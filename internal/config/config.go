@@ -9,12 +9,17 @@ import (
 	"github.com/spf13/viper"
 )
 
+const (
+	DefaultPort = 19841
+	DefaultHost = "localhost"
+)
+
 // DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
-			Host:            "0.0.0.0",
-			Port:            8080,
+			Host:            DefaultHost,
+			Port:            DefaultPort,
 			ReadTimeout:     30 * time.Second,
 			WriteTimeout:    30 * time.Second,
 			ShutdownTimeout: 10 * time.Second,
@@ -32,6 +37,7 @@ func DefaultConfig() *Config {
 			RefreshInterval: 30 * time.Second,
 			Static: StaticDiscoveryConfig{
 				Endpoints: []EndpointConfig{
+					// Assume they have an ollama locally running
 					{
 						URL:            "http://localhost:11434",
 						Priority:       100,
@@ -86,7 +92,6 @@ func Load() (*Config, error) {
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
 
-	// Environment variables
 	viper.SetEnvPrefix("OLLA")
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	viper.AutomaticEnv()
@@ -106,12 +111,10 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Unmarshal config
 	if err := viper.Unmarshal(config); err != nil {
 		return nil, fmt.Errorf("unable to decode config: %w", err)
 	}
 
-	// Enable hot reloading of config
 	viper.WatchConfig()
 
 	return config, nil

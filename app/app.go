@@ -2,10 +2,10 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/thushan/olla/internal/config"
-	"log"
 	"log/slog"
 	"net/http"
 )
@@ -15,6 +15,7 @@ type Application struct {
 	config *config.Config
 	server *http.Server
 	logger *slog.Logger
+	errCh  chan error
 }
 
 // New creates a new application instance
@@ -31,6 +32,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*Application, error) {
 		config: cfg,
 		server: server,
 		logger: logger,
+		errCh:  make(chan error, 1),
 	}, nil
 }
 
@@ -46,13 +48,23 @@ func (a *Application) Start(ctx context.Context) error {
 
 	go func() {
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("HTTP server error: %v\n", err)
+			a.logger.Error("HTTP server error", "error", err)
+			a.errCh <- err
+		}
+	}()
+
+	go func() {
+		select {
+		case err := <-a.errCh:
+			a.logger.Error("Server startup error", "error", err)
+		case <-ctx.Done():
+			return
 		}
 	}()
 
 	a.logger.Info("Started WebServer", "bind", a.server.Addr)
 	a.logger.Info("Endpoints enabled", slog.Group("/health",
-		"info", "Health check endpoint"), slog.Group("/ma",
+		"info", "Health check endpoint"), slog.Group("/api",
 		"info", "Default Ollama endpoint"))
 	return nil
 }
@@ -73,5 +85,7 @@ func (a *Application) Stop(ctx context.Context) error {
 func (a *Application) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprintf(w, `{"status":"healthy"}`)
+
+	response := map[string]string{"status": "healthy"}
+	json.NewEncoder(w).Encode(response)
 }
