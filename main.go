@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/app"
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/version"
 	"log"
 	"log/slog"
@@ -23,10 +25,14 @@ func main() {
 		version.PrintVersionInfo(false, vlog)
 	}
 
-	cfg := buildConfig()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
 	// setup: logging
-	log, cleanup, err := logger.New(cfg)
+	lcfg := buildLoggerConfig()
+	log, cleanup, err := logger.New(lcfg)
 	if err != nil {
 		fmt.Printf("Failed to initialise logger: %v\n", err)
 		os.Exit(1)
@@ -36,8 +42,8 @@ func main() {
 	// Set as default logger
 	slog.SetDefault(log)
 
-	log.Info("Olla starting", "version", version.Version, "pid", os.Getpid())
-
+	log.Info("Initialising", "version", version.Version, "pid", os.Getpid())
+	
 	// setup: graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -51,15 +57,26 @@ func main() {
 		cancel()
 	}()
 
-	// TODO: Add Application
-	// Wait for shutdown
+	application, err := app.New(cfg, log)
+	if err != nil {
+		log.Error("Failed to create application: %v", err)
+	}
+
+	if err := application.Start(ctx); err != nil {
+		log.Error("Failed to start application: %v", err)
+	}
+
 	<-ctx.Done()
 
-	log.Info("Olla has stopped")
+	if err := application.Stop(context.Background()); err != nil {
+		log.Error("Error during shutdown: %v", err)
+	}
+
+	log.Info("Olla has shutdown")
 }
 
-// buildConfig creates logger config from environment variables with defaults
-func buildConfig() *logger.Config {
+// buildLoggerConfig creates logger config from environment variables with defaults
+func buildLoggerConfig() *logger.Config {
 	return &logger.Config{
 		Level:      getEnvOrDefault("OLLA_LOG_LEVEL", "info"),
 		FileOutput: getEnvBoolOrDefault("OLLA_FILE_OUTPUT", true),
