@@ -31,8 +31,7 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 
 	var b strings.Builder
 
-	b.WriteString(theme.ColourSplash(`
-╔────────────────────────────────────────────────────────╗
+	b.WriteString(theme.ColourSplash(`╔────────────────────────────────────────────────────────╗
 │                                      ⠀⠀⣀⣀⠀⠀⠀⠀⠀⣀⣀⠀⠀     │
 │                                      ⠀⢰⡏⢹⡆⠀⠀⠀⢰⡏⢹⡆⡀     │ 
 │   ██████╗ ██╗     ██╗      █████╗    ⠀⢸⡇⣸⡷⠟⠛⠻⢾⣇⣸⡇      │
