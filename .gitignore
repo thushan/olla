@@ -1,0 +1,6 @@
+.idea/
+out/
+bin/
+report/
+logs/
+*.exe
