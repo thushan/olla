@@ -327,7 +327,10 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 				return fmt.Errorf("failed to add endpoint %s: %w", key, err)
 			}
 
-			s.logger.Info("Added new endpoint", "name", endpoint.Name, "endpoint", endpoint.URL.String(), "health_check_url", endpoint.HealthCheckURL.String())
+			s.logger.Info("Added new endpoint", "name", endpoint.Name,
+				"endpoint", endpoint.URL.String(),
+				"model_url", endpoint.ModelUrl.String(),
+				"health_check_url", endpoint.HealthCheckURL.String())
 		}
 	}
 
@@ -368,7 +371,7 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 		return nil
 	}
 
-	s.logger.InfoWithCount("Endpoints to health check", endpointCount)
+	s.logger.InfoWithCount("Health checking Endpoints", endpointCount)
 
 	// Perform health checks concurrently but wait for all to complete
 	var wg sync.WaitGroup
@@ -382,7 +385,7 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 		go func(ep *domain.Endpoint) {
 			defer wg.Done()
 
-			s.logger.InfoWithEndpoint(" Checking", ep.Name, "endpoint", ep.URL.String())
+			s.logger.InfoWithEndpoint(" Checking", ep.Name, "url", ep.HealthCheckURL.String())
 
 			result, _ := s.checker.Check(checkCtx, ep)
 			healthCheckResults <- struct {
