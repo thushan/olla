@@ -275,13 +275,13 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 // Check performs a health check on the endpoint and returns its status
 func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint) (domain.HealthCheckResult, error) {
 	start := time.Now()
-	endpointURL := endpoint.URL.String()
+	healthCheckUrl := endpoint.URL.ResolveReference(endpoint.HealthCheckURL).String()
 
 	result := domain.HealthCheckResult{
 		Status: domain.StatusUnknown,
 	}
 
-	if c.circuitBreaker.IsOpen(endpointURL) {
+	if c.circuitBreaker.IsOpen(healthCheckUrl) {
 		result.Status = domain.StatusOffline
 		result.Error = ErrCircuitBreakerOpen
 		result.ErrorType = domain.ErrorTypeCircuitOpen
@@ -298,7 +298,7 @@ func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint
 		result.Error = err
 		result.ErrorType = classifyError(err)
 		result.Status = determineStatus(0, result.Latency, err, result.ErrorType)
-		c.circuitBreaker.RecordFailure(endpointURL)
+		c.circuitBreaker.RecordFailure(healthCheckUrl)
 		return result, err
 	}
 
@@ -309,7 +309,7 @@ func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint
 		result.Error = err
 		result.ErrorType = classifyError(err)
 		result.Status = determineStatus(0, result.Latency, err, result.ErrorType)
-		c.circuitBreaker.RecordFailure(endpointURL)
+		c.circuitBreaker.RecordFailure(healthCheckUrl)
 		return result, err
 	}
 	defer func(Body io.ReadCloser) {
@@ -319,9 +319,9 @@ func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint
 	result.Status = determineStatus(resp.StatusCode, result.Latency, nil, domain.ErrorTypeNone)
 
 	if result.Status == domain.StatusHealthy {
-		c.circuitBreaker.RecordSuccess(endpointURL)
+		c.circuitBreaker.RecordSuccess(healthCheckUrl)
 	} else {
-		c.circuitBreaker.RecordFailure(endpointURL)
+		c.circuitBreaker.RecordFailure(healthCheckUrl)
 	}
 
 	return result, nil

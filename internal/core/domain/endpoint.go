@@ -12,6 +12,7 @@ type Endpoint struct {
 	URL            *url.URL
 	Priority       int
 	HealthCheckURL *url.URL
+	ModelUrl       *url.URL
 	CheckInterval  time.Duration
 	CheckTimeout   time.Duration
 	Status         EndpointStatus

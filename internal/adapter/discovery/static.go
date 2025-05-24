@@ -271,10 +271,19 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			return fmt.Errorf("invalid endpoint URL %s: %w", endpointCfg.URL, err)
 		}
 
-		healthCheckURL, err := url.Parse(endpointCfg.HealthCheckURL)
+		healthCheckPath, err := url.Parse(endpointCfg.HealthCheckURL)
 		if err != nil {
 			return fmt.Errorf("invalid health check URL %s: %w", endpointCfg.HealthCheckURL, err)
 		}
+
+		modelPath, err := url.Parse(endpointCfg.ModelURL)
+		if err != nil {
+			return fmt.Errorf("invalid model URL %s: %w", endpointCfg.ModelURL, err)
+		}
+
+		// Get the full health check URL here to avoid having do it each teime later
+		healthCheckURL := endpointURL.ResolveReference(healthCheckPath)
+		modelUrl := endpointURL.ResolveReference(modelPath)
 
 		key := endpointURL.String()
 		if existing, exists := currentMap[key]; exists {
@@ -284,6 +293,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			existing.Name = endpointCfg.Name
 			existing.Priority = endpointCfg.Priority
 			existing.HealthCheckURL = healthCheckURL
+			existing.ModelUrl = modelUrl
 			existing.CheckInterval = endpointCfg.CheckInterval
 			existing.CheckTimeout = endpointCfg.CheckTimeout
 
@@ -304,6 +314,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 				URL:                 endpointURL,
 				Priority:            endpointCfg.Priority,
 				HealthCheckURL:      healthCheckURL,
+				ModelUrl:            modelUrl,
 				CheckInterval:       endpointCfg.CheckInterval,
 				CheckTimeout:        endpointCfg.CheckTimeout,
 				Status:              domain.StatusUnknown,
@@ -371,7 +382,7 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 		go func(ep *domain.Endpoint) {
 			defer wg.Done()
 
-			s.logger.InfoWithEndpoint("Checking", ep.URL.String())
+			s.logger.InfoWithEndpoint(" Checking", ep.Name, "endpoint", ep.URL.String())
 
 			result, _ := s.checker.Check(checkCtx, ep)
 			healthCheckResults <- struct {
