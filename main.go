@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/app"
+	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/env"
 	"github.com/thushan/olla/internal/version"
 	"log"
 	"log/slog"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/thushan/olla/internal/logger"
@@ -23,20 +25,25 @@ func main() {
 		version.PrintVersionInfo(false, vlog)
 	}
 
-	cfg := buildConfig()
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
 
 	// setup: logging
-	log, cleanup, err := logger.New(cfg)
+	lcfg := buildLoggerConfig()
+	logInstance, cleanup, err := logger.New(lcfg)
 	if err != nil {
-		fmt.Printf("Failed to initialise logger: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to initialise logger: %v\n", err)
 		os.Exit(1)
 	}
 	defer cleanup()
 
 	// Set as default logger
-	slog.SetDefault(log)
+	slog.SetDefault(logInstance)
 
-	log.Info("Olla starting", "version", version.Version, "pid", os.Getpid())
+	logInstance.Info("Initialising", "version", version.Version, "pid", os.Getpid())
 
 	// setup: graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -47,51 +54,37 @@ func main() {
 
 	go func() {
 		sig := <-sigCh
-		log.Info("Shutdown signal received", "signal", sig.String())
+		logInstance.Info("Shutdown signal received", "signal", sig.String())
 		cancel()
 	}()
 
-	// TODO: Add Application
-	// Wait for shutdown
+	application, err := app.New(cfg, logInstance)
+	if err != nil {
+		logger.FatalWithLogger(logInstance, "Failed to create application", "error", err)
+	}
+
+	if err := application.Start(ctx); err != nil {
+		logger.FatalWithLogger(logInstance, "Failed to start application", "error", err)
+	}
+
 	<-ctx.Done()
 
-	log.Info("Olla has stopped")
+	if err := application.Stop(context.Background()); err != nil {
+		logInstance.Error("Error during shutdown", "error", err)
+	}
+
+	logInstance.Info("Olla has shutdown")
 }
 
-// buildConfig creates logger config from environment variables with defaults
-func buildConfig() *logger.Config {
+// buildLoggerConfig creates logger config from environment variables with defaults
+func buildLoggerConfig() *logger.Config {
 	return &logger.Config{
-		Level:      getEnvOrDefault("OLLA_LOG_LEVEL", "info"),
-		FileOutput: getEnvBoolOrDefault("OLLA_FILE_OUTPUT", true),
-		LogDir:     getEnvOrDefault("OLLA_LOG_DIR", "./logs"),
-		MaxSize:    getEnvIntOrDefault("OLLA_MAX_SIZE", 100),
-		MaxBackups: getEnvIntOrDefault("OLLA_MAX_BACKUPS", 5),
-		MaxAge:     getEnvIntOrDefault("OLLA_MAX_AGE", 30),
-		Theme:      getEnvOrDefault("OLLA_THEME", "default"),
+		Level:      env.GetEnvOrDefault("OLLA_LOG_LEVEL", "info"),
+		FileOutput: env.GetEnvBoolOrDefault("OLLA_FILE_OUTPUT", true),
+		LogDir:     env.GetEnvOrDefault("OLLA_LOG_DIR", "./logs"),
+		MaxSize:    env.GetEnvIntOrDefault("OLLA_MAX_SIZE", 100),
+		MaxBackups: env.GetEnvIntOrDefault("OLLA_MAX_BACKUPS", 5),
+		MaxAge:     env.GetEnvIntOrDefault("OLLA_MAX_AGE", 30),
+		Theme:      env.GetEnvOrDefault("OLLA_THEME", "default"),
 	}
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvBoolOrDefault(key string, defaultValue bool) bool {
-	if value := os.Getenv(key); value != "" {
-		if parsed, err := strconv.ParseBool(value); err == nil {
-			return parsed
-		}
-	}
-	return defaultValue
-}
-
-func getEnvIntOrDefault(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if parsed, err := strconv.Atoi(value); err == nil {
-			return parsed
-		}
-	}
-	return defaultValue
 }
