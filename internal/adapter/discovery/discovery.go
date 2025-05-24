@@ -12,128 +12,6 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-// StaticEndpointRepository implements domain.EndpointRepository for static endpoints
-type StaticEndpointRepository struct {
-	endpoints map[string]*domain.Endpoint
-	mu        sync.RWMutex
-}
-
-func NewStaticEndpointRepository() *StaticEndpointRepository {
-	return &StaticEndpointRepository{
-		endpoints: make(map[string]*domain.Endpoint),
-	}
-}
-
-// GetAll returns all registered endpoints
-func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoint, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	endpoints := make([]*domain.Endpoint, 0, len(r.endpoints))
-	for _, endpoint := range r.endpoints {
-		endpoints = append(endpoints, endpoint)
-	}
-	return endpoints, nil
-}
-
-// GetHealthy returns only healthy endpoints
-func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.Endpoint, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	endpoints := make([]*domain.Endpoint, 0)
-	for _, endpoint := range r.endpoints {
-		if endpoint.Status == domain.StatusHealthy {
-			endpoints = append(endpoints, endpoint)
-		}
-	}
-	return endpoints, nil
-}
-
-// GetRoutable returns endpoints that can receive traffic
-func (r *StaticEndpointRepository) GetRoutable(ctx context.Context) ([]*domain.Endpoint, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	endpoints := make([]*domain.Endpoint, 0)
-	for _, endpoint := range r.endpoints {
-		if endpoint.Status.IsRoutable() {
-			endpoints = append(endpoints, endpoint)
-		}
-	}
-	return endpoints, nil
-}
-
-// UpdateStatus updates the health status of an endpoint
-func (r *StaticEndpointRepository) UpdateStatus(ctx context.Context, endpointURL *url.URL, status domain.EndpointStatus) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	key := endpointURL.String()
-	endpoint, exists := r.endpoints[key]
-	if !exists {
-		return fmt.Errorf("endpoint not found: %s", key)
-	}
-
-	endpoint.Status = status
-	endpoint.LastChecked = time.Now()
-	return nil
-}
-
-// UpdateEndpoint updates endpoint state including backoff and timing
-func (r *StaticEndpointRepository) UpdateEndpoint(ctx context.Context, endpoint *domain.Endpoint) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	key := endpoint.URL.String()
-	existing, exists := r.endpoints[key]
-	if !exists {
-		return fmt.Errorf("endpoint not found: %s", key)
-	}
-
-	// Update the existing endpoint with new state
-	existing.Status = endpoint.Status
-	existing.LastChecked = endpoint.LastChecked
-	existing.ConsecutiveFailures = endpoint.ConsecutiveFailures
-	existing.BackoffMultiplier = endpoint.BackoffMultiplier
-	existing.NextCheckTime = endpoint.NextCheckTime
-	existing.LastLatency = endpoint.LastLatency
-
-	return nil
-}
-
-// Add adds a new endpoint to the repository
-func (r *StaticEndpointRepository) Add(ctx context.Context, endpoint *domain.Endpoint) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	key := endpoint.URL.String()
-	// Initialize state fields for new endpoints
-	if endpoint.BackoffMultiplier == 0 {
-		endpoint.BackoffMultiplier = 1
-	}
-	if endpoint.NextCheckTime.IsZero() {
-		endpoint.NextCheckTime = time.Now()
-	}
-
-	r.endpoints[key] = endpoint
-	return nil
-}
-
-// Remove removes an endpoint from the repository
-func (r *StaticEndpointRepository) Remove(ctx context.Context, endpointURL *url.URL) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	key := endpointURL.String()
-	if _, exists := r.endpoints[key]; !exists {
-		return fmt.Errorf("endpoint not found: %s", key)
-	}
-
-	delete(r.endpoints, key)
-	return nil
-}
-
 // StaticDiscoveryService implements ports.DiscoveryService for static endpoints
 type StaticDiscoveryService struct {
 	repository           domain.EndpointRepository
@@ -165,65 +43,6 @@ func NewStaticDiscoveryService(
 		config:               config,
 		logger:               logger,
 		initialHealthTimeout: DefaultInitialHealthTimeout,
-	}
-}
-
-func validateEndpointConfig(cfg config.EndpointConfig) error {
-	if cfg.URL == "" {
-		return fmt.Errorf("endpoint URL cannot be empty")
-	}
-
-	if cfg.HealthCheckURL == "" {
-		return fmt.Errorf("health check URL cannot be empty")
-	}
-
-	if cfg.CheckInterval < MinHealthCheckInterval {
-		return fmt.Errorf("check_interval too short: minimum %v, got %v", MinHealthCheckInterval, cfg.CheckInterval)
-	}
-
-	if cfg.CheckTimeout >= cfg.CheckInterval {
-		return fmt.Errorf("check_timeout (%v) must be less than check_interval (%v)", cfg.CheckTimeout, cfg.CheckInterval)
-	}
-
-	if cfg.CheckTimeout > MaxHealthCheckTimeout {
-		return fmt.Errorf("check_timeout too long: maximum %v, got %v", MaxHealthCheckTimeout, cfg.CheckTimeout)
-	}
-
-	if cfg.Priority < 0 {
-		return fmt.Errorf("priority must be non-negative, got %d", cfg.Priority)
-	}
-
-	// Validate URLs are parseable
-	if _, err := url.Parse(cfg.URL); err != nil {
-		return fmt.Errorf("invalid endpoint URL %q: %w", cfg.URL, err)
-	}
-
-	if _, err := url.Parse(cfg.HealthCheckURL); err != nil {
-		return fmt.Errorf("invalid health check URL %q: %w", cfg.HealthCheckURL, err)
-	}
-
-	return nil
-}
-
-// SetConfig - minimal thread safety addition
-func (s *StaticDiscoveryService) SetConfig(config *config.Config) {
-	s.configMu.Lock()
-	defer s.configMu.Unlock()
-	s.config = config
-}
-
-// getConfig - helper for safe access
-func (s *StaticDiscoveryService) getConfig() *config.Config {
-	s.configMu.RLock()
-	defer s.configMu.RUnlock()
-	return s.config
-}
-
-// ReloadConfig - EXACTLY your original logic
-func (s *StaticDiscoveryService) ReloadConfig() {
-	s.logger.Info("Config file changed, reloading endpoints...")
-	if err := s.RefreshEndpoints(context.Background()); err != nil {
-		s.logger.Error("Failed to reload endpoints from config", "error", err)
 	}
 }
 
@@ -270,7 +89,7 @@ func (s *StaticDiscoveryService) GetHealthyEndpointsWithFallback(ctx context.Con
 
 // RefreshEndpoints triggers a refresh of the endpoint list from the config
 func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
-	cfg := s.getConfig() // ONLY CHANGE: use safe getter
+	cfg := s.getConfig()
 
 	currentEndpoints, err := s.repository.GetAll(ctx)
 	if err != nil {
@@ -283,7 +102,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 		currentMap[endpoint.URL.String()] = endpoint
 	}
 
-	for _, endpointCfg := range cfg.Discovery.Static.Endpoints { // Use cfg from safe getter
+	for _, endpointCfg := range cfg.Discovery.Static.Endpoints {
 		if err := validateEndpointConfig(endpointCfg); err != nil {
 			s.logger.Error("Invalid endpoint configuration",
 				"name", endpointCfg.Name,
@@ -368,6 +187,8 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 	}
 
 	// Remove endpoints that are no longer in config
+	// We do this after processing all new endpoints
+	// to avoid removing ones that are being updated
 	for key, endpoint := range currentMap {
 		if err := s.repository.Remove(ctx, endpoint.URL); err != nil {
 			return fmt.Errorf("failed to remove endpoint %s: %w", key, err)
