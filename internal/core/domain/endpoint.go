@@ -8,6 +8,7 @@ import (
 
 // Endpoint represents an Ollama server endpoint
 type Endpoint struct {
+	Name           string
 	URL            *url.URL
 	Priority       int
 	HealthCheckURL *url.URL

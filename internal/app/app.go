@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/thushan/olla/internal/adapter/discovery"
+	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/router"
 	"log/slog"
 	"net/http"
@@ -13,15 +16,24 @@ import (
 
 // Application represents the Olla application
 type Application struct {
-	config   *config.Config
-	server   *http.Server
-	logger   *slog.Logger
-	registry *router.RouteRegistry
-	errCh    chan error
+	config           *config.Config
+	server           *http.Server
+	logger           *slog.Logger
+	registry         *router.RouteRegistry
+	discoveryService ports.DiscoveryService
+	proxyService     ports.ProxyService
+	pluginService    ports.PluginService
+	errCh            chan error
 }
 
 // New creates a new application instance
 func New(cfg *config.Config, logger *slog.Logger) (*Application, error) {
+
+	// start port services
+	registry := router.NewRouteRegistry(logger)
+	repository := discovery.NewStaticEndpointRepository()
+	healthChecker := health.NewHTTPHealthChecker(repository)
+	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, cfg, logger)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -30,35 +42,18 @@ func New(cfg *config.Config, logger *slog.Logger) (*Application, error) {
 		Handler:      nil, // Will be set in Start()
 	}
 
-	registry := router.NewRouteRegistry(logger)
-
 	return &Application{
-		config:   cfg,
-		server:   server,
-		logger:   logger,
-		registry: registry,
-		errCh:    make(chan error, 1),
+		config:           cfg,
+		server:           server,
+		logger:           logger,
+		registry:         registry,
+		discoveryService: discoveryService,
+		errCh:            make(chan error, 1),
 	}, nil
 }
 
 // Start starts the application
 func (a *Application) Start(ctx context.Context) error {
-
-	a.logger.Info("Starting WebServer...", "host", a.config.Server.Host, "port", a.config.Server.Port)
-
-	mux := http.NewServeMux()
-
-	a.registerRoutes()
-	a.registry.WireUp(mux)
-
-	a.server.Handler = mux
-
-	go func() {
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.logger.Error("HTTP server error", "error", err)
-			a.errCh <- err
-		}
-	}()
 
 	go func() {
 		select {
@@ -69,7 +64,15 @@ func (a *Application) Start(ctx context.Context) error {
 		}
 	}()
 
-	a.logger.Info("Started WebServer", "bind", a.server.Addr)
+	a.startWebServer()
+	
+	// Start discovery service
+	if err := a.discoveryService.Start(ctx); err != nil {
+		a.logger.Error("discovery service startup error", "error", err)
+		a.errCh <- err
+	}
+
+	a.logger.Info("Olly started", "bind", a.server.Addr)
 	return nil
 }
 
@@ -89,6 +92,25 @@ func (a *Application) registerRoutes() {
 	a.registry.RegisterWithMethod("/proxy", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
 	a.registry.RegisterWithMethod("/ma", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
 	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
+}
+
+func (a *Application) startWebServer() {
+	a.logger.Info("Starting WebServer...", "host", a.config.Server.Host, "port", a.config.Server.Port)
+
+	mux := http.NewServeMux()
+
+	a.registerRoutes()
+	a.registry.WireUp(mux)
+
+	go func() {
+		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			a.logger.Error("HTTP server error", "error", err)
+			a.errCh <- err
+		}
+	}()
+
+	a.server.Handler = mux
+	a.logger.Info("Started WebServer", "bind", a.server.Addr)
 }
 
 // healthHandler handles health check requests

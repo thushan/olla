@@ -27,9 +27,15 @@ type Theme struct {
 	Good      pterm.Color
 
 	// Application colours
-	Counts   pterm.Color // Colour for counts like Microsofty apps Eg. Outlook (234) unread emails
-	Numbers  pterm.Color
-	Endpoint pterm.Color
+	Counts      pterm.Color // Colour for counts like Microsofty apps Eg. Outlook (234) unread emails
+	Numbers     pterm.Color
+	Endpoint    pterm.Color
+	HealthCheck pterm.Color
+
+	// Health check colours
+	HealthHealthy   pterm.Color
+	HealthUnhealthy pterm.Color
+	HealthUnknown   pterm.Color
 }
 
 // Default returns the default application theme
@@ -56,9 +62,15 @@ func Default() *Theme {
 		Good:      pterm.FgGreen,
 
 		// Application colours
-		Counts:   pterm.FgLightBlue,
-		Numbers:  pterm.FgLightCyan,
-		Endpoint: pterm.FgLightMagenta,
+		Counts:      pterm.FgLightBlue,
+		Numbers:     pterm.FgLightCyan,
+		Endpoint:    pterm.FgLightMagenta,
+		HealthCheck: pterm.FgGreen,
+
+		// Health check colours
+		HealthHealthy:   pterm.FgGreen,
+		HealthUnhealthy: pterm.FgRed,
+		HealthUnknown:   pterm.FgYellow,
 	}
 }
 

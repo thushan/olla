@@ -20,11 +20,13 @@ discovery:
   static:
     endpoints:
       - url: "http://localhost:11434"
+        name: "localhost"
         priority: 100
         health_check_url: "http://localhost:11434/"
         check_interval: 5s
         check_timeout: 2s
       - url: "http://192.168.0.1:11434"
+        name: "neo"
         priority: 200
         health_check_url: "http://192.168.0.1:11434/"
         check_interval: 5s

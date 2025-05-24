@@ -1,0 +1,422 @@
+package discovery
+
+import (
+	"context"
+	"fmt"
+	"github.com/pterm/pterm"
+	"github.com/thushan/olla/theme"
+	"log/slog"
+	"net/url"
+	"sync"
+	"time"
+
+	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/domain"
+)
+
+// StaticEndpointRepository implements domain.EndpointRepository for static endpoints
+type StaticEndpointRepository struct {
+	endpoints map[string]*domain.Endpoint
+	mu        sync.RWMutex
+}
+
+func NewStaticEndpointRepository() *StaticEndpointRepository {
+	return &StaticEndpointRepository{
+		endpoints: make(map[string]*domain.Endpoint),
+	}
+}
+
+// GetAll returns all registered endpoints
+func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	endpoints := make([]*domain.Endpoint, 0, len(r.endpoints))
+	for _, endpoint := range r.endpoints {
+		endpoints = append(endpoints, endpoint)
+	}
+	return endpoints, nil
+}
+
+// GetHealthy returns only healthy endpoints
+func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.Endpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	endpoints := make([]*domain.Endpoint, 0)
+	for _, endpoint := range r.endpoints {
+		if endpoint.Status == domain.StatusHealthy {
+			endpoints = append(endpoints, endpoint)
+		}
+	}
+	return endpoints, nil
+}
+
+// UpdateStatus updates the health status of an endpoint
+func (r *StaticEndpointRepository) UpdateStatus(ctx context.Context, endpointURL *url.URL, status domain.EndpointStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := endpointURL.String()
+	endpoint, exists := r.endpoints[key]
+	if !exists {
+		return fmt.Errorf("endpoint not found: %s", key)
+	}
+
+	endpoint.Status = status
+	endpoint.LastChecked = time.Now()
+	return nil
+}
+
+// Add adds a new endpoint to the repository
+func (r *StaticEndpointRepository) Add(ctx context.Context, endpoint *domain.Endpoint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := endpoint.URL.String()
+	r.endpoints[key] = endpoint
+	return nil
+}
+
+// Remove removes an endpoint from the repository
+func (r *StaticEndpointRepository) Remove(ctx context.Context, endpointURL *url.URL) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := endpointURL.String()
+	if _, exists := r.endpoints[key]; !exists {
+		return fmt.Errorf("endpoint not found: %s", key)
+	}
+
+	delete(r.endpoints, key)
+	return nil
+}
+
+// StaticDiscoveryService implements ports.DiscoveryService for static endpoints
+type StaticDiscoveryService struct {
+	repository           domain.EndpointRepository
+	checker              domain.HealthChecker
+	config               *config.Config
+	initialHealthTimeout time.Duration
+	logger               *slog.Logger
+}
+
+const (
+	DefaultInitialHealthTimeout  = 30 * time.Second // The default timeout for initial health checks
+	DefaultWaitForHealthyTimeout = 30 * time.Second // The default timeout for waiting for healthy endpoints
+)
+
+// NewStaticDiscoveryService creates a new static discovery service
+func NewStaticDiscoveryService(
+	repository domain.EndpointRepository,
+	checker domain.HealthChecker,
+	config *config.Config,
+	logger *slog.Logger,
+) *StaticDiscoveryService {
+	return &StaticDiscoveryService{
+		repository:           repository,
+		checker:              checker,
+		config:               config,
+		logger:               logger,
+		initialHealthTimeout: DefaultInitialHealthTimeout,
+	}
+}
+
+// GetEndpoints returns all registered endpoints
+func (s *StaticDiscoveryService) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return s.repository.GetAll(ctx)
+}
+
+// GetHealthyEndpoints returns only healthy endpoints
+func (s *StaticDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return s.repository.GetHealthy(ctx)
+}
+
+// RefreshEndpoints triggers a refresh of the endpoint list from the config
+func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
+	currentEndpoints, err := s.repository.GetAll(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get current endpoints: %w", err)
+	}
+
+	// Create a map of current endpoints for quick lookup
+	currentMap := make(map[string]*domain.Endpoint)
+	for _, endpoint := range currentEndpoints {
+		currentMap[endpoint.URL.String()] = endpoint
+	}
+
+	// chunky way to iterate over the static endpoints
+	for _, endpointCfg := range s.config.Discovery.Static.Endpoints {
+		endpointURL, err := url.Parse(endpointCfg.URL)
+		if err != nil {
+			return fmt.Errorf("invalid endpoint URL %s: %w", endpointCfg.URL, err)
+		}
+
+		healthCheckURL, err := url.Parse(endpointCfg.HealthCheckURL)
+		if err != nil {
+			return fmt.Errorf("invalid health check URL %s: %w", endpointCfg.HealthCheckURL, err)
+		}
+
+		// Check if endpoint already exists
+		key := endpointURL.String()
+		if existing, exists := currentMap[key]; exists {
+			// Update existing endpoint if needed
+			existing.Name = endpointCfg.Name
+			existing.Priority = endpointCfg.Priority
+			existing.HealthCheckURL = healthCheckURL
+			existing.CheckInterval = endpointCfg.CheckInterval
+			existing.CheckTimeout = endpointCfg.CheckTimeout
+
+			// TODO: Determine if status should be updated
+			// maybe we should determine if the healthcheck URL has changed
+			// or make it any change to the endpoint, we recheck the status
+			existing.Status = domain.StatusUnknown
+			existing.LastChecked = time.Now()
+
+			// remove from currentMap to avoid deletion later
+			delete(currentMap, key)
+		} else {
+			endpoint := &domain.Endpoint{
+				Name:           endpointCfg.Name,
+				URL:            endpointURL,
+				Priority:       endpointCfg.Priority,
+				HealthCheckURL: healthCheckURL,
+				CheckInterval:  endpointCfg.CheckInterval,
+				CheckTimeout:   endpointCfg.CheckTimeout,
+				Status:         domain.StatusUnknown,
+			}
+
+			if err := s.repository.Add(ctx, endpoint); err != nil {
+				return fmt.Errorf("failed to add endpoint %s: %w", key, err)
+			}
+		}
+	}
+
+	// Remove endpoints that are no longer in config
+	for key, endpoint := range currentMap {
+		if err := s.repository.Remove(ctx, endpoint.URL); err != nil {
+			return fmt.Errorf("failed to remove endpoint %s: %w", key, err)
+		}
+	}
+
+	return nil
+}
+
+// performInitialHealthChecks performs synchronous health checks on startup
+func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context) error {
+	s.logger.Info("Performing initial health checks...")
+
+	checkCtx, cancel := context.WithTimeout(ctx, s.initialHealthTimeout)
+	defer cancel()
+
+	endpoints, err := s.repository.GetAll(checkCtx)
+	if err != nil {
+		return fmt.Errorf("failed to get endpoints for initial health check: %w", err)
+	}
+
+	endpoint_count := len(endpoints)
+	if endpoint_count == 0 {
+		s.logger.Warn("No endpoints configured for health checking")
+		return nil
+	}
+
+	s.logger.Info(fmt.Sprintf("Health checking %s Endpoints", pterm.Style{theme.Default().Counts}.Sprintf("(%d)", endpoint_count)))
+
+	// Perform health checks concurrently but wait for all to complete
+	var wg sync.WaitGroup
+	healthCheckResults := make(chan struct {
+		endpoint *domain.Endpoint
+		status   domain.EndpointStatus
+		err      error
+	}, len(endpoints))
+
+	for _, endpoint := range endpoints {
+		wg.Add(1)
+		go func(ep *domain.Endpoint) {
+			defer wg.Done()
+
+			s.logger.Info(fmt.Sprintf("Initial health check for %s", pterm.Style{theme.Default().HealthCheck}.Sprintf(ep.URL.String())))
+
+			status, err := s.checker.Check(checkCtx, ep)
+
+			healthCheckResults <- struct {
+				endpoint *domain.Endpoint
+				status   domain.EndpointStatus
+				err      error
+			}{ep, status, err}
+		}(endpoint)
+	}
+
+	wg.Wait()
+	close(healthCheckResults)
+
+	healthyCount := 0
+	unhealthyCount := 0
+	unknownCount := 0
+
+	// Process results
+	for result := range healthCheckResults {
+		if result.err != nil {
+			s.logger.Error(fmt.Sprintf("Initial health check failed for %s: %v", pterm.Style{theme.Default().Endpoint}.Sprintf(result.endpoint.URL.String())), err)
+		}
+
+		if err := s.repository.UpdateStatus(checkCtx, result.endpoint.URL, result.status); err != nil {
+			s.logger.Error(fmt.Sprintf("Failed to update endpoint status for %s: %v", pterm.Style{theme.Default().Endpoint}.Sprintf(result.endpoint.URL.String())), err)
+		}
+
+		if result.status == domain.StatusHealthy {
+			healthyCount++
+			healthStatus := pterm.Style{theme.Default().HealthHealthy}.Sprintf("healthy")
+			s.logger.Info(fmt.Sprintf("%s is %s", pterm.Style{theme.Default().Endpoint}.Sprintf(result.endpoint.URL.String()), healthStatus))
+		} else if result.status == domain.StatusUnhealthy {
+			unhealthyCount++
+			healthStatus := pterm.Style{theme.Default().HealthUnhealthy}.Sprintf("unhealthy")
+			s.logger.Info(fmt.Sprintf("%s is %s", pterm.Style{theme.Default().Endpoint}.Sprintf(result.endpoint.URL.String()), healthStatus))
+		} else {
+			unknownCount++
+			healthStatus := pterm.Style{theme.Default().HealthHealthy}.Sprintf("unknown")
+			s.logger.Warn(fmt.Sprintf("%s is %s", pterm.Style{theme.Default().Endpoint}.Sprintf(result.endpoint.URL.String()), healthStatus))
+		}
+
+	}
+
+	if healthyCount == 0 {
+		return fmt.Errorf("no healthy endpoints available after initial health check")
+	}
+
+	nodesStatus := map[string]any{
+		"healthy":   pterm.Style{theme.Default().HealthHealthy}.Sprint(healthyCount),
+		"unhealthy": pterm.Style{theme.Default().HealthUnhealthy}.Sprint(unhealthyCount),
+		"unknown":   pterm.Style{theme.Default().HealthUnknown}.Sprint(len(endpoints) - healthyCount - unhealthyCount),
+	}
+	s.logger.Info("Initial health check complete", nodesStatus)
+
+	return nil
+}
+
+// waitForHealthyEndpoints waits until at least one endpoint becomes healthy
+func (s *StaticDiscoveryService) waitForHealthyEndpoints(ctx context.Context, maxWait time.Duration) error {
+	s.logger.Info("Waiting for healthy endpoints (max %v)...", maxWait)
+
+	timeout := time.NewTimer(maxWait)
+	defer timeout.Stop()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for healthy endpoints: %w", ctx.Err())
+		case <-timeout.C:
+			return fmt.Errorf("timeout waiting for healthy endpoints after %v", maxWait)
+		case <-ticker.C:
+			healthy, err := s.repository.GetHealthy(ctx)
+			if err != nil {
+				s.logger.Error("Error checking healthy endpoints: %v", err)
+				continue
+			}
+
+			if len(healthy) > 0 {
+				s.logger.Info("Found %d healthy endpoints, ready to serve traffic", pterm.Style{theme.Default().Counts}.Sprint(len(healthy)))
+				return nil
+			}
+
+			s.logger.Warn("No healthy endpoints yet, waiting...")
+		}
+	}
+}
+
+// Start starts the discovery service and health checker
+func (s *StaticDiscoveryService) Start(ctx context.Context) error {
+	s.logger.Info("Starting static discovery service...")
+
+	// Initial refresh of endpoints from config
+	if err := s.RefreshEndpoints(ctx); err != nil {
+		return fmt.Errorf("failed to refresh endpoints: %w", err)
+	}
+
+	// Perform initial health checks before starting periodic checks
+	if err := s.performInitialHealthChecks(ctx); err != nil {
+		// Don't fail startup if initial health checks fail
+		// But warn about it and continue with periodic checks
+		s.logger.Warn("Initial health checks failed: %v", err)
+		s.logger.Info("Continuing with periodic health checks...")
+	}
+
+	// Start periodic health checking
+	if err := s.checker.StartChecking(ctx); err != nil {
+		return fmt.Errorf("failed to start health checking: %w", err)
+	}
+
+	// If no endpoints were healthy initially, wait a bit for periodic checks
+	// to potentially find healthy endpoints eventually
+	healthy, err := s.repository.GetHealthy(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to check healthy endpoints: %w", err)
+	}
+
+	if len(healthy) == 0 {
+
+		// TODO: Maybe better as a info?
+		s.logger.Warn("No initially healthy endpoints, waiting for periodic health checks...", err)
+
+		// Wait up to 30 seconds for at least one endpoint to become healthy
+		if err := s.waitForHealthyEndpoints(ctx, DefaultWaitForHealthyTimeout); err != nil {
+			// Log warning but don't fail startup
+			s.logger.Warn("Proxy will start but may not be able to serve requests initially", err)
+		}
+	}
+
+	s.logger.Info("Starting static discovery service...Done!")
+	return nil
+}
+
+// Stop stops the discovery service and health checker
+func (s *StaticDiscoveryService) Stop(ctx context.Context) error {
+	s.logger.Info("Stopping static discovery service...")
+
+	// Stop health checking
+	if err := s.checker.StopChecking(ctx); err != nil {
+		return fmt.Errorf("failed to stop health checking: %w", err)
+	}
+
+	s.logger.Info("Stopping static discovery service...Done!")
+	return nil
+}
+
+// SetInitialHealthTimeout allows configuring the initial health check timeout
+func (s *StaticDiscoveryService) SetInitialHealthTimeout(timeout time.Duration) {
+	s.initialHealthTimeout = timeout
+}
+
+// GetHealthStatus returns a summary of endpoint health
+func (s *StaticDiscoveryService) GetHealthStatus(ctx context.Context) (map[string]interface{}, error) {
+	all, err := s.repository.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	healthy, err := s.repository.GetHealthy(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	status := make(map[string]interface{})
+	status["total_endpoints"] = len(all)
+	status["healthy_endpoints"] = len(healthy)
+	status["unhealthy_endpoints"] = len(all) - len(healthy)
+
+	endpoints := make([]map[string]interface{}, len(all))
+	for i, endpoint := range all {
+		endpoints[i] = map[string]interface{}{
+			"url":          endpoint.URL.String(),
+			"priority":     endpoint.Priority,
+			"status":       string(endpoint.Status),
+			"last_checked": endpoint.LastChecked,
+		}
+	}
+	status["endpoints"] = endpoints
+
+	return status, nil
+}
