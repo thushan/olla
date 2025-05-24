@@ -16,6 +16,12 @@ type Endpoint struct {
 	CheckTimeout   time.Duration
 	Status         EndpointStatus
 	LastChecked    time.Time
+
+	// Health check state tracking
+	ConsecutiveFailures int
+	BackoffMultiplier   int
+	NextCheckTime       time.Time
+	LastLatency         time.Duration
 }
 
 // EndpointStatus represents the health status of an endpoint
@@ -25,12 +31,45 @@ const (
 	// StatusHealthy indicates the endpoint is healthy and available
 	StatusHealthy EndpointStatus = "healthy"
 
-	// StatusUnhealthy indicates the endpoint is unhealthy or unavailable
+	// StatusBusy indicates the endpoint is responding but slowly/overloaded
+	StatusBusy EndpointStatus = "busy"
+
+	// StatusOffline indicates the endpoint is completely unreachable
+	StatusOffline EndpointStatus = "offline"
+
+	// StatusWarming indicates the endpoint is starting up but not ready for full traffic
+	StatusWarming EndpointStatus = "warming"
+
+	// StatusUnhealthy indicates the endpoint has other health issues
 	StatusUnhealthy EndpointStatus = "unhealthy"
 
 	// StatusUnknown indicates the endpoint health is unknown (not yet checked)
 	StatusUnknown EndpointStatus = "unknown"
 )
+
+// IsRoutable returns true if the endpoint can receive traffic
+func (s EndpointStatus) IsRoutable() bool {
+	switch s {
+	case StatusHealthy, StatusBusy, StatusWarming:
+		return true
+	default:
+		return false
+	}
+}
+
+// GetTrafficWeight returns the traffic weight for load balancing (0.0-1.0)
+func (s EndpointStatus) GetTrafficWeight() float64 {
+	switch s {
+	case StatusHealthy:
+		return 1.0
+	case StatusBusy:
+		return 0.3
+	case StatusWarming:
+		return 0.1
+	default:
+		return 0.0
+	}
+}
 
 // EndpointRepository defines the interface for endpoint storage and retrieval
 type EndpointRepository interface {
@@ -40,8 +79,14 @@ type EndpointRepository interface {
 	// GetHealthy returns only healthy endpoints
 	GetHealthy(ctx context.Context) ([]*Endpoint, error)
 
+	// GetRoutable returns endpoints that can receive traffic
+	GetRoutable(ctx context.Context) ([]*Endpoint, error)
+
 	// UpdateStatus updates the health status of an endpoint
 	UpdateStatus(ctx context.Context, endpointURL *url.URL, status EndpointStatus) error
+
+	// UpdateEndpoint updates endpoint state including backoff and timing
+	UpdateEndpoint(ctx context.Context, endpoint *Endpoint) error
 
 	// Add adds a new endpoint to the repository
 	Add(ctx context.Context, endpoint *Endpoint) error
@@ -50,10 +95,29 @@ type EndpointRepository interface {
 	Remove(ctx context.Context, endpointURL *url.URL) error
 }
 
+// HealthCheckResult contains the result of a health check
+type HealthCheckResult struct {
+	Status    EndpointStatus
+	Latency   time.Duration
+	Error     error
+	ErrorType HealthCheckErrorType
+}
+
+// HealthCheckErrorType categorises different types of health check errors
+type HealthCheckErrorType int
+
+const (
+	ErrorTypeNone HealthCheckErrorType = iota
+	ErrorTypeNetwork
+	ErrorTypeTimeout
+	ErrorTypeHTTPError
+	ErrorTypeCircuitOpen
+)
+
 // HealthChecker defines the interface for checking endpoint health
 type HealthChecker interface {
 	// Check performs a health check on the endpoint and returns its status
-	Check(ctx context.Context, endpoint *Endpoint) (EndpointStatus, error)
+	Check(ctx context.Context, endpoint *Endpoint) (HealthCheckResult, error)
 
 	// StartChecking begins periodic health checks for all endpoints
 	StartChecking(ctx context.Context) error

@@ -36,6 +36,9 @@ type Theme struct {
 	HealthHealthy   pterm.Color
 	HealthUnhealthy pterm.Color
 	HealthUnknown   pterm.Color
+	HealthBusy      pterm.Color
+	HealthOffline   pterm.Color
+	HealthWarming   pterm.Color
 }
 
 // Default returns the default application theme
@@ -70,7 +73,10 @@ func Default() *Theme {
 		// Health check colours
 		HealthHealthy:   pterm.FgGreen,
 		HealthUnhealthy: pterm.FgRed,
-		HealthUnknown:   pterm.FgYellow,
+		HealthUnknown:   pterm.FgGray,
+		HealthBusy:      pterm.FgYellow,
+		HealthOffline:   pterm.FgLightRed,
+		HealthWarming:   pterm.FgLightBlue,
 	}
 }
 
@@ -93,6 +99,14 @@ func Dark() *Theme {
 		Danger:    pterm.FgLightRed,
 		Warning:   pterm.FgLightYellow,
 		Good:      pterm.FgLightGreen,
+
+		// Health colours for dark theme
+		HealthHealthy:   pterm.FgLightGreen,
+		HealthUnhealthy: pterm.FgLightRed,
+		HealthUnknown:   pterm.FgGray,
+		HealthBusy:      pterm.FgLightYellow,
+		HealthOffline:   pterm.FgRed,
+		HealthWarming:   pterm.FgLightCyan,
 	}
 }
 
@@ -115,6 +129,14 @@ func Light() *Theme {
 		Danger:    pterm.FgRed,
 		Warning:   pterm.FgRed,
 		Good:      pterm.FgGreen,
+
+		// Health colours for light theme
+		HealthHealthy:   pterm.FgGreen,
+		HealthUnhealthy: pterm.FgRed,
+		HealthUnknown:   pterm.FgGray,
+		HealthBusy:      pterm.FgRed, // More visible on light backgrounds
+		HealthOffline:   pterm.FgRed,
+		HealthWarming:   pterm.FgBlue,
 	}
 }
 

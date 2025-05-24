@@ -1,7 +1,6 @@
 package health
 
 import (
-	"container/heap"
 	"context"
 	"errors"
 	"fmt"
@@ -16,18 +15,46 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+/*
+Health Check Status Promotion Logic:
+
+Network Errors (connection refused, timeout, DNS failure):
+- First failure: StatusOffline (immediate)
+- Backoff: 2x, 4x, 8x up to MaxBackoffMultiplier
+- Recovery: Reset to normal on any success
+
+HTTP Errors (5xx responses):
+- High latency (>SlowResponseThreshold): StatusBusy
+- Normal latency: StatusUnhealthy
+- Consecutive failures trigger backoff
+
+HTTP Success (2xx):
+- High latency (>SlowResponseThreshold): StatusBusy
+- Normal latency: StatusHealthy
+- Resets failure counters and backoff
+
+Circuit Breaker:
+- Opens after FailureThreshold consecutive failures
+- Returns StatusOffline when open
+- Auto-recovers after CircuitBreakerTimeout
+*/
+
 const (
 	DefaultHealthCheckerWorkerCount = 10
 	DefaultHealthCheckerQueueSize   = 100
 
-	DefaultHealthCheckerInterval = 1 * time.Second
-	DefaultHealthCheckerTimeout  = 5 * time.Second
+	DefaultHealthCheckerTimeout = 5 * time.Second
+	SlowResponseThreshold       = 10 * time.Second
+	VerySlowResponseThreshold   = 30 * time.Second
 
 	HealthyEndpointStatusRangeStart = 200
 	HealthyEndpointStatusRangeEnd   = 300
 
-	DefaultCircuitBreakerThreshold = 5
+	DefaultCircuitBreakerThreshold = 3
 	DefaultCircuitBreakerTimeout   = 30 * time.Second
+
+	MaxBackoffMultiplier = 12
+	BaseBackoffSeconds   = 2
 )
 
 var (
@@ -106,111 +133,49 @@ func (cb *CircuitBreaker) RecordFailure(endpointURL string) {
 	}
 }
 
-// HealthCheckMetrics tracks health check statistics
-type HealthCheckMetrics struct {
-	mu               sync.RWMutex
-	totalChecks      int64
-	successfulChecks int64
-	failedChecks     int64
-	totalLatency     time.Duration
-	lastCheckTime    time.Time
+// StatusTransitionTracker reduces logging noise by only logging status changes
+type StatusTransitionTracker struct {
+	mu          sync.RWMutex
+	lastStatus  map[string]domain.EndpointStatus
+	lastLogTime map[string]time.Time
+	errorCounts map[string]int
 }
 
-func (m *HealthCheckMetrics) RecordCheck(latency time.Duration, success bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.totalChecks++
-	m.totalLatency += latency
-	m.lastCheckTime = time.Now()
-
-	if success {
-		m.successfulChecks++
-	} else {
-		m.failedChecks++
+func NewStatusTransitionTracker() *StatusTransitionTracker {
+	return &StatusTransitionTracker{
+		lastStatus:  make(map[string]domain.EndpointStatus),
+		lastLogTime: make(map[string]time.Time),
+		errorCounts: make(map[string]int),
 	}
 }
 
-func (m *HealthCheckMetrics) GetStats() (total, successful, failed int64, avgLatency time.Duration) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (st *StatusTransitionTracker) ShouldLog(endpointURL string, newStatus domain.EndpointStatus, isError bool) (bool, int) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
 
-	if m.totalChecks > 0 {
-		avgLatency = m.totalLatency / time.Duration(m.totalChecks)
+	key := endpointURL
+	oldStatus := st.lastStatus[key]
+
+	// Always log status transitions
+	if oldStatus != newStatus {
+		st.lastStatus[key] = newStatus
+		st.errorCounts[key] = 0 // Reset error count on status change
+		return true, 0
 	}
 
-	return m.totalChecks, m.successfulChecks, m.failedChecks, avgLatency
-}
+	// For repeated errors, log every 10th occurrence or every 5 minutes
+	if isError {
+		st.errorCounts[key]++
+		count := st.errorCounts[key]
+		lastLog := st.lastLogTime[key]
 
-// scheduledCheck represents a health check scheduled for a specific time
-type scheduledCheck struct {
-	endpoint *domain.Endpoint
-	nextTime time.Time
-	index    int
-}
-
-// checkScheduler manages efficient scheduling of health checks using a heap
-type checkScheduler struct {
-	heap []*scheduledCheck
-	mu   sync.Mutex
-}
-
-func (h *checkScheduler) Len() int { return len(h.heap) }
-
-func (h *checkScheduler) Less(i, j int) bool {
-	return h.heap[i].nextTime.Before(h.heap[j].nextTime)
-}
-
-func (h *checkScheduler) Swap(i, j int) {
-	h.heap[i], h.heap[j] = h.heap[j], h.heap[i]
-	h.heap[i].index = i
-	h.heap[j].index = j
-}
-
-func (h *checkScheduler) Push(x interface{}) {
-	n := len(h.heap)
-	item := x.(*scheduledCheck)
-	item.index = n
-	h.heap = append(h.heap, item)
-}
-
-func (h *checkScheduler) Pop() interface{} {
-	old := h.heap
-	n := len(old)
-	item := old[n-1]
-	old[n-1] = nil
-	item.index = -1
-	h.heap = old[0 : n-1]
-	return item
-}
-
-func (s *checkScheduler) schedule(endpoint *domain.Endpoint, when time.Time) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	check := &scheduledCheck{
-		endpoint: endpoint,
-		nextTime: when,
+		if count%10 == 0 || time.Since(lastLog) > 5*time.Minute {
+			st.lastLogTime[key] = time.Now()
+			return true, count
+		}
 	}
 
-	heap.Push(s, check)
-}
-
-func (s *checkScheduler) nextCheck() (*scheduledCheck, time.Duration) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if len(s.heap) == 0 {
-		return nil, time.Hour
-	}
-
-	next := s.heap[0]
-	waitTime := time.Until(next.nextTime)
-	if waitTime <= 0 {
-		return heap.Pop(s).(*scheduledCheck), 0
-	}
-
-	return nil, waitTime
+	return false, st.errorCounts[key]
 }
 
 // healthCheckJob represents a health check task
@@ -224,8 +189,7 @@ type HTTPHealthChecker struct {
 	repository     domain.EndpointRepository
 	client         HTTPClient
 	circuitBreaker *CircuitBreaker
-	metrics        map[string]*HealthCheckMetrics
-	scheduler      *checkScheduler
+	statusTracker  *StatusTransitionTracker
 	stopCh         chan struct{}
 	jobCh          chan healthCheckJob
 	wg             sync.WaitGroup
@@ -243,8 +207,7 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.S
 			Timeout: DefaultHealthCheckerTimeout,
 		},
 		circuitBreaker: NewCircuitBreaker(),
-		metrics:        make(map[string]*HealthCheckMetrics),
-		scheduler:      &checkScheduler{heap: make([]*scheduledCheck, 0)},
+		statusTracker:  NewStatusTransitionTracker(),
 		stopCh:         make(chan struct{}),
 		jobCh:          make(chan healthCheckJob, DefaultHealthCheckerQueueSize),
 		workerCount:    DefaultHealthCheckerWorkerCount,
@@ -252,19 +215,78 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.S
 	}
 }
 
-func isNetworkError(err error) bool {
+func classifyError(err error) domain.HealthCheckErrorType {
+	if errors.Is(err, ErrCircuitBreakerOpen) {
+		return domain.ErrorTypeCircuitOpen
+	}
+
 	var netErr net.Error
-	return errors.As(err, &netErr)
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return domain.ErrorTypeTimeout
+		}
+		return domain.ErrorTypeNetwork
+	}
+
+	return domain.ErrorTypeHTTPError
+}
+
+func determineStatus(statusCode int, latency time.Duration, err error, errorType domain.HealthCheckErrorType) domain.EndpointStatus {
+	if err != nil {
+		switch errorType {
+		case domain.ErrorTypeNetwork, domain.ErrorTypeTimeout, domain.ErrorTypeCircuitOpen:
+			return domain.StatusOffline
+		default:
+			return domain.StatusUnhealthy
+		}
+	}
+
+	// HTTP response received
+	if statusCode >= HealthyEndpointStatusRangeStart && statusCode < HealthyEndpointStatusRangeEnd {
+		if latency > SlowResponseThreshold {
+			return domain.StatusBusy
+		}
+		return domain.StatusHealthy
+	}
+
+	// HTTP error codes
+	if latency > SlowResponseThreshold {
+		return domain.StatusBusy
+	}
+	return domain.StatusUnhealthy
+}
+
+func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, int) {
+	if success {
+		// Reset on success
+		return endpoint.CheckInterval, 1
+	}
+
+	// Increase backoff multiplier
+	multiplier := endpoint.BackoffMultiplier * 2
+	if multiplier > MaxBackoffMultiplier {
+		multiplier = MaxBackoffMultiplier
+	}
+
+	backoffInterval := endpoint.CheckInterval * time.Duration(multiplier)
+	return backoffInterval, multiplier
 }
 
 // Check performs a health check on the endpoint and returns its status
-func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint) (domain.EndpointStatus, error) {
+func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint) (domain.HealthCheckResult, error) {
 	start := time.Now()
 	endpointURL := endpoint.URL.String()
 
+	result := domain.HealthCheckResult{
+		Status: domain.StatusUnknown,
+	}
+
 	if c.circuitBreaker.IsOpen(endpointURL) {
-		c.recordMetrics(endpointURL, time.Since(start), false)
-		return domain.StatusUnhealthy, ErrCircuitBreakerOpen
+		result.Status = domain.StatusOffline
+		result.Error = ErrCircuitBreakerOpen
+		result.ErrorType = domain.ErrorTypeCircuitOpen
+		result.Latency = time.Since(start)
+		return result, ErrCircuitBreakerOpen
 	}
 
 	checkCtx, cancel := context.WithTimeout(ctx, endpoint.CheckTimeout)
@@ -272,46 +294,37 @@ func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint
 
 	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, endpoint.HealthCheckURL.String(), nil)
 	if err != nil {
+		result.Latency = time.Since(start)
+		result.Error = err
+		result.ErrorType = classifyError(err)
+		result.Status = determineStatus(0, result.Latency, err, result.ErrorType)
 		c.circuitBreaker.RecordFailure(endpointURL)
-		c.recordMetrics(endpointURL, time.Since(start), false)
-		return domain.StatusUnhealthy, fmt.Errorf("failed to create request: %w", err)
+		return result, err
 	}
 
 	resp, err := c.client.Do(req)
-	if err != nil {
-		c.circuitBreaker.RecordFailure(endpointURL)
-		c.recordMetrics(endpointURL, time.Since(start), false)
+	result.Latency = time.Since(start)
 
-		if isNetworkError(err) {
-			return domain.StatusUnhealthy, fmt.Errorf("network error: %w", err)
-		}
-		return domain.StatusUnhealthy, fmt.Errorf("request failed: %w", err)
+	if err != nil {
+		result.Error = err
+		result.ErrorType = classifyError(err)
+		result.Status = determineStatus(0, result.Latency, err, result.ErrorType)
+		c.circuitBreaker.RecordFailure(endpointURL)
+		return result, err
 	}
 	defer func(Body io.ReadCloser) {
 		_ = Body.Close()
 	}(resp.Body)
 
-	success := resp.StatusCode >= HealthyEndpointStatusRangeStart && resp.StatusCode < HealthyEndpointStatusRangeEnd
-	c.recordMetrics(endpointURL, time.Since(start), success)
+	result.Status = determineStatus(resp.StatusCode, result.Latency, nil, domain.ErrorTypeNone)
 
-	if success {
+	if result.Status == domain.StatusHealthy {
 		c.circuitBreaker.RecordSuccess(endpointURL)
-		return domain.StatusHealthy, nil
+	} else {
+		c.circuitBreaker.RecordFailure(endpointURL)
 	}
 
-	c.circuitBreaker.RecordFailure(endpointURL)
-	return domain.StatusUnhealthy, fmt.Errorf("unhealthy status code: %d", resp.StatusCode)
-}
-
-func (c *HTTPHealthChecker) recordMetrics(endpointURL string, latency time.Duration, success bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if _, exists := c.metrics[endpointURL]; !exists {
-		c.metrics[endpointURL] = &HealthCheckMetrics{}
-	}
-
-	c.metrics[endpointURL].RecordCheck(latency, success)
+	return result, nil
 }
 
 // StartChecking begins periodic health checks for all endpoints
@@ -373,84 +386,100 @@ func (c *HTTPHealthChecker) worker() {
 
 // processHealthCheck performs the actual health check and updates status
 func (c *HTTPHealthChecker) processHealthCheck(job healthCheckJob) {
-	status, err := c.Check(job.ctx, job.endpoint)
-	if err != nil && !errors.Is(err, ErrCircuitBreakerOpen) {
-		c.logger.Error("Health check failed",
-			"endpoint", job.endpoint.URL.String(),
-			"error", err)
+	result, err := c.Check(job.ctx, job.endpoint)
+
+	// Update endpoint state
+	job.endpoint.Status = result.Status
+	job.endpoint.LastChecked = time.Now()
+	job.endpoint.LastLatency = result.Latency
+
+	// Calculate next check time with backoff
+	isSuccess := result.Status == domain.StatusHealthy
+	nextInterval, newMultiplier := calculateBackoff(job.endpoint, isSuccess)
+
+	if !isSuccess {
+		job.endpoint.ConsecutiveFailures++
+		job.endpoint.BackoffMultiplier = newMultiplier
+	} else {
+		job.endpoint.ConsecutiveFailures = 0
+		job.endpoint.BackoffMultiplier = 1
 	}
 
-	if err := c.repository.UpdateStatus(job.ctx, job.endpoint.URL, status); err != nil {
-		c.logger.Error("Failed to update endpoint status",
+	job.endpoint.NextCheckTime = time.Now().Add(nextInterval)
+
+	// Update repository
+	if repoErr := c.repository.UpdateEndpoint(job.ctx, job.endpoint); repoErr != nil {
+		c.logger.Error("Failed to update endpoint",
 			"endpoint", job.endpoint.URL.String(),
-			"error", err)
+			"error", repoErr)
+	}
+
+	// Smart logging - only log transitions and periodic summaries
+	shouldLog, errorCount := c.statusTracker.ShouldLog(
+		job.endpoint.URL.String(),
+		result.Status,
+		err != nil)
+
+	if shouldLog {
+		if errorCount > 0 {
+			// Batch error summary
+			c.logger.Warn("Endpoint health issues",
+				"endpoint", job.endpoint.Name,
+				"status", string(result.Status),
+				"consecutive_failures", errorCount,
+				"latency", result.Latency,
+				"next_check_in", nextInterval)
+		} else {
+			// Status transition
+			c.logger.InfoHealthStatus("Endpoint status changed",
+				job.endpoint.Name,
+				result.Status,
+				"latency", result.Latency,
+				"next_check_in", nextInterval)
+		}
 	}
 }
 
-// schedulerLoop manages the timing of health checks using efficient heap-based scheduling
+// schedulerLoop manages health check timing with per-endpoint backoff
 func (c *HTTPHealthChecker) schedulerLoop(ctx context.Context) {
 	defer c.wg.Done()
 
-	// Initial scheduling
-	c.scheduleAllEndpoints(ctx)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
 	for {
-		check, waitTime := c.scheduler.nextCheck()
-
-		if check == nil {
-			// No checks scheduled, wait and refresh
-			select {
-			case <-ctx.Done():
-				return
-			case <-c.stopCh:
-				return
-			case <-time.After(waitTime):
-				c.scheduleAllEndpoints(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-c.stopCh:
+			return
+		case now := <-ticker.C:
+			endpoints, err := c.repository.GetAll(ctx)
+			if err != nil {
 				continue
 			}
-		}
 
-		// Wait until it's time for the next check
-		if waitTime > 0 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-c.stopCh:
-				return
-			case <-time.After(waitTime):
+			for _, endpoint := range endpoints {
+				// Check if it's time for this endpoint
+				if now.Before(endpoint.NextCheckTime) {
+					continue
+				}
+
+				job := healthCheckJob{
+					endpoint: endpoint,
+					ctx:      ctx,
+				}
+
+				select {
+				case c.jobCh <- job:
+					// Job queued successfully
+				default:
+					// Queue full - extend check time slightly
+					endpoint.NextCheckTime = now.Add(time.Second)
+					c.repository.UpdateEndpoint(ctx, endpoint)
+				}
 			}
 		}
-
-		// Queue the health check job
-		job := healthCheckJob{
-			endpoint: check.endpoint,
-			ctx:      ctx,
-		}
-
-		select {
-		case c.jobCh <- job:
-			// Schedule next check for this endpoint
-			nextTime := time.Now().Add(check.endpoint.CheckInterval)
-			c.scheduler.schedule(check.endpoint, nextTime)
-		default:
-			c.logger.Warn("Health check queue full, skipping check",
-				"endpoint", check.endpoint.URL.String())
-			// Reschedule for immediate retry
-			c.scheduler.schedule(check.endpoint, time.Now().Add(time.Second))
-		}
-	}
-}
-
-func (c *HTTPHealthChecker) scheduleAllEndpoints(ctx context.Context) {
-	endpoints, err := c.repository.GetAll(ctx)
-	if err != nil {
-		c.logger.Error("Failed to get endpoints for scheduling", "error", err)
-		return
-	}
-
-	now := time.Now()
-	for _, endpoint := range endpoints {
-		c.scheduler.schedule(endpoint, now)
 	}
 }
 
@@ -493,27 +522,6 @@ func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 	}
 }
 
-// GetHealthCheckMetrics returns metrics for all endpoints
-func (c *HTTPHealthChecker) GetHealthCheckMetrics() map[string]interface{} {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	result := make(map[string]interface{})
-
-	for endpoint, metrics := range c.metrics {
-		total, successful, failed, avgLatency := metrics.GetStats()
-		result[endpoint] = map[string]interface{}{
-			"total_checks":      total,
-			"successful_checks": successful,
-			"failed_checks":     failed,
-			"average_latency":   avgLatency.String(),
-			"success_rate":      float64(successful) / float64(total) * 100,
-		}
-	}
-
-	return result
-}
-
 // ForceHealthCheck forces an immediate health check for all endpoints
 func (c *HTTPHealthChecker) ForceHealthCheck(ctx context.Context) error {
 	if !c.running {
@@ -533,8 +541,7 @@ func (c *HTTPHealthChecker) ForceHealthCheck(ctx context.Context) error {
 
 		select {
 		case c.jobCh <- job:
-			c.logger.Info("Forced health check queued",
-				"endpoint", endpoint.URL.String())
+			// Queued successfully
 		default:
 			return fmt.Errorf("health check queue is full")
 		}

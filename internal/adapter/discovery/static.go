@@ -50,6 +50,20 @@ func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.En
 	return endpoints, nil
 }
 
+// GetRoutable returns endpoints that can receive traffic
+func (r *StaticEndpointRepository) GetRoutable(ctx context.Context) ([]*domain.Endpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	endpoints := make([]*domain.Endpoint, 0)
+	for _, endpoint := range r.endpoints {
+		if endpoint.Status.IsRoutable() {
+			endpoints = append(endpoints, endpoint)
+		}
+	}
+	return endpoints, nil
+}
+
 // UpdateStatus updates the health status of an endpoint
 func (r *StaticEndpointRepository) UpdateStatus(ctx context.Context, endpointURL *url.URL, status domain.EndpointStatus) error {
 	r.mu.Lock()
@@ -66,12 +80,42 @@ func (r *StaticEndpointRepository) UpdateStatus(ctx context.Context, endpointURL
 	return nil
 }
 
+// UpdateEndpoint updates endpoint state including backoff and timing
+func (r *StaticEndpointRepository) UpdateEndpoint(ctx context.Context, endpoint *domain.Endpoint) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := endpoint.URL.String()
+	existing, exists := r.endpoints[key]
+	if !exists {
+		return fmt.Errorf("endpoint not found: %s", key)
+	}
+
+	// Update the existing endpoint with new state
+	existing.Status = endpoint.Status
+	existing.LastChecked = endpoint.LastChecked
+	existing.ConsecutiveFailures = endpoint.ConsecutiveFailures
+	existing.BackoffMultiplier = endpoint.BackoffMultiplier
+	existing.NextCheckTime = endpoint.NextCheckTime
+	existing.LastLatency = endpoint.LastLatency
+
+	return nil
+}
+
 // Add adds a new endpoint to the repository
 func (r *StaticEndpointRepository) Add(ctx context.Context, endpoint *domain.Endpoint) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	key := endpoint.URL.String()
+	// Initialize state fields for new endpoints
+	if endpoint.BackoffMultiplier == 0 {
+		endpoint.BackoffMultiplier = 1
+	}
+	if endpoint.NextCheckTime.IsZero() {
+		endpoint.NextCheckTime = time.Now()
+	}
+
 	r.endpoints[key] = endpoint
 	return nil
 }
@@ -169,29 +213,35 @@ func (s *StaticDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*do
 	return s.repository.GetHealthy(ctx)
 }
 
+// GetRoutableEndpoints returns endpoints that can receive traffic
+func (s *StaticDiscoveryService) GetRoutableEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return s.repository.GetRoutable(ctx)
+}
+
 // GetHealthyEndpointsWithFallback returns healthy endpoints with graceful degradation
 func (s *StaticDiscoveryService) GetHealthyEndpointsWithFallback(ctx context.Context) ([]*domain.Endpoint, error) {
-	healthy, err := s.repository.GetHealthy(ctx)
+	// First try routable endpoints (healthy, busy, warming)
+	routable, err := s.repository.GetRoutable(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(healthy) == 0 {
-		s.logger.Warn("No healthy endpoints available, falling back to all endpoints")
-		all, err := s.repository.GetAll(ctx)
-		if err != nil {
-			return nil, err
-		}
-
-		// Still return error if no endpoints exist at all
-		if len(all) == 0 {
-			return nil, fmt.Errorf("no endpoints configured")
-		}
-
-		return all, nil
+	if len(routable) > 0 {
+		return routable, nil
 	}
 
-	return healthy, nil
+	// Fallback to all endpoints if none are routable
+	s.logger.Warn("No routable endpoints available, falling back to all endpoints")
+	all, err := s.repository.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(all) == 0 {
+		return nil, fmt.Errorf("no endpoints configured")
+	}
+
+	return all, nil
 }
 
 // RefreshEndpoints triggers a refresh of the endpoint list from the config
@@ -240,6 +290,9 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			if configChanged {
 				existing.Status = domain.StatusUnknown
 				existing.LastChecked = time.Now()
+				existing.ConsecutiveFailures = 0
+				existing.BackoffMultiplier = 1
+				existing.NextCheckTime = time.Now()
 				s.logger.Info("Endpoint configuration changed, resetting health status",
 					"endpoint", existing.URL.String())
 			}
@@ -247,20 +300,23 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			delete(currentMap, key)
 		} else {
 			endpoint := &domain.Endpoint{
-				Name:           endpointCfg.Name,
-				URL:            endpointURL,
-				Priority:       endpointCfg.Priority,
-				HealthCheckURL: healthCheckURL,
-				CheckInterval:  endpointCfg.CheckInterval,
-				CheckTimeout:   endpointCfg.CheckTimeout,
-				Status:         domain.StatusUnknown,
+				Name:                endpointCfg.Name,
+				URL:                 endpointURL,
+				Priority:            endpointCfg.Priority,
+				HealthCheckURL:      healthCheckURL,
+				CheckInterval:       endpointCfg.CheckInterval,
+				CheckTimeout:        endpointCfg.CheckTimeout,
+				Status:              domain.StatusUnknown,
+				ConsecutiveFailures: 0,
+				BackoffMultiplier:   1,
+				NextCheckTime:       time.Now(),
 			}
 
 			if err := s.repository.Add(ctx, endpoint); err != nil {
 				return fmt.Errorf("failed to add endpoint %s: %w", key, err)
 			}
 
-			s.logger.Info("Added new endpoint", "name", endpoint.Name, "endpoint", endpoint.URL.String())
+			s.logger.Info("Added new endpoint", "name", endpoint.Name, "endpoint", endpoint.URL.String(), "health_check_url", endpoint.HealthCheckURL.String())
 		}
 	}
 
@@ -307,8 +363,7 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 	var wg sync.WaitGroup
 	healthCheckResults := make(chan struct {
 		endpoint *domain.Endpoint
-		status   domain.EndpointStatus
-		err      error
+		result   domain.HealthCheckResult
 	}, len(endpoints))
 
 	for _, endpoint := range endpoints {
@@ -318,58 +373,63 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 
 			s.logger.InfoWithEndpoint("Checking", ep.URL.String())
 
-			status, err := s.checker.Check(checkCtx, ep)
-
+			result, _ := s.checker.Check(checkCtx, ep)
 			healthCheckResults <- struct {
 				endpoint *domain.Endpoint
-				status   domain.EndpointStatus
-				err      error
-			}{ep, status, err}
+				result   domain.HealthCheckResult
+			}{ep, result}
 		}(endpoint)
 	}
 
 	wg.Wait()
 	close(healthCheckResults)
 
-	healthyCount := 0
-	unhealthyCount := 0
-	unknownCount := 0
-
 	// Process results
-	for result := range healthCheckResults {
-		if result.err != nil {
-			s.logger.ErrorWithEndpoint("Initial health check failed", result.endpoint.URL.String(), "error", result.err)
+	statusCounts := make(map[domain.EndpointStatus]int)
+	for resultData := range healthCheckResults {
+		endpoint := resultData.endpoint
+		result := resultData.result
+
+		// Update endpoint state
+		endpoint.Status = result.Status
+		endpoint.LastChecked = time.Now()
+		endpoint.LastLatency = result.Latency
+
+		if err := s.repository.UpdateEndpoint(checkCtx, endpoint); err != nil {
+			s.logger.ErrorWithEndpoint("Failed to update endpoint status", endpoint.URL.String(), "error", err)
 		}
 
-		if err := s.repository.UpdateStatus(checkCtx, result.endpoint.URL, result.status); err != nil {
-			s.logger.ErrorWithEndpoint("Failed to update endpoint status", result.endpoint.URL.String(), "error", err)
-		}
-
-		s.logger.InfoHealthStatus("Endpoint", result.endpoint.Name, result.status, "uri", result.endpoint.HealthCheckURL.String())
-
-		switch result.status {
-		case domain.StatusHealthy:
-			healthyCount++
-		case domain.StatusUnhealthy:
-			unhealthyCount++
-		default:
-			unknownCount++
-		}
+		statusCounts[result.Status]++
 	}
 
-	if healthyCount == 0 {
-		return fmt.Errorf("no healthy endpoints available after initial health check")
+	// Show clean summary instead of individual status lines
+	s.logger.Info("Initial health check results:")
+	for _, endpoint := range endpoints {
+		s.logger.InfoHealthStatus("", endpoint.Name, endpoint.Status,
+			"latency", endpoint.LastLatency.Round(time.Millisecond))
 	}
 
-	// Using the stats helper method
-	s.logger.InfoWithHealthStats("Initial health check complete", healthyCount, unhealthyCount, unknownCount)
+	healthy := statusCounts[domain.StatusHealthy]
+	routable := healthy + statusCounts[domain.StatusBusy] + statusCounts[domain.StatusWarming]
+
+	if routable == 0 {
+		return fmt.Errorf("no routable endpoints available after initial health check")
+	}
+
+	s.logger.Info("Health check summary",
+		"healthy", healthy,
+		"busy", statusCounts[domain.StatusBusy],
+		"warming", statusCounts[domain.StatusWarming],
+		"offline", statusCounts[domain.StatusOffline],
+		"unhealthy", statusCounts[domain.StatusUnhealthy],
+		"unknown", statusCounts[domain.StatusUnknown])
 
 	return nil
 }
 
-// waitForHealthyEndpoints waits until at least one endpoint becomes healthy
+// waitForHealthyEndpoints waits until at least one endpoint becomes routable
 func (s *StaticDiscoveryService) waitForHealthyEndpoints(ctx context.Context, maxWait time.Duration) error {
-	s.logger.Info("Waiting for healthy endpoints", "max_wait", maxWait)
+	s.logger.Info("Waiting for routable endpoints", "max_wait", maxWait)
 
 	timeout := time.NewTimer(maxWait)
 	defer timeout.Stop()
@@ -380,23 +440,23 @@ func (s *StaticDiscoveryService) waitForHealthyEndpoints(ctx context.Context, ma
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("context cancelled while waiting for healthy endpoints: %w", ctx.Err())
+			return fmt.Errorf("context cancelled while waiting for routable endpoints: %w", ctx.Err())
 		case <-timeout.C:
-			return fmt.Errorf("timeout waiting for healthy endpoints after %v", maxWait)
+			return fmt.Errorf("timeout waiting for routable endpoints after %v", maxWait)
 		case <-ticker.C:
-			healthy, err := s.repository.GetHealthy(ctx)
+			routable, err := s.repository.GetRoutable(ctx)
 			if err != nil {
-				s.logger.Error("Error checking healthy endpoints", "error", err)
+				s.logger.Error("Error checking routable endpoints", "error", err)
 				continue
 			}
 
-			if len(healthy) > 0 {
-				s.logger.Info("Found healthy endpoints, ready to serve traffic",
-					"count", len(healthy))
+			if len(routable) > 0 {
+				s.logger.Info("Found routable endpoints, ready to serve traffic",
+					"count", len(routable))
 				return nil
 			}
 
-			s.logger.Warn("No healthy endpoints yet, waiting...")
+			s.logger.Warn("No routable endpoints yet, waiting...")
 		}
 	}
 }
@@ -421,14 +481,14 @@ func (s *StaticDiscoveryService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start health checking: %w", err)
 	}
 
-	// If no endpoints were healthy initially, wait for periodic checks
-	healthy, err := s.repository.GetHealthy(ctx)
+	// If no endpoints were routable initially, wait for periodic checks
+	routable, err := s.repository.GetRoutable(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to check healthy endpoints: %w", err)
+		return fmt.Errorf("failed to check routable endpoints: %w", err)
 	}
 
-	if len(healthy) == 0 {
-		s.logger.Info("No initially healthy endpoints, waiting for periodic health checks...")
+	if len(routable) == 0 {
+		s.logger.Info("No initially routable endpoints, waiting for periodic health checks...")
 
 		if err := s.waitForHealthyEndpoints(ctx, DefaultWaitForHealthyTimeout); err != nil {
 			s.logger.Warn("Proxy will start but may not be able to serve requests initially",
@@ -458,6 +518,19 @@ func (s *StaticDiscoveryService) SetInitialHealthTimeout(timeout time.Duration) 
 	s.initialHealthTimeout = timeout
 }
 
+// EndpointStatusResponse represents the JSON structure for endpoint status
+type EndpointStatusResponse struct {
+	Name                string    `json:"name"`
+	URL                 string    `json:"url"`
+	Priority            int       `json:"priority"`
+	Status              string    `json:"status"`
+	LastChecked         time.Time `json:"last_checked"`
+	LastLatency         string    `json:"last_latency"`
+	ConsecutiveFailures int       `json:"consecutive_failures"`
+	BackoffMultiplier   int       `json:"backoff_multiplier"`
+	NextCheckTime       time.Time `json:"next_check_time"`
+}
+
 // GetHealthStatus returns a summary of endpoint health
 func (s *StaticDiscoveryService) GetHealthStatus(ctx context.Context) (map[string]interface{}, error) {
 	all, err := s.repository.GetAll(ctx)
@@ -470,19 +543,29 @@ func (s *StaticDiscoveryService) GetHealthStatus(ctx context.Context) (map[strin
 		return nil, err
 	}
 
+	routable, err := s.repository.GetRoutable(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	status := make(map[string]interface{})
 	status["total_endpoints"] = len(all)
 	status["healthy_endpoints"] = len(healthy)
-	status["unhealthy_endpoints"] = len(all) - len(healthy)
+	status["routable_endpoints"] = len(routable)
+	status["unhealthy_endpoints"] = len(all) - len(routable)
 
-	endpoints := make([]map[string]interface{}, len(all))
+	endpoints := make([]EndpointStatusResponse, len(all))
 	for i, endpoint := range all {
-		endpoints[i] = map[string]interface{}{
-			"name":         endpoint.Name,
-			"url":          endpoint.URL.String(),
-			"priority":     endpoint.Priority,
-			"status":       string(endpoint.Status),
-			"last_checked": endpoint.LastChecked,
+		endpoints[i] = EndpointStatusResponse{
+			Name:                endpoint.Name,
+			URL:                 endpoint.URL.String(),
+			Priority:            endpoint.Priority,
+			Status:              string(endpoint.Status),
+			LastChecked:         endpoint.LastChecked,
+			LastLatency:         endpoint.LastLatency.String(),
+			ConsecutiveFailures: endpoint.ConsecutiveFailures,
+			BackoffMultiplier:   endpoint.BackoffMultiplier,
+			NextCheckTime:       endpoint.NextCheckTime,
 		}
 	}
 	status["endpoints"] = endpoints

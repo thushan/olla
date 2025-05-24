@@ -82,7 +82,6 @@ func (sl *StyledLogger) InfoHealthy(msg string, endpoint string, args ...any) {
 }
 
 func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.EndpointStatus, args ...any) {
-
 	var statusColor pterm.Color
 	var statusText string
 
@@ -90,6 +89,15 @@ func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.
 	case domain.StatusHealthy:
 		statusColor = sl.theme.HealthHealthy
 		statusText = "Healthy"
+	case domain.StatusBusy:
+		statusColor = sl.theme.HealthBusy
+		statusText = "Busy"
+	case domain.StatusOffline:
+		statusColor = sl.theme.HealthOffline
+		statusText = "Offline"
+	case domain.StatusWarming:
+		statusColor = sl.theme.HealthWarming
+		statusText = "Warming"
 	case domain.StatusUnhealthy:
 		statusColor = sl.theme.HealthUnhealthy
 		statusText = "Unhealthy"
@@ -100,6 +108,7 @@ func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.
 	styledMsg := fmt.Sprintf("%s %s is %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(name), pterm.Style{statusColor}.Sprint(statusText))
 	sl.logger.Info(styledMsg, args...)
 }
+
 func (sl *StyledLogger) InfoUnhealthy(msg string, endpoint string, args ...any) {
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.HealthUnhealthy}.Sprint(endpoint))
 	sl.logger.Info(styledMsg, args...)
