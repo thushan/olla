@@ -109,34 +109,6 @@ func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.
 	sl.logger.Info(styledMsg, args...)
 }
 
-func (sl *StyledLogger) InfoUnhealthy(msg string, endpoint string, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.HealthUnhealthy}.Sprint(endpoint))
-	sl.logger.Info(styledMsg, args...)
-}
-
-func (sl *StyledLogger) WarnUnknownHealth(msg string, endpoint string, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.HealthUnknown}.Sprint(endpoint))
-	sl.logger.Warn(styledMsg, args...)
-}
-
-func (sl *StyledLogger) InfoWithHealthStats(msg string, healthy, unhealthy, unknown int, args ...any) {
-	// Create styled values for the health stats - more efficient for integers
-	healthyStyled := pterm.Style{sl.theme.HealthHealthy}.Sprint(healthy)
-	unhealthyStyled := pterm.Style{sl.theme.HealthUnhealthy}.Sprint(unhealthy)
-	unknownStyled := pterm.Style{sl.theme.HealthUnknown}.Sprint(unknown)
-
-	// Combine the styled health stats with any additional args
-	allArgs := make([]any, 0, len(args)+6)
-	allArgs = append(allArgs, args...)
-	allArgs = append(allArgs,
-		"healthy", healthyStyled,
-		"unhealthy", unhealthyStyled,
-		"unknown", unknownStyled,
-	)
-
-	sl.logger.Info(msg, allArgs...)
-}
-
 // GetUnderlying returns the underlying slog.Logger for cases where direct access is needed
 func (sl *StyledLogger) GetUnderlying() *slog.Logger {
 	return sl.logger

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/thushan/olla/internal/app"
-	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/env"
 	"github.com/thushan/olla/internal/version"
 	"log"
@@ -24,12 +23,6 @@ func main() {
 		os.Exit(0)
 	} else {
 		version.PrintVersionInfo(false, vlog)
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
-		os.Exit(1)
 	}
 
 	// setup: logging with styled logger
@@ -60,7 +53,7 @@ func main() {
 	}()
 
 	// Pass styled logger to application
-	application, err := app.New(cfg, styledLogger)
+	application, err := app.New(styledLogger)
 	if err != nil {
 		logger.FatalWithLogger(logInstance, "Failed to create application", "error", err)
 	}

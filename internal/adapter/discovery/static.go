@@ -141,6 +141,7 @@ type StaticDiscoveryService struct {
 	config               *config.Config
 	initialHealthTimeout time.Duration
 	logger               *logger.StyledLogger
+	configLoader         func() *config.Config
 }
 
 const (
@@ -201,6 +202,17 @@ func validateEndpointConfig(cfg config.EndpointConfig) error {
 	}
 
 	return nil
+}
+
+func (s *StaticDiscoveryService) SetConfig(config *config.Config) {
+	s.config = config
+}
+
+func (s *StaticDiscoveryService) ReloadConfig() {
+	s.logger.Info("Config file changed, reloading endpoints...")
+	if err := s.RefreshEndpoints(context.Background()); err != nil {
+		s.logger.Error("Failed to reload endpoints from config", "error", err)
+	}
 }
 
 // GetEndpoints returns all registered endpoints
@@ -288,6 +300,8 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 		key := endpointURL.String()
 		if existing, exists := currentMap[key]; exists {
 			configChanged := s.hasEndpointConfigChanged(existing, endpointCfg, healthCheckURL)
+			oldName := existing.Name
+			hasNameChanged := existing.Name != endpointCfg.Name
 
 			// Update existing endpoint
 			existing.Name = endpointCfg.Name
@@ -298,13 +312,19 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			existing.CheckTimeout = endpointCfg.CheckTimeout
 
 			if configChanged {
+				if hasNameChanged {
+					s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName, "to", endpointCfg.Name)
+				} else {
+					s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName)
+				}
+
+				existing.Name = endpointCfg.Name
 				existing.Status = domain.StatusUnknown
 				existing.LastChecked = time.Now()
 				existing.ConsecutiveFailures = 0
 				existing.BackoffMultiplier = 1
 				existing.NextCheckTime = time.Now()
-				s.logger.Info("Endpoint configuration changed, resetting health status",
-					"endpoint", existing.URL.String())
+
 			}
 
 			delete(currentMap, key)
@@ -339,7 +359,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 		if err := s.repository.Remove(ctx, endpoint.URL); err != nil {
 			return fmt.Errorf("failed to remove endpoint %s: %w", key, err)
 		}
-		s.logger.Info("Removed endpoint", "endpoint", endpoint.URL.String())
+		s.logger.InfoWithEndpoint("Removed endpoint", endpoint.Name)
 	}
 
 	return nil

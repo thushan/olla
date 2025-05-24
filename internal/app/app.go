@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/spf13/viper"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/config"
@@ -27,13 +28,35 @@ type Application struct {
 }
 
 // New creates a new application instance
-func New(cfg *config.Config, logger *logger.StyledLogger) (*Application, error) {
-
+func New(logger *logger.StyledLogger) (*Application, error) {
 	// start port services
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthChecker(repository, logger)
-	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, cfg, logger)
+	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, nil, logger)
+
+	cfg, err := config.Load(func() {
+		// Hot reloading of  configuration file
+		// this is a bit tricky, inspired by Viper's docs.
+		if err := viper.ReadInConfig(); err != nil {
+			logger.Error("Failed to re-read config file", "error", err)
+			return
+		}
+
+		newConfig := config.DefaultConfig()
+		if err := viper.Unmarshal(newConfig); err != nil {
+			logger.Error("Failed to unmarshal new config", "error", err)
+			return
+		}
+
+		// reset the config reference
+		discoveryService.SetConfig(newConfig)
+		discoveryService.ReloadConfig()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Failed to load configuration: %v\n", err)
+	}
+	discoveryService.SetConfig(cfg)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
