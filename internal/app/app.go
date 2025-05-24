@@ -32,7 +32,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*Application, error) {
 	// start port services
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
-	healthChecker := health.NewHTTPHealthChecker(repository)
+	healthChecker := health.NewHTTPHealthChecker(repository, logger)
 	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, cfg, logger)
 
 	server := &http.Server{
@@ -65,14 +65,14 @@ func (a *Application) Start(ctx context.Context) error {
 	}()
 
 	a.startWebServer()
-	
+
 	// Start discovery service
 	if err := a.discoveryService.Start(ctx); err != nil {
 		a.logger.Error("discovery service startup error", "error", err)
 		a.errCh <- err
 	}
 
-	a.logger.Info("Olly started", "bind", a.server.Addr)
+	a.logger.Info("Olla started", "bind", a.server.Addr)
 	return nil
 }
 
@@ -80,6 +80,11 @@ func (a *Application) Start(ctx context.Context) error {
 func (a *Application) Stop(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, a.config.Server.ShutdownTimeout)
 	defer cancel()
+
+	// Stop discovery service first
+	if err := a.discoveryService.Stop(shutdownCtx); err != nil {
+		a.logger.Error("Failed to stop discovery service", "error", err)
+	}
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("HTTP server shutdown error: %w", err)
@@ -92,6 +97,7 @@ func (a *Application) registerRoutes() {
 	a.registry.RegisterWithMethod("/proxy", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
 	a.registry.RegisterWithMethod("/ma", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
 	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
+	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
 }
 
 func (a *Application) startWebServer() {
@@ -119,6 +125,31 @@ func (a *Application) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	response := map[string]string{"status": "healthy"}
+	json.NewEncoder(w).Encode(response)
+}
+
+// statusHandler handles endpoint status requests
+func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get discovery service status if it implements the method
+	if ds, ok := a.discoveryService.(*discovery.StaticDiscoveryService); ok {
+		status, err := ds.GetHealthStatus(ctx)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to get status: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(status)
+		return
+	}
+
+	// Fallback response
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	response := map[string]string{"message": "Status endpoint available"}
 	json.NewEncoder(w).Encode(response)
 }
 
