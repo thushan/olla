@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/thushan/olla/internal/logger"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -232,11 +232,11 @@ type HTTPHealthChecker struct {
 	mu             sync.Mutex
 	running        bool
 	workerCount    int
-	logger         *slog.Logger
+	logger         *logger.StyledLogger
 }
 
 // NewHTTPHealthChecker creates a new HTTP health checker
-func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *slog.Logger) *HTTPHealthChecker {
+func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.StyledLogger) *HTTPHealthChecker {
 	return &HTTPHealthChecker{
 		repository: repository,
 		client: &http.Client{

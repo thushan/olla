@@ -3,9 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"github.com/pterm/pterm"
-	"github.com/thushan/olla/theme"
-	"log/slog"
+	"github.com/thushan/olla/internal/logger"
 	"net/url"
 	"sync"
 	"time"
@@ -98,7 +96,7 @@ type StaticDiscoveryService struct {
 	checker              domain.HealthChecker
 	config               *config.Config
 	initialHealthTimeout time.Duration
-	logger               *slog.Logger
+	logger               *logger.StyledLogger
 }
 
 const (
@@ -113,7 +111,7 @@ func NewStaticDiscoveryService(
 	repository domain.EndpointRepository,
 	checker domain.HealthChecker,
 	config *config.Config,
-	logger *slog.Logger,
+	logger *logger.StyledLogger,
 ) *StaticDiscoveryService {
 	return &StaticDiscoveryService{
 		repository:           repository,
@@ -262,7 +260,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 				return fmt.Errorf("failed to add endpoint %s: %w", key, err)
 			}
 
-			s.logger.Info("Added new endpoint", "endpoint", endpoint.URL.String())
+			s.logger.Info("Added new endpoint", "name", endpoint.Name, "endpoint", endpoint.URL.String())
 		}
 	}
 
@@ -303,8 +301,7 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 		return nil
 	}
 
-	s.logger.Info(fmt.Sprintf("Health checking %s Endpoints",
-		pterm.Style{theme.Default().Counts}.Sprintf("(%d)", endpointCount)))
+	s.logger.InfoWithCount("Endpoints to health check", endpointCount)
 
 	// Perform health checks concurrently but wait for all to complete
 	var wg sync.WaitGroup
@@ -319,8 +316,7 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 		go func(ep *domain.Endpoint) {
 			defer wg.Done()
 
-			s.logger.Info(fmt.Sprintf("Initial health check for %s",
-				pterm.Style{theme.Default().HealthCheck}.Sprintf(ep.URL.String())))
+			s.logger.InfoWithEndpoint("Checking", ep.URL.String())
 
 			status, err := s.checker.Check(checkCtx, ep)
 
@@ -342,33 +338,22 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 	// Process results
 	for result := range healthCheckResults {
 		if result.err != nil {
-			s.logger.Error("Initial health check failed",
-				"endpoint", result.endpoint.URL.String(),
-				"error", result.err)
+			s.logger.ErrorWithEndpoint("Initial health check failed", result.endpoint.URL.String(), "error", result.err)
 		}
 
 		if err := s.repository.UpdateStatus(checkCtx, result.endpoint.URL, result.status); err != nil {
-			s.logger.Error("Failed to update endpoint status",
-				"endpoint", result.endpoint.URL.String(),
-				"error", err)
+			s.logger.ErrorWithEndpoint("Failed to update endpoint status", result.endpoint.URL.String(), "error", err)
 		}
+
+		s.logger.InfoHealthStatus("Endpoint", result.endpoint.Name, result.status, "uri", result.endpoint.HealthCheckURL.String())
 
 		switch result.status {
 		case domain.StatusHealthy:
 			healthyCount++
-			s.logger.Info("Endpoint is healthy",
-				"endpoint", result.endpoint.URL.String(),
-				"status", "healthy")
 		case domain.StatusUnhealthy:
 			unhealthyCount++
-			s.logger.Info("Endpoint is unhealthy",
-				"endpoint", result.endpoint.URL.String(),
-				"status", "unhealthy")
 		default:
 			unknownCount++
-			s.logger.Warn("Endpoint status unknown",
-				"endpoint", result.endpoint.URL.String(),
-				"status", "unknown")
 		}
 	}
 
@@ -376,10 +361,8 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 		return fmt.Errorf("no healthy endpoints available after initial health check")
 	}
 
-	s.logger.Info("Initial health check complete",
-		"healthy", healthyCount,
-		"unhealthy", unhealthyCount,
-		"unknown", unknownCount)
+	// Using the stats helper method
+	s.logger.InfoWithHealthStats("Initial health check complete", healthyCount, unhealthyCount, unknownCount)
 
 	return nil
 }

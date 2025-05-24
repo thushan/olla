@@ -9,8 +9,8 @@ import (
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
-	"log/slog"
 	"net/http"
 )
 
@@ -18,7 +18,7 @@ import (
 type Application struct {
 	config           *config.Config
 	server           *http.Server
-	logger           *slog.Logger
+	logger           *logger.StyledLogger
 	registry         *router.RouteRegistry
 	discoveryService ports.DiscoveryService
 	proxyService     ports.ProxyService
@@ -27,7 +27,7 @@ type Application struct {
 }
 
 // New creates a new application instance
-func New(cfg *config.Config, logger *slog.Logger) (*Application, error) {
+func New(cfg *config.Config, logger *logger.StyledLogger) (*Application, error) {
 
 	// start port services
 	registry := router.NewRouteRegistry(logger)

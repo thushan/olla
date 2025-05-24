@@ -1,3 +1,4 @@
+// main.go - Updated sections to use styled logger
 package main
 
 import (
@@ -31,9 +32,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// setup: logging
+	// setup: logging with styled logger
 	lcfg := buildLoggerConfig()
-	logInstance, cleanup, err := logger.New(lcfg)
+	logInstance, styledLogger, cleanup, err := logger.NewWithTheme(lcfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialise logger: %v\n", err)
 		os.Exit(1)
@@ -43,7 +44,7 @@ func main() {
 	// Set as default logger
 	slog.SetDefault(logInstance)
 
-	logInstance.Info("Initialising", "version", version.Version, "pid", os.Getpid())
+	styledLogger.Info("Initialising", "version", version.Version, "pid", os.Getpid())
 
 	// setup: graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -54,11 +55,12 @@ func main() {
 
 	go func() {
 		sig := <-sigCh
-		logInstance.Info("Shutdown signal received", "signal", sig.String())
+		styledLogger.Info("Shutdown signal received", "signal", sig.String())
 		cancel()
 	}()
 
-	application, err := app.New(cfg, logInstance)
+	// Pass styled logger to application
+	application, err := app.New(cfg, styledLogger)
 	if err != nil {
 		logger.FatalWithLogger(logInstance, "Failed to create application", "error", err)
 	}
@@ -70,10 +72,10 @@ func main() {
 	<-ctx.Done()
 
 	if err := application.Stop(context.Background()); err != nil {
-		logInstance.Error("Error during shutdown", "error", err)
+		styledLogger.Error("Error during shutdown", "error", err)
 	}
 
-	logInstance.Info("Olla has shutdown")
+	styledLogger.Info("Olla has shutdown")
 }
 
 // buildLoggerConfig creates logger config from environment variables with defaults

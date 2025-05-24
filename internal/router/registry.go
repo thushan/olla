@@ -2,8 +2,8 @@ package router
 
 import (
 	"fmt"
+	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/theme"
-	"log/slog"
 	"net/http"
 	"sort"
 
@@ -19,11 +19,11 @@ type RouteInfo struct {
 
 type RouteRegistry struct {
 	routes   map[string]RouteInfo
-	logger   *slog.Logger
+	logger   *logger.StyledLogger
 	orderSeq int
 }
 
-func NewRouteRegistry(logger *slog.Logger) *RouteRegistry {
+func NewRouteRegistry(logger *logger.StyledLogger) *RouteRegistry {
 	return &RouteRegistry{
 		routes:   make(map[string]RouteInfo),
 		logger:   logger,
