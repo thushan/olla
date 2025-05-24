@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/app"
+	"github.com/thushan/olla/internal/app"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/env"
 	"github.com/thushan/olla/internal/version"
