@@ -13,10 +13,12 @@ import (
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
 	"net/http"
+	"sync"
 )
 
 // Application represents the Olla application
 type Application struct {
+	configMu         sync.RWMutex
 	config           *config.Config
 	server           *http.Server
 	logger           *logger.StyledLogger
@@ -35,8 +37,15 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	healthChecker := health.NewHTTPHealthChecker(repository, logger)
 	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, nil, logger)
 
+	app := &Application{
+		logger:           logger,
+		registry:         registry,
+		discoveryService: discoveryService,
+		errCh:            make(chan error, 1),
+	}
+
 	cfg, err := config.Load(func() {
-		// Hot reloading of  configuration file
+		// Hot reloading of configuration file
 		// this is a bit tricky, inspired by Viper's docs.
 		if err := viper.ReadInConfig(); err != nil {
 			logger.Error("Failed to re-read config file", "error", err)
@@ -49,13 +58,16 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 			return
 		}
 
-		// reset the config reference
+		// ONLY CHANGE: use thread-safe setter
+		app.setConfig(newConfig)
 		discoveryService.SetConfig(newConfig)
 		discoveryService.ReloadConfig()
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load configuration: %v\n", err)
 	}
+
+	app.setConfig(cfg) // Use thread-safe setter
 	discoveryService.SetConfig(cfg)
 
 	server := &http.Server{
@@ -64,15 +76,9 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 		WriteTimeout: cfg.Server.WriteTimeout,
 		Handler:      nil, // Will be set in Start()
 	}
+	app.server = server
 
-	return &Application{
-		config:           cfg,
-		server:           server,
-		logger:           logger,
-		registry:         registry,
-		discoveryService: discoveryService,
-		errCh:            make(chan error, 1),
-	}, nil
+	return app, nil
 }
 
 // Start starts the application

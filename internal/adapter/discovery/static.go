@@ -138,6 +138,7 @@ func (r *StaticEndpointRepository) Remove(ctx context.Context, endpointURL *url.
 type StaticDiscoveryService struct {
 	repository           domain.EndpointRepository
 	checker              domain.HealthChecker
+	configMu             sync.RWMutex
 	config               *config.Config
 	initialHealthTimeout time.Duration
 	logger               *logger.StyledLogger
@@ -204,10 +205,21 @@ func validateEndpointConfig(cfg config.EndpointConfig) error {
 	return nil
 }
 
+// SetConfig - minimal thread safety addition
 func (s *StaticDiscoveryService) SetConfig(config *config.Config) {
+	s.configMu.Lock()
+	defer s.configMu.Unlock()
 	s.config = config
 }
 
+// getConfig - helper for safe access
+func (s *StaticDiscoveryService) getConfig() *config.Config {
+	s.configMu.RLock()
+	defer s.configMu.RUnlock()
+	return s.config
+}
+
+// ReloadConfig - EXACTLY your original logic
 func (s *StaticDiscoveryService) ReloadConfig() {
 	s.logger.Info("Config file changed, reloading endpoints...")
 	if err := s.RefreshEndpoints(context.Background()); err != nil {
@@ -258,6 +270,8 @@ func (s *StaticDiscoveryService) GetHealthyEndpointsWithFallback(ctx context.Con
 
 // RefreshEndpoints triggers a refresh of the endpoint list from the config
 func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
+	cfg := s.getConfig() // ONLY CHANGE: use safe getter
+
 	currentEndpoints, err := s.repository.GetAll(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current endpoints: %w", err)
@@ -269,7 +283,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 		currentMap[endpoint.URL.String()] = endpoint
 	}
 
-	for _, endpointCfg := range s.config.Discovery.Static.Endpoints {
+	for _, endpointCfg := range cfg.Discovery.Static.Endpoints { // Use cfg from safe getter
 		if err := validateEndpointConfig(endpointCfg); err != nil {
 			s.logger.Error("Invalid endpoint configuration",
 				"name", endpointCfg.Name,
@@ -293,7 +307,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			return fmt.Errorf("invalid model URL %s: %w", endpointCfg.ModelURL, err)
 		}
 
-		// Get the full health check URL here to avoid having do it each teime later
+		// Get the full health check URL here to avoid having do it each time later
 		healthCheckURL := endpointURL.ResolveReference(healthCheckPath)
 		modelUrl := endpointURL.ResolveReference(modelPath)
 
@@ -324,7 +338,6 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 				existing.ConsecutiveFailures = 0
 				existing.BackoffMultiplier = 1
 				existing.NextCheckTime = time.Now()
-
 			}
 
 			delete(currentMap, key)
