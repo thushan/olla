@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/spf13/viper"
 	"github.com/thushan/olla/internal/adapter/discovery"
@@ -31,7 +29,7 @@ type Application struct {
 
 // New creates a new application instance
 func New(logger *logger.StyledLogger) (*Application, error) {
-	// start port services
+	// start port services first, w e need them for discovery
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthChecker(repository, logger)
@@ -58,8 +56,8 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 			return
 		}
 
-		// ONLY CHANGE: use thread-safe setter
 		app.setConfig(newConfig)
+
 		discoveryService.SetConfig(newConfig)
 		discoveryService.ReloadConfig()
 	})
@@ -127,69 +125,4 @@ func (a *Application) registerRoutes() {
 	a.registry.RegisterWithMethod("/ma", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
 	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
 	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
-}
-
-func (a *Application) startWebServer() {
-	a.logger.Info("Starting WebServer...", "host", a.config.Server.Host, "port", a.config.Server.Port)
-
-	mux := http.NewServeMux()
-
-	a.registerRoutes()
-	a.registry.WireUp(mux)
-
-	go func() {
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.logger.Error("HTTP server error", "error", err)
-			a.errCh <- err
-		}
-	}()
-
-	a.server.Handler = mux
-	a.logger.Info("Started WebServer", "bind", a.server.Addr)
-}
-
-// healthHandler handles health check requests
-func (a *Application) healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-
-	response := map[string]string{"status": "healthy"}
-	json.NewEncoder(w).Encode(response)
-}
-
-// statusHandler handles endpoint status requests
-func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	// Get discovery service status if it implements the method
-	if ds, ok := a.discoveryService.(*discovery.StaticDiscoveryService); ok {
-		status, err := ds.GetHealthStatus(ctx)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to get status: %v", err), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(status)
-		return
-	}
-
-	// Fallback response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	response := map[string]string{"message": "Status endpoint available"}
-	json.NewEncoder(w).Encode(response)
-}
-
-// proxyHandler handles Ollama API proxy requests
-func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusNotImplemented)
-
-	response := map[string]string{
-		"message": "Ollama proxy not yet implemented",
-		"path":    r.URL.Path,
-	}
-	json.NewEncoder(w).Encode(response)
 }
