@@ -360,17 +360,19 @@ func (c *HTTPHealthChecker) processHealthCheck(job healthCheckJob) {
 		err != nil)
 
 	if shouldLog {
-		if errorCount > 0 {
+		if errorCount > 0 ||
+			(result.Status  == domain.StatusOffline ||
+				result.Status == domain.StatusBusy ||
+				result.Status == domain.StatusUnhealthy) {
 			// Batch error summary
-			c.logger.Warn("Endpoint health issues",
-				"endpoint", job.endpoint.Name,
-				"status", string(result.Status),
+			c.logger.WarnWithEndpoint("Endpoint health issues for", job.endpoint.Name,
+				"status", result.Status.String(),
 				"consecutive_failures", errorCount,
 				"latency", result.Latency,
 				"next_check_in", nextInterval)
 		} else {
 			// Status transition
-			c.logger.InfoHealthStatus("Endpoint status changed",
+			c.logger.InfoHealthStatus("Endpoint status changed for",
 				job.endpoint.Name,
 				result.Status,
 				"latency", result.Latency,
