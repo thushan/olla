@@ -40,7 +40,6 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 │  ██║   ██║██║     ██║     ██╔══██║   ⢻⣄⠘⠋⡞⠉⢤⠉⢳⠙⠃⢠⡿⡀ │
 │  ╚██████╔╝███████╗███████╗██║  ██║   ⣼⠃⠀⠀⠳⠤⠬⠤⠞⠀⠀⠘⣷  │
 │                                      ⢸⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡇  │` + "\n"))
-
 	b.WriteString(theme.ColourSplashLipgloss("│  "))
 	b.WriteString(theme.StyleUrlLipgloss(githubUri))
 	b.WriteString(padLatest)

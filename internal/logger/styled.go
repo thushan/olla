@@ -62,7 +62,59 @@ func (sl *StyledLogger) Debug(msg string, args ...any) {
 }
 
 func (sl *StyledLogger) Info(msg string, args ...any) {
-	sl.logger.Info(msg, args...)
+	// Check if this looks like a multi-line structured log entry
+	if len(args) >= 6 && containsEndpointInfo(args) {
+		sl.infoWithTree(msg, args...)
+	} else {
+		sl.logger.Info(msg, args...)
+	}
+}
+
+// Helper function to detect endpoint info logging
+func containsEndpointInfo(args []any) bool {
+	// Look for common endpoint info keys
+	for i := 0; i < len(args)-1; i += 2 {
+		if key, ok := args[i].(string); ok {
+			if key == "name" || key == "endpoint" || key == "model_url" || key == "health_check_url" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// infoWithTree formats structured data with tree-style box drawing characters
+func (sl *StyledLogger) infoWithTree(msg string, args ...any) {
+	// Log the main message first
+	sl.logger.Info(msg)
+
+	// Then log each key-value pair with tree formatting
+	for i := 0; i < len(args)-1; i += 2 {
+		if key, ok := args[i].(string); ok {
+			value := args[i+1]
+
+			var prefix string
+			if i == len(args)-2 { // Last item
+				prefix = "└"
+			} else {
+				prefix = "├"
+			}
+
+			// Format with tree characters and colors
+			var formattedLine string
+			switch key {
+			case "name":
+				formattedLine = fmt.Sprintf("%s %s: %s", prefix, key, sl.styles.Endpoint.Render(fmt.Sprintf("%v", value)))
+			case "endpoint", "model_url", "health_check_url":
+				formattedLine = fmt.Sprintf("%s %s: %v", prefix, key, value)
+			default:
+				formattedLine = fmt.Sprintf("%s %s: %v", prefix, key, value)
+			}
+
+			// Log each line directly to avoid extra formatting
+			fmt.Println(formattedLine)
+		}
+	}
 }
 
 func (sl *StyledLogger) Warn(msg string, args ...any) {

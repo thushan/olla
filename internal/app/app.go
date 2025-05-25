@@ -3,6 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"sync"
+
 	"github.com/spf13/viper"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
@@ -10,8 +13,7 @@ import (
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
-	"net/http"
-	"sync"
+	"github.com/thushan/olla/internal/tui"
 )
 
 // Application represents the Olla application
@@ -24,6 +26,8 @@ type Application struct {
 	discoveryService ports.DiscoveryService
 	proxyService     ports.ProxyService
 	pluginService    ports.PluginService
+	tui              *tui.TUI
+	tuiEnabled       bool
 	errCh            chan error
 }
 
@@ -68,6 +72,14 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	app.setConfig(cfg) // Use thread-safe setter
 	discoveryService.SetConfig(cfg)
 
+	// Determine if TUI should be enabled
+	app.tuiEnabled = cfg.Server.InteractiveCLI
+
+	// Create TUI if enabled
+	if app.tuiEnabled {
+		app.tui = tui.NewTUI(discoveryService, logger)
+	}
+
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		ReadTimeout:  cfg.Server.ReadTimeout,
@@ -81,7 +93,6 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 
 // Start starts the application
 func (a *Application) Start(ctx context.Context) error {
-
 	go func() {
 		select {
 		case err := <-a.errCh:
@@ -91,13 +102,40 @@ func (a *Application) Start(ctx context.Context) error {
 		}
 	}()
 
-	a.startWebServer()
-
 	// Start discovery service
 	if err := a.discoveryService.Start(ctx); err != nil {
 		a.logger.Error("discovery service startup error", "error", err)
 		a.errCh <- err
 	}
+
+	// Try to start TUI first, fallback to CLI on error
+	if a.tuiEnabled && a.tui != nil {
+		if err := a.startTUI(ctx); err != nil {
+			a.logger.Warn("TUI failed to start, falling back to CLI", "error", err)
+			a.tuiEnabled = false
+			return a.startCLI(ctx)
+		}
+	} else {
+		return a.startCLI(ctx)
+	}
+
+	return nil
+}
+
+// startTUI starts the TUI interface
+func (a *Application) startTUI(ctx context.Context) error {
+	a.logger.Info("Starting TUI interface...")
+
+	// Start web server in background
+	go a.startWebServer()
+
+	// Start TUI (this blocks until TUI exits)
+	return a.tui.Start(ctx)
+}
+
+// startCLI starts the traditional CLI interface
+func (a *Application) startCLI(ctx context.Context) error {
+	a.startWebServer()
 
 	a.logger.Info("Olla started", "bind", a.server.Addr)
 	return nil
@@ -107,6 +145,11 @@ func (a *Application) Start(ctx context.Context) error {
 func (a *Application) Stop(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, a.config.Server.ShutdownTimeout)
 	defer cancel()
+
+	// Stop TUI if running
+	if a.tui != nil {
+		a.tui.Stop()
+	}
 
 	// Stop discovery service first
 	if err := a.discoveryService.Stop(shutdownCtx); err != nil {

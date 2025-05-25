@@ -97,46 +97,55 @@ func (h *prettyHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *prettyHandler) Handle(ctx context.Context, record slog.Record) error {
-	var levelPrefix string
-	var levelStyle lipgloss.Style
+	var output strings.Builder
 
+	// new lipgloss style for gray
+	timestampStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	output.WriteString(timestampStyle.Render(record.Time.Format("2006-01-02 15:04:05")))
+	output.WriteString(" ")
+
+	// Add colored level
+	var levelStyle lipgloss.Style
 	switch record.Level {
 	case slog.LevelDebug:
-		levelPrefix = "DEBUG"
 		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // Light blue
 	case slog.LevelInfo:
-		levelPrefix = "INFO"
 		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Light green
 	case slog.LevelWarn:
-		levelPrefix = "WARN"
 		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true) // Light yellow, bold
 	case slog.LevelError:
-		levelPrefix = "ERROR"
 		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true) // Light red, bold
 	}
 
-	// Build the log line similar to how pterm did it
-	var output strings.Builder
-
 	if util.IsTerminal() {
-		// Colored output for terminal
-		output.WriteString(levelStyle.Render(levelPrefix))
-		output.WriteString(" ")
-		output.WriteString(record.Message) // Message already contains ANSI codes from styled logger
+		output.WriteString(levelStyle.Render(record.Level.String()))
 	} else {
-		// Plain text for non-terminal (files, pipes)
-		output.WriteString(levelPrefix)
-		output.WriteString(" ")
+		output.WriteString(record.Level.String())
+	}
+	output.WriteString(" ")
+
+	// Add the message (which already contains ANSI codes from styled logger)
+	if util.IsTerminal() {
+		output.WriteString(record.Message)
+	} else {
 		output.WriteString(stripANSI(record.Message))
 	}
 
-	// Add any additional attributes
+	// Add attributes in key=value format (like pterm structured logging)
 	record.Attrs(func(attr slog.Attr) bool {
-		if attr.Key != "msg" { // Don't duplicate the message
-			output.WriteString(" ")
-			output.WriteString(attr.Key)
-			output.WriteString("=")
-			output.WriteString(attr.Value.String())
+		output.WriteString(" ")
+		output.WriteString(attr.Key)
+		output.WriteString("=")
+
+		// Format the value properly
+		value := attr.Value.String()
+		// If value contains spaces, quote it
+		if strings.Contains(value, " ") {
+			output.WriteString(`"`)
+			output.WriteString(value)
+			output.WriteString(`"`)
+		} else {
+			output.WriteString(value)
 		}
 		return true
 	})
