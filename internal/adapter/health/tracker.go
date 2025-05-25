@@ -13,9 +13,9 @@ type StatusTransitionTracker struct {
 }
 
 type statusEntry struct {
-	lastStatus   int32 // atomic access to domain.EndpointStatus as int32
-	lastLogTime  int64 // Unix nano timestamp
-	errorCount   int64 // atomic counter
+	lastStatus  int32 // atomic access to domain.EndpointStatus as int32
+	lastLogTime int64 // Unix nano timestamp
+	errorCount  int64 // atomic counter
 }
 
 func NewStatusTransitionTracker() *StatusTransitionTracker {
@@ -25,11 +25,13 @@ func NewStatusTransitionTracker() *StatusTransitionTracker {
 func (st *StatusTransitionTracker) ShouldLog(endpointURL string, newStatus domain.EndpointStatus, isError bool) (bool, int) {
 	value, exists := st.entries.Load(endpointURL)
 	if !exists {
+		// First time seeing this endpoint - always log and store the status
 		entry := &statusEntry{
 			lastStatus:  int32(statusToInt(newStatus)),
 			lastLogTime: time.Now().UnixNano(),
 		}
-		value, _ = st.entries.LoadOrStore(endpointURL, entry)
+		st.entries.Store(endpointURL, entry)
+		return true, 0
 	}
 
 	entry := value.(*statusEntry)

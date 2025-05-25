@@ -19,12 +19,12 @@ type StaticEndpointRepository struct {
 	mu        sync.RWMutex
 
 	// Copy-on-write caching
-	cacheMu      sync.RWMutex
-	cachedAll    []*domain.Endpoint
-	cachedHealthy []*domain.Endpoint
+	cacheMu        sync.RWMutex
+	cachedAll      []*domain.Endpoint
+	cachedHealthy  []*domain.Endpoint
 	cachedRoutable []*domain.Endpoint
-	cacheValid   bool
-	lastModified time.Time
+	cacheValid     bool
+	lastModified   time.Time
 }
 
 func NewStaticEndpointRepository() *StaticEndpointRepository {
@@ -50,14 +50,18 @@ func (r *StaticEndpointRepository) rebuildCache() {
 	routable := make([]*domain.Endpoint, 0, len(r.endpoints))
 
 	for _, endpoint := range r.endpoints {
-		all = append(all, endpoint)
+		// Create copies to maintain mutation safety
+		endpointCopy := *endpoint
+		all = append(all, &endpointCopy)
 
 		if endpoint.Status == domain.StatusHealthy {
-			healthy = append(healthy, endpoint)
+			healthyCopy := *endpoint
+			healthy = append(healthy, &healthyCopy)
 		}
 
 		if endpoint.Status.IsRoutable() {
-			routable = append(routable, endpoint)
+			routableCopy := *endpoint
+			routable = append(routable, &routableCopy)
 		}
 	}
 
@@ -78,13 +82,13 @@ func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoi
 		return []*domain.Endpoint{}, nil
 	}
 
-	r.rebuildCache()
-
-	r.cacheMu.RLock()
-	result := r.cachedAll
-	r.cacheMu.RUnlock()
-
-	return result, nil
+	// Always return fresh copies to maintain mutation safety
+	endpoints := make([]*domain.Endpoint, 0, len(r.endpoints))
+	for _, endpoint := range r.endpoints {
+		endpointCopy := *endpoint
+		endpoints = append(endpoints, &endpointCopy)
+	}
+	return endpoints, nil
 }
 
 // GetHealthy returns only healthy endpoints
