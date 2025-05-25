@@ -1,18 +1,16 @@
-# Version variables for build-time injection
 PKG := github.com/thushan/olla/internal/version
 VERSION := "v0.0.1"
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 USER := $(shell git config user.name 2>/dev/null || whoami)
 
-# Build flags
 LDFLAGS := -ldflags "\
 	-X '$(PKG).Version=$(VERSION)' \
 	-X '$(PKG).Commit=$(COMMIT)' \
 	-X '$(PKG).Date=$(DATE)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test version
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version
 
 # Build the application with version info
 build:
@@ -32,6 +30,53 @@ run:
 run-debug:
 	@OLLA_LOG_LEVEL=debug go run $(LDFLAGS) .
 
+# Run tests
+test:
+	@echo "Running tests..."
+	@go test ./...
+
+# Run tests with verbose output
+test-verbose:
+	@echo "Running tests with verbose output..."
+	@go test -v ./...
+
+# Run tests with short flag (skip long-running tests)
+test-short:
+	@echo "Running short tests..."
+	@go test -short ./...
+
+# Run tests with race detection
+test-race:
+	@echo "Running tests with race detection..."
+	@go test -race ./...
+
+# Run tests with coverage
+test-cover:
+	@echo "Running tests with coverage..."
+	@go test -cover ./...
+
+# Run tests with coverage profile and generate HTML report
+test-cover-html:
+	@echo "Running tests with coverage and generating HTML report..."
+	@go test -coverprofile=coverage.out ./...
+	@go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+
+# Run benchmark tests
+bench:
+	@echo "Running benchmarks..."
+	@go test -bench=. -benchmem ./...
+
+# Run specific benchmark tests for repository
+bench-repo:
+	@echo "Running repository benchmarks..."
+	@go test -bench=BenchmarkRepository -benchmem ./internal/adapter/discovery/
+
+# Run specific benchmark tests for health checker
+bench-health:
+	@echo "Running health checker benchmarks..."
+	@go test -bench=BenchmarkHealth -benchmem ./internal/adapter/health/
+
 # Show version information that would be embedded
 version:
 	@echo "Version: $(VERSION)"
@@ -45,7 +90,7 @@ version-built: build
 
 # Clean build artifacts and logs
 clean:
-	@rm -rf bin/ logs/
+	@rm -rf bin/ logs/ coverage.out coverage.html
 
 # Download dependencies
 deps:
@@ -55,27 +100,41 @@ deps:
 fmt:
 	@go fmt ./...
 
-# Run tests
-test:
-	@go test -v ./...
+# Run linter (if golangci-lint is installed)
+lint:
+	@which golangci-lint > /dev/null && golangci-lint run || echo "golangci-lint not installed, skipping..."
 
 # Development build (no optimisations)
 dev:
 	@echo "Building development version..."
 	@go build $(LDFLAGS) -gcflags="all=-N -l" -o bin/olla-dev .
 
+# Run full CI pipeline locally
+ci: deps fmt lint test-race test-cover build
+	@echo "CI pipeline completed successfully!"
+
 # Show help
 help:
 	@echo "Available targets:"
-	@echo "  build         - Build optimised binary with version info"
-	@echo "  build-release - Build release binary (static, optimised)"
-	@echo "  run           - Run with version info"
-	@echo "  run-debug     - Run with debug logging"
-	@echo "  version       - Show version info that will be embedded"
-	@echo "  version-built - Show version from built binary"
-	@echo "  dev           - Build development binary (with debug symbols)"
-	@echo "  test          - Run tests"
-	@echo "  clean         - Clean build artifacts and logs"
-	@echo "  deps          - Download and tidy dependencies"
-	@echo "  fmt           - Format code"
-	@echo "  help          - Show this help"
+	@echo "  build           - Build optimised binary with version info"
+	@echo "  build-release   - Build release binary (static, optimised)"
+	@echo "  run             - Run with version info"
+	@echo "  run-debug       - Run with debug logging"
+	@echo "  test            - Run all tests"
+	@echo "  test-verbose    - Run tests with verbose output"
+	@echo "  test-short      - Run short tests only"
+	@echo "  test-race       - Run tests with race detection"
+	@echo "  test-cover      - Run tests with coverage"
+	@echo "  test-cover-html - Run tests with coverage and generate HTML report"
+	@echo "  bench           - Run all benchmarks"
+	@echo "  bench-repo      - Run repository benchmarks"
+	@echo "  bench-health    - Run health checker benchmarks"
+	@echo "  version         - Show version info that will be embedded"
+	@echo "  version-built   - Show version from built binary"
+	@echo "  dev             - Build development binary (with debug symbols)"
+	@echo "  clean           - Clean build artifacts and logs"
+	@echo "  deps            - Download and tidy dependencies"
+	@echo "  fmt             - Format code"
+	@echo "  lint            - Run linter (requires golangci-lint)"
+	@echo "  ci              - Run full CI pipeline locally"
+	@echo "  help            - Show this help"
