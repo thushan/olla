@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"github.com/fsnotify/fsnotify"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
@@ -12,6 +14,13 @@ import (
 const (
 	DefaultPort = 19841
 	DefaultHost = "localhost"
+
+	DefaultFileWriteDelay = 150 * time.Millisecond // Small delay to ensure file write is complete
+)
+
+var (
+	lastReload  time.Time
+	reloadMutex sync.Mutex
 )
 
 // DefaultConfig returns a configuration with sensible defaults
@@ -84,7 +93,7 @@ func DefaultConfig() *Config {
 }
 
 // Load loads configuration from file and environment variables
-func Load() (*Config, error) {
+func Load(onConfigChange func()) (*Config, error) {
 	config := DefaultConfig()
 
 	viper.SetConfigName("config")
@@ -117,5 +126,23 @@ func Load() (*Config, error) {
 
 	viper.WatchConfig()
 
+	if onConfigChange != nil {
+		viper.OnConfigChange(func(e fsnotify.Event) {
+			reloadMutex.Lock()
+			defer reloadMutex.Unlock()
+
+			// lame debounce to avoid rapid-fire reloads
+			now := time.Now()
+			if now.Sub(lastReload) < 500*time.Millisecond {
+				return // Ignore miultiple rapid changes
+			}
+			lastReload = now
+
+			// looks like on windows this event is triggered
+			// before the file is fully written, not sure why
+			time.Sleep(DefaultFileWriteDelay)
+			onConfigChange()
+		})
+	}
 	return config, nil
 }
