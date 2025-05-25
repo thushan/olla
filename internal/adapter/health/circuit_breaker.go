@@ -19,84 +19,82 @@ type HTTPClient interface {
 
 // CircuitBreaker tracks failure rates and prevents cascading failures
 type CircuitBreaker struct {
-	mu               sync.RWMutex
-	endpoints        map[string]*circuitState
+	endpoints        sync.Map // map[string]*circuitState
 	failureThreshold int
 	timeout          time.Duration
 }
 
 type circuitState struct {
 	failures    int64
-	lastFailure time.Time
-	isOpen      bool
+	lastFailure int64 // Unix nano timestamp for atomic access
+	isOpen      int32 // 0 = closed, 1 = open
 }
 
 func NewCircuitBreaker() *CircuitBreaker {
 	return &CircuitBreaker{
-		endpoints:        make(map[string]*circuitState),
 		failureThreshold: DefaultCircuitBreakerThreshold,
 		timeout:          DefaultCircuitBreakerTimeout,
 	}
 }
 
 func (cb *CircuitBreaker) IsOpen(endpointURL string) bool {
-	cb.mu.RLock()
-	defer cb.mu.RUnlock()
-
-	state, exists := cb.endpoints[endpointURL]
+	value, exists := cb.endpoints.Load(endpointURL)
 	if !exists {
 		return false
 	}
 
-	if state.isOpen && time.Since(state.lastFailure) > cb.timeout {
-		state.isOpen = false
-		state.failures = 0
+	state := value.(*circuitState)
+
+	// Check if circuit should auto-recover
+	if atomic.LoadInt32(&state.isOpen) == 1 {
+		lastFailure := time.Unix(0, atomic.LoadInt64(&state.lastFailure))
+		if time.Since(lastFailure) > cb.timeout {
+			atomic.StoreInt32(&state.isOpen, 0)
+			atomic.StoreInt64(&state.failures, 0)
+			return false
+		}
+		return true
 	}
 
-	return state.isOpen
+	return false
 }
 
 func (cb *CircuitBreaker) RecordSuccess(endpointURL string) {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	if state, exists := cb.endpoints[endpointURL]; exists {
-		state.failures = 0
-		state.isOpen = false
+	value, exists := cb.endpoints.Load(endpointURL)
+	if !exists {
+		return
 	}
+
+	state := value.(*circuitState)
+	atomic.StoreInt64(&state.failures, 0)
+	atomic.StoreInt32(&state.isOpen, 0)
 }
 
 func (cb *CircuitBreaker) RecordFailure(endpointURL string) {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-
-	state, exists := cb.endpoints[endpointURL]
+	value, exists := cb.endpoints.Load(endpointURL)
 	if !exists {
-		state = &circuitState{}
-		cb.endpoints[endpointURL] = state
+		state := &circuitState{}
+		value, _ = cb.endpoints.LoadOrStore(endpointURL, state)
 	}
 
-	atomic.AddInt64(&state.failures, 1)
-	state.lastFailure = time.Now()
+	state := value.(*circuitState)
+	failures := atomic.AddInt64(&state.failures, 1)
+	atomic.StoreInt64(&state.lastFailure, time.Now().UnixNano())
 
-	if state.failures >= int64(cb.failureThreshold) {
-		state.isOpen = true
+	if failures >= int64(cb.failureThreshold) {
+		atomic.StoreInt32(&state.isOpen, 1)
 	}
 }
 
 func (cb *CircuitBreaker) CleanupEndpoint(endpointURL string) {
-	cb.mu.Lock()
-	defer cb.mu.Unlock()
-	delete(cb.endpoints, endpointURL)
+	cb.endpoints.Delete(endpointURL)
 }
 
 func (cb *CircuitBreaker) GetActiveEndpoints() []string {
-	cb.mu.RLock()
-	defer cb.mu.RUnlock()
-
-	endpoints := make([]string, 0, len(cb.endpoints))
-	for url := range cb.endpoints {
-		endpoints = append(endpoints, url)
-	}
+	var endpoints []string
+	cb.endpoints.Range(func(key, value interface{}) bool {
+		endpoints = append(endpoints, key.(string))
+		return true
+	})
 	return endpoints
 }

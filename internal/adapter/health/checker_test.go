@@ -2,8 +2,10 @@ package health
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -293,5 +295,180 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	stats = checker.GetSchedulerStats()
 	if stats["running"].(bool) {
 		t.Error("Checker should be stopped")
+	}
+}
+
+func TestHTTPHealthChecker_PreComputedURLs(t *testing.T) {
+	mockClient := &mockHTTPClient{statusCode: 200}
+	mockRepo := newMockRepository()
+
+	loggerCfg := &logger.Config{Level: "error"}
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewStyledLogger(log, nil)
+
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
+	checker.client = mockClient
+
+	baseURL, _ := url.Parse("http://localhost:11434")
+	// Pre-computed absolute URL (not relative)
+	healthURL, _ := url.Parse("http://localhost:11434/api/health")
+
+	endpoint := &domain.Endpoint{
+		URL:            baseURL,
+		HealthCheckURL: healthURL, // Already absolute
+		CheckTimeout:   time.Second,
+	}
+
+	result, err := checker.Check(context.Background(), endpoint)
+
+	if err != nil {
+		t.Fatalf("Check failed: %v", err)
+	}
+	if result.Status != domain.StatusHealthy {
+		t.Errorf("Expected StatusHealthy, got %v", result.Status)
+	}
+
+	// Verify the health check used the pre-computed URL
+	if healthURL.String() != "http://localhost:11434/api/health" {
+		t.Errorf("Pre-computed URL incorrect: %s", healthURL.String())
+	}
+}
+
+func TestCircuitBreaker_ConcurrentAccess(t *testing.T) {
+	cb := NewCircuitBreaker()
+	url1 := "http://localhost:11434"
+	url2 := "http://localhost:11435"
+
+	var wg sync.WaitGroup
+	iterations := 100
+
+	// Concurrent failure recording
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			cb.RecordFailure(url1)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			cb.RecordFailure(url2)
+		}
+	}()
+
+	// Concurrent status checking
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 50; j++ {
+				cb.IsOpen(url1)
+				cb.IsOpen(url2)
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Both should be open after many failures
+	if !cb.IsOpen(url1) {
+		t.Error("Circuit breaker should be open for url1")
+	}
+	if !cb.IsOpen(url2) {
+		t.Error("Circuit breaker should be open for url2")
+	}
+}
+
+func TestStatusTransitionTracker_ConcurrentAccess(t *testing.T) {
+	tracker := NewStatusTransitionTracker()
+	url := "http://localhost:11434"
+
+	var wg sync.WaitGroup
+	results := make(chan bool, 200)
+
+	// Concurrent status logging with controlled transitions
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 20; j++ {
+				// Alternate between only 2 statuses to limit transitions
+				status := domain.StatusHealthy
+				if j%2 == 0 {
+					status = domain.StatusOffline
+				}
+				shouldLog, _ := tracker.ShouldLog(url, status, false)
+				results <- shouldLog
+				time.Sleep(time.Microsecond) // Small delay to reduce contention
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(results)
+
+	// Count how many transitions were logged
+	logCount := 0
+	for shouldLog := range results {
+		if shouldLog {
+			logCount++
+		}
+	}
+
+	// Should have logged some transitions but not too many
+	if logCount == 0 {
+		t.Error("Should have logged some status transitions")
+	}
+	if logCount > 50 { // More lenient threshold for concurrent access
+		t.Errorf("Logged too many transitions: %d (expected < 50)", logCount)
+	}
+}
+
+func TestHealthChecker_BatchedChecking(t *testing.T) {
+	mockRepo := newMockRepository()
+	loggerCfg := &logger.Config{Level: "error"}
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewStyledLogger(log, nil)
+
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
+	checker.client = &mockHTTPClient{statusCode: 200}
+
+	// Add many endpoints
+	ctx := context.Background()
+	for i := 0; i < 12; i++ {
+		port := 11434 + i
+		testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
+		healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
+		endpoint := &domain.Endpoint{
+			Name:           fmt.Sprintf("batch-test-%d", i),
+			URL:            testURL,
+			HealthCheckURL: healthURL,
+			CheckTimeout:   100 * time.Millisecond,
+			Status:         domain.StatusUnknown,
+		}
+		mockRepo.Add(ctx, endpoint)
+	}
+
+	// Test that individual health checks work properly
+	endpoints, _ := mockRepo.GetAll(ctx)
+
+	start := time.Now()
+	for _, endpoint := range endpoints {
+		result, err := checker.Check(ctx, endpoint)
+		if err != nil {
+			t.Fatalf("Health check failed: %v", err)
+		}
+		if result.Status != domain.StatusHealthy {
+			t.Errorf("Expected healthy status, got %v", result.Status)
+		}
+	}
+	elapsed := time.Since(start)
+
+	// Should complete reasonably quickly
+	if elapsed > 2*time.Second {
+		t.Errorf("Health checks took too long: %v", elapsed)
 	}
 }

@@ -65,8 +65,10 @@ func (s *StaticDiscoveryService) getConfig() *config.Config {
 }
 
 func (s *StaticDiscoveryService) ReloadConfig() {
-	s.logger.Info("Config file changed, reloading endpoints...")
-	if err := s.RefreshEndpoints(context.Background()); err != nil {
-		s.logger.Error("Failed to reload endpoints from config", "error", err)
-	}
+	go func() {
+		s.logger.Info("Config file changed, reloading endpoints...")
+		if err := s.RefreshEndpoints(context.Background()); err != nil {
+			s.logger.Error("Failed to reload endpoints from config", "error", err)
+		}
+	}()
 }
