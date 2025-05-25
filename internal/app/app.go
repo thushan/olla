@@ -6,11 +6,13 @@ import (
 	"github.com/spf13/viper"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
+	"github.com/thushan/olla/internal/cli"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
 	"net/http"
+	"os"
 	"sync"
 )
 
@@ -24,12 +26,13 @@ type Application struct {
 	discoveryService ports.DiscoveryService
 	proxyService     ports.ProxyService
 	pluginService    ports.PluginService
+	interactiveCLI   *cli.InteractiveCLI
 	errCh            chan error
 }
 
 // New creates a new application instance
 func New(logger *logger.StyledLogger) (*Application, error) {
-	// start port services first, w e need them for discovery
+	// start port services first, we need them for discovery
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthChecker(repository, logger)
@@ -68,6 +71,9 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	app.setConfig(cfg) // Use thread-safe setter
 	discoveryService.SetConfig(cfg)
 
+	// Create interactive CLI
+	app.interactiveCLI = cli.NewInteractiveCLI(discoveryService, cfg, logger)
+
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		ReadTimeout:  cfg.Server.ReadTimeout,
@@ -99,6 +105,23 @@ func (a *Application) Start(ctx context.Context) error {
 		a.errCh <- err
 	}
 
+	// Start interactive CLI if enabled
+	if a.config.Server.InteractiveCLI {
+		a.interactiveCLI.Start(ctx)
+
+		// Monitor for CLI shutdown requests
+		go func() {
+			select {
+			case <-a.interactiveCLI.GetShutdownChannel():
+				a.logger.Info("Shutdown requested via interactive CLI")
+				// Trigger graceful shutdown by exiting
+				os.Exit(0)
+			case <-ctx.Done():
+				return
+			}
+		}()
+	}
+
 	a.logger.Info("Olla started", "bind", a.server.Addr)
 	return nil
 }
@@ -107,6 +130,11 @@ func (a *Application) Start(ctx context.Context) error {
 func (a *Application) Stop(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, a.config.Server.ShutdownTimeout)
 	defer cancel()
+
+	// Stop interactive CLI if it was start
+	if a.config.Server.InteractiveCLI && a.interactiveCLI != nil {
+		a.interactiveCLI.Stop()
+	}
 
 	// Stop discovery service first
 	if err := a.discoveryService.Stop(shutdownCtx); err != nil {

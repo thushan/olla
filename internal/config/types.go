@@ -20,6 +20,7 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration `mapstructure:"read_timeout"`
 	WriteTimeout    time.Duration `mapstructure:"write_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout"`
+	InteractiveCLI  bool         `mapstructure:"interactive_cli"`
 }
 
 // ProxyConfig holds proxy-specific configuration

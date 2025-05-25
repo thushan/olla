@@ -32,6 +32,7 @@ func DefaultConfig() *Config {
 			ReadTimeout:     30 * time.Second,
 			WriteTimeout:    30 * time.Second,
 			ShutdownTimeout: 10 * time.Second,
+			InteractiveCLI:  true,
 		},
 		Proxy: ProxyConfig{
 			ConnectionTimeout: 30 * time.Second,  // Quick connection/request timeout
