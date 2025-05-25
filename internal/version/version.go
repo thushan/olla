@@ -31,7 +31,7 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 
 	var b strings.Builder
 
-	b.WriteString(theme.ColourSplash(`╔─────────────────────────────────────────────────────╗
+	b.WriteString(theme.ColourSplashLipgloss(`╔─────────────────────────────────────────────────────╗
 │                                      ⠀⠀⣀⣀⠀⠀⠀⠀⠀⣀⣀⠀⠀  │
 │                                      ⠀⢰⡏⢹⡆⠀⠀⠀⢰⡏⢹⡆⡀  │ 
 │   ██████╗ ██╗     ██╗      █████╗    ⠀⢸⡇⣸⡷⠟⠛⠻⢾⣇⣸⡇   │
@@ -41,13 +41,13 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 │  ╚██████╔╝███████╗███████╗██║  ██║   ⣼⠃⠀⠀⠳⠤⠬⠤⠞⠀⠀⠘⣷  │
 │                                      ⢸⡟⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡇  │` + "\n"))
 
-	b.WriteString(theme.ColourSplash("│  "))
-	b.WriteString(theme.StyleUrl(githubUri))
+	b.WriteString(theme.ColourSplashLipgloss("│  "))
+	b.WriteString(theme.StyleUrlLipgloss(githubUri))
 	b.WriteString(padLatest)
-	b.WriteString(theme.ColourVersion(latestUri))
+	b.WriteString(theme.ColourVersionLipgloss(latestUri))
 	b.WriteString(padBuffer)
-	b.WriteString(theme.ColourSplash(" ⢸⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡿  │\n"))
-	b.WriteString(theme.ColourSplash("╚─────────────────────────────────────────────────────╝"))
+	b.WriteString(theme.ColourSplashLipgloss(" ⢸⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡿  │\n"))
+	b.WriteString(theme.ColourSplashLipgloss("╚─────────────────────────────────────────────────────╝"))
 
 	if extendedInfo {
 		b.WriteString("\n")

@@ -1,142 +1,79 @@
 package theme
 
 import (
-	"github.com/pterm/pterm"
+	"fmt"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // Theme defines the colour scheme and styling for the application
 type Theme struct {
-	// Log level colours
-	Debug *pterm.Style
-	Info  *pterm.Style
-	Warn  *pterm.Style
-	Error *pterm.Style
-	Fatal *pterm.Style
-
-	// Component colours
-	Success   *pterm.Style
-	Highlight *pterm.Style
-	Muted     *pterm.Style
-	Accent    *pterm.Style
-
-	// Functional colours
-	Primary   pterm.Color
-	Secondary pterm.Color
-	Danger    pterm.Color
-	Warning   pterm.Color
-	Good      pterm.Color
-
-	// Application colours
-	Counts      pterm.Color // Colour for counts like Microsofty apps Eg. Outlook (234) unread emails
-	Numbers     pterm.Color
-	Endpoint    pterm.Color
-	HealthCheck pterm.Color
+	// Application colours (now stored as lipgloss colors)
+	Counts      string // Color for counts like Microsoft apps Eg. Outlook (234) unread emails
+	Numbers     string
+	Endpoint    string
+	HealthCheck string
 
 	// Health check colours
-	HealthHealthy   pterm.Color
-	HealthUnhealthy pterm.Color
-	HealthUnknown   pterm.Color
-	HealthBusy      pterm.Color
-	HealthOffline   pterm.Color
-	HealthWarming   pterm.Color
+	HealthHealthy   string
+	HealthUnhealthy string
+	HealthUnknown   string
+	HealthBusy      string
+	HealthOffline   string
+	HealthWarming   string
 }
 
 // Default returns the default application theme
 func Default() *Theme {
 	return &Theme{
-		// Log level styling
-		Debug: pterm.NewStyle(pterm.FgLightBlue),
-		Info:  pterm.NewStyle(pterm.FgGreen),
-		Warn:  pterm.NewStyle(pterm.FgYellow, pterm.Bold),
-		Error: pterm.NewStyle(pterm.FgRed, pterm.Bold),
-		Fatal: pterm.NewStyle(pterm.FgWhite, pterm.BgRed, pterm.Bold),
-
-		// Component styling
-		Success:   pterm.NewStyle(pterm.FgGreen, pterm.Bold),
-		Highlight: pterm.NewStyle(pterm.FgCyan, pterm.Bold),
-		Muted:     pterm.NewStyle(pterm.FgGray),
-		Accent:    pterm.NewStyle(pterm.FgMagenta),
-
-		// Colour palette
-		Primary:   pterm.FgBlue,
-		Secondary: pterm.FgCyan,
-		Danger:    pterm.FgRed,
-		Warning:   pterm.FgYellow,
-		Good:      pterm.FgGreen,
-
-		// Application colours
-		Counts:      pterm.FgLightBlue,
-		Numbers:     pterm.FgLightCyan,
-		Endpoint:    pterm.FgLightMagenta,
-		HealthCheck: pterm.FgGreen,
+		// Application colours (using ANSI color codes)
+		Counts:      "12", // Light blue
+		Numbers:     "14", // Light cyan
+		Endpoint:    "13", // Light magenta
+		HealthCheck: "10", // Green
 
 		// Health check colours
-		HealthHealthy:   pterm.FgGreen,
-		HealthUnhealthy: pterm.FgRed,
-		HealthUnknown:   pterm.FgGray,
-		HealthBusy:      pterm.FgYellow,
-		HealthOffline:   pterm.FgLightRed,
-		HealthWarming:   pterm.FgLightBlue,
+		HealthHealthy:   "10", // Green
+		HealthUnhealthy: "9",  // Light red
+		HealthUnknown:   "8",  // Gray
+		HealthBusy:      "11", // Yellow
+		HealthOffline:   "1",  // Red
+		HealthWarming:   "12", // Light blue
 	}
 }
 
 // Dark returns a dark theme variant
 func Dark() *Theme {
 	return &Theme{
-		Debug: pterm.NewStyle(pterm.FgLightBlue),
-		Info:  pterm.NewStyle(pterm.FgLightGreen),
-		Warn:  pterm.NewStyle(pterm.FgLightYellow, pterm.Bold),
-		Error: pterm.NewStyle(pterm.FgLightRed, pterm.Bold),
-		Fatal: pterm.NewStyle(pterm.FgWhite, pterm.BgRed, pterm.Bold),
-
-		Success:   pterm.NewStyle(pterm.FgLightGreen, pterm.Bold),
-		Highlight: pterm.NewStyle(pterm.FgLightCyan, pterm.Bold),
-		Muted:     pterm.NewStyle(pterm.FgGray),
-		Accent:    pterm.NewStyle(pterm.FgLightMagenta),
-
-		Primary:   pterm.FgLightBlue,
-		Secondary: pterm.FgLightCyan,
-		Danger:    pterm.FgLightRed,
-		Warning:   pterm.FgLightYellow,
-		Good:      pterm.FgLightGreen,
+		Counts:      "12", // Light blue
+		Numbers:     "14", // Light cyan
+		Endpoint:    "13", // Light magenta
+		HealthCheck: "10", // Light green
 
 		// Health colours for dark theme
-		HealthHealthy:   pterm.FgLightGreen,
-		HealthUnhealthy: pterm.FgLightRed,
-		HealthUnknown:   pterm.FgGray,
-		HealthBusy:      pterm.FgLightYellow,
-		HealthOffline:   pterm.FgRed,
-		HealthWarming:   pterm.FgLightCyan,
+		HealthHealthy:   "10", // Light green
+		HealthUnhealthy: "9",  // Light red
+		HealthUnknown:   "8",  // Gray
+		HealthBusy:      "11", // Light yellow
+		HealthOffline:   "1",  // Red
+		HealthWarming:   "14", // Light cyan
 	}
 }
 
 // Light returns a light theme variant
 func Light() *Theme {
 	return &Theme{
-		Debug: pterm.NewStyle(pterm.FgBlue),
-		Info:  pterm.NewStyle(pterm.FgBlack),
-		Warn:  pterm.NewStyle(pterm.FgRed, pterm.Bold),
-		Error: pterm.NewStyle(pterm.FgRed, pterm.Bold),
-		Fatal: pterm.NewStyle(pterm.FgWhite, pterm.BgRed, pterm.Bold),
-
-		Success:   pterm.NewStyle(pterm.FgGreen, pterm.Bold),
-		Highlight: pterm.NewStyle(pterm.FgBlue, pterm.Bold),
-		Muted:     pterm.NewStyle(pterm.FgGray),
-		Accent:    pterm.NewStyle(pterm.FgMagenta),
-
-		Primary:   pterm.FgBlue,
-		Secondary: pterm.FgCyan,
-		Danger:    pterm.FgRed,
-		Warning:   pterm.FgRed,
-		Good:      pterm.FgGreen,
+		Counts:      "4", // Blue
+		Numbers:     "6", // Cyan
+		Endpoint:    "5", // Magenta
+		HealthCheck: "2", // Green
 
 		// Health colours for light theme
-		HealthHealthy:   pterm.FgGreen,
-		HealthUnhealthy: pterm.FgRed,
-		HealthUnknown:   pterm.FgGray,
-		HealthBusy:      pterm.FgRed, // More visible on light backgrounds
-		HealthOffline:   pterm.FgRed,
-		HealthWarming:   pterm.FgBlue,
+		HealthHealthy:   "2", // Green
+		HealthUnhealthy: "1", // Red
+		HealthUnknown:   "8", // Gray
+		HealthBusy:      "1", // Red (more visible on light backgrounds)
+		HealthOffline:   "1", // Red
+		HealthWarming:   "4", // Blue
 	}
 }
 
@@ -152,19 +89,80 @@ func GetTheme(name string) *Theme {
 	}
 }
 
-// ColourSplash Colours for the splash screen
+// Theme extension methods for Lipgloss styles
+func (t *Theme) CountsStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.Counts))
+}
+
+func (t *Theme) NumbersStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.Numbers))
+}
+
+func (t *Theme) EndpointStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.Endpoint))
+}
+
+func (t *Theme) HealthCheckStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.HealthCheck))
+}
+
+// Health status styles
+func (t *Theme) HealthHealthyStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.HealthHealthy))
+}
+
+func (t *Theme) HealthBusyStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.HealthBusy))
+}
+
+func (t *Theme) HealthOfflineStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.HealthOffline))
+}
+
+func (t *Theme) HealthWarmingStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.HealthWarming))
+}
+
+func (t *Theme) HealthUnhealthyStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.HealthUnhealthy))
+}
+
+func (t *Theme) HealthUnknownStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(t.HealthUnknown))
+}
+
+// Styling functions for splash screen and URLs
+var (
+	splashStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Light green
+	versionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // Light yellow
+	urlStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // Light blue
+)
+
+// ColourSplash colours for the splash screen
 func ColourSplash(message ...any) string {
-	return pterm.LightGreen(message...)
+	var result string
+	for _, msg := range message {
+		result += splashStyle.Render(fmt.Sprintf("%v", msg))
+	}
+	return result
 }
 
-// ColourVersion Colours Version numbers, used for the splash screen
+// ColourVersion colours Version numbers, used for the splash screen
 func ColourVersion(message ...any) string {
-	return pterm.LightYellow(message...)
+	var result string
+	for _, msg := range message {
+		result += versionStyle.Render(fmt.Sprintf("%v", msg))
+	}
+	return result
 }
 
-// StyleUrl Colours for URLs and hyperlinks
+// StyleUrl colours for URLs and hyperlinks
 func StyleUrl(message ...any) string {
-	return pterm.LightBlue(message...)
+	var result string
+	for _, msg := range message {
+		result += urlStyle.Render(fmt.Sprintf("%v", msg))
+	}
+	return result
 }
 
 // Hyperlink creates a hyperlink in the terminal

@@ -2,15 +2,16 @@ package logger
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/util"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/pterm/pterm"
+	"github.com/charmbracelet/lipgloss"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/theme"
 )
 
@@ -36,26 +37,26 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 
 	var cleanupFuncs []func()
 
-	terminalLogger := createTerminalLogger(level, appTheme)
+	// Create terminal handler using our custom handler instead of pterm
+	terminalHandler := createTerminalHandler(level, appTheme)
 
 	var logger *slog.Logger
 
 	if cfg.FileOutput {
-
-		fileLogger, cleanup, err := createFileLogger(cfg, level)
+		fileHandler, cleanup, err := createFileHandler(cfg, level)
 		if err != nil {
 			return nil, nil, err
 		}
 
 		cleanupFuncs = append(cleanupFuncs, cleanup)
 		handler := &multiHandler{
-			terminalHandler: pterm.NewSlogHandler(terminalLogger),
-			fileHandler:     fileLogger,
+			terminalHandler: terminalHandler,
+			fileHandler:     fileHandler,
 		}
 		logger = slog.New(handler)
 	} else {
 		// Terminal only
-		logger = slog.New(pterm.NewSlogHandler(terminalLogger))
+		logger = slog.New(terminalHandler)
 	}
 
 	cleanup := func() {
@@ -67,36 +68,178 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	return logger, cleanup, nil
 }
 
-// createTerminalLogger creates a PTerm logger with theme colours
-func createTerminalLogger(level slog.Level, appTheme *theme.Theme) *pterm.Logger {
-	plogger := pterm.DefaultLogger.
-		WithLevel(convertToPTermLevel(level)).
-		WithWriter(os.Stdout)
-
-	// Only use colours if we're in a terminal
-	if util.IsTerminal() {
-		plogger = plogger.WithFormatter(pterm.LogFormatterColorful)
-
-		keyStyles := map[string]pterm.Style{
-			"level": *appTheme.Info,
-			"msg":   *appTheme.Info,
-			"time":  *appTheme.Muted,
-		}
-		plogger = plogger.WithKeyStyles(keyStyles)
-	} else {
-		plogger = plogger.WithFormatter(pterm.LogFormatterJSON)
+// createTerminalHandler creates a custom terminal handler with colors
+func createTerminalHandler(level slog.Level, appTheme *theme.Theme) slog.Handler {
+	opts := &slog.HandlerOptions{
+		Level: level,
 	}
 
-	return plogger
+	// Use our custom formatter that maintains the nice CLI output
+	return &colorHandler{
+		handler: &prettyHandler{
+			opts:  opts,
+			theme: appTheme,
+		},
+		theme: appTheme,
+	}
 }
 
-// createFileLogger creates a rotating file logger
-func createFileLogger(cfg *Config, level slog.Level) (slog.Handler, func(), error) {
+// prettyHandler formats logs in a human-readable way like pterm did
+type prettyHandler struct {
+	opts  *slog.HandlerOptions
+	theme *theme.Theme
+	attrs []slog.Attr
+	group string
+}
+
+func (h *prettyHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return level >= h.opts.Level.Level()
+}
+
+func (h *prettyHandler) Handle(ctx context.Context, record slog.Record) error {
+	var levelPrefix string
+	var levelStyle lipgloss.Style
+
+	switch record.Level {
+	case slog.LevelDebug:
+		levelPrefix = "DEBUG"
+		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("12")) // Light blue
+	case slog.LevelInfo:
+		levelPrefix = "INFO"
+		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Light green
+	case slog.LevelWarn:
+		levelPrefix = "WARN"
+		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("11")).Bold(true) // Light yellow, bold
+	case slog.LevelError:
+		levelPrefix = "ERROR"
+		levelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true) // Light red, bold
+	}
+
+	// Build the log line similar to how pterm did it
+	var output strings.Builder
+
+	if util.IsTerminal() {
+		// Colored output for terminal
+		output.WriteString(levelStyle.Render(levelPrefix))
+		output.WriteString(" ")
+		output.WriteString(record.Message) // Message already contains ANSI codes from styled logger
+	} else {
+		// Plain text for non-terminal (files, pipes)
+		output.WriteString(levelPrefix)
+		output.WriteString(" ")
+		output.WriteString(stripANSI(record.Message))
+	}
+
+	// Add any additional attributes
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key != "msg" { // Don't duplicate the message
+			output.WriteString(" ")
+			output.WriteString(attr.Key)
+			output.WriteString("=")
+			output.WriteString(attr.Value.String())
+		}
+		return true
+	})
+
+	output.WriteString("\n")
+
+	fmt.Print(output.String())
+	return nil
+}
+
+func (h *prettyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &prettyHandler{
+		opts:  h.opts,
+		theme: h.theme,
+		attrs: append(h.attrs, attrs...),
+		group: h.group,
+	}
+}
+
+func (h *prettyHandler) WithGroup(name string) slog.Handler {
+	return &prettyHandler{
+		opts:  h.opts,
+		theme: h.theme,
+		attrs: h.attrs,
+		group: name,
+	}
+}
+
+// stripANSI removes ANSI escape sequences from text
+func stripANSI(text string) string {
+	// Simple ANSI removal - could be enhanced with regex if needed
+	result := ""
+	inEscape := false
+
+	for _, r := range text {
+		if r == '\033' { // ESC character
+			inEscape = true
+			continue
+		}
+
+		if inEscape {
+			if (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') {
+				inEscape = false
+			}
+			continue
+		}
+
+		result += string(r)
+	}
+
+	return result
+}
+
+// colorHandler wraps a handler to add colors to terminal output
+type colorHandler struct {
+	handler slog.Handler
+	theme   *theme.Theme
+}
+
+func (h *colorHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.handler.Enabled(ctx, level)
+}
+
+func (h *colorHandler) Handle(ctx context.Context, record slog.Record) error {
+	// Only add colors if we're in a terminal
+	if util.IsTerminal() {
+		// Create a styled version of the record for terminal output
+		record = h.styleRecord(record)
+	}
+	return h.handler.Handle(ctx, record)
+}
+
+func (h *colorHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &colorHandler{
+		handler: h.handler.WithAttrs(attrs),
+		theme:   h.theme,
+	}
+}
+
+func (h *colorHandler) WithGroup(name string) slog.Handler {
+	return &colorHandler{
+		handler: h.handler.WithGroup(name),
+		theme:   h.theme,
+	}
+}
+
+// styleRecord applies color styling to log records
+func (h *colorHandler) styleRecord(record slog.Record) slog.Record {
+	// For now, we'll keep this simple and not modify the record
+	// Color styling will be handled by the underlying text handler
+	// when we implement custom formatting later
+
+	// Future enhancement: modify the record message with colors based on level
+	return record
+}
+
+// createFileHandler creates a rotating file handler
+func createFileHandler(cfg *Config, level slog.Level) (slog.Handler, func(), error) {
 	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
 		return nil, nil, err
 	}
 
-	// Setsup log rotation
+	// Setup log rotation
 	rotator := &lumberjack.Logger{
 		Filename:   filepath.Join(cfg.LogDir, DefaultLogOutputName),
 		MaxSize:    cfg.MaxSize,
@@ -172,21 +315,5 @@ func parseLevel(level string) slog.Level {
 		return slog.LevelError
 	default:
 		return slog.LevelInfo
-	}
-}
-
-// convertToPTermLevel converts slog.Level to pterm.LogLevel
-func convertToPTermLevel(level slog.Level) pterm.LogLevel {
-	switch level {
-	case slog.LevelDebug:
-		return pterm.LogLevelTrace
-	case slog.LevelInfo:
-		return pterm.LogLevelInfo
-	case slog.LevelWarn:
-		return pterm.LogLevelWarn
-	case slog.LevelError:
-		return pterm.LogLevelError
-	default:
-		return pterm.LogLevelInfo
 	}
 }

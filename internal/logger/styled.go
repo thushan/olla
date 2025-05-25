@@ -1,26 +1,59 @@
-// internal/logger/styled.go
+// internal/logger/styled.go - Converted to use Lipgloss instead of pterm
 package logger
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/core/domain"
 	"log/slog"
 
-	"github.com/pterm/pterm"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/theme"
 )
 
-// StyledLogger wraps slog.Logger with theme-aware formatting methods
+// StyledLogger wraps slog.Logger with theme-aware formatting methods using Lipgloss
 type StyledLogger struct {
 	logger *slog.Logger
 	theme  *theme.Theme
+	styles *ThemeStyles
+}
+
+// ThemeStyles holds pre-configured Lipgloss styles based on theme
+type ThemeStyles struct {
+	Counts      lipgloss.Style
+	Numbers     lipgloss.Style
+	Endpoint    lipgloss.Style
+	HealthCheck lipgloss.Style
+
+	// Health status styles
+	HealthHealthy   lipgloss.Style
+	HealthBusy      lipgloss.Style
+	HealthOffline   lipgloss.Style
+	HealthWarming   lipgloss.Style
+	HealthUnhealthy lipgloss.Style
+	HealthUnknown   lipgloss.Style
 }
 
 // NewStyledLogger creates a new styled logger with the given theme
 func NewStyledLogger(logger *slog.Logger, theme *theme.Theme) *StyledLogger {
+	styles := &ThemeStyles{
+		Counts:      theme.CountsStyle(),
+		Numbers:     theme.NumbersStyle(),
+		Endpoint:    theme.EndpointStyle(),
+		HealthCheck: theme.HealthCheckStyle(),
+
+		// Health status styles
+		HealthHealthy:   theme.HealthHealthyStyle(),
+		HealthBusy:      theme.HealthBusyStyle(),
+		HealthOffline:   theme.HealthOfflineStyle(),
+		HealthWarming:   theme.HealthWarmingStyle(),
+		HealthUnhealthy: theme.HealthUnhealthyStyle(),
+		HealthUnknown:   theme.HealthUnknownStyle(),
+	}
+
 	return &StyledLogger{
 		logger: logger,
 		theme:  theme,
+		styles: styles,
 	}
 }
 
@@ -41,24 +74,24 @@ func (sl *StyledLogger) Error(msg string, args ...any) {
 }
 
 func (sl *StyledLogger) InfoWithCount(msg string, count int, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Counts}.Sprint("(", count, ")"))
+	styledMsg := fmt.Sprintf("%s %s", msg, sl.styles.Counts.Render(fmt.Sprintf("(%d)", count)))
 	sl.logger.Info(styledMsg, args...)
 }
 
 func (sl *StyledLogger) InfoWithEndpoint(msg string, endpoint string, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(endpoint))
+	styledMsg := fmt.Sprintf("%s %s", msg, sl.styles.Endpoint.Render(endpoint))
 	sl.logger.Info(styledMsg, args...)
 }
 
 func (sl *StyledLogger) InfoWithHealthCheck(msg string, endpoint string, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.HealthCheck}.Sprint(endpoint))
+	styledMsg := fmt.Sprintf("%s %s", msg, sl.styles.HealthCheck.Render(endpoint))
 	sl.logger.Info(styledMsg, args...)
 }
 
 func (sl *StyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
 	var formattedNums []string
 	for _, num := range numbers {
-		formattedNums = append(formattedNums, pterm.Style{sl.theme.Numbers}.Sprint(num))
+		formattedNums = append(formattedNums, sl.styles.Numbers.Render(fmt.Sprintf("%d", num)))
 	}
 
 	// Build message with styled numbers
@@ -67,45 +100,49 @@ func (sl *StyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
 }
 
 func (sl *StyledLogger) WarnWithEndpoint(msg string, endpoint string, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(endpoint))
+	styledMsg := fmt.Sprintf("%s %s", msg, sl.styles.Endpoint.Render(endpoint))
 	sl.logger.Warn(styledMsg, args...)
 }
 
 func (sl *StyledLogger) ErrorWithEndpoint(msg string, endpoint string, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(endpoint))
+	styledMsg := fmt.Sprintf("%s %s", msg, sl.styles.Endpoint.Render(endpoint))
 	sl.logger.Error(styledMsg, args...)
 }
 
 func (sl *StyledLogger) InfoHealthy(msg string, endpoint string, args ...any) {
-	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.HealthHealthy}.Sprint(endpoint))
+	styledMsg := fmt.Sprintf("%s %s", msg, sl.styles.HealthHealthy.Render(endpoint))
 	sl.logger.Info(styledMsg, args...)
 }
 
 func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.EndpointStatus, args ...any) {
-	var statusColor pterm.Color
+	var statusStyle lipgloss.Style
 	var statusText string
 
 	switch status {
 	case domain.StatusHealthy:
-		statusColor = sl.theme.HealthHealthy
+		statusStyle = sl.styles.HealthHealthy
 		statusText = "Healthy"
 	case domain.StatusBusy:
-		statusColor = sl.theme.HealthBusy
+		statusStyle = sl.styles.HealthBusy
 		statusText = "Busy"
 	case domain.StatusOffline:
-		statusColor = sl.theme.HealthOffline
+		statusStyle = sl.styles.HealthOffline
 		statusText = "Offline"
 	case domain.StatusWarming:
-		statusColor = sl.theme.HealthWarming
+		statusStyle = sl.styles.HealthWarming
 		statusText = "Warming"
 	case domain.StatusUnhealthy:
-		statusColor = sl.theme.HealthUnhealthy
+		statusStyle = sl.styles.HealthUnhealthy
 		statusText = "Unhealthy"
 	case domain.StatusUnknown:
-		statusColor = sl.theme.HealthUnknown
+		statusStyle = sl.styles.HealthUnknown
 		statusText = "Unknown"
 	}
-	styledMsg := fmt.Sprintf("%s %s is %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(name), pterm.Style{statusColor}.Sprint(statusText))
+
+	styledMsg := fmt.Sprintf("%s %s is %s",
+		msg,
+		sl.styles.Endpoint.Render(name),
+		statusStyle.Render(statusText))
 	sl.logger.Info(styledMsg, args...)
 }
 
@@ -125,6 +162,7 @@ func (sl *StyledLogger) WithAttrs(attrs ...slog.Attr) *StyledLogger {
 	return &StyledLogger{
 		logger: sl.logger.With(args...),
 		theme:  sl.theme,
+		styles: sl.styles,
 	}
 }
 
@@ -133,6 +171,7 @@ func (sl *StyledLogger) With(args ...any) *StyledLogger {
 	return &StyledLogger{
 		logger: sl.logger.With(args...),
 		theme:  sl.theme,
+		styles: sl.styles,
 	}
 }
 

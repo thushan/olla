@@ -2,12 +2,12 @@ package router
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 	"net/http"
 	"sort"
+	"strings"
 
-	"github.com/pterm/pterm"
+	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/theme"
 )
 
 type RouteInfo struct {
@@ -80,21 +80,20 @@ func (r *RouteRegistry) logRoutesTable() {
 		return entries[i].order < entries[j].order
 	})
 
-	// Build table data
-	tableData := [][]string{
-		{"ROUTE", "METHOD", "DESCRIPTION"},
-	}
+	// Create table using simple formatting instead of pterm
+	appTheme := theme.GetTheme("default")
+	countStyle := appTheme.CountsStyle()
+
+	r.logger.Info(fmt.Sprintf("Registered routes %s", countStyle.Render(fmt.Sprintf("(%d)", len(entries)))))
+
+	// Build table manually
+	fmt.Printf("%-25s %-10s %s\n", "ROUTE", "METHOD", "DESCRIPTION")
+	fmt.Println(strings.Repeat("─", 70))
 
 	for _, entry := range entries {
-		tableData = append(tableData, []string{
-			entry.path,
-			entry.method,
-			entry.desc,
-		})
+		fmt.Printf("%-25s %-10s %s\n", entry.path, entry.method, entry.desc)
 	}
-	r.logger.Info(fmt.Sprintf("Registered routes %s", pterm.Style{theme.Default().Counts}.Sprintf("(%d)", len(entries))))
-	tableString, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
-	fmt.Print(tableString)
+	fmt.Println()
 }
 
 func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
