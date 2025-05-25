@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+// Status string constants to reduce allocations
+const (
+	StatusStringHealthy   = "healthy"
+	StatusStringBusy      = "busy"
+	StatusStringOffline   = "offline"
+	StatusStringWarming   = "warming"
+	StatusStringUnhealthy = "unhealthy"
+	StatusStringUnknown   = "unknown"
+)
+
 // Endpoint represents an Ollama server endpoint
 type Endpoint struct {
 	Name           string
@@ -30,22 +40,22 @@ type EndpointStatus string
 
 const (
 	// StatusHealthy indicates the endpoint is healthy and available
-	StatusHealthy EndpointStatus = "healthy"
+	StatusHealthy EndpointStatus = StatusStringHealthy
 
 	// StatusBusy indicates the endpoint is responding but slowly/overloaded
-	StatusBusy EndpointStatus = "busy"
+	StatusBusy EndpointStatus = StatusStringBusy
 
 	// StatusOffline indicates the endpoint is completely unreachable
-	StatusOffline EndpointStatus = "offline"
+	StatusOffline EndpointStatus = StatusStringOffline
 
 	// StatusWarming indicates the endpoint is starting up but not ready for full traffic
-	StatusWarming EndpointStatus = "warming"
+	StatusWarming EndpointStatus = StatusStringWarming
 
 	// StatusUnhealthy indicates the endpoint has other health issues
-	StatusUnhealthy EndpointStatus = "unhealthy"
+	StatusUnhealthy EndpointStatus = StatusStringUnhealthy
 
 	// StatusUnknown indicates the endpoint health is unknown (not yet checked)
-	StatusUnknown EndpointStatus = "unknown"
+	StatusUnknown EndpointStatus = StatusStringUnknown
 )
 
 // IsRoutable returns true if the endpoint can receive traffic
@@ -70,6 +80,11 @@ func (s EndpointStatus) GetTrafficWeight() float64 {
 	default:
 		return 0.0
 	}
+}
+
+// String returns the string representation of the status
+func (s EndpointStatus) String() string {
+	return string(s)
 }
 
 // EndpointRepository defines the interface for endpoint storage and retrieval

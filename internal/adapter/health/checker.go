@@ -157,7 +157,8 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 // Check performs a health check on the endpoint and returns its status
 func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint) (domain.HealthCheckResult, error) {
 	start := time.Now()
-	healthCheckUrl := endpoint.URL.ResolveReference(endpoint.HealthCheckURL).String()
+	// Use pre-computed absolute URL instead of resolving each time
+	healthCheckUrl := endpoint.HealthCheckURL.String()
 
 	result := domain.HealthCheckResult{
 		Status: domain.StatusUnknown,
@@ -174,7 +175,7 @@ func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint
 	checkCtx, cancel := context.WithTimeout(ctx, endpoint.CheckTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, endpoint.HealthCheckURL.String(), nil)
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, healthCheckUrl, nil)
 	if err != nil {
 		result.Latency = time.Since(start)
 		result.Error = err
@@ -273,21 +274,28 @@ func (c *HTTPHealthChecker) cleanupLoop() {
 	}
 }
 
+// performCleanup checks for stale entries in circuit breaker and status tracker
 func (c *HTTPHealthChecker) performCleanup() {
 	endpoints, err := c.repository.GetAll(context.Background())
 	if err != nil {
 		return
 	}
 
-	currentEndpoints := make(map[string]bool)
+	// Only perform cleanup if we have endpoints to check against
+	if len(endpoints) == 0 {
+		return
+	}
+
+	// Build current endpoints set more efficiently
+	currentEndpoints := make(map[string]struct{}, len(endpoints))
 	for _, endpoint := range endpoints {
-		currentEndpoints[endpoint.URL.String()] = true
+		currentEndpoints[endpoint.URL.String()] = struct{}{}
 	}
 
 	// Clean up circuit breaker stale entries
 	circuitEndpoints := c.circuitBreaker.GetActiveEndpoints()
 	for _, url := range circuitEndpoints {
-		if !currentEndpoints[url] {
+		if _, exists := currentEndpoints[url]; !exists {
 			c.circuitBreaker.CleanupEndpoint(url)
 		}
 	}
@@ -295,7 +303,7 @@ func (c *HTTPHealthChecker) performCleanup() {
 	// Clean up status tracker stale entries
 	statusEndpoints := c.statusTracker.GetActiveEndpoints()
 	for _, url := range statusEndpoints {
-		if !currentEndpoints[url] {
+		if _, exists := currentEndpoints[url]; !exists {
 			c.statusTracker.CleanupEndpoint(url)
 		}
 	}

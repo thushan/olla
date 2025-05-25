@@ -9,16 +9,64 @@ import (
 	"time"
 )
 
+const (
+	CacheInvalidationDelay = 50 * time.Millisecond
+)
+
 // StaticEndpointRepository implements domain.EndpointRepository for static endpoints
 type StaticEndpointRepository struct {
 	endpoints map[string]*domain.Endpoint
 	mu        sync.RWMutex
+
+	// Copy-on-write caching
+	cacheMu      sync.RWMutex
+	cachedAll    []*domain.Endpoint
+	cachedHealthy []*domain.Endpoint
+	cachedRoutable []*domain.Endpoint
+	cacheValid   bool
+	lastModified time.Time
 }
 
 func NewStaticEndpointRepository() *StaticEndpointRepository {
 	return &StaticEndpointRepository{
 		endpoints: make(map[string]*domain.Endpoint),
 	}
+}
+
+// invalidateCache marks the cache as invalid - must be called with write lock held
+func (r *StaticEndpointRepository) invalidateCache() {
+	r.cacheValid = false
+	r.lastModified = time.Now()
+}
+
+// rebuildCache rebuilds the cached endpoint lists - must be called with appropriate locks
+func (r *StaticEndpointRepository) rebuildCache() {
+	if r.cacheValid {
+		return
+	}
+
+	all := make([]*domain.Endpoint, 0, len(r.endpoints))
+	healthy := make([]*domain.Endpoint, 0, len(r.endpoints))
+	routable := make([]*domain.Endpoint, 0, len(r.endpoints))
+
+	for _, endpoint := range r.endpoints {
+		all = append(all, endpoint)
+
+		if endpoint.Status == domain.StatusHealthy {
+			healthy = append(healthy, endpoint)
+		}
+
+		if endpoint.Status.IsRoutable() {
+			routable = append(routable, endpoint)
+		}
+	}
+
+	r.cacheMu.Lock()
+	r.cachedAll = all
+	r.cachedHealthy = healthy
+	r.cachedRoutable = routable
+	r.cacheValid = true
+	r.cacheMu.Unlock()
 }
 
 // GetAll returns all registered endpoints
@@ -30,12 +78,13 @@ func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoi
 		return []*domain.Endpoint{}, nil
 	}
 
-	endpoints := make([]*domain.Endpoint, 0, len(r.endpoints))
-	for _, endpoint := range r.endpoints {
-		endpointCopy := *endpoint
-		endpoints = append(endpoints, &endpointCopy)
-	}
-	return endpoints, nil
+	r.rebuildCache()
+
+	r.cacheMu.RLock()
+	result := r.cachedAll
+	r.cacheMu.RUnlock()
+
+	return result, nil
 }
 
 // GetHealthy returns only healthy endpoints
@@ -43,14 +92,13 @@ func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.En
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	endpoints := make([]*domain.Endpoint, 0)
-	for _, endpoint := range r.endpoints {
-		if endpoint.Status == domain.StatusHealthy {
-			endpointCopy := *endpoint
-			endpoints = append(endpoints, &endpointCopy)
-		}
-	}
-	return endpoints, nil
+	r.rebuildCache()
+
+	r.cacheMu.RLock()
+	result := r.cachedHealthy
+	r.cacheMu.RUnlock()
+
+	return result, nil
 }
 
 // GetRoutable returns endpoints that can receive traffic
@@ -58,14 +106,13 @@ func (r *StaticEndpointRepository) GetRoutable(ctx context.Context) ([]*domain.E
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	endpoints := make([]*domain.Endpoint, 0)
-	for _, endpoint := range r.endpoints {
-		if endpoint.Status.IsRoutable() {
-			endpointCopy := *endpoint
-			endpoints = append(endpoints, &endpointCopy)
-		}
-	}
-	return endpoints, nil
+	r.rebuildCache()
+
+	r.cacheMu.RLock()
+	result := r.cachedRoutable
+	r.cacheMu.RUnlock()
+
+	return result, nil
 }
 
 // UpdateStatus updates the health status of an endpoint
@@ -81,6 +128,7 @@ func (r *StaticEndpointRepository) UpdateStatus(ctx context.Context, endpointURL
 
 	endpoint.Status = status
 	endpoint.LastChecked = time.Now()
+	r.invalidateCache()
 	return nil
 }
 
@@ -103,6 +151,7 @@ func (r *StaticEndpointRepository) UpdateEndpoint(ctx context.Context, endpoint 
 	existing.NextCheckTime = endpoint.NextCheckTime
 	existing.LastLatency = endpoint.LastLatency
 
+	r.invalidateCache()
 	return nil
 }
 
@@ -121,6 +170,7 @@ func (r *StaticEndpointRepository) Add(ctx context.Context, endpoint *domain.End
 	}
 
 	r.endpoints[key] = endpoint
+	r.invalidateCache()
 	return nil
 }
 
@@ -135,5 +185,6 @@ func (r *StaticEndpointRepository) Remove(ctx context.Context, endpointURL *url.
 	}
 
 	delete(r.endpoints, key)
+	r.invalidateCache()
 	return nil
 }
