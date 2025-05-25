@@ -1,13 +1,17 @@
 PKG := github.com/thushan/olla/internal/version
+RUNTIME := Go v$(shell go version | awk '{print $$3}' | sed 's/go//')
 VERSION := "v0.0.1"
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 USER := $(shell git config user.name 2>/dev/null || whoami)
+TOOL := "make"
 
 LDFLAGS := -ldflags "\
 	-X '$(PKG).Version=$(VERSION)' \
+	-X '$(PKG).Runtime=$(RUNTIME)' \
 	-X '$(PKG).Commit=$(COMMIT)' \
 	-X '$(PKG).Date=$(DATE)' \
+	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
 .PHONY: run clean build test test-verbose test-short test-race test-cover bench version

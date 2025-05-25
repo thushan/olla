@@ -15,6 +15,8 @@ var (
 	Commit      = "none"
 	Date        = "nowish"
 	User        = "local"
+	Tool        = "make"
+	Runtime     = "Go 1.2x.0"
 )
 
 const (
@@ -53,7 +55,9 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 		b.WriteString("\n")
 		b.WriteString(fmt.Sprintf(" Commit: %s\n", Commit))
 		b.WriteString(fmt.Sprintf("  Built: %s\n", Date))
-		b.WriteString(fmt.Sprintf("  Using: %s\n", User))
+		b.WriteString(fmt.Sprintf("  Using: %s\n", Tool))
+		b.WriteString(fmt.Sprintf("   With: %s\n", Runtime))
+		b.WriteString(fmt.Sprintf("     By: %s\n", User))
 	}
 
 	vlog.Println(b.String())
