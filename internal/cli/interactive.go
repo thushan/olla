@@ -1,4 +1,3 @@
-// internal/cli/interactive.go
 package cli
 
 import (
@@ -7,15 +6,14 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/pterm/pterm"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/internal/version"
 )
 
 type InteractiveCLI struct {
@@ -24,16 +22,22 @@ type InteractiveCLI struct {
 	logger           *logger.StyledLogger
 	shutdownCh       chan struct{}
 	running          bool
-
-	// Content management
-	logMessages []string
-	logMutex    sync.RWMutex
-	maxLogLines int
 }
 
 const (
-	updateInterval = 10 * time.Second
-	maxLogMessages = 50 // Keep last 50 log messages
+	helpText = `
+Interactive Commands:
+  h, health    - Show health summary
+  n, nodes     - Show node list with status  
+  s, status    - Show detailed endpoint status
+  r, refresh   - Force refresh health checks
+  c, config    - Show current configuration
+  l, logs      - Toggle log level (info <-> debug)
+  help         - Show this help message
+  q, quit      - Shutdown olla
+
+Press any key + Enter to execute command...
+`
 )
 
 func NewInteractiveCLI(discoveryService ports.DiscoveryService, config *config.Config, logger *logger.StyledLogger) *InteractiveCLI {
@@ -43,8 +47,6 @@ func NewInteractiveCLI(discoveryService ports.DiscoveryService, config *config.C
 		logger:           logger,
 		shutdownCh:       make(chan struct{}),
 		running:          false,
-		logMessages:      make([]string, 0),
-		maxLogLines:      maxLogMessages,
 	}
 }
 
@@ -54,13 +56,8 @@ func (cli *InteractiveCLI) Start(ctx context.Context) {
 	}
 	cli.running = true
 
-	// Show initial interface
-	cli.showInterface(ctx)
+	cli.showWelcome()
 
-	// Start background updater for cluster status
-	go cli.backgroundUpdater(ctx)
-
-	// Start input handler
 	go cli.inputLoop(ctx)
 }
 
@@ -76,148 +73,14 @@ func (cli *InteractiveCLI) GetShutdownChannel() <-chan struct{} {
 	return cli.shutdownCh
 }
 
-func (cli *InteractiveCLI) showInterface(ctx context.Context) {
-	// Clear screen completely
-	pterm.Print("\033[2J\033[H")
+func (cli *InteractiveCLI) showWelcome() {
+	pterm.DefaultHeader.WithFullWidth().
+		WithBackgroundStyle(pterm.NewStyle(pterm.BgLightBlue)).
+		WithTextStyle(pterm.NewStyle(pterm.FgBlack)).
+		Println("Olla Interactive CLI")
 
-	// Show header
-	cli.showHeader()
-
-	// Show cluster status
-	cli.showClusterStatus(ctx)
-
-	// Show log area with current messages
-	cli.showLogArea()
-
-	// Show command bar
-	cli.showCommandBar()
-
-	// Position cursor at input
-	pterm.Print("> ")
-}
-
-func (cli *InteractiveCLI) refreshInterface(ctx context.Context) {
-	// Save cursor position
-	pterm.Print("\033[s")
-
-	// Move to top and redraw just the dynamic parts
-	pterm.Print("\033[H")
-
-	// Redraw cluster status (skip header)
-	pterm.Print("\033[4;1H") // Move to line 4
-	cli.showClusterStatus(ctx)
-
-	// Redraw log area
-	cli.showLogArea()
-
-	// Restore cursor to input line
-	pterm.Print("\033[u> ")
-}
-
-func (cli *InteractiveCLI) showHeader() {
-	pid := os.Getpid()
-	headerText := fmt.Sprintf("Olla %s (PID: %d)", version.Version, pid)
-
-	pterm.DefaultBox.
-		WithTitle(headerText).
-		WithTitleTopCenter().
-		WithBoxStyle(pterm.NewStyle(pterm.FgBlue)).
-		Println("")
-}
-
-func (cli *InteractiveCLI) showClusterStatus(ctx context.Context) {
-	statusText := cli.getClusterStatusText(ctx)
-
-	pterm.DefaultBox.
-		WithTitle("Cluster Status").
-		WithTitleTopLeft().
-		WithBoxStyle(pterm.NewStyle(pterm.FgCyan)).
-		Println(statusText)
-}
-
-func (cli *InteractiveCLI) showLogArea() {
-	cli.logMutex.RLock()
-	logs := make([]string, len(cli.logMessages))
-	copy(logs, cli.logMessages)
-	cli.logMutex.RUnlock()
-
-	// Create log content
-	logContent := "System logs will appear here..."
-	if len(logs) > 0 {
-		// Show last 10 messages
-		start := 0
-		if len(logs) > 10 {
-			start = len(logs) - 10
-		}
-		logContent = strings.Join(logs[start:], "\n")
-	}
-
-	pterm.DefaultBox.
-		WithTitle("Application Logs").
-		WithTitleTopLeft().
-		WithBoxStyle(pterm.NewStyle(pterm.FgGreen)).
-		Println(logContent)
-}
-
-func (cli *InteractiveCLI) showCommandBar() {
-	commands := []string{
-		"h:Health", "n:Nodes", "s:Status", "r:Refresh",
-		"c:Config", "l:Logs", "q:Quit", "help:Commands",
-	}
-
-	commandText := strings.Join(commands, " | ")
-
-	pterm.DefaultBox.
-		WithBoxStyle(pterm.NewStyle(pterm.BgBlue, pterm.FgWhite)).
-		Println(commandText)
-}
-
-func (cli *InteractiveCLI) getClusterStatusText(ctx context.Context) string {
-	if ds, ok := cli.discoveryService.(*discovery.StaticDiscoveryService); ok {
-		status, err := ds.GetHealthStatus(ctx)
-		if err != nil {
-			return pterm.Red("Error getting cluster status")
-		}
-
-		total := status["total_endpoints"].(int)
-		healthy := status["healthy_endpoints"].(int)
-		routable := status["routable_endpoints"].(int)
-
-		timestamp := time.Now().Format("15:04:05")
-
-		return fmt.Sprintf("%s | %s | Updated: %s",
-			pterm.Green(fmt.Sprintf("%d/%d healthy", healthy, total)),
-			pterm.Cyan(fmt.Sprintf("%d routable", routable)),
-			pterm.Gray(timestamp))
-	}
-
-	return pterm.Gray("Cluster status unavailable")
-}
-
-func (cli *InteractiveCLI) backgroundUpdater(ctx context.Context) {
-	ticker := time.NewTicker(updateInterval)
-	defer ticker.Stop()
-
-	for cli.running {
-		select {
-		case <-ctx.Done():
-			return
-		case <-cli.shutdownCh:
-			return
-		case <-ticker.C:
-			// Just update cluster status, don't redraw everything
-			cli.updateClusterStatus(ctx)
-		}
-	}
-}
-
-func (cli *InteractiveCLI) updateClusterStatus(ctx context.Context) {
-	// Move cursor to cluster status area and update just that section
-	// This is a simplified approach - in practice you'd need precise cursor positioning
-	statusText := cli.getClusterStatusText(ctx)
-
-	// For now, just add to log that status updated
-	cli.addLogMessage("info", fmt.Sprintf("Cluster status: %s", statusText))
+	pterm.Info.Println("Interactive mode enabled. Type 'help' for commands or 'q' to quit.")
+	pterm.Println()
 }
 
 func (cli *InteractiveCLI) inputLoop(ctx context.Context) {
@@ -227,16 +90,12 @@ func (cli *InteractiveCLI) inputLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case <-cli.shutdownCh:
-			return
 		default:
 			if scanner.Scan() {
 				input := strings.TrimSpace(scanner.Text())
 				if input != "" {
 					cli.handleCommand(ctx, input)
 				}
-				// Show prompt again after command
-				pterm.Print("> ")
 			}
 		}
 	}
@@ -245,38 +104,33 @@ func (cli *InteractiveCLI) inputLoop(ctx context.Context) {
 func (cli *InteractiveCLI) handleCommand(ctx context.Context, cmd string) {
 	switch strings.ToLower(cmd) {
 	case "h", "health":
-		cli.showHealthCommand(ctx)
+		cli.showHealthSummary(ctx)
 	case "n", "nodes":
-		cli.showNodesCommand(ctx)
+		cli.showNodeList(ctx)
 	case "s", "status":
-		cli.showStatusCommand(ctx)
+		cli.showDetailedStatus(ctx)
 	case "r", "refresh":
-		cli.refreshCommand(ctx)
+		cli.forceRefresh(ctx)
 	case "c", "config":
-		cli.showConfigCommand()
+		cli.showConfig()
 	case "l", "logs":
 		cli.toggleLogLevel()
 	case "help":
-		cli.showHelpCommand()
+		cli.showHelp()
 	case "q", "quit", "exit":
 		cli.initiateShutdown()
-		return
-	case "clear":
-		cli.showInterface(ctx) // Redraw interface
-		return
 	default:
-		cli.addLogMessage("warn", fmt.Sprintf("Unknown command: %s (type 'help' for commands)", cmd))
+		pterm.Warning.Printfln("Unknown command: %s. Type 'help' for available commands.", cmd)
 	}
-
-	// Refresh the interface after any command
-	cli.refreshInterface(ctx)
 }
 
-func (cli *InteractiveCLI) showHealthCommand(ctx context.Context) {
+func (cli *InteractiveCLI) showHealthSummary(ctx context.Context) {
+	pterm.DefaultSection.Println("Health Summary")
+
 	if ds, ok := cli.discoveryService.(*discovery.StaticDiscoveryService); ok {
 		status, err := ds.GetHealthStatus(ctx)
 		if err != nil {
-			cli.addLogMessage("error", fmt.Sprintf("Error getting health: %v", err))
+			pterm.Error.Printfln("Error getting health status: %v", err)
 			return
 		}
 
@@ -285,139 +139,230 @@ func (cli *InteractiveCLI) showHealthCommand(ctx context.Context) {
 		routable := status["routable_endpoints"].(int)
 		unhealthy := status["unhealthy_endpoints"].(int)
 
-		healthMsg := fmt.Sprintf("Health: %d total, %d healthy, %d routable, %d unhealthy",
-			total, healthy, routable, unhealthy)
-		cli.addLogMessage("info", healthMsg)
+		// Create summary table
+		tableData := pterm.TableData{
+			{"Metric", "Count"},
+			{"Total Endpoints", pterm.Sprintf("%d", total)},
+			{"Healthy", pterm.Green(fmt.Sprintf("%d", healthy))},
+			{"Routable", pterm.Cyan(fmt.Sprintf("%d", routable))},
+			{"Unhealthy", pterm.Red(fmt.Sprintf("%d", unhealthy))},
+		}
+
+		pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
 
 		healthPercentage := float64(healthy) / float64(total) * 100
-		cli.addLogMessage("info", fmt.Sprintf("Health percentage: %.1f%%", healthPercentage))
+		if healthPercentage >= 80 {
+			pterm.Success.Printfln("Health Percentage: %.1f%%", healthPercentage)
+		} else if healthPercentage >= 50 {
+			pterm.Warning.Printfln("Health Percentage: %.1f%%", healthPercentage)
+		} else {
+			pterm.Error.Printfln("Health Percentage: %.1f%%", healthPercentage)
+		}
+	} else {
+		pterm.Warning.Println("Health status not available")
 	}
+	pterm.Println()
 }
 
-func (cli *InteractiveCLI) showNodesCommand(ctx context.Context) {
+func (cli *InteractiveCLI) showNodeList(ctx context.Context) {
+	pterm.DefaultSection.Println("Node List")
+
 	endpoints, err := cli.discoveryService.GetEndpoints(ctx)
 	if err != nil {
-		cli.addLogMessage("error", fmt.Sprintf("Error getting nodes: %v", err))
+		pterm.Error.Printfln("Error getting endpoints: %v", err)
 		return
 	}
 
-	cli.addLogMessage("info", fmt.Sprintf("Found %d nodes:", len(endpoints)))
+	if len(endpoints) == 0 {
+		pterm.Warning.Println("No endpoints configured")
+		return
+	}
+
+	// Sort by priority (highest first)
+	for i := 0; i < len(endpoints)-1; i++ {
+		for j := i + 1; j < len(endpoints); j++ {
+			if endpoints[i].Priority < endpoints[j].Priority {
+				endpoints[i], endpoints[j] = endpoints[j], endpoints[i]
+			}
+		}
+	}
+
+	// Create table data
+	tableData := pterm.TableData{
+		{"Name", "Status", "Priority", "URL", "Latency"},
+	}
+
 	for _, ep := range endpoints {
-		statusText := strings.ToLower(string(ep.Status))
-		nodeMsg := fmt.Sprintf("  %s: %s (priority: %d)", ep.Name, statusText, ep.Priority)
-		cli.addLogMessage("info", nodeMsg)
+		statusText := cli.getStatusText(ep.Status)
+		latency := "N/A"
+		if ep.LastLatency > 0 {
+			latency = ep.LastLatency.Round(time.Millisecond).String()
+		}
+
+		tableData = append(tableData, []string{
+			ep.Name,
+			statusText,
+			fmt.Sprintf("%d", ep.Priority),
+			ep.URL.String(),
+			latency,
+		})
 	}
+
+	pterm.DefaultTable.WithHasHeader().WithData(tableData).Render()
+	pterm.Println()
 }
 
-func (cli *InteractiveCLI) showStatusCommand(ctx context.Context) {
-	cli.addLogMessage("info", "Detailed status requested")
-	// Show last few log messages as status
-	cli.logMutex.RLock()
-	recentLogs := len(cli.logMessages)
-	cli.logMutex.RUnlock()
+func (cli *InteractiveCLI) showDetailedStatus(ctx context.Context) {
+	pterm.DefaultSection.Println("Detailed Status")
 
-	cli.addLogMessage("info", fmt.Sprintf("Recent activity: %d log messages", recentLogs))
-}
+	if ds, ok := cli.discoveryService.(*discovery.StaticDiscoveryService); ok {
+		status, err := ds.GetHealthStatus(ctx)
+		if err != nil {
+			pterm.Error.Printfln("Error getting detailed status: %v", err)
+			return
+		}
 
-func (cli *InteractiveCLI) refreshCommand(ctx context.Context) {
-	cli.addLogMessage("info", "Refreshing endpoints...")
+		endpoints, ok := status["endpoints"].([]discovery.EndpointStatusResponse)
+		if !ok {
+			pterm.Warning.Println("Unable to parse endpoint details")
+			return
+		}
 
-	start := time.Now()
-	if err := cli.discoveryService.RefreshEndpoints(ctx); err != nil {
-		cli.addLogMessage("error", fmt.Sprintf("Refresh failed: %v", err))
+		for i, ep := range endpoints {
+			if i > 0 {
+				pterm.Println()
+			}
+
+			// Create a box for each endpoint
+			pterm.DefaultBox.WithTitle(ep.Name).WithTitleTopCenter().Printfln(
+				"URL: %s\nStatus: %s\nPriority: %d\nLast Checked: %s\nLatency: %s\nConsecutive Failures: %d\nNext Check: %s",
+				pterm.Cyan(ep.URL),
+				cli.getStatusTextByString(ep.Status),
+				ep.Priority,
+				ep.LastChecked.Format("15:04:05"),
+				ep.LastLatency,
+				ep.ConsecutiveFailures,
+				ep.NextCheckTime.Format("15:04:05"))
+		}
 	} else {
-		elapsed := time.Since(start)
-		cli.addLogMessage("info", fmt.Sprintf("Refresh completed in %v", elapsed.Round(time.Millisecond)))
+		pterm.Warning.Println("Detailed status not available")
 	}
+	pterm.Println()
 }
 
-func (cli *InteractiveCLI) showConfigCommand() {
-	cli.addLogMessage("info", fmt.Sprintf("Server: %s:%d", cli.config.Server.Host, cli.config.Server.Port))
-	cli.addLogMessage("info", fmt.Sprintf("Discovery: %s", cli.config.Discovery.Type))
-	cli.addLogMessage("info", fmt.Sprintf("Log level: %s", cli.config.Logging.Level))
-	cli.addLogMessage("info", fmt.Sprintf("Endpoints: %d configured", len(cli.config.Discovery.Static.Endpoints)))
+func (cli *InteractiveCLI) forceRefresh(ctx context.Context) {
+	pterm.DefaultSection.Println("Force Health Check Refresh")
+
+	spinner, _ := pterm.DefaultSpinner.Start("Refreshing endpoints...")
+	start := time.Now()
+
+	if err := cli.discoveryService.RefreshEndpoints(ctx); err != nil {
+		spinner.Fail(fmt.Sprintf("Error refreshing endpoints: %v", err))
+		return
+	}
+
+	elapsed := time.Since(start)
+	spinner.Success(fmt.Sprintf("Refresh completed in %v", elapsed.Round(time.Millisecond)))
+	pterm.Println()
+}
+
+func (cli *InteractiveCLI) showConfig() {
+	pterm.DefaultSection.Println("Current Configuration")
+
+	configData := pterm.TableData{
+		{"Setting", "Value"},
+		{"Server", fmt.Sprintf("%s:%d", cli.config.Server.Host, cli.config.Server.Port)},
+		{"Discovery Type", cli.config.Discovery.Type},
+		{"Log Level", cli.config.Logging.Level},
+		{"Endpoints", fmt.Sprintf("%d configured", len(cli.config.Discovery.Static.Endpoints))},
+	}
+
+	if cli.config.Telemetry.Metrics.Enabled {
+		configData = append(configData, []string{"Metrics", fmt.Sprintf("Enabled (%s)", cli.config.Telemetry.Metrics.Address)})
+	} else {
+		configData = append(configData, []string{"Metrics", "Disabled"})
+	}
+
+	pterm.DefaultTable.WithHasHeader().WithData(configData).Render()
+	pterm.Println()
 }
 
 func (cli *InteractiveCLI) toggleLogLevel() {
+	pterm.DefaultSection.Println("Toggle Log Level")
+
 	currentLevel := cli.config.Logging.Level
-	newLevel := "info"
-	if currentLevel == "info" {
+	var newLevel string
+
+	switch strings.ToLower(currentLevel) {
+	case "info":
 		newLevel = "debug"
+	case "debug":
+		newLevel = "info"
+	default:
+		newLevel = "info"
 	}
 
 	cli.config.Logging.Level = newLevel
-	cli.addLogMessage("info", fmt.Sprintf("Log level: %s → %s", currentLevel, newLevel))
+	pterm.Success.Printfln("Log level changed: %s → %s", currentLevel, newLevel)
+	pterm.Warning.Println("Note: This change is temporary and won't persist after restart")
+	pterm.Println()
 }
 
-func (cli *InteractiveCLI) showHelpCommand() {
-	commands := []string{
-		"h,health - Show health summary",
-		"n,nodes - Show node list",
-		"s,status - Show detailed status",
-		"r,refresh - Force refresh",
-		"c,config - Show configuration",
-		"l,logs - Toggle log level",
-		"clear - Redraw interface",
-		"q,quit - Exit application",
+func (cli *InteractiveCLI) showHelp() {
+	pterm.DefaultSection.Println("Interactive Commands")
+
+	helpData := pterm.TableData{
+		{"Command", "Aliases", "Description"},
+		{"health", "h", "Show health summary"},
+		{"nodes", "n", "Show node list with status"},
+		{"status", "s", "Show detailed endpoint status"},
+		{"refresh", "r", "Force refresh health checks"},
+		{"config", "c", "Show current configuration"},
+		{"logs", "l", "Toggle log level (info ↔ debug)"},
+		{"help", "", "Show this help message"},
+		{"quit", "q, exit", "Shutdown olla"},
 	}
 
-	cli.addLogMessage("info", "Available commands:")
-	for _, cmd := range commands {
-		cli.addLogMessage("info", fmt.Sprintf("  %s", cmd))
-	}
+	pterm.DefaultTable.WithHasHeader().WithData(helpData).Render()
+	pterm.Info.Println("Press any key + Enter to execute command...")
+	pterm.Println()
 }
 
 func (cli *InteractiveCLI) initiateShutdown() {
-	cli.addLogMessage("info", "Shutting down...")
+	pterm.Success.Println("Initiating graceful shutdown...")
 	cli.Stop()
 }
 
-// HandleLogMessage receives log messages from the styled logger
-func (cli *InteractiveCLI) HandleLogMessage(level, message string, args ...interface{}) {
-	if !cli.running {
-		return
+func (cli *InteractiveCLI) getStatusText(status domain.EndpointStatus) string {
+	switch status {
+	case domain.StatusHealthy:
+		return pterm.Green("HEALTHY")
+	case domain.StatusBusy:
+		return pterm.Yellow("BUSY")
+	case domain.StatusOffline:
+		return pterm.Red("OFFLINE")
+	case domain.StatusWarming:
+		return pterm.Cyan("WARMING")
+	case domain.StatusUnhealthy:
+		return pterm.Red("UNHEALTHY")
+	default:
+		return pterm.Gray("UNKNOWN")
 	}
-
-	cli.addLogMessage(level, message)
-
-	// Auto-refresh interface when new logs arrive (but not too frequently)
-	go func() {
-		time.Sleep(50 * time.Millisecond) // Small delay to batch updates
-		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		defer cancel()
-		cli.refreshInterface(ctx)
-	}()
 }
 
-func (cli *InteractiveCLI) addLogMessage(level, message string) {
-	cli.logMutex.Lock()
-	defer cli.logMutex.Unlock()
-
-	timestamp := time.Now().Format("15:04:05")
-
-	var levelColor func(...interface{}) string
-	switch strings.ToLower(level) {
-	case "debug":
-		levelColor = pterm.Gray
-	case "info":
-		levelColor = pterm.Blue
-	case "warn":
-		levelColor = pterm.Yellow
-	case "error":
-		levelColor = pterm.Red
+func (cli *InteractiveCLI) getStatusTextByString(status string) string {
+	switch strings.ToLower(status) {
+	case "healthy":
+		return pterm.Green("HEALTHY")
+	case "busy":
+		return pterm.Yellow("BUSY")
+	case "offline":
+		return pterm.Red("OFFLINE")
+	case "warming":
+		return pterm.Cyan("WARMING")
+	case "unhealthy":
+		return pterm.Red("UNHEALTHY")
 	default:
-		levelColor = pterm.White
-	}
-
-	logLine := fmt.Sprintf("[%s] %s %s",
-		pterm.Gray(timestamp),
-		levelColor(strings.ToUpper(level)),
-		message)
-
-	cli.logMessages = append(cli.logMessages, logLine)
-
-	// Keep only recent messages
-	if len(cli.logMessages) > cli.maxLogLines {
-		cli.logMessages = cli.logMessages[len(cli.logMessages)-cli.maxLogLines:]
+		return pterm.Gray("UNKNOWN")
 	}
 }
