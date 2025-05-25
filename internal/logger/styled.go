@@ -12,8 +12,10 @@ import (
 
 // StyledLogger wraps slog.Logger with theme-aware formatting methods
 type StyledLogger struct {
-	logger *slog.Logger
-	theme  *theme.Theme
+	logger           *slog.Logger
+	theme            *theme.Theme
+	cliHook          func(level, message string, args ...interface{}) // CLI message hook
+	suppressTerminal bool                                             // When true, only send to CLI, not terminal
 }
 
 // NewStyledLogger creates a new styled logger with the given theme
@@ -24,35 +26,79 @@ func NewStyledLogger(logger *slog.Logger, theme *theme.Theme) *StyledLogger {
 	}
 }
 
+// SetCLIHook allows the CLI to capture log messages
+func (sl *StyledLogger) SetCLIHook(hook func(level, message string, args ...interface{})) {
+	sl.cliHook = hook
+}
+
+// SetTerminalSuppression controls whether logs go to terminal when CLI is active
+func (sl *StyledLogger) SetTerminalSuppression(suppress bool) {
+	sl.suppressTerminal = suppress
+}
+
 func (sl *StyledLogger) Debug(msg string, args ...any) {
-	sl.logger.Debug(msg, args...)
+	if !sl.suppressTerminal {
+		sl.logger.Debug(msg, args...)
+	}
+	if sl.cliHook != nil {
+		sl.cliHook("debug", msg, args...)
+	}
 }
 
 func (sl *StyledLogger) Info(msg string, args ...any) {
-	sl.logger.Info(msg, args...)
+	if !sl.suppressTerminal {
+		sl.logger.Info(msg, args...)
+	}
+	if sl.cliHook != nil {
+		sl.cliHook("info", msg, args...)
+	}
 }
 
 func (sl *StyledLogger) Warn(msg string, args ...any) {
-	sl.logger.Warn(msg, args...)
+	if !sl.suppressTerminal {
+		sl.logger.Warn(msg, args...)
+	}
+	if sl.cliHook != nil {
+		sl.cliHook("warn", msg, args...)
+	}
 }
 
 func (sl *StyledLogger) Error(msg string, args ...any) {
-	sl.logger.Error(msg, args...)
+	if !sl.suppressTerminal {
+		sl.logger.Error(msg, args...)
+	}
+	if sl.cliHook != nil {
+		sl.cliHook("error", msg, args...)
+	}
 }
 
 func (sl *StyledLogger) InfoWithCount(msg string, count int, args ...any) {
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Counts}.Sprint("(", count, ")"))
 	sl.logger.Info(styledMsg, args...)
+	if sl.cliHook != nil {
+		// Send clean message to CLI without pterm styling
+		cleanMsg := fmt.Sprintf("%s (%d)", msg, count)
+		sl.cliHook("info", cleanMsg, args...)
+	}
 }
 
 func (sl *StyledLogger) InfoWithEndpoint(msg string, endpoint string, args ...any) {
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(endpoint))
 	sl.logger.Info(styledMsg, args...)
+	if sl.cliHook != nil {
+		// Send clean message to CLI
+		cleanMsg := fmt.Sprintf("%s %s", msg, endpoint)
+		sl.cliHook("info", cleanMsg, args...)
+	}
 }
 
 func (sl *StyledLogger) InfoWithHealthCheck(msg string, endpoint string, args ...any) {
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.HealthCheck}.Sprint(endpoint))
 	sl.logger.Info(styledMsg, args...)
+	if sl.cliHook != nil {
+		cleanMsg := fmt.Sprintf("%s %s", msg, endpoint)
+		sl.cliHook("info", cleanMsg, args...)
+	}
 }
 
 func (sl *StyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
@@ -64,21 +110,43 @@ func (sl *StyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
 	// Build message with styled numbers
 	styledMsg := fmt.Sprintf(msg, toInterfaceSlice(formattedNums)...)
 	sl.logger.Info(styledMsg)
+
+	if sl.cliHook != nil {
+		// Send clean message to CLI
+		var cleanNums []interface{}
+		for _, num := range numbers {
+			cleanNums = append(cleanNums, num)
+		}
+		cleanMsg := fmt.Sprintf(msg, cleanNums...)
+		sl.cliHook("info", cleanMsg)
+	}
 }
 
 func (sl *StyledLogger) WarnWithEndpoint(msg string, endpoint string, args ...any) {
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(endpoint))
 	sl.logger.Warn(styledMsg, args...)
+	if sl.cliHook != nil {
+		cleanMsg := fmt.Sprintf("%s %s", msg, endpoint)
+		sl.cliHook("warn", cleanMsg, args...)
+	}
 }
 
 func (sl *StyledLogger) ErrorWithEndpoint(msg string, endpoint string, args ...any) {
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(endpoint))
 	sl.logger.Error(styledMsg, args...)
+	if sl.cliHook != nil {
+		cleanMsg := fmt.Sprintf("%s %s", msg, endpoint)
+		sl.cliHook("error", cleanMsg, args...)
+	}
 }
 
 func (sl *StyledLogger) InfoHealthy(msg string, endpoint string, args ...any) {
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.theme.HealthHealthy}.Sprint(endpoint))
 	sl.logger.Info(styledMsg, args...)
+	if sl.cliHook != nil {
+		cleanMsg := fmt.Sprintf("%s %s", msg, endpoint)
+		sl.cliHook("info", cleanMsg, args...)
+	}
 }
 
 func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.EndpointStatus, args ...any) {
@@ -107,6 +175,12 @@ func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.
 	}
 	styledMsg := fmt.Sprintf("%s %s is %s", msg, pterm.Style{sl.theme.Endpoint}.Sprint(name), pterm.Style{statusColor}.Sprint(statusText))
 	sl.logger.Info(styledMsg, args...)
+
+	if sl.cliHook != nil {
+		// Send clean message to CLI
+		cleanMsg := fmt.Sprintf("%s %s is %s", msg, name, statusText)
+		sl.cliHook("info", cleanMsg, args...)
+	}
 }
 
 // GetUnderlying returns the underlying slog.Logger for cases where direct access is needed
@@ -123,16 +197,18 @@ func (sl *StyledLogger) WithAttrs(attrs ...slog.Attr) *StyledLogger {
 	}
 
 	return &StyledLogger{
-		logger: sl.logger.With(args...),
-		theme:  sl.theme,
+		logger:  sl.logger.With(args...),
+		theme:   sl.theme,
+		cliHook: sl.cliHook, // Preserve CLI hook
 	}
 }
 
 // With creates a new StyledLogger with additional key-value pairs
 func (sl *StyledLogger) With(args ...any) *StyledLogger {
 	return &StyledLogger{
-		logger: sl.logger.With(args...),
-		theme:  sl.theme,
+		logger:  sl.logger.With(args...),
+		theme:   sl.theme,
+		cliHook: sl.cliHook, // Preserve CLI hook
 	}
 }
 

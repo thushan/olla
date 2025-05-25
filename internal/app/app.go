@@ -109,6 +109,10 @@ func (a *Application) Start(ctx context.Context) error {
 	if a.config.Server.InteractiveCLI {
 		a.interactiveCLI.Start(ctx)
 
+		// Connect logger to CLI and suppress terminal output
+		a.logger.SetCLIHook(a.interactiveCLI.HandleLogMessage)
+		a.logger.SetTerminalSuppression(true) // Prevent logs from appearing in terminal
+
 		// Monitor for CLI shutdown requests
 		go func() {
 			select {
@@ -131,7 +135,7 @@ func (a *Application) Stop(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, a.config.Server.ShutdownTimeout)
 	defer cancel()
 
-	// Stop interactive CLI if it was start
+	// Stop interactive CLI if it was started
 	if a.config.Server.InteractiveCLI && a.interactiveCLI != nil {
 		a.interactiveCLI.Stop()
 	}
