@@ -237,26 +237,39 @@ func (s *StaticDiscoveryService) performInitialHealthChecks(ctx context.Context)
 
 	s.logger.InfoWithCount("Health checking Endpoints", endpointCount)
 
-	// Perform health checks concurrently but wait for all to complete
-	var wg sync.WaitGroup
+	// Batch endpoints into smaller groups to prevent goroutine explosion
+	const batchSize = 5
+	batches := make([][]*domain.Endpoint, 0, (endpointCount+batchSize-1)/batchSize)
+	for i := 0; i < len(endpoints); i += batchSize {
+		end := i + batchSize
+		if end > len(endpoints) {
+			end = len(endpoints)
+		}
+		batches = append(batches, endpoints[i:end])
+	}
+
 	healthCheckResults := make(chan struct {
 		endpoint *domain.Endpoint
 		result   domain.HealthCheckResult
 	}, len(endpoints))
 
-	for _, endpoint := range endpoints {
+	var wg sync.WaitGroup
+
+	// Process batches with controlled concurrency
+	for _, batch := range batches {
 		wg.Add(1)
-		go func(ep *domain.Endpoint) {
+		go func(batch []*domain.Endpoint) {
 			defer wg.Done()
+			for _, endpoint := range batch {
+				s.logger.InfoWithEndpoint(" Checking", endpoint.Name, "url", endpoint.HealthCheckURL.String())
 
-			s.logger.InfoWithEndpoint(" Checking", ep.Name, "url", ep.HealthCheckURL.String())
-
-			result, _ := s.checker.Check(checkCtx, ep)
-			healthCheckResults <- struct {
-				endpoint *domain.Endpoint
-				result   domain.HealthCheckResult
-			}{ep, result}
-		}(endpoint)
+				result, _ := s.checker.Check(checkCtx, endpoint)
+				healthCheckResults <- struct {
+					endpoint *domain.Endpoint
+					result   domain.HealthCheckResult
+				}{endpoint, result}
+			}
+		}(batch)
 	}
 
 	wg.Wait()
@@ -432,13 +445,15 @@ func (s *StaticDiscoveryService) GetHealthStatus(ctx context.Context) (map[strin
 	status["routable_endpoints"] = len(routable)
 	status["unhealthy_endpoints"] = len(all) - len(routable)
 
+	// Pre-allocate slice with known capacity
 	endpoints := make([]EndpointStatusResponse, len(all))
 	for i, endpoint := range all {
+		// Use pre-computed URL strings and status constants
 		endpoints[i] = EndpointStatusResponse{
 			Name:                endpoint.Name,
 			URL:                 endpoint.URL.String(),
 			Priority:            endpoint.Priority,
-			Status:              string(endpoint.Status),
+			Status:              endpoint.Status.String(),
 			LastChecked:         endpoint.LastChecked,
 			LastLatency:         endpoint.LastLatency.String(),
 			ConsecutiveFailures: endpoint.ConsecutiveFailures,
