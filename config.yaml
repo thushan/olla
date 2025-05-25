@@ -5,6 +5,7 @@ server:
   read_timeout: 30s
   write_timeout: 0s
   shutdown_timeout: 10s
+  interactive_cli: true
 
 proxy:
   connection_timeout: 30s
@@ -22,13 +23,29 @@ discovery:
       - url: "http://localhost:11434"
         name: "localhost"
         priority: 100
-        health_check_url: "http://localhost:11434/"
+        model_url: "/api/tags"
+        health_check_url: "/"
         check_interval: 5s
         check_timeout: 2s
       - url: "http://192.168.0.1:11434"
         name: "neo"
         priority: 200
-        health_check_url: "http://192.168.0.1:11434/"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://192.168.0.2:11434"
+        name: "cody"
+        priority: 200
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://192.168.0.4:11434"
+        name: "zeus"
+        priority: 200
+        model_url: "/api/tags"
+        health_check_url: "/"
         check_interval: 5s
         check_timeout: 2s
   consul:
@@ -65,7 +82,7 @@ security:
 plugins:
   directory: "./plugins"
   enabled:
-    # - "priority_balancer"
+  # - "priority_balancer"
   config:
-    # priority_balancer:
-    #   some_option: "value"
+  # priority_balancer:
+  #   some_option: "value"

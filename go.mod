@@ -3,6 +3,7 @@ module github.com/thushan/olla
 go 1.24
 
 require (
+	github.com/fsnotify/fsnotify v1.8.0
 	github.com/pterm/pterm v0.12.80
 	github.com/spf13/viper v1.20.1
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -13,7 +14,6 @@ require (
 	atomicgo.dev/keyboard v0.2.9 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
-	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
