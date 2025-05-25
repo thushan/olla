@@ -70,6 +70,7 @@ type HTTPHealthChecker struct {
 	client         HTTPClient
 	circuitBreaker *CircuitBreaker
 	statusTracker  *StatusTransitionTracker
+	cleanupTicker  *time.Ticker
 	stopCh         chan struct{}
 	jobCh          chan healthCheckJob
 	wg             sync.WaitGroup
@@ -143,6 +144,7 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 	}
 
 	// Increase backoff multiplier
+	// this is the simplest backoff strategy for now
 	multiplier := endpoint.BackoffMultiplier * 2
 	if multiplier > MaxBackoffMultiplier {
 		multiplier = MaxBackoffMultiplier
@@ -231,6 +233,10 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 	c.wg.Add(1)
 	go c.schedulerLoop(ctx)
 
+	c.cleanupTicker = time.NewTicker(CleanupInterval)
+	c.wg.Add(1)
+	go c.cleanupLoop()
+
 	return nil
 }
 
@@ -244,10 +250,55 @@ func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 	}
 
 	close(c.stopCh)
+
+	if c.cleanupTicker != nil {
+		c.cleanupTicker.Stop()
+	}
+
 	c.wg.Wait()
 	c.running = false
 
 	return nil
+}
+func (c *HTTPHealthChecker) cleanupLoop() {
+	defer c.wg.Done()
+
+	for {
+		select {
+		case <-c.stopCh:
+			return
+		case <-c.cleanupTicker.C:
+			c.performCleanup()
+		}
+	}
+}
+
+func (c *HTTPHealthChecker) performCleanup() {
+	endpoints, err := c.repository.GetAll(context.Background())
+	if err != nil {
+		return
+	}
+
+	currentEndpoints := make(map[string]bool)
+	for _, endpoint := range endpoints {
+		currentEndpoints[endpoint.URL.String()] = true
+	}
+
+	// Clean up circuit breaker stale entries
+	circuitEndpoints := c.circuitBreaker.GetActiveEndpoints()
+	for _, url := range circuitEndpoints {
+		if !currentEndpoints[url] {
+			c.circuitBreaker.CleanupEndpoint(url)
+		}
+	}
+
+	// Clean up status tracker stale entries
+	statusEndpoints := c.statusTracker.GetActiveEndpoints()
+	for _, url := range statusEndpoints {
+		if !currentEndpoints[url] {
+			c.statusTracker.CleanupEndpoint(url)
+		}
+	}
 }
 
 // worker processes health check jobs from the job channel

@@ -83,3 +83,20 @@ func (cb *CircuitBreaker) RecordFailure(endpointURL string) {
 		state.isOpen = true
 	}
 }
+
+func (cb *CircuitBreaker) CleanupEndpoint(endpointURL string) {
+	cb.mu.Lock()
+	defer cb.mu.Unlock()
+	delete(cb.endpoints, endpointURL)
+}
+
+func (cb *CircuitBreaker) GetActiveEndpoints() []string {
+	cb.mu.RLock()
+	defer cb.mu.RUnlock()
+
+	endpoints := make([]string, 0, len(cb.endpoints))
+	for url := range cb.endpoints {
+		endpoints = append(endpoints, url)
+	}
+	return endpoints
+}

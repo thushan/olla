@@ -50,3 +50,22 @@ func (st *StatusTransitionTracker) ShouldLog(endpointURL string, newStatus domai
 
 	return false, st.errorCounts[key]
 }
+
+func (st *StatusTransitionTracker) GetActiveEndpoints() []string {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+
+	endpoints := make([]string, 0, len(st.lastStatus))
+	for url := range st.lastStatus {
+		endpoints = append(endpoints, url)
+	}
+	return endpoints
+}
+
+func (st *StatusTransitionTracker) CleanupEndpoint(endpointURL string) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	delete(st.lastStatus, endpointURL)
+	delete(st.lastLogTime, endpointURL)
+	delete(st.errorCounts, endpointURL)
+}

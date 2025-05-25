@@ -17,6 +17,7 @@ type StaticDiscoveryService struct {
 	repository           domain.EndpointRepository
 	checker              domain.HealthChecker
 	configMu             sync.RWMutex
+	endpointUpdateMu     sync.Mutex
 	config               *config.Config
 	initialHealthTimeout time.Duration
 	logger               *logger.StyledLogger
@@ -89,6 +90,9 @@ func (s *StaticDiscoveryService) GetHealthyEndpointsWithFallback(ctx context.Con
 
 // RefreshEndpoints triggers a refresh of the endpoint list from the config
 func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
+	s.endpointUpdateMu.Lock()
+	defer s.endpointUpdateMu.Unlock()
+
 	cfg := s.getConfig()
 
 	currentEndpoints, err := s.repository.GetAll(ctx)
@@ -136,29 +140,7 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			oldName := existing.Name
 			hasNameChanged := existing.Name != endpointCfg.Name
 
-			// Update existing endpoint
-			existing.Name = endpointCfg.Name
-			existing.Priority = endpointCfg.Priority
-			existing.HealthCheckURL = healthCheckURL
-			existing.ModelUrl = modelUrl
-			existing.CheckInterval = endpointCfg.CheckInterval
-			existing.CheckTimeout = endpointCfg.CheckTimeout
-
-			if configChanged {
-				if hasNameChanged {
-					s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName, "to", endpointCfg.Name)
-				} else {
-					s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName)
-				}
-
-				existing.Name = endpointCfg.Name
-				existing.Status = domain.StatusUnknown
-				existing.LastChecked = time.Now()
-				existing.ConsecutiveFailures = 0
-				existing.BackoffMultiplier = 1
-				existing.NextCheckTime = time.Now()
-			}
-
+			s.updateExistingEndpoint(existing, endpointCfg, healthCheckURL, modelUrl, configChanged, hasNameChanged, oldName)
 			delete(currentMap, key)
 		} else {
 			endpoint := &domain.Endpoint{
@@ -198,7 +180,35 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 
 	return nil
 }
+func (s *StaticDiscoveryService) updateExistingEndpoint(
+	existing *domain.Endpoint,
+	cfg config.EndpointConfig,
+	healthCheckURL, modelUrl *url.URL,
+	configChanged, hasNameChanged bool,
+	oldName string,
+) {
+	// Update existing endpoint
+	existing.Name = cfg.Name
+	existing.Priority = cfg.Priority
+	existing.HealthCheckURL = healthCheckURL
+	existing.ModelUrl = modelUrl
+	existing.CheckInterval = cfg.CheckInterval
+	existing.CheckTimeout = cfg.CheckTimeout
 
+	if configChanged {
+		if hasNameChanged {
+			s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName, "to", cfg.Name)
+		} else {
+			s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName)
+		}
+
+		existing.Status = domain.StatusUnknown
+		existing.LastChecked = time.Now()
+		existing.ConsecutiveFailures = 0
+		existing.BackoffMultiplier = 1
+		existing.NextCheckTime = time.Now()
+	}
+}
 func (s *StaticDiscoveryService) hasEndpointConfigChanged(existing *domain.Endpoint, cfg config.EndpointConfig, healthCheckURL *url.URL) bool {
 	return existing.Name != cfg.Name ||
 		existing.Priority != cfg.Priority ||
