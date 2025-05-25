@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -240,5 +241,201 @@ func TestValidateEndpointConfig(t *testing.T) {
 				t.Errorf("Expected no error but got: %v", err)
 			}
 		})
+	}
+}
+
+func TestStaticDiscoveryService_AsyncConfigReload(t *testing.T) {
+	repo := NewStaticEndpointRepository()
+	checker := &mockHealthChecker{}
+	logger := createSimpleLogger()
+
+	cfg := &config.Config{
+		Discovery: config.DiscoveryConfig{
+			Static: config.StaticDiscoveryConfig{
+				Endpoints: []config.EndpointConfig{
+					{
+						Name:           "async-test",
+						URL:            "http://localhost:11434",
+						Priority:       100,
+						HealthCheckURL: "http://localhost:11434/health",
+						ModelURL:       "http://localhost:11434/api/tags",
+						CheckInterval:  5 * time.Second,
+						CheckTimeout:   2 * time.Second,
+					},
+				},
+			},
+		},
+	}
+
+	service := NewStaticDiscoveryService(repo, checker, cfg, logger)
+	ctx := context.Background()
+
+	// Initial setup
+	service.RefreshEndpoints(ctx)
+
+	// Config reload should be async and not block
+	start := time.Now()
+	service.ReloadConfig()
+	elapsed := time.Since(start)
+
+	// Should return immediately
+	if elapsed > 50*time.Millisecond {
+		t.Errorf("ReloadConfig blocked for %v, should be async", elapsed)
+	}
+
+	// Give async reload time to complete
+	time.Sleep(100 * time.Millisecond)
+
+	endpoints, _ := service.GetEndpoints(ctx)
+	if len(endpoints) != 1 {
+		t.Errorf("Expected 1 endpoint after async reload, got %d", len(endpoints))
+	}
+}
+
+func TestStaticDiscoveryService_EmptyEndpointHandling(t *testing.T) {
+	repo := NewStaticEndpointRepository()
+	checker := &mockHealthChecker{}
+	logger := createSimpleLogger()
+
+	cfg := &config.Config{
+		Discovery: config.DiscoveryConfig{
+			Static: config.StaticDiscoveryConfig{
+				Endpoints: []config.EndpointConfig{}, // Empty
+			},
+		},
+	}
+
+	service := NewStaticDiscoveryService(repo, checker, cfg, logger)
+	ctx := context.Background()
+
+	err := service.RefreshEndpoints(ctx)
+	if err != nil {
+		t.Fatalf("RefreshEndpoints with empty config failed: %v", err)
+	}
+
+	endpoints, err := service.GetEndpoints(ctx)
+	if err != nil {
+		t.Fatalf("GetEndpoints failed: %v", err)
+	}
+
+	if len(endpoints) != 0 {
+		t.Errorf("Expected 0 endpoints, got %d", len(endpoints))
+	}
+
+	// Fallback should handle empty case
+	fallback, err := service.GetHealthyEndpointsWithFallback(ctx)
+	if err == nil {
+		t.Error("Expected error for no endpoints configured")
+	}
+	if fallback != nil {
+		t.Error("Expected nil fallback for no endpoints")
+	}
+}
+
+func TestStaticDiscoveryService_RapidStatusChanges(t *testing.T) {
+	repo := NewStaticEndpointRepository()
+	checker := &mockHealthChecker{}
+	logger := createSimpleLogger()
+
+	cfg := &config.Config{
+		Discovery: config.DiscoveryConfig{
+			Static: config.StaticDiscoveryConfig{
+				Endpoints: []config.EndpointConfig{
+					{
+						Name:           "rapid-test",
+						URL:            "http://localhost:11434",
+						Priority:       100,
+						HealthCheckURL: "http://localhost:11434/health",
+						ModelURL:       "http://localhost:11434/api/tags",
+						CheckInterval:  5 * time.Second,
+						CheckTimeout:   2 * time.Second,
+					},
+				},
+			},
+		},
+	}
+
+	service := NewStaticDiscoveryService(repo, checker, cfg, logger)
+	ctx := context.Background()
+
+	service.RefreshEndpoints(ctx)
+	endpoints, _ := service.GetEndpoints(ctx)
+	endpoint := endpoints[0]
+
+	statuses := []domain.EndpointStatus{
+		domain.StatusHealthy,
+		domain.StatusBusy,
+		domain.StatusOffline,
+		domain.StatusWarming,
+		domain.StatusUnhealthy,
+		domain.StatusHealthy,
+	}
+
+	// Rapid status changes should all be handled correctly
+	for i, status := range statuses {
+		endpoint.Status = status
+		err := repo.UpdateEndpoint(ctx, endpoint)
+		if err != nil {
+			t.Fatalf("Status update %d failed: %v", i, err)
+		}
+
+		// Verify cache invalidation worked
+		healthy, _ := service.GetHealthyEndpoints(ctx)
+		routable, _ := service.GetRoutableEndpoints(ctx)
+
+		expectedHealthy := 0
+		if status == domain.StatusHealthy {
+			expectedHealthy = 1
+		}
+
+		expectedRoutable := 0
+		if status.IsRoutable() {
+			expectedRoutable = 1
+		}
+
+		if len(healthy) != expectedHealthy {
+			t.Errorf("Status %s: expected %d healthy, got %d", status, expectedHealthy, len(healthy))
+		}
+
+		if len(routable) != expectedRoutable {
+			t.Errorf("Status %s: expected %d routable, got %d", status, expectedRoutable, len(routable))
+		}
+	}
+}
+
+func TestStaticEndpointRepository_MalformedURLHandling(t *testing.T) {
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	// Test with properly formed URLs that become malformed
+	testURL, _ := url.Parse("http://localhost:11434")
+	healthURL, _ := url.Parse("http://localhost:11434/health")
+
+	endpoint := &domain.Endpoint{
+		Name:           "malformed-test",
+		URL:            testURL,
+		HealthCheckURL: healthURL,
+		Status:         domain.StatusHealthy,
+	}
+
+	err := repo.Add(ctx, endpoint)
+	if err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Normal operations should work
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Errorf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	// URL string operations should work
+	urlStr := endpoints[0].URL.String()
+	if urlStr != "http://localhost:11434" {
+		t.Errorf("URL string incorrect: %s", urlStr)
 	}
 }
