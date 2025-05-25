@@ -1,4 +1,3 @@
-// internal/logger/styled.go
 package logger
 
 import (
@@ -10,13 +9,12 @@ import (
 	"github.com/thushan/olla/theme"
 )
 
-// StyledLogger wraps slog.Logger with theme-aware formatting methods
+// StyledLogger wraps slog.Logger with theme-aware formatting
 type StyledLogger struct {
 	logger *slog.Logger
 	theme  *theme.Theme
 }
 
-// NewStyledLogger creates a new styled logger with the given theme
 func NewStyledLogger(logger *slog.Logger, theme *theme.Theme) *StyledLogger {
 	return &StyledLogger{
 		logger: logger,
@@ -61,7 +59,6 @@ func (sl *StyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
 		formattedNums = append(formattedNums, pterm.Style{sl.theme.Numbers}.Sprint(num))
 	}
 
-	// Build message with styled numbers
 	styledMsg := fmt.Sprintf(msg, toInterfaceSlice(formattedNums)...)
 	sl.logger.Info(styledMsg)
 }
@@ -109,14 +106,11 @@ func (sl *StyledLogger) InfoHealthStatus(msg string, name string, status domain.
 	sl.logger.Info(styledMsg, args...)
 }
 
-// GetUnderlying returns the underlying slog.Logger for cases where direct access is needed
 func (sl *StyledLogger) GetUnderlying() *slog.Logger {
 	return sl.logger
 }
 
-// WithAttrs creates a new StyledLogger with additional structured attributes
 func (sl *StyledLogger) WithAttrs(attrs ...slog.Attr) *StyledLogger {
-	// Convert slog.Attr to key-value pairs
 	args := make([]any, 0, len(attrs)*2)
 	for _, attr := range attrs {
 		args = append(args, attr.Key, attr.Value)
@@ -128,7 +122,6 @@ func (sl *StyledLogger) WithAttrs(attrs ...slog.Attr) *StyledLogger {
 	}
 }
 
-// With creates a new StyledLogger with additional key-value pairs
 func (sl *StyledLogger) With(args ...any) *StyledLogger {
 	return &StyledLogger{
 		logger: sl.logger.With(args...),
@@ -136,7 +129,6 @@ func (sl *StyledLogger) With(args ...any) *StyledLogger {
 	}
 }
 
-// Helper function to convert string slice to interface slice
 func toInterfaceSlice(strs []string) []interface{} {
 	result := make([]interface{}, len(strs))
 	for i, s := range strs {
@@ -145,7 +137,6 @@ func toInterfaceSlice(strs []string) []interface{} {
 	return result
 }
 
-// NewWithTheme creates both a regular logger and a styled logger
 func NewWithTheme(cfg *Config) (*slog.Logger, *StyledLogger, func(), error) {
 	logger, cleanup, err := New(cfg)
 	if err != nil {
