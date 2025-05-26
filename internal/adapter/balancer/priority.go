@@ -25,7 +25,7 @@ func NewPrioritySelector() *PrioritySelector {
 
 // Name returns the name of the selection strategy
 func (p *PrioritySelector) Name() string {
-	return "priority"
+	return DefaultBalancerPriority
 }
 
 // Select chooses the highest priority routable endpoint with weighted selection for non-healthy statuses

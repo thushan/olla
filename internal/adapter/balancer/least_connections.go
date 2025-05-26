@@ -7,6 +7,7 @@ import (
 
 	"github.com/thushan/olla/internal/core/domain"
 )
+
 // LeastConnectionsSelector implements a load balancer that selects the endpoint with the least number of active connections.
 type LeastConnectionsSelector struct {
 	connections map[string]int64
@@ -20,7 +21,7 @@ func NewLeastConnectionsSelector() *LeastConnectionsSelector {
 }
 
 func (l *LeastConnectionsSelector) Name() string {
-	return "least-connections"
+	return DefaultBalancerLeastConnections
 }
 
 func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
