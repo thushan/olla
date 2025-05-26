@@ -129,6 +129,7 @@ type EndpointRepository interface {
 	UpdateEndpoint(ctx context.Context, endpoint *Endpoint) error
 	Add(ctx context.Context, endpoint *Endpoint) error
 	Remove(ctx context.Context, endpointURL *url.URL) error
+	GetCacheStats() map[string]interface{}
 }
 
 type HealthCheckResult struct {

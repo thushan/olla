@@ -119,10 +119,3 @@ func (a *Application) Stop(ctx context.Context) error {
 
 	return nil
 }
-
-func (a *Application) registerRoutes() {
-	a.registry.RegisterWithMethod("/proxy", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
-	a.registry.RegisterWithMethod("/ma", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
-	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
-	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
-}

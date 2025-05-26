@@ -443,6 +443,7 @@ func (s *StaticDiscoveryService) GetHealthStatus(ctx context.Context) (map[strin
 		}
 	}
 	status["endpoints"] = endpoints
+	status["cache"] = s.repository.GetCacheStats()
 
 	return status, nil
 }
