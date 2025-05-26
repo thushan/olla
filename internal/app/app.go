@@ -4,14 +4,17 @@ import (
 	"context"
 	"fmt"
 	"github.com/spf13/viper"
+	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
+	"github.com/thushan/olla/internal/adapter/proxy"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
 	"net/http"
 	"sync"
+	"time"
 )
 
 // Application represents the Olla application
@@ -27,18 +30,45 @@ type Application struct {
 	errCh            chan error
 }
 
+const (
+	DefaultCOnnectionTimeout = 30 * time.Second
+	DefaultResponseTimeout   = 600 * time.Second
+	DefaultReadTimeout       = 300 * time.Second
+	DefaultLoadBalancer      = "priority" // Default load balancer type
+)
+
 // New creates a new application instance
 func New(logger *logger.StyledLogger) (*Application, error) {
-	// start port services first, w e need them for discovery
+
+	/**
+	 * Slightly annoying but we have to setup the configuration with defaults here
+	 * then load it again with viper to allow hot reloading.
+	 **/
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthChecker(repository, logger)
 	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, nil, logger)
 
+	balancerFactory := balancer.NewFactory()
+	selector, err := balancerFactory.Create(DefaultLoadBalancer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create load balancer: %w", err)
+	}
+
+	proxyService := proxy.NewService(
+		discoveryService,
+		selector,
+		DefaultCOnnectionTimeout,
+		DefaultResponseTimeout,
+		DefaultReadTimeout,
+		logger,
+	)
+
 	app := &Application{
 		logger:           logger,
 		registry:         registry,
 		discoveryService: discoveryService,
+		proxyService:     proxyService,
 		errCh:            make(chan error, 1),
 	}
 
@@ -60,13 +90,19 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 
 		discoveryService.SetConfig(newConfig)
 		discoveryService.ReloadConfig()
+
+		proxyService.UpdateTimeouts(newConfig.Proxy.ConnectionTimeout,
+			newConfig.Proxy.ResponseTimeout,
+			newConfig.Proxy.ReadTimeout)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load configuration: %v\n", err)
 	}
 
-	app.setConfig(cfg) // Use thread-safe setter
+	// Now we can set the configuration properly
+	app.setConfig(cfg)
 	discoveryService.SetConfig(cfg)
+	proxyService.UpdateTimeouts(cfg.Proxy.ConnectionTimeout, cfg.Proxy.ResponseTimeout, cfg.Proxy.ReadTimeout)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -93,7 +129,6 @@ func (a *Application) Start(ctx context.Context) error {
 
 	a.startWebServer()
 
-	// Start discovery service
 	if err := a.discoveryService.Start(ctx); err != nil {
 		a.logger.Error("discovery service startup error", "error", err)
 		a.errCh <- err
