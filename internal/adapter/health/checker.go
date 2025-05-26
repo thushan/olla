@@ -1,6 +1,7 @@
 package health
 
 import (
+	"container/heap"
 	"context"
 	"errors"
 	"fmt"
@@ -14,33 +15,10 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-/*
-Health Check Status Promotion Logic:
-
-Network Errors (connection refused, timeout, DNS failure):
-- First failure: StatusOffline (immediate)
-- Backoff: 2x, 4x, 8x up to MaxBackoffMultiplier
-- Recovery: Reset to normal on any success
-
-HTTP Errors (5xx responses):
-- High latency (>SlowResponseThreshold): StatusBusy
-- Normal latency: StatusUnhealthy
-- Consecutive failures trigger backoff
-
-HTTP Success (2xx):
-- High latency (>SlowResponseThreshold): StatusBusy
-- Normal latency: StatusHealthy
-- Resets failure counters and backoff
-
-Circuit Breaker:
-- Opens after FailureThreshold consecutive failures
-- Returns StatusOffline when open
-- Auto-recovers after CircuitBreakerTimeout
-*/
-
 const (
 	DefaultHealthCheckerWorkerCount = 10
-	DefaultHealthCheckerQueueSize   = 100
+	BaseHealthCheckerQueueSize      = 100
+	QueueScaleFactor                = 2 // Queue size = endpoints * factor
 
 	DefaultHealthCheckerTimeout = 5 * time.Second
 	SlowResponseThreshold       = 10 * time.Second
@@ -58,13 +36,36 @@ const (
 	CleanupInterval = 5 * time.Minute
 )
 
-// healthCheckJob represents a health check task
+// Heap-based scheduler for efficient health check timing
+type scheduledCheck struct {
+	endpoint *domain.Endpoint
+	dueTime  time.Time
+	ctx      context.Context
+}
+
+type checkHeap []*scheduledCheck
+
+func (h checkHeap) Len() int           { return len(h) }
+func (h checkHeap) Less(i, j int) bool { return h[i].dueTime.Before(h[j].dueTime) }
+func (h checkHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+
+func (h *checkHeap) Push(x interface{}) {
+	*h = append(*h, x.(*scheduledCheck))
+}
+
+func (h *checkHeap) Pop() interface{} {
+	old := *h
+	n := len(old)
+	item := old[n-1]
+	*h = old[0 : n-1]
+	return item
+}
+
 type healthCheckJob struct {
 	endpoint *domain.Endpoint
 	ctx      context.Context
 }
 
-// HTTPHealthChecker implements domain.HealthChecker for HTTP health checks
 type HTTPHealthChecker struct {
 	repository     domain.EndpointRepository
 	client         HTTPClient
@@ -78,10 +79,16 @@ type HTTPHealthChecker struct {
 	running        bool
 	workerCount    int
 	logger         *logger.StyledLogger
+
+	// Heap-based scheduler
+	schedulerHeap *checkHeap
+	heapMu        sync.Mutex
 }
 
-// NewHTTPHealthChecker creates a new HTTP health checker
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.StyledLogger) *HTTPHealthChecker {
+	heapInstance := &checkHeap{}
+	heap.Init(heapInstance)
+
 	return &HTTPHealthChecker{
 		repository: repository,
 		client: &http.Client{
@@ -90,9 +97,9 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.S
 		circuitBreaker: NewCircuitBreaker(),
 		statusTracker:  NewStatusTransitionTracker(),
 		stopCh:         make(chan struct{}),
-		jobCh:          make(chan healthCheckJob, DefaultHealthCheckerQueueSize),
 		workerCount:    DefaultHealthCheckerWorkerCount,
 		logger:         logger,
+		schedulerHeap:  heapInstance,
 	}
 }
 
@@ -112,6 +119,7 @@ func classifyError(err error) domain.HealthCheckErrorType {
 	return domain.ErrorTypeHTTPError
 }
 
+// Status logic: offline for network errors, busy for slow responses, healthy otherwise
 func determineStatus(statusCode int, latency time.Duration, err error, errorType domain.HealthCheckErrorType) domain.EndpointStatus {
 	if err != nil {
 		switch errorType {
@@ -122,7 +130,6 @@ func determineStatus(statusCode int, latency time.Duration, err error, errorType
 		}
 	}
 
-	// HTTP response received
 	if statusCode >= HealthyEndpointStatusRangeStart && statusCode < HealthyEndpointStatusRangeEnd {
 		if latency > SlowResponseThreshold {
 			return domain.StatusBusy
@@ -130,7 +137,6 @@ func determineStatus(statusCode int, latency time.Duration, err error, errorType
 		return domain.StatusHealthy
 	}
 
-	// HTTP error codes
 	if latency > SlowResponseThreshold {
 		return domain.StatusBusy
 	}
@@ -139,12 +145,10 @@ func determineStatus(statusCode int, latency time.Duration, err error, errorType
 
 func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, int) {
 	if success {
-		// Reset on success
 		return endpoint.CheckInterval, 1
 	}
 
-	// Increase backoff multiplier
-	// this is the simplest backoff strategy for now
+	// Double the backoff up to max
 	multiplier := endpoint.BackoffMultiplier * 2
 	if multiplier > MaxBackoffMultiplier {
 		multiplier = MaxBackoffMultiplier
@@ -154,11 +158,10 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 	return backoffInterval, multiplier
 }
 
-// Check performs a health check on the endpoint and returns its status
 func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint) (domain.HealthCheckResult, error) {
 	start := time.Now()
-	// Use pre-computed absolute URL instead of resolving each time
-	healthCheckUrl := endpoint.HealthCheckURL.String()
+	// Use pre-computed URL string to avoid allocations
+	healthCheckUrl := endpoint.GetHealthCheckURLString()
 
 	result := domain.HealthCheckResult{
 		Status: domain.StatusUnknown,
@@ -210,7 +213,15 @@ func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint
 	return result, nil
 }
 
-// StartChecking begins periodic health checks for all endpoints
+// Scale queue size based on endpoint count
+func (c *HTTPHealthChecker) calculateQueueSize(endpointCount int) int {
+	queueSize := endpointCount * QueueScaleFactor
+	if queueSize < BaseHealthCheckerQueueSize {
+		queueSize = BaseHealthCheckerQueueSize
+	}
+	return queueSize
+}
+
 func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -219,20 +230,31 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 		return nil
 	}
 
-	// Recreate channels for clean start
+	// Get endpoint count to scale queue size
+	endpoints, err := c.repository.GetAll(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get endpoints for queue sizing: %w", err)
+	}
+
+	queueSize := c.calculateQueueSize(len(endpoints))
 	c.stopCh = make(chan struct{})
-	c.jobCh = make(chan healthCheckJob, DefaultHealthCheckerQueueSize)
+	c.jobCh = make(chan healthCheckJob, queueSize)
 	c.running = true
 
-	// Start worker goroutines
+	c.logger.Info("Health checker starting",
+		"workers", c.workerCount,
+		"queue_size", queueSize,
+		"endpoints", len(endpoints))
+
+	// Start workers
 	for i := 0; i < c.workerCount; i++ {
 		c.wg.Add(1)
 		go c.worker()
 	}
 
-	// Start the scheduler
+	// Start heap-based scheduler
 	c.wg.Add(1)
-	go c.schedulerLoop(ctx)
+	go c.heapSchedulerLoop(ctx)
 
 	c.cleanupTicker = time.NewTicker(CleanupInterval)
 	c.wg.Add(1)
@@ -241,7 +263,6 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 	return nil
 }
 
-// StopChecking stops periodic health checks
 func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -261,6 +282,7 @@ func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 
 	return nil
 }
+
 func (c *HTTPHealthChecker) cleanupLoop() {
 	defer c.wg.Done()
 
@@ -274,25 +296,23 @@ func (c *HTTPHealthChecker) cleanupLoop() {
 	}
 }
 
-// performCleanup checks for stale entries in circuit breaker and status tracker
+// Clean up stale circuit breaker and status tracker entries
 func (c *HTTPHealthChecker) performCleanup() {
 	endpoints, err := c.repository.GetAll(context.Background())
 	if err != nil {
 		return
 	}
 
-	// Only perform cleanup if we have endpoints to check against
 	if len(endpoints) == 0 {
 		return
 	}
 
-	// Build current endpoints set more efficiently
 	currentEndpoints := make(map[string]struct{}, len(endpoints))
 	for _, endpoint := range endpoints {
-		currentEndpoints[endpoint.URL.String()] = struct{}{}
+		currentEndpoints[endpoint.GetURLString()] = struct{}{}
 	}
 
-	// Clean up circuit breaker stale entries
+	// Clean circuit breaker
 	circuitEndpoints := c.circuitBreaker.GetActiveEndpoints()
 	for _, url := range circuitEndpoints {
 		if _, exists := currentEndpoints[url]; !exists {
@@ -300,7 +320,7 @@ func (c *HTTPHealthChecker) performCleanup() {
 		}
 	}
 
-	// Clean up status tracker stale entries
+	// Clean status tracker
 	statusEndpoints := c.statusTracker.GetActiveEndpoints()
 	for _, url := range statusEndpoints {
 		if _, exists := currentEndpoints[url]; !exists {
@@ -309,7 +329,6 @@ func (c *HTTPHealthChecker) performCleanup() {
 	}
 }
 
-// worker processes health check jobs from the job channel
 func (c *HTTPHealthChecker) worker() {
 	defer c.wg.Done()
 
@@ -323,16 +342,14 @@ func (c *HTTPHealthChecker) worker() {
 	}
 }
 
-// processHealthCheck performs the actual health check and updates status
 func (c *HTTPHealthChecker) processHealthCheck(job healthCheckJob) {
 	result, err := c.Check(job.ctx, job.endpoint)
 
-	// Update endpoint state
 	job.endpoint.Status = result.Status
 	job.endpoint.LastChecked = time.Now()
 	job.endpoint.LastLatency = result.Latency
 
-	// Calculate next check time with backoff
+	// Calculate backoff
 	isSuccess := result.Status == domain.StatusHealthy
 	nextInterval, newMultiplier := calculateBackoff(job.endpoint, isSuccess)
 
@@ -346,32 +363,38 @@ func (c *HTTPHealthChecker) processHealthCheck(job healthCheckJob) {
 
 	job.endpoint.NextCheckTime = time.Now().Add(nextInterval)
 
-	// Update repository
+	// Reschedule in heap
+	c.heapMu.Lock()
+	heap.Push(c.schedulerHeap, &scheduledCheck{
+		endpoint: job.endpoint,
+		dueTime:  job.endpoint.NextCheckTime,
+		ctx:      job.ctx,
+	})
+	c.heapMu.Unlock()
+
 	if repoErr := c.repository.UpdateEndpoint(job.ctx, job.endpoint); repoErr != nil {
 		c.logger.Error("Failed to update endpoint",
-			"endpoint", job.endpoint.URL.String(),
+			"endpoint", job.endpoint.GetURLString(),
 			"error", repoErr)
 	}
 
-	// Smart logging - only log transitions and periodic summaries
+	// Only log status changes and periodic error summaries
 	shouldLog, errorCount := c.statusTracker.ShouldLog(
-		job.endpoint.URL.String(),
+		job.endpoint.GetURLString(),
 		result.Status,
 		err != nil)
 
 	if shouldLog {
 		if errorCount > 0 ||
-			(result.Status  == domain.StatusOffline ||
+			(result.Status == domain.StatusOffline ||
 				result.Status == domain.StatusBusy ||
 				result.Status == domain.StatusUnhealthy) {
-			// Batch error summary
 			c.logger.WarnWithEndpoint("Endpoint health issues for", job.endpoint.Name,
 				"status", result.Status.String(),
 				"consecutive_failures", errorCount,
 				"latency", result.Latency,
 				"next_check_in", nextInterval)
 		} else {
-			// Status transition
 			c.logger.InfoHealthStatus("Endpoint status changed for",
 				job.endpoint.Name,
 				result.Status,
@@ -381,11 +404,25 @@ func (c *HTTPHealthChecker) processHealthCheck(job healthCheckJob) {
 	}
 }
 
-// schedulerLoop manages health check timing with per-endpoint backoff
-func (c *HTTPHealthChecker) schedulerLoop(ctx context.Context) {
+// Heap-based scheduler - much more efficient than linear scanning
+func (c *HTTPHealthChecker) heapSchedulerLoop(ctx context.Context) {
 	defer c.wg.Done()
 
-	ticker := time.NewTicker(1 * time.Second)
+	// Initial population of heap
+	endpoints, err := c.repository.GetAll(ctx)
+	if err == nil {
+		c.heapMu.Lock()
+		for _, endpoint := range endpoints {
+			heap.Push(c.schedulerHeap, &scheduledCheck{
+				endpoint: endpoint,
+				dueTime:  endpoint.NextCheckTime,
+				ctx:      ctx,
+			})
+		}
+		c.heapMu.Unlock()
+	}
+
+	ticker := time.NewTicker(100 * time.Millisecond) // Check more frequently for heap
 	defer ticker.Stop()
 
 	for {
@@ -395,36 +432,37 @@ func (c *HTTPHealthChecker) schedulerLoop(ctx context.Context) {
 		case <-c.stopCh:
 			return
 		case now := <-ticker.C:
-			endpoints, err := c.repository.GetAll(ctx)
-			if err != nil {
-				continue
-			}
+			c.heapMu.Lock()
 
-			for _, endpoint := range endpoints {
-				// Check if it's time for this endpoint
-				if now.Before(endpoint.NextCheckTime) {
-					continue
+			// Process all due checks
+			for c.schedulerHeap.Len() > 0 {
+				next := (*c.schedulerHeap)[0]
+				if now.Before(next.dueTime) {
+					break // Next check isn't due yet
 				}
 
+				check := heap.Pop(c.schedulerHeap).(*scheduledCheck)
+
 				job := healthCheckJob{
-					endpoint: endpoint,
-					ctx:      ctx,
+					endpoint: check.endpoint,
+					ctx:      check.ctx,
 				}
 
 				select {
 				case c.jobCh <- job:
-					// Job queued successfully
+					// Queued
 				default:
-					// Queue full - extend check time slightly
-					endpoint.NextCheckTime = now.Add(time.Second)
-					c.repository.UpdateEndpoint(ctx, endpoint)
+					// Queue full, reschedule in 1 second
+					check.dueTime = now.Add(time.Second)
+					heap.Push(c.schedulerHeap, check)
 				}
 			}
+
+			c.heapMu.Unlock()
 		}
 	}
 }
 
-// SetWorkerCount allows configuring the number of worker goroutines
 func (c *HTTPHealthChecker) SetWorkerCount(count int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -440,7 +478,6 @@ func (c *HTTPHealthChecker) SetWorkerCount(count int) {
 	c.workerCount = count
 }
 
-// GetSchedulerStats returns statistics about the health check scheduler
 func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -454,16 +491,20 @@ func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 	queueSize := len(c.jobCh)
 	queueCap := cap(c.jobCh)
 
+	c.heapMu.Lock()
+	heapSize := c.schedulerHeap.Len()
+	c.heapMu.Unlock()
+
 	return map[string]interface{}{
-		"running":      c.running,
-		"worker_count": c.workerCount,
-		"queue_size":   queueSize,
-		"queue_cap":    queueCap,
-		"queue_usage":  float64(queueSize) / float64(queueCap),
+		"running":       c.running,
+		"worker_count":  c.workerCount,
+		"queue_size":    queueSize,
+		"queue_cap":     queueCap,
+		"queue_usage":   float64(queueSize) / float64(queueCap),
+		"scheduled_checks": heapSize,
 	}
 }
 
-// ForceHealthCheck forces an immediate health check for all endpoints
 func (c *HTTPHealthChecker) ForceHealthCheck(ctx context.Context) error {
 	if !c.running {
 		return fmt.Errorf("health checker is not running")
@@ -482,7 +523,7 @@ func (c *HTTPHealthChecker) ForceHealthCheck(ctx context.Context) error {
 
 		select {
 		case c.jobCh <- job:
-			// Queued successfully
+			// Queued
 		default:
 			return fmt.Errorf("health check queue is full")
 		}

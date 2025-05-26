@@ -89,6 +89,18 @@ func (m *mockRepository) Remove(ctx context.Context, endpointURL *url.URL) error
 	return nil
 }
 
+func (m *mockRepository) GetCacheStats() map[string]interface{} {
+	return map[string]interface{}{
+		"cache_hits":        0,
+		"cache_misses":      0,
+		"cache_hit_rate":    0,
+		"cache_valid":       0,
+		"cached_healthy":    0,
+		"cached_routable":   0,
+		"last_invalidation": time.Now().UTC(),
+	}
+}
+
 func TestHTTPHealthChecker_Check_Success(t *testing.T) {
 	mockClient := &mockHTTPClient{statusCode: 200}
 	mockRepo := newMockRepository()

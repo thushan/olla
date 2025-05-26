@@ -72,7 +72,6 @@ func (st *StatusTransitionTracker) CleanupEndpoint(endpointURL string) {
 	st.entries.Delete(endpointURL)
 }
 
-// Helper functions to convert between status and int for atomic operations
 func statusToInt(status domain.EndpointStatus) int {
 	switch status {
 	case domain.StatusHealthy:

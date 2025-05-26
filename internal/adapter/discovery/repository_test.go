@@ -14,7 +14,6 @@ func TestStaticEndpointRepository_BasicOperations(t *testing.T) {
 	repo := NewStaticEndpointRepository()
 	ctx := context.Background()
 
-	// Test empty repository
 	endpoints, err := repo.GetAll(ctx)
 	if err != nil {
 		t.Fatalf("GetAll failed: %v", err)
@@ -47,7 +46,6 @@ func TestStaticEndpointRepository_BasicOperations(t *testing.T) {
 		t.Errorf("Expected 1 endpoint, got %d", len(endpoints))
 	}
 
-	// Test endpoint copy (mutation safety)
 	endpoints[0].Status = domain.StatusOffline
 	original, _ := repo.GetAll(ctx)
 	if original[0].Status == domain.StatusOffline {
@@ -179,7 +177,10 @@ func TestStaticEndpointRepository_CacheInvalidation(t *testing.T) {
 		Status:         domain.StatusHealthy,
 	}
 
-	repo.Add(ctx, endpoint)
+	aerr := repo.Add(ctx, endpoint)
+	if aerr != nil {
+		t.Fatalf("failed to add endpoint: %v", aerr)
+	}
 
 	// First call should build cache
 	healthy1, _ := repo.GetHealthy(ctx)
@@ -189,7 +190,11 @@ func TestStaticEndpointRepository_CacheInvalidation(t *testing.T) {
 
 	// Change status - should invalidate cache
 	endpoint.Status = domain.StatusOffline
-	repo.UpdateEndpoint(ctx, endpoint)
+	err := repo.UpdateEndpoint(ctx, endpoint)
+	if err != nil {
+		// fail test
+		t.Fatalf("UpdateEndpoint failed: %v", err)
+	}
 
 	// Should return updated results
 	healthy2, _ := repo.GetHealthy(ctx)
@@ -301,7 +306,6 @@ func TestStaticEndpointRepository_ConcurrentCacheAccess(t *testing.T) {
 	}
 }
 
-// Helper function to parse URLs and fail test immediately if invalid
 func parseURLOrFail(t *testing.T, urlStr string) *url.URL {
 	u, err := url.Parse(urlStr)
 	if err != nil {
