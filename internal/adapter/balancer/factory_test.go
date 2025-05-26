@@ -212,7 +212,7 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < routines; i++ {
+	for i := 0; i < routines * 2; i++ {
 		<-done
 	}
 

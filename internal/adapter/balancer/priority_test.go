@@ -22,8 +22,8 @@ func TestNewPrioritySelector(t *testing.T) {
 		t.Error("Connections map not initialised")
 	}
 
-	if selector.Name() != "priority" {
-		t.Errorf("Expected name 'priority', got %q", selector.Name())
+	if selector.Name() != DefaultBalancerPriority {
+		t.Errorf("Expected name '%s', got %q", DefaultBalancerPriority, selector.Name())
 	}
 }
 
