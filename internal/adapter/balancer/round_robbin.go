@@ -10,7 +10,7 @@ import (
 )
 
 type RoundRobinSelector struct {
-	counter     int64
+	counter     uint64
 	connections map[string]int64
 	mu          sync.RWMutex
 }
@@ -22,15 +22,15 @@ func NewRoundRobinSelector() *RoundRobinSelector {
 }
 
 func (r *RoundRobinSelector) Name() string {
-	return "round-robin"
+	return DefaultBalancerRoundRobbin
 }
+
 // Select chooses endpoints in a round-robin fashion, filtering out non-routable endpoints
 func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
 	if len(endpoints) == 0 {
 		return nil, fmt.Errorf("no endpoints available")
 	}
 
-	// Filter only routable endpoints
 	routable := make([]*domain.Endpoint, 0, len(endpoints))
 	for _, endpoint := range endpoints {
 		if endpoint.Status.IsRoutable() {
@@ -42,8 +42,9 @@ func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.End
 		return nil, fmt.Errorf("no routable endpoints available")
 	}
 
-	// Round-robin selection
-	index := atomic.AddInt64(&r.counter, 1) % int64(len(routable))
+	current := atomic.AddUint64(&r.counter, 1) - 1 // Subtract 1 to start from 0
+	index := current % uint64(len(routable))
+
 	return routable[index], nil
 }
 
