@@ -3,16 +3,26 @@ package proxy
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/version"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+)
+
+const (
+	// TODO: add these to settings/config
+	DefaultReadTimeout      = 60 * time.Second // Default read timeout for streaming responses
+	DefaultStreamBufferSize = 8 * 1024         // 8 KB buffer for streaming responses
+
 )
 
 type SherpaProxyService struct {
@@ -78,11 +88,8 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	atomic.AddInt64(&s.stats.totalRequests, 1)
 	startTime := time.Now()
 
-	s.logger.Debug("proxy request started",
-		"method", r.Method,
-		"url", r.URL.String())
+	s.logger.Debug("proxy request started", "method", r.Method, "url", r.URL.String())
 
-	// Get healthy endpoints
 	endpoints, err := s.discoveryService.GetHealthyEndpoints(ctx)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
@@ -97,7 +104,6 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	s.logger.Debug("found healthy endpoints", "count", len(endpoints))
 
-	// Select endpoint
 	endpoint, err := s.selector.Select(ctx, endpoints)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
@@ -107,8 +113,10 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	s.logger.Debug("selected endpoint", "url", endpoint.URL.String())
 
-	// Build target URL
-	targetURL, err := url.Parse(endpoint.URL.String() + r.URL.Path)
+	// We have to strip the route prefix from the request path
+	// to ensure we forward the correct path to the upstream service
+	targetPath := s.stripRoutePrefix(r.Context(), r.URL.Path)
+	targetURL, err := url.Parse(endpoint.URL.String() + targetPath)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("failed to parse target URL", "error", err)
@@ -121,7 +129,9 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	s.logger.Debug("built target URL", "target", targetURL.String())
 
 	// Create separate contexts for different phases
-	clientCtx := ctx // Original client context - detects client disconnections
+
+	// but we cache the original client context - detects client disconnections
+	clientCtx := ctx
 
 	// Create upstream context with response timeout
 	// This context is independent of client disconnections to allow LLM responses to complete
@@ -154,11 +164,15 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 		s.logger.Error("roundtrip failed", "error", err, "time", time.Now())
 		return fmt.Errorf("upstream request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		// this was a bit of a pain to hunt down when we had 40 servers running
+		// leaks galore because we never closed the response body properly.
+		_ = Body.Close()
+	}(resp.Body)
 
 	s.logger.Debug("roundtrip success", "status", resp.StatusCode, "time", time.Now())
 
-	// Track connection only after successful establishment
+	// Track connection only after successsful establishment
 	s.selector.IncrementConnections(endpoint)
 	defer s.selector.DecrementConnections(endpoint)
 
@@ -191,15 +205,27 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	return nil
 }
 
+func (s *SherpaProxyService) stripRoutePrefix(ctx context.Context, path string) string {
+	if prefix, ok := ctx.Value(constants.ProxyPathPrefix).(string); ok {
+		if strings.HasPrefix(path, prefix) {
+			stripped := path[len(prefix):]
+			if stripped == "" || stripped[0] != '/' {
+				stripped = "/" + stripped
+			}
+			return stripped
+		}
+	}
+	return path
+}
+
 func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
-	// Copy all headers
+	// c lone headers from the original request to the proxy request
 	for k, vals := range originalReq.Header {
 		for _, v := range vals {
 			proxyReq.Header.Add(k, v)
 		}
 	}
 
-	// Add forwarding headers
 	proto := "http"
 	if originalReq.TLS != nil {
 		proto = "https"
@@ -210,22 +236,34 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 	if ip, _, err := net.SplitHostPort(originalReq.RemoteAddr); err == nil {
 		proxyReq.Header.Set("X-Forwarded-For", ip)
 	}
+
+	// being good netizens *RFC7230*
+	proxyReq.Header.Set("X-Proxied-By", fmt.Sprintf("%s/%s", version.Name, version.Version))
+	// proxyReq.Header.Set("X-Olla-Request-ID", generateRequestID())
+	proxyReq.Header.Set("Via", fmt.Sprintf("1.1 olla/%s", version.Version))
+
+	/*
+		if endpoint := getEndpointFromContext(originalReq.Context()); endpoint != nil {
+			proxyReq.Header.Set("X-Olla-Endpoint", endpoint.Name)
+			proxyReq.Header.Set("X-Olla-Strategy", s.selector.Name())
+		}
+	*/
 }
 
 // streamResponse handles the complex streaming logic with dual context management
 func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader) error {
-	const bufSize = 8 * 1024 // Smaller buffer for lower latency on interactive responses
-	buf := make([]byte, bufSize)
+	buf := make([]byte, DefaultStreamBufferSize)
 
 	flusher, canFlush := w.(http.Flusher)
 
 	// Use read timeout for inter-chunk timeouts
 	readTimeout := s.readTimeout
 	if readTimeout == 0 {
-		readTimeout = 60 * time.Second // Default if not configured
+		readTimeout = DefaultReadTimeout
 	}
 
 	s.logger.Debug("starting response stream", "read_timeout", readTimeout, "time", time.Now())
+
 	totalBytes := 0
 	readCount := 0
 	lastReadTime := time.Now()
@@ -249,7 +287,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				return fmt.Errorf("client disconnected: %w", clientCtx.Err())
 			}
 		default:
-			// Client still connected, continue
+			// Client still connected, carry on son
 		}
 
 		// Check upstream timeout

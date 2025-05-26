@@ -7,14 +7,6 @@ import (
 	"net/http"
 )
 
-func (a *Application) registerRoutes() {
-	a.registry.RegisterWithMethod("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
-	a.registry.RegisterWithMethod("/ma/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
-	a.registry.RegisterWithMethod("/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
-	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
-	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
-}
-
 // healthHandler handles health check requests
 func (a *Application) healthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(ContentTypeHeader, ContentTypeJSON)

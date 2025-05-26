@@ -1,7 +1,9 @@
 package router
 
 import (
+	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/theme"
 	"net/http"
@@ -43,6 +45,14 @@ func (r *RouteRegistry) RegisterWithMethod(route string, handler http.HandlerFun
 		Order:       r.orderSeq,
 	}
 	r.orderSeq++
+}
+
+func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFunc, description string, method string) {
+	wrappedHandler := func(w http.ResponseWriter, req *http.Request) {
+		ctx := context.WithValue(req.Context(), constants.ProxyPathPrefix, route)
+		handler(w, req.WithContext(ctx))
+	}
+	r.RegisterWithMethod(route, wrappedHandler, description, method)
 }
 
 func (r *RouteRegistry) WireUp(mux *http.ServeMux) {

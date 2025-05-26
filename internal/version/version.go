@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	Name        = "olla"
+	Name        = "Olla"
 	Authors     = "Thushan Fernando"
 	Description = "Your Ollama Proxy Sherpa"
 	Version     = "v0.0.1"
