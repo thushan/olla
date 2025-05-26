@@ -22,7 +22,7 @@ func TestNewFactory(t *testing.T) {
 	}
 
 	// Test default strategies are registered
-	expectedStrategies := []string{"priority", "round-robin", "least-connections"}
+	expectedStrategies := []string{DefaultBalancerPriority, DefaultBalancerRoundRobbin, DefaultBalancerLeastConnections}
 	available := factory.GetAvailableStrategies()
 
 	if len(available) != len(expectedStrategies) {
@@ -51,9 +51,9 @@ func TestFactory_Create_DefaultStrategies(t *testing.T) {
 		expectedType  string
 		shouldSucceed bool
 	}{
-		{"priority", "priority", true},
-		{"round-robin", "round_robin", true},
-		{"least-connections", "least_connections", true},
+		{DefaultBalancerPriority, DefaultBalancerPriority, true},
+		{DefaultBalancerRoundRobbin, DefaultBalancerRoundRobbin, true},
+		{DefaultBalancerLeastConnections, DefaultBalancerLeastConnections, true},
 		{"unknown-strategy", "", false},
 		{"", "", false},
 	}
@@ -86,20 +86,21 @@ func TestFactory_Create_DefaultStrategies(t *testing.T) {
 
 func TestFactory_Register_CustomStrategy(t *testing.T) {
 	factory := NewFactory()
+	customName := "custom"
 
 	// Mock custom selector
 	customCreator := func() domain.EndpointSelector {
-		return &mockEndpointSelector{name: "custom"}
+		return &mockEndpointSelector{name: customName}
 	}
 
 	// Register custom strategy
-	factory.Register("custom", customCreator)
+	factory.Register(customName, customCreator)
 
 	// Verify it's in available strategies
 	available := factory.GetAvailableStrategies()
 	found := false
 	for _, strategy := range available {
-		if strategy == "custom" {
+		if strategy == customName {
 			found = true
 			break
 		}
@@ -109,32 +110,33 @@ func TestFactory_Register_CustomStrategy(t *testing.T) {
 	}
 
 	// Test creating custom strategy
-	selector, err := factory.Create("custom")
+	selector, err := factory.Create(customName)
 	if err != nil {
 		t.Fatalf("Failed to create custom strategy: %v", err)
 	}
-	if selector.Name() != "custom" {
+	if selector.Name() != customName {
 		t.Errorf("Expected custom selector name, got %q", selector.Name())
 	}
 }
 
 func TestFactory_Register_OverrideStrategy(t *testing.T) {
 	factory := NewFactory()
+	customName := "custom-priority"
 
 	// Create custom priority selector
 	customCreator := func() domain.EndpointSelector {
-		return &mockEndpointSelector{name: "custom-priority"}
+		return &mockEndpointSelector{name: customName}
 	}
 
 	// Override existing priority strategy
-	factory.Register("priority", customCreator)
+	factory.Register(DefaultBalancerPriority, customCreator)
 
-	// Test that override works
-	selector, err := factory.Create("priority")
+	// Test that override works, should overwrite the default priority select
+	selector, err := factory.Create(DefaultBalancerPriority)
 	if err != nil {
 		t.Fatalf("Failed to create overridden strategy: %v", err)
 	}
-	if selector.Name() != "custom-priority" {
+	if selector.Name() != customName {
 		t.Errorf("Expected overridden selector, got %q", selector.Name())
 	}
 }
@@ -150,16 +152,14 @@ func TestFactory_GetAvailableStrategies_EmptyFactory(t *testing.T) {
 
 func TestFactory_ConcurrentAccess(t *testing.T) {
 	factory := NewFactory()
+	routines := 10
+	done := make(chan bool, routines)
 
-	// Concurrent creation
-	done := make(chan bool, 10)
-
-	for i := 0; i < 10; i++ {
+	for i := 0; i < routines; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
 
-			// Test creating existing strategies
-			selector, err := factory.Create("priority")
+			selector, err := factory.Create(DefaultBalancerPriority)
 			if err != nil {
 				t.Errorf("Goroutine %d: Create failed: %v", id, err)
 				return
@@ -169,7 +169,6 @@ func TestFactory_ConcurrentAccess(t *testing.T) {
 				return
 			}
 
-			// Test getting available strategies
 			strategies := factory.GetAvailableStrategies()
 			if len(strategies) < 3 {
 				t.Errorf("Goroutine %d: Expected at least 3 strategies, got %d", id, len(strategies))
@@ -177,8 +176,8 @@ func TestFactory_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
+	// wait for all goroutines to finito!
+	for i := 0; i < routines; i++ {
 		<-done
 	}
 }
@@ -186,11 +185,10 @@ func TestFactory_ConcurrentAccess(t *testing.T) {
 func TestFactory_ConcurrentRegistration(t *testing.T) {
 	factory := NewFactory()
 
-	// Concurrent registration and creation
-	done := make(chan bool, 20)
+	routines := 10
+	done := make(chan bool, routines*2)
 
-	// Register strategies concurrently
-	for i := 0; i < 10; i++ {
+	for i := 0; i < routines; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
 
@@ -202,25 +200,22 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 		}(i)
 	}
 
-	// Create strategies concurrently
-	for i := 0; i < 10; i++ {
+	for i := 0; i < routines; i++ {
 		go func(id int) {
 			defer func() { done <- true }()
 
 			// Try to create default strategies
-			_, err := factory.Create("priority")
+			_, err := factory.Create(DefaultBalancerPriority)
 			if err != nil {
 				t.Errorf("Concurrent create failed: %v", err)
 			}
 		}(i)
 	}
 
-	// Wait for all goroutines
-	for i := 0; i < 20; i++ {
+	for i := 0; i < routines; i++ {
 		<-done
 	}
 
-	// Verify all custom strategies were registered
 	strategies := factory.GetAvailableStrategies()
 	customStrategies := 0
 	for _, strategy := range strategies {
@@ -229,8 +224,8 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 		}
 	}
 
-	if customStrategies != 10 {
-		t.Errorf("Expected 10 custom strategies, found %d", customStrategies)
+	if customStrategies != routines {
+		t.Errorf("Expected %d custom strategies, found %d", routines, customStrategies)
 	}
 }
 

@@ -7,6 +7,10 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+const DefaultBalancerPriority = "priority"
+const DefaultBalancerRoundRobbin = "round-robin"
+const DefaultBalancerLeastConnections = "least-connections"
+
 type Factory struct {
 	creators map[string]func() domain.EndpointSelector
 	mu       sync.RWMutex
@@ -18,13 +22,13 @@ func NewFactory() *Factory {
 	}
 
 	// Register default strategies
-	factory.Register("priority", func() domain.EndpointSelector {
+	factory.Register(DefaultBalancerPriority, func() domain.EndpointSelector {
 		return NewPrioritySelector()
 	})
-	factory.Register("round-robin", func() domain.EndpointSelector {
+	factory.Register(DefaultBalancerRoundRobbin, func() domain.EndpointSelector {
 		return NewRoundRobinSelector()
 	})
-	factory.Register("least-connections", func() domain.EndpointSelector {
+	factory.Register(DefaultBalancerLeastConnections, func() domain.EndpointSelector {
 		return NewLeastConnectionsSelector()
 	})
 
