@@ -18,8 +18,14 @@ func NewFactory() *Factory {
 	}
 
 	// Register default strategies
+	factory.Register("priority", func() domain.EndpointSelector {
+		return NewPrioritySelector()
+	})
 	factory.Register("round-robin", func() domain.EndpointSelector {
 		return NewRoundRobinSelector()
+	})
+	factory.Register("least-connections", func() domain.EndpointSelector {
+		return NewLeastConnectionsSelector()
 	})
 
 	return factory
