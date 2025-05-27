@@ -14,7 +14,6 @@ import (
 	"github.com/thushan/olla/internal/router"
 	"net/http"
 	"sync"
-	"time"
 )
 
 // Application represents the Olla application
@@ -29,13 +28,6 @@ type Application struct {
 	pluginService    ports.PluginService
 	errCh            chan error
 }
-
-const (
-	DefaultCOnnectionTimeout = 30 * time.Second
-	DefaultResponseTimeout   = 600 * time.Second
-	DefaultReadTimeout       = 300 * time.Second
-	DefaultLoadBalancer      = "priority" // Default load balancer type
-)
 
 // New creates a new application instance
 func New(logger *logger.StyledLogger) (*Application, error) {
@@ -58,9 +50,7 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	proxyService := proxy.NewService(
 		discoveryService,
 		selector,
-		DefaultCOnnectionTimeout,
-		DefaultResponseTimeout,
-		DefaultReadTimeout,
+		DefaultProxyConfiguration(),
 		logger,
 	)
 
@@ -91,9 +81,8 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 		discoveryService.SetConfig(newConfig)
 		discoveryService.ReloadConfig()
 
-		proxyService.UpdateTimeouts(newConfig.Proxy.ConnectionTimeout,
-			newConfig.Proxy.ResponseTimeout,
-			newConfig.Proxy.ReadTimeout)
+		proxyService.UpdateConfig(updateProxyConfiguration(newConfig))
+
 	})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to load configuration: %v\n", err)
@@ -102,7 +91,7 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	// Now we can set the configuration properly
 	app.setConfig(cfg)
 	discoveryService.SetConfig(cfg)
-	proxyService.UpdateTimeouts(cfg.Proxy.ConnectionTimeout, cfg.Proxy.ResponseTimeout, cfg.Proxy.ReadTimeout)
+	proxyService.UpdateConfig(updateProxyConfiguration(cfg))
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),

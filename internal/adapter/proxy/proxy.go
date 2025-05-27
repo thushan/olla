@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/version"
 	"io"
@@ -26,14 +25,21 @@ const (
 )
 
 type SherpaProxyService struct {
-	discoveryService  ports.DiscoveryService
-	selector          domain.EndpointSelector
-	transport         *http.Transport
-	connectionTimeout time.Duration
-	responseTimeout   time.Duration
-	readTimeout       time.Duration
-	stats             *proxyStats
-	logger            *logger.StyledLogger
+	discoveryService ports.DiscoveryService
+	selector         domain.EndpointSelector
+	transport        *http.Transport
+	configuration    *Configuration
+	stats            *proxyStats
+	logger           *logger.StyledLogger
+}
+
+type Configuration struct {
+	ConnectionTimeout   time.Duration
+	ConnectionKeepAlive time.Duration
+	ResponseTimeout     time.Duration
+	ReadTimeout         time.Duration
+	ProxyPrefix         string
+	StreamBufferSize    int
 }
 
 type proxyStats struct {
@@ -46,9 +52,7 @@ type proxyStats struct {
 func NewService(
 	discoveryService ports.DiscoveryService,
 	selector domain.EndpointSelector,
-	connectionTimeout time.Duration,
-	responseTimeout time.Duration,
-	readTimeout time.Duration,
+	configuration *Configuration,
 	logger *logger.StyledLogger,
 ) *SherpaProxyService {
 	transport := &http.Transport{
@@ -57,8 +61,8 @@ func NewService(
 		TLSHandshakeTimeout: 10 * time.Second,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
-				Timeout:   connectionTimeout,
-				KeepAlive: 30 * time.Second,
+				Timeout:   configuration.ConnectionTimeout,
+				KeepAlive: configuration.ConnectionKeepAlive,
 			}
 			conn, err := dialer.DialContext(ctx, network, addr)
 			if err != nil {
@@ -73,14 +77,12 @@ func NewService(
 	}
 
 	return &SherpaProxyService{
-		discoveryService:  discoveryService,
-		selector:          selector,
-		transport:         transport,
-		connectionTimeout: connectionTimeout,
-		responseTimeout:   responseTimeout,
-		readTimeout:       readTimeout,
-		stats:             &proxyStats{},
-		logger:            logger,
+		discoveryService: discoveryService,
+		selector:         selector,
+		transport:        transport,
+		configuration:    configuration,
+		stats:            &proxyStats{},
+		logger:           logger,
 	}
 }
 
@@ -136,9 +138,9 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	// Create upstream context with response timeout
 	// This context is independent of client disconnections to allow LLM responses to complete
 	upstreamCtx := context.Background()
-	if s.responseTimeout > 0 {
+	if s.configuration.ResponseTimeout > 0 {
 		var cancel context.CancelFunc
-		upstreamCtx, cancel = context.WithTimeout(upstreamCtx, s.responseTimeout)
+		upstreamCtx, cancel = context.WithTimeout(upstreamCtx, s.configuration.ResponseTimeout)
 		defer cancel()
 	}
 
@@ -206,7 +208,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 }
 
 func (s *SherpaProxyService) stripRoutePrefix(ctx context.Context, path string) string {
-	if prefix, ok := ctx.Value(constants.ProxyPathPrefix).(string); ok {
+	if prefix, ok := ctx.Value(s.configuration.ProxyPrefix).(string); ok {
 		if strings.HasPrefix(path, prefix) {
 			stripped := path[len(prefix):]
 			if stripped == "" || stripped[0] != '/' {
@@ -257,7 +259,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 	flusher, canFlush := w.(http.Flusher)
 
 	// Use read timeout for inter-chunk timeouts
-	readTimeout := s.readTimeout
+	readTimeout := s.configuration.ReadTimeout
 	if readTimeout == 0 {
 		readTimeout = DefaultReadTimeout
 	}
@@ -434,8 +436,6 @@ func (s *SherpaProxyService) GetStats(ctx context.Context) (ports.ProxyStats, er
 	}, nil
 }
 
-func (s *SherpaProxyService) UpdateTimeouts(connectionTimeout time.Duration, responseTimeout time.Duration, readTimeout time.Duration) {
-	s.connectionTimeout = connectionTimeout
-	s.responseTimeout = responseTimeout
-	s.readTimeout = readTimeout
+func (s *SherpaProxyService) UpdateConfig(configuration *Configuration) {
+	s.configuration = configuration
 }
