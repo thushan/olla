@@ -86,9 +86,10 @@ func NewService(
 	}
 }
 
-func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (int, error) {
 	atomic.AddInt64(&s.stats.totalRequests, 1)
 	startTime := time.Now()
+	var totalBytes = 0
 
 	s.logger.Debug("proxy request started", "method", r.Method, "url", r.URL.String())
 
@@ -96,12 +97,12 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("failed to get healthy endpoints", "error", err)
-		return fmt.Errorf("failed to get healthy endpoints: %w", err)
+		return totalBytes, fmt.Errorf("failed to get healthy endpoints: %w", err)
 	}
 	if len(endpoints) == 0 {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("no healthy endpoints available")
-		return fmt.Errorf("no healthy endpoints available - all endpoints may be down or still being health checked")
+		return totalBytes, fmt.Errorf("no healthy endpoints available - all endpoints may be down or still being health checked")
 	}
 
 	s.logger.Debug("found healthy endpoints", "count", len(endpoints))
@@ -110,7 +111,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("failed to select endpoint", "error", err)
-		return fmt.Errorf("failed to select endpoint: %w", err)
+		return totalBytes, fmt.Errorf("failed to select endpoint: %w", err)
 	}
 
 	s.logger.Debug("selected endpoint", "url", endpoint.URL.String())
@@ -122,7 +123,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("failed to parse target URL", "error", err)
-		return fmt.Errorf("failed to parse target URL: %w", err)
+		return totalBytes, fmt.Errorf("failed to parse target URL: %w", err)
 	}
 	if r.URL.RawQuery != "" {
 		targetURL.RawQuery = r.URL.RawQuery
@@ -149,7 +150,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("failed to create proxy request", "error", err)
-		return fmt.Errorf("failed to create proxy request: %w", err)
+		return totalBytes, fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
 	s.logger.Debug("created proxy request")
@@ -164,7 +165,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("roundtrip failed", "error", err, "time", time.Now())
-		return fmt.Errorf("upstream request failed: %w", err)
+		return totalBytes, fmt.Errorf("upstream request failed: %w", err)
 	}
 	defer func(Body io.ReadCloser) {
 		// this was a bit of a pain to hunt down when we had 40 servers running
@@ -192,10 +193,12 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	// - clientCtx: detects when client disconnects
 	// - upstreamCtx: controls upstream timeout behaviour
 	// - resp.Body: the actual response stream
-	if err := s.streamResponse(clientCtx, upstreamCtx, w, resp.Body); err != nil {
+	if sumBytes, err := s.streamResponse(clientCtx, upstreamCtx, w, resp.Body); err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("streaming failed", "error", err, "time", time.Now())
-		return err
+		return totalBytes, err
+	} else {
+		totalBytes = sumBytes
 	}
 
 	// Record success
@@ -204,7 +207,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	atomic.AddInt64(&s.stats.totalLatency, latency)
 
 	s.logger.Debug("proxy request completed", "latency_ms", latency, "time", time.Now())
-	return nil
+	return totalBytes, nil
 }
 
 func (s *SherpaProxyService) stripRoutePrefix(ctx context.Context, path string) string {
@@ -253,7 +256,7 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 }
 
 // streamResponse handles the complex streaming logic with dual context management
-func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader) error {
+func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader) (int, error) {
 	buf := make([]byte, DefaultStreamBufferSize)
 
 	flusher, canFlush := w.(http.Flusher)
@@ -286,7 +289,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				// Continue but with a shorter timeout
 				clientCtx = context.Background()
 			} else {
-				return fmt.Errorf("client disconnected: %w", clientCtx.Err())
+				return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
 			}
 		default:
 			// Client still connected, carry on son
@@ -300,7 +303,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				"read_count", readCount,
 				"error", upstreamCtx.Err(),
 				"time", time.Now())
-			return fmt.Errorf("upstream timeout: %w", upstreamCtx.Err())
+			return totalBytes, fmt.Errorf("upstream timeout: %w", upstreamCtx.Err())
 		default:
 			// Upstream still valid, continue
 		}
@@ -335,7 +338,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				if result.n > 0 {
 					// We got data, try to send it
 					if _, err := w.Write(buf[:result.n]); err != nil {
-						return fmt.Errorf("failed to write response after client disconnect: %w", err)
+						return totalBytes, fmt.Errorf("failed to write response after client disconnect: %w", err)
 					}
 					if canFlush {
 						flusher.Flush()
@@ -344,7 +347,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 			case <-time.After(1 * time.Second):
 				// Read is taking too long after client disconnect
 			}
-			return fmt.Errorf("client disconnected: %w", clientCtx.Err())
+			return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
 
 		case <-upstreamCtx.Done():
 			readTimer.Stop()
@@ -352,7 +355,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				"total_bytes", totalBytes,
 				"read_count", readCount,
 				"time", time.Now())
-			return fmt.Errorf("upstream timeout during read: %w", upstreamCtx.Err())
+			return totalBytes, fmt.Errorf("upstream timeout during read: %w", upstreamCtx.Err())
 
 		case <-readTimer.C:
 			s.logger.Error("read timeout exceeded between chunks",
@@ -361,7 +364,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				"read_count", readCount,
 				"time_since_last_read", time.Since(lastReadTime),
 				"time", time.Now())
-			return fmt.Errorf("no response data received within %v", readTimeout)
+			return totalBytes, fmt.Errorf("no response data received within %v", readTimeout)
 
 		case result := <-readCh:
 			readTimer.Stop()
@@ -381,7 +384,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 
 				if _, err := w.Write(buf[:result.n]); err != nil {
 					s.logger.Error("failed to write response", "error", err, "time", time.Now())
-					return fmt.Errorf("failed to write response: %w", err)
+					return totalBytes, fmt.Errorf("failed to write response: %w", err)
 				}
 				if canFlush {
 					flusher.Flush()
@@ -396,14 +399,14 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 						"total_bytes", totalBytes,
 						"read_count", readCount,
 						"time", time.Now())
-					return nil // Normal end of stream
+					return totalBytes, nil // Normal end of stream
 				}
 				s.logger.Error("stream read error",
 					"error", result.err,
 					"total_bytes", totalBytes,
 					"read_count", readCount,
 					"time", time.Now())
-				return fmt.Errorf("failed to read response: %w", result.err)
+				return totalBytes, fmt.Errorf("failed to read response: %w", result.err)
 			}
 		}
 	}
