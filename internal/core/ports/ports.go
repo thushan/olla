@@ -10,7 +10,7 @@ import (
 // ProxyService defines the interface for the proxy service
 type ProxyService interface {
 	// ProxyRequest forwards an HTTP request to an appropriate Ollama endpoint
-	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) error
+	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (int, error)
 
 	// GetStats returns statistics about the proxy service
 	GetStats(ctx context.Context) (ProxyStats, error)

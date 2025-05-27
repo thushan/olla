@@ -29,3 +29,13 @@ func (a *Application) startWebServer() {
 	a.server.Handler = mux
 	a.logger.Info("Started WebServer", "bind", a.server.Addr)
 }
+
+func (a *Application) registerRoutes() {
+	// Register the main proxy handler for Ollama API
+	// We need to append a trailing slash to the path to avoid issues with path matching
+	a.registry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
+	a.registry.RegisterProxyRoute("/ma/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
+	// a.registry.RegisterWithMethod("/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
+	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
+	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
+}

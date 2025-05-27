@@ -110,6 +110,10 @@ func (sl *StyledLogger) GetUnderlying() *slog.Logger {
 	return sl.logger
 }
 
+func (sl *StyledLogger) WithRequestID(requestID string) *StyledLogger {
+	return sl.With("request_id", requestID)
+}
+
 func (sl *StyledLogger) WithAttrs(attrs ...slog.Attr) *StyledLogger {
 	args := make([]any, 0, len(attrs)*2)
 	for _, attr := range attrs {
