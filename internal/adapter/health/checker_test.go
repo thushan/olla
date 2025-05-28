@@ -110,8 +110,7 @@ func TestHTTPHealthChecker_Check_Success(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	testURL, _ := url.Parse("http://localhost:11434")
 	healthURL, _ := url.Parse("/health")
@@ -140,8 +139,7 @@ func TestHTTPHealthChecker_Check_NetworkError(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	testURL, _ := url.Parse("http://localhost:11434")
 	healthURL, _ := url.Parse("/health")
@@ -173,8 +171,7 @@ func TestHTTPHealthChecker_Check_SlowResponse(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	testURL, _ := url.Parse("http://localhost:11434")
 	healthURL, _ := url.Parse("/health")
@@ -282,7 +279,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
 	ctx := context.Background()
 
 	// Start checker
@@ -319,8 +316,7 @@ func TestHTTPHealthChecker_PreComputedURLs(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	baseURL, _ := url.Parse("http://localhost:11434")
 	// Pre-computed absolute URL (not relative)
@@ -445,8 +441,7 @@ func TestHealthChecker_BatchedChecking(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = &mockHTTPClient{statusCode: 200}
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
 
 	// Add many endpoints
 	ctx := context.Background()

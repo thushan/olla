@@ -93,7 +93,6 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 		return fmt.Errorf("failed to get current endpoints: %w", err)
 	}
 
-	// Use pre-computed strings for lookups
 	currentMap := make(map[string]*domain.Endpoint)
 	for _, endpoint := range currentEndpoints {
 		currentMap[endpoint.GetURLString()] = endpoint
@@ -127,7 +126,6 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 		healthCheckURL := endpointURL.ResolveReference(healthCheckPath)
 		modelUrl := endpointURL.ResolveReference(modelPath)
 
-		// Use optimized endpoint creation with pre-computed strings
 		key := endpointURL.String()
 		if existing, exists := currentMap[key]; exists {
 			configChanged := s.hasEndpointConfigChanged(existing, endpointCfg, healthCheckURL)
@@ -137,7 +135,6 @@ func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 			s.updateExistingEndpoint(existing, endpointCfg, healthCheckURL, modelUrl, configChanged, hasNameChanged, oldName)
 			delete(currentMap, key)
 		} else {
-			// Use NewEndpoint to get pre-computed strings
 			endpoint, err := domain.NewEndpoint(
 				endpointCfg.Name,
 				endpointCfg.URL,
@@ -186,8 +183,6 @@ func (s *StaticDiscoveryService) updateExistingEndpoint(
 	existing.ModelUrl = modelUrl
 	existing.CheckInterval = cfg.CheckInterval
 	existing.CheckTimeout = cfg.CheckTimeout
-
-	// Update pre-computed strings
 	existing.HealthCheckURLString = healthCheckURL.String()
 	existing.ModelURLString = modelUrl.String()
 
@@ -429,7 +424,6 @@ func (s *StaticDiscoveryService) GetHealthStatus(ctx context.Context) (map[strin
 
 	endpoints := make([]EndpointStatusResponse, len(all))
 	for i, endpoint := range all {
-		// Use pre-computed URL strings
 		endpoints[i] = EndpointStatusResponse{
 			Name:                endpoint.Name,
 			URL:                 endpoint.GetURLString(),

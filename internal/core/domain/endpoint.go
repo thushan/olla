@@ -15,7 +15,6 @@ const (
 	StatusStringUnknown   = "unknown"
 )
 
-// Endpoint with pre-computed strings to avoid repeated allocations
 type Endpoint struct {
 	Name           string
 	URL            *url.URL
@@ -26,20 +25,15 @@ type Endpoint struct {
 	CheckTimeout   time.Duration
 	Status         EndpointStatus
 	LastChecked    time.Time
-
-	// Pre-computed strings to avoid url.String() allocations
 	URLString            string
 	HealthCheckURLString string
 	ModelURLString       string
-
-	// Health check state tracking
 	ConsecutiveFailures int
 	BackoffMultiplier   int
 	NextCheckTime       time.Time
 	LastLatency         time.Duration
 }
 
-// NewEndpoint creates an endpoint with pre-computed URL strings
 func NewEndpoint(name, urlStr, healthCheckURL, modelURL string, priority int, checkInterval, checkTimeout time.Duration) (*Endpoint, error) {
 	baseURL, err := url.Parse(urlStr)
 	if err != nil {
@@ -56,7 +50,6 @@ func NewEndpoint(name, urlStr, healthCheckURL, modelURL string, priority int, ch
 		return nil, err
 	}
 
-	// Pre-compute all URL strings once
 	return &Endpoint{
 		Name:                 name,
 		URL:                  baseURL,
@@ -74,12 +67,10 @@ func NewEndpoint(name, urlStr, healthCheckURL, modelURL string, priority int, ch
 	}, nil
 }
 
-// GetURLString returns pre-computed URL string
 func (e *Endpoint) GetURLString() string {
 	return e.URLString
 }
 
-// GetHealthCheckURLString returns pre-computed health check URL string
 func (e *Endpoint) GetHealthCheckURLString() string {
 	return e.HealthCheckURLString
 }

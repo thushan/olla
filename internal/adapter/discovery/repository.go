@@ -9,25 +9,16 @@ import (
 	"time"
 )
 
-const (
-	CacheInvalidationDelay = 50 * time.Millisecond
-)
-
-// StaticEndpointRepository implements domain.EndpointRepository with optimized caching
 type StaticEndpointRepository struct {
-	endpoints map[string]*domain.Endpoint
-	mu        sync.RWMutex
-
-	// Optimised copy-on-write caching - cache the actual copies
+	endpoints            map[string]*domain.Endpoint
+	mu                   sync.RWMutex
 	cacheMu              sync.RWMutex
 	cachedHealthyCopies  []*domain.Endpoint
 	cachedRoutableCopies []*domain.Endpoint
 	cacheValid           bool
 	lastModified         time.Time
-
-	// Cache statistics
-	cacheHits   int64
-	cacheMisses int64
+	cacheHits            int64
+	cacheMisses          int64
 }
 
 func NewStaticEndpointRepository() *StaticEndpointRepository {
@@ -40,6 +31,7 @@ func (r *StaticEndpointRepository) invalidateCache() {
 	r.cacheMu.Lock()
 	r.cacheValid = false
 	r.lastModified = time.Now()
+
 	// Clear cached slices to prevent memory leaks
 	r.cachedHealthyCopies = nil
 	r.cachedRoutableCopies = nil
@@ -188,7 +180,6 @@ func (r *StaticEndpointRepository) Add(ctx context.Context, endpoint *domain.End
 
 	key := endpoint.URL.String()
 
-	// Initialize state fields for new endpoints
 	if endpoint.BackoffMultiplier == 0 {
 		endpoint.BackoffMultiplier = 1
 	}

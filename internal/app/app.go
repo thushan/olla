@@ -38,7 +38,7 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	 **/
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
-	healthChecker := health.NewHTTPHealthChecker(repository, logger)
+	healthChecker := health.NewHTTPHealthCheckerWithDefaults(repository, logger)
 	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, nil, logger)
 
 	balancerFactory := balancer.NewFactory()

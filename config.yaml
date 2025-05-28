@@ -42,7 +42,14 @@ discovery:
         check_interval: 5s
         check_timeout: 2s
       - url: "http://192.168.0.4:11434"
-        name: "zeus"
+        name: "zeusy"
+        priority: 200
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://192.168.0.12:11434"
+        name: "neo-nas"
         priority: 200
         model_url: "/api/tags"
         health_check_url: "/"

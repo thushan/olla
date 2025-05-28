@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	DefaultLogTimeout = 2 * time.Minute
+)
+
 // StatusTransitionTracker reduces logging noise by only logging status changes
 type StatusTransitionTracker struct {
 	entries sync.Map // map[string]*statusEntry
@@ -45,12 +49,12 @@ func (st *StatusTransitionTracker) ShouldLog(endpointURL string, newStatus domai
 		return true, 0
 	}
 
-	// For repeated errors, log every 10th occurrence or every 5 minutes
+	// For repeated errors, log every 10th occurrence or every x minutes
 	if isError {
 		count := atomic.AddInt64(&entry.errorCount, 1)
 		lastLog := time.Unix(0, atomic.LoadInt64(&entry.lastLogTime))
 
-		if count%10 == 0 || time.Since(lastLog) > 5*time.Minute {
+		if count%10 == 0 || time.Since(lastLog) > DefaultLogTimeout {
 			atomic.StoreInt64(&entry.lastLogTime, time.Now().UnixNano())
 			return true, int(count)
 		}
