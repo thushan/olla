@@ -24,12 +24,14 @@ type ServerConfig struct {
 
 // ProxyConfig holds proxy-specific configuration
 type ProxyConfig struct {
-	ConnectionTimeout time.Duration `mapstructure:"connection_timeout" yaml:"connection_timeout"` // Time to establish connection and send request
-	ResponseTimeout   time.Duration `mapstructure:"response_timeout" yaml:"response_timeout"`   // Time to wait for response (much longer for LLMs)
-	ReadTimeout       time.Duration `mapstructure:"read_timeout" yaml:"read_timeout"`       // Max time between response chunks
-	MaxRetries        int           `mapstructure:"max_retries" yaml:"max_retries"`
-	RetryBackoff      time.Duration `mapstructure:"retry_backoff" yaml:"retry_backoff"`
-	LoadBalancer      string        `mapstructure:"load_balancer" yaml:"load_balancer"`
+	ConnectionTimeout    time.Duration `mapstructure:"connection_timeout" yaml:"connection_timeout"` // Time to establish connection and send request
+	ResponseTimeout      time.Duration `mapstructure:"response_timeout" yaml:"response_timeout"`     // Time to wait for response (much longer for LLMs)
+	ReadTimeout          time.Duration `mapstructure:"read_timeout" yaml:"read_timeout"`             // Max time between response chunks
+	MaxRetries           int           `mapstructure:"max_retries" yaml:"max_retries"`
+	RetryBackoff         time.Duration `mapstructure:"retry_backoff" yaml:"retry_backoff"`
+	LoadBalancer         string        `mapstructure:"load_balancer" yaml:"load_balancer"`
+	StreamBufferSize     int           `mapstructure:"stream_buffer_size" yaml:"stream_buffer_size"`
+	EnableCircuitBreaker bool          `mapstructure:"enable_circuit_breaker" yaml:"enable_circuit_breaker"`
 }
 
 // DiscoveryConfig holds service discovery configuration

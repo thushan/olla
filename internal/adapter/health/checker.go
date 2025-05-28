@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -12,15 +13,15 @@ import (
 )
 
 type HTTPHealthChecker struct {
-	healthClient    *HealthClient
-	circuitBreaker  *CircuitBreaker
-	statusTracker   *StatusTransitionTracker
-	repository      domain.EndpointRepository
-	ticker          *time.Ticker
-	stopCh          chan struct{}
-	logger          *logger.StyledLogger
-	mu              sync.Mutex
-	running         bool
+	healthClient   *HealthClient
+	circuitBreaker *CircuitBreaker
+	statusTracker  *StatusTransitionTracker
+	repository     domain.EndpointRepository
+	ticker         *time.Ticker
+	stopCh         chan struct{}
+	logger         *logger.StyledLogger
+	mu             sync.Mutex
+	isRunning      atomic.Bool
 }
 
 // NewHTTPHealthChecker creates a health checker with the provided HTTP client
@@ -56,7 +57,7 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.running {
+	if c.isRunning.Load() {
 		return nil
 	}
 
@@ -65,11 +66,9 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 		return fmt.Errorf("failed to get endpoints for health checking: %w", err)
 	}
 
-	c.running = true
+	c.isRunning.Store(true)
 
-	c.logger.Info("Health checker starting",
-		"check_interval", DefaultHealthCheckInterval,
-		"endpoints", len(endpoints))
+	c.logger.Info("Starting Health Checker Service", "check_interval", DefaultHealthCheckInterval, "endpoints", len(endpoints))
 
 	// Start simple ticker-based health checking
 	c.ticker = time.NewTicker(DefaultHealthCheckInterval)
@@ -82,7 +81,7 @@ func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if !c.running {
+	if !c.isRunning.Load() {
 		return nil
 	}
 
@@ -91,7 +90,7 @@ func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 	}
 
 	close(c.stopCh)
-	c.running = false
+	c.isRunning.Store(false)
 
 	return nil
 }
@@ -220,18 +219,18 @@ func (c *HTTPHealthChecker) performCleanup(currentEndpoints []*domain.Endpoint) 
 
 func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 	c.mu.Lock()
-	running := c.running
+	running := c.isRunning.Load()
 	c.mu.Unlock()
 
 	if !running {
 		return map[string]interface{}{
-			"running": false,
+			"isRunning": false,
 		}
 	}
 
 	return map[string]interface{}{
-		"running":          running,
-		"check_interval":   DefaultHealthCheckInterval.String(),
+		"isRunning":       running,
+		"check_interval":  DefaultHealthCheckInterval.String(),
 		"circuit_breaker": c.getCircuitBreakerStats(),
 		"status_tracker":  c.getStatusTrackerStats(),
 	}
@@ -262,8 +261,8 @@ func (c *HTTPHealthChecker) getStatusTrackerStats() map[string]interface{} {
 }
 
 func (c *HTTPHealthChecker) ForceHealthCheck(ctx context.Context) error {
-	if !c.running {
-		return fmt.Errorf("health checker is not running")
+	if !c.isRunning.Load() {
+		return fmt.Errorf("health checker is not isRunning")
 	}
 
 	endpoints, err := c.repository.GetAll(ctx)

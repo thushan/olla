@@ -295,10 +295,10 @@ func TestHealthChecker_StartStop(t *testing.T) {
 		t.Fatalf("StartChecking failed: %v", err)
 	}
 
-	// Verify it's running
+	// Verify it's isRunning
 	stats := checker.GetSchedulerStats()
-	if !stats["running"].(bool) {
-		t.Error("Checker should be running")
+	if !stats["isRunning"].(bool) {
+		t.Error("Checker should be isRunning")
 	}
 
 	// Stop chucker
@@ -309,7 +309,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 
 	// Verify it's stopped
 	stats = checker.GetSchedulerStats()
-	if stats["running"].(bool) {
+	if stats["isRunning"].(bool) {
 		t.Error("Checker should be stopped")
 	}
 }

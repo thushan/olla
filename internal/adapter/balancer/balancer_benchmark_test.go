@@ -122,7 +122,7 @@ func BenchmarkLeastConnectionsSelector_Select(b *testing.B) {
 func BenchmarkConnectionTracking(b *testing.B) {
 	selectors := map[string]domain.EndpointSelector{
 		DefaultBalancerPriority:         NewPrioritySelector(),
-		DefaultBalancerRoundRobbin:      NewRoundRobinSelector(),
+		DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
 		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
 	}
 
@@ -145,7 +145,7 @@ func BenchmarkConnectionTracking(b *testing.B) {
 func BenchmarkConcurrentSelection(b *testing.B) {
 	selectors := map[string]domain.EndpointSelector{
 		DefaultBalancerPriority:         NewPrioritySelector(),
-		DefaultBalancerRoundRobbin:      NewRoundRobinSelector(),
+		DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
 		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
 	}
 
@@ -181,7 +181,7 @@ func BenchmarkLargeEndpointSet(b *testing.B) {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
 			selectors := map[string]domain.EndpointSelector{
 				DefaultBalancerPriority:         NewPrioritySelector(),
-				DefaultBalancerRoundRobbin:      NewRoundRobinSelector(),
+				DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
 				DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
 			}
 
@@ -235,7 +235,7 @@ func BenchmarkFilteringRoutableEndpoints(b *testing.B) {
 
 	selectors := map[string]domain.EndpointSelector{
 		DefaultBalancerPriority:         NewPrioritySelector(),
-		DefaultBalancerRoundRobbin:      NewRoundRobinSelector(),
+		DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
 		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
 	}
 
@@ -275,7 +275,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 
 		for i := 0; i < b.N; i++ {
 			priority, _ := factory.Create(DefaultBalancerPriority)
-			roundRobin, _ := factory.Create(DefaultBalancerRoundRobbin)
+			roundRobin, _ := factory.Create(DefaultBalancerRoundRobin)
 			leastConn, _ := factory.Create(DefaultBalancerLeastConnections)
 
 			_ = priority

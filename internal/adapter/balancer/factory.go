@@ -8,7 +8,7 @@ import (
 )
 
 const DefaultBalancerPriority = "priority"
-const DefaultBalancerRoundRobbin = "round-robin"
+const DefaultBalancerRoundRobin = "round-robin"
 const DefaultBalancerLeastConnections = "least-connections"
 
 type Factory struct {
@@ -25,7 +25,7 @@ func NewFactory() *Factory {
 	factory.Register(DefaultBalancerPriority, func() domain.EndpointSelector {
 		return NewPrioritySelector()
 	})
-	factory.Register(DefaultBalancerRoundRobbin, func() domain.EndpointSelector {
+	factory.Register(DefaultBalancerRoundRobin, func() domain.EndpointSelector {
 		return NewRoundRobinSelector()
 	})
 	factory.Register(DefaultBalancerLeastConnections, func() domain.EndpointSelector {

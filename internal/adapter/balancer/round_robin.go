@@ -22,7 +22,7 @@ func NewRoundRobinSelector() *RoundRobinSelector {
 }
 
 func (r *RoundRobinSelector) Name() string {
-	return DefaultBalancerRoundRobbin
+	return DefaultBalancerRoundRobin
 }
 
 // Select chooses endpoints in a round-robin fashion, filtering out non-routable endpoints

@@ -8,22 +8,13 @@ import (
 )
 
 const (
-	DefaultCOnnectionTimeout   = 30 * time.Second
+	DefaultConnectionTimeout   = 30 * time.Second
 	DefaultConnectionKeepAlive = 30 * time.Second
 	DefaultResponseTimeout     = 600 * time.Second
 	DefaultReadTimeout         = 300 * time.Second
 	DefaultLoadBalancer        = "priority"
+	DefaultStreamBufferSize    = 8 * 1024 // 8KB
 )
-
-func DefaultProxyConfiguration() *proxy.Configuration {
-	return &proxy.Configuration{
-		ConnectionTimeout:   DefaultCOnnectionTimeout,
-		ConnectionKeepAlive: DefaultConnectionKeepAlive,
-		ResponseTimeout:     DefaultResponseTimeout,
-		ReadTimeout:         DefaultReadTimeout,
-		ProxyPrefix:         constants.ProxyPathPrefix,
-	}
-}
 
 func updateProxyConfiguration(config *config.Config) *proxy.Configuration {
 	return &proxy.Configuration{
@@ -32,5 +23,12 @@ func updateProxyConfiguration(config *config.Config) *proxy.Configuration {
 		ResponseTimeout:     config.Proxy.ResponseTimeout,
 		ReadTimeout:         config.Proxy.ReadTimeout,
 		ProxyPrefix:         constants.ProxyPathPrefix,
+		StreamBufferSize:    getStreamBufferSize(config),
 	}
+}
+func getStreamBufferSize(config *config.Config) int {
+	if config.Proxy.StreamBufferSize > 0 {
+		return config.Proxy.StreamBufferSize
+	}
+	return DefaultStreamBufferSize
 }

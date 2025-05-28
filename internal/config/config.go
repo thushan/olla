@@ -31,6 +31,8 @@ func DefaultConfig() *Config {
 			MaxRetries:        3,
 			RetryBackoff:      500 * time.Millisecond,
 			LoadBalancer:      "priority",
+			StreamBufferSize:     8 * 1024, // 8KB
+			EnableCircuitBreaker: true,
 		},
 		Discovery: DiscoveryConfig{
 			Type:            "static",

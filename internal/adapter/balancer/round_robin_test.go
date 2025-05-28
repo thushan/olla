@@ -22,8 +22,8 @@ func TestNewRoundRobinSelector(t *testing.T) {
 		t.Error("Connections map not initialised")
 	}
 
-	if selector.Name() != DefaultBalancerRoundRobbin {
-		t.Errorf("Expected name '%s', got %q", DefaultBalancerRoundRobbin, selector.Name())
+	if selector.Name() != DefaultBalancerRoundRobin {
+		t.Errorf("Expected name '%s', got %q", DefaultBalancerRoundRobin, selector.Name())
 	}
 
 	// Counter should start at 0
