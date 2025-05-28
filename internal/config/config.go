@@ -2,28 +2,19 @@ package config
 
 import (
 	"fmt"
-	"github.com/fsnotify/fsnotify"
 	"os"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 const (
 	DefaultPort = 19841
 	DefaultHost = "localhost"
-
-	DefaultFileWriteDelay = 150 * time.Millisecond // Small delay to ensure file write is complete
 )
 
-var (
-	lastReload  time.Time
-	reloadMutex sync.Mutex
-)
-
-// DefaultConfig returns a configuration with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
 		Server: ServerConfig{
@@ -34,9 +25,9 @@ func DefaultConfig() *Config {
 			ShutdownTimeout: 10 * time.Second,
 		},
 		Proxy: ProxyConfig{
-			ConnectionTimeout: 30 * time.Second,  // Quick connection/request timeout
-			ResponseTimeout:   10 * time.Minute,  // Long response timeout for LLMs
-			ReadTimeout:       120 * time.Second, // 2 minutes between response chunks
+			ConnectionTimeout: 30 * time.Second,
+			ResponseTimeout:   10 * time.Minute,
+			ReadTimeout:       120 * time.Second,
 			MaxRetries:        3,
 			RetryBackoff:      500 * time.Millisecond,
 			LoadBalancer:      "priority",
@@ -46,11 +37,12 @@ func DefaultConfig() *Config {
 			RefreshInterval: 30 * time.Second,
 			Static: StaticDiscoveryConfig{
 				Endpoints: []EndpointConfig{
-					// Assume they have an ollama locally running
 					{
+						Name:           "localhost",
 						URL:            "http://localhost:11434",
 						Priority:       100,
-						HealthCheckURL: "http://localhost:11434/health",
+						HealthCheckURL: "/health",
+						ModelURL:       "/api/tags",
 						CheckInterval:  5 * time.Second,
 						CheckTimeout:   2 * time.Second,
 					},
@@ -92,57 +84,146 @@ func DefaultConfig() *Config {
 	}
 }
 
-// Load loads configuration from file and environment variables
-func Load(onConfigChange func()) (*Config, error) {
+func Load() (*Config, error) {
 	config := DefaultConfig()
 
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./config")
+	configPaths := []string{"config.yaml", "config/config.yaml"}
+	if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
+		configPaths = []string{configFile}
+	}
 
-	viper.SetEnvPrefix("OLLA")
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	viper.AutomaticEnv()
-
-	// Try to read config file
-	if err := viper.ReadInConfig(); err != nil {
-		// It's okay if config file doesn't exist
-		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
-			return nil, fmt.Errorf("error reading config file: %w", err)
-		}
-		// If config file not found, check if we have OLLA_CONFIG_FILE env var
-		if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
-			viper.SetConfigFile(configFile)
-			if err := viper.ReadInConfig(); err != nil {
-				return nil, fmt.Errorf("error reading config file %s: %w", configFile, err)
+	var configLoaded bool
+	for _, path := range configPaths {
+		if data, err := os.ReadFile(path); err == nil {
+			if err := yaml.Unmarshal(data, config); err != nil {
+				return nil, fmt.Errorf("failed to parse %s: %w", path, err)
 			}
+			configLoaded = true
+			break
 		}
 	}
 
-	if err := viper.Unmarshal(config); err != nil {
-		return nil, fmt.Errorf("unable to decode config: %w", err)
+	if !configLoaded && os.Getenv("OLLA_CONFIG_FILE") != "" {
+		return nil, fmt.Errorf("specified config file not found: %s", os.Getenv("OLLA_CONFIG_FILE"))
 	}
 
-	viper.WatchConfig()
-
-	if onConfigChange != nil {
-		viper.OnConfigChange(func(e fsnotify.Event) {
-			reloadMutex.Lock()
-			defer reloadMutex.Unlock()
-
-			// lame debounce to avoid rapid-fire reloads
-			now := time.Now()
-			if now.Sub(lastReload) < 500*time.Millisecond {
-				return // Ignore miultiple rapid changes
-			}
-			lastReload = now
-
-			// looks like on windows this event is triggered
-			// before the file is fully written, not sure why
-			time.Sleep(DefaultFileWriteDelay)
-			onConfigChange()
-		})
-	}
+	applyEnvOverrides(config)
 	return config, nil
+}
+
+func applyEnvOverrides(config *Config) {
+	if val := os.Getenv("OLLA_SERVER_HOST"); val != "" {
+		config.Server.Host = val
+	}
+	if val := os.Getenv("OLLA_SERVER_PORT"); val != "" {
+		if port, err := strconv.Atoi(val); err == nil {
+			config.Server.Port = port
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_READ_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Server.ReadTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_WRITE_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Server.WriteTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_SHUTDOWN_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Server.ShutdownTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_CONNECTION_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Proxy.ConnectionTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_RESPONSE_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Proxy.ResponseTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_READ_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Proxy.ReadTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_MAX_RETRIES"); val != "" {
+		if retries, err := strconv.Atoi(val); err == nil {
+			config.Proxy.MaxRetries = retries
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_RETRY_BACKOFF"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Proxy.RetryBackoff = duration
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_LOAD_BALANCER"); val != "" {
+		config.Proxy.LoadBalancer = val
+	}
+	if val := os.Getenv("OLLA_DISCOVERY_TYPE"); val != "" {
+		config.Discovery.Type = val
+	}
+	if val := os.Getenv("OLLA_DISCOVERY_REFRESH_INTERVAL"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Discovery.RefreshInterval = duration
+		}
+	}
+	if val := os.Getenv("OLLA_LOGGING_LEVEL"); val != "" {
+		config.Logging.Level = val
+	}
+	if val := os.Getenv("OLLA_LOGGING_FORMAT"); val != "" {
+		config.Logging.Format = val
+	}
+	if val := os.Getenv("OLLA_LOGGING_OUTPUT"); val != "" {
+		config.Logging.Output = val
+	}
+	if val := os.Getenv("OLLA_TELEMETRY_METRICS_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Telemetry.Metrics.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_TELEMETRY_METRICS_ADDRESS"); val != "" {
+		config.Telemetry.Metrics.Address = val
+	}
+	if val := os.Getenv("OLLA_TELEMETRY_TRACING_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Telemetry.Tracing.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_TELEMETRY_TRACING_ENDPOINT"); val != "" {
+		config.Telemetry.Tracing.Endpoint = val
+	}
+	if val := os.Getenv("OLLA_TELEMETRY_TRACING_SAMPLE_RATE"); val != "" {
+		if rate, err := strconv.ParseFloat(val, 64); err == nil {
+			config.Telemetry.Tracing.SampleRate = rate
+		}
+	}
+	if val := os.Getenv("OLLA_SECURITY_TLS_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Security.TLS.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_SECURITY_TLS_CERT_FILE"); val != "" {
+		config.Security.TLS.CertFile = val
+	}
+	if val := os.Getenv("OLLA_SECURITY_TLS_KEY_FILE"); val != "" {
+		config.Security.TLS.KeyFile = val
+	}
+	if val := os.Getenv("OLLA_SECURITY_MTLS_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Security.MTLS.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_SECURITY_MTLS_CA_FILE"); val != "" {
+		config.Security.MTLS.CAFile = val
+	}
+	if val := os.Getenv("OLLA_PLUGINS_DIRECTORY"); val != "" {
+		config.Plugins.Directory = val
+	}
+	if val := os.Getenv("OLLA_PLUGINS_ENABLED"); val != "" {
+		config.Plugins.Enabled = strings.Split(val, ",")
+	}
 }

@@ -3,43 +3,39 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/viper"
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy"
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
 	"net/http"
-	"sync"
 )
 
-// Application represents the Olla application
 type Application struct {
-	configMu         sync.RWMutex
-	config           *config.Config
-	server           *http.Server
-	logger           *logger.StyledLogger
-	registry         *router.RouteRegistry
-	discoveryService ports.DiscoveryService
-	proxyService     ports.ProxyService
-	pluginService    ports.PluginService
-	errCh            chan error
+	config        *config.Config
+	server        *http.Server
+	logger        *logger.StyledLogger
+	registry      *router.RouteRegistry
+	repository    *discovery.StaticEndpointRepository
+	healthChecker *health.HTTPHealthChecker
+	proxyService  ports.ProxyService
+	pluginService ports.PluginService
+	errCh         chan error
 }
 
-// New creates a new application instance
 func New(logger *logger.StyledLogger) (*Application, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
 
-	/**
-	 * Slightly annoying but we have to setup the configuration with defaults here
-	 * then load it again with viper to allow hot reloading.
-	 **/
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthCheckerWithDefaults(repository, logger)
-	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, nil, logger)
 
 	balancerFactory := balancer.NewFactory()
 	selector, err := balancerFactory.Create(DefaultLoadBalancer)
@@ -47,66 +43,43 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
 
+	// Create a simple discovery service wrapper
+	discoveryService := &SimpleDiscoveryService{
+		repository:    repository,
+		healthChecker: healthChecker,
+		endpoints:     cfg.Discovery.Static.Endpoints,
+		logger:        logger,
+	}
+
 	proxyService := proxy.NewService(
 		discoveryService,
 		selector,
-		DefaultProxyConfiguration(),
+		updateProxyConfiguration(cfg),
 		logger,
 	)
-
-	app := &Application{
-		logger:           logger,
-		registry:         registry,
-		discoveryService: discoveryService,
-		proxyService:     proxyService,
-		errCh:            make(chan error, 1),
-	}
-
-	cfg, err := config.Load(func() {
-		// Hot reloading of configuration file
-		// this is a bit tricky, inspired by Viper's docs.
-		if err := viper.ReadInConfig(); err != nil {
-			logger.Error("Failed to re-read config file", "error", err)
-			return
-		}
-
-		newConfig := config.DefaultConfig()
-		if err := viper.Unmarshal(newConfig); err != nil {
-			logger.Error("Failed to unmarshal new config", "error", err)
-			return
-		}
-
-		app.setConfig(newConfig)
-
-		discoveryService.SetConfig(newConfig)
-		discoveryService.ReloadConfig()
-
-		proxyService.UpdateConfig(updateProxyConfiguration(newConfig))
-
-	})
-	if err != nil {
-		return nil, fmt.Errorf("Failed to load configuration: %v\n", err)
-	}
-
-	// Now we can set the configuration properly
-	app.setConfig(cfg)
-	discoveryService.SetConfig(cfg)
-	proxyService.UpdateConfig(updateProxyConfiguration(cfg))
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		ReadTimeout:  cfg.Server.ReadTimeout,
 		WriteTimeout: cfg.Server.WriteTimeout,
-		Handler:      nil, // Will be set in Start()
+		Handler:      nil,
 	}
-	app.server = server
+
+	app := &Application{
+		config:        cfg,
+		server:        server,
+		logger:        logger,
+		registry:      registry,
+		repository:    repository,
+		healthChecker: healthChecker,
+		proxyService:  proxyService,
+		errCh:         make(chan error, 1),
+	}
 
 	return app, nil
 }
 
-// Start starts the application
 func (a *Application) Start(ctx context.Context) error {
-
 	go func() {
 		select {
 		case err := <-a.errCh:
@@ -118,28 +91,80 @@ func (a *Application) Start(ctx context.Context) error {
 
 	a.startWebServer()
 
-	if err := a.discoveryService.Start(ctx); err != nil {
-		a.logger.Error("discovery service startup error", "error", err)
+	// Directly use repository and health checker
+	if _, err := a.repository.UpsertFromConfig(ctx, a.config.Discovery.Static.Endpoints); err != nil {
+		a.logger.Error("Failed to load endpoints from config", "error", err)
 		a.errCh <- err
+		return err
+	}
+
+	if err := a.healthChecker.StartChecking(ctx); err != nil {
+		a.logger.Error("Failed to start health checker", "error", err)
+		a.errCh <- err
+		return err
+	}
+
+	// Force initial health check
+	if err := a.healthChecker.ForceHealthCheck(ctx); err != nil {
+		a.logger.Warn("Failed to force initial health check", "error", err)
 	}
 
 	a.logger.Info("Olla started", "bind", a.server.Addr)
 	return nil
 }
 
-// Stop stops the application
 func (a *Application) Stop(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, a.config.Server.ShutdownTimeout)
 	defer cancel()
 
-	// Stop discovery service first
-	if err := a.discoveryService.Stop(shutdownCtx); err != nil {
-		a.logger.Error("Failed to stop discovery service", "error", err)
+	if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {
+		a.logger.Error("Failed to stop health checker", "error", err)
 	}
 
 	if err := a.server.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("HTTP server shutdown error: %w", err)
 	}
 
+	return nil
+}
+
+// SimpleDiscoveryService is a minimal wrapper that maintains the interface
+type SimpleDiscoveryService struct {
+	repository    *discovery.StaticEndpointRepository
+	healthChecker *health.HTTPHealthChecker
+	endpoints     []config.EndpointConfig
+	logger        *logger.StyledLogger
+}
+
+func (s *SimpleDiscoveryService) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return s.repository.GetAll(ctx)
+}
+
+func (s *SimpleDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	routable, err := s.repository.GetRoutable(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(routable) > 0 {
+		return routable, nil
+	}
+
+	s.logger.Warn("No routable endpoints available, falling back to all endpoints")
+	return s.repository.GetAll(ctx)
+}
+
+func (s *SimpleDiscoveryService) RefreshEndpoints(ctx context.Context) error {
+	_, err := s.repository.UpsertFromConfig(ctx, s.endpoints)
+	return err
+}
+
+func (s *SimpleDiscoveryService) Start(ctx context.Context) error {
+	// This is now handled directly in Application.Start()
+	return nil
+}
+
+func (s *SimpleDiscoveryService) Stop(ctx context.Context) error {
+	// This is now handled directly in Application.Stop()
 	return nil
 }

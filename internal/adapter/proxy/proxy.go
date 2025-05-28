@@ -61,8 +61,8 @@ func NewService(
 		TLSHandshakeTimeout: 10 * time.Second,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
-				Timeout:   configuration.ConnectionTimeout,
-				KeepAlive: configuration.ConnectionKeepAlive,
+				Timeout:   60 * time.Second,
+				KeepAlive: 60 * time.Second,
 			}
 			conn, err := dialer.DialContext(ctx, network, addr)
 			if err != nil {

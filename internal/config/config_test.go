@@ -43,13 +43,11 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestLoadConfig_WithoutFile(t *testing.T) {
-	// Test loading without config file (should use defaults)
-	cfg, err := Load(nil)
+	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load failed: %v", err)
 	}
 
-	// Should have default values
 	if cfg.Server.Port != DefaultPort {
 		t.Errorf("Expected default port %d, got %d", DefaultPort, cfg.Server.Port)
 	}
@@ -59,7 +57,6 @@ func TestLoadConfig_WithoutFile(t *testing.T) {
 }
 
 func TestLoadConfig_WithEnvironmentVariables(t *testing.T) {
-	// Set environment variables with correct Viper mapping
 	os.Setenv("OLLA_SERVER_PORT", "8080")
 	os.Setenv("OLLA_SERVER_HOST", "0.0.0.0")
 	os.Setenv("OLLA_LOGGING_LEVEL", "debug")
@@ -69,26 +66,19 @@ func TestLoadConfig_WithEnvironmentVariables(t *testing.T) {
 		os.Unsetenv("OLLA_LOGGING_LEVEL")
 	}()
 
-	cfg, err := Load(nil)
+	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("Load with env vars failed: %v", err)
 	}
 
-	// For now, just test that config loads successfully
-	// Environment variable override behavior may need configuration adjustment
-	if cfg == nil {
-		t.Fatal("Config should not be nil")
+	if cfg.Server.Port != 8080 {
+		t.Errorf("Expected port 8080 from env var, got %d", cfg.Server.Port)
 	}
-
-	// Test that we get a valid config with reasonable defaults
-	if cfg.Server.Port <= 0 {
-		t.Error("Server port should be positive")
+	if cfg.Server.Host != "0.0.0.0" {
+		t.Errorf("Expected host 0.0.0.0 from env var, got %s", cfg.Server.Host)
 	}
-	if cfg.Server.Host == "" {
-		t.Error("Server host should not be empty")
-	}
-	if cfg.Logging.Level == "" {
-		t.Error("Logging level should not be empty")
+	if cfg.Logging.Level != "debug" {
+		t.Errorf("Expected log level debug from env var, got %s", cfg.Logging.Level)
 	}
 }
 

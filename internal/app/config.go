@@ -12,20 +12,8 @@ const (
 	DefaultConnectionKeepAlive = 30 * time.Second
 	DefaultResponseTimeout     = 600 * time.Second
 	DefaultReadTimeout         = 300 * time.Second
-	DefaultLoadBalancer        = "priority" // Default load balancer type
+	DefaultLoadBalancer        = "priority"
 )
-
-func (a *Application) setConfig(cfg *config.Config) {
-	a.configMu.Lock()
-	defer a.configMu.Unlock()
-	a.config = cfg
-}
-
-func (a *Application) getConfig() *config.Config {
-	a.configMu.RLock()
-	defer a.configMu.RUnlock()
-	return a.config
-}
 
 func DefaultProxyConfiguration() *proxy.Configuration {
 	return &proxy.Configuration{
