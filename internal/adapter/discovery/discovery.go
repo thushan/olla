@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/thushan/olla/internal/logger"
-	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,132 +81,161 @@ func (s *StaticDiscoveryService) GetHealthyEndpointsWithFallback(ctx context.Con
 
 	return all, nil
 }
-
 func (s *StaticDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 	s.endpointUpdateMu.Lock()
 	defer s.endpointUpdateMu.Unlock()
 
 	cfg := s.getConfig()
 
-	currentEndpoints, err := s.repository.GetAll(ctx)
+	changeResult, err := s.repository.UpsertFromConfig(ctx, cfg.Discovery.Static.Endpoints)
 	if err != nil {
-		return fmt.Errorf("failed to get current endpoints: %w", err)
+		return err
 	}
 
-	currentMap := make(map[string]*domain.Endpoint)
-	for _, endpoint := range currentEndpoints {
-		currentMap[endpoint.GetURLString()] = endpoint
-	}
+	if changeResult.Changed {
+		s.logEndpointChanges(changeResult)
 
-	for _, endpointCfg := range cfg.Discovery.Static.Endpoints {
-		if err := validateEndpointConfig(endpointCfg); err != nil {
-			s.logger.Error("Invalid endpoint configuration",
-				"name", endpointCfg.Name,
-				"url", endpointCfg.URL,
-				"error", err)
-			continue
-		}
-
-		endpointURL, err := url.Parse(endpointCfg.URL)
-		if err != nil {
-			return fmt.Errorf("invalid endpoint URL %s: %w", endpointCfg.URL, err)
-		}
-
-		healthCheckPath, err := url.Parse(endpointCfg.HealthCheckURL)
-		if err != nil {
-			return fmt.Errorf("invalid health check URL %s: %w", endpointCfg.HealthCheckURL, err)
-		}
-
-		modelPath, err := url.Parse(endpointCfg.ModelURL)
-		if err != nil {
-			return fmt.Errorf("invalid model URL %s: %w", endpointCfg.ModelURL, err)
-		}
-
-		// Resolve URLs properly
-		healthCheckURL := endpointURL.ResolveReference(healthCheckPath)
-		modelUrl := endpointURL.ResolveReference(modelPath)
-
-		key := endpointURL.String()
-		if existing, exists := currentMap[key]; exists {
-			configChanged := s.hasEndpointConfigChanged(existing, endpointCfg, healthCheckURL)
-			oldName := existing.Name
-			hasNameChanged := existing.Name != endpointCfg.Name
-
-			s.updateExistingEndpoint(existing, endpointCfg, healthCheckURL, modelUrl, configChanged, hasNameChanged, oldName)
-			delete(currentMap, key)
+		// CRITICAL FIX: Force health check to ensure new endpoints get scheduled
+		if hc, ok := s.checker.(interface{ ForceHealthCheck(context.Context) error }); ok {
+			if err := hc.ForceHealthCheck(ctx); err != nil && !strings.Contains(err.Error(), "health checker is not running") {
+				s.logger.Warn("Failed to force health check after config change", "error", err)
+			} else {
+				s.logger.InfoWithCount("Scheduled health checks for all endpoints after config change", changeResult.NewCount)
+			}
 		} else {
-			endpoint, err := domain.NewEndpoint(
-				endpointCfg.Name,
-				endpointCfg.URL,
-				healthCheckURL.String(),
-				modelUrl.String(),
-				endpointCfg.Priority,
-				endpointCfg.CheckInterval,
-				endpointCfg.CheckTimeout,
-			)
-			if err != nil {
-				return fmt.Errorf("failed to create endpoint %s: %w", key, err)
-			}
-
-			if err := s.repository.Add(ctx, endpoint); err != nil {
-				return fmt.Errorf("failed to add endpoint %s: %w", key, err)
-			}
-
-			s.logger.Info("Added new endpoint", "name", endpoint.Name,
-				"endpoint", endpoint.GetURLString(),
-				"model_url", endpoint.ModelURLString,
-				"health_check_url", endpoint.HealthCheckURLString)
+			// Fallback: Log warning if ForceHealthCheck not available
+			s.logger.Warn("CRITICAL: Health checker does not support ForceHealthCheck - new endpoints may not be scheduled!")
 		}
-	}
-
-	// Remove endpoints no longer in config
-	for key, endpoint := range currentMap {
-		if err := s.repository.Remove(ctx, endpoint.URL); err != nil {
-			return fmt.Errorf("failed to remove endpoint %s: %w", key, err)
-		}
-		s.logger.InfoWithEndpoint("Removed endpoint", endpoint.Name)
 	}
 
 	return nil
 }
 
-func (s *StaticDiscoveryService) updateExistingEndpoint(
-	existing *domain.Endpoint,
-	cfg config.EndpointConfig,
-	healthCheckURL, modelUrl *url.URL,
-	configChanged, hasNameChanged bool,
-	oldName string,
-) {
-	existing.Name = cfg.Name
-	existing.Priority = cfg.Priority
-	existing.HealthCheckURL = healthCheckURL
-	existing.ModelUrl = modelUrl
-	existing.CheckInterval = cfg.CheckInterval
-	existing.CheckTimeout = cfg.CheckTimeout
-	existing.HealthCheckURLString = healthCheckURL.String()
-	existing.ModelURLString = modelUrl.String()
+func (s *StaticDiscoveryService) logEndpointChanges(result *domain.EndpointChangeResult) {
+	// Log added endpoints
+	for _, change := range result.Added {
+		s.logger.InfoWithEndpoint("Added endpoint", change.Name)
+	}
 
-	if configChanged {
-		if hasNameChanged {
-			s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName, "to", cfg.Name)
-		} else {
-			s.logger.InfoWithEndpoint("Endpoint configuration changed for", oldName)
+	// Log removed endpoints
+	for _, change := range result.Removed {
+		s.logger.InfoWithEndpoint("Removed endpoint", change.Name)
+	}
+
+	// Log modified endpoints - handle name changes specially
+	for _, change := range result.Modified {
+		for _, specificChange := range change.Changes {
+			if strings.Contains(specificChange, "name:") {
+				// Extract old and new names for the classic format
+				parts := strings.Split(specificChange, " -> ")
+				if len(parts) == 2 {
+					oldName := strings.TrimPrefix(parts[0], "name: ")
+					newName := parts[1]
+					// Use the classic format: "Endpoint configuration changed for zeus to: zeusy"
+					s.logger.InfoConfigChange(oldName, newName)
+				}
+			} else {
+				// For other changes, show what specifically changed
+				s.logger.InfoWithEndpoint("Endpoint configuration changed for", change.Name, "change", specificChange)
+			}
 		}
+	}
 
-		existing.Status = domain.StatusUnknown
-		existing.LastChecked = time.Now()
-		existing.ConsecutiveFailures = 0
-		existing.BackoffMultiplier = 1
-		existing.NextCheckTime = time.Now()
+	if result.Changed {
+		s.logger.InfoWithCount("Endpoint configuration changed ", result.NewCount)
 	}
 }
 
-func (s *StaticDiscoveryService) hasEndpointConfigChanged(existing *domain.Endpoint, cfg config.EndpointConfig, healthCheckURL *url.URL) bool {
-	return existing.Name != cfg.Name ||
-		existing.Priority != cfg.Priority ||
-		existing.HealthCheckURLString != healthCheckURL.String() ||
-		existing.CheckInterval != cfg.CheckInterval ||
-		existing.CheckTimeout != cfg.CheckTimeout
+func (s *StaticDiscoveryService) performConfigChangeHealthCheck(ctx context.Context) error {
+	// s.logger.Info("Running health checks after configuration change...")
+
+	checkCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	endpoints, err := s.repository.GetAll(checkCtx)
+	if err != nil {
+		return fmt.Errorf("failed to get endpoints: %w", err)
+	}
+
+	if len(endpoints) == 0 {
+		s.logger.Info("No endpoints to health check")
+		return nil
+	}
+
+	s.logger.InfoWithCount("Health checking endpoints after config change", len(endpoints))
+
+	// Use same batching logic as initial health check
+	const batchSize = 5
+	batches := make([][]*domain.Endpoint, 0, (len(endpoints)+batchSize-1)/batchSize)
+	for i := 0; i < len(endpoints); i += batchSize {
+		end := i + batchSize
+		if end > len(endpoints) {
+			end = len(endpoints)
+		}
+		batches = append(batches, endpoints[i:end])
+	}
+
+	healthCheckResults := make(chan struct {
+		endpoint *domain.Endpoint
+		result   domain.HealthCheckResult
+	}, len(endpoints))
+
+	var wg sync.WaitGroup
+
+	for _, batch := range batches {
+		wg.Add(1)
+		go func(batch []*domain.Endpoint) {
+			defer wg.Done()
+			for _, endpoint := range batch {
+				result, _ := s.checker.Check(checkCtx, endpoint)
+				healthCheckResults <- struct {
+					endpoint *domain.Endpoint
+					result   domain.HealthCheckResult
+				}{endpoint, result}
+			}
+		}(batch)
+	}
+
+	wg.Wait()
+	close(healthCheckResults)
+
+	// Process results and update repository
+	statusCounts := make(map[domain.EndpointStatus]int)
+	for resultData := range healthCheckResults {
+		endpoint := resultData.endpoint
+		result := resultData.result
+
+		endpoint.Status = result.Status
+		endpoint.LastChecked = time.Now()
+		endpoint.LastLatency = result.Latency
+
+		if err := s.repository.UpdateEndpoint(checkCtx, endpoint); err != nil {
+			s.logger.ErrorWithEndpoint("Failed to update endpoint status", endpoint.GetURLString(), "error", err)
+		}
+
+		statusCounts[result.Status]++
+	}
+
+	// Log summary like initial health check
+	s.logger.Info("Configuration change health check results:")
+	for _, endpoint := range endpoints {
+		s.logger.InfoHealthStatus("", endpoint.Name, endpoint.Status,
+			"latency", endpoint.LastLatency.Round(time.Millisecond))
+	}
+
+	healthy := statusCounts[domain.StatusHealthy]
+	routable := healthy + statusCounts[domain.StatusBusy] + statusCounts[domain.StatusWarming]
+
+	s.logger.Info("Configuration change health check summary",
+		"healthy", healthy,
+		"busy", statusCounts[domain.StatusBusy],
+		"warming", statusCounts[domain.StatusWarming],
+		"offline", statusCounts[domain.StatusOffline],
+		"unhealthy", statusCounts[domain.StatusUnhealthy],
+		"unknown", statusCounts[domain.StatusUnknown],
+		"total_routable", routable)
+
+	return nil
 }
 
 // Batch health checks for better performance
@@ -338,7 +367,6 @@ func (s *StaticDiscoveryService) waitForHealthyEndpoints(ctx context.Context, ma
 		}
 	}
 }
-
 func (s *StaticDiscoveryService) Start(ctx context.Context) error {
 	s.logger.Info("Starting static discovery service...")
 

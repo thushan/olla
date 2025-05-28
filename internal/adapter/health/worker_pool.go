@@ -1,6 +1,7 @@
 package health
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -96,13 +97,30 @@ func (wp *WorkerPool) processHealthCheck(job healthCheckJob, scheduler *HealthSc
 
 	job.endpoint.NextCheckTime = time.Now().Add(nextInterval)
 
-	scheduler.ScheduleCheck(job.endpoint, job.endpoint.NextCheckTime, job.ctx)
+	// Check if endpoint still exists before updating
+	if !wp.repository.Exists(job.ctx, job.endpoint.URL) {
+		wp.logger.Debug("Endpoint removed from configuration, stopping health checks",
+			"endpoint", job.endpoint.GetURLString())
+		return
+	}
 
 	if repoErr := wp.repository.UpdateEndpoint(job.ctx, job.endpoint); repoErr != nil {
+		var notFoundErr *domain.ErrEndpointNotFound
+		if errors.As(repoErr, &notFoundErr) {
+			// This shouldn't happen since we checked Exists() above, but handle it gracefully
+			wp.logger.Debug("Endpoint not found during update, stopping health checks",
+				"endpoint", job.endpoint.GetURLString())
+			return
+		}
+		// Other repository errors should still be logged as errors
 		wp.logger.Error("Failed to update endpoint",
 			"endpoint", job.endpoint.GetURLString(),
 			"error", repoErr)
+		return
 	}
+
+	// Only reschedule if repository update succeeded
+	scheduler.ScheduleCheck(job.endpoint, job.endpoint.NextCheckTime, job.ctx)
 
 	shouldLog, errorCount := wp.statusTracker.ShouldLog(
 		job.endpoint.GetURLString(),
