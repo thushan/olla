@@ -43,4 +43,5 @@ func (a *Application) registerRoutes() {
 	// a.registry.RegisterWithMethod("/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
 	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
 	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
+	a.registry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
 }

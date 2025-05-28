@@ -13,9 +13,11 @@ import (
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
 	"net/http"
+	"time"
 )
 
 type Application struct {
+	startTime     time.Time
 	config        *config.Config
 	server        *http.Server
 	logger        *logger.StyledLogger
@@ -27,7 +29,7 @@ type Application struct {
 	errCh         chan error
 }
 
-func New(logger *logger.StyledLogger) (*Application, error) {
+func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
@@ -66,6 +68,7 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	}
 
 	app := &Application{
+		startTime:     startTime,
 		config:        cfg,
 		server:        server,
 		logger:        logger,

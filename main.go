@@ -7,16 +7,21 @@ import (
 	"github.com/thushan/olla/internal/app"
 	"github.com/thushan/olla/internal/env"
 	"github.com/thushan/olla/internal/version"
+	"github.com/thushan/olla/pkg/format"
+	"github.com/thushan/olla/pkg/nerdstats"
 	"log"
 	"log/slog"
 	"os"
 	"os/signal"
+	"runtime"
 	"syscall"
+	"time"
 
 	"github.com/thushan/olla/internal/logger"
 )
 
 func main() {
+	startTime := time.Now()
 	vlog := log.New(log.Writer(), "", 0)
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		version.PrintVersionInfo(true, vlog)
@@ -53,7 +58,7 @@ func main() {
 	}()
 
 	// Pass styled logger to application
-	application, err := app.New(styledLogger)
+	application, err := app.New(startTime, styledLogger)
 	if err != nil {
 		logger.FatalWithLogger(logInstance, "Failed to create application", "error", err)
 	}
@@ -68,7 +73,68 @@ func main() {
 		styledLogger.Error("Error during shutdown", "error", err)
 	}
 
+	reportProcessStats(styledLogger, startTime)
+
 	styledLogger.Info("Olla has shutdown")
+}
+
+func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
+	runtime.GC()
+
+	stats := nerdstats.Snapshot(startTime)
+
+	logger.Info("Process Memory Stats",
+		"heap_alloc", format.Bytes(stats.HeapAlloc),
+		"heap_sys", format.Bytes(stats.HeapSys),
+		"heap_inuse", format.Bytes(stats.HeapInuse),
+		"heap_released", format.Bytes(stats.HeapReleased),
+		"stack_inuse", format.Bytes(stats.StackInuse),
+		"total_alloc", format.Bytes(stats.TotalAlloc),
+		"memory_pressure", stats.GetMemoryPressure(),
+	)
+
+	logger.Info("Process Allocation Stats",
+		"total_mallocs", stats.Mallocs,
+		"total_frees", stats.Frees,
+		"net_objects", int64(stats.Mallocs)-int64(stats.Frees),
+	)
+
+	if stats.NumGC > 0 {
+		logger.Info("Garbage Collection Stats",
+			"num_gc_cycles", stats.NumGC,
+			"last_gc", stats.LastGC.Format(time.RFC3339),
+			"total_gc_time", format.Duration(stats.TotalGCTime),
+			"gc_cpu_fraction", fmt.Sprintf("%.4f%%", stats.GCCPUFraction*100),
+		)
+	}
+
+	logger.Info("Goroutine Stats",
+		"num_goroutines", stats.NumGoroutines,
+		"goroutine_health", stats.GetGoroutineHealthStatus(),
+		"num_cgo_calls", stats.NumCgoCall,
+	)
+
+	logger.Info("Runtime Stats",
+		"uptime", format.Duration(stats.Uptime),
+		"go_version", stats.GoVersion,
+		"num_cpu", stats.NumCPU,
+		"gomaxprocs", stats.GOMAXPROCS,
+	)
+
+	if buildInfo := stats.GetBuildInfoSummary(); len(buildInfo) > 0 {
+		var buildArgs []any
+		for key, value := range buildInfo {
+			buildArgs = append(buildArgs, key, value)
+		}
+		logger.Info("Build Info", buildArgs...)
+	}
+
+	logger.Info("Process Health Summary",
+		"memory_pressure", stats.GetMemoryPressure(),
+		"goroutine_status", stats.GetGoroutineHealthStatus(),
+		"uptime", format.Duration(stats.Uptime),
+		"avg_gc_pause", nerdstats.CalculateAverageGCPause(stats),
+	)
 }
 
 // buildLoggerConfig creates logger config from environment variables with defaults
