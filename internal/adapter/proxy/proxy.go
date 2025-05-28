@@ -61,8 +61,8 @@ func NewService(
 		TLSHandshakeTimeout: 10 * time.Second,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
-				Timeout:   configuration.ConnectionTimeout,
-				KeepAlive: configuration.ConnectionKeepAlive,
+				Timeout:   60 * time.Second,
+				KeepAlive: 60 * time.Second,
 			}
 			conn, err := dialer.DialContext(ctx, network, addr)
 			if err != nil {
@@ -138,10 +138,10 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	// Create upstream context with response timeout
 	// This context is independent of client disconnections to allow LLM responses to complete
-	upstreamCtx := context.Background()
+	upstreamCtx := ctx
 	if s.configuration.ResponseTimeout > 0 {
 		var cancel context.CancelFunc
-		upstreamCtx, cancel = context.WithTimeout(upstreamCtx, s.configuration.ResponseTimeout)
+		upstreamCtx, cancel = context.WithTimeout(ctx, s.configuration.ResponseTimeout)
 		defer cancel()
 	}
 
@@ -257,7 +257,11 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 
 // streamResponse handles the complex streaming logic with dual context management
 func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader) (int, error) {
-	buf := make([]byte, DefaultStreamBufferSize)
+	bufferSize := s.configuration.StreamBufferSize
+	if bufferSize == 0 {
+		bufferSize = DefaultStreamBufferSize
+	}
+	buf := make([]byte, bufferSize)
 
 	flusher, canFlush := w.(http.Flusher)
 

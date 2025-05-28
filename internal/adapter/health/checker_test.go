@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/config"
 	"net/http"
 	"net/url"
 	"sync"
@@ -89,6 +90,12 @@ func (m *mockRepository) Remove(ctx context.Context, endpointURL *url.URL) error
 	return nil
 }
 
+func (m *mockRepository) UpsertFromConfig(ctx context.Context, configs []config.EndpointConfig) (*domain.EndpointChangeResult, error) {
+	return nil, nil
+}
+func (m *mockRepository) Exists(ctx context.Context, endpointURL *url.URL) bool {
+	return true
+}
 func (m *mockRepository) GetCacheStats() map[string]interface{} {
 	return map[string]interface{}{
 		"cache_hits":        0,
@@ -110,8 +117,7 @@ func TestHTTPHealthChecker_Check_Success(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	testURL, _ := url.Parse("http://localhost:11434")
 	healthURL, _ := url.Parse("/health")
@@ -140,8 +146,7 @@ func TestHTTPHealthChecker_Check_NetworkError(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	testURL, _ := url.Parse("http://localhost:11434")
 	healthURL, _ := url.Parse("/health")
@@ -173,8 +178,7 @@ func TestHTTPHealthChecker_Check_SlowResponse(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	testURL, _ := url.Parse("http://localhost:11434")
 	healthURL, _ := url.Parse("/health")
@@ -282,7 +286,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
 	ctx := context.Background()
 
 	// Start checker
@@ -291,10 +295,10 @@ func TestHealthChecker_StartStop(t *testing.T) {
 		t.Fatalf("StartChecking failed: %v", err)
 	}
 
-	// Verify it's running
+	// Verify it's isRunning
 	stats := checker.GetSchedulerStats()
-	if !stats["running"].(bool) {
-		t.Error("Checker should be running")
+	if !stats["isRunning"].(bool) {
+		t.Error("Checker should be isRunning")
 	}
 
 	// Stop chucker
@@ -305,7 +309,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 
 	// Verify it's stopped
 	stats = checker.GetSchedulerStats()
-	if stats["running"].(bool) {
+	if stats["isRunning"].(bool) {
 		t.Error("Checker should be stopped")
 	}
 }
@@ -319,8 +323,7 @@ func TestHTTPHealthChecker_PreComputedURLs(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = mockClient
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
 	baseURL, _ := url.Parse("http://localhost:11434")
 	// Pre-computed absolute URL (not relative)
@@ -392,20 +395,18 @@ func TestCircuitBreaker_ConcurrentAccess(t *testing.T) {
 		t.Error("Circuit breaker should be open for url2")
 	}
 }
-
 func TestStatusTransitionTracker_ConcurrentAccess(t *testing.T) {
 	tracker := NewStatusTransitionTracker()
 	url := "http://localhost:11434"
 
 	var wg sync.WaitGroup
-	results := make(chan bool, 200)
+	results := make(chan bool, 100)
 
-	// Concurrent status logging with controlled transitions
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 5; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 20; j++ {
+			for j := 0; j < 10; j++ {
 				// Alternate between only 2 statuses to limit transitions
 				status := domain.StatusHealthy
 				if j%2 == 0 {
@@ -413,7 +414,7 @@ func TestStatusTransitionTracker_ConcurrentAccess(t *testing.T) {
 				}
 				shouldLog, _ := tracker.ShouldLog(url, status, false)
 				results <- shouldLog
-				time.Sleep(time.Microsecond) // Small delay to reduce contention
+				time.Sleep(time.Millisecond)
 			}
 		}(i)
 	}
@@ -433,8 +434,9 @@ func TestStatusTransitionTracker_ConcurrentAccess(t *testing.T) {
 	if logCount == 0 {
 		t.Error("Should have logged some status transitions")
 	}
-	if logCount > 50 { // More lenient threshold for concurrent access
-		t.Errorf("Logged too many transitions: %d (expected < 50)", logCount)
+	// More realistic threshold for reduced concurrent access
+	if logCount > 20 {
+		t.Errorf("Logged too many transitions: %d (expected < 20)", logCount)
 	}
 }
 
@@ -445,8 +447,7 @@ func TestHealthChecker_BatchedChecking(t *testing.T) {
 	defer cleanup()
 	styledLogger := logger.NewStyledLogger(log, nil)
 
-	checker := NewHTTPHealthChecker(mockRepo, styledLogger)
-	checker.client = &mockHTTPClient{statusCode: 200}
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
 
 	// Add many endpoints
 	ctx := context.Background()

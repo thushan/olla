@@ -2,6 +2,8 @@ package domain
 
 import (
 	"context"
+	"fmt"
+	"github.com/thushan/olla/internal/config"
 	"net/url"
 	"time"
 )
@@ -15,73 +17,34 @@ const (
 	StatusStringUnknown   = "unknown"
 )
 
-// Endpoint with pre-computed strings to avoid repeated allocations
 type Endpoint struct {
-	Name           string
-	URL            *url.URL
-	Priority       int
-	HealthCheckURL *url.URL
-	ModelUrl       *url.URL
-	CheckInterval  time.Duration
-	CheckTimeout   time.Duration
-	Status         EndpointStatus
-	LastChecked    time.Time
-
-	// Pre-computed strings to avoid url.String() allocations
+	Name                 string
+	URL                  *url.URL
+	Priority             int
+	HealthCheckURL       *url.URL
+	ModelUrl             *url.URL
+	CheckInterval        time.Duration
+	CheckTimeout         time.Duration
+	Status               EndpointStatus
+	LastChecked          time.Time
 	URLString            string
 	HealthCheckURLString string
 	ModelURLString       string
-
-	// Health check state tracking
-	ConsecutiveFailures int
-	BackoffMultiplier   int
-	NextCheckTime       time.Time
-	LastLatency         time.Duration
+	ConsecutiveFailures  int
+	BackoffMultiplier    int
+	NextCheckTime        time.Time
+	LastLatency          time.Duration
 }
 
-// NewEndpoint creates an endpoint with pre-computed URL strings
-func NewEndpoint(name, urlStr, healthCheckURL, modelURL string, priority int, checkInterval, checkTimeout time.Duration) (*Endpoint, error) {
-	baseURL, err := url.Parse(urlStr)
-	if err != nil {
-		return nil, err
-	}
-
-	healthURL, err := url.Parse(healthCheckURL)
-	if err != nil {
-		return nil, err
-	}
-
-	modURL, err := url.Parse(modelURL)
-	if err != nil {
-		return nil, err
-	}
-
-	// Pre-compute all URL strings once
-	return &Endpoint{
-		Name:                 name,
-		URL:                  baseURL,
-		Priority:             priority,
-		HealthCheckURL:       healthURL,
-		ModelUrl:             modURL,
-		CheckInterval:        checkInterval,
-		CheckTimeout:         checkTimeout,
-		Status:               StatusUnknown,
-		URLString:            baseURL.String(),
-		HealthCheckURLString: healthURL.String(),
-		ModelURLString:       modURL.String(),
-		BackoffMultiplier:    1,
-		NextCheckTime:        time.Now(),
-	}, nil
-}
-
-// GetURLString returns pre-computed URL string
 func (e *Endpoint) GetURLString() string {
 	return e.URLString
 }
 
-// GetHealthCheckURLString returns pre-computed health check URL string
 func (e *Endpoint) GetHealthCheckURLString() string {
 	return e.HealthCheckURLString
+}
+func (e *ErrEndpointNotFound) Error() string {
+	return fmt.Sprintf("endpoint not found: %s", e.URL)
 }
 
 type EndpointStatus string
@@ -121,38 +84,36 @@ func (s EndpointStatus) String() string {
 	return string(s)
 }
 
+type EndpointChangeResult struct {
+	Changed  bool
+	Added    []*EndpointChange
+	Removed  []*EndpointChange
+	Modified []*EndpointChange
+	OldCount int
+	NewCount int
+}
+
+type EndpointChange struct {
+	Name    string
+	URL     string
+	Changes []string
+}
+
+type ErrEndpointNotFound struct {
+	URL string
+}
+
 type EndpointRepository interface {
 	GetAll(ctx context.Context) ([]*Endpoint, error)
 	GetHealthy(ctx context.Context) ([]*Endpoint, error)
 	GetRoutable(ctx context.Context) ([]*Endpoint, error)
 	UpdateStatus(ctx context.Context, endpointURL *url.URL, status EndpointStatus) error
 	UpdateEndpoint(ctx context.Context, endpoint *Endpoint) error
+	UpsertFromConfig(ctx context.Context, configs []config.EndpointConfig) (*EndpointChangeResult, error)
 	Add(ctx context.Context, endpoint *Endpoint) error
 	Remove(ctx context.Context, endpointURL *url.URL) error
+	Exists(ctx context.Context, endpointURL *url.URL) bool
 	GetCacheStats() map[string]interface{}
-}
-
-type HealthCheckResult struct {
-	Status    EndpointStatus
-	Latency   time.Duration
-	Error     error
-	ErrorType HealthCheckErrorType
-}
-
-type HealthCheckErrorType int
-
-const (
-	ErrorTypeNone HealthCheckErrorType = iota
-	ErrorTypeNetwork
-	ErrorTypeTimeout
-	ErrorTypeHTTPError
-	ErrorTypeCircuitOpen
-)
-
-type HealthChecker interface {
-	Check(ctx context.Context, endpoint *Endpoint) (HealthCheckResult, error)
-	StartChecking(ctx context.Context) error
-	StopChecking(ctx context.Context) error
 }
 
 type EndpointSelector interface {

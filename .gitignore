@@ -3,4 +3,7 @@ out/
 bin/
 report/
 logs/
+tmp/
 *.exe
+config.yaml
+config/

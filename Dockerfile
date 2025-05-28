@@ -5,7 +5,7 @@ RUN apk --no-cache add ca-certificates tzdata wget && \
     chown -R olla:olla /app
 WORKDIR /app
 COPY --from=builder /app/bin/olla /usr/local/bin/olla
-COPY --chown=olla:olla config.yaml ./
+COPY --chown=olla:olla default.yaml ./
 USER olla
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:19841/internal/health || exit 1

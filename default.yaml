@@ -1,0 +1,41 @@
+# Olla Configuration (default)
+server:
+  host: "localhost"
+  port: 19841
+  read_timeout: 20s
+  write_timeout: 0s
+  shutdown_timeout: 10s
+  interactive_cli: true
+
+proxy:
+  connection_timeout: 40s
+  response_timeout: 900s
+  read_timeout: 300s
+  max_retries: 3
+  retry_backoff: 500ms
+  load_balancer: "priority"
+
+discovery:
+  type: "static"  # static, consul, etcd
+  refresh_interval: 30s
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        priority: 100
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://localhost:1234"
+        name: "local-lm-studio"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/"
+        check_interval: 5s
+        check_timeout: 2s
+
+logging:
+  level: "debug"  # debug, info, warn, error
+  format: "json"  # json, text
+  output: "stdout"  # stdout, file

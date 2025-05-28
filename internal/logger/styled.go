@@ -110,8 +110,16 @@ func (sl *StyledLogger) GetUnderlying() *slog.Logger {
 	return sl.logger
 }
 
+
 func (sl *StyledLogger) WithRequestID(requestID string) *StyledLogger {
 	return sl.With("request_id", requestID)
+}
+
+func (sl *StyledLogger) InfoConfigChange(oldName, newName string) {
+	styledMsg := fmt.Sprintf("Endpoint configuration changed for %s to: %s",
+		pterm.Style{sl.theme.Endpoint}.Sprint(oldName),
+		pterm.Style{sl.theme.Endpoint}.Sprint(newName))
+	sl.logger.Info(styledMsg)
 }
 
 func (sl *StyledLogger) WithAttrs(attrs ...slog.Attr) *StyledLogger {
