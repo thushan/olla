@@ -1051,7 +1051,6 @@ func TestStaticEndpointRepository_UpsertFromConfig_NewEndpointsNeedScheduling(t 
 		t.Errorf("New endpoint should start with StatusUnknown, got %s", endpoint.Status)
 	}
 
-	// Document that this endpoint needs to be scheduled by external system
 	t.Logf("INTEGRATION REQUIREMENT: New endpoint %s needs to be scheduled for health checks", endpoint.Name)
 }
 

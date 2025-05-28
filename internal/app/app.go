@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/spf13/viper"
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
@@ -13,12 +12,9 @@ import (
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
 	"net/http"
-	"sync"
 )
 
-// Application represents the Olla application
 type Application struct {
-	configMu         sync.RWMutex
 	config           *config.Config
 	server           *http.Server
 	logger           *logger.StyledLogger
@@ -29,17 +25,16 @@ type Application struct {
 	errCh            chan error
 }
 
-// New creates a new application instance
 func New(logger *logger.StyledLogger) (*Application, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
 
-	/**
-	 * Slightly annoying but we have to setup the configuration with defaults here
-	 * then load it again with viper to allow hot reloading.
-	 **/
 	registry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthCheckerWithDefaults(repository, logger)
-	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, nil, logger)
+	discoveryService := discovery.NewStaticDiscoveryService(repository, healthChecker, cfg.Discovery.Static.Endpoints, logger)
 
 	balancerFactory := balancer.NewFactory()
 	selector, err := balancerFactory.Create(DefaultLoadBalancer)
@@ -50,11 +45,20 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	proxyService := proxy.NewService(
 		discoveryService,
 		selector,
-		DefaultProxyConfiguration(),
+		updateProxyConfiguration(cfg),
 		logger,
 	)
 
+	server := &http.Server{
+		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		Handler:      nil,
+	}
+
 	app := &Application{
+		config:           cfg,
+		server:           server,
 		logger:           logger,
 		registry:         registry,
 		discoveryService: discoveryService,
@@ -62,51 +66,10 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 		errCh:            make(chan error, 1),
 	}
 
-	cfg, err := config.Load(func() {
-		// Hot reloading of configuration file
-		// this is a bit tricky, inspired by Viper's docs.
-		if err := viper.ReadInConfig(); err != nil {
-			logger.Error("Failed to re-read config file", "error", err)
-			return
-		}
-
-		newConfig := config.DefaultConfig()
-		if err := viper.Unmarshal(newConfig); err != nil {
-			logger.Error("Failed to unmarshal new config", "error", err)
-			return
-		}
-
-		app.setConfig(newConfig)
-
-		discoveryService.SetConfig(newConfig)
-		discoveryService.ReloadConfig()
-
-		proxyService.UpdateConfig(updateProxyConfiguration(newConfig))
-
-	})
-	if err != nil {
-		return nil, fmt.Errorf("Failed to load configuration: %v\n", err)
-	}
-
-	// Now we can set the configuration properly
-	app.setConfig(cfg)
-	discoveryService.SetConfig(cfg)
-	proxyService.UpdateConfig(updateProxyConfiguration(cfg))
-
-	server := &http.Server{
-		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-		Handler:      nil, // Will be set in Start()
-	}
-	app.server = server
-
 	return app, nil
 }
 
-// Start starts the application
 func (a *Application) Start(ctx context.Context) error {
-
 	go func() {
 		select {
 		case err := <-a.errCh:
@@ -127,12 +90,10 @@ func (a *Application) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop stops the application
 func (a *Application) Stop(ctx context.Context) error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, a.config.Server.ShutdownTimeout)
 	defer cancel()
 
-	// Stop discovery service first
 	if err := a.discoveryService.Stop(shutdownCtx); err != nil {
 		a.logger.Error("Failed to stop discovery service", "error", err)
 	}

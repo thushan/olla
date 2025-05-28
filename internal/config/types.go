@@ -48,13 +48,13 @@ type StaticDiscoveryConfig struct {
 
 // EndpointConfig holds configuration for an Ollama endpoint
 type EndpointConfig struct {
-	Name           string        `mapstructure:"name"`
-	URL            string        `mapstructure:"url"`
-	Priority       int           `mapstructure:"priority"`
-	HealthCheckURL string        `mapstructure:"health_check_url"`
-	ModelURL       string        `mapstructure:"model_url"`
-	CheckInterval  time.Duration `mapstructure:"check_interval"`
-	CheckTimeout   time.Duration `mapstructure:"check_timeout"`
+	Name           string        `mapstructure:"name" yaml:"name"`
+	URL            string        `mapstructure:"url" yaml:"url"`
+	Priority       int           `mapstructure:"priority" yaml:"priority"`
+	HealthCheckURL string        `mapstructure:"health_check_url" yaml:"health_check_url"`
+	ModelURL       string        `mapstructure:"model_url" yaml:"model_url"`
+	CheckInterval  time.Duration `mapstructure:"check_interval" yaml:"check_interval"`
+	CheckTimeout   time.Duration `mapstructure:"check_timeout" yaml:"check_timeout"`
 }
 
 // ConsulDiscoveryConfig holds configuration for Consul service discovery
