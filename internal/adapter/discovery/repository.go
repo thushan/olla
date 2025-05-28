@@ -10,74 +10,20 @@ import (
 	"time"
 )
 
+const (
+	MinHealthCheckInterval = 1 * time.Second
+	MaxHealthCheckTimeout  = 30 * time.Second
+)
+
 type StaticEndpointRepository struct {
-	endpoints            map[string]*domain.Endpoint
-	mu                   sync.RWMutex
-	cacheMu              sync.RWMutex
-	cachedHealthyCopies  []*domain.Endpoint
-	cachedRoutableCopies []*domain.Endpoint
-	cacheValid           bool
-	lastModified         time.Time
-	cacheHits            int64
-	cacheMisses          int64
+	endpoints map[string]*domain.Endpoint
+	mu        sync.RWMutex
 }
 
 func NewStaticEndpointRepository() *StaticEndpointRepository {
 	return &StaticEndpointRepository{
 		endpoints: make(map[string]*domain.Endpoint),
 	}
-}
-
-func (r *StaticEndpointRepository) invalidateCache() {
-	r.cacheMu.Lock()
-	r.cacheValid = false
-	r.lastModified = time.Now()
-
-	// Clear cached slices to prevent memory leaks
-	r.cachedHealthyCopies = nil
-	r.cachedRoutableCopies = nil
-	r.cacheMu.Unlock()
-}
-
-// rebuildCacheIfNeeded now caches the actual copies, not just the filtering logic
-func (r *StaticEndpointRepository) rebuildCacheIfNeeded() {
-	r.cacheMu.Lock()
-	defer r.cacheMu.Unlock()
-
-	if r.cacheValid {
-		return
-	}
-
-	// Pre-allocate with reasonable estimates
-	endpointCount := len(r.endpoints)
-	healthyEstimate := endpointCount / 4  // Assume 25% healthy
-	routableEstimate := endpointCount / 2 // Assume 50% routable
-
-	if healthyEstimate < 4 {
-		healthyEstimate = 4
-	}
-	if routableEstimate < 8 {
-		routableEstimate = 8
-	}
-
-	r.cachedHealthyCopies = make([]*domain.Endpoint, 0, healthyEstimate)
-	r.cachedRoutableCopies = make([]*domain.Endpoint, 0, routableEstimate)
-
-	// Build both caches in one pass, storing actual copies
-	for _, endpoint := range r.endpoints {
-		if endpoint.Status == domain.StatusHealthy {
-			healthyCopy := *endpoint
-			r.cachedHealthyCopies = append(r.cachedHealthyCopies, &healthyCopy)
-		}
-
-		if endpoint.Status.IsRoutable() {
-			routableCopy := *endpoint
-			r.cachedRoutableCopies = append(r.cachedRoutableCopies, &routableCopy)
-		}
-	}
-
-	r.cacheValid = true
-	r.cacheMisses++
 }
 
 // GetAll returns all registered endpoints with fresh copies for mutation safety
@@ -89,7 +35,6 @@ func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoi
 		return []*domain.Endpoint{}, nil
 	}
 
-	// Always create fresh copies for GetAll - no caching since this changes frequently
 	endpoints := make([]*domain.Endpoint, 0, len(r.endpoints))
 	for _, endpoint := range r.endpoints {
 		endpointCopy := *endpoint
@@ -98,36 +43,34 @@ func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoi
 	return endpoints, nil
 }
 
-func (r *StaticEndpointRepository) getCachedEndpoints(getSlice func() []*domain.Endpoint) ([]*domain.Endpoint, error) {
+func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.Endpoint, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	r.rebuildCacheIfNeeded()
-
-	r.cacheMu.RLock()
-	defer r.cacheMu.RUnlock()
-
-	src := getSlice()
-	result := make([]*domain.Endpoint, len(src))
-	for i, endpoint := range src {
-		endpointCopy := *endpoint // mutation safety
-		result[i] = &endpointCopy
+	healthy := make([]*domain.Endpoint, 0)
+	for _, endpoint := range r.endpoints {
+		if endpoint.Status == domain.StatusHealthy {
+			healthyCopy := *endpoint
+			healthy = append(healthy, &healthyCopy)
+		}
 	}
 
-	r.cacheHits++
-	return result, nil
-}
-
-func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.Endpoint, error) {
-	return r.getCachedEndpoints(func() []*domain.Endpoint {
-		return r.cachedHealthyCopies
-	})
+	return healthy, nil
 }
 
 func (r *StaticEndpointRepository) GetRoutable(ctx context.Context) ([]*domain.Endpoint, error) {
-	return r.getCachedEndpoints(func() []*domain.Endpoint {
-		return r.cachedRoutableCopies
-	})
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	routable := make([]*domain.Endpoint, 0)
+	for _, endpoint := range r.endpoints {
+		if endpoint.Status.IsRoutable() {
+			routableCopy := *endpoint
+			routable = append(routable, &routableCopy)
+		}
+	}
+
+	return routable, nil
 }
 
 func (r *StaticEndpointRepository) UpdateStatus(ctx context.Context, endpointURL *url.URL, status domain.EndpointStatus) error {
@@ -140,12 +83,8 @@ func (r *StaticEndpointRepository) UpdateStatus(ctx context.Context, endpointURL
 		return &domain.ErrEndpointNotFound{URL: key}
 	}
 
-	// Only invalidate if status actually changed
-	if endpoint.Status != status {
-		endpoint.Status = status
-		endpoint.LastChecked = time.Now()
-		r.invalidateCache()
-	}
+	endpoint.Status = status
+	endpoint.LastChecked = time.Now()
 
 	return nil
 }
@@ -167,11 +106,6 @@ func (r *StaticEndpointRepository) UpdateEndpoint(ctx context.Context, endpoint 
 	existing.NextCheckTime = endpoint.NextCheckTime
 	existing.LastLatency = endpoint.LastLatency
 
-	// Always invalidate cache when UpdateEndpoint is called
-	// The caller wouldn't call this unless something changed
-	// NOTE: we test this in the repository_test.go!
-	r.invalidateCache()
-
 	return nil
 }
 
@@ -189,7 +123,6 @@ func (r *StaticEndpointRepository) Add(ctx context.Context, endpoint *domain.End
 	}
 
 	r.endpoints[key] = endpoint
-	r.invalidateCache()
 	return nil
 }
 
@@ -203,7 +136,6 @@ func (r *StaticEndpointRepository) Remove(ctx context.Context, endpointURL *url.
 	}
 
 	delete(r.endpoints, key)
-	r.invalidateCache()
 	return nil
 }
 
@@ -221,8 +153,8 @@ func (r *StaticEndpointRepository) Reset() {
 	defer r.mu.Unlock()
 
 	r.endpoints = make(map[string]*domain.Endpoint)
-	r.invalidateCache()
 }
+
 func (r *StaticEndpointRepository) UpsertFromConfig(ctx context.Context, configs []config.EndpointConfig) (*domain.EndpointChangeResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -237,7 +169,6 @@ func (r *StaticEndpointRepository) UpsertFromConfig(ctx context.Context, configs
 	endpointCount := len(configs)
 	if endpointCount == 0 {
 		r.endpoints = make(map[string]*domain.Endpoint)
-		r.invalidateCache()
 		return &domain.EndpointChangeResult{
 			Changed:  oldCount > 0,
 			Removed:  r.getEndpointChanges(oldEndpoints, "removed"),
@@ -287,12 +218,12 @@ func (r *StaticEndpointRepository) UpsertFromConfig(ctx context.Context, configs
 				URLString:            endpointURL.String(),
 				HealthCheckURLString: healthCheckURL.String(),
 				ModelURLString:       modelURL.String(),
-				Status:              existing.Status,
-				LastChecked:         existing.LastChecked,
-				ConsecutiveFailures: existing.ConsecutiveFailures,
-				BackoffMultiplier:   existing.BackoffMultiplier,
-				NextCheckTime:       existing.NextCheckTime,
-				LastLatency:         existing.LastLatency,
+				Status:               existing.Status,
+				LastChecked:          existing.LastChecked,
+				ConsecutiveFailures:  existing.ConsecutiveFailures,
+				BackoffMultiplier:    existing.BackoffMultiplier,
+				NextCheckTime:        existing.NextCheckTime,
+				LastLatency:          existing.LastLatency,
 			}
 		} else {
 			newEndpoint = &domain.Endpoint{
@@ -320,7 +251,6 @@ func (r *StaticEndpointRepository) UpsertFromConfig(ctx context.Context, configs
 
 	// Apply changes atomically
 	r.endpoints = newEndpoints
-	r.invalidateCache()
 
 	return changeResult, nil
 }
@@ -399,6 +329,37 @@ func (r *StaticEndpointRepository) getSpecificChanges(old, new *domain.Endpoint)
 
 	return changes
 }
+func validateEndpointConfig(cfg config.EndpointConfig) error {
+	if cfg.URL == "" {
+		return fmt.Errorf("endpoint URL cannot be empty")
+	}
+
+	if cfg.HealthCheckURL == "" {
+		return fmt.Errorf("health check URL cannot be empty")
+	}
+
+	if cfg.ModelURL == "" {
+		return fmt.Errorf("model URL cannot be empty")
+	}
+
+	if cfg.CheckInterval < MinHealthCheckInterval {
+		return fmt.Errorf("check_interval too short: minimum %v, got %v", MinHealthCheckInterval, cfg.CheckInterval)
+	}
+
+	if cfg.CheckTimeout >= cfg.CheckInterval {
+		return fmt.Errorf("check_timeout (%v) must be less than check_interval (%v)", cfg.CheckTimeout, cfg.CheckInterval)
+	}
+
+	if cfg.CheckTimeout > MaxHealthCheckTimeout {
+		return fmt.Errorf("check_timeout too long: maximum %v, got %v", MaxHealthCheckTimeout, cfg.CheckTimeout)
+	}
+
+	if cfg.Priority < 0 {
+		return fmt.Errorf("priority must be non-negative, got %d", cfg.Priority)
+	}
+
+	return nil
+}
 
 func (r *StaticEndpointRepository) getEndpointChanges(endpoints map[string]*domain.Endpoint, changeType string) []*domain.EndpointChange {
 	changes := make([]*domain.EndpointChange, 0, len(endpoints))
@@ -420,25 +381,19 @@ func (r *StaticEndpointRepository) endpointConfigUnchanged(existing *domain.Endp
 		existing.CheckTimeout == cfg.CheckTimeout
 }
 
-// GetCacheStats returns cache performance statistics
+// GetCacheStats returns repository statistics (no caching in simplified version)
 func (r *StaticEndpointRepository) GetCacheStats() map[string]interface{} {
-	// TODO: Remove later if we dont have a reporting endpoint
-	r.cacheMu.RLock()
-	defer r.cacheMu.RUnlock()
-
-	totalAccesses := r.cacheHits + r.cacheMisses
-	hitRate := float64(0)
-	if totalAccesses > 0 {
-		hitRate = float64(r.cacheHits) / float64(totalAccesses)
-	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 
 	return map[string]interface{}{
-		"cache_hits":        r.cacheHits,
-		"cache_misses":      r.cacheMisses,
-		"cache_hit_rate":    hitRate,
-		"cache_valid":       r.cacheValid,
-		"cached_healthy":    len(r.cachedHealthyCopies),
-		"cached_routable":   len(r.cachedRoutableCopies),
-		"last_invalidation": r.lastModified,
+		"cache_hits":        0,
+		"cache_misses":      0,
+		"cache_hit_rate":    0.0,
+		"cache_valid":       true,
+		"cached_healthy":    0,
+		"cached_routable":   0,
+		"last_invalidation": time.Now(),
+		"total_endpoints":   len(r.endpoints),
 	}
 }
