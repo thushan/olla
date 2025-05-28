@@ -21,7 +21,7 @@ func DefaultConfig() *Config {
 			Host:            DefaultHost,
 			Port:            DefaultPort,
 			ReadTimeout:     30 * time.Second,
-			WriteTimeout:    30 * time.Second,
+			WriteTimeout:    0, /* We don't want to timeout for proxies */
 			ShutdownTimeout: 10 * time.Second,
 		},
 		Proxy: ProxyConfig{
@@ -37,6 +37,7 @@ func DefaultConfig() *Config {
 			RefreshInterval: 30 * time.Second,
 			Static: StaticDiscoveryConfig{
 				Endpoints: []EndpointConfig{
+					/** Assume user has a default endpoint for Ollama API **/
 					{
 						Name:           "localhost",
 						URL:            "http://localhost:11434",
@@ -87,7 +88,8 @@ func DefaultConfig() *Config {
 func Load() (*Config, error) {
 	config := DefaultConfig()
 
-	configPaths := []string{"config.yaml", "config/config.yaml"}
+	// Prioritise users ./config.yaml or ./config/config.yaml before falling back to default.yaml
+	configPaths := []string{"config.yaml", "config/config.yaml" /* Development */, "default.yaml"}
 	if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
 		configPaths = []string{configFile}
 	}

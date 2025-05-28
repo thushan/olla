@@ -12,7 +12,12 @@ const (
 )
 
 func (a *Application) startWebServer() {
-	a.logger.Info("Starting WebServer...", "host", a.config.Server.Host, "port", a.config.Server.Port)
+	a.logger.Info("Starting WebServer...", "host", a.config.Server.Host, "port", a.config.Server.Port,
+		"read_timeout", a.config.Server.ReadTimeout, "write_timeout", a.config.Server.WriteTimeout)
+
+	if a.config.Server.WriteTimeout > 0 {
+		a.logger.Warn("Write timeout is set, this may cause issues with long-running requests. (default: 0s)", "write_timeout", a.config.Server.WriteTimeout)
+	}
 
 	mux := http.NewServeMux()
 
