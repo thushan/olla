@@ -3,8 +3,6 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/internal/version"
 	"io"
 	"net"
 	"net/http"
@@ -15,13 +13,8 @@ import (
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
-)
-
-const (
-	// TODO: add these to settings/config
-	DefaultReadTimeout      = 60 * time.Second // Default read timeout for streaming responses
-	DefaultStreamBufferSize = 8 * 1024         // 8 KB buffer for streaming responses
-
+	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/version"
 )
 
 type SherpaProxyService struct {
@@ -49,6 +42,20 @@ type proxyStats struct {
 	totalLatency       int64
 }
 
+const (
+	// TODO: add these to settings/config
+	DefaultReadTimeout                = 60 * time.Second
+	DefaultStreamBufferSize           = 8 * 1024
+	DefaultSetNoDelay                 = true
+	DefaultTimeout                    = 60 * time.Second
+	DefaultKeepAlive                  = 60 * time.Second
+	DefaultMaxIdleConns               = 100
+	DefaultIdleConnTimeout            = 90 * time.Second
+	DefaultTLSHandshakeTimeout        = 10 * time.Second
+	ClientDisconnectionBytesThreshold = 1024
+	ClientDisconnectionTimeThreshold  = 5 * time.Second
+)
+
 func NewService(
 	discoveryService ports.DiscoveryService,
 	selector domain.EndpointSelector,
@@ -56,21 +63,22 @@ func NewService(
 	logger *logger.StyledLogger,
 ) *SherpaProxyService {
 	transport := &http.Transport{
-		MaxIdleConns:        100,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
+		MaxIdleConns:        DefaultMaxIdleConns,
+		IdleConnTimeout:     DefaultIdleConnTimeout,
+		TLSHandshakeTimeout: DefaultTLSHandshakeTimeout,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
-				Timeout:   60 * time.Second,
-				KeepAlive: 60 * time.Second,
+				Timeout:   DefaultTimeout,
+				KeepAlive: DefaultKeepAlive,
 			}
 			conn, err := dialer.DialContext(ctx, network, addr)
 			if err != nil {
 				return nil, err
 			}
 			if tcpConn, ok := conn.(*net.TCPConn); ok {
-				// TODO: Make this configurable to allow disabling Nagle's algorithm
-				tcpConn.SetNoDelay(true)
+				if terr := tcpConn.SetNoDelay(DefaultSetNoDelay); terr != nil {
+					logger.Warn("Failed to set NoDelay", "err", terr)
+				}
 			}
 			return conn, nil
 		},
@@ -116,8 +124,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	s.logger.Debug("selected endpoint", "url", endpoint.URL.String())
 
-	// We have to strip the route prefix from the request path
-	// to ensure we forward the correct path to the upstream service
+	// Strip route prefix from request path for upstream
 	targetPath := s.stripRoutePrefix(r.Context(), r.URL.Path)
 	targetURL, err := url.Parse(endpoint.URL.String() + targetPath)
 	if err != nil {
@@ -131,13 +138,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	s.logger.Debug("built target URL", "target", targetURL.String())
 
-	// Create separate contexts for different phases
-
-	// but we cache the original client context - detects client disconnections
-	clientCtx := ctx
-
 	// Create upstream context with response timeout
-	// This context is independent of client disconnections to allow LLM responses to complete
 	upstreamCtx := ctx
 	if s.configuration.ResponseTimeout > 0 {
 		var cancel context.CancelFunc
@@ -145,7 +146,6 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 		defer cancel()
 	}
 
-	// Create proxy request with upstream context
 	proxyReq, err := http.NewRequestWithContext(upstreamCtx, r.Method, targetURL.String(), r.Body)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
@@ -155,12 +155,10 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	s.logger.Debug("created proxy request")
 
-	// Copy headers and add forwarding headers
 	s.copyHeaders(proxyReq, r)
 
 	s.logger.Debug("making roundtrip request", "target", targetURL.String(), "time", time.Now())
 
-	// Make the request using upstream context
 	resp, err := s.transport.RoundTrip(proxyReq)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
@@ -168,14 +166,12 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 		return totalBytes, fmt.Errorf("upstream request failed: %w", err)
 	}
 	defer func(Body io.ReadCloser) {
-		// this was a bit of a pain to hunt down when we had 40 servers running
-		// leaks galore because we never closed the response body properly.
 		_ = Body.Close()
 	}(resp.Body)
 
 	s.logger.Debug("roundtrip success", "status", resp.StatusCode, "time", time.Now())
 
-	// Track connection only after successsful establishment
+	// Track connection after successful establishment
 	s.selector.IncrementConnections(endpoint)
 	defer s.selector.DecrementConnections(endpoint)
 
@@ -189,11 +185,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	s.logger.Debug("starting response stream", "time", time.Now())
 
-	// Stream response using both contexts:
-	// - clientCtx: detects when client disconnects
-	// - upstreamCtx: controls upstream timeout behaviour
-	// - resp.Body: the actual response stream
-	if sumBytes, err := s.streamResponse(clientCtx, upstreamCtx, w, resp.Body); err != nil {
+	if sumBytes, err := s.streamResponse(ctx, upstreamCtx, w, resp.Body); err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.logger.Error("streaming failed", "error", err, "time", time.Now())
 		return totalBytes, err
@@ -244,18 +236,9 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 
 	// being good netizens *RFC7230*
 	proxyReq.Header.Set("X-Proxied-By", fmt.Sprintf("%s/%s", version.Name, version.Version))
-	// proxyReq.Header.Set("X-Olla-Request-ID", generateRequestID())
 	proxyReq.Header.Set("Via", fmt.Sprintf("1.1 olla/%s", version.Version))
-
-	/*
-		if endpoint := getEndpointFromContext(originalReq.Context()); endpoint != nil {
-			proxyReq.Header.Set("X-Olla-Endpoint", endpoint.Name)
-			proxyReq.Header.Set("X-Olla-Strategy", s.selector.Name())
-		}
-	*/
 }
 
-// streamResponse handles the complex streaming logic with dual context management
 func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader) (int, error) {
 	bufferSize := s.configuration.StreamBufferSize
 	if bufferSize == 0 {
@@ -265,7 +248,6 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 
 	flusher, canFlush := w.(http.Flusher)
 
-	// Use read timeout for inter-chunk timeouts
 	readTimeout := s.configuration.ReadTimeout
 	if readTimeout == 0 {
 		readTimeout = DefaultReadTimeout
@@ -278,7 +260,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 	lastReadTime := time.Now()
 
 	for {
-		// Check if client has disconnected (but don't let it cancel upstream immediately)
+		// Check if client disconnected
 		select {
 		case <-clientCtx.Done():
 			s.logger.Info("client disconnected during streaming",
@@ -286,17 +268,15 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				"read_count", readCount,
 				"error", clientCtx.Err(),
 				"time", time.Now())
-			// For LLM responses, we might want to continue for a short time
-			// in case the client reconnects or it's a temporary network issue
+			// Continue briefly for LLM responses in case client reconnects
 			if s.shouldContinueAfterClientDisconnect(totalBytes, time.Since(lastReadTime)) {
 				s.logger.Debug("continuing stream briefly after client disconnect")
-				// Continue but with a shorter timeout
 				clientCtx = context.Background()
 			} else {
 				return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
 			}
 		default:
-			// Client still connected, carry on son
+			// Client still connected
 		}
 
 		// Check upstream timeout
@@ -309,10 +289,10 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				"time", time.Now())
 			return totalBytes, fmt.Errorf("upstream timeout: %w", upstreamCtx.Err())
 		default:
-			// Upstream still valid, continue
+			// Upstream still valid
 		}
 
-		// Use a separate goroutine for reading to handle multiple context cancellations
+		// Read with timeout handling
 		type readResult struct {
 			n   int
 			err error
@@ -326,7 +306,6 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 			readCh <- readResult{n: n, err: err}
 		}()
 
-		// Wait for read with timeout
 		readTimer := time.NewTimer(readTimeout)
 
 		select {
@@ -336,11 +315,10 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				"total_bytes", totalBytes,
 				"read_count", readCount,
 				"time", time.Now())
-			// Don't immediately return - let the read complete and then decide
+			// Try to complete current read and send it
 			select {
 			case result := <-readCh:
 				if result.n > 0 {
-					// We got data, try to send it
 					if _, err := w.Write(buf[:result.n]); err != nil {
 						return totalBytes, fmt.Errorf("failed to write response after client disconnect: %w", err)
 					}
@@ -349,7 +327,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 					}
 				}
 			case <-time.After(1 * time.Second):
-				// Read is taking too long after client disconnect
+				// Read taking too long after client disconnect
 			}
 			return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
 
@@ -403,7 +381,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 						"total_bytes", totalBytes,
 						"read_count", readCount,
 						"time", time.Now())
-					return totalBytes, nil // Normal end of stream
+					return totalBytes, nil
 				}
 				s.logger.Error("stream read error",
 					"error", result.err,
@@ -416,12 +394,10 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 	}
 }
 
-// shouldContinueAfterClientDisconnect determines if we should continue streaming
-// after client disconnect - useful for LLM responses that might be valuable to cache
 func (s *SherpaProxyService) shouldContinueAfterClientDisconnect(bytesRead int, timeSinceLastRead time.Duration) bool {
-	// Continue if we've already read significant data and the stream is still active
-	// This allows for brief network interruptions during long LLM responses
-	return bytesRead > 1024 && timeSinceLastRead < 5*time.Second
+	// Continue if we've read significant data and stream is still active
+	// Allows for brief network interruptions during long LLM responses
+	return bytesRead > ClientDisconnectionBytesThreshold && timeSinceLastRead < ClientDisconnectionTimeThreshold
 }
 
 func (s *SherpaProxyService) GetStats(ctx context.Context) (ports.ProxyStats, error) {
