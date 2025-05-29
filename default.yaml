@@ -39,3 +39,6 @@ logging:
   level: "debug"  # debug, info, warn, error
   format: "json"  # json, text
   output: "stdout"  # stdout, file
+
+engineering:
+  show_nerdstats: false

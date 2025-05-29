@@ -12,11 +12,13 @@ const (
 )
 
 func (a *Application) startWebServer() {
-	a.logger.Info("Starting WebServer...", "host", a.config.Server.Host, "port", a.config.Server.Port,
-		"read_timeout", a.config.Server.ReadTimeout, "write_timeout", a.config.Server.WriteTimeout)
+	configServer := a.Config.Server
 
-	if a.config.Server.WriteTimeout > 0 {
-		a.logger.Warn("Write timeout is set, this may cause issues with long-running requests. (default: 0s)", "write_timeout", a.config.Server.WriteTimeout)
+	a.logger.Info("Starting WebServer...", "host", configServer.Host, "port", configServer.Port,
+		"read_timeout", configServer.ReadTimeout, "write_timeout", configServer.WriteTimeout)
+
+	if configServer.WriteTimeout > 0 {
+		a.logger.Warn("Write timeout is set, this may cause issues with long-running requests. (default: 0s)", "write_timeout", configServer.WriteTimeout)
 	}
 
 	mux := http.NewServeMux()
@@ -43,4 +45,5 @@ func (a *Application) registerRoutes() {
 	// a.registry.RegisterWithMethod("/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
 	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
 	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
+	a.registry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
 }

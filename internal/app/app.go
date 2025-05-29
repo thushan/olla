@@ -13,10 +13,12 @@ import (
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
 	"net/http"
+	"time"
 )
 
 type Application struct {
-	config        *config.Config
+	StartTime     time.Time
+	Config        *config.Config
 	server        *http.Server
 	logger        *logger.StyledLogger
 	registry      *router.RouteRegistry
@@ -27,7 +29,7 @@ type Application struct {
 	errCh         chan error
 }
 
-func New(logger *logger.StyledLogger) (*Application, error) {
+func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
@@ -66,7 +68,8 @@ func New(logger *logger.StyledLogger) (*Application, error) {
 	}
 
 	app := &Application{
-		config:        cfg,
+		StartTime:     startTime,
+		Config:        cfg,
 		server:        server,
 		logger:        logger,
 		registry:      registry,
@@ -92,7 +95,7 @@ func (a *Application) Start(ctx context.Context) error {
 	a.startWebServer()
 
 	// Directly use repository and health checker
-	if _, err := a.repository.UpsertFromConfig(ctx, a.config.Discovery.Static.Endpoints); err != nil {
+	if _, err := a.repository.UpsertFromConfig(ctx, a.Config.Discovery.Static.Endpoints); err != nil {
 		a.logger.Error("Failed to load endpoints from config", "error", err)
 		a.errCh <- err
 		return err
@@ -114,7 +117,7 @@ func (a *Application) Start(ctx context.Context) error {
 }
 
 func (a *Application) Stop(ctx context.Context) error {
-	shutdownCtx, cancel := context.WithTimeout(ctx, a.config.Server.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(ctx, a.Config.Server.ShutdownTimeout)
 	defer cancel()
 
 	if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {

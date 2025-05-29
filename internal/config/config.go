@@ -84,6 +84,9 @@ func DefaultConfig() *Config {
 			Enabled:   []string{},
 			Config:    map[string]interface{}{},
 		},
+		Engineering: EngineeringConfig{
+			ShowNerdStats: false,
+		},
 	}
 }
 
