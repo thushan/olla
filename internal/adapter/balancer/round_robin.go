@@ -10,8 +10,8 @@ import (
 )
 
 type RoundRobinSelector struct {
-	counter     uint64
 	connections map[string]int64
+	counter     uint64
 	mu          sync.RWMutex
 }
 

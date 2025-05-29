@@ -131,8 +131,8 @@ func (a *Application) Stop(ctx context.Context) error {
 // simpleDiscovery implements ports.DiscoveryService without the wrapper complexity
 type simpleDiscovery struct {
 	repository *discovery.StaticEndpointRepository
-	endpoints  []config.EndpointConfig
 	logger     *logger.StyledLogger
+	endpoints  []config.EndpointConfig
 }
 
 func (s *simpleDiscovery) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {

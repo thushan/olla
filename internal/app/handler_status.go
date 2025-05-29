@@ -8,15 +8,15 @@ import (
 )
 
 type EndpointStatusResponse struct {
+	LastChecked         time.Time `json:"last_checked"`
+	NextCheckTime       time.Time `json:"next_check_time"`
 	Name                string    `json:"name"`
 	URL                 string    `json:"url"`
-	Priority            int       `json:"priority"`
 	Status              string    `json:"status"`
-	LastChecked         time.Time `json:"last_checked"`
 	LastLatency         string    `json:"last_latency"`
+	Priority            int       `json:"priority"`
 	ConsecutiveFailures int       `json:"consecutive_failures"`
 	BackoffMultiplier   int       `json:"backoff_multiplier"`
-	NextCheckTime       time.Time `json:"next_check_time"`
 }
 
 // statusHandler handles endpoint status requests

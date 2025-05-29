@@ -4,10 +4,10 @@ import "time"
 
 // Config holds all configuration for the application
 type Config struct {
+	Logging     LoggingConfig     `yaml:"logging"`
+	Discovery   DiscoveryConfig   `yaml:"discovery"`
 	Server      ServerConfig      `yaml:"server"`
 	Proxy       ProxyConfig       `yaml:"proxy"`
-	Discovery   DiscoveryConfig   `yaml:"discovery"`
-	Logging     LoggingConfig     `yaml:"logging"`
 	Engineering EngineeringConfig `yaml:"engineering"`
 }
 
@@ -22,20 +22,20 @@ type ServerConfig struct {
 
 // ProxyConfig holds proxy-specific configuration
 type ProxyConfig struct {
+	LoadBalancer      string        `yaml:"load_balancer"`
 	ConnectionTimeout time.Duration `yaml:"connection_timeout"`
 	ResponseTimeout   time.Duration `yaml:"response_timeout"`
 	ReadTimeout       time.Duration `yaml:"read_timeout"`
 	MaxRetries        int           `yaml:"max_retries"`
 	RetryBackoff      time.Duration `yaml:"retry_backoff"`
-	LoadBalancer      string        `yaml:"load_balancer"`
 	StreamBufferSize  int           `yaml:"stream_buffer_size"`
 }
 
 // DiscoveryConfig holds service discovery configuration
 type DiscoveryConfig struct {
 	Type            string                `yaml:"type"` // Only "static" is implemented
-	RefreshInterval time.Duration         `yaml:"refresh_interval"`
 	Static          StaticDiscoveryConfig `yaml:"static"`
+	RefreshInterval time.Duration         `yaml:"refresh_interval"`
 }
 
 // StaticDiscoveryConfig holds static endpoint configuration
@@ -47,9 +47,9 @@ type StaticDiscoveryConfig struct {
 type EndpointConfig struct {
 	Name           string        `yaml:"name"`
 	URL            string        `yaml:"url"`
-	Priority       int           `yaml:"priority"`
 	HealthCheckURL string        `yaml:"health_check_url"`
 	ModelURL       string        `yaml:"model_url"`
+	Priority       int           `yaml:"priority"`
 	CheckInterval  time.Duration `yaml:"check_interval"`
 	CheckTimeout   time.Duration `yaml:"check_timeout"`
 }

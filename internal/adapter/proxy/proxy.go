@@ -27,11 +27,11 @@ type SherpaProxyService struct {
 }
 
 type Configuration struct {
+	ProxyPrefix         string
 	ConnectionTimeout   time.Duration
 	ConnectionKeepAlive time.Duration
 	ResponseTimeout     time.Duration
 	ReadTimeout         time.Duration
-	ProxyPrefix         string
 	StreamBufferSize    int
 }
 
@@ -294,8 +294,8 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 
 		// Read with timeout handling
 		type readResult struct {
-			n   int
 			err error
+			n   int
 		}
 
 		readCh := make(chan readResult, 1)

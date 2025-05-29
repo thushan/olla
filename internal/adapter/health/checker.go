@@ -20,15 +20,15 @@ const (
 )
 
 type HTTPHealthChecker struct {
-	healthClient     *HealthClient
 	repository       domain.EndpointRepository
+	healthClient     *HealthClient
 	ticker           *time.Ticker
 	stopCh           chan struct{}
 	logger           *logger.StyledLogger
-	isRunning        atomic.Bool
 	lastLoggedStatus map[string]domain.EndpointStatus
 	lastLogTime      map[string]time.Time
 	logMu            sync.RWMutex
+	isRunning        atomic.Bool
 }
 
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {

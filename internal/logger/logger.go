@@ -16,12 +16,12 @@ import (
 
 type Config struct {
 	Level      string
-	FileOutput bool
 	LogDir     string
+	Theme      string
 	MaxSize    int // megabytes
 	MaxBackups int
 	MaxAge     int // days
-	Theme      string
+	FileOutput bool
 }
 
 const (

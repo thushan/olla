@@ -6,9 +6,9 @@ import (
 )
 
 type HealthCheckResult struct {
+	Error     error
 	Status    EndpointStatus
 	Latency   time.Duration
-	Error     error
 	ErrorType HealthCheckErrorType
 }
 

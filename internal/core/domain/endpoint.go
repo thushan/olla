@@ -19,22 +19,22 @@ const (
 )
 
 type Endpoint struct {
-	Name                  string
+	LastChecked           time.Time
+	NextCheckTime         time.Time
 	URL                   *url.URL
-	Priority              int
 	HealthCheckURL        *url.URL
 	ModelUrl              *url.URL
-	CheckInterval         time.Duration
-	CheckTimeout          time.Duration
+	Name                  string
 	Status                EndpointStatus
-	LastChecked           time.Time
 	URLString             string
 	HealthCheckPathString string
 	HealthCheckURLString  string
 	ModelURLString        string
+	Priority              int
+	CheckInterval         time.Duration
+	CheckTimeout          time.Duration
 	ConsecutiveFailures   int
 	BackoffMultiplier     int
-	NextCheckTime         time.Time
 	LastLatency           time.Duration
 }
 
