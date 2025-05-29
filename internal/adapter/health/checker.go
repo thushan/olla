@@ -25,9 +25,8 @@ type HTTPHealthChecker struct {
 	ticker           *time.Ticker
 	stopCh           chan struct{}
 	logger           *logger.StyledLogger
-	lastLoggedStatus map[string]domain.EndpointStatus
-	lastLogTime      map[string]time.Time
-	logMu            sync.RWMutex
+	lastLoggedStatus sync.Map
+	lastLogTime      sync.Map
 	isRunning        atomic.Bool
 }
 
@@ -36,12 +35,10 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.S
 	healthClient := NewHealthClient(client, circuitBreaker)
 
 	return &HTTPHealthChecker{
-		healthClient:     healthClient,
-		repository:       repository,
-		logger:           logger,
-		stopCh:           make(chan struct{}),
-		lastLoggedStatus: make(map[string]domain.EndpointStatus),
-		lastLogTime:      make(map[string]time.Time),
+		healthClient: healthClient,
+		repository:   repository,
+		logger:       logger,
+		stopCh:       make(chan struct{}),
 	}
 }
 
@@ -92,6 +89,12 @@ func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 }
 
 func (c *HTTPHealthChecker) healthCheckLoop(ctx context.Context) {
+	defer func() {
+		if c.ticker != nil {
+			c.ticker.Stop()
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -164,17 +167,13 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 	// Status change logging: ALWAYS log any status change immediately,
 	// only throttle when status remains the same
 	endpointKey := endpoint.GetURLString()
-
-	c.logMu.RLock()
-	lastLogTime := c.lastLogTime[endpointKey]
-	c.logMu.RUnlock()
+	lastLogTimeInterface, _ := c.lastLogTime.Load(endpointKey)
+	lastLogTime, _ := lastLogTimeInterface.(time.Time)
 
 	if statusChanged {
 		// ANY status change gets logged immediately - this is critical for ops
-		c.logMu.Lock()
-		c.lastLoggedStatus[endpointKey] = newStatus
-		c.lastLogTime[endpointKey] = time.Now()
-		c.logMu.Unlock()
+		c.lastLoggedStatus.Store(endpointKey, newStatus)
+		c.lastLogTime.Store(endpointKey, time.Now())
 
 		// Special handling for initial status discovery
 		if oldStatus == domain.StatusUnknown {
@@ -208,9 +207,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		}
 	} else if err != nil && time.Since(lastLogTime) > LogThrottleInterval {
 		// Same status but still having issues - only log every 2 minutes to avoid spam
-		c.logMu.Lock()
-		c.lastLogTime[endpointKey] = time.Now()
-		c.logMu.Unlock()
+		c.lastLogTime.Store(endpointKey, time.Now())
 
 		c.logger.WarnWithEndpoint("Endpoint still having issues:", endpoint.Name,
 			"status", newStatus.String(),
