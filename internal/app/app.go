@@ -8,7 +8,6 @@ import (
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy"
 	"github.com/thushan/olla/internal/config"
-	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
@@ -46,11 +45,11 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 	}
 
 	// Create a simple discovery service wrapper
-	discoveryService := &SimpleDiscoveryService{
-		repository:    repository,
-		healthChecker: healthChecker,
-		endpoints:     cfg.Discovery.Static.Endpoints,
-		logger:        logger,
+	discoveryService := &discovery.SimpleDiscoveryService{
+		Repository:    repository,
+		HealthChecker: healthChecker,
+		Endpoints:     cfg.Discovery.Static.Endpoints,
+		Logger:        logger,
 	}
 
 	proxyService := proxy.NewService(
@@ -128,46 +127,5 @@ func (a *Application) Stop(ctx context.Context) error {
 		return fmt.Errorf("HTTP server shutdown error: %w", err)
 	}
 
-	return nil
-}
-
-// SimpleDiscoveryService is a minimal wrapper that maintains the interface
-type SimpleDiscoveryService struct {
-	repository    *discovery.StaticEndpointRepository
-	healthChecker *health.HTTPHealthChecker
-	endpoints     []config.EndpointConfig
-	logger        *logger.StyledLogger
-}
-
-func (s *SimpleDiscoveryService) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
-	return s.repository.GetAll(ctx)
-}
-
-func (s *SimpleDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
-	routable, err := s.repository.GetRoutable(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(routable) > 0 {
-		return routable, nil
-	}
-
-	s.logger.Warn("No routable endpoints available, falling back to all endpoints")
-	return s.repository.GetAll(ctx)
-}
-
-func (s *SimpleDiscoveryService) RefreshEndpoints(ctx context.Context) error {
-	_, err := s.repository.UpsertFromConfig(ctx, s.endpoints)
-	return err
-}
-
-func (s *SimpleDiscoveryService) Start(ctx context.Context) error {
-	// This is now handled directly in Application.Start()
-	return nil
-}
-
-func (s *SimpleDiscoveryService) Stop(ctx context.Context) error {
-	// This is now handled directly in Application.Stop()
 	return nil
 }
