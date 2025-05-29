@@ -141,9 +141,9 @@ func buildLoggerConfig() *logger.Config {
 		Level:      env.GetEnvOrDefault("OLLA_LOG_LEVEL", "info"),
 		FileOutput: env.GetEnvBoolOrDefault("OLLA_FILE_OUTPUT", true),
 		LogDir:     env.GetEnvOrDefault("OLLA_LOG_DIR", "./logs"),
-		MaxSize:    env.GetEnvIntOrDefault("OLLA_MAX_SIZE", 100),
-		MaxBackups: env.GetEnvIntOrDefault("OLLA_MAX_BACKUPS", 5),
-		MaxAge:     env.GetEnvIntOrDefault("OLLA_MAX_AGE", 30),
+		MaxSize:    env.GetEnvIntOrDefault("OLLA_LOG_SIZE_MB", 10),
+		MaxBackups: env.GetEnvIntOrDefault("OLLA_LOG_MAX_BACKUPS", 7),
+		MaxAge:     env.GetEnvIntOrDefault("OLLA_LOG_MAX_AGE_DAYS", 30),
 		Theme:      env.GetEnvOrDefault("OLLA_THEME", "default"),
 	}
 }
