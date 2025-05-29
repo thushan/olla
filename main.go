@@ -72,8 +72,9 @@ func main() {
 	if err := application.Stop(context.Background()); err != nil {
 		styledLogger.Error("Error during shutdown", "error", err)
 	}
-
-	reportProcessStats(styledLogger, startTime)
+	if application.Config.Engineering.ShowNerdStats {
+		reportProcessStats(styledLogger, startTime)
+	}
 
 	styledLogger.Info("Olla has shutdown")
 }

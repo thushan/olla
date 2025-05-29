@@ -50,13 +50,12 @@ type ProcessStatsResponse struct {
 }
 
 func (a *Application) processStatsHandler(w http.ResponseWriter, r *http.Request) {
-	stats := nerdstats.Snapshot(a.startTime)
+	stats := nerdstats.Snapshot(a.StartTime)
 
 	response := ProcessStatsResponse{
 		Timestamp: time.Now(),
 	}
 
-	// Populate memory stats
 	response.Memory.HeapAlloc = format.Bytes(stats.HeapAlloc)
 	response.Memory.HeapSys = format.Bytes(stats.HeapSys)
 	response.Memory.HeapInuse = format.Bytes(stats.HeapInuse)
@@ -65,12 +64,10 @@ func (a *Application) processStatsHandler(w http.ResponseWriter, r *http.Request
 	response.Memory.TotalAlloc = format.Bytes(stats.TotalAlloc)
 	response.Memory.MemoryPressure = stats.GetMemoryPressure()
 
-	// Populate allocation stats
 	response.Allocations.TotalMallocs = stats.Mallocs
 	response.Allocations.TotalFrees = stats.Frees
 	response.Allocations.NetObjects = int64(stats.Mallocs) - int64(stats.Frees)
 
-	// Populate GC stats
 	response.GarbageCollection.NumGC = stats.NumGC
 	if !stats.LastGC.IsZero() {
 		response.GarbageCollection.LastGC = stats.LastGC.Format(time.RFC3339)
@@ -82,12 +79,10 @@ func (a *Application) processStatsHandler(w http.ResponseWriter, r *http.Request
 	}
 	response.GarbageCollection.GCCPUFraction = stats.GCCPUFraction
 
-	// Populate goroutine stats
 	response.Goroutines.Count = stats.NumGoroutines
 	response.Goroutines.HealthStatus = stats.GetGoroutineHealthStatus()
 	response.Goroutines.CgoCalls = stats.NumCgoCall
 
-	// Populate runtime stats
 	response.Runtime.Uptime = format.Duration(stats.Uptime)
 	response.Runtime.GoVersion = stats.GoVersion
 	response.Runtime.NumCPU = stats.NumCPU

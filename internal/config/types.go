@@ -4,13 +4,14 @@ import "time"
 
 // Config holds all configuration for the application
 type Config struct {
-	Server    ServerConfig    `mapstructure:"server" yaml:"server"`
-	Proxy     ProxyConfig     `mapstructure:"proxy" yaml:"proxy"`
-	Discovery DiscoveryConfig `mapstructure:"discovery" yaml:"discovery"`
-	Logging   LoggingConfig   `mapstructure:"logging" yaml:"logging"`
-	Telemetry TelemetryConfig `mapstructure:"telemetry" yaml:"telemetry"`
-	Security  SecurityConfig  `mapstructure:"security" yaml:"security"`
-	Plugins   PluginsConfig   `mapstructure:"plugins" yaml:"plugins"`
+	Server      ServerConfig      `mapstructure:"server" yaml:"server"`
+	Proxy       ProxyConfig       `mapstructure:"proxy" yaml:"proxy"`
+	Discovery   DiscoveryConfig   `mapstructure:"discovery" yaml:"discovery"`
+	Logging     LoggingConfig     `mapstructure:"logging" yaml:"logging"`
+	Telemetry   TelemetryConfig   `mapstructure:"telemetry" yaml:"telemetry"`
+	Security    SecurityConfig    `mapstructure:"security" yaml:"security"`
+	Plugins     PluginsConfig     `mapstructure:"plugins" yaml:"plugins"`
+	Engineering EngineeringConfig `mapstructure:"engineering" yaml:"engineering"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -20,6 +21,10 @@ type ServerConfig struct {
 	ReadTimeout     time.Duration `mapstructure:"read_timeout" yaml:"read_timeout"`
 	WriteTimeout    time.Duration `mapstructure:"write_timeout" yaml:"write_timeout"`
 	ShutdownTimeout time.Duration `mapstructure:"shutdown_timeout" yaml:"shutdown_timeout"`
+}
+
+type EngineeringConfig struct {
+	ShowNerdStats bool `mapstructure:"show_nerdstats" yaml:"show_nerdstats"` // Show nerd stats when olla closes
 }
 
 // ProxyConfig holds proxy-specific configuration

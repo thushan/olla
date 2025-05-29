@@ -32,7 +32,7 @@ type NerdStats struct {
 	Mallocs      uint64 // Number of malloc operations
 	Frees        uint64 // Number of free operations
 
-	// Garbage collection stats
+	// GC stats
 	NumGC         uint32        // Number of GC cycles
 	LastGC        time.Time     // Time of last GC
 	TotalGCTime   time.Duration // Total time spent in GC
@@ -42,14 +42,14 @@ type NerdStats struct {
 	NumGoroutines int   // Number of goroutines
 	NumCgoCall    int64 // Number of cgo calls
 
-	// Runtime stats
+	// Go stats
 	NumCPU     int           // Number of logical CPUs
 	GOMAXPROCS int           // Max OS threads for Go
 	GoVersion  string        // Go version
 	Uptime     time.Duration // Process uptime
 
 	// Debug info
-	BuildInfo *debug.BuildInfo // Build information if available
+	BuildInfo *debug.BuildInfo
 }
 
 func Snapshot(startTime time.Time) *NerdStats {
@@ -67,15 +67,15 @@ func Snapshot(startTime time.Time) *NerdStats {
 		Mallocs:      m.Mallocs,
 		Frees:        m.Frees,
 
-		// GC stats
+		// GC
 		NumGC:         m.NumGC,
 		GCCPUFraction: m.GCCPUFraction,
 
-		// Goroutine stats
+		// Goroutine
 		NumGoroutines: runtime.NumGoroutine(),
 		NumCgoCall:    runtime.NumCgoCall(),
 
-		// Runtime stats
+		// Runtime
 		NumCPU:     runtime.NumCPU(),
 		GOMAXPROCS: runtime.GOMAXPROCS(0),
 		GoVersion:  runtime.Version(),
@@ -88,7 +88,6 @@ func Snapshot(startTime time.Time) *NerdStats {
 		stats.TotalGCTime = time.Duration(m.PauseTotalNs)
 	}
 
-	// Get build info if available
 	if info, ok := debug.ReadBuildInfo(); ok {
 		stats.BuildInfo = info
 	}
@@ -111,7 +110,7 @@ func (ps *NerdStats) GetMemoryPressure() string {
 
 // GetGoroutineHealthStatus assesses goroutine count health
 func (ps *NerdStats) GetGoroutineHealthStatus() string {
-	// These thresholds are conservative for Olla
+	// These thresholds are conservative
 	if ps.NumGoroutines > 1000 {
 		return "CONCERNING"
 	} else if ps.NumGoroutines > 500 {
