@@ -29,7 +29,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	healthy, err := a.repository.GetRoutable(ctx)
+	healthy, err := a.repository.GetHealthy(ctx)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get healthy endpoints: %v", err), http.StatusInternalServerError)
 		return

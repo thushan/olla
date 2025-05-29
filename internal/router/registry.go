@@ -3,13 +3,12 @@ package router
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 	"net/http"
 	"sort"
 
 	"github.com/pterm/pterm"
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/logger"
 )
 
 type RouteInfo struct {
@@ -67,7 +66,7 @@ func (r *RouteRegistry) logRoutesTable() {
 		return
 	}
 
-	// Collect routes in registration order
+	// Sort routes by registration order
 	type routeEntry struct {
 		path   string
 		method string
@@ -85,12 +84,11 @@ func (r *RouteRegistry) logRoutesTable() {
 		})
 	}
 
-	// Sort by registration order
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].order < entries[j].order
 	})
 
-	// Build table data
+	// Build table
 	tableData := [][]string{
 		{"ROUTE", "METHOD", "DESCRIPTION"},
 	}
@@ -102,7 +100,8 @@ func (r *RouteRegistry) logRoutesTable() {
 			entry.desc,
 		})
 	}
-	r.logger.Info(fmt.Sprintf("Registered routes %s", pterm.Style{theme.Default().Counts}.Sprintf("(%d)", len(entries))))
+
+	r.logger.Info(fmt.Sprintf("Registered routes %s", pterm.Style{r.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
 	tableString, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
 	fmt.Print(tableString)
 }

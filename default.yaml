@@ -5,7 +5,6 @@ server:
   read_timeout: 20s
   write_timeout: 0s
   shutdown_timeout: 10s
-  interactive_cli: true
 
 proxy:
   connection_timeout: 40s
@@ -14,9 +13,10 @@ proxy:
   max_retries: 3
   retry_backoff: 500ms
   load_balancer: "priority"
+  stream_buffer_size: 8192
 
 discovery:
-  type: "static"  # static, consul, etcd
+  type: "static"
   refresh_interval: 30s
   static:
     endpoints:
@@ -36,9 +36,9 @@ discovery:
         check_timeout: 2s
 
 logging:
-  level: "debug"  # debug, info, warn, error
-  format: "json"  # json, text
-  output: "stdout"  # stdout, file
+  level: "info"
+  format: "json"
+  output: "stdout"
 
 engineering:
   show_nerdstats: false

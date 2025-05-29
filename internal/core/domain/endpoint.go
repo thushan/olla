@@ -93,6 +93,7 @@ func (e *ErrEndpointNotFound) Error() string {
 type EndpointRepository interface {
 	GetAll(ctx context.Context) ([]*Endpoint, error)
 	GetRoutable(ctx context.Context) ([]*Endpoint, error)
+	GetHealthy(ctx context.Context) ([]*Endpoint, error)
 	UpdateEndpoint(ctx context.Context, endpoint *Endpoint) error
 	LoadFromConfig(ctx context.Context, configs []config.EndpointConfig) error
 	Exists(ctx context.Context, endpointURL *url.URL) bool

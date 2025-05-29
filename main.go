@@ -1,14 +1,8 @@
-// main.go - Updated sections to use styled logger
 package main
 
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/app"
-	"github.com/thushan/olla/internal/env"
-	"github.com/thushan/olla/internal/version"
-	"github.com/thushan/olla/pkg/format"
-	"github.com/thushan/olla/pkg/nerdstats"
 	"log"
 	"log/slog"
 	"os"
@@ -17,12 +11,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thushan/olla/internal/app"
+	"github.com/thushan/olla/internal/env"
 	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/version"
+	"github.com/thushan/olla/pkg/format"
+	"github.com/thushan/olla/pkg/nerdstats"
 )
 
 func main() {
 	startTime := time.Now()
 	vlog := log.New(log.Writer(), "", 0)
+
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		version.PrintVersionInfo(true, vlog)
 		os.Exit(0)
@@ -30,7 +30,7 @@ func main() {
 		version.PrintVersionInfo(false, vlog)
 	}
 
-	// setup: logging with styled logger
+	// Setup logging
 	lcfg := buildLoggerConfig()
 	logInstance, styledLogger, cleanup, err := logger.NewWithTheme(lcfg)
 	if err != nil {
@@ -39,12 +39,11 @@ func main() {
 	}
 	defer cleanup()
 
-	// Set as default logger
 	slog.SetDefault(logInstance)
 
 	styledLogger.Info("Initialising", "version", version.Version, "pid", os.Getpid())
 
-	// setup: graceful shutdown
+	// Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -57,7 +56,6 @@ func main() {
 		cancel()
 	}()
 
-	// Pass styled logger to application
 	application, err := app.New(startTime, styledLogger)
 	if err != nil {
 		logger.FatalWithLogger(logInstance, "Failed to create application", "error", err)
@@ -72,6 +70,7 @@ func main() {
 	if err := application.Stop(context.Background()); err != nil {
 		styledLogger.Error("Error during shutdown", "error", err)
 	}
+
 	if application.Config.Engineering.ShowNerdStats {
 		reportProcessStats(styledLogger, startTime)
 	}
@@ -81,7 +80,6 @@ func main() {
 
 func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
 	runtime.GC()
-
 	stats := nerdstats.Snapshot(startTime)
 
 	logger.Info("Process Memory Stats",
@@ -138,7 +136,6 @@ func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
 	)
 }
 
-// buildLoggerConfig creates logger config from environment variables with defaults
 func buildLoggerConfig() *logger.Config {
 	return &logger.Config{
 		Level:      env.GetEnvOrDefault("OLLA_LOG_LEVEL", "info"),

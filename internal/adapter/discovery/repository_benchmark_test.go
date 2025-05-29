@@ -93,7 +93,7 @@ func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 	repo := NewStaticEndpointRepository()
 	ctx := context.Background()
 
-	config := config.EndpointConfig{
+	cfg := config.EndpointConfig{
 		Name:           "bench-update",
 		URL:            "http://localhost:11434",
 		HealthCheckURL: "/health",
@@ -103,7 +103,7 @@ func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 		CheckTimeout:   2 * time.Second,
 	}
 
-	_ = repo.LoadFromConfig(ctx, []config.EndpointConfig{config})
+	repo.LoadFromConfig(ctx, []config.EndpointConfig{cfg})
 	endpoints, _ := repo.GetAll(ctx)
 	endpoint := endpoints[0]
 

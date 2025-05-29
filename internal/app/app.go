@@ -26,7 +26,6 @@ type Application struct {
 	repository    *discovery.StaticEndpointRepository
 	healthChecker *health.HTTPHealthChecker
 	proxyService  ports.ProxyService
-	pluginService ports.PluginService
 	errCh         chan error
 }
 

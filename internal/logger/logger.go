@@ -67,7 +67,7 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	return logger, cleanup, nil
 }
 
-// createTerminalLogger creates a PTerm logger with theme colours
+// createTerminalLogger creates a PTerm logger with Theme colours
 func createTerminalLogger(level slog.Level, appTheme *theme.Theme) *pterm.Logger {
 	plogger := pterm.DefaultLogger.
 		WithLevel(convertToPTermLevel(level)).

@@ -43,6 +43,21 @@ func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoi
 	return endpoints, nil
 }
 
+func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.Endpoint, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	healthy := make([]*domain.Endpoint, 0)
+	for _, endpoint := range r.endpoints {
+		if endpoint.Status == domain.StatusHealthy {
+			healthyCopy := *endpoint
+			healthy = append(healthy, &healthyCopy)
+		}
+	}
+
+	return healthy, nil
+}
+
 func (r *StaticEndpointRepository) GetRoutable(ctx context.Context) ([]*domain.Endpoint, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
