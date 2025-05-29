@@ -66,6 +66,19 @@ func (m *mockRepository) GetAll(ctx context.Context) ([]*domain.Endpoint, error)
 	return endpoints, nil
 }
 
+func (m *mockRepository) GetHealthy(ctx context.Context) ([]*domain.Endpoint, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	healthy := make([]*domain.Endpoint, 0)
+	for _, ep := range m.endpoints {
+		if ep.Status == domain.StatusHealthy {
+			healthy = append(healthy, ep)
+		}
+	}
+	return healthy, nil
+}
+
 func (m *mockRepository) GetRoutable(ctx context.Context) ([]*domain.Endpoint, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -318,9 +331,9 @@ func TestHTTPHealthChecker_ForceHealthCheck(t *testing.T) {
 	defer checker.StopChecking(ctx)
 
 	// Force health check
-	err := checker.ForceHealthCheck(ctx)
+	err := checker.RunHealthCheck(ctx)
 	if err != nil {
-		t.Fatalf("ForceHealthCheck failed: %v", err)
+		t.Fatalf("RunHealthCheck failed: %v", err)
 	}
 
 	// Verify endpoint was updated
@@ -373,7 +386,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := checker.ForceHealthCheck(ctx)
+			err := checker.RunHealthCheck(ctx)
 			if err != nil {
 				errors <- err
 			}

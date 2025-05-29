@@ -106,7 +106,7 @@ func (a *Application) Start(ctx context.Context) error {
 	}
 
 	// Force initial health check
-	if err := a.healthChecker.ForceHealthCheck(ctx); err != nil {
+	if err := a.healthChecker.RunHealthCheck(ctx); err != nil {
 		a.logger.Warn("Failed to force initial health check", "error", err)
 	}
 

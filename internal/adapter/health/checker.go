@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -23,8 +24,9 @@ type HTTPHealthChecker struct {
 	stopCh           chan struct{}
 	logger           *logger.StyledLogger
 	isRunning        atomic.Bool
-	lastLoggedStatus map[string]domain.EndpointStatus // Simple noise reduction
+	lastLoggedStatus map[string]domain.EndpointStatus
 	lastLogTime      map[string]time.Time
+	logMu            sync.RWMutex
 }
 
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
@@ -62,9 +64,9 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 		return fmt.Errorf("failed to get endpoints for health checking: %w", err)
 	}
 
-	c.isRunning.Store(true)
-
 	c.logger.Info("Starting Health Checker Service", "check_interval", DefaultHealthCheckInterval, "endpoints", len(endpoints))
+
+	c.isRunning.Store(true)
 
 	c.ticker = time.NewTicker(DefaultHealthCheckInterval)
 	go c.healthCheckLoop(ctx)
@@ -160,12 +162,17 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 	// Status change logging: ALWAYS log any status change immediately,
 	// only throttle when status remains the same
 	endpointKey := endpoint.GetURLString()
+
+	c.logMu.RLock()
 	lastLogTime := c.lastLogTime[endpointKey]
+	c.logMu.RUnlock()
 
 	if statusChanged {
 		// ANY status change gets logged immediately - this is critical for ops
+		c.logMu.Lock()
 		c.lastLoggedStatus[endpointKey] = newStatus
 		c.lastLogTime[endpointKey] = time.Now()
+		c.logMu.Unlock()
 
 		// Special handling for initial status discovery
 		if oldStatus == domain.StatusUnknown {
@@ -199,7 +206,9 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		}
 	} else if err != nil && time.Since(lastLogTime) > LogThrottleInterval {
 		// Same status but still having issues - only log every 2 minutes to avoid spam
+		c.logMu.Lock()
 		c.lastLogTime[endpointKey] = time.Now()
+		c.logMu.Unlock()
 
 		c.logger.WarnWithEndpoint("Endpoint still having issues:", endpoint.Name,
 			"status", newStatus.String(),
@@ -224,7 +233,7 @@ func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 	}
 }
 
-func (c *HTTPHealthChecker) ForceHealthCheck(ctx context.Context) error {
+func (c *HTTPHealthChecker) RunHealthCheck(ctx context.Context) error {
 	if !c.isRunning.Load() {
 		return fmt.Errorf("health checker is not running")
 	}
