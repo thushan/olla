@@ -138,7 +138,7 @@ func (p *PrioritySelector) GetConnectionStats() map[string]int64 {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	stats := make(map[string]int64)
+	stats := make(map[string]int64, len(p.connections))
 	for endpoint, count := range p.connections {
 		stats[endpoint] = count
 	}

@@ -90,7 +90,7 @@ func (l *LeastConnectionsSelector) GetConnectionStats() map[string]int64 {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	stats := make(map[string]int64)
+	stats := make(map[string]int64, len(l.connections))
 	for endpoint, count := range l.connections {
 		stats[endpoint] = count
 	}

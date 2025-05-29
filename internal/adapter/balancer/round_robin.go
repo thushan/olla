@@ -78,7 +78,7 @@ func (r *RoundRobinSelector) GetConnectionStats() map[string]int64 {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	stats := make(map[string]int64)
+	stats := make(map[string]int64, len(r.connections))
 	for endpoint, count := range r.connections {
 		stats[endpoint] = count
 	}
