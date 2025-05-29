@@ -3,16 +3,18 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"time"
+
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy"
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
-	"net/http"
-	"time"
 )
 
 type Application struct {
@@ -44,12 +46,11 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
 
-	// Create a simple discovery service wrapper
-	discoveryService := &discovery.SimpleDiscoveryService{
-		Repository:    repository,
-		HealthChecker: healthChecker,
-		Endpoints:     cfg.Discovery.Static.Endpoints,
-		Logger:        logger,
+	// Create simple discovery wrapper that implements the interface
+	discoveryService := &simpleDiscovery{
+		repository: repository,
+		endpoints:  cfg.Discovery.Static.Endpoints,
+		logger:     logger,
 	}
 
 	proxyService := proxy.NewService(
@@ -93,8 +94,7 @@ func (a *Application) Start(ctx context.Context) error {
 
 	a.startWebServer()
 
-	// Directly use repository and health checker
-	if _, err := a.repository.UpsertFromConfig(ctx, a.Config.Discovery.Static.Endpoints); err != nil {
+	if err := a.repository.LoadFromConfig(ctx, a.Config.Discovery.Static.Endpoints); err != nil {
 		a.logger.Error("Failed to load endpoints from config", "error", err)
 		a.errCh <- err
 		return err
@@ -128,4 +128,33 @@ func (a *Application) Stop(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// simpleDiscovery implements ports.DiscoveryService without the wrapper complexity
+type simpleDiscovery struct {
+	repository *discovery.StaticEndpointRepository
+	endpoints  []config.EndpointConfig
+	logger     *logger.StyledLogger
+}
+
+func (s *simpleDiscovery) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return s.repository.GetAll(ctx)
+}
+
+func (s *simpleDiscovery) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	routable, err := s.repository.GetRoutable(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(routable) > 0 {
+		return routable, nil
+	}
+
+	s.logger.Warn("No routable endpoints available, falling back to all endpoints")
+	return s.repository.GetAll(ctx)
+}
+
+func (s *simpleDiscovery) RefreshEndpoints(ctx context.Context) error {
+	return s.repository.LoadFromConfig(ctx, s.endpoints)
 }

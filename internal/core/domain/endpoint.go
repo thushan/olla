@@ -3,9 +3,10 @@ package domain
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/config"
 	"net/url"
 	"time"
+
+	"github.com/thushan/olla/internal/config"
 )
 
 const (
@@ -42,9 +43,6 @@ func (e *Endpoint) GetURLString() string {
 
 func (e *Endpoint) GetHealthCheckURLString() string {
 	return e.HealthCheckURLString
-}
-func (e *ErrEndpointNotFound) Error() string {
-	return fmt.Sprintf("endpoint not found: %s", e.URL)
 }
 
 type EndpointStatus string
@@ -84,36 +82,20 @@ func (s EndpointStatus) String() string {
 	return string(s)
 }
 
-type EndpointChangeResult struct {
-	Changed  bool
-	Added    []*EndpointChange
-	Removed  []*EndpointChange
-	Modified []*EndpointChange
-	OldCount int
-	NewCount int
-}
-
-type EndpointChange struct {
-	Name    string
-	URL     string
-	Changes []string
-}
-
 type ErrEndpointNotFound struct {
 	URL string
 }
 
+func (e *ErrEndpointNotFound) Error() string {
+	return fmt.Sprintf("endpoint not found: %s", e.URL)
+}
+
 type EndpointRepository interface {
 	GetAll(ctx context.Context) ([]*Endpoint, error)
-	GetHealthy(ctx context.Context) ([]*Endpoint, error)
 	GetRoutable(ctx context.Context) ([]*Endpoint, error)
-	UpdateStatus(ctx context.Context, endpointURL *url.URL, status EndpointStatus) error
 	UpdateEndpoint(ctx context.Context, endpoint *Endpoint) error
-	UpsertFromConfig(ctx context.Context, configs []config.EndpointConfig) (*EndpointChangeResult, error)
-	Add(ctx context.Context, endpoint *Endpoint) error
-	Remove(ctx context.Context, endpointURL *url.URL) error
+	LoadFromConfig(ctx context.Context, configs []config.EndpointConfig) error
 	Exists(ctx context.Context, endpointURL *url.URL) bool
-	GetCacheStats() map[string]interface{}
 }
 
 type EndpointSelector interface {
