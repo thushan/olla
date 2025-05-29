@@ -14,7 +14,7 @@ const (
 func (a *Application) startWebServer() {
 	configServer := a.Config.Server
 
-	a.logger.Info("Starting WebServer...", "host", configServer.Host, "port", configServer.Port,
+	a.logger.Info("Starting Olla Server...", "host", configServer.Host, "port", configServer.Port,
 		"read_timeout", configServer.ReadTimeout, "write_timeout", configServer.WriteTimeout)
 
 	if configServer.WriteTimeout > 0 {
@@ -34,7 +34,7 @@ func (a *Application) startWebServer() {
 	}()
 
 	a.server.Handler = mux
-	a.logger.Info("Started WebServer", "bind", a.server.Addr)
+	a.logger.Info("Started Olla Server", "bind", a.server.Addr)
 }
 
 func (a *Application) registerRoutes() {

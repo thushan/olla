@@ -105,12 +105,11 @@ func (a *Application) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Force initial health check
-	if err := a.healthChecker.RunHealthCheck(ctx); err != nil {
+	if err := a.healthChecker.RunHealthCheck(ctx, true); err != nil {
 		a.logger.Warn("Failed to force initial health check", "error", err)
 	}
 
-	a.logger.Info("Olla started", "bind", a.server.Addr)
+	a.logger.Info("Olla started, waiting for requests...", "bind", a.server.Addr)
 	return nil
 }
 

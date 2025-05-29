@@ -101,7 +101,7 @@ func (r *RouteRegistry) logRoutesTable() {
 		})
 	}
 
-	r.logger.Info(fmt.Sprintf("Registered routes %s", pterm.Style{r.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
+	r.logger.Info(fmt.Sprintf("Registered web routes %s", pterm.Style{r.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
 	tableString, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
 	fmt.Print(tableString)
 }

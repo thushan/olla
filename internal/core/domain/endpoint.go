@@ -19,22 +19,23 @@ const (
 )
 
 type Endpoint struct {
-	Name                 string
-	URL                  *url.URL
-	Priority             int
-	HealthCheckURL       *url.URL
-	ModelUrl             *url.URL
-	CheckInterval        time.Duration
-	CheckTimeout         time.Duration
-	Status               EndpointStatus
-	LastChecked          time.Time
-	URLString            string
-	HealthCheckURLString string
-	ModelURLString       string
-	ConsecutiveFailures  int
-	BackoffMultiplier    int
-	NextCheckTime        time.Time
-	LastLatency          time.Duration
+	Name                  string
+	URL                   *url.URL
+	Priority              int
+	HealthCheckURL        *url.URL
+	ModelUrl              *url.URL
+	CheckInterval         time.Duration
+	CheckTimeout          time.Duration
+	Status                EndpointStatus
+	LastChecked           time.Time
+	URLString             string
+	HealthCheckPathString string
+	HealthCheckURLString  string
+	ModelURLString        string
+	ConsecutiveFailures   int
+	BackoffMultiplier     int
+	NextCheckTime         time.Time
+	LastLatency           time.Duration
 }
 
 func (e *Endpoint) GetURLString() string {

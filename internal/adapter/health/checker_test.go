@@ -331,7 +331,7 @@ func TestHTTPHealthChecker_ForceHealthCheck(t *testing.T) {
 	defer checker.StopChecking(ctx)
 
 	// Force health check
-	err := checker.RunHealthCheck(ctx)
+	err := checker.RunHealthCheck(ctx, true)
 	if err != nil {
 		t.Fatalf("RunHealthCheck failed: %v", err)
 	}
@@ -386,7 +386,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			err := checker.RunHealthCheck(ctx)
+			err := checker.RunHealthCheck(ctx, false)
 			if err != nil {
 				errors <- err
 			}

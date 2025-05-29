@@ -10,8 +10,8 @@ import (
 var (
 	Name        = "Olla"
 	Authors     = "Thushan Fernando"
-	Description = "Your Ollama Proxy Sherpa"
-	Version     = "v0.0.1"
+	Description = "The AI Proxy for your LLMs"
+	Version     = "v0.0.5"
 	Commit      = "none"
 	Date        = "nowish"
 	User        = "local"

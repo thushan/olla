@@ -3,7 +3,9 @@ package health
 import (
 	"context"
 	"fmt"
+	"github.com/pterm/pterm"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -233,7 +235,7 @@ func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 	}
 }
 
-func (c *HTTPHealthChecker) RunHealthCheck(ctx context.Context) error {
+func (c *HTTPHealthChecker) RunHealthCheck(ctx context.Context, initial bool) error {
 	if !c.isRunning.Load() {
 		return fmt.Errorf("health checker is not running")
 	}
@@ -243,11 +245,69 @@ func (c *HTTPHealthChecker) RunHealthCheck(ctx context.Context) error {
 		return fmt.Errorf("failed to get endpoints: %w", err)
 	}
 
-	c.logger.Info("Initialising health checks", "endpoints", len(endpoints))
+	if initial {
+		c.logger.Info("Initialising health checks", "endpoints", len(endpoints))
+	} else {
+		c.logger.Info("Running full health checks", "endpoints", len(endpoints))
+	}
+
+	c.logEndpointsTable(endpoints)
 
 	for _, endpoint := range endpoints {
 		c.checkEndpoint(ctx, endpoint)
 	}
 
 	return nil
+}
+
+func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
+	if len(endpoints) == 0 {
+		return
+	}
+
+	// Sort routes by registration priority
+	type endpointEntry struct {
+		url      string
+		name     string
+		health   string
+		priority int
+		interval int
+		timeout  int
+	}
+
+	var entries []endpointEntry
+	for _, info := range endpoints {
+		entries = append(entries, endpointEntry{
+			url:      info.URL.String(),
+			name:     info.Name,
+			health:   info.HealthCheckPathString,
+			priority: info.Priority,
+			interval: int(info.CheckInterval.Seconds()),
+			timeout:  int(info.CheckTimeout.Seconds()),
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].priority > entries[j].priority
+	})
+
+	// Build table
+	tableData := [][]string{
+		{"PRIORITY", "NAME", "URL", "HEALTH", "CHECK", "TIMEOUT"},
+	}
+
+	for _, entry := range entries {
+		tableData = append(tableData, []string{
+			fmt.Sprintf("%d", entry.priority),
+			entry.name,
+			entry.url,
+			entry.health,
+			fmt.Sprintf("%ds", entry.interval),
+			fmt.Sprintf("%ds", entry.timeout),
+		})
+	}
+
+	c.logger.Info(fmt.Sprintf("Registered endpoints %s", pterm.Style{c.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
+	tableString, _ := pterm.DefaultTable.WithHeaderStyle(c.logger.Theme.Accent).WithHasHeader().WithData(tableData).Srender()
+	fmt.Print(tableString)
 }

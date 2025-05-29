@@ -138,19 +138,20 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 		key := endpointURL.String()
 
 		newEndpoint := &domain.Endpoint{
-			Name:                 cfg.Name,
-			URL:                  endpointURL,
-			Priority:             cfg.Priority,
-			HealthCheckURL:       healthCheckURL,
-			ModelUrl:             modelURL,
-			CheckInterval:        cfg.CheckInterval,
-			CheckTimeout:         cfg.CheckTimeout,
-			Status:               domain.StatusUnknown,
-			URLString:            endpointURL.String(),
-			HealthCheckURLString: healthCheckURL.String(),
-			ModelURLString:       modelURL.String(),
-			BackoffMultiplier:    1,
-			NextCheckTime:        time.Now(),
+			Name:                  cfg.Name,
+			URL:                   endpointURL,
+			Priority:              cfg.Priority,
+			HealthCheckURL:        healthCheckURL,
+			ModelUrl:              modelURL,
+			CheckInterval:         cfg.CheckInterval,
+			CheckTimeout:          cfg.CheckTimeout,
+			Status:                domain.StatusUnknown,
+			URLString:             endpointURL.String(),
+			HealthCheckPathString: healthCheckPath.String(),
+			HealthCheckURLString:  healthCheckURL.String(),
+			ModelURLString:        modelURL.String(),
+			BackoffMultiplier:     1,
+			NextCheckTime:         time.Now(),
 		}
 
 		newEndpoints[key] = newEndpoint
