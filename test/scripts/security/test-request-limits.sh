@@ -9,6 +9,11 @@
 # 15-05-2025  [GW]  - Fix for large payloads not being created correctly
 # 12-05-2025  [GW]  - Initial version
 
+# Ensure required environment variables are set:
+# export OLLA_SERVER_MAX_BODY_SIZE="1KB"
+# export OLLA_SERVER_MAX_HEADER_SIZE="500B"
+##
+
 OLLA_URL="http://localhost:19841"
 PROXY_ENDPOINT="/proxy/api/generate"
 HEALTH_ENDPOINT="/internal/health"

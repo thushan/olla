@@ -42,6 +42,18 @@ type RateLimitResult struct {
 }
 
 func NewRateLimiter(limits config.ServerRateLimits, logger *logger.StyledLogger) *RateLimiter {
+
+	/*
+		if limits.AutoScale {
+			limits.BurstSize = determineBurstSize(limits.PerIPRequestsPerMinute, limits.GlobalRequestsPerMinute)
+		}
+	*/
+	// configure global tokens to burst size if global limit is enabled
+	initialGlobalTokens := int64(0)
+	if limits.GlobalRequestsPerMinute > 0 {
+		initialGlobalTokens = int64(limits.BurstSize)
+	}
+
 	rl := &RateLimiter{
 		globalRequestsPerMinute: limits.GlobalRequestsPerMinute,
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,
@@ -49,7 +61,7 @@ func NewRateLimiter(limits config.ServerRateLimits, logger *logger.StyledLogger)
 		healthRequestsPerMinute: limits.HealthRequestsPerMinute,
 		trustProxyHeaders:       limits.IPExtractionTrustProxy,
 		logger:                  logger,
-		globalTokens:            int64(limits.BurstSize),
+		globalTokens:            initialGlobalTokens,
 		lastGlobalRefill:        time.Now().UnixNano(),
 		stopCleanup:             make(chan struct{}),
 	}
@@ -110,7 +122,7 @@ func (rl *RateLimiter) checkRateLimit(clientIP string, limit int) RateLimitResul
 	now := time.Now()
 	nowNano := now.UnixNano()
 
-	// Check global limit first, but don't fail immediately if disabled
+	// Check global limit first if enabled
 	if rl.globalRequestsPerMinute > 0 {
 		if !rl.checkGlobalLimit(nowNano) {
 			return RateLimitResult{
@@ -150,7 +162,7 @@ func (rl *RateLimiter) refillGlobalTokens(nowNano int64) {
 	lastRefill := atomic.LoadInt64(&rl.lastGlobalRefill)
 	elapsed := nowNano - lastRefill
 
-	if elapsed < 1e9 {
+	if elapsed < 1e9 { // Less than 1 second
 		return
 	}
 
@@ -160,15 +172,19 @@ func (rl *RateLimiter) refillGlobalTokens(nowNano int64) {
 
 	tokensToAdd := elapsed * int64(rl.globalRequestsPerMinute) / (60 * 1e9)
 	if tokensToAdd > 0 {
-		currentTokens := atomic.LoadInt64(&rl.globalTokens)
-		newTokens := currentTokens + tokensToAdd
-		maxTokens := int64(rl.burstSize)
+		for {
+			currentTokens := atomic.LoadInt64(&rl.globalTokens)
+			newTokens := currentTokens + tokensToAdd
+			maxTokens := int64(rl.burstSize)
 
-		if newTokens > maxTokens {
-			newTokens = maxTokens
+			if newTokens > maxTokens {
+				newTokens = maxTokens
+			}
+
+			if atomic.CompareAndSwapInt64(&rl.globalTokens, currentTokens, newTokens) {
+				break
+			}
 		}
-
-		atomic.StoreInt64(&rl.globalTokens, newTokens)
 	}
 }
 
@@ -188,11 +204,11 @@ func (rl *RateLimiter) checkIPLimit(clientIP string, limit int, nowNano int64, n
 		bucketKey = clientIP + ":health"
 	}
 
-	// Calculate initial tokens based on the specific limit, not global burst size
+	// Use the smaller of limit or burstSize for initial tokens
 	initialTokens := int64(min(limit, rl.burstSize))
 
 	value, _ := rl.ipBuckets.LoadOrStore(bucketKey, &ipBucket{
-		tokens:     initialTokens, // Use limit-specific initial tokens
+		tokens:     initialTokens,
 		lastRefill: nowNano,
 		lastAccess: nowNano,
 	})
@@ -206,7 +222,9 @@ func (rl *RateLimiter) checkIPLimit(clientIP string, limit int, nowNano int64, n
 	for {
 		tokens := atomic.LoadInt64(&bucket.tokens)
 		if tokens <= 0 {
-			retryAfter := 60 - int((nowNano-atomic.LoadInt64(&bucket.lastRefill))/1e9)
+			// Calculate retry after based on token refill rate
+			tokensPerSecond := float64(limit) / 60.0
+			retryAfter := int(1.0 / tokensPerSecond)
 			if retryAfter < 1 {
 				retryAfter = 1
 			}
@@ -266,7 +284,6 @@ func (rl *RateLimiter) refillIPTokens(bucket *ipBucket, limit int, nowNano int64
 			if atomic.CompareAndSwapInt64(&bucket.tokens, currentTokens, newTokens) {
 				break
 			}
-			// CAS failed, retry
 		}
 	}
 }
