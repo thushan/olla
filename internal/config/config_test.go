@@ -247,6 +247,7 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 		})
 	}
 }
+
 func TestParseByteSize(t *testing.T) {
 	testCases := []struct {
 		input    string
@@ -344,16 +345,80 @@ func TestLoadConfig_WithRequestLimits(t *testing.T) {
 	}
 }
 
-func TestDefaultConfig_RequestLimits(t *testing.T) {
+func TestLoadConfig_WithRateLimits(t *testing.T) {
+	// Test environment variables for rate limits
+	testEnvVars := map[string]string{
+		"OLLA_SERVER_GLOBAL_RATE_LIMIT":      "500",
+		"OLLA_SERVER_PER_IP_RATE_LIMIT":      "50",
+		"OLLA_SERVER_RATE_BURST_SIZE":        "25",
+		"OLLA_SERVER_HEALTH_RATE_LIMIT":      "2000",
+		"OLLA_SERVER_RATE_CLEANUP_INTERVAL":  "10m",
+		"OLLA_SERVER_TRUST_PROXY_HEADERS":    "true",
+	}
+
+	// Set env vars
+	for key, value := range testEnvVars {
+		os.Setenv(key, value)
+	}
+
+	// Clean up after test
+	defer func() {
+		for key := range testEnvVars {
+			os.Unsetenv(key)
+		}
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with rate limit env vars failed: %v", err)
+	}
+
+	// Verify rate limit overrides
+	if cfg.Server.RateLimits.GlobalRequestsPerMinute != 500 {
+		t.Errorf("Expected global rate limit 500, got %d", cfg.Server.RateLimits.GlobalRequestsPerMinute)
+	}
+	if cfg.Server.RateLimits.PerIPRequestsPerMinute != 50 {
+		t.Errorf("Expected per-IP rate limit 50, got %d", cfg.Server.RateLimits.PerIPRequestsPerMinute)
+	}
+	if cfg.Server.RateLimits.BurstSize != 25 {
+		t.Errorf("Expected burst size 25, got %d", cfg.Server.RateLimits.BurstSize)
+	}
+	if cfg.Server.RateLimits.HealthRequestsPerMinute != 2000 {
+		t.Errorf("Expected health rate limit 2000, got %d", cfg.Server.RateLimits.HealthRequestsPerMinute)
+	}
+	if cfg.Server.RateLimits.CleanupInterval != 10*time.Minute {
+		t.Errorf("Expected cleanup interval 10m, got %v", cfg.Server.RateLimits.CleanupInterval)
+	}
+	if !cfg.Server.RateLimits.IPExtractionTrustProxy {
+		t.Error("Expected trust proxy headers true")
+	}
+}
+
+func TestDefaultConfig_RateLimits(t *testing.T) {
 	cfg := DefaultConfig()
 
-	expectedBodySize := int64(100 * 1024 * 1024) // 100MB
-	expectedHeaderSize := int64(1024 * 1024)     // 1MB
+	expectedGlobal := 1000
+	expectedPerIP := 100
+	expectedBurst := 50
+	expectedHealth := 1000
+	expectedCleanup := 5 * time.Minute
 
-	if cfg.Server.RequestLimits.MaxBodySize != expectedBodySize {
-		t.Errorf("Expected default body size %d, got %d", expectedBodySize, cfg.Server.RequestLimits.MaxBodySize)
+	if cfg.Server.RateLimits.GlobalRequestsPerMinute != expectedGlobal {
+		t.Errorf("Expected global rate limit %d, got %d", expectedGlobal, cfg.Server.RateLimits.GlobalRequestsPerMinute)
 	}
-	if cfg.Server.RequestLimits.MaxHeaderSize != expectedHeaderSize {
-		t.Errorf("Expected default header size %d, got %d", expectedHeaderSize, cfg.Server.RequestLimits.MaxHeaderSize)
+	if cfg.Server.RateLimits.PerIPRequestsPerMinute != expectedPerIP {
+		t.Errorf("Expected per-IP rate limit %d, got %d", expectedPerIP, cfg.Server.RateLimits.PerIPRequestsPerMinute)
+	}
+	if cfg.Server.RateLimits.BurstSize != expectedBurst {
+		t.Errorf("Expected burst size %d, got %d", expectedBurst, cfg.Server.RateLimits.BurstSize)
+	}
+	if cfg.Server.RateLimits.HealthRequestsPerMinute != expectedHealth {
+		t.Errorf("Expected health rate limit %d, got %d", expectedHealth, cfg.Server.RateLimits.HealthRequestsPerMinute)
+	}
+	if cfg.Server.RateLimits.CleanupInterval != expectedCleanup {
+		t.Errorf("Expected cleanup interval %v, got %v", expectedCleanup, cfg.Server.RateLimits.CleanupInterval)
+	}
+	if cfg.Server.RateLimits.IPExtractionTrustProxy {
+		t.Error("Expected trust proxy headers false by default")
 	}
 }

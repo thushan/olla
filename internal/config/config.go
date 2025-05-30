@@ -25,8 +25,16 @@ func DefaultConfig() *Config {
 			WriteTimeout:    0, // No timeout for proxies
 			ShutdownTimeout: 10 * time.Second,
 			RequestLimits: ServerRequestLimits{
-				MaxBodySize:   100 * 1024 * 1024, // 100MB default
-				MaxHeaderSize: 1024 * 1024,       // 1MB headers
+				MaxBodySize:   100 * 1024 * 1024,
+				MaxHeaderSize: 1024 * 1024,
+			},
+			RateLimits: ServerRateLimits{
+				GlobalRequestsPerMinute: 1000,
+				PerIPRequestsPerMinute:  100,
+				BurstSize:               50,
+				HealthRequestsPerMinute: 1000,
+				CleanupInterval:         5 * time.Minute,
+				IPExtractionTrustProxy:  false,
 			},
 		},
 		Proxy: ProxyConfig{
@@ -97,7 +105,6 @@ func Load() (*Config, error) {
 
 // Simplified env overrides - only the ones actually used
 func applyEnvOverrides(config *Config) {
-	// Server config
 	if val := os.Getenv("OLLA_SERVER_HOST"); val != "" {
 		config.Server.Host = val
 	}
@@ -127,7 +134,37 @@ func applyEnvOverrides(config *Config) {
 		}
 	}
 
-	// Proxy config
+	if val := os.Getenv("OLLA_SERVER_GLOBAL_RATE_LIMIT"); val != "" {
+		if limit, err := strconv.Atoi(val); err == nil {
+			config.Server.RateLimits.GlobalRequestsPerMinute = limit
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_PER_IP_RATE_LIMIT"); val != "" {
+		if limit, err := strconv.Atoi(val); err == nil {
+			config.Server.RateLimits.PerIPRequestsPerMinute = limit
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_RATE_BURST_SIZE"); val != "" {
+		if burst, err := strconv.Atoi(val); err == nil {
+			config.Server.RateLimits.BurstSize = burst
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_HEALTH_RATE_LIMIT"); val != "" {
+		if limit, err := strconv.Atoi(val); err == nil {
+			config.Server.RateLimits.HealthRequestsPerMinute = limit
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_RATE_CLEANUP_INTERVAL"); val != "" {
+		if interval, err := time.ParseDuration(val); err == nil {
+			config.Server.RateLimits.CleanupInterval = interval
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_TRUST_PROXY_HEADERS"); val != "" {
+		if trust, err := strconv.ParseBool(val); err == nil {
+			config.Server.RateLimits.IPExtractionTrustProxy = trust
+		}
+	}
+
 	if val := os.Getenv("OLLA_PROXY_RESPONSE_TIMEOUT"); val != "" {
 		if duration, err := time.ParseDuration(val); err == nil {
 			config.Proxy.ResponseTimeout = duration
@@ -142,7 +179,6 @@ func applyEnvOverrides(config *Config) {
 		config.Proxy.LoadBalancer = val
 	}
 
-	// Logging config
 	if val := os.Getenv("OLLA_LOGGING_LEVEL"); val != "" {
 		config.Logging.Level = val
 	}
@@ -150,7 +186,6 @@ func applyEnvOverrides(config *Config) {
 		config.Logging.Format = val
 	}
 
-	// Engineering config
 	if val := os.Getenv("OLLA_SHOW_NERD_STATS"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
 			config.Engineering.ShowNerdStats = enabled
@@ -158,15 +193,15 @@ func applyEnvOverrides(config *Config) {
 	}
 }
 
+// parseByteSize parses human-readable byte sizes like "100MB", "1GB"
+// Uses binary units (1KB = 1024 bytes) for consistency with memory/storage
 func parseByteSize(s string) (int64, error) {
 	if s == "" {
 		return 0, fmt.Errorf("empty byte size")
 	}
 
-	// Trim spaces first
 	s = strings.TrimSpace(s)
 
-	// Use RAMInBytes for binary units (1KB = 1024 bytes)
 	size, err := units.RAMInBytes(s)
 	if err != nil {
 		return 0, fmt.Errorf("invalid byte size format: %s", s)

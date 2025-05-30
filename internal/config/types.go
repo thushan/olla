@@ -19,12 +19,23 @@ type ServerConfig struct {
 	WriteTimeout    time.Duration       `yaml:"write_timeout"`
 	ShutdownTimeout time.Duration       `yaml:"shutdown_timeout"`
 	RequestLimits   ServerRequestLimits `yaml:"request_limits"`
+	RateLimits      ServerRateLimits    `yaml:"rate_limits"`
 }
 
 // ServerRequestLimits defines request size and validation limits
 type ServerRequestLimits struct {
 	MaxBodySize   int64 `yaml:"max_body_size"`
 	MaxHeaderSize int64 `yaml:"max_header_size"`
+}
+
+// ServerRateLimits defines rate limiting configuration
+type ServerRateLimits struct {
+	GlobalRequestsPerMinute    int           `yaml:"global_requests_per_minute"`
+	PerIPRequestsPerMinute     int           `yaml:"per_ip_requests_per_minute"`
+	BurstSize                  int           `yaml:"burst_size"`
+	HealthRequestsPerMinute    int           `yaml:"health_requests_per_minute"`
+	CleanupInterval            time.Duration `yaml:"cleanup_interval"`
+	IPExtractionTrustProxy     bool          `yaml:"ip_extraction_trust_proxy"`
 }
 
 // ProxyConfig holds proxy-specific configuration

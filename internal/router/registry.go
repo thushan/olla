@@ -116,26 +116,42 @@ func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
 	return r.routes
 }
 
-func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter interface{}) {
+func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter interface{}, rateLimiter interface{}) {
 	type middlewareFunc interface {
 		Middleware(http.Handler) http.Handler
 	}
 
-	limiter, ok := sizeLimiter.(middlewareFunc)
-	if !ok {
-		// Fallback to regular fireup if middleware isn't compatible
+	type rateLimiterFunc interface {
+		Middleware(bool) func(http.Handler) http.Handler
+	}
+
+	sizeMiddleware, hasSizeMiddleware := sizeLimiter.(middlewareFunc)
+	rateMiddleware, hasRateMiddleware := rateLimiter.(rateLimiterFunc)
+
+	// Fallback to regular wireup if middleware isn't compatible
+	if !hasSizeMiddleware && !hasRateMiddleware {
 		r.WireUp(mux)
 		return
 	}
 
 	for route, info := range r.routes {
+		var handler http.Handler = http.HandlerFunc(info.Handler)
+
 		if info.IsProxy {
-			// Apply size limits to proxy routes
-			wrappedHandler := limiter.Middleware(http.HandlerFunc(info.Handler))
-			mux.Handle(route, wrappedHandler)
+			// Apply middleware chain to proxy routes: rate limiting -> size limiting -> handler
+			if hasRateMiddleware {
+				handler = rateMiddleware.Middleware(false)(handler)
+			}
+			if hasSizeMiddleware {
+				handler = sizeMiddleware.Middleware(handler)
+			}
+			mux.Handle(route, handler)
 		} else {
-			// let's ignore internal ones for now
-			mux.HandleFunc(route, info.Handler)
+			// Health/internal routes get lighter rate limiting, no size limits
+			if hasRateMiddleware {
+				handler = rateMiddleware.Middleware(true)(handler)
+			}
+			mux.Handle(route, handler)
 		}
 	}
 	r.logRoutesTable()

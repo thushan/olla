@@ -27,6 +27,7 @@ type Application struct {
 	repository    *discovery.StaticEndpointRepository
 	healthChecker *health.HTTPHealthChecker
 	proxyService  ports.ProxyService
+	rateLimiter   *RateLimiter
 	errCh         chan error
 	shutdownOnce  sync.Once
 }

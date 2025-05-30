@@ -29,12 +29,24 @@ func (a *Application) startWebServer() {
 			"max_header_size", units.HumanSize(float64(configServer.RequestLimits.MaxHeaderSize)))
 	}
 
+	if configServer.RateLimits.GlobalRequestsPerMinute > 0 || configServer.RateLimits.PerIPRequestsPerMinute > 0 {
+		a.logger.Info("Rate limiting enabled",
+			"global_limit", configServer.RateLimits.GlobalRequestsPerMinute,
+			"per_ip_limit", configServer.RateLimits.PerIPRequestsPerMinute,
+			"burst_size", configServer.RateLimits.BurstSize,
+			"health_limit", configServer.RateLimits.HealthRequestsPerMinute,
+			"trust_proxy", configServer.RateLimits.IPExtractionTrustProxy)
+	}
+
 	mux := http.NewServeMux()
 
 	sizeLimiter := NewRequestSizeLimiter(configServer.RequestLimits, a.logger)
+	rateLimiter := NewRateLimiter(configServer.RateLimits, a.logger)
+
+	a.rateLimiter = rateLimiter
 
 	a.registerRoutes()
-	a.registry.WireUpWithMiddleware(mux, sizeLimiter)
+	a.registry.WireUpWithMiddleware(mux, sizeLimiter, rateLimiter)
 
 	go func() {
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

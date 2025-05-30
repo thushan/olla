@@ -8,7 +8,12 @@ server:
   request_limits:
     max_body_size: 52428800  # 50MB
     max_header_size: 524288  # 512KB
-
+  rate_limits:
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 100
+    burst_size: 50
+    per_endpoint:
+      default_requests_per_minute: 200
 proxy:
   connection_timeout: 40s
   response_timeout: 900s
