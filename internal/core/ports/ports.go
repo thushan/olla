@@ -4,11 +4,12 @@ import (
 	"context"
 	"github.com/thushan/olla/internal/core/domain"
 	"net/http"
+	"time"
 )
 
 // ProxyService defines the interface for the proxy service
 type ProxyService interface {
-	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (int, error)
+	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (RequestStats, error)
 	GetStats(ctx context.Context) (ProxyStats, error)
 }
 
@@ -18,6 +19,16 @@ type ProxyStats struct {
 	SuccessfulRequests int64
 	FailedRequests     int64
 	AverageLatency     int64 // in milliseconds
+}
+
+type RequestStats struct {
+	RequestID    string
+	StartTime    time.Time
+	EndTime      time.Time
+	EndpointName string
+	TargetUrl    string
+	TotalBytes   int
+	Latency      int64
 }
 
 // DiscoveryService defines the interface for service discovery

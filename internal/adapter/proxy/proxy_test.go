@@ -136,7 +136,7 @@ func TestSherpaProxyService_ProxyRequest_Success(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/test", nil)
 	w := httptest.NewRecorder()
 
-	bytes, err := proxy.ProxyRequest(context.Background(), w, req)
+	stats, err := proxy.ProxyRequest(context.Background(), w, req)
 
 	if err != nil {
 		t.Fatalf("ProxyRequest failed: %v", err)
@@ -144,7 +144,7 @@ func TestSherpaProxyService_ProxyRequest_Success(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	if bytes == 0 {
+	if stats.TotalBytes == 0 {
 		t.Error("Expected non-zero bytes transferred")
 	}
 	if !strings.Contains(w.Body.String(), "ok") {
@@ -268,12 +268,12 @@ func TestSherpaProxyService_ProxyRequest_StreamingResponse(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/stream", nil)
 	w := httptest.NewRecorder()
 
-	bytes, err := proxy.ProxyRequest(context.Background(), w, req)
+	stats, err := proxy.ProxyRequest(context.Background(), w, req)
 
 	if err != nil {
 		t.Fatalf("ProxyRequest failed: %v", err)
 	}
-	if bytes == 0 {
+	if stats.TotalBytes == 0 {
 		t.Error("Expected non-zero bytes for streaming response")
 	}
 	if !strings.Contains(w.Body.String(), "chunk 0") {
@@ -305,18 +305,18 @@ func TestSherpaProxyService_ProxyRequest_ClientDisconnection(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	// This should succeed and transfer data
-	bytes, err := proxy.ProxyRequest(context.Background(), w, req)
+	stats, err := proxy.ProxyRequest(context.Background(), w, req)
 
 	if err != nil {
 		t.Fatalf("ProxyRequest failed: %v", err)
 	}
 
-	if bytes == 0 {
+	if stats.TotalBytes == 0 {
 		t.Error("Expected bytes to be transferred")
 	}
 
-	if bytes < 1000 {
-		t.Errorf("Expected substantial data transfer, got %d bytes", bytes)
+	if stats.TotalBytes < 1000 {
+		t.Errorf("Expected substantial data transfer, got %d bytes", stats.TotalBytes)
 	}
 
 	responseBody := w.Body.String()
@@ -598,13 +598,13 @@ func TestSherpaProxyService_LargePayloadHandling(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
-	bytes, err := proxy.ProxyRequest(context.Background(), w, req)
+	stats, err := proxy.ProxyRequest(context.Background(), w, req)
 
 	if err != nil {
 		t.Fatalf("Large payload proxy failed: %v", err)
 	}
-	if bytes < 100000 {
-		t.Errorf("Expected ~100KB, got %d bytes", bytes)
+	if stats.TotalBytes < 100000 {
+		t.Errorf("Expected ~100KB, got %d bytes", stats.TotalBytes)
 	}
 	if !strings.Contains(w.Body.String(), `"chunk": 99`) {
 		t.Error("Final chunk not received")

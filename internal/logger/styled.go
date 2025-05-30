@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"github.com/thushan/olla/internal/core/domain"
 	"log/slog"
@@ -110,7 +111,6 @@ func (sl *StyledLogger) GetUnderlying() *slog.Logger {
 	return sl.logger
 }
 
-
 func (sl *StyledLogger) WithRequestID(requestID string) *StyledLogger {
 	return sl.With("request_id", requestID)
 }
@@ -159,4 +159,62 @@ func NewWithTheme(cfg *Config) (*slog.Logger, *StyledLogger, func(), error) {
 	styledLogger := NewStyledLogger(logger, appTheme)
 
 	return logger, styledLogger, cleanup, nil
+}
+
+/**
+ * LogContext provides a structured way to separate user-facing and detailed logging context.
+ * This allows for cleaner terminal output while still capturing all necessary details in the log file.
+ * Taht way, we get a clean TUI output with user-friendly messages, and detailed logs for debugging.
+ */
+
+// LogContext separates user-facing from detailed logging context
+type LogContext struct {
+	UserArgs     []interface{}
+	DetailedArgs []interface{}
+}
+
+func (sl *StyledLogger) InfoWithContext(msg string, endpoint string, ctx LogContext) {
+	sl.logWithContext("info", msg, endpoint, ctx)
+}
+
+func (sl *StyledLogger) WarnWithContext(msg string, endpoint string, ctx LogContext) {
+	sl.logWithContext("warn", msg, endpoint, ctx)
+}
+
+func (sl *StyledLogger) ErrorWithContext(msg string, endpoint string, ctx LogContext) {
+	sl.logWithContext("error", msg, endpoint, ctx)
+}
+
+// logWithContext is the internal method that handles the dual logging logic
+func (sl *StyledLogger) logWithContext(level string, msg string, endpoint string, ctx LogContext) {
+	// CLI: clean messaging
+	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.Theme.Endpoint}.Sprint(endpoint))
+
+	switch level {
+	case "info":
+		sl.logger.Info(styledMsg, ctx.UserArgs...)
+	case "warn":
+		sl.logger.Warn(styledMsg, ctx.UserArgs...)
+	case "error":
+		sl.logger.Error(styledMsg, ctx.UserArgs...)
+	}
+
+	// log file: detailed hopefully
+	if len(ctx.DetailedArgs) > 0 {
+		allArgs := make([]interface{}, 0, len(ctx.UserArgs)+len(ctx.DetailedArgs)+2)
+		allArgs = append(allArgs, "endpoint_name", endpoint)
+		allArgs = append(allArgs, ctx.UserArgs...)
+		allArgs = append(allArgs, ctx.DetailedArgs...)
+
+		detailedCtx := context.WithValue(context.Background(), DefaultDetailedCookie, true)
+
+		switch level {
+		case "info":
+			sl.logger.InfoContext(detailedCtx, msg, allArgs...)
+		case "warn":
+			sl.logger.WarnContext(detailedCtx, msg, allArgs...)
+		case "error":
+			sl.logger.ErrorContext(detailedCtx, msg, allArgs...)
+		}
+	}
 }

@@ -25,7 +25,8 @@ type Config struct {
 }
 
 const (
-	DefaultLogOutputName = "olla.log"
+	DefaultLogOutputName  = "olla.log"
+	DefaultDetailedCookie = "detailed"
 )
 
 func New(cfg *Config) (*slog.Logger, func(), error) {
@@ -135,7 +136,14 @@ func (mh *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (mh *multiHandler) Handle(ctx context.Context, record slog.Record) error {
-	if mh.terminalHandler.Enabled(ctx, record.Level) {
+	isDetailed := false
+	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
+		if d, ok := detailed.(bool); ok {
+			isDetailed = d
+		}
+	}
+
+	if !isDetailed && mh.terminalHandler.Enabled(ctx, record.Level) {
 		if err := mh.terminalHandler.Handle(ctx, record); err != nil {
 			return err
 		}

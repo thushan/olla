@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -359,7 +360,6 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 	ctx := context.Background()
 
-	// Add test endpoints
 	configs := make([]config.EndpointConfig, 5)
 	for i := 0; i < 5; i++ {
 		configs[i] = config.EndpointConfig{
@@ -371,7 +371,6 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	}
 	mockRepo.LoadFromConfig(ctx, configs)
 
-	// Start the health checker
 	err := checker.StartChecking(ctx)
 	if err != nil {
 		t.Fatalf("Failed to start health checker: %v", err)
@@ -381,7 +380,6 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, 20)
 
-	// Concurrent health checks
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
@@ -399,4 +397,213 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	for err := range errors {
 		t.Errorf("Concurrent access error: %v", err)
 	}
+}
+func TestHTTPHealthChecker_PanicRecovery(t *testing.T) {
+	mockRepo := newMockRepository()
+
+	panicClient := &panicHTTPClient{}
+
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewStyledLogger(log, theme.Default())
+
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, panicClient)
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "panic-endpoint",
+			URL:            "http://localhost:11434",
+			HealthCheckURL: "/health",
+			CheckTimeout:   time.Second,
+		},
+	}
+	mockRepo.LoadFromConfig(context.Background(), configs)
+
+	ctx := context.Background()
+	checker.StartChecking(ctx)
+	defer checker.StopChecking(ctx)
+
+	// This should not crash the test - panic should be recovered
+	err := checker.RunHealthCheck(ctx, false)
+	if err != nil {
+		t.Fatalf("RunHealthCheck should not fail due to panic recovery: %v", err)
+	}
+
+	// Verify endpoint was still processed (even though it panicked)
+	endpoints, _ := mockRepo.GetAll(ctx)
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+}
+func TestHTTPHealthChecker_ConcurrentHealthChecks(t *testing.T) {
+	mockRepo := newMockRepository()
+	slowClient := &mockHTTPClient{
+		statusCode: 200,
+		delay:      50 * time.Millisecond, // Slow but not timeout
+	}
+
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewStyledLogger(log, theme.Default())
+
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, slowClient)
+
+	configs := make([]config.EndpointConfig, 10)
+	for i := 0; i < 10; i++ {
+		configs[i] = config.EndpointConfig{
+			Name:           fmt.Sprintf("endpoint-%d", i),
+			URL:            fmt.Sprintf("http://localhost:%d", 11434+i),
+			HealthCheckURL: "/health",
+			CheckTimeout:   time.Second,
+		}
+	}
+	mockRepo.LoadFromConfig(context.Background(), configs)
+
+	ctx := context.Background()
+	checker.StartChecking(ctx)
+	defer checker.StopChecking(ctx)
+
+	// Time the health check to ensure concurrency is working
+	start := time.Now()
+	err := checker.RunHealthCheck(ctx, false)
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("RunHealthCheck failed: %v", err)
+	}
+
+	// With 10 endpoints taking 50ms each, serial execution would take 500ms+
+	// Concurrent execution should be much faster
+	if duration > 200*time.Millisecond {
+		t.Errorf("Health checks took too long (%v), may not be running concurrently", duration)
+	}
+
+	// Verify all endpoints were checked
+	endpoints, _ := mockRepo.GetAll(ctx)
+	for _, endpoint := range endpoints {
+		if endpoint.Status != domain.StatusHealthy {
+			t.Errorf("Endpoint %s not healthy after check: %v", endpoint.Name, endpoint.Status)
+		}
+	}
+}
+
+func TestHTTPHealthChecker_StatusCodeLogging(t *testing.T) {
+	mockRepo := newMockRepository()
+
+	statusCodes := []int{200, 404, 500, 503}
+	mockClient := &statusCodeHTTPClient{
+		statusCodes: statusCodes,
+	}
+
+	loggerCfg := &logger.Config{Level: "debug", Theme: "default"} // Debug to capture all logs
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewStyledLogger(log, theme.Default())
+
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
+
+	configs := make([]config.EndpointConfig, len(statusCodes))
+	for i := range statusCodes {
+		configs[i] = config.EndpointConfig{
+			Name:           fmt.Sprintf("endpoint-%d", i),
+			URL:            fmt.Sprintf("http://localhost:%d", 11434+i),
+			HealthCheckURL: "/health",
+			CheckTimeout:   time.Second,
+		}
+	}
+	mockRepo.LoadFromConfig(context.Background(), configs)
+
+	ctx := context.Background()
+	checker.StartChecking(ctx)
+	defer checker.StopChecking(ctx)
+
+	err := checker.RunHealthCheck(ctx, false)
+	if err != nil {
+		t.Fatalf("RunHealthCheck failed: %v", err)
+	}
+
+	// Verify endpoints have different statuses based on status codes
+	endpoints, _ := mockRepo.GetAll(ctx)
+
+	expectedStatuses := map[int]domain.EndpointStatus{
+		200: domain.StatusHealthy,
+		404: domain.StatusUnhealthy,
+		500: domain.StatusUnhealthy,
+		503: domain.StatusUnhealthy,
+	}
+
+	for i, endpoint := range endpoints {
+		expectedStatus := expectedStatuses[statusCodes[i]]
+		if endpoint.Status != expectedStatus {
+			t.Errorf("Endpoint %d: expected status %v for HTTP %d, got %v",
+				i, expectedStatus, statusCodes[i], endpoint.Status)
+		}
+	}
+}
+
+func TestHTTPHealthChecker_ContextCancellation(t *testing.T) {
+	mockRepo := newMockRepository()
+
+	mockClient := &mockHTTPClient{
+		statusCode: 200,
+		delay:      100 * time.Millisecond,
+	}
+
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewStyledLogger(log, theme.Default())
+
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "test-endpoint",
+			URL:            "http://localhost:11434",
+			HealthCheckURL: "/health",
+			CheckTimeout:   time.Second,
+		},
+	}
+	mockRepo.LoadFromConfig(context.Background(), configs)
+
+	// Start checker
+	ctx, cancel := context.WithCancel(context.Background())
+	checker.StartChecking(ctx)
+	defer checker.StopChecking(ctx)
+
+	// Cancel context quickly
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	// This should handle cancellation gracefully
+	err := checker.RunHealthCheck(ctx, false)
+
+	// The error might be due to context cancellation, which is expected
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Errorf("Expected context cancellation or no error, got: %v", err)
+	}
+}
+
+type panicHTTPClient struct{}
+
+func (p *panicHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	panic("simulated panic in health check")
+}
+
+type statusCodeHTTPClient struct {
+	statusCodes []int
+	callCount   int
+}
+
+func (s *statusCodeHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	statusCode := s.statusCodes[s.callCount%len(s.statusCodes)]
+	s.callCount++
+	return &http.Response{
+		StatusCode: statusCode,
+		Body:       http.NoBody,
+	}, nil
 }
