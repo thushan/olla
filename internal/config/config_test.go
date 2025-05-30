@@ -64,12 +64,12 @@ func TestLoadConfig_WithoutFile(t *testing.T) {
 func TestLoadConfig_WithEnvironmentVariables(t *testing.T) {
 	// Set test environment variables
 	testEnvVars := map[string]string{
-		"OLLA_SERVER_PORT":             "8080",
-		"OLLA_SERVER_HOST":             "0.0.0.0",
-		"OLLA_PROXY_LOAD_BALANCER":     "round-robin",
-		"OLLA_LOGGING_LEVEL":           "debug",
-		"OLLA_SHOW_NERD_STATS":         "true",
-		"OLLA_PROXY_RESPONSE_TIMEOUT":  "15m",
+		"OLLA_SERVER_PORT":            "8080",
+		"OLLA_SERVER_HOST":            "0.0.0.0",
+		"OLLA_PROXY_LOAD_BALANCER":    "round-robin",
+		"OLLA_LOGGING_LEVEL":          "debug",
+		"OLLA_SHOW_NERD_STATS":        "true",
+		"OLLA_PROXY_RESPONSE_TIMEOUT": "15m",
 	}
 
 	// Set env vars
@@ -245,5 +245,115 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 				t.Errorf("Environment variable %s=%s not applied correctly", tc.envVar, tc.envValue)
 			}
 		})
+	}
+}
+func TestParseByteSize(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected int64
+		hasError bool
+	}{
+		// Valid cases
+		{"100", 100, false},
+		{"1024", 1024, false},
+		{"1KB", 1024, false},
+		{"1MB", 1024 * 1024, false},
+		{"1GB", 1024 * 1024 * 1024, false},
+		{"100MB", 100 * 1024 * 1024, false},
+		{"2.5GB", int64(2.5 * 1024 * 1024 * 1024), false},
+		{"0.5KB", 512, false},
+
+		// Case insensitive
+		{"100mb", 100 * 1024 * 1024, false},
+		{"1gb", 1024 * 1024 * 1024, false},
+		{"50KB", 50 * 1024, false},
+
+		// With spaces (RAMInBytes handles this)
+		{"100MB", 100 * 1024 * 1024, false},
+		{"1GB", 1024 * 1024 * 1024, false},
+
+		// Just B suffix
+		{"1024B", 1024, false},
+
+		// RAMInBytes also supports these formats
+		{"1k", 1024, false},
+		{"1m", 1024 * 1024, false},
+		{"1g", 1024 * 1024 * 1024, false},
+
+		// Invalid cases
+		{"", 0, true},
+		{"invalid", 0, true},
+		{"100XB", 0, true},
+		{"-100MB", 0, true},
+		{"MB100", 0, true},
+		{"100 MB", 100 * 1024 * 1024, false}, // RAMInBytes allows spaces
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.input, func(t *testing.T) {
+			result, err := parseByteSize(tc.input)
+
+			if tc.hasError {
+				if err == nil {
+					t.Errorf("Expected error for input %q, but got none", tc.input)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error for input %q: %v", tc.input, err)
+				}
+				if result != tc.expected {
+					t.Errorf("Expected %d for input %q, got %d", tc.expected, tc.input, result)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfig_WithRequestLimits(t *testing.T) {
+	// Test environment variables for request limits
+	testEnvVars := map[string]string{
+		"OLLA_SERVER_MAX_BODY_SIZE":   "50MB",
+		"OLLA_SERVER_MAX_HEADER_SIZE": "2MB",
+	}
+
+	// Set env vars
+	for key, value := range testEnvVars {
+		os.Setenv(key, value)
+	}
+
+	// Clean up after test
+	defer func() {
+		for key := range testEnvVars {
+			os.Unsetenv(key)
+		}
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with request limit env vars failed: %v", err)
+	}
+
+	expectedBodySize := int64(50 * 1024 * 1024)
+	expectedHeaderSize := int64(2 * 1024 * 1024)
+
+	if cfg.Server.RequestLimits.MaxBodySize != expectedBodySize {
+		t.Errorf("Expected body size %d from env var, got %d", expectedBodySize, cfg.Server.RequestLimits.MaxBodySize)
+	}
+	if cfg.Server.RequestLimits.MaxHeaderSize != expectedHeaderSize {
+		t.Errorf("Expected header size %d from env var, got %d", expectedHeaderSize, cfg.Server.RequestLimits.MaxHeaderSize)
+	}
+}
+
+func TestDefaultConfig_RequestLimits(t *testing.T) {
+	cfg := DefaultConfig()
+
+	expectedBodySize := int64(100 * 1024 * 1024) // 100MB
+	expectedHeaderSize := int64(1024 * 1024)     // 1MB
+
+	if cfg.Server.RequestLimits.MaxBodySize != expectedBodySize {
+		t.Errorf("Expected default body size %d, got %d", expectedBodySize, cfg.Server.RequestLimits.MaxBodySize)
+	}
+	if cfg.Server.RequestLimits.MaxHeaderSize != expectedHeaderSize {
+		t.Errorf("Expected default header size %d, got %d", expectedHeaderSize, cfg.Server.RequestLimits.MaxHeaderSize)
 	}
 }

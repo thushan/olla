@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"github.com/docker/go-units"
 	"net/http"
 )
 
@@ -21,10 +22,19 @@ func (a *Application) startWebServer() {
 		a.logger.Warn("Write timeout is set, this may cause issues with long-running requests. (default: 0s)", "write_timeout", configServer.WriteTimeout)
 	}
 
+	if configServer.RequestLimits.MaxBodySize > 0 || configServer.RequestLimits.MaxHeaderSize > 0 {
+		// m,aybe make this a debug log?
+		a.logger.Info("Request size limits enabled",
+			"max_body_size", units.HumanSize(float64(configServer.RequestLimits.MaxBodySize)),
+			"max_header_size", units.HumanSize(float64(configServer.RequestLimits.MaxHeaderSize)))
+	}
+
 	mux := http.NewServeMux()
 
+	sizeLimiter := NewRequestSizeLimiter(configServer.RequestLimits, a.logger)
+
 	a.registerRoutes()
-	a.registry.WireUp(mux)
+	a.registry.WireUpWithMiddleware(mux, sizeLimiter)
 
 	go func() {
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

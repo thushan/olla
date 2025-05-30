@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/docker/go-units"
 	"gopkg.in/yaml.v3"
 )
 
@@ -22,6 +24,10 @@ func DefaultConfig() *Config {
 			ReadTimeout:     30 * time.Second,
 			WriteTimeout:    0, // No timeout for proxies
 			ShutdownTimeout: 10 * time.Second,
+			RequestLimits: ServerRequestLimits{
+				MaxBodySize:   100 * 1024 * 1024, // 100MB default
+				MaxHeaderSize: 1024 * 1024,       // 1MB headers
+			},
 		},
 		Proxy: ProxyConfig{
 			ConnectionTimeout: 30 * time.Second,
@@ -110,6 +116,16 @@ func applyEnvOverrides(config *Config) {
 			config.Server.WriteTimeout = duration
 		}
 	}
+	if val := os.Getenv("OLLA_SERVER_MAX_BODY_SIZE"); val != "" {
+		if size, err := parseByteSize(val); err == nil {
+			config.Server.RequestLimits.MaxBodySize = size
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_MAX_HEADER_SIZE"); val != "" {
+		if size, err := parseByteSize(val); err == nil {
+			config.Server.RequestLimits.MaxHeaderSize = size
+		}
+	}
 
 	// Proxy config
 	if val := os.Getenv("OLLA_PROXY_RESPONSE_TIMEOUT"); val != "" {
@@ -140,4 +156,21 @@ func applyEnvOverrides(config *Config) {
 			config.Engineering.ShowNerdStats = enabled
 		}
 	}
+}
+
+func parseByteSize(s string) (int64, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty byte size")
+	}
+
+	// Trim spaces first
+	s = strings.TrimSpace(s)
+
+	// Use RAMInBytes for binary units (1KB = 1024 bytes)
+	size, err := units.RAMInBytes(s)
+	if err != nil {
+		return 0, fmt.Errorf("invalid byte size format: %s", s)
+	}
+
+	return size, nil
 }

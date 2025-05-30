@@ -3,6 +3,7 @@ module github.com/thushan/olla
 go 1.24
 
 require (
+	github.com/docker/go-units v0.5.0
 	github.com/pterm/pterm v0.12.80
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1

@@ -13,11 +13,18 @@ type Config struct {
 
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Host            string        `yaml:"host"`
-	Port            int           `yaml:"port"`
-	ReadTimeout     time.Duration `yaml:"read_timeout"`
-	WriteTimeout    time.Duration `yaml:"write_timeout"`
-	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+	Host            string              `yaml:"host"`
+	Port            int                 `yaml:"port"`
+	ReadTimeout     time.Duration       `yaml:"read_timeout"`
+	WriteTimeout    time.Duration       `yaml:"write_timeout"`
+	ShutdownTimeout time.Duration       `yaml:"shutdown_timeout"`
+	RequestLimits   ServerRequestLimits `yaml:"request_limits"`
+}
+
+// ServerRequestLimits defines request size and validation limits
+type ServerRequestLimits struct {
+	MaxBodySize   int64 `yaml:"max_body_size"`
+	MaxHeaderSize int64 `yaml:"max_header_size"`
 }
 
 // ProxyConfig holds proxy-specific configuration

@@ -16,6 +16,7 @@ type RouteInfo struct {
 	Description string
 	Method      string
 	Order       int
+	IsProxy     bool
 }
 
 type RouteRegistry struct {
@@ -37,13 +38,7 @@ func (r *RouteRegistry) Register(route string, handler http.HandlerFunc, descrip
 }
 
 func (r *RouteRegistry) RegisterWithMethod(route string, handler http.HandlerFunc, description, method string) {
-	r.routes[route] = RouteInfo{
-		Handler:     handler,
-		Description: description,
-		Method:      method,
-		Order:       r.orderSeq,
-	}
-	r.orderSeq++
+	r.registerWithMethod(route, handler, description, method, false)
 }
 
 func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFunc, description string, method string) {
@@ -51,7 +46,18 @@ func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFun
 		ctx := context.WithValue(req.Context(), constants.ProxyPathPrefix, route)
 		handler(w, req.WithContext(ctx))
 	}
-	r.RegisterWithMethod(route, wrappedHandler, description, method)
+	r.registerWithMethod(route, wrappedHandler, description, method, true)
+}
+
+func (r *RouteRegistry) registerWithMethod(route string, handler http.HandlerFunc, description, method string, isProxy bool) {
+	r.routes[route] = RouteInfo{
+		Handler:     handler,
+		Description: description,
+		Method:      method,
+		Order:       r.orderSeq,
+		IsProxy:     isProxy,
+	}
+	r.orderSeq++
 }
 
 func (r *RouteRegistry) WireUp(mux *http.ServeMux) {
@@ -108,4 +114,29 @@ func (r *RouteRegistry) logRoutesTable() {
 
 func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
 	return r.routes
+}
+
+func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter interface{}) {
+	type middlewareFunc interface {
+		Middleware(http.Handler) http.Handler
+	}
+
+	limiter, ok := sizeLimiter.(middlewareFunc)
+	if !ok {
+		// Fallback to regular fireup if middleware isn't compatible
+		r.WireUp(mux)
+		return
+	}
+
+	for route, info := range r.routes {
+		if info.IsProxy {
+			// Apply size limits to proxy routes
+			wrappedHandler := limiter.Middleware(http.HandlerFunc(info.Handler))
+			mux.Handle(route, wrappedHandler)
+		} else {
+			// let's ignore internal ones for now
+			mux.HandleFunc(route, info.Handler)
+		}
+	}
+	r.logRoutesTable()
 }

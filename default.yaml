@@ -5,6 +5,9 @@ server:
   read_timeout: 20s
   write_timeout: 0s
   shutdown_timeout: 10s
+  request_limits:
+    max_body_size: 52428800  # 50MB
+    max_header_size: 524288  # 512KB
 
 proxy:
   connection_timeout: 40s
