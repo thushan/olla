@@ -9,7 +9,8 @@ import (
 )
 
 type ProcessStatsResponse struct {
-	Memory struct {
+	Timestamp time.Time `json:"timestamp"`
+	Memory    struct {
 		HeapAlloc      string `json:"heap_alloc"`
 		HeapSys        string `json:"heap_sys"`
 		HeapInuse      string `json:"heap_inuse"`
@@ -19,23 +20,17 @@ type ProcessStatsResponse struct {
 		MemoryPressure string `json:"memory_pressure"`
 	} `json:"memory"`
 
-	Allocations struct {
-		TotalMallocs uint64 `json:"total_mallocs"`
-		TotalFrees   uint64 `json:"total_frees"`
-		NetObjects   int64  `json:"net_objects"`
-	} `json:"allocations"`
-
 	GarbageCollection struct {
-		NumGC         uint32  `json:"num_gc_cycles"`
 		LastGC        string  `json:"last_gc"`
 		TotalGCTime   string  `json:"total_gc_time"`
-		GCCPUFraction float64 `json:"gc_cpu_fraction"`
 		AvgGCPause    string  `json:"avg_gc_pause"`
+		GCCPUFraction float64 `json:"gc_cpu_fraction"`
+		NumGC         uint32  `json:"num_gc_cycles"`
 	} `json:"garbage_collection"`
 
 	Goroutines struct {
-		Count        int    `json:"count"`
 		HealthStatus string `json:"health_status"`
+		Count        int    `json:"count"`
 		CgoCalls     int64  `json:"cgo_calls"`
 	} `json:"goroutines"`
 
@@ -46,7 +41,11 @@ type ProcessStatsResponse struct {
 		GOMAXPROCS int    `json:"gomaxprocs"`
 	} `json:"runtime"`
 
-	Timestamp time.Time `json:"timestamp"`
+	Allocations struct {
+		TotalMallocs uint64 `json:"total_mallocs"`
+		TotalFrees   uint64 `json:"total_frees"`
+		NetObjects   int64  `json:"net_objects"`
+	} `json:"allocations"`
 }
 
 func (a *Application) processStatsHandler(w http.ResponseWriter, r *http.Request) {

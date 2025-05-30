@@ -2,7 +2,6 @@ package logger
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/util"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -11,25 +10,25 @@ import (
 	"github.com/pterm/pterm"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/theme"
 )
 
-// Config holds the logger configuration
 type Config struct {
-	Level      string // debug, info, warn, error
-	FileOutput bool
+	Level      string
 	LogDir     string
+	Theme      string
 	MaxSize    int // megabytes
 	MaxBackups int
 	MaxAge     int // days
-	Theme      string
+	FileOutput bool
 }
 
 const (
-	DefaultLogOutputName = "olla.log"
+	DefaultLogOutputName  = "olla.log"
+	DefaultDetailedCookie = "detailed"
 )
 
-// New creates a new logger with dual output (terminal + file) and rotation
 func New(cfg *Config) (*slog.Logger, func(), error) {
 	level := parseLevel(cfg.Level)
 	appTheme := theme.GetTheme(cfg.Theme)
@@ -41,7 +40,6 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	var logger *slog.Logger
 
 	if cfg.FileOutput {
-
 		fileLogger, cleanup, err := createFileLogger(cfg, level)
 		if err != nil {
 			return nil, nil, err
@@ -54,7 +52,6 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 		}
 		logger = slog.New(handler)
 	} else {
-		// Terminal only
 		logger = slog.New(pterm.NewSlogHandler(terminalLogger))
 	}
 
@@ -67,13 +64,11 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	return logger, cleanup, nil
 }
 
-// createTerminalLogger creates a PTerm logger with theme colours
 func createTerminalLogger(level slog.Level, appTheme *theme.Theme) *pterm.Logger {
 	plogger := pterm.DefaultLogger.
 		WithLevel(convertToPTermLevel(level)).
 		WithWriter(os.Stdout)
 
-	// Only use colours if we're in a terminal
 	if util.IsTerminal() {
 		plogger = plogger.WithFormatter(pterm.LogFormatterColorful)
 
@@ -90,13 +85,11 @@ func createTerminalLogger(level slog.Level, appTheme *theme.Theme) *pterm.Logger
 	return plogger
 }
 
-// createFileLogger creates a rotating file logger
 func createFileLogger(cfg *Config, level slog.Level) (slog.Handler, func(), error) {
 	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
 		return nil, nil, err
 	}
 
-	// Setsup log rotation
 	rotator := &lumberjack.Logger{
 		Filename:   filepath.Join(cfg.LogDir, DefaultLogOutputName),
 		MaxSize:    cfg.MaxSize,
@@ -107,17 +100,32 @@ func createFileLogger(cfg *Config, level slog.Level) (slog.Handler, func(), erro
 
 	handler := slog.NewJSONHandler(rotator, &slog.HandlerOptions{
 		Level:     level,
-		AddSource: true,
+		AddSource: false,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				return slog.Attr{
+					Key:   "timestamp",
+					Value: slog.StringValue(a.Value.Time().Format("2006-01-02 15:04:05")),
+				}
+			}
+			// kinda strip ANSI codes from string values
+			if a.Value.Kind() == slog.KindString {
+				cleanValue := stripAnsiCodes(a.Value.String())
+				if cleanValue != a.Value.String() {
+					return slog.Attr{Key: a.Key, Value: slog.StringValue(cleanValue)}
+				}
+			}
+			return a
+		},
 	})
 
 	cleanup := func() {
-		rotator.Close()
+		_ = rotator.Close()
 	}
 
 	return handler, cleanup, nil
 }
 
-// multiHandler implements slog.Handler to write to multiple handlers
 type multiHandler struct {
 	terminalHandler slog.Handler
 	fileHandler     slog.Handler
@@ -128,14 +136,19 @@ func (mh *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (mh *multiHandler) Handle(ctx context.Context, record slog.Record) error {
-	// terminal:
-	if mh.terminalHandler.Enabled(ctx, record.Level) {
+	isDetailed := false
+	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
+		if d, ok := detailed.(bool); ok {
+			isDetailed = d
+		}
+	}
+
+	if !isDetailed && mh.terminalHandler.Enabled(ctx, record.Level) {
 		if err := mh.terminalHandler.Handle(ctx, record); err != nil {
 			return err
 		}
 	}
 
-	// file out:
 	if mh.fileHandler.Enabled(ctx, record.Level) {
 		if err := mh.fileHandler.Handle(ctx, record); err != nil {
 			return err
@@ -159,7 +172,6 @@ func (mh *multiHandler) WithGroup(name string) slog.Handler {
 	}
 }
 
-// parseLevel converts string level to slog.Level
 func parseLevel(level string) slog.Level {
 	switch strings.ToLower(level) {
 	case "debug":
@@ -175,7 +187,6 @@ func parseLevel(level string) slog.Level {
 	}
 }
 
-// convertToPTermLevel converts slog.Level to pterm.LogLevel
 func convertToPTermLevel(level slog.Level) pterm.LogLevel {
 	switch level {
 	case slog.LevelDebug:

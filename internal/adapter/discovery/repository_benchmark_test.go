@@ -3,28 +3,33 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/domain"
-	"net/url"
 	"testing"
+	"time"
+
+	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 func BenchmarkRepository_GetAll(b *testing.B) {
 	repo := NewStaticEndpointRepository()
 	ctx := context.Background()
 
-	// Setup 100 test endpoints
+	// Setup test endpoints via config
+	configs := make([]config.EndpointConfig, 100)
 	for i := 0; i < 100; i++ {
 		port := 11434 + i
-		testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
-		healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
-		endpoint := &domain.Endpoint{
+		configs[i] = config.EndpointConfig{
 			Name:           fmt.Sprintf("bench-%d", i),
-			URL:            testURL,
-			HealthCheckURL: healthURL,
-			Status:         domain.StatusHealthy,
+			URL:            fmt.Sprintf("http://localhost:%d", port),
+			HealthCheckURL: "/health",
+			ModelURL:       "/api/tags",
+			Priority:       100,
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
 		}
-		repo.Add(ctx, endpoint)
 	}
+
+	repo.LoadFromConfig(ctx, configs)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -37,47 +42,12 @@ func BenchmarkRepository_GetAll(b *testing.B) {
 	}
 }
 
-func BenchmarkRepository_GetHealthy(b *testing.B) {
-	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
-
-	// Mix of statuses - 25% healthy
-	statuses := []domain.EndpointStatus{
-		domain.StatusHealthy,
-		domain.StatusBusy,
-		domain.StatusOffline,
-		domain.StatusUnhealthy,
-	}
-
-	for i := 0; i < 100; i++ {
-		port := 11434 + i
-		testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
-		healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
-		endpoint := &domain.Endpoint{
-			Name:           fmt.Sprintf("bench-%d", i),
-			URL:            testURL,
-			HealthCheckURL: healthURL,
-			Status:         statuses[i%len(statuses)],
-		}
-		repo.Add(ctx, endpoint)
-	}
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_, err := repo.GetHealthy(ctx)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 func BenchmarkRepository_GetRoutable(b *testing.B) {
 	repo := NewStaticEndpointRepository()
 	ctx := context.Background()
 
-	// 60% routable (healthy + busy + warming)
+	// Mix of statuses - 60% routable (healthy + busy + warming)
+	configs := make([]config.EndpointConfig, 100)
 	statuses := []domain.EndpointStatus{
 		domain.StatusHealthy,
 		domain.StatusBusy,
@@ -88,15 +58,24 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 
 	for i := 0; i < 100; i++ {
 		port := 11434 + i
-		testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
-		healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
-		endpoint := &domain.Endpoint{
+		configs[i] = config.EndpointConfig{
 			Name:           fmt.Sprintf("bench-%d", i),
-			URL:            testURL,
-			HealthCheckURL: healthURL,
-			Status:         statuses[i%len(statuses)],
+			URL:            fmt.Sprintf("http://localhost:%d", port),
+			HealthCheckURL: "/health",
+			ModelURL:       "/api/tags",
+			Priority:       100,
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
 		}
-		repo.Add(ctx, endpoint)
+	}
+
+	repo.LoadFromConfig(ctx, configs)
+
+	// Set mixed statuses after loading
+	endpoints, _ := repo.GetAll(ctx)
+	for i, endpoint := range endpoints {
+		endpoint.Status = statuses[i%len(statuses)]
+		repo.UpdateEndpoint(ctx, endpoint)
 	}
 
 	b.ResetTimer()
@@ -110,19 +89,23 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 	}
 }
 
-func BenchmarkRepository_StatusUpdate(b *testing.B) {
+func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 	repo := NewStaticEndpointRepository()
 	ctx := context.Background()
 
-	testURL, _ := url.Parse("http://localhost:11434")
-	healthURL, _ := url.Parse("http://localhost:11434/health")
-	endpoint := &domain.Endpoint{
+	cfg := config.EndpointConfig{
 		Name:           "bench-update",
-		URL:            testURL,
-		HealthCheckURL: healthURL,
-		Status:         domain.StatusHealthy,
+		URL:            "http://localhost:11434",
+		HealthCheckURL: "/health",
+		ModelURL:       "/api/tags",
+		Priority:       100,
+		CheckInterval:  5 * time.Second,
+		CheckTimeout:   2 * time.Second,
 	}
-	repo.Add(ctx, endpoint)
+
+	repo.LoadFromConfig(ctx, []config.EndpointConfig{cfg})
+	endpoints, _ := repo.GetAll(ctx)
+	endpoint := endpoints[0]
 
 	statuses := []domain.EndpointStatus{
 		domain.StatusHealthy,
@@ -134,8 +117,41 @@ func BenchmarkRepository_StatusUpdate(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		status := statuses[i%len(statuses)]
-		err := repo.UpdateStatus(ctx, testURL, status)
+		endpoint.Status = statuses[i%len(statuses)]
+		endpoint.LastChecked = time.Now()
+		endpoint.LastLatency = time.Duration(i%100) * time.Millisecond
+
+		err := repo.UpdateEndpoint(ctx, endpoint)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRepository_LoadFromConfig(b *testing.B) {
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	// Create realistic config with 10 endpoints
+	configs := make([]config.EndpointConfig, 10)
+	for i := 0; i < 10; i++ {
+		port := 11434 + i
+		configs[i] = config.EndpointConfig{
+			Name:           fmt.Sprintf("load-bench-%d", i),
+			URL:            fmt.Sprintf("http://localhost:%d", port),
+			HealthCheckURL: "/health",
+			ModelURL:       "/api/tags",
+			Priority:       100 + i*10,
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		}
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		err := repo.LoadFromConfig(ctx, configs)
 		if err != nil {
 			b.Fatal(err)
 		}

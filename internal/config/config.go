@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -21,7 +20,7 @@ func DefaultConfig() *Config {
 			Host:            DefaultHost,
 			Port:            DefaultPort,
 			ReadTimeout:     30 * time.Second,
-			WriteTimeout:    0, /* We don't want to timeout for proxies */
+			WriteTimeout:    0, // No timeout for proxies
 			ShutdownTimeout: 10 * time.Second,
 		},
 		Proxy: ProxyConfig{
@@ -31,15 +30,13 @@ func DefaultConfig() *Config {
 			MaxRetries:        3,
 			RetryBackoff:      500 * time.Millisecond,
 			LoadBalancer:      "priority",
-			StreamBufferSize:     8 * 1024, // 8KB
-			EnableCircuitBreaker: true,
+			StreamBufferSize:  8 * 1024, // 8KB
 		},
 		Discovery: DiscoveryConfig{
 			Type:            "static",
 			RefreshInterval: 30 * time.Second,
 			Static: StaticDiscoveryConfig{
 				Endpoints: []EndpointConfig{
-					/** Assume user has a default endpoint for Ollama API **/
 					{
 						Name:           "localhost",
 						URL:            "http://localhost:11434",
@@ -57,33 +54,6 @@ func DefaultConfig() *Config {
 			Format: "json",
 			Output: "stdout",
 		},
-		Telemetry: TelemetryConfig{
-			Metrics: MetricsConfig{
-				Enabled: true,
-				Address: ":9090",
-			},
-			Tracing: TracingConfig{
-				Enabled:    false,
-				Endpoint:   "localhost:4317",
-				SampleRate: 0.1,
-			},
-		},
-		Security: SecurityConfig{
-			TLS: TLSConfig{
-				Enabled:  false,
-				CertFile: "cert.pem",
-				KeyFile:  "key.pem",
-			},
-			MTLS: MTLSConfig{
-				Enabled: false,
-				CAFile:  "ca.pem",
-			},
-		},
-		Plugins: PluginsConfig{
-			Directory: "./plugins",
-			Enabled:   []string{},
-			Config:    map[string]interface{}{},
-		},
 		Engineering: EngineeringConfig{
 			ShowNerdStats: false,
 		},
@@ -93,8 +63,8 @@ func DefaultConfig() *Config {
 func Load() (*Config, error) {
 	config := DefaultConfig()
 
-	// Prioritise users ./config.yaml or ./config/config.yaml before falling back to default.yaml
-	configPaths := []string{"config.yaml", "config/config.yaml" /* Development */, "default.yaml"}
+	// Simple config file loading - check a few standard locations
+	configPaths := []string{"config.yaml", "config/config.yaml", "default.yaml"}
 	if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
 		configPaths = []string{configFile}
 	}
@@ -114,11 +84,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("specified config file not found: %s", os.Getenv("OLLA_CONFIG_FILE"))
 	}
 
+	// Apply essential environment overrides only
 	applyEnvOverrides(config)
 	return config, nil
 }
 
+// Simplified env overrides - only the ones actually used
 func applyEnvOverrides(config *Config) {
+	// Server config
 	if val := os.Getenv("OLLA_SERVER_HOST"); val != "" {
 		config.Server.Host = val
 	}
@@ -137,16 +110,8 @@ func applyEnvOverrides(config *Config) {
 			config.Server.WriteTimeout = duration
 		}
 	}
-	if val := os.Getenv("OLLA_SERVER_SHUTDOWN_TIMEOUT"); val != "" {
-		if duration, err := time.ParseDuration(val); err == nil {
-			config.Server.ShutdownTimeout = duration
-		}
-	}
-	if val := os.Getenv("OLLA_PROXY_CONNECTION_TIMEOUT"); val != "" {
-		if duration, err := time.ParseDuration(val); err == nil {
-			config.Proxy.ConnectionTimeout = duration
-		}
-	}
+
+	// Proxy config
 	if val := os.Getenv("OLLA_PROXY_RESPONSE_TIMEOUT"); val != "" {
 		if duration, err := time.ParseDuration(val); err == nil {
 			config.Proxy.ResponseTimeout = duration
@@ -157,80 +122,22 @@ func applyEnvOverrides(config *Config) {
 			config.Proxy.ReadTimeout = duration
 		}
 	}
-	if val := os.Getenv("OLLA_PROXY_MAX_RETRIES"); val != "" {
-		if retries, err := strconv.Atoi(val); err == nil {
-			config.Proxy.MaxRetries = retries
-		}
-	}
-	if val := os.Getenv("OLLA_PROXY_RETRY_BACKOFF"); val != "" {
-		if duration, err := time.ParseDuration(val); err == nil {
-			config.Proxy.RetryBackoff = duration
-		}
-	}
 	if val := os.Getenv("OLLA_PROXY_LOAD_BALANCER"); val != "" {
 		config.Proxy.LoadBalancer = val
 	}
-	if val := os.Getenv("OLLA_DISCOVERY_TYPE"); val != "" {
-		config.Discovery.Type = val
-	}
-	if val := os.Getenv("OLLA_DISCOVERY_REFRESH_INTERVAL"); val != "" {
-		if duration, err := time.ParseDuration(val); err == nil {
-			config.Discovery.RefreshInterval = duration
-		}
-	}
+
+	// Logging config
 	if val := os.Getenv("OLLA_LOGGING_LEVEL"); val != "" {
 		config.Logging.Level = val
 	}
 	if val := os.Getenv("OLLA_LOGGING_FORMAT"); val != "" {
 		config.Logging.Format = val
 	}
-	if val := os.Getenv("OLLA_LOGGING_OUTPUT"); val != "" {
-		config.Logging.Output = val
-	}
-	if val := os.Getenv("OLLA_TELEMETRY_METRICS_ENABLED"); val != "" {
+
+	// Engineering config
+	if val := os.Getenv("OLLA_SHOW_NERD_STATS"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
-			config.Telemetry.Metrics.Enabled = enabled
+			config.Engineering.ShowNerdStats = enabled
 		}
-	}
-	if val := os.Getenv("OLLA_TELEMETRY_METRICS_ADDRESS"); val != "" {
-		config.Telemetry.Metrics.Address = val
-	}
-	if val := os.Getenv("OLLA_TELEMETRY_TRACING_ENABLED"); val != "" {
-		if enabled, err := strconv.ParseBool(val); err == nil {
-			config.Telemetry.Tracing.Enabled = enabled
-		}
-	}
-	if val := os.Getenv("OLLA_TELEMETRY_TRACING_ENDPOINT"); val != "" {
-		config.Telemetry.Tracing.Endpoint = val
-	}
-	if val := os.Getenv("OLLA_TELEMETRY_TRACING_SAMPLE_RATE"); val != "" {
-		if rate, err := strconv.ParseFloat(val, 64); err == nil {
-			config.Telemetry.Tracing.SampleRate = rate
-		}
-	}
-	if val := os.Getenv("OLLA_SECURITY_TLS_ENABLED"); val != "" {
-		if enabled, err := strconv.ParseBool(val); err == nil {
-			config.Security.TLS.Enabled = enabled
-		}
-	}
-	if val := os.Getenv("OLLA_SECURITY_TLS_CERT_FILE"); val != "" {
-		config.Security.TLS.CertFile = val
-	}
-	if val := os.Getenv("OLLA_SECURITY_TLS_KEY_FILE"); val != "" {
-		config.Security.TLS.KeyFile = val
-	}
-	if val := os.Getenv("OLLA_SECURITY_MTLS_ENABLED"); val != "" {
-		if enabled, err := strconv.ParseBool(val); err == nil {
-			config.Security.MTLS.Enabled = enabled
-		}
-	}
-	if val := os.Getenv("OLLA_SECURITY_MTLS_CA_FILE"); val != "" {
-		config.Security.MTLS.CAFile = val
-	}
-	if val := os.Getenv("OLLA_PLUGINS_DIRECTORY"); val != "" {
-		config.Plugins.Directory = val
-	}
-	if val := os.Getenv("OLLA_PLUGINS_ENABLED"); val != "" {
-		config.Plugins.Enabled = strings.Split(val, ",")
 	}
 }

@@ -44,7 +44,7 @@ test-verbose:
 	@echo "Running tests with verbose output..."
 	@go test -v ./...
 
-# Run tests with short flag (skip long-running tests)
+# Run tests with short flag
 test-short:
 	@echo "Running short tests..."
 	@go test -short ./...
@@ -71,15 +71,18 @@ bench:
 	@echo "Running benchmarks..."
 	@go test -bench=. -benchmem ./...
 
-# Run specific benchmark tests for repository
+# Run repository benchmarks
 bench-repo:
 	@echo "Running repository benchmarks..."
 	@go test -bench=BenchmarkRepository -benchmem ./internal/adapter/discovery/
 
-# Run specific benchmark tests for health checker
-bench-health:
-	@echo "Running health checker benchmarks..."
-	@go test -bench=BenchmarkHealth -benchmem ./internal/adapter/health/
+# Run balancer benchmarks
+bench-balancer:
+	@echo "Running balancer benchmarks..."
+	@go test -bench=BenchmarkFactory -benchmem ./internal/adapter/balancer/
+	@go test -bench=BenchmarkPriority -benchmem ./internal/adapter/balancer/
+	@go test -bench=BenchmarkRoundRobin -benchmem ./internal/adapter/balancer/
+	@go test -bench=BenchmarkLeastConnections -benchmem ./internal/adapter/balancer/
 
 # Show version information that would be embedded
 version:
@@ -104,7 +107,7 @@ deps:
 fmt:
 	@go fmt ./...
 
-# Run linter (if golangci-lint is installed)
+# Run linter
 lint:
 	@which golangci-lint > /dev/null && golangci-lint run || echo "golangci-lint not installed, skipping..."
 
@@ -132,7 +135,7 @@ help:
 	@echo "  test-cover-html - Run tests with coverage and generate HTML report"
 	@echo "  bench           - Run all benchmarks"
 	@echo "  bench-repo      - Run repository benchmarks"
-	@echo "  bench-health    - Run health checker benchmarks"
+	@echo "  bench-balancer  - Run balancer benchmarks"
 	@echo "  version         - Show version info that will be embedded"
 	@echo "  version-built   - Show version from built binary"
 	@echo "  dev             - Build development binary (with debug symbols)"

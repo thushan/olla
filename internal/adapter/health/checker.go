@@ -2,45 +2,48 @@ package health
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/pterm/pterm"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
 
+const (
+	DefaultConcurrentChecks    = 5
+	DefaultHealthCheckInterval = 30 * time.Second
+	LogThrottleInterval        = 2 * time.Minute
+)
+
 type HTTPHealthChecker struct {
-	healthClient   *HealthClient
-	circuitBreaker *CircuitBreaker
-	statusTracker  *StatusTransitionTracker
-	repository     domain.EndpointRepository
-	ticker         *time.Ticker
-	stopCh         chan struct{}
-	logger         *logger.StyledLogger
-	mu             sync.Mutex
-	isRunning      atomic.Bool
+	repository       domain.EndpointRepository
+	healthClient     *HealthClient
+	ticker           *time.Ticker
+	stopCh           chan struct{}
+	logger           *logger.StyledLogger
+	lastLoggedStatus sync.Map
+	lastLogTime      sync.Map
+	isRunning        atomic.Bool
 }
 
-// NewHTTPHealthChecker creates a health checker with the provided HTTP client
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
 	circuitBreaker := NewCircuitBreaker()
-	statusTracker := NewStatusTransitionTracker()
 	healthClient := NewHealthClient(client, circuitBreaker)
 
 	return &HTTPHealthChecker{
-		healthClient:   healthClient,
-		circuitBreaker: circuitBreaker,
-		statusTracker:  statusTracker,
-		repository:     repository,
-		logger:         logger,
-		stopCh:         make(chan struct{}),
+		healthClient: healthClient,
+		repository:   repository,
+		logger:       logger,
+		stopCh:       make(chan struct{}),
 	}
 }
 
-// NewHTTPHealthCheckerWithDefaults creates a health checker with default HTTP client
 func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger *logger.StyledLogger) *HTTPHealthChecker {
 	client := &http.Client{
 		Timeout: DefaultHealthCheckerTimeout,
@@ -48,29 +51,29 @@ func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logg
 	return NewHTTPHealthChecker(repository, logger, client)
 }
 
-// Check delegates to the health client - maintains existing public API
 func (c *HTTPHealthChecker) Check(ctx context.Context, endpoint *domain.Endpoint) (domain.HealthCheckResult, error) {
-	return c.healthClient.Check(ctx, endpoint)
+	// Add timeout protection for individual checks
+	checkCtx, cancel := context.WithTimeout(ctx, endpoint.CheckTimeout*2) // Give extra time for retries
+	defer cancel()
+
+	return c.healthClient.Check(checkCtx, endpoint)
 }
 
 func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.isRunning.Load() {
 		return nil
 	}
 
 	endpoints, err := c.repository.GetAll(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get endpoints for health checking: %w", err)
+		return domain.NewEndpointError("start_health_checking", "repository",
+			fmt.Errorf("failed to get endpoints for health checking: %w", err))
 	}
-
-	c.isRunning.Store(true)
 
 	c.logger.Info("Starting Health Checker Service", "check_interval", DefaultHealthCheckInterval, "endpoints", len(endpoints))
 
-	// Start simple ticker-based health checking
+	c.isRunning.Store(true)
+
 	c.ticker = time.NewTicker(DefaultHealthCheckInterval)
 	go c.healthCheckLoop(ctx)
 
@@ -78,9 +81,6 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 }
 
 func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if !c.isRunning.Load() {
 		return nil
 	}
@@ -96,14 +96,30 @@ func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 }
 
 func (c *HTTPHealthChecker) healthCheckLoop(ctx context.Context) {
+	defer func() {
+		if c.ticker != nil {
+			c.ticker.Stop()
+		}
+		// Panic recovery for health check loop
+		if r := recover(); r != nil {
+			c.logger.Error("Health check loop panic recovered", "panic", r)
+			// Could restart the loop here if needed
+		}
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
+			c.logger.Debug("Health check loop stopping due to context cancellation")
 			return
 		case <-c.stopCh:
+			c.logger.Debug("Health check loop stopping due to stop signal")
 			return
 		case <-c.ticker.C:
-			c.performHealthChecks(ctx)
+			// Use a separate context for health checks to avoid cancelling mid-check
+			checkCtx, cancel := context.WithTimeout(context.Background(), DefaultHealthCheckInterval/2)
+			c.performHealthChecks(checkCtx)
+			cancel()
 		}
 	}
 }
@@ -111,45 +127,90 @@ func (c *HTTPHealthChecker) healthCheckLoop(ctx context.Context) {
 func (c *HTTPHealthChecker) performHealthChecks(ctx context.Context) {
 	endpoints, err := c.repository.GetAll(ctx)
 	if err != nil {
-		c.logger.Error("Failed to get endpoints for health checking", "error", err)
+		c.logger.Error("Failed to get endpoints for health checking",
+			"error", domain.NewEndpointError("get_endpoints", "repository", err))
 		return
 	}
 
 	now := time.Now()
+	var wg sync.WaitGroup
 
+	endpointsToCheck := make([]*domain.Endpoint, 0, len(endpoints))
+
+	// Filter endpoints that are due for checking
 	for _, endpoint := range endpoints {
-		// Check if this endpoint is due for a health check
 		if now.Before(endpoint.NextCheckTime) {
 			continue
 		}
-
-		// Perform health check
-		c.checkEndpoint(ctx, endpoint)
+		endpointsToCheck = append(endpointsToCheck, endpoint)
 	}
 
-	// Cleanup old circuit breaker and status tracker entries
-	c.performCleanup(endpoints)
+	if len(endpointsToCheck) == 0 {
+		return
+	}
+
+	c.logger.Debug("Performing health checks", "endpoints_to_check", len(endpointsToCheck))
+
+	// Limit concurrency to avoid overwhelming the health client
+	semaphore := make(chan struct{}, DefaultConcurrentChecks)
+
+	for _, endpoint := range endpointsToCheck {
+		wg.Add(1)
+		go func(ep *domain.Endpoint) {
+			defer wg.Done()
+
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				return
+			}
+
+			c.checkEndpointSafely(ctx, ep)
+		}(endpoint)
+	}
+
+	wg.Wait()
+}
+
+func (c *HTTPHealthChecker) checkEndpointSafely(ctx context.Context, endpoint *domain.Endpoint) {
+	// Panic recovery for individual endpoint checks
+	defer func() {
+		if r := recover(); r != nil {
+			c.logger.Error("Health check panic recovered for endpoint",
+				"endpoint", endpoint.Name,
+				"url", endpoint.GetURLString(),
+				"panic", r)
+		}
+	}()
+
+	c.checkEndpoint(ctx, endpoint)
 }
 
 func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.Endpoint) {
 	result, err := c.healthClient.Check(ctx, endpoint)
 
-	endpoint.Status = result.Status
-	endpoint.LastChecked = time.Now()
-	endpoint.LastLatency = result.Latency
+	oldStatus := endpoint.Status
+	newStatus := result.Status
+	statusChanged := oldStatus != newStatus
+
+	endpointCopy := *endpoint
+	endpointCopy.Status = newStatus
+	endpointCopy.LastChecked = time.Now()
+	endpointCopy.LastLatency = result.Latency
 
 	isSuccess := result.Status == domain.StatusHealthy
-	nextInterval, newMultiplier := calculateBackoff(endpoint, isSuccess)
+	nextInterval, newMultiplier := calculateBackoff(&endpointCopy, isSuccess)
 
 	if !isSuccess {
-		endpoint.ConsecutiveFailures++
-		endpoint.BackoffMultiplier = newMultiplier
+		endpointCopy.ConsecutiveFailures++
+		endpointCopy.BackoffMultiplier = newMultiplier
 	} else {
-		endpoint.ConsecutiveFailures = 0
-		endpoint.BackoffMultiplier = 1
+		endpointCopy.ConsecutiveFailures = 0
+		endpointCopy.BackoffMultiplier = 1
 	}
 
-	endpoint.NextCheckTime = time.Now().Add(nextInterval)
+	endpointCopy.NextCheckTime = time.Now().Add(nextInterval)
 
 	// Check if endpoint still exists before updating
 	if !c.repository.Exists(ctx, endpoint.URL) {
@@ -158,69 +219,123 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		return
 	}
 
-	if repoErr := c.repository.UpdateEndpoint(ctx, endpoint); repoErr != nil {
-		c.logger.Error("Failed to update endpoint",
-			"endpoint", endpoint.GetURLString(),
-			"error", repoErr)
+	if repoErr := c.repository.UpdateEndpoint(ctx, &endpointCopy); repoErr != nil {
+		enhancedErr := domain.NewEndpointError("update_endpoint", endpoint.GetURLString(), repoErr)
+		c.logger.Error("Failed to update endpoint", "error", enhancedErr)
 		return
 	}
 
-	shouldLog, errorCount := c.statusTracker.ShouldLog(
-		endpoint.GetURLString(),
-		result.Status,
-		err != nil)
+	// Enhanced logging with better error context
+	c.logHealthCheckResult(endpoint, oldStatus, newStatus, statusChanged, result, nextInterval, err)
+}
+func (c *HTTPHealthChecker) logHealthCheckResult(endpoint *domain.Endpoint, oldStatus, newStatus domain.EndpointStatus, statusChanged bool, result domain.HealthCheckResult, nextInterval time.Duration, checkErr error) {
+	endpointKey := endpoint.GetURLString()
+	lastLogTimeInterface, _ := c.lastLogTime.Load(endpointKey)
+	lastLogTime, _ := lastLogTimeInterface.(time.Time)
 
-	if shouldLog {
-		if errorCount > 0 ||
-			(result.Status == domain.StatusOffline ||
-				result.Status == domain.StatusBusy ||
-				result.Status == domain.StatusUnhealthy) {
-			c.logger.WarnWithEndpoint("Endpoint health issues for", endpoint.Name,
-				"status", result.Status.String(),
-				"consecutive_failures", errorCount,
+	if statusChanged {
+		// ANY status change gets logged immediately - this is critical for ops
+		c.lastLoggedStatus.Store(endpointKey, newStatus)
+		c.lastLogTime.Store(endpointKey, time.Now())
+
+		// Special handling for initial status discovery
+		if oldStatus == domain.StatusUnknown {
+			if newStatus == domain.StatusHealthy {
+				c.logger.InfoHealthStatus("Endpoint initial status:",
+					endpoint.Name,
+					newStatus,
+					"latency", result.Latency,
+					"next_check_in", nextInterval)
+			} else {
+				// Initial discovery of unhealthy endpoint
+				detailedArgs := []interface{}{
+					"endpoint_url", endpoint.GetURLString(),
+					"status_code", result.StatusCode,
+					"error_type", result.ErrorType,
+				}
+				if checkErr != nil {
+					var healthCheckErr *domain.HealthCheckError
+					if errors.As(checkErr, &healthCheckErr) {
+						detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
+					} else {
+						detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
+					}
+				}
+
+				c.logger.WarnWithContext("Endpoint discovered offline:", endpoint.Name, logger.LogContext{
+					UserArgs: []interface{}{
+						"status", newStatus.String(),
+						"latency", result.Latency,
+						"next_check_in", nextInterval,
+					},
+					DetailedArgs: detailedArgs,
+				})
+			}
+		} else if newStatus == domain.StatusHealthy {
+			c.logger.InfoHealthStatus("Endpoint recovered:",
+				endpoint.Name,
+				newStatus,
+				"was", oldStatus.String(),
 				"latency", result.Latency,
 				"next_check_in", nextInterval)
 		} else {
-			c.logger.InfoHealthStatus("Endpoint status changed for",
-				endpoint.Name,
-				result.Status,
-				"latency", result.Latency,
-				"next_check_in", nextInterval)
+			// Status change to unhealthy
+			detailedArgs := []interface{}{
+				"endpoint_url", endpoint.GetURLString(),
+				"status_code", result.StatusCode,
+				"error_type", result.ErrorType,
+			}
+			if checkErr != nil {
+				var healthCheckErr *domain.HealthCheckError
+				if errors.As(checkErr, &healthCheckErr) {
+					detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
+				} else {
+					detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
+				}
+			}
+
+			c.logger.WarnWithContext("Endpoint status changed:", endpoint.Name, logger.LogContext{
+				UserArgs: []interface{}{
+					"status", newStatus.String(),
+					"was", oldStatus.String(),
+					"consecutive_failures", endpoint.ConsecutiveFailures + 1,
+					"latency", result.Latency,
+					"next_check_in", nextInterval,
+				},
+				DetailedArgs: detailedArgs,
+			})
 		}
-	}
-}
+	} else if checkErr != nil && time.Since(lastLogTime) > LogThrottleInterval {
+		// Same status but still having issues - only log every 2 minutes to avoid spam
+		c.lastLogTime.Store(endpointKey, time.Now())
 
-func (c *HTTPHealthChecker) performCleanup(currentEndpoints []*domain.Endpoint) {
-	if len(currentEndpoints) == 0 {
-		return
-	}
-
-	currentEndpointURLs := make(map[string]struct{}, len(currentEndpoints))
-	for _, endpoint := range currentEndpoints {
-		currentEndpointURLs[endpoint.GetURLString()] = struct{}{}
-	}
-
-	// Clean circuit breaker
-	circuitEndpoints := c.circuitBreaker.GetActiveEndpoints()
-	for _, url := range circuitEndpoints {
-		if _, exists := currentEndpointURLs[url]; !exists {
-			c.circuitBreaker.CleanupEndpoint(url)
+		detailedArgs := []interface{}{
+			"endpoint_url", endpoint.GetURLString(),
+			"status_code", result.StatusCode,
+			"error_type", result.ErrorType,
 		}
-	}
 
-	// Clean status tracker
-	statusEndpoints := c.statusTracker.GetActiveEndpoints()
-	for _, url := range statusEndpoints {
-		if _, exists := currentEndpointURLs[url]; !exists {
-			c.statusTracker.CleanupEndpoint(url)
+		var healthCheckErr *domain.HealthCheckError
+		if errors.As(checkErr, &healthCheckErr) {
+			detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
+		} else {
+			detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
 		}
+
+		c.logger.WarnWithContext("Endpoint still having issues:", endpoint.Name, logger.LogContext{
+			UserArgs: []interface{}{
+				"status", newStatus.String(),
+				"consecutive_failures", endpoint.ConsecutiveFailures + 1,
+				"duration", time.Since(lastLogTime).Round(time.Second),
+				"next_check_in", nextInterval,
+			},
+			DetailedArgs: detailedArgs,
+		})
 	}
 }
 
 func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
-	c.mu.Lock()
 	running := c.isRunning.Load()
-	c.mu.Unlock()
 
 	if !running {
 		return map[string]interface{}{
@@ -229,57 +344,103 @@ func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"isRunning":       running,
-		"check_interval":  DefaultHealthCheckInterval.String(),
-		"circuit_breaker": c.getCircuitBreakerStats(),
-		"status_tracker":  c.getStatusTrackerStats(),
+		"isRunning":      running,
+		"check_interval": DefaultHealthCheckInterval.String(),
 	}
 }
 
-func (c *HTTPHealthChecker) getCircuitBreakerStats() map[string]interface{} {
-	activeEndpoints := c.circuitBreaker.GetActiveEndpoints()
-
-	openCircuits := 0
-	for _, endpoint := range activeEndpoints {
-		if c.circuitBreaker.IsOpen(endpoint) {
-			openCircuits++
-		}
-	}
-
-	return map[string]interface{}{
-		"total_endpoints": len(activeEndpoints),
-		"open_circuits":   openCircuits,
-	}
-}
-
-func (c *HTTPHealthChecker) getStatusTrackerStats() map[string]interface{} {
-	activeEndpoints := c.statusTracker.GetActiveEndpoints()
-
-	return map[string]interface{}{
-		"tracked_endpoints": len(activeEndpoints),
-	}
-}
-
-func (c *HTTPHealthChecker) ForceHealthCheck(ctx context.Context) error {
+func (c *HTTPHealthChecker) RunHealthCheck(ctx context.Context, initial bool) error {
 	if !c.isRunning.Load() {
-		return fmt.Errorf("health checker is not isRunning")
+		return domain.NewEndpointError("run_health_check", "health_checker",
+			fmt.Errorf("health checker is not running"))
 	}
 
 	endpoints, err := c.repository.GetAll(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get endpoints: %w", err)
+		return domain.NewEndpointError("run_health_check", "repository",
+			fmt.Errorf("failed to get endpoints: %w", err))
 	}
 
-	c.logger.Info("Forcing health check", "endpoints", len(endpoints))
+	if initial {
+		c.logger.Info("Initialising health checks", "endpoints", len(endpoints))
+	} else {
+		c.logger.Info("Running full health checks", "endpoints", len(endpoints))
+	}
 
-	// Force check all endpoints immediately
+	c.logEndpointsTable(endpoints)
+
+	// Use controlled concurrency for manual health checks too
+	var wg sync.WaitGroup
+	semaphore := make(chan struct{}, 10) // Allow more concurrency for manual checks
+
 	for _, endpoint := range endpoints {
-		c.checkEndpoint(ctx, endpoint)
+		wg.Add(1)
+		go func(ep *domain.Endpoint) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				return
+			}
+
+			c.checkEndpointSafely(ctx, ep)
+		}(endpoint)
 	}
 
+	wg.Wait()
 	return nil
 }
 
-const (
-	DefaultHealthCheckInterval = 30 * time.Second
-)
+func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
+	if len(endpoints) == 0 {
+		return
+	}
+
+	// Sort routes by registration priority
+	type endpointEntry struct {
+		url      string
+		name     string
+		health   string
+		priority int
+		interval int
+		timeout  int
+	}
+
+	entries := make([]endpointEntry, 0, len(endpoints))
+	for _, info := range endpoints {
+		entries = append(entries, endpointEntry{
+			url:      info.URL.String(),
+			name:     info.Name,
+			health:   info.HealthCheckPathString,
+			priority: info.Priority,
+			interval: int(info.CheckInterval.Seconds()),
+			timeout:  int(info.CheckTimeout.Seconds()),
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].priority > entries[j].priority
+	})
+
+	// Build table
+	tableData := make([][]string, 0, len(entries)+1)
+	tableData = append(tableData, []string{"PRIORITY", "NAME", "URL", "HEALTH", "CHECK", "TIMEOUT"})
+
+	for _, entry := range entries {
+		tableData = append(tableData, []string{
+			fmt.Sprintf("%d", entry.priority),
+			entry.name,
+			entry.url,
+			entry.health,
+			fmt.Sprintf("%ds", entry.interval),
+			fmt.Sprintf("%ds", entry.timeout),
+		})
+	}
+
+	c.logger.Info(fmt.Sprintf("Registered endpoints %s", pterm.Style{c.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
+	tableString, _ := pterm.DefaultTable.WithHeaderStyle(c.logger.Theme.Accent).WithHasHeader().WithData(tableData).Srender()
+	fmt.Print(tableString)
+}

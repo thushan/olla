@@ -3,6 +3,10 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
@@ -12,8 +16,6 @@ import (
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
-	"net/http"
-	"time"
 )
 
 type Application struct {
@@ -25,8 +27,8 @@ type Application struct {
 	repository    *discovery.StaticEndpointRepository
 	healthChecker *health.HTTPHealthChecker
 	proxyService  ports.ProxyService
-	pluginService ports.PluginService
 	errCh         chan error
+	shutdownOnce  sync.Once
 }
 
 func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error) {
@@ -45,12 +47,11 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
 
-	// Create a simple discovery service wrapper
-	discoveryService := &SimpleDiscoveryService{
-		repository:    repository,
-		healthChecker: healthChecker,
-		endpoints:     cfg.Discovery.Static.Endpoints,
-		logger:        logger,
+	// Create simple discovery wrapper that implements the interface
+	discoveryService := &simpleDiscovery{
+		repository: repository,
+		endpoints:  cfg.Discovery.Static.Endpoints,
+		logger:     logger,
 	}
 
 	proxyService := proxy.NewService(
@@ -94,8 +95,7 @@ func (a *Application) Start(ctx context.Context) error {
 
 	a.startWebServer()
 
-	// Directly use repository and health checker
-	if _, err := a.repository.UpsertFromConfig(ctx, a.Config.Discovery.Static.Endpoints); err != nil {
+	if err := a.repository.LoadFromConfig(ctx, a.Config.Discovery.Static.Endpoints); err != nil {
 		a.logger.Error("Failed to load endpoints from config", "error", err)
 		a.errCh <- err
 		return err
@@ -107,43 +107,50 @@ func (a *Application) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Force initial health check
-	if err := a.healthChecker.ForceHealthCheck(ctx); err != nil {
+	if err := a.healthChecker.RunHealthCheck(ctx, true); err != nil {
 		a.logger.Warn("Failed to force initial health check", "error", err)
 	}
 
-	a.logger.Info("Olla started", "bind", a.server.Addr)
+	a.logger.Info("Olla started, waiting for requests...", "bind", a.server.Addr)
 	return nil
 }
 
 func (a *Application) Stop(ctx context.Context) error {
-	shutdownCtx, cancel := context.WithTimeout(ctx, a.Config.Server.ShutdownTimeout)
-	defer cancel()
+	var shutdownErr error
 
-	if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {
-		a.logger.Error("Failed to stop health checker", "error", err)
-	}
+	a.shutdownOnce.Do(func() {
+		shutdownCtx, cancel := context.WithTimeout(ctx, a.Config.Server.ShutdownTimeout)
+		defer cancel()
 
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("HTTP server shutdown error: %w", err)
-	}
+		if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {
+			a.logger.Error("Failed to stop health checker", "error", err)
+			shutdownErr = err
+		}
 
-	return nil
+		if err := a.server.Shutdown(shutdownCtx); err != nil {
+			if shutdownErr != nil {
+				a.logger.Error("HTTP server shutdown error", "error", err)
+			} else {
+				shutdownErr = fmt.Errorf("HTTP server shutdown error: %w", err)
+			}
+		}
+	})
+
+	return shutdownErr
 }
 
-// SimpleDiscoveryService is a minimal wrapper that maintains the interface
-type SimpleDiscoveryService struct {
-	repository    *discovery.StaticEndpointRepository
-	healthChecker *health.HTTPHealthChecker
-	endpoints     []config.EndpointConfig
-	logger        *logger.StyledLogger
+// simpleDiscovery implements ports.DiscoveryService without the wrapper complexity
+type simpleDiscovery struct {
+	repository *discovery.StaticEndpointRepository
+	logger     *logger.StyledLogger
+	endpoints  []config.EndpointConfig
 }
 
-func (s *SimpleDiscoveryService) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+func (s *simpleDiscovery) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
 	return s.repository.GetAll(ctx)
 }
 
-func (s *SimpleDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+func (s *simpleDiscovery) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
 	routable, err := s.repository.GetRoutable(ctx)
 	if err != nil {
 		return nil, err
@@ -157,17 +164,6 @@ func (s *SimpleDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*do
 	return s.repository.GetAll(ctx)
 }
 
-func (s *SimpleDiscoveryService) RefreshEndpoints(ctx context.Context) error {
-	_, err := s.repository.UpsertFromConfig(ctx, s.endpoints)
-	return err
-}
-
-func (s *SimpleDiscoveryService) Start(ctx context.Context) error {
-	// This is now handled directly in Application.Start()
-	return nil
-}
-
-func (s *SimpleDiscoveryService) Stop(ctx context.Context) error {
-	// This is now handled directly in Application.Stop()
-	return nil
+func (s *simpleDiscovery) RefreshEndpoints(ctx context.Context) error {
+	return s.repository.LoadFromConfig(ctx, s.endpoints)
 }

@@ -3,9 +3,10 @@ package domain
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/config"
 	"net/url"
 	"time"
+
+	"github.com/thushan/olla/internal/config"
 )
 
 const (
@@ -18,22 +19,23 @@ const (
 )
 
 type Endpoint struct {
-	Name                 string
-	URL                  *url.URL
-	Priority             int
-	HealthCheckURL       *url.URL
-	ModelUrl             *url.URL
-	CheckInterval        time.Duration
-	CheckTimeout         time.Duration
-	Status               EndpointStatus
-	LastChecked          time.Time
-	URLString            string
-	HealthCheckURLString string
-	ModelURLString       string
-	ConsecutiveFailures  int
-	BackoffMultiplier    int
-	NextCheckTime        time.Time
-	LastLatency          time.Duration
+	LastChecked           time.Time
+	NextCheckTime         time.Time
+	URL                   *url.URL
+	HealthCheckURL        *url.URL
+	ModelUrl              *url.URL
+	Name                  string
+	Status                EndpointStatus
+	URLString             string
+	HealthCheckPathString string
+	HealthCheckURLString  string
+	ModelURLString        string
+	Priority              int
+	CheckInterval         time.Duration
+	CheckTimeout          time.Duration
+	ConsecutiveFailures   int
+	BackoffMultiplier     int
+	LastLatency           time.Duration
 }
 
 func (e *Endpoint) GetURLString() string {
@@ -42,9 +44,6 @@ func (e *Endpoint) GetURLString() string {
 
 func (e *Endpoint) GetHealthCheckURLString() string {
 	return e.HealthCheckURLString
-}
-func (e *ErrEndpointNotFound) Error() string {
-	return fmt.Sprintf("endpoint not found: %s", e.URL)
 }
 
 type EndpointStatus string
@@ -84,36 +83,21 @@ func (s EndpointStatus) String() string {
 	return string(s)
 }
 
-type EndpointChangeResult struct {
-	Changed  bool
-	Added    []*EndpointChange
-	Removed  []*EndpointChange
-	Modified []*EndpointChange
-	OldCount int
-	NewCount int
-}
-
-type EndpointChange struct {
-	Name    string
-	URL     string
-	Changes []string
-}
-
 type ErrEndpointNotFound struct {
 	URL string
 }
 
+func (e *ErrEndpointNotFound) Error() string {
+	return fmt.Sprintf("endpoint not found: %s", e.URL)
+}
+
 type EndpointRepository interface {
 	GetAll(ctx context.Context) ([]*Endpoint, error)
-	GetHealthy(ctx context.Context) ([]*Endpoint, error)
 	GetRoutable(ctx context.Context) ([]*Endpoint, error)
-	UpdateStatus(ctx context.Context, endpointURL *url.URL, status EndpointStatus) error
+	GetHealthy(ctx context.Context) ([]*Endpoint, error)
 	UpdateEndpoint(ctx context.Context, endpoint *Endpoint) error
-	UpsertFromConfig(ctx context.Context, configs []config.EndpointConfig) (*EndpointChangeResult, error)
-	Add(ctx context.Context, endpoint *Endpoint) error
-	Remove(ctx context.Context, endpointURL *url.URL) error
+	LoadFromConfig(ctx context.Context, configs []config.EndpointConfig) error
 	Exists(ctx context.Context, endpointURL *url.URL) bool
-	GetCacheStats() map[string]interface{}
 }
 
 type EndpointSelector interface {

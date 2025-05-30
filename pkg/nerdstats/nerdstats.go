@@ -21,6 +21,11 @@ import (
 */
 
 type NerdStats struct {
+	LastGC time.Time // Time of last GC
+
+	// Debug info
+	BuildInfo *debug.BuildInfo
+	GoVersion string // Go version
 	// Memory stats
 	HeapAlloc    uint64 // Allocated heap memory in bytes
 	HeapSys      uint64 // Heap memory obtained from OS
@@ -32,9 +37,6 @@ type NerdStats struct {
 	Mallocs      uint64 // Number of malloc operations
 	Frees        uint64 // Number of free operations
 
-	// GC stats
-	NumGC         uint32        // Number of GC cycles
-	LastGC        time.Time     // Time of last GC
 	TotalGCTime   time.Duration // Total time spent in GC
 	GCCPUFraction float64       // Fraction of CPU time used by GC
 
@@ -45,11 +47,10 @@ type NerdStats struct {
 	// Go stats
 	NumCPU     int           // Number of logical CPUs
 	GOMAXPROCS int           // Max OS threads for Go
-	GoVersion  string        // Go version
 	Uptime     time.Duration // Process uptime
 
-	// Debug info
-	BuildInfo *debug.BuildInfo
+	// GC stats
+	NumGC uint32 // Number of GC cycles
 }
 
 func Snapshot(startTime time.Time) *NerdStats {
