@@ -125,7 +125,6 @@ func (c *HTTPHealthChecker) performHealthChecks(ctx context.Context) {
 		c.checkEndpoint(ctx, endpoint)
 	}
 }
-
 func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.Endpoint) {
 	result, err := c.healthClient.Check(ctx, endpoint)
 
@@ -133,22 +132,23 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 	newStatus := result.Status
 	statusChanged := oldStatus != newStatus
 
-	endpoint.Status = newStatus
-	endpoint.LastChecked = time.Now()
-	endpoint.LastLatency = result.Latency
+	endpointCopy := *endpoint
+	endpointCopy.Status = newStatus
+	endpointCopy.LastChecked = time.Now()
+	endpointCopy.LastLatency = result.Latency
 
 	isSuccess := result.Status == domain.StatusHealthy
-	nextInterval, newMultiplier := calculateBackoff(endpoint, isSuccess)
+	nextInterval, newMultiplier := calculateBackoff(&endpointCopy, isSuccess)
 
 	if !isSuccess {
-		endpoint.ConsecutiveFailures++
-		endpoint.BackoffMultiplier = newMultiplier
+		endpointCopy.ConsecutiveFailures++
+		endpointCopy.BackoffMultiplier = newMultiplier
 	} else {
-		endpoint.ConsecutiveFailures = 0
-		endpoint.BackoffMultiplier = 1
+		endpointCopy.ConsecutiveFailures = 0
+		endpointCopy.BackoffMultiplier = 1
 	}
 
-	endpoint.NextCheckTime = time.Now().Add(nextInterval)
+	endpointCopy.NextCheckTime = time.Now().Add(nextInterval)
 
 	// Check if endpoint still exists before updating
 	if !c.repository.Exists(ctx, endpoint.URL) {
@@ -157,7 +157,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		return
 	}
 
-	if repoErr := c.repository.UpdateEndpoint(ctx, endpoint); repoErr != nil {
+	if repoErr := c.repository.UpdateEndpoint(ctx, &endpointCopy); repoErr != nil {
 		c.logger.Error("Failed to update endpoint",
 			"endpoint", endpoint.GetURLString(),
 			"error", repoErr)
@@ -201,7 +201,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 			c.logger.WarnWithEndpoint("Endpoint status changed:", endpoint.Name,
 				"status", newStatus.String(),
 				"was", oldStatus.String(),
-				"consecutive_failures", endpoint.ConsecutiveFailures,
+				"consecutive_failures", endpointCopy.ConsecutiveFailures,
 				"latency", result.Latency,
 				"next_check_in", nextInterval)
 		}
@@ -211,7 +211,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 
 		c.logger.WarnWithEndpoint("Endpoint still having issues:", endpoint.Name,
 			"status", newStatus.String(),
-			"consecutive_failures", endpoint.ConsecutiveFailures,
+			"consecutive_failures", endpointCopy.ConsecutiveFailures,
 			"duration", time.Since(lastLogTime).Round(time.Second),
 			"next_check_in", nextInterval)
 	}

@@ -201,7 +201,6 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	s.logger.Debug("proxy request completed", "latency_ms", latency, "time", time.Now())
 	return totalBytes, nil
 }
-
 func (s *SherpaProxyService) stripRoutePrefix(ctx context.Context, path string) string {
 	if prefix, ok := ctx.Value(s.configuration.ProxyPrefix).(string); ok {
 		if strings.HasPrefix(path, prefix) {
@@ -259,37 +258,48 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 	readCount := 0
 	lastReadTime := time.Now()
 
-	for {
-		// Check if client disconnected
+	// Create a combined context for proper cancellation coordination
+	combinedCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Monitor both client and upstream contexts
+	go func() {
 		select {
 		case <-clientCtx.Done():
-			s.logger.Info("client disconnected during streaming",
-				"total_bytes", totalBytes,
-				"read_count", readCount,
-				"error", clientCtx.Err(),
-				"time", time.Now())
-			// Continue briefly for LLM responses in case client reconnects
-			if s.shouldContinueAfterClientDisconnect(totalBytes, time.Since(lastReadTime)) {
-				s.logger.Debug("continuing stream briefly after client disconnect")
-				clientCtx = context.Background()
+			cancel()
+		case <-upstreamCtx.Done():
+			cancel()
+		case <-combinedCtx.Done():
+			return
+		}
+	}()
+
+	for {
+		// Check if either context is cancelled
+		select {
+		case <-combinedCtx.Done():
+			if clientCtx.Err() != nil {
+				s.logger.Info("client disconnected during streaming",
+					"total_bytes", totalBytes,
+					"read_count", readCount,
+					"error", clientCtx.Err(),
+					"time", time.Now())
+				// Continue briefly for LLM responses in case client reconnects
+				if s.shouldContinueAfterClientDisconnect(totalBytes, time.Since(lastReadTime)) {
+					s.logger.Debug("continuing stream briefly after client disconnect")
+					combinedCtx = context.Background()
+				} else {
+					return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
+				}
 			} else {
-				return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
+				s.logger.Error("upstream timeout exceeded",
+					"total_bytes", totalBytes,
+					"read_count", readCount,
+					"error", upstreamCtx.Err(),
+					"time", time.Now())
+				return totalBytes, fmt.Errorf("upstream timeout: %w", upstreamCtx.Err())
 			}
 		default:
-			// Client still connected
-		}
-
-		// Check upstream timeout
-		select {
-		case <-upstreamCtx.Done():
-			s.logger.Error("upstream timeout exceeded",
-				"total_bytes", totalBytes,
-				"read_count", readCount,
-				"error", upstreamCtx.Err(),
-				"time", time.Now())
-			return totalBytes, fmt.Errorf("upstream timeout: %w", upstreamCtx.Err())
-		default:
-			// Upstream still valid
 		}
 
 		// Read with timeout handling
@@ -309,35 +319,35 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 		readTimer := time.NewTimer(readTimeout)
 
 		select {
-		case <-clientCtx.Done():
+		case <-combinedCtx.Done():
 			readTimer.Stop()
-			s.logger.Debug("client context cancelled during read wait",
-				"total_bytes", totalBytes,
-				"read_count", readCount,
-				"time", time.Now())
-			// Try to complete current read and send it
-			select {
-			case result := <-readCh:
-				if result.n > 0 {
-					if _, err := w.Write(buf[:result.n]); err != nil {
-						return totalBytes, fmt.Errorf("failed to write response after client disconnect: %w", err)
+			if clientCtx.Err() != nil {
+				s.logger.Debug("client context cancelled during read wait",
+					"total_bytes", totalBytes,
+					"read_count", readCount,
+					"time", time.Now())
+				// Try to complete current read and send it
+				select {
+				case result := <-readCh:
+					if result.n > 0 {
+						if _, err := w.Write(buf[:result.n]); err != nil {
+							return totalBytes, fmt.Errorf("failed to write response after client disconnect: %w", err)
+						}
+						if canFlush {
+							flusher.Flush()
+						}
 					}
-					if canFlush {
-						flusher.Flush()
-					}
+				case <-time.After(1 * time.Second):
+					// Read taking too long after client disconnect
 				}
-			case <-time.After(1 * time.Second):
-				// Read taking too long after client disconnect
+				return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
+			} else {
+				s.logger.Error("upstream context cancelled during read wait",
+					"total_bytes", totalBytes,
+					"read_count", readCount,
+					"time", time.Now())
+				return totalBytes, fmt.Errorf("upstream timeout during read: %w", upstreamCtx.Err())
 			}
-			return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
-
-		case <-upstreamCtx.Done():
-			readTimer.Stop()
-			s.logger.Error("upstream context cancelled during read wait",
-				"total_bytes", totalBytes,
-				"read_count", readCount,
-				"time", time.Now())
-			return totalBytes, fmt.Errorf("upstream timeout during read: %w", upstreamCtx.Err())
 
 		case <-readTimer.C:
 			s.logger.Error("read timeout exceeded between chunks",

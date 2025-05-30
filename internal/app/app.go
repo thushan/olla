@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/balancer"
@@ -27,6 +28,7 @@ type Application struct {
 	healthChecker *health.HTTPHealthChecker
 	proxyService  ports.ProxyService
 	errCh         chan error
+	shutdownOnce  sync.Once
 }
 
 func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error) {
@@ -114,18 +116,27 @@ func (a *Application) Start(ctx context.Context) error {
 }
 
 func (a *Application) Stop(ctx context.Context) error {
-	shutdownCtx, cancel := context.WithTimeout(ctx, a.Config.Server.ShutdownTimeout)
-	defer cancel()
+	var shutdownErr error
 
-	if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {
-		a.logger.Error("Failed to stop health checker", "error", err)
-	}
+	a.shutdownOnce.Do(func() {
+		shutdownCtx, cancel := context.WithTimeout(ctx, a.Config.Server.ShutdownTimeout)
+		defer cancel()
 
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("HTTP server shutdown error: %w", err)
-	}
+		if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {
+			a.logger.Error("Failed to stop health checker", "error", err)
+			shutdownErr = err
+		}
 
-	return nil
+		if err := a.server.Shutdown(shutdownCtx); err != nil {
+			if shutdownErr != nil {
+				a.logger.Error("HTTP server shutdown error", "error", err)
+			} else {
+				shutdownErr = fmt.Errorf("HTTP server shutdown error: %w", err)
+			}
+		}
+	})
+
+	return shutdownErr
 }
 
 // simpleDiscovery implements ports.DiscoveryService without the wrapper complexity
