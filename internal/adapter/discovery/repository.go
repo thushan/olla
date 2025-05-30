@@ -103,11 +103,10 @@ func (r *StaticEndpointRepository) Exists(ctx context.Context, endpointURL *url.
 }
 
 func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs []config.EndpointConfig) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
 	if len(configs) == 0 {
+		r.mu.Lock()
 		r.endpoints = make(map[string]*domain.Endpoint)
+		r.mu.Unlock()
 		return nil
 	}
 
@@ -157,7 +156,10 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 		newEndpoints[key] = newEndpoint
 	}
 
+	r.mu.Lock()
 	r.endpoints = newEndpoints
+	r.mu.Unlock()
+
 	return nil
 }
 
