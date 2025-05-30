@@ -20,7 +20,7 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	requestLogger := a.logger.WithRequestID(requestID)
 	requestLogger.Info("Request started",
-		"client_ip", util.GetClientIP(r),
+		"client_ip", util.GetClientIP(r, true),
 		"method", r.Method,
 		"path", r.URL.Path,
 		"query", r.URL.RawQuery,

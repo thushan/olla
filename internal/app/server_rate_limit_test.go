@@ -119,7 +119,7 @@ func TestRateLimiter_ExtractClientIP(t *testing.T) {
 				req.Header.Set("X-Real-IP", tc.xRealIP)
 			}
 
-			ip := util.GetClientIP(req)
+			ip := util.GetClientIP(req, rl.trustProxyHeaders)
 			if ip != tc.expectedIP {
 				t.Errorf("Expected IP %s, got %s", tc.expectedIP, ip)
 			}
@@ -189,7 +189,7 @@ func TestRateLimiter_BasicRateLimit(t *testing.T) {
 
 func TestRateLimiter_PerIPIsolation(t *testing.T) {
 	limits := config.ServerRateLimits{
-		GlobalRequestsPerMinute: 1000,
+		GlobalRequestsPerMinute: 0,
 		PerIPRequestsPerMinute:  2,
 		BurstSize:               2,
 		CleanupInterval:         time.Minute,

@@ -27,12 +27,14 @@ func GenerateRequestID() string {
 	return fmt.Sprintf("%s_%s_%s", group, action, suffix)
 }
 
-func GetClientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		return strings.Split(ip, ",")[0]
-	}
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
+func GetClientIP(r *http.Request, trustProxyHeaders bool) string {
+	if trustProxyHeaders {
+		if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+			return strings.TrimSpace(strings.Split(ip, ",")[0])
+		}
+		if ip := r.Header.Get("X-Real-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
 	}
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return ip
