@@ -384,9 +384,10 @@ func TestRateLimiter_ConcurrentAccess(t *testing.T) {
 
 			handler.ServeHTTP(w, req)
 
-			if w.Code == http.StatusOK {
+			switch w.Code {
+			case http.StatusOK:
 				atomic.AddInt32(&successCount, 1)
-			} else if w.Code == http.StatusTooManyRequests {
+			case http.StatusTooManyRequests:
 				atomic.AddInt32(&rateLimitedCount, 1)
 			}
 		}(i)

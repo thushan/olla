@@ -97,7 +97,6 @@ func NewService(
 }
 
 func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (stats ports.RequestStats, err error) {
-
 	requestID, _ := ctx.Value(constants.RequestIDKey).(string)
 	if requestID == "" {
 		requestID = util.GenerateRequestID()
