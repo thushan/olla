@@ -1,15 +1,15 @@
 package app
 
 import (
-	"github.com/thushan/olla/internal/util"
 	"net/http"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/util"
+	"golang.org/x/time/rate"
 )
 
 type RateLimiter struct {
@@ -20,17 +20,19 @@ type RateLimiter struct {
 	trustProxyHeaders       bool
 	logger                  *logger.StyledLogger
 
-	globalTokens     int64
-	lastGlobalRefill int64
-	ipBuckets        sync.Map
-	cleanupTicker    *time.Ticker
-	stopCleanup      chan struct{}
+	globalLimiter *rate.Limiter
+	ipLimiters    sync.Map // map[string]*ipLimiterInfo
+	cleanupTicker *time.Ticker
+	stopCleanup   chan struct{}
 }
 
-type ipBucket struct {
-	tokens     int64
-	lastRefill int64
-	lastAccess int64
+type ipLimiterInfo struct {
+	limiter      *rate.Limiter
+	lastAccess   time.Time
+	tokensUsed   int
+	windowStart  time.Time
+	requestLimit int
+	mu           sync.RWMutex
 }
 
 type RateLimitResult struct {
@@ -42,18 +44,6 @@ type RateLimitResult struct {
 }
 
 func NewRateLimiter(limits config.ServerRateLimits, logger *logger.StyledLogger) *RateLimiter {
-
-	/*
-		if limits.AutoScale {
-			limits.BurstSize = determineBurstSize(limits.PerIPRequestsPerMinute, limits.GlobalRequestsPerMinute)
-		}
-	*/
-	// configure global tokens to burst size if global limit is enabled
-	initialGlobalTokens := int64(0)
-	if limits.GlobalRequestsPerMinute > 0 {
-		initialGlobalTokens = int64(limits.BurstSize)
-	}
-
 	rl := &RateLimiter{
 		globalRequestsPerMinute: limits.GlobalRequestsPerMinute,
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,
@@ -61,9 +51,13 @@ func NewRateLimiter(limits config.ServerRateLimits, logger *logger.StyledLogger)
 		healthRequestsPerMinute: limits.HealthRequestsPerMinute,
 		trustProxyHeaders:       limits.IPExtractionTrustProxy,
 		logger:                  logger,
-		globalTokens:            initialGlobalTokens,
-		lastGlobalRefill:        time.Now().UnixNano(),
 		stopCleanup:             make(chan struct{}),
+	}
+
+	// set global limiter if global limiting is enabled
+	if limits.GlobalRequestsPerMinute > 0 {
+		globalRate := rate.Limit(float64(limits.GlobalRequestsPerMinute) / 60.0) // per second
+		rl.globalLimiter = rate.NewLimiter(globalRate, limits.BurstSize)
 	}
 
 	if limits.CleanupInterval > 0 {
@@ -87,17 +81,23 @@ func (rl *RateLimiter) Middleware(isHealthEndpoint bool) func(http.Handler) http
 			clientIP := util.GetClientIP(r, rl.trustProxyHeaders)
 
 			var limit int
+			// TODO: make this more of ignroed_routes later
+			// we're doing individual ones for now
+			// let's look at a bucket of ignored routes later
 			if isHealthEndpoint {
 				limit = rl.healthRequestsPerMinute
 			} else {
 				limit = rl.perIPRequestsPerMinute
 			}
 
-			result := rl.checkRateLimit(clientIP, limit)
+			result := rl.checkRateLimit(clientIP, limit, isHealthEndpoint)
 
+			// ALWAYS set headers, even if rate limiting is disabled
 			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(result.Limit))
 			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
 			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetTime.Unix(), 10))
+
+			rl.logger.Debug("Request Rate request", "limit", result.Limit, "remaining", result.Remaining)
 
 			if !result.Allowed {
 				w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
@@ -118,174 +118,121 @@ func (rl *RateLimiter) Middleware(isHealthEndpoint bool) func(http.Handler) http
 	}
 }
 
-func (rl *RateLimiter) checkRateLimit(clientIP string, limit int) RateLimitResult {
+func (rl *RateLimiter) checkRateLimit(clientIP string, limit int, isHealthEndpoint bool) RateLimitResult {
 	now := time.Now()
-	nowNano := now.UnixNano()
 
-	// Check global limit first if enabled
-	if rl.globalRequestsPerMinute > 0 {
-		if !rl.checkGlobalLimit(nowNano) {
-			return RateLimitResult{
-				Allowed:    false,
-				RetryAfter: 60,
-				Limit:      rl.globalRequestsPerMinute,
-				Remaining:  0,
-				ResetTime:  now.Add(time.Minute),
-			}
-		}
-	}
-
-	return rl.checkIPLimit(clientIP, limit, nowNano, now)
-}
-
-func (rl *RateLimiter) checkGlobalLimit(nowNano int64) bool {
-	if rl.globalRequestsPerMinute <= 0 {
-		return true
-	}
-
-	rl.refillGlobalTokens(nowNano)
-
-	for {
-		tokens := atomic.LoadInt64(&rl.globalTokens)
-		if tokens <= 0 {
-			return false
-		}
-
-		if atomic.CompareAndSwapInt64(&rl.globalTokens, tokens, tokens-1) {
-			return true
-		}
-		// CAS failed, retry
-	}
-}
-
-func (rl *RateLimiter) refillGlobalTokens(nowNano int64) {
-	lastRefill := atomic.LoadInt64(&rl.lastGlobalRefill)
-	elapsed := nowNano - lastRefill
-
-	if elapsed < 1e9 { // Less than 1 second
-		return
-	}
-
-	if !atomic.CompareAndSwapInt64(&rl.lastGlobalRefill, lastRefill, nowNano) {
-		return
-	}
-
-	tokensToAdd := elapsed * int64(rl.globalRequestsPerMinute) / (60 * 1e9)
-	if tokensToAdd > 0 {
-		for {
-			currentTokens := atomic.LoadInt64(&rl.globalTokens)
-			newTokens := currentTokens + tokensToAdd
-			maxTokens := int64(rl.burstSize)
-
-			if newTokens > maxTokens {
-				newTokens = maxTokens
-			}
-
-			if atomic.CompareAndSwapInt64(&rl.globalTokens, currentTokens, newTokens) {
-				break
-			}
-		}
-	}
-}
-
-func (rl *RateLimiter) checkIPLimit(clientIP string, limit int, nowNano int64, now time.Time) RateLimitResult {
+	// Handle disabled rate limiting
 	if limit <= 0 {
 		return RateLimitResult{
 			Allowed:   true,
-			Limit:     limit,
-			Remaining: limit,
+			Limit:     0,
+			Remaining: 0,
 			ResetTime: now.Add(time.Minute),
 		}
 	}
 
-	// Create unique key for IP + endpoint type combination
-	bucketKey := clientIP
-	if limit == rl.healthRequestsPerMinute {
-		bucketKey = clientIP + ":health"
-	}
-
-	// Use the smaller of limit or burstSize for initial tokens
-	initialTokens := int64(min(limit, rl.burstSize))
-
-	value, _ := rl.ipBuckets.LoadOrStore(bucketKey, &ipBucket{
-		tokens:     initialTokens,
-		lastRefill: nowNano,
-		lastAccess: nowNano,
-	})
-
-	bucket := value.(*ipBucket)
-
-	// Always refill before checking
-	rl.refillIPTokens(bucket, limit, nowNano)
-
-	// Try to consume a token
-	for {
-		tokens := atomic.LoadInt64(&bucket.tokens)
-		if tokens <= 0 {
-			// Calculate retry after based on token refill rate
-			tokensPerSecond := float64(limit) / 60.0
-			retryAfter := int(1.0 / tokensPerSecond)
-			if retryAfter < 1 {
-				retryAfter = 1
+	// Check glibal limit first if enabled
+	if rl.globalLimiter != nil {
+		reservation := rl.globalLimiter.Reserve()
+		if !reservation.OK() || reservation.Delay() > 0 {
+			if reservation.Delay() > 0 {
+				reservation.Cancel()
 			}
-
 			return RateLimitResult{
 				Allowed:    false,
-				RetryAfter: retryAfter,
+				RetryAfter: 60,
 				Limit:      limit,
 				Remaining:  0,
 				ResetTime:  now.Add(time.Minute),
 			}
 		}
+	}
 
-		if atomic.CompareAndSwapInt64(&bucket.tokens, tokens, tokens-1) {
-			atomic.StoreInt64(&bucket.lastAccess, nowNano)
+	return rl.checkIPLimit(clientIP, limit, now, isHealthEndpoint)
+}
 
-			remaining := int(tokens - 1)
-			if remaining < 0 {
-				remaining = 0
-			}
+func (rl *RateLimiter) checkIPLimit(clientIP string, limit int, now time.Time, isHealthEndpoint bool) RateLimitResult {
+	// we'll use this as the key for the limiter
+	bucketKey := clientIP
+	if isHealthEndpoint {
+		bucketKey = clientIP + ":health"
+	}
 
-			return RateLimitResult{
-				Allowed:   true,
-				Limit:     limit,
-				Remaining: remaining,
-				ResetTime: now.Add(time.Minute),
-			}
+	limiterInfo := rl.getOrCreateLimiter(bucketKey, limit)
+	limiterInfo.mu.Lock()
+	limiterInfo.lastAccess = now
+
+	// Check if we need to reset the window (every minute)
+	if now.Sub(limiterInfo.windowStart) >= time.Minute {
+		limiterInfo.windowStart = now
+		limiterInfo.tokensUsed = 0
+	}
+
+	limiter := limiterInfo.limiter
+	limiterInfo.mu.Unlock()
+
+	// Try to get a token
+	reservation := limiter.Reserve()
+	if !reservation.OK() {
+		return RateLimitResult{
+			Allowed:    false,
+			RetryAfter: 60 / limit,
+			Limit:      limit,
+			Remaining:  0,
+			ResetTime:  now.Add(time.Minute),
 		}
+	}
+
+	delay := reservation.Delay()
+	if delay > 0 {
+		// Cancel the reservation since we can't wait
+		reservation.Cancel()
+
+		limiterInfo.mu.RLock()
+		remaining := rl.calculateRemaining(limiterInfo, limit, now)
+		limiterInfo.mu.RUnlock()
+
+		return RateLimitResult{
+			Allowed:    false,
+			RetryAfter: int(delay.Seconds()) + 1,
+			Limit:      limit,
+			Remaining:  remaining,
+			ResetTime:  now.Add(time.Minute),
+		}
+	}
+
+	// Request allowed - update token usage tracking
+	limiterInfo.mu.Lock()
+	limiterInfo.tokensUsed++
+	remaining := rl.calculateRemaining(limiterInfo, limit, now)
+	limiterInfo.mu.Unlock()
+
+	return RateLimitResult{
+		Allowed:   true,
+		Limit:     limit,
+		Remaining: remaining,
+		ResetTime: now.Add(time.Minute),
 	}
 }
 
-func (rl *RateLimiter) refillIPTokens(bucket *ipBucket, limit int, nowNano int64) {
-	lastRefill := atomic.LoadInt64(&bucket.lastRefill)
-	elapsed := nowNano - lastRefill
-
-	// Only refill if at least 1 second has passed
-	if elapsed < 1e9 {
-		return
+func (rl *RateLimiter) calculateRemaining(limiterInfo *ipLimiterInfo, limit int, now time.Time) int {
+	remaining := limit - limiterInfo.tokensUsed
+	if remaining < 0 {
+		remaining = 0
 	}
+	return remaining
+}
 
-	if !atomic.CompareAndSwapInt64(&bucket.lastRefill, lastRefill, nowNano) {
-		return
-	}
+func (rl *RateLimiter) getOrCreateLimiter(key string, limit int) *ipLimiterInfo {
+	value, _ := rl.ipLimiters.LoadOrStore(key, &ipLimiterInfo{
+		limiter:      rate.NewLimiter(rate.Limit(float64(limit)/60.0), rl.burstSize), // per second
+		lastAccess:   time.Now(),
+		tokensUsed:   0,
+		windowStart:  time.Now(),
+		requestLimit: limit,
+	})
 
-	// Calculate tokens to add based on rate (tokens per second)
-	tokensToAdd := elapsed * int64(limit) / (60 * 1e9)
-	if tokensToAdd > 0 {
-		for {
-			currentTokens := atomic.LoadInt64(&bucket.tokens)
-			newTokens := currentTokens + tokensToAdd
-			maxTokens := int64(rl.burstSize)
-
-			if newTokens > maxTokens {
-				newTokens = maxTokens
-			}
-
-			if atomic.CompareAndSwapInt64(&bucket.tokens, currentTokens, newTokens) {
-				break
-			}
-		}
-	}
+	return value.(*ipLimiterInfo)
 }
 
 func (rl *RateLimiter) cleanupRoutine() {
@@ -294,20 +241,23 @@ func (rl *RateLimiter) cleanupRoutine() {
 		case <-rl.stopCleanup:
 			return
 		case <-rl.cleanupTicker.C:
-			rl.cleanupOldBuckets()
+			rl.cleanupOldLimiters()
 		}
 	}
 }
 
-func (rl *RateLimiter) cleanupOldBuckets() {
-	cutoff := time.Now().Add(-10 * time.Minute).UnixNano()
+func (rl *RateLimiter) cleanupOldLimiters() {
+	cutoff := time.Now().Add(-10 * time.Minute)
 
-	rl.ipBuckets.Range(func(key, value interface{}) bool {
-		bucket := value.(*ipBucket)
-		lastAccess := atomic.LoadInt64(&bucket.lastAccess)
+	rl.ipLimiters.Range(func(key, value interface{}) bool {
+		limiterInfo := value.(*ipLimiterInfo)
 
-		if lastAccess < cutoff {
-			rl.ipBuckets.Delete(key)
+		limiterInfo.mu.RLock()
+		lastAccess := limiterInfo.lastAccess
+		limiterInfo.mu.RUnlock()
+
+		if lastAccess.Before(cutoff) {
+			rl.ipLimiters.Delete(key)
 		}
 		return true
 	})
