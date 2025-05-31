@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"github.com/docker/go-units"
+	"github.com/thushan/olla/internal/core/constants"
 	"net/http"
 )
 
@@ -23,7 +24,6 @@ func (a *Application) startWebServer() {
 	}
 
 	if configServer.RequestLimits.MaxBodySize > 0 || configServer.RequestLimits.MaxHeaderSize > 0 {
-		// m,aybe make this a debug log?
 		a.logger.Info("Request size limits enabled",
 			"max_body_size", units.HumanSize(float64(configServer.RequestLimits.MaxBodySize)),
 			"max_header_size", units.HumanSize(float64(configServer.RequestLimits.MaxHeaderSize)))
@@ -40,13 +40,8 @@ func (a *Application) startWebServer() {
 
 	mux := http.NewServeMux()
 
-	sizeLimiter := NewRequestSizeLimiter(configServer.RequestLimits, a.logger)
-	rateLimiter := NewRateLimiter(configServer.RateLimits, a.logger)
-
-	a.rateLimiter = rateLimiter
-
 	a.registerRoutes()
-	a.registry.WireUpWithMiddleware(mux, sizeLimiter, rateLimiter)
+	a.registry.WireUpWithSecurityChain(mux, a.securityAdapters)
 
 	go func() {
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -60,12 +55,9 @@ func (a *Application) startWebServer() {
 }
 
 func (a *Application) registerRoutes() {
-	// Register the main proxy handler for Ollama API
-	// We need to append a trailing slash to the path to avoid issues with path matching
 	a.registry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
 	a.registry.RegisterProxyRoute("/ma/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
-	// a.registry.RegisterWithMethod("/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
-	a.registry.RegisterWithMethod("/internal/health", a.healthHandler, "Health check endpoint", "GET")
+	a.registry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
 	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
 	a.registry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
 }

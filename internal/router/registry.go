@@ -72,7 +72,6 @@ func (r *RouteRegistry) logRoutesTable() {
 		return
 	}
 
-	// Sort routes by registration order
 	type routeEntry struct {
 		path   string
 		method string
@@ -94,7 +93,6 @@ func (r *RouteRegistry) logRoutesTable() {
 		return entries[i].order < entries[j].order
 	})
 
-	// Build table
 	tableData := [][]string{
 		{"ROUTE", "METHOD", "DESCRIPTION"},
 	}
@@ -128,7 +126,6 @@ func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter int
 	sizeMiddleware, hasSizeMiddleware := sizeLimiter.(middlewareFunc)
 	rateMiddleware, hasRateMiddleware := rateLimiter.(rateLimiterFunc)
 
-	// Fallback to regular wireup if middleware isn't compatible
 	if !hasSizeMiddleware && !hasRateMiddleware {
 		r.WireUp(mux)
 		return
@@ -138,7 +135,6 @@ func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter int
 		var handler http.Handler = http.HandlerFunc(info.Handler)
 
 		if info.IsProxy {
-			// Apply middleware chain to proxy routes: rate limiting -> size limiting -> handler
 			if hasRateMiddleware {
 				handler = rateMiddleware.Middleware(false)(handler)
 			}
@@ -147,10 +143,36 @@ func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter int
 			}
 			mux.Handle(route, handler)
 		} else {
-			// Health/internal routes get lighter rate limiting, no size limits
 			if hasRateMiddleware {
 				handler = rateMiddleware.Middleware(true)(handler)
 			}
+			mux.Handle(route, handler)
+		}
+	}
+	r.logRoutesTable()
+}
+
+func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters interface{}) {
+	type securityAdapterProvider interface {
+		CreateChainMiddleware() func(http.Handler) http.Handler
+		CreateRateLimitMiddleware() func(http.Handler) http.Handler
+	}
+
+	adapters, hasAdapters := securityAdapters.(securityAdapterProvider)
+
+	if !hasAdapters {
+		r.WireUp(mux)
+		return
+	}
+
+	for route, info := range r.routes {
+		var handler http.Handler = http.HandlerFunc(info.Handler)
+
+		if info.IsProxy {
+			handler = adapters.CreateChainMiddleware()(handler)
+			mux.Handle(route, handler)
+		} else {
+			handler = adapters.CreateRateLimitMiddleware()(handler)
 			mux.Handle(route, handler)
 		}
 	}

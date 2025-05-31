@@ -1,5 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 # Olla Request Rate Limit Security Test Suite
+# [o] AI Enhanced: Claude[AI] 3.7, Github Copilot
+#
 # Run this after starting Olla with rate limiting configured
 
 # 31-05-2025  [TF]  - Updated for golang.org/x/time/rate implementation,
@@ -8,12 +11,14 @@
 # 30-05-2025  [TF]  - Fixed test logic, improved burst handling, better timing
 # 21-05-2025  [ML]  - Added more context to CLI output, shows when tests fail at the end
 # 15-05-2025  [GW]  - Burst capacity test added and fix sleep timing for other tests
-# 14-05-2025  [GW]  - Initial version
+# 14-05-2025  [GW]  - Initial version built with Claude[AI] and Copilot
 
 OLLA_URL="http://localhost:19841"
 PROXY_ENDPOINT="/proxy/api/generate"
 HEALTH_ENDPOINT="/internal/health"
 MODEL_NAME="phi4:latest"
+# NOTE about model choice, choose a lighter model for testing request limits so it returns quickly.
+# Ideally we find Phi-3/Phi-4 or Llama-3 are light enough for this purpose.
 
 export OLLA_SERVER_PER_IP_RATE_LIMIT="20"     # 20/minute for more aggressive testing
 export OLLA_SERVER_RATE_BURST_SIZE="3"        # Small burst for clear testing
