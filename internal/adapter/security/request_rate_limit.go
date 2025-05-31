@@ -27,6 +27,7 @@ type RateLimitValidator struct {
 	ipLimiters    sync.Map
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
+	stopOnce      sync.Once
 }
 
 type ipLimiterInfo struct {
@@ -113,7 +114,7 @@ func (rl *RateLimitValidator) Validate(ctx context.Context, req ports.SecurityRe
 				RateLimit:  limit,
 				Remaining:  0,
 				ResetTime:  now.Add(time.Minute),
-				Reason:     "Global rate limit exceeded",
+				Reason:     "Rate limit exceeded",
 			}, nil
 		}
 	}
@@ -235,10 +236,14 @@ func (rl *RateLimitValidator) cleanupOldLimiters() {
 }
 
 func (rl *RateLimitValidator) Stop() {
-	if rl.cleanupTicker != nil {
-		rl.cleanupTicker.Stop()
-	}
-	close(rl.stopCleanup)
+	// Ensure cleanup ticker is stopped and the channel
+	// is closed only once, we test this in unit tests.
+	rl.stopOnce.Do(func() {
+		if rl.cleanupTicker != nil {
+			rl.cleanupTicker.Stop()
+		}
+		close(rl.stopCleanup)
+	})
 }
 
 func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler {
