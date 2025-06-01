@@ -26,7 +26,7 @@ func TestNewRateLimitValidator(t *testing.T) {
 		BurstSize:               50,
 		HealthRequestsPerMinute: 500,
 		CleanupInterval:         time.Minute,
-		IPExtractionTrustProxy:  true,
+		TrustProxyHeaders:       true,
 	}
 
 	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())

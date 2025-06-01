@@ -348,12 +348,12 @@ func TestLoadConfig_WithRequestLimits(t *testing.T) {
 func TestLoadConfig_WithRateLimits(t *testing.T) {
 	// Test environment variables for rate limits
 	testEnvVars := map[string]string{
-		"OLLA_SERVER_GLOBAL_RATE_LIMIT":      "500",
-		"OLLA_SERVER_PER_IP_RATE_LIMIT":      "50",
-		"OLLA_SERVER_RATE_BURST_SIZE":        "25",
-		"OLLA_SERVER_HEALTH_RATE_LIMIT":      "2000",
-		"OLLA_SERVER_RATE_CLEANUP_INTERVAL":  "10m",
-		"OLLA_SERVER_TRUST_PROXY_HEADERS":    "true",
+		"OLLA_SERVER_GLOBAL_RATE_LIMIT":     "500",
+		"OLLA_SERVER_PER_IP_RATE_LIMIT":     "50",
+		"OLLA_SERVER_RATE_BURST_SIZE":       "25",
+		"OLLA_SERVER_HEALTH_RATE_LIMIT":     "2000",
+		"OLLA_SERVER_RATE_CLEANUP_INTERVAL": "10m",
+		"OLLA_SERVER_TRUST_PROXY_HEADERS":   "true",
 	}
 
 	// Set env vars
@@ -389,7 +389,7 @@ func TestLoadConfig_WithRateLimits(t *testing.T) {
 	if cfg.Server.RateLimits.CleanupInterval != 10*time.Minute {
 		t.Errorf("Expected cleanup interval 10m, got %v", cfg.Server.RateLimits.CleanupInterval)
 	}
-	if !cfg.Server.RateLimits.IPExtractionTrustProxy {
+	if !cfg.Server.RateLimits.TrustProxyHeaders {
 		t.Error("Expected trust proxy headers true")
 	}
 }
@@ -418,7 +418,68 @@ func TestDefaultConfig_RateLimits(t *testing.T) {
 	if cfg.Server.RateLimits.CleanupInterval != expectedCleanup {
 		t.Errorf("Expected cleanup interval %v, got %v", expectedCleanup, cfg.Server.RateLimits.CleanupInterval)
 	}
-	if cfg.Server.RateLimits.IPExtractionTrustProxy {
+	if cfg.Server.RateLimits.TrustProxyHeaders {
 		t.Error("Expected trust proxy headers false by default")
+	}
+}
+
+func TestLoadConfig_WithTrustedProxyCIDRs(t *testing.T) {
+	testEnvVars := map[string]string{
+		"OLLA_SERVER_TRUSTED_PROXY_CIDRS": "10.0.0.0/8,172.16.0.0/12,192.168.1.0/24",
+	}
+
+	for key, value := range testEnvVars {
+		os.Setenv(key, value)
+	}
+
+	defer func() {
+		for key := range testEnvVars {
+			os.Unsetenv(key)
+		}
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with trusted proxy CIDRs failed: %v", err)
+	}
+
+	expectedCIDRs := []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.1.0/24"}
+	if len(cfg.Server.RateLimits.TrustedProxyCIDRs) != len(expectedCIDRs) {
+		t.Errorf("Expected %d CIDRs, got %d", len(expectedCIDRs), len(cfg.Server.RateLimits.TrustedProxyCIDRs))
+	}
+
+	for i, expected := range expectedCIDRs {
+		if i >= len(cfg.Server.RateLimits.TrustedProxyCIDRs) {
+			t.Errorf("Missing CIDR at index %d", i)
+			continue
+		}
+		if cfg.Server.RateLimits.TrustedProxyCIDRs[i] != expected {
+			t.Errorf("Expected CIDR %s at index %d, got %s", expected, i, cfg.Server.RateLimits.TrustedProxyCIDRs[i])
+		}
+	}
+}
+
+func TestDefaultConfig_TrustedProxyCIDRs(t *testing.T) {
+	cfg := DefaultConfig()
+
+	expectedCIDRs := []string{
+		"127.0.0.0/8",
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+	}
+
+	if len(cfg.Server.RateLimits.TrustedProxyCIDRs) != len(expectedCIDRs) {
+		t.Errorf("Expected %d default CIDRs, got %d", len(expectedCIDRs), len(cfg.Server.RateLimits.TrustedProxyCIDRs))
+	}
+
+	for i, expected := range expectedCIDRs {
+		if i >= len(cfg.Server.RateLimits.TrustedProxyCIDRs) {
+			t.Errorf("Missing default CIDR at index %d", i)
+			continue
+		}
+		if cfg.Server.RateLimits.TrustedProxyCIDRs[i] != expected {
+			t.Errorf("Expected default CIDR %s at index %d, got %s", expected, i, cfg.Server.RateLimits.TrustedProxyCIDRs[i])
+		}
 	}
 }

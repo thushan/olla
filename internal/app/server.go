@@ -35,7 +35,7 @@ func (a *Application) startWebServer() {
 			"per_ip_limit", configServer.RateLimits.PerIPRequestsPerMinute,
 			"burst_size", configServer.RateLimits.BurstSize,
 			"health_limit", configServer.RateLimits.HealthRequestsPerMinute,
-			"trust_proxy", configServer.RateLimits.IPExtractionTrustProxy)
+			"trust_proxy", configServer.RateLimits.TrustProxyHeaders)
 	}
 
 	mux := http.NewServeMux()

@@ -34,7 +34,13 @@ func DefaultConfig() *Config {
 				BurstSize:               50,
 				HealthRequestsPerMinute: 1000,
 				CleanupInterval:         5 * time.Minute,
-				IPExtractionTrustProxy:  false,
+				TrustProxyHeaders:       false,
+				TrustedProxyCIDRs: []string{
+					"127.0.0.0/8",
+					"10.0.0.0/8",
+					"172.16.0.0/12",
+					"192.168.0.0/16",
+				},
 			},
 		},
 		Proxy: ProxyConfig{
@@ -161,8 +167,15 @@ func applyEnvOverrides(config *Config) {
 	}
 	if val := os.Getenv("OLLA_SERVER_TRUST_PROXY_HEADERS"); val != "" {
 		if trust, err := strconv.ParseBool(val); err == nil {
-			config.Server.RateLimits.IPExtractionTrustProxy = trust
+			config.Server.RateLimits.TrustProxyHeaders = trust
 		}
+	}
+	if val := os.Getenv("OLLA_SERVER_TRUSTED_PROXY_CIDRS"); val != "" {
+		cidrs := strings.Split(val, ",")
+		for i, cidr := range cidrs {
+			cidrs[i] = strings.TrimSpace(cidr)
+		}
+		config.Server.RateLimits.TrustedProxyCIDRs = cidrs
 	}
 
 	if val := os.Getenv("OLLA_PROXY_RESPONSE_TIMEOUT"); val != "" {

@@ -30,12 +30,13 @@ type ServerRequestLimits struct {
 
 // ServerRateLimits defines rate limiting configuration
 type ServerRateLimits struct {
-	GlobalRequestsPerMinute    int           `yaml:"global_requests_per_minute"`
-	PerIPRequestsPerMinute     int           `yaml:"per_ip_requests_per_minute"`
-	BurstSize                  int           `yaml:"burst_size"`
-	HealthRequestsPerMinute    int           `yaml:"health_requests_per_minute"`
-	CleanupInterval            time.Duration `yaml:"cleanup_interval"`
-	IPExtractionTrustProxy     bool          `yaml:"ip_extraction_trust_proxy"`
+	GlobalRequestsPerMinute int           `yaml:"global_requests_per_minute"`
+	PerIPRequestsPerMinute  int           `yaml:"per_ip_requests_per_minute"`
+	BurstSize               int           `yaml:"burst_size"`
+	HealthRequestsPerMinute int           `yaml:"health_requests_per_minute"`
+	CleanupInterval         time.Duration `yaml:"cleanup_interval"`
+	TrustProxyHeaders       bool          `yaml:"trust_proxy_headers"`
+	TrustedProxyCIDRs       []string      `yaml:"trusted_proxy_cidrs"`
 }
 
 // ProxyConfig holds proxy-specific configuration

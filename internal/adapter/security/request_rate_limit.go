@@ -58,7 +58,7 @@ func NewRateLimitValidator(limits config.ServerRateLimits, logger *logger.Styled
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,
 		burstSize:               limits.BurstSize,
 		healthRequestsPerMinute: limits.HealthRequestsPerMinute,
-		trustProxyHeaders:       limits.IPExtractionTrustProxy,
+		trustProxyHeaders:       limits.TrustProxyHeaders,
 		logger:                  logger,
 		stopCleanup:             make(chan struct{}),
 	}

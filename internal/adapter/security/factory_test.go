@@ -26,7 +26,7 @@ func createTestConfig() *config.Config {
 				BurstSize:               50,
 				HealthRequestsPerMinute: 500,
 				CleanupInterval:         5 * time.Minute,
-				IPExtractionTrustProxy:  false,
+				TrustProxyHeaders:       false,
 			},
 			RequestLimits: config.ServerRequestLimits{
 				MaxBodySize:   10 * 1024 * 1024, // 10MB
