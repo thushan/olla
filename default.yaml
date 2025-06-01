@@ -5,6 +5,24 @@ server:
   read_timeout: 20s
   write_timeout: 0s
   shutdown_timeout: 10s
+  request_limits:
+    max_body_size: 52428800  # 50MB
+    max_header_size: 524288  # 512KB
+  rate_limits:
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 100
+    health_requests_per_minute: 1000
+    burst_size: 50
+    per_endpoint:
+      default_requests_per_minute: 200
+    cleanup_interval: 5m
+    trust_proxy_headers: false
+    trusted_proxy_cidrs: [
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16"
+    ]
 
 proxy:
   connection_timeout: 40s
@@ -22,6 +40,7 @@ discovery:
     endpoints:
       - url: "http://localhost:11434"
         name: "local-ollama"
+        type: "ollama"
         priority: 100
         model_url: "/api/tags"
         health_check_url: "/"
@@ -29,6 +48,7 @@ discovery:
         check_timeout: 2s
       - url: "http://localhost:1234"
         name: "local-lm-studio"
+        type: "lm-studio"
         priority: 100
         model_url: "/v1/models"
         health_check_url: "/"
@@ -36,9 +56,9 @@ discovery:
         check_timeout: 2s
 
 logging:
-  level: "info"
-  format: "json"
-  output: "stdout"
+  level: "info"  # debug, info, warn, error
+  format: "json"  # json, text
+  output: "stdout"  # stdout, file
 
 engineering:
   show_nerdstats: false

@@ -3,14 +3,16 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/adapter/balancer"
+	"github.com/thushan/olla/internal/adapter/security"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy"
+
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -19,16 +21,18 @@ import (
 )
 
 type Application struct {
-	StartTime     time.Time
-	Config        *config.Config
-	server        *http.Server
-	logger        *logger.StyledLogger
-	registry      *router.RouteRegistry
-	repository    *discovery.StaticEndpointRepository
-	healthChecker *health.HTTPHealthChecker
-	proxyService  ports.ProxyService
-	errCh         chan error
-	shutdownOnce  sync.Once
+	StartTime        time.Time
+	Config           *config.Config
+	server           *http.Server
+	logger           *logger.StyledLogger
+	registry         *router.RouteRegistry
+	repository       *discovery.StaticEndpointRepository
+	healthChecker    *health.HTTPHealthChecker
+	proxyService     ports.ProxyService
+	securityServices *security.Services
+	securityAdapters *security.Adapters
+	errCh            chan error
+	shutdownOnce     sync.Once
 }
 
 func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error) {
@@ -47,7 +51,6 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
 
-	// Create simple discovery wrapper that implements the interface
 	discoveryService := &simpleDiscovery{
 		repository: repository,
 		endpoints:  cfg.Discovery.Static.Endpoints,
@@ -61,6 +64,8 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		logger,
 	)
 
+	securityServices, securityAdapters := security.NewSecurityServices(cfg, logger)
+
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		ReadTimeout:  cfg.Server.ReadTimeout,
@@ -69,15 +74,17 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 	}
 
 	app := &Application{
-		StartTime:     startTime,
-		Config:        cfg,
-		server:        server,
-		logger:        logger,
-		registry:      registry,
-		repository:    repository,
-		healthChecker: healthChecker,
-		proxyService:  proxyService,
-		errCh:         make(chan error, 1),
+		StartTime:        startTime,
+		Config:           cfg,
+		server:           server,
+		logger:           logger,
+		registry:         registry,
+		repository:       repository,
+		healthChecker:    healthChecker,
+		proxyService:     proxyService,
+		securityServices: securityServices,
+		securityAdapters: securityAdapters,
+		errCh:            make(chan error, 1),
 	}
 
 	return app, nil
@@ -122,6 +129,10 @@ func (a *Application) Stop(ctx context.Context) error {
 		shutdownCtx, cancel := context.WithTimeout(ctx, a.Config.Server.ShutdownTimeout)
 		defer cancel()
 
+		if a.securityAdapters != nil {
+			a.securityAdapters.Stop()
+		}
+
 		if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {
 			a.logger.Error("Failed to stop health checker", "error", err)
 			shutdownErr = err
@@ -139,7 +150,6 @@ func (a *Application) Stop(ctx context.Context) error {
 	return shutdownErr
 }
 
-// simpleDiscovery implements ports.DiscoveryService without the wrapper complexity
 type simpleDiscovery struct {
 	repository *discovery.StaticEndpointRepository
 	logger     *logger.StyledLogger

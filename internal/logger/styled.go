@@ -164,7 +164,7 @@ func NewWithTheme(cfg *Config) (*slog.Logger, *StyledLogger, func(), error) {
 /**
  * LogContext provides a structured way to separate user-facing and detailed logging context.
  * This allows for cleaner terminal output while still capturing all necessary details in the log file.
- * Taht way, we get a clean TUI output with user-friendly messages, and detailed logs for debugging.
+ * That way, we get a clean TUI output with user-friendly messages, and detailed logs for debugging.
  */
 
 // LogContext separates user-facing from detailed logging context

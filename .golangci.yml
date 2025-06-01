@@ -1,3 +1,5 @@
+version: 2
+
 run:
   timeout: 5m
   issues-exit-code: 1
@@ -13,26 +15,30 @@ output:
   print-issued-lines: true
   print-linter-name: true
 
+formatting:
+  goimports:
+    local-prefixes: github.com/thushan/olla
+
 linters-settings:
   govet:
     check-shadowing: true
-  golint:
-    min-confidence: 0
+
   gocyclo:
     min-complexity: 15
-  maligned:
-    suggest-new: true
+
   dupl:
     threshold: 100
+
   goconst:
     min-len: 2
     min-occurrences: 2
+
   misspell:
     locale: AU
+
   lll:
     line-length: 140
-  goimports:
-    local-prefixes: github.com/thushan/olla
+
   gocritic:
     enabled-tags:
       - diagnostic
@@ -51,21 +57,16 @@ linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
     - depguard
     - dogsled
     - dupl
     - errcheck
-    - exportloopref
     - exhaustive
     - goconst
     - gocritic
-    - gofmt
-    - goimports
-    - gomnd
+    - gocyclo
     - goprintffuncname
     - gosec
-    - gosimple
     - govet
     - ineffassign
     - lll
@@ -75,13 +76,9 @@ linters:
     - nolintlint
     - rowserrcheck
     - staticcheck
-    - structcheck
-    - stylecheck
-    - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
 
 issues:

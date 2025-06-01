@@ -837,7 +837,7 @@ func TestSherpaProxyService_ConnectionPooling(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&callCount, 1)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(fmt.Sprintf("call_%d", atomic.LoadInt32(&callCount))))
+		fmt.Fprintf(w, "call_%d", atomic.LoadInt32(&callCount))
 	}))
 	defer upstream.Close()
 

@@ -18,9 +18,12 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	ctx = context.WithValue(ctx, constants.RequestTimeKey, requestStartTime)
 	r = r.WithContext(ctx)
 
+	rl := a.Config.Server.RateLimits
+	clientIP := util.GetClientIP(r, rl.TrustProxyHeaders, rl.TrustedProxyCIDRsParsed)
+
 	requestLogger := a.logger.WithRequestID(requestID)
 	requestLogger.Info("Request started",
-		"client_ip", util.GetClientIP(r),
+		"client_ip", clientIP,
 		"method", r.Method,
 		"path", r.URL.Path,
 		"query", r.URL.RawQuery,

@@ -97,17 +97,18 @@ func NewService(
 }
 
 func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (stats ports.RequestStats, err error) {
-
 	requestID, _ := ctx.Value(constants.RequestIDKey).(string)
 	if requestID == "" {
 		requestID = util.GenerateRequestID()
-		s.logger.Warn("Request context missing request_id, using current time, please report bug.")
+		s.logger.Warn("Request context missing request_id, using current time, please report bug.", "new_request_id", requestID)
 	}
+
+	rlog := s.logger.With("request_id", requestID)
 
 	startTime, _ := ctx.Value(constants.RequestTimeKey).(time.Time)
 	if startTime.IsZero() {
 		startTime = time.Now()
-		s.logger.Warn("Request context missing start_time, using current time, please report bug.")
+		rlog.Warn("Request context missing start_time, using current time, please report bug.")
 	}
 
 	stats = ports.RequestStats{
@@ -120,8 +121,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 		if rec := recover(); rec != nil {
 			atomic.AddInt64(&s.stats.failedRequests, 1)
 			err = fmt.Errorf("proxy panic recovered: %v", rec)
-			s.logger.Error("Proxy request panic recovered",
-				"request_id", requestID,
+			rlog.Error("Proxy request panic recovered",
 				"panic", rec,
 				"method", r.Method,
 				"path", r.URL.Path)
@@ -135,43 +135,35 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	atomic.AddInt64(&s.stats.totalRequests, 1)
 
-	s.logger.Debug("proxy request started",
-		"request_id", requestID,
-		"method", r.Method,
+	rlog.Debug("proxy request started", "method", r.Method,
 		"url", r.URL.String())
 
 	endpoints, err := s.discoveryService.GetHealthyEndpoints(ctx)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.logger.Error("failed to get healthy endpoints",
-			"request_id", requestID,
-			"error", err)
+		rlog.Error("failed to get healthy endpoints", "error", err)
 		return stats, domain.NewProxyError(requestID, "", r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
 			fmt.Errorf("failed to get healthy endpoints: %w", err))
 	}
 
 	if len(endpoints) == 0 {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.logger.Error("no healthy endpoints available", "request_id", requestID)
+		rlog.Error("no healthy endpoints available")
 		return stats, domain.NewProxyError(requestID, "", r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
 			fmt.Errorf("no healthy endpoints available - all endpoints may be down or still being health checked"))
 	}
 
-	s.logger.Debug("found healthy endpoints",
-		"request_id", requestID,
-		"count", len(endpoints))
+	rlog.Debug("found healthy endpoints", "count", len(endpoints))
 
 	endpoint, err := s.selector.Select(ctx, endpoints)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.logger.Error("failed to select endpoint",
-			"request_id", requestID,
-			"error", err)
+		rlog.Error("failed to select endpoint", "error", err)
 		return stats, domain.NewProxyError(requestID, "", r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
 			fmt.Errorf("failed to select endpoint: %w", err))
 	}
 
-	// s.logger.Debug("selected endpoint", "request_id", requestID, "url", endpoint.URL.String())
+	// rlog.Debug("selected endpoint", "url", endpoint.URL.String())
 	stats.EndpointName = endpoint.Name
 
 	// Strip route prefix from request path for upstream
@@ -179,9 +171,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	targetURL, err := url.Parse(endpoint.URL.String() + targetPath)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.logger.Error("failed to parse target URL",
-			"request_id", requestID,
-			"error", err)
+		rlog.Error("failed to parse target URL", "error", err)
 		return stats, domain.NewProxyError(requestID, endpoint.URL.String(), r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
 			fmt.Errorf("failed to parse target URL: %w", err))
 	}
@@ -191,8 +181,8 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	stats.TargetUrl = targetURL.String()
 
-	s.logger.Debug("built target URL", "request_id", requestID, "target", stats.TargetUrl)
-	s.logger.Info("Request dispatching to endpoint", "request_id", requestID, "endpoint", endpoint.Name, "target", stats.TargetUrl)
+	rlog.Debug("built target URL", "target", stats.TargetUrl)
+	rlog.Info("Request dispatching to endpoint", "endpoint", endpoint.Name, "target", stats.TargetUrl)
 
 	// Create upstream context with response timeout
 	upstreamCtx := ctx
@@ -205,27 +195,23 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	proxyReq, err := http.NewRequestWithContext(upstreamCtx, r.Method, targetURL.String(), r.Body)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.logger.Error("failed to create proxy request",
-			"request_id", requestID,
-			"error", err)
+		rlog.Error("failed to create proxy request", "error", err)
 		return stats, domain.NewProxyError(requestID, targetURL.String(), r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
 			fmt.Errorf("failed to create proxy request: %w", err))
 	}
 
-	s.logger.Debug("created proxy request", "request_id", requestID)
+	rlog.Debug("created proxy request")
 
 	s.copyHeaders(proxyReq, r)
 
-	s.logger.Debug("making roundtrip request",
-		"request_id", requestID,
+	rlog.Debug("making round-trip request",
 		"target", targetURL.String(),
 		"time", time.Now())
 
 	resp, err := s.transport.RoundTrip(proxyReq)
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.logger.Error("roundtrip failed",
-			"request_id", requestID,
+		rlog.Error("round-trip failed",
 			"error", err,
 			"time", time.Now())
 		return stats, domain.NewProxyError(requestID, targetURL.String(), r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
@@ -235,10 +221,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 		_ = Body.Close()
 	}(resp.Body)
 
-	s.logger.Debug("roundtrip success",
-		"request_id", requestID,
-		"status", resp.StatusCode,
-		"time", time.Now())
+	rlog.Debug("round-trip success", "status", resp.StatusCode, "time", time.Now())
 
 	// Track connection after successful establishment
 	s.selector.IncrementConnections(endpoint)
@@ -252,14 +235,12 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 	}
 	w.WriteHeader(resp.StatusCode)
 
-	s.logger.Debug("starting response stream",
-		"request_id", requestID,
+	rlog.Debug("starting response stream",
 		"time", time.Now())
 
-	if sumBytes, err := s.streamResponse(ctx, upstreamCtx, w, resp.Body); err != nil {
+	if sumBytes, err := s.streamResponse(ctx, upstreamCtx, w, resp.Body, rlog); err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.logger.Error("streaming failed",
-			"request_id", requestID,
+		rlog.Error("streaming failed",
 			"error", err,
 			"time", time.Now())
 		stats.TotalBytes = sumBytes
@@ -270,11 +251,11 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	// Record success
 	stats.Latency = time.Since(startTime).Milliseconds()
+
 	atomic.AddInt64(&s.stats.successfulRequests, 1)
 	atomic.AddInt64(&s.stats.totalLatency, stats.Latency)
 
-	s.logger.Debug("proxy request completed",
-		"request_id", requestID,
+	rlog.Debug("proxy request completed",
 		"latency_ms", stats.Latency,
 		"total_bytes", stats.TotalBytes,
 		"time", time.Now())
@@ -317,8 +298,8 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 	proxyReq.Header.Set("X-Proxied-By", fmt.Sprintf("%s/%s", version.Name, version.Version))
 	proxyReq.Header.Set("Via", fmt.Sprintf("1.1 olla/%s", version.Version))
 }
+func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, rlog *logger.StyledLogger) (int, error) {
 
-func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader) (int, error) {
 	bufferSize := s.configuration.StreamBufferSize
 	if bufferSize == 0 {
 		bufferSize = DefaultStreamBufferSize
@@ -332,13 +313,16 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 		readTimeout = DefaultReadTimeout
 	}
 
-	s.logger.Debug("starting response stream",
+	rlog.Debug("starting response stream",
 		"read_timeout", readTimeout,
+		"buffer_size", bufferSize,
 		"time", time.Now())
 
 	totalBytes := 0
 	readCount := 0
 	lastReadTime := time.Now()
+	firstDataSent := false // switch to track if first data has been sent
+	firstDataSentTime := time.Now()
 
 	// Create a combined context for proper cancellation coordination
 	combinedCtx, cancel := context.WithCancel(context.Background())
@@ -361,20 +345,20 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 		select {
 		case <-combinedCtx.Done():
 			if clientCtx.Err() != nil {
-				s.logger.Info("client disconnected during streaming",
+				rlog.Info("client disconnected during streaming",
 					"total_bytes", totalBytes,
 					"read_count", readCount,
 					"error", clientCtx.Err(),
 					"time", time.Now())
 				// Continue briefly for LLM responses in case client reconnects
 				if s.shouldContinueAfterClientDisconnect(totalBytes, time.Since(lastReadTime)) {
-					s.logger.Debug("continuing stream briefly after client disconnect")
+					rlog.Debug("continuing stream briefly after client disconnect")
 					combinedCtx = context.Background()
 				} else {
 					return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
 				}
 			} else {
-				s.logger.Error("upstream timeout exceeded",
+				rlog.Error("upstream timeout exceeded",
 					"total_bytes", totalBytes,
 					"read_count", readCount,
 					"error", upstreamCtx.Err(),
@@ -404,7 +388,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 		case <-combinedCtx.Done():
 			readTimer.Stop()
 			if clientCtx.Err() != nil {
-				s.logger.Debug("client context cancelled during read wait",
+				rlog.Debug("client context cancelled during read wait",
 					"total_bytes", totalBytes,
 					"read_count", readCount,
 					"time", time.Now())
@@ -424,7 +408,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				}
 				return totalBytes, fmt.Errorf("client disconnected: %w", clientCtx.Err())
 			} else {
-				s.logger.Error("upstream context cancelled during read wait",
+				rlog.Error("upstream context cancelled during read wait",
 					"total_bytes", totalBytes,
 					"read_count", readCount,
 					"time", time.Now())
@@ -432,7 +416,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 			}
 
 		case <-readTimer.C:
-			s.logger.Error("read timeout exceeded between chunks",
+			rlog.Error("read timeout exceeded between chunks",
 				"timeout", readTimeout,
 				"total_bytes", totalBytes,
 				"read_count", readCount,
@@ -449,7 +433,14 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 				readCount++
 				lastReadTime = time.Now()
 
-				s.logger.Debug("stream read success",
+				// Log when first data is transmitted to user
+				if !firstDataSent {
+					firstDataSent = true
+					firstDataSentTime = time.Now()
+					rlog.Info("Request started streaming data", "bytes", result.n, "time", firstDataSentTime)
+				}
+
+				rlog.Debug("stream read success",
 					"read_num", readCount,
 					"bytes", result.n,
 					"duration_ms", readDuration.Milliseconds(),
@@ -457,7 +448,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 					"time", time.Now())
 
 				if _, err := w.Write(buf[:result.n]); err != nil {
-					s.logger.Error("failed to write response",
+					rlog.Error("failed to write response",
 						"error", err,
 						"time", time.Now())
 					return totalBytes, fmt.Errorf("failed to write response: %w", err)
@@ -466,20 +457,20 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 					flusher.Flush()
 				}
 			} else if result.n == 0 && result.err == nil {
-				s.logger.Debug("empty read",
+				rlog.Debug("empty read",
 					"read_num", readCount+1,
 					"duration_ms", readDuration.Milliseconds())
 			}
 
 			if result.err != nil {
 				if result.err == io.EOF {
-					s.logger.Debug("stream ended normally",
+					rlog.Debug("stream ended normally",
 						"total_bytes", totalBytes,
 						"read_count", readCount,
 						"time", time.Now())
 					return totalBytes, nil
 				}
-				s.logger.Error("stream read error",
+				rlog.Error("stream read error",
 					"error", result.err,
 					"total_bytes", totalBytes,
 					"read_count", readCount,

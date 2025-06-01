@@ -16,6 +16,7 @@ type RouteInfo struct {
 	Description string
 	Method      string
 	Order       int
+	IsProxy     bool
 }
 
 type RouteRegistry struct {
@@ -37,13 +38,7 @@ func (r *RouteRegistry) Register(route string, handler http.HandlerFunc, descrip
 }
 
 func (r *RouteRegistry) RegisterWithMethod(route string, handler http.HandlerFunc, description, method string) {
-	r.routes[route] = RouteInfo{
-		Handler:     handler,
-		Description: description,
-		Method:      method,
-		Order:       r.orderSeq,
-	}
-	r.orderSeq++
+	r.registerWithMethod(route, handler, description, method, false)
 }
 
 func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFunc, description string, method string) {
@@ -51,7 +46,18 @@ func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFun
 		ctx := context.WithValue(req.Context(), constants.ProxyPathPrefix, route)
 		handler(w, req.WithContext(ctx))
 	}
-	r.RegisterWithMethod(route, wrappedHandler, description, method)
+	r.registerWithMethod(route, wrappedHandler, description, method, true)
+}
+
+func (r *RouteRegistry) registerWithMethod(route string, handler http.HandlerFunc, description, method string, isProxy bool) {
+	r.routes[route] = RouteInfo{
+		Handler:     handler,
+		Description: description,
+		Method:      method,
+		Order:       r.orderSeq,
+		IsProxy:     isProxy,
+	}
+	r.orderSeq++
 }
 
 func (r *RouteRegistry) WireUp(mux *http.ServeMux) {
@@ -66,7 +72,6 @@ func (r *RouteRegistry) logRoutesTable() {
 		return
 	}
 
-	// Sort routes by registration order
 	type routeEntry struct {
 		path   string
 		method string
@@ -88,7 +93,6 @@ func (r *RouteRegistry) logRoutesTable() {
 		return entries[i].order < entries[j].order
 	})
 
-	// Build table
 	tableData := [][]string{
 		{"ROUTE", "METHOD", "DESCRIPTION"},
 	}
@@ -108,4 +112,69 @@ func (r *RouteRegistry) logRoutesTable() {
 
 func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
 	return r.routes
+}
+
+func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter interface{}, rateLimiter interface{}) {
+	type middlewareFunc interface {
+		Middleware(http.Handler) http.Handler
+	}
+
+	type rateLimiterFunc interface {
+		Middleware(bool) func(http.Handler) http.Handler
+	}
+
+	sizeMiddleware, hasSizeMiddleware := sizeLimiter.(middlewareFunc)
+	rateMiddleware, hasRateMiddleware := rateLimiter.(rateLimiterFunc)
+
+	if !hasSizeMiddleware && !hasRateMiddleware {
+		r.WireUp(mux)
+		return
+	}
+
+	for route, info := range r.routes {
+		var handler http.Handler = http.HandlerFunc(info.Handler)
+
+		if info.IsProxy {
+			if hasRateMiddleware {
+				handler = rateMiddleware.Middleware(false)(handler)
+			}
+			if hasSizeMiddleware {
+				handler = sizeMiddleware.Middleware(handler)
+			}
+			mux.Handle(route, handler)
+		} else {
+			if hasRateMiddleware {
+				handler = rateMiddleware.Middleware(true)(handler)
+			}
+			mux.Handle(route, handler)
+		}
+	}
+	r.logRoutesTable()
+}
+
+func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters interface{}) {
+	type securityAdapterProvider interface {
+		CreateChainMiddleware() func(http.Handler) http.Handler
+		CreateRateLimitMiddleware() func(http.Handler) http.Handler
+	}
+
+	adapters, hasAdapters := securityAdapters.(securityAdapterProvider)
+
+	if !hasAdapters {
+		r.WireUp(mux)
+		return
+	}
+
+	for route, info := range r.routes {
+		var handler http.Handler = http.HandlerFunc(info.Handler)
+
+		if info.IsProxy {
+			handler = adapters.CreateChainMiddleware()(handler)
+			mux.Handle(route, handler)
+		} else {
+			handler = adapters.CreateRateLimitMiddleware()(handler)
+			mux.Handle(route, handler)
+		}
+	}
+	r.logRoutesTable()
 }
