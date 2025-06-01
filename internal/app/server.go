@@ -5,6 +5,7 @@ import (
 	"github.com/docker/go-units"
 	"github.com/thushan/olla/internal/core/constants"
 	"net/http"
+	"strings"
 )
 
 const (
@@ -36,6 +37,11 @@ func (a *Application) startWebServer() {
 			"burst_size", configServer.RateLimits.BurstSize,
 			"health_limit", configServer.RateLimits.HealthRequestsPerMinute,
 			"trust_proxy", configServer.RateLimits.TrustProxyHeaders)
+	}
+
+	if configServer.RateLimits.TrustProxyHeaders && len(configServer.RateLimits.TrustedProxyCIDRs) > 0 {
+		cidrsStr := strings.Join(configServer.RateLimits.TrustedProxyCIDRs, ", ")
+		a.logger.Info("Configured Trusted Proxy CIDRS", "cidrs", cidrsStr)
 	}
 
 	mux := http.NewServeMux()

@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/util"
 	"sync"
 	"testing"
 	"time"
@@ -20,6 +21,8 @@ func createTestRateLimitLogger() *logger.StyledLogger {
 }
 
 func TestNewRateLimitValidator(t *testing.T) {
+	cidrs := []string{"192.168.0.0/16", "10.0.0.0/8"}
+	trustedCIDRs, _ := util.ParseTrustedCIDRs(cidrs)
 	limits := config.ServerRateLimits{
 		GlobalRequestsPerMinute: 1000,
 		PerIPRequestsPerMinute:  100,
@@ -27,6 +30,8 @@ func TestNewRateLimitValidator(t *testing.T) {
 		HealthRequestsPerMinute: 500,
 		CleanupInterval:         time.Minute,
 		TrustProxyHeaders:       true,
+		TrustedProxyCIDRs:       cidrs,
+		TrustedProxyCIDRsParsed: trustedCIDRs,
 	}
 
 	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
@@ -49,6 +54,26 @@ func TestNewRateLimitValidator(t *testing.T) {
 	}
 	if validator.globalLimiter == nil {
 		t.Error("Expected global limiter to be initialised")
+	}
+	if len(validator.trustedCIDRs) != 2 {
+		t.Errorf("Expected 2 trusted CIDRs, got %d", len(validator.trustedCIDRs))
+	}
+}
+
+func TestNewRateLimitValidator_InvalidCIDRs(t *testing.T) {
+	limits := config.ServerRateLimits{
+		GlobalRequestsPerMinute: 1000,
+		PerIPRequestsPerMinute:  100,
+		BurstSize:               50,
+		TrustProxyHeaders:       true,
+		TrustedProxyCIDRs:       []string{"invalid-cidr", "192.168.0.0/16"},
+	}
+
+	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	defer validator.Stop()
+
+	if validator.trustedCIDRs != nil {
+		t.Error("Expected trustedCIDRs to be nil when parsing fails")
 	}
 }
 

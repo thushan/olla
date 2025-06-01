@@ -27,17 +27,38 @@ func GenerateRequestID() string {
 	return fmt.Sprintf("%s_%s_%s", group, action, suffix)
 }
 
-func GetClientIP(r *http.Request, trustProxyHeaders bool) string {
-	if trustProxyHeaders {
-		if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-			return strings.TrimSpace(strings.Split(ip, ",")[0])
+func GetClientIP(r *http.Request, trustProxyHeaders bool, trustedCIDRs []*net.IPNet) string {
+	if !trustProxyHeaders {
+		if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			return ip
 		}
-		if ip := r.Header.Get("X-Real-IP"); ip != "" {
-			return strings.TrimSpace(ip)
-		}
+		return r.RemoteAddr
 	}
+
+	sourceIP := getSourceIP(r)
+	if sourceIP == nil || !isIPInTrustedCIDRs(sourceIP, trustedCIDRs) {
+		if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			return ip
+		}
+		return r.RemoteAddr
+	}
+
+	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
+		return strings.TrimSpace(strings.Split(ip, ",")[0])
+	}
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return strings.TrimSpace(ip)
+	}
+
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		return ip
 	}
 	return r.RemoteAddr
+}
+
+func getSourceIP(r *http.Request) net.IP {
+	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return net.ParseIP(ip)
+	}
+	return net.ParseIP(r.RemoteAddr)
 }

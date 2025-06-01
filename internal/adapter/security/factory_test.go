@@ -27,6 +27,7 @@ func createTestConfig() *config.Config {
 				HealthRequestsPerMinute: 500,
 				CleanupInterval:         5 * time.Minute,
 				TrustProxyHeaders:       false,
+				TrustedProxyCIDRs:       []string{"127.0.0.0/8", "192.168.0.0/16"},
 			},
 			RequestLimits: config.ServerRequestLimits{
 				MaxBodySize:   10 * 1024 * 1024, // 10MB

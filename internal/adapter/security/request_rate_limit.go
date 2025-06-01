@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"github.com/thushan/olla/internal/core/constants"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -21,6 +22,7 @@ type RateLimitValidator struct {
 	burstSize               int
 	healthRequestsPerMinute int
 	trustProxyHeaders       bool
+	trustedCIDRs            []*net.IPNet
 	logger                  *logger.StyledLogger
 
 	globalLimiter *rate.Limiter
@@ -53,12 +55,14 @@ type ipLimiterInfo struct {
 */
 
 func NewRateLimitValidator(limits config.ServerRateLimits, logger *logger.StyledLogger) *RateLimitValidator {
+
 	rl := &RateLimitValidator{
 		globalRequestsPerMinute: limits.GlobalRequestsPerMinute,
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,
 		burstSize:               limits.BurstSize,
 		healthRequestsPerMinute: limits.HealthRequestsPerMinute,
 		trustProxyHeaders:       limits.TrustProxyHeaders,
+		trustedCIDRs:            limits.TrustedProxyCIDRsParsed,
 		logger:                  logger,
 		stopCleanup:             make(chan struct{}),
 	}
@@ -249,7 +253,7 @@ func (rl *RateLimitValidator) Stop() {
 func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			clientIP := util.GetClientIP(r, rl.trustProxyHeaders)
+			clientIP := util.GetClientIP(r, rl.trustProxyHeaders, rl.trustedCIDRs)
 
 			//  Thisis n't so nice to do this but we want to ignore the Heatcheck endpoint
 			isHealthEndpoint := r.URL.Path == constants.DefaultHealthCheckEndpoint

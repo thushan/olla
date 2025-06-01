@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"net"
+	"time"
+)
 
 // Config holds all configuration for the application
 type Config struct {
@@ -37,6 +40,7 @@ type ServerRateLimits struct {
 	CleanupInterval         time.Duration `yaml:"cleanup_interval"`
 	TrustProxyHeaders       bool          `yaml:"trust_proxy_headers"`
 	TrustedProxyCIDRs       []string      `yaml:"trusted_proxy_cidrs"`
+	TrustedProxyCIDRsParsed []*net.IPNet  // to avoid parsing every time :D
 }
 
 // ProxyConfig holds proxy-specific configuration

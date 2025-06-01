@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"github.com/thushan/olla/internal/util"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -15,6 +17,13 @@ const (
 	DefaultPort = 19841
 	DefaultHost = "localhost"
 )
+
+var DefaultLocalNetworkTrustedCIDRs = []string{
+	"127.0.0.0/8",
+	"10.0.0.0/8",
+	"172.16.0.0/12",
+	"192.168.0.0/16",
+}
 
 func DefaultConfig() *Config {
 	return &Config{
@@ -35,12 +44,8 @@ func DefaultConfig() *Config {
 				HealthRequestsPerMinute: 1000,
 				CleanupInterval:         5 * time.Minute,
 				TrustProxyHeaders:       false,
-				TrustedProxyCIDRs: []string{
-					"127.0.0.0/8",
-					"10.0.0.0/8",
-					"172.16.0.0/12",
-					"192.168.0.0/16",
-				},
+				TrustedProxyCIDRs:       DefaultLocalNetworkTrustedCIDRs,
+				TrustedProxyCIDRsParsed: nil, // Will be parsed later
 			},
 		},
 		Proxy: ProxyConfig{
@@ -96,6 +101,8 @@ func Load() (*Config, error) {
 				return nil, fmt.Errorf("failed to parse %s: %w", path, err)
 			}
 			configLoaded = true
+			// Cache any settings so we don't reparse etc
+			ApplyConfigCaches(config)
 			break
 		}
 	}
@@ -107,6 +114,31 @@ func Load() (*Config, error) {
 	// Apply essential environment overrides only
 	applyEnvOverrides(config)
 	return config, nil
+}
+
+func ApplyConfigCaches(config *Config) {
+
+	if val := config.Server.RateLimits.TrustedProxyCIDRs; len(val) > 0 {
+		if trustedCIDRs, err := util.ParseTrustedCIDRs(val); err == nil {
+			config.Server.RateLimits.TrustedProxyCIDRs = val
+			config.Server.RateLimits.TrustedProxyCIDRsParsed = trustedCIDRs
+		} else {
+			config.Server.RateLimits.TrustedProxyCIDRsParsed = nil // fallback to empty if parsing fails
+		}
+	}
+
+	CheckFallbackCIDRs(config)
+}
+
+func CheckFallbackCIDRs(config *Config) {
+	if config.Server.RateLimits.TrustedProxyCIDRsParsed == nil {
+		if localCIDRs, err := util.ParseTrustedCIDRs(DefaultLocalNetworkTrustedCIDRs); err == nil {
+			config.Server.RateLimits.TrustedProxyCIDRs = DefaultLocalNetworkTrustedCIDRs
+			config.Server.RateLimits.TrustedProxyCIDRsParsed = localCIDRs
+		} else {
+			slog.Error("BUGCHECK: Failed to parse trusted local proxy CIDRs, please file a bug report")
+		}
+	}
 }
 
 // Simplified env overrides - only the ones actually used
@@ -172,10 +204,12 @@ func applyEnvOverrides(config *Config) {
 	}
 	if val := os.Getenv("OLLA_SERVER_TRUSTED_PROXY_CIDRS"); val != "" {
 		cidrs := strings.Split(val, ",")
-		for i, cidr := range cidrs {
-			cidrs[i] = strings.TrimSpace(cidr)
+		if trustedCIDRs, err := util.ParseTrustedCIDRs(cidrs); err == nil {
+			config.Server.RateLimits.TrustedProxyCIDRs = cidrs
+			config.Server.RateLimits.TrustedProxyCIDRsParsed = trustedCIDRs
+		} else {
+			CheckFallbackCIDRs(config)
 		}
-		config.Server.RateLimits.TrustedProxyCIDRs = cidrs
 	}
 
 	if val := os.Getenv("OLLA_PROXY_RESPONSE_TIMEOUT"); val != "" {
