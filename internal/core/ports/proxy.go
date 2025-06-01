@@ -22,13 +22,20 @@ type ProxyStats struct {
 }
 
 type RequestStats struct {
-	RequestID    string
-	StartTime    time.Time
-	EndTime      time.Time
-	EndpointName string
-	TargetUrl    string
-	TotalBytes   int
-	Latency      int64
+	RequestID           string
+	StartTime           time.Time
+	EndTime             time.Time
+	EndpointName        string
+	TargetUrl           string
+	TotalBytes          int
+
+	Latency             int64 // Total end-to-end time
+	RequestProcessingMs int64 // Time spent in Olla before upstream call
+	BackendResponseMs   int64 // Time for backend connection to response headers
+	FirstDataMs         int64 // Time from start until first data sent to client
+	StreamingMs         int64 // Time spent streaming response data
+	HeaderProcessingMs  int64 // Time spent processing headers
+	SelectionMs         int64 // Time spent selecting endpoint
 }
 
 // DiscoveryService defines the interface for service discovery

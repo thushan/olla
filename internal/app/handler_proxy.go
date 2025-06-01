@@ -39,7 +39,13 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			"latency_ms", stats.Latency,
 			"request_id", requestID,
 			"endpoint", stats.EndpointName,
-			"total_bytes", stats.TotalBytes)
+			"total_bytes", stats.TotalBytes,
+			"request_processing_ms", stats.RequestProcessingMs,
+			"backend_response_ms", stats.BackendResponseMs,
+			"first_data_ms", stats.FirstDataMs,
+			"streaming_ms", stats.StreamingMs,
+			"header_processing_ms", stats.HeaderProcessingMs,
+			"selection_ms", stats.SelectionMs)
 
 		// If headers haven't been written yet, return an error instead
 		if w.Header().Get("Content-Type") == "" {
@@ -51,6 +57,13 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			"endpoint", stats.EndpointName,
 			"total_bytes", stats.TotalBytes,
 			"duration_ms", duration.Milliseconds(),
-			"latency_ms", stats.Latency)
+			"latency_ms", stats.Latency,
+			"request_processing_ms", stats.RequestProcessingMs,
+			"backend_response_ms", stats.BackendResponseMs,
+			"first_data_ms", stats.FirstDataMs,
+			"streaming_ms", stats.StreamingMs,
+			"header_processing_ms", stats.HeaderProcessingMs,
+			"selection_ms", stats.SelectionMs)
+
 	}
 }
