@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,7 @@ type SherpaProxyService struct {
 	transport        *http.Transport
 	configuration    *Configuration
 	stats            *proxyStats
+	bufferPool       sync.Pool
 	logger           *logger.StyledLogger
 }
 
@@ -92,7 +94,12 @@ func NewService(
 		transport:        transport,
 		configuration:    configuration,
 		stats:            &proxyStats{},
-		logger:           logger,
+		bufferPool: sync.Pool{
+			New: func() interface{} {
+				return make([]byte, DefaultStreamBufferSize)
+			},
+		},
+		logger: logger,
 	}
 }
 
@@ -292,10 +299,10 @@ func (s *SherpaProxyService) stripRoutePrefix(ctx context.Context, path string) 
 }
 
 func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
-	// Clone headers from the original request to the proxy request
-	for k, vals := range originalReq.Header {
-		for _, v := range vals {
-			proxyReq.Header.Add(k, v)
+	// TODO: copy only safe headers (SECURITY_JUNE2025)
+	if len(originalReq.Header) > 0 {
+		for k, vals := range originalReq.Header {
+			proxyReq.Header[k] = append([]string(nil), vals...)
 		}
 	}
 
@@ -310,7 +317,6 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 		proxyReq.Header.Set("X-Forwarded-For", ip)
 	}
 
-	// being good netizens *RFC7230*
 	proxyReq.Header.Set("X-Proxied-By", fmt.Sprintf("%s/%s", version.Name, version.Version))
 	proxyReq.Header.Set("Via", fmt.Sprintf("1.1 %s/%s", version.ShortName, version.Version))
 }
@@ -320,7 +326,13 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 	if bufferSize == 0 {
 		bufferSize = DefaultStreamBufferSize
 	}
-	buf := make([]byte, bufferSize)
+	buf := s.bufferPool.Get().([]byte)
+	defer s.bufferPool.Put(buf)
+
+	// Resize if needed at this point to avoid resizing during streaming
+	if len(buf) != bufferSize {
+		buf = make([]byte, bufferSize)
+	}
 
 	flusher, canFlush := w.(http.Flusher)
 
@@ -329,11 +341,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 		readTimeout = DefaultReadTimeout
 	}
 
-	rlog.Debug("starting response stream",
-		"read_timeout", readTimeout,
-		"buffer_size", bufferSize)
-
-	rlog.Info("Endpoint streaming response")
+	rlog.Debug("starting response stream", "read_timeout", readTimeout, "buffer_size", bufferSize)
 
 	totalBytes := 0
 	readCount := 0
@@ -381,7 +389,6 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 		default:
 		}
 
-		// Read with timeout handling
 		type readResult struct {
 			err error
 			n   int
