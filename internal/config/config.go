@@ -63,8 +63,9 @@ func DefaultConfig() *Config {
 			Static: StaticDiscoveryConfig{
 				Endpoints: []EndpointConfig{
 					{
-						Name:           "localhost",
 						URL:            "http://localhost:11434",
+						Name:           "localhost",
+						Type: 			"ollama",
 						Priority:       100,
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",

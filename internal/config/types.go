@@ -67,10 +67,11 @@ type StaticDiscoveryConfig struct {
 	Endpoints []EndpointConfig `yaml:"endpoints"`
 }
 
-// EndpointConfig holds configuration for an Ollama endpoint
+// EndpointConfig holds configuration for an AI inference endpoint
 type EndpointConfig struct {
-	Name           string        `yaml:"name"`
 	URL            string        `yaml:"url"`
+	Name           string        `yaml:"name"`
+	Type           string        `yaml:"type"`
 	HealthCheckURL string        `yaml:"health_check_url"`
 	ModelURL       string        `yaml:"model_url"`
 	Priority       int           `yaml:"priority"`
