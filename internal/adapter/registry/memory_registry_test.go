@@ -3,6 +3,8 @@ package registry
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/theme"
 	"sync"
 	"testing"
 	"time"
@@ -20,7 +22,7 @@ const (
 )
 
 func TestNewMemoryModelRegistry(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 
 	if registry == nil {
 		t.Fatal("NewMemoryModelRegistry returned nil")
@@ -50,7 +52,7 @@ func TestNewMemoryModelRegistry(t *testing.T) {
 
 func TestRegisterModel_Success(t *testing.T) {
 	modelName := DefaultModelName
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	model := createTestModel(modelName)
@@ -76,7 +78,7 @@ func TestRegisterModel_Success(t *testing.T) {
 }
 
 func TestRegisterModel_InvalidInputs(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -109,7 +111,7 @@ func TestRegisterModel_InvalidInputs(t *testing.T) {
 }
 
 func TestRegisterModel_UpdateExisting(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 	endpointURL := DefaultOllamaEndpointUri
 
@@ -150,7 +152,7 @@ func TestRegisterModel_UpdateExisting(t *testing.T) {
 }
 
 func TestRegisterModels_Success(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 	endpointURL := DefaultOllamaEndpointUri
 
@@ -188,7 +190,7 @@ func TestRegisterModels_Success(t *testing.T) {
 }
 
 func TestRegisterModels_ReplaceExisting(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 	endpointURL := DefaultOllamaEndpointUri
 
@@ -234,7 +236,7 @@ func TestRegisterModels_ReplaceExisting(t *testing.T) {
 }
 
 func TestRegisterModels_EmptyList(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 	endpointURL := DefaultOllamaEndpointUri
 
@@ -267,7 +269,7 @@ func TestRegisterModels_EmptyList(t *testing.T) {
 }
 
 func TestGetModelsForEndpoint_NonExistent(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	models, err := registry.GetModelsForEndpoint(ctx, "http://nonexistent:11434")
@@ -281,7 +283,7 @@ func TestGetModelsForEndpoint_NonExistent(t *testing.T) {
 }
 
 func TestGetEndpointsForModel_Success(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	model := createTestModel(DefaultModelNameC)
@@ -321,7 +323,7 @@ func TestGetEndpointsForModel_Success(t *testing.T) {
 }
 
 func TestGetEndpointsForModel_NonExistent(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	endpoints, err := registry.GetEndpointsForModel(ctx, "nonexistent-model")
@@ -335,7 +337,7 @@ func TestGetEndpointsForModel_NonExistent(t *testing.T) {
 }
 
 func TestIsModelAvailable(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	if registry.IsModelAvailable(ctx, "nonexistent") {
@@ -358,7 +360,7 @@ func TestIsModelAvailable(t *testing.T) {
 }
 
 func TestGetAllModels(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	endpoint1 := DefaultOllamaEndpointUri
@@ -402,7 +404,7 @@ func TestGetAllModels(t *testing.T) {
 }
 
 func TestRemoveEndpoint(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	endpoint1 := DefaultOllamaEndpointUri
@@ -455,7 +457,7 @@ func TestRemoveEndpoint(t *testing.T) {
 }
 
 func TestGetStats(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	endpoint1 := DefaultOllamaEndpointUri
@@ -504,7 +506,7 @@ func TestGetStats(t *testing.T) {
 }
 
 func TestContextCancellation(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -533,7 +535,7 @@ func TestContextCancellation(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -596,7 +598,7 @@ func TestConcurrentAccess(t *testing.T) {
 }
 
 func TestDataIsolation(t *testing.T) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	model := createTestModel(DefaultModelName)
@@ -625,7 +627,7 @@ func TestDataIsolation(t *testing.T) {
 }
 
 func BenchmarkModelLookup(b *testing.B) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	for i := 0; i < 100; i++ {
@@ -647,7 +649,7 @@ func BenchmarkModelLookup(b *testing.B) {
 }
 
 func BenchmarkModelRegistration(b *testing.B) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	b.ResetTimer()
@@ -659,7 +661,7 @@ func BenchmarkModelRegistration(b *testing.B) {
 }
 
 func BenchmarkConcurrentAccess(b *testing.B) {
-	registry := NewMemoryModelRegistry()
+	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
 	for i := 0; i < 50; i++ {
@@ -699,4 +701,9 @@ func createTestModel(name string) *domain.ModelInfo {
 		Description: fmt.Sprintf("Test model %s", name),
 		LastSeen:    time.Now(),
 	}
+}
+func createTestLogger() *logger.StyledLogger {
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, _, _ := logger.New(loggerCfg)
+	return logger.NewStyledLogger(log, theme.Default())
 }
