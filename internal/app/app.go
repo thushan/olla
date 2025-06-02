@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/thushan/olla/internal/adapter/balancer"
+	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/adapter/security"
 	"net/http"
 	"sync"
@@ -26,6 +27,7 @@ type Application struct {
 	server           *http.Server
 	logger           *logger.StyledLogger
 	registry         *router.RouteRegistry
+	modelRegistry    *domain.ModelRegistry
 	repository       *discovery.StaticEndpointRepository
 	healthChecker    *health.HTTPHealthChecker
 	proxyService     ports.ProxyService
@@ -41,9 +43,15 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	registry := router.NewRouteRegistry(logger)
+	routeRegistry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthCheckerWithDefaults(repository, logger)
+
+	modelRegistryConfig := registry.RegistryConfig{Type: cfg.ModelRegistry.Type}
+	modelRegistry, err := registry.NewModelRegistry(modelRegistryConfig, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create model registry: %w", err)
+	}
 
 	balancerFactory := balancer.NewFactory()
 	selector, err := balancerFactory.Create(DefaultLoadBalancer)
@@ -78,7 +86,8 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		Config:           cfg,
 		server:           server,
 		logger:           logger,
-		registry:         registry,
+		registry:         routeRegistry,
+		modelRegistry:    &modelRegistry,
 		repository:       repository,
 		healthChecker:    healthChecker,
 		proxyService:     proxyService,

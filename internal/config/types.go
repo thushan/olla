@@ -7,11 +7,12 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	Logging     LoggingConfig     `yaml:"logging"`
-	Discovery   DiscoveryConfig   `yaml:"discovery"`
-	Server      ServerConfig      `yaml:"server"`
-	Proxy       ProxyConfig       `yaml:"proxy"`
-	Engineering EngineeringConfig `yaml:"engineering"`
+	Logging       LoggingConfig       `yaml:"logging"`
+	Discovery     DiscoveryConfig     `yaml:"discovery"`
+	Server        ServerConfig        `yaml:"server"`
+	Proxy         ProxyConfig         `yaml:"proxy"`
+	Engineering   EngineeringConfig   `yaml:"engineering"`
+	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -87,4 +88,9 @@ type LoggingConfig struct {
 // EngineeringConfig holds development/debugging configuration
 type EngineeringConfig struct {
 	ShowNerdStats bool `yaml:"show_nerdstats"`
+}
+
+// ModelRegistryConfig holds model registry configuration
+type ModelRegistryConfig struct {
+	Type string `yaml:"type"`
 }
