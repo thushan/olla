@@ -26,7 +26,7 @@ type Application struct {
 	Config           *config.Config
 	server           *http.Server
 	logger           *logger.StyledLogger
-	registry         *router.RouteRegistry
+	routeRegistry    *router.RouteRegistry
 	modelRegistry    *domain.ModelRegistry
 	repository       *discovery.StaticEndpointRepository
 	healthChecker    *health.HTTPHealthChecker
@@ -50,7 +50,7 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 	modelRegistryConfig := registry.RegistryConfig{Type: cfg.ModelRegistry.Type}
 	modelRegistry, err := registry.NewModelRegistry(modelRegistryConfig, logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create model registry: %w", err)
+		return nil, fmt.Errorf("failed to create model routeRegistry: %w", err)
 	}
 
 	balancerFactory := balancer.NewFactory()
@@ -86,7 +86,7 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		Config:           cfg,
 		server:           server,
 		logger:           logger,
-		registry:         routeRegistry,
+		routeRegistry:    routeRegistry,
 		modelRegistry:    &modelRegistry,
 		repository:       repository,
 		healthChecker:    healthChecker,

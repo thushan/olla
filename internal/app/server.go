@@ -47,7 +47,7 @@ func (a *Application) startWebServer() {
 	mux := http.NewServeMux()
 
 	a.registerRoutes()
-	a.registry.WireUpWithSecurityChain(mux, a.securityAdapters)
+	a.routeRegistry.WireUpWithSecurityChain(mux, a.securityAdapters)
 
 	go func() {
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -61,10 +61,10 @@ func (a *Application) startWebServer() {
 }
 
 func (a *Application) registerRoutes() {
-	a.registry.RegisterProxyRoute("/olla/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
-	a.registry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST") // Sherpa compatibility
-	a.registry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
-	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
-	a.registry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
-	a.registry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
+	a.routeRegistry.RegisterProxyRoute("/olla/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
+	a.routeRegistry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST") // Sherpa compatibility
+	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
+	a.routeRegistry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
 }
