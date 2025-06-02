@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,9 @@ func NewMemoryModelRegistry() *MemoryModelRegistry {
 }
 
 func (r *MemoryModelRegistry) RegisterModel(ctx context.Context, endpointURL string, model *domain.ModelInfo) error {
+	if err := r.validateInputs(endpointURL, model.Name); err != nil {
+		return domain.NewModelRegistryError("register_model", endpointURL, model.Name, err)
+	}
 
 	select {
 	case <-ctx.Done():
@@ -295,6 +299,35 @@ func (r *MemoryModelRegistry) GetStats(ctx context.Context) (domain.RegistryStat
 		ModelsPerEndpoint: modelsPerEndpoint,
 		LastUpdated:       r.stats.LastUpdated,
 	}, nil
+}
+
+func (r *MemoryModelRegistry) validateInputs(endpointURL, modelName string) error {
+	if endpointURL == "" {
+		return fmt.Errorf("endpoint URL cannot be empty")
+	}
+
+	if modelName == "" {
+		return fmt.Errorf("model name cannot be empty")
+	}
+
+	if strings.TrimSpace(endpointURL) == "" {
+		return fmt.Errorf("endpoint URL cannot be whitespace only")
+	}
+
+	if strings.TrimSpace(modelName) == "" {
+		return fmt.Errorf("model name cannot be whitespace only")
+	}
+
+	parsedURL, err := url.Parse(endpointURL)
+	if err != nil {
+		return fmt.Errorf("invalid endpoint URL: %w", err)
+	}
+
+	if parsedURL.Scheme == "" || parsedURL.Host == "" {
+		return fmt.Errorf("endpoint URL must have scheme and host")
+	}
+
+	return nil
 }
 
 func (r *MemoryModelRegistry) removeEndpointFromIndex(endpointURL string) {

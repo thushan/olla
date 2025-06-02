@@ -186,6 +186,272 @@ func TestRegisterModels_Success(t *testing.T) {
 	}
 }
 
+func TestRegisterModels_ReplaceExisting(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+	endpointURL := DefaultOllamaEndpointUri
+
+	initialModels := []*domain.ModelInfo{
+		createTestModel(DefaultModelName),
+		createTestModel(DefaultModelNameC),
+	}
+
+	err := registry.RegisterModels(ctx, endpointURL, initialModels)
+	if err != nil {
+		t.Fatalf("Initial RegisterModels failed: %v", err)
+	}
+
+	newModels := []*domain.ModelInfo{
+		createTestModel(DefaultModelNameB),
+	}
+
+	err = registry.RegisterModels(ctx, endpointURL, newModels)
+	if err != nil {
+		t.Fatalf("Second RegisterModels failed: %v", err)
+	}
+
+	retrievedModels, err := registry.GetModelsForEndpoint(ctx, endpointURL)
+	if err != nil {
+		t.Fatalf("GetModelsForEndpoint failed: %v", err)
+	}
+
+	if len(retrievedModels) != 1 {
+		t.Fatalf("Expected 1 model after replacement, got %d", len(retrievedModels))
+	}
+
+	if retrievedModels[0].Name != DefaultModelNameB {
+		t.Errorf("Expected model 'mistral:7b', got %s", retrievedModels[0].Name)
+	}
+
+	if registry.IsModelAvailable(ctx, DefaultModelName) {
+		t.Error("Old model should no longer be available")
+	}
+
+	if !registry.IsModelAvailable(ctx, DefaultModelNameB) {
+		t.Error("New model should be available")
+	}
+}
+
+func TestRegisterModels_EmptyList(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+	endpointURL := DefaultOllamaEndpointUri
+
+	initialModels := []*domain.ModelInfo{
+		createTestModel(DefaultModelName),
+	}
+
+	err := registry.RegisterModels(ctx, endpointURL, initialModels)
+	if err != nil {
+		t.Fatalf("Initial RegisterModels failed: %v", err)
+	}
+
+	err = registry.RegisterModels(ctx, endpointURL, []*domain.ModelInfo{})
+	if err != nil {
+		t.Fatalf("RegisterModels with empty list failed: %v", err)
+	}
+
+	retrievedModels, err := registry.GetModelsForEndpoint(ctx, endpointURL)
+	if err != nil {
+		t.Fatalf("GetModelsForEndpoint failed: %v", err)
+	}
+
+	if len(retrievedModels) != 0 {
+		t.Fatalf("Expected 0 models after empty registration, got %d", len(retrievedModels))
+	}
+
+	if registry.IsModelAvailable(ctx, DefaultModelName) {
+		t.Error("Model should no longer be available")
+	}
+}
+
+func TestGetModelsForEndpoint_NonExistent(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	models, err := registry.GetModelsForEndpoint(ctx, "http://nonexistent:11434")
+	if err != nil {
+		t.Fatalf("GetModelsForEndpoint failed: %v", err)
+	}
+
+	if len(models) != 0 {
+		t.Errorf("Expected empty slice for nonexistent endpoint, got %d models", len(models))
+	}
+}
+
+func TestGetEndpointsForModel_Success(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	model := createTestModel(DefaultModelNameC)
+
+	endpoints := []string{
+		DefaultOllamaEndpointUri,
+		"http://localhost:11435",
+		"http://localhost:11436",
+	}
+
+	for _, endpoint := range endpoints {
+		err := registry.RegisterModel(ctx, endpoint, model)
+		if err != nil {
+			t.Fatalf("RegisterModel failed for %s: %v", endpoint, err)
+		}
+	}
+
+	retrievedEndpoints, err := registry.GetEndpointsForModel(ctx, DefaultModelNameC)
+	if err != nil {
+		t.Fatalf("GetEndpointsForModel failed: %v", err)
+	}
+
+	if len(retrievedEndpoints) != 3 {
+		t.Fatalf("Expected 3 endpoints, got %d", len(retrievedEndpoints))
+	}
+
+	endpointMap := make(map[string]bool)
+	for _, endpoint := range retrievedEndpoints {
+		endpointMap[endpoint] = true
+	}
+
+	for _, expected := range endpoints {
+		if !endpointMap[expected] {
+			t.Errorf("Expected endpoint %s not found", expected)
+		}
+	}
+}
+
+func TestGetEndpointsForModel_NonExistent(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	endpoints, err := registry.GetEndpointsForModel(ctx, "nonexistent-model")
+	if err != nil {
+		t.Fatalf("GetEndpointsForModel failed: %v", err)
+	}
+
+	if len(endpoints) != 0 {
+		t.Errorf("Expected empty slice for nonexistent model, got %d endpoints", len(endpoints))
+	}
+}
+
+func TestIsModelAvailable(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	if registry.IsModelAvailable(ctx, "nonexistent") {
+		t.Error("Nonexistent model should not be available")
+	}
+
+	model := createTestModel(DefaultModelNameC)
+	err := registry.RegisterModel(ctx, DefaultOllamaEndpointUri, model)
+	if err != nil {
+		t.Fatalf("RegisterModel failed: %v", err)
+	}
+
+	if !registry.IsModelAvailable(ctx, DefaultModelNameC) {
+		t.Error("Registered model should be available")
+	}
+
+	if registry.IsModelAvailable(ctx, "") {
+		t.Error("Empty model name should not be available")
+	}
+}
+
+func TestGetAllModels(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	endpoint1 := DefaultOllamaEndpointUri
+	endpoint2 := "http://localhost:11435"
+
+	models1 := []*domain.ModelInfo{
+		createTestModel(DefaultModelName),
+		createTestModel(DefaultModelNameA),
+	}
+
+	models2 := []*domain.ModelInfo{
+		createTestModel(DefaultModelNameB),
+	}
+
+	err := registry.RegisterModels(ctx, endpoint1, models1)
+	if err != nil {
+		t.Fatalf("RegisterModels failed for endpoint1: %v", err)
+	}
+
+	err = registry.RegisterModels(ctx, endpoint2, models2)
+	if err != nil {
+		t.Fatalf("RegisterModels failed for endpoint2: %v", err)
+	}
+
+	allModels, err := registry.GetAllModels(ctx)
+	if err != nil {
+		t.Fatalf("GetAllModels failed: %v", err)
+	}
+
+	if len(allModels) != 2 {
+		t.Fatalf("Expected 2 endpoints, got %d", len(allModels))
+	}
+
+	if len(allModels[endpoint1]) != 2 {
+		t.Errorf("Expected 2 models for endpoint1, got %d", len(allModels[endpoint1]))
+	}
+
+	if len(allModels[endpoint2]) != 1 {
+		t.Errorf("Expected 1 model for endpoint2, got %d", len(allModels[endpoint2]))
+	}
+}
+
+func TestRemoveEndpoint(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	endpoint1 := DefaultOllamaEndpointUri
+	endpoint2 := "http://localhost:11435"
+
+	model1 := createTestModel(DefaultModelName)
+	model2 := createTestModel(DefaultModelNameC)
+
+	err := registry.RegisterModel(ctx, endpoint1, model1)
+	if err != nil {
+		t.Fatalf("RegisterModel failed: %v", err)
+	}
+
+	err = registry.RegisterModel(ctx, endpoint2, model1)
+	if err != nil {
+		t.Fatalf("RegisterModel failed: %v", err)
+	}
+
+	err = registry.RegisterModel(ctx, endpoint1, model2)
+	if err != nil {
+		t.Fatalf("RegisterModel failed: %v", err)
+	}
+
+	err = registry.RemoveEndpoint(ctx, endpoint1)
+	if err != nil {
+		t.Fatalf("RemoveEndpoint failed: %v", err)
+	}
+
+	models, err := registry.GetModelsForEndpoint(ctx, endpoint1)
+	if err != nil {
+		t.Fatalf("GetModelsForEndpoint failed: %v", err)
+	}
+
+	if len(models) != 0 {
+		t.Errorf("Expected 0 models for removed endpoint, got %d", len(models))
+	}
+
+	endpoints, err := registry.GetEndpointsForModel(ctx, DefaultModelName)
+	if err != nil {
+		t.Fatalf("GetEndpointsForModel failed: %v", err)
+	}
+
+	if len(endpoints) != 1 || endpoints[0] != endpoint2 {
+		t.Error("Model should still be available on endpoint2")
+	}
+
+	if registry.IsModelAvailable(ctx, DefaultModelNameC) {
+		t.Error("Model should no longer be available after endpoint removal")
+	}
+}
 
 func createTestModel(name string) *domain.ModelInfo {
 	return &domain.ModelInfo{
