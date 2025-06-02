@@ -55,6 +55,9 @@ discovery:
         check_interval: 5s
         check_timeout: 2s
 
+model_registry:
+  type: "memory"
+
 logging:
   level: "info"  # debug, info, warn, error
   format: "json"  # json, text

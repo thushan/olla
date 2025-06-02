@@ -74,6 +74,9 @@ func DefaultConfig() *Config {
 				},
 			},
 		},
+		ModelRegistry: ModelRegistryConfig{
+			Type: "memory",
+		},
 		Logging: LoggingConfig{
 			Level:  "info",
 			Format: "json",
@@ -237,6 +240,9 @@ func applyEnvOverrides(config *Config) {
 		if enabled, err := strconv.ParseBool(val); err == nil {
 			config.Engineering.ShowNerdStats = enabled
 		}
+	}
+	if val := os.Getenv("OLLA_MODEL_REGISTRY_TYPE"); val != "" {
+		config.ModelRegistry.Type = val
 	}
 }
 
