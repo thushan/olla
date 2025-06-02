@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/logger"
 	"net/url"
 	"strings"
 	"sync"
@@ -16,9 +17,11 @@ type MemoryModelRegistry struct {
 	modelToEndpoints map[string]map[string]struct{}
 	stats            domain.RegistryStats
 	mu               sync.RWMutex
+	logger           *logger.StyledLogger
 }
 
-func NewMemoryModelRegistry() *MemoryModelRegistry {
+func NewMemoryModelRegistry(logger *logger.StyledLogger) *MemoryModelRegistry {
+	logger.Info("Started in-memory model registry")
 	return &MemoryModelRegistry{
 		endpointModels:   make(map[string]*domain.EndpointModels),
 		modelToEndpoints: make(map[string]map[string]struct{}),
@@ -28,6 +31,7 @@ func NewMemoryModelRegistry() *MemoryModelRegistry {
 			ModelsPerEndpoint: make(map[string]int),
 			LastUpdated:       time.Now(),
 		},
+		logger: logger,
 	}
 }
 
