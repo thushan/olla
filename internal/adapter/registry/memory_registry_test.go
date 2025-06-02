@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -451,6 +452,243 @@ func TestRemoveEndpoint(t *testing.T) {
 	if registry.IsModelAvailable(ctx, DefaultModelNameC) {
 		t.Error("Model should no longer be available after endpoint removal")
 	}
+}
+
+func TestGetStats(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	endpoint1 := DefaultOllamaEndpointUri
+	endpoint2 := "http://localhost:11435"
+
+	models1 := []*domain.ModelInfo{
+		createTestModel(DefaultModelName),
+		createTestModel(DefaultModelNameA),
+	}
+
+	models2 := []*domain.ModelInfo{
+		createTestModel(DefaultModelName),
+		createTestModel(DefaultModelNameB),
+	}
+
+	err := registry.RegisterModels(ctx, endpoint1, models1)
+	if err != nil {
+		t.Fatalf("RegisterModels failed: %v", err)
+	}
+
+	err = registry.RegisterModels(ctx, endpoint2, models2)
+	if err != nil {
+		t.Fatalf("RegisterModels failed: %v", err)
+	}
+
+	stats, err := registry.GetStats(ctx)
+	if err != nil {
+		t.Fatalf("GetStats failed: %v", err)
+	}
+
+	if stats.TotalEndpoints != 2 {
+		t.Errorf("Expected 2 endpoints, got %d", stats.TotalEndpoints)
+	}
+
+	if stats.TotalModels != 3 {
+		t.Errorf("Expected 3 unique models, got %d", stats.TotalModels)
+	}
+
+	if stats.ModelsPerEndpoint[endpoint1] != 2 {
+		t.Errorf("Expected 2 models for endpoint1, got %d", stats.ModelsPerEndpoint[endpoint1])
+	}
+
+	if stats.ModelsPerEndpoint[endpoint2] != 2 {
+		t.Errorf("Expected 2 models for endpoint2, got %d", stats.ModelsPerEndpoint[endpoint2])
+	}
+}
+
+func TestContextCancellation(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	model := createTestModel("test")
+
+	err := registry.RegisterModel(ctx, DefaultOllamaEndpointUri, model)
+	if err == nil {
+		t.Error("Expected error due to cancelled context")
+	}
+
+	_, err = registry.GetModelsForEndpoint(ctx, DefaultOllamaEndpointUri)
+	if err == nil {
+		t.Error("Expected error due to cancelled context")
+	}
+
+	_, err = registry.GetEndpointsForModel(ctx, "test")
+	if err == nil {
+		t.Error("Expected error due to cancelled context")
+	}
+
+	available := registry.IsModelAvailable(ctx, "test")
+	if available {
+		t.Error("Expected false due to cancelled context")
+	}
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	var wg sync.WaitGroup
+	errors := make(chan error, 200)
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			endpoint := fmt.Sprintf("http://localhost:%d", 11434+id)
+			model := createTestModel(fmt.Sprintf("model-%d", id))
+
+			for j := 0; j < 10; j++ {
+				if err := registry.RegisterModel(ctx, endpoint, model); err != nil {
+					errors <- err
+					return
+				}
+			}
+		}(i)
+	}
+
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < 5; j++ {
+				_, err := registry.GetAllModels(ctx)
+				if err != nil {
+					errors <- err
+					return
+				}
+
+				_, err = registry.GetStats(ctx)
+				if err != nil {
+					errors <- err
+					return
+				}
+			}
+		}(i)
+	}
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			modelName := fmt.Sprintf("model-%d", id%5)
+			for j := 0; j < 5; j++ {
+				registry.IsModelAvailable(ctx, modelName)
+				_, _ = registry.GetEndpointsForModel(ctx, modelName)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errors)
+
+	for err := range errors {
+		t.Errorf("Concurrent access error: %v", err)
+	}
+}
+
+func TestDataIsolation(t *testing.T) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	model := createTestModel(DefaultModelName)
+	model.Size = 1000
+
+	err := registry.RegisterModel(ctx, DefaultOllamaEndpointUri, model)
+	if err != nil {
+		t.Fatalf("RegisterModel failed: %v", err)
+	}
+
+	retrievedModels, err := registry.GetModelsForEndpoint(ctx, DefaultOllamaEndpointUri)
+	if err != nil {
+		t.Fatalf("GetModelsForEndpoint failed: %v", err)
+	}
+
+	retrievedModels[0].Size = 2000
+
+	models2, err := registry.GetModelsForEndpoint(ctx, DefaultOllamaEndpointUri)
+	if err != nil {
+		t.Fatalf("Second GetModelsForEndpoint failed: %v", err)
+	}
+
+	if models2[0].Size != 1000 {
+		t.Error("External modification affected internal data")
+	}
+}
+
+func BenchmarkModelLookup(b *testing.B) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	for i := 0; i < 100; i++ {
+		endpoint := fmt.Sprintf("http://localhost:%d", 11434+i)
+		models := make([]*domain.ModelInfo, 10)
+		for j := 0; j < 10; j++ {
+			models[j] = createTestModel(fmt.Sprintf("model-%d-%d", i, j))
+		}
+		registry.RegisterModels(ctx, endpoint, models)
+	}
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			endpoint := fmt.Sprintf("http://localhost:%d", 11434+(b.N%100))
+			_, _ = registry.GetModelsForEndpoint(ctx, endpoint)
+		}
+	})
+}
+
+func BenchmarkModelRegistration(b *testing.B) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		endpoint := fmt.Sprintf("http://localhost:%d", 11434+(i%10))
+		model := createTestModel(fmt.Sprintf("model-%d", i))
+		registry.RegisterModel(ctx, endpoint, model)
+	}
+}
+
+func BenchmarkConcurrentAccess(b *testing.B) {
+	registry := NewMemoryModelRegistry()
+	ctx := context.Background()
+
+	for i := 0; i < 50; i++ {
+		endpoint := fmt.Sprintf("http://localhost:%d", 11434+i)
+		models := make([]*domain.ModelInfo, 5)
+		for j := 0; j < 5; j++ {
+			models[j] = createTestModel(fmt.Sprintf("model-%d-%d", i, j))
+		}
+		registry.RegisterModels(ctx, endpoint, models)
+	}
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			switch b.N % 4 {
+			case 0:
+				endpoint := fmt.Sprintf("http://localhost:%d", 11434+(b.N%50))
+				_, _ = registry.GetModelsForEndpoint(ctx, endpoint)
+			case 1:
+				model := fmt.Sprintf("model-%d-0", b.N%50)
+				_, _ = registry.GetEndpointsForModel(ctx, model)
+			case 2:
+				model := fmt.Sprintf("model-%d-0", b.N%50)
+				_ = registry.IsModelAvailable(ctx, model)
+			case 3:
+				_, _ = registry.GetStats(ctx)
+			}
+		}
+	})
 }
 
 func createTestModel(name string) *domain.ModelInfo {
