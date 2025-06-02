@@ -394,7 +394,7 @@ func TestSherpaProxyService_StripRoutePrefix(t *testing.T) {
 		expectedPath string
 	}{
 		{"/proxy/api/models", "/proxy/", "/api/models"},
-		{"/ma/api/chat", "/ma/", "/api/chat"},
+		{"/olla/api/chat", "/olla/", "/api/chat"},
 		{"/api/models", "/proxy/", "/api/models"}, // No prefix to strip
 		{"/proxy/", "/proxy/", "/"},
 		{"/proxy", "/proxy/", "/proxy"}, // Doesn't match prefix exactly, so no stripping
