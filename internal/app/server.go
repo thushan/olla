@@ -61,9 +61,10 @@ func (a *Application) startWebServer() {
 }
 
 func (a *Application) registerRoutes() {
-	a.registry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
-	a.registry.RegisterProxyRoute("/ma/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST")
+	a.registry.RegisterProxyRoute("/olla/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
+	a.registry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST") // Sherpa compatibility
 	a.registry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
 	a.registry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
 	a.registry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
+	a.registry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
 }

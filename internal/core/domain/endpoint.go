@@ -30,12 +30,12 @@ type Endpoint struct {
 	HealthCheckPathString string
 	HealthCheckURLString  string
 	ModelURLString        string
-	Priority              int
+	LastLatency           time.Duration
 	CheckInterval         time.Duration
 	CheckTimeout          time.Duration
+	Priority              int
 	ConsecutiveFailures   int
 	BackoffMultiplier     int
-	LastLatency           time.Duration
 }
 
 func (e *Endpoint) GetURLString() string {

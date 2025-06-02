@@ -10,14 +10,26 @@ import (
 var (
 	Name        = "Olla"
 	ShortName   = "olla"
+	Edition     = "Community"
 	Authors     = "Thushan Fernando"
 	Description = "The AI Proxy for your LLMs"
-	Version     = "v0.0.5"
+	Version     = "v0.0.6"
 	Commit      = "none"
 	Date        = "nowish"
 	User        = "local"
 	Tool        = "make"
 	Runtime     = "Go 1.2x.0"
+	Capabilities = []string{
+		"load_balancing",
+		"health_checking",
+		"rate_limiting",
+		"endpoint_discovery",
+	}
+	SupportedBackends = []string{
+		"ollama",
+		"lm_studio",
+		"openai_compatible",
+	}
 )
 
 const (
