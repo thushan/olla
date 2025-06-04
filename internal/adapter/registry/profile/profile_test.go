@@ -1,15 +1,15 @@
-package domain
+package profile
 
 import (
-	RegistryProfile "github.com/thushan/olla/internal/adapter/registry/profile"
+	"github.com/thushan/olla/internal/core/domain"
 	"testing"
 )
 
 func TestOllamaProfile(t *testing.T) {
-	profile := RegistryProfile.NewOllamaProfile()
+	profile := NewOllamaProfile()
 
-	if profile.GetName() != ProfileOllama {
-		t.Errorf("Expected name %q, got %q", ProfileOllama, profile.GetName())
+	if profile.GetName() != domain.ProfileOllama {
+		t.Errorf("Expected name %q, got %q", domain.ProfileOllama, profile.GetName())
 	}
 
 	url := profile.GetModelDiscoveryURL("http://localhost:11434")
@@ -45,10 +45,10 @@ func TestOllamaProfile(t *testing.T) {
 }
 
 func TestLMStudioProfile(t *testing.T) {
-	profile := RegistryProfile.NewOllamaProfile()
+	profile := NewLMStudioProfile()
 
-	if profile.GetName() != ProfileLmStudio {
-		t.Errorf("Expected name %q, got %q", ProfileLmStudio, profile.GetName())
+	if profile.GetName() != domain.ProfileLmStudio {
+		t.Errorf("Expected name %q, got %q", domain.ProfileLmStudio, profile.GetName())
 	}
 
 	url := profile.GetModelDiscoveryURL("http://localhost:1234")
@@ -79,10 +79,10 @@ func TestLMStudioProfile(t *testing.T) {
 }
 
 func TestOpenAICompatibleProfile(t *testing.T) {
-	profile := RegistryProfile.NewOllamaProfile()
+	profile := NewOpenAICompatibleProfile()
 
-	if profile.GetName() != ProfileOpenAICompatible {
-		t.Errorf("Expected name %q, got %q", ProfileOpenAICompatible, profile.GetName())
+	if profile.GetName() != domain.ProfileOpenAICompatible {
+		t.Errorf("Expected name %q, got %q", domain.ProfileOpenAICompatible, profile.GetName())
 	}
 
 	url := profile.GetModelDiscoveryURL("http://localhost:8080")
@@ -107,10 +107,10 @@ func TestOpenAICompatibleProfile(t *testing.T) {
 }
 
 func TestProfileVersioning(t *testing.T) {
-	profiles := []PlatformProfile{
-		RegistryProfile.NewOllamaProfile(),
-		RegistryProfile.NewLMStudioProfile(),
-		RegistryProfile.NewOpenAICompatibleProfile(),
+	profiles := []domain.PlatformProfile{
+		NewOllamaProfile(),
+		NewLMStudioProfile(),
+		NewOpenAICompatibleProfile(),
 	}
 
 	for _, profile := range profiles {
@@ -122,7 +122,7 @@ func TestProfileVersioning(t *testing.T) {
 }
 
 func TestDetectionHints(t *testing.T) {
-	profile := RegistryProfile.NewOllamaProfile()
+	profile := NewOllamaProfile()
 	hints := profile.GetDetectionHints()
 
 	if len(hints.PathIndicators) == 0 {

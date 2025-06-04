@@ -54,6 +54,13 @@ discovery:
         health_check_url: "/"
         check_interval: 5s
         check_timeout: 2s
+  model_discovery:
+    enabled: true
+    interval: 5m
+    timeout: 30s
+    concurrent_workers: 5
+    retry_attempts: 3
+    retry_backoff: 1s
 
 model_registry:
   type: "memory"
