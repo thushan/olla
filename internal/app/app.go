@@ -4,13 +4,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/thushan/olla/internal/adapter/balancer"
+	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/registry"
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/security"
 	"net/http"
 	"sync"
 	"time"
 
-	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy"
 
@@ -22,19 +23,21 @@ import (
 )
 
 type Application struct {
-	StartTime        time.Time
-	Config           *config.Config
-	server           *http.Server
-	logger           *logger.StyledLogger
-	routeRegistry    *router.RouteRegistry
-	modelRegistry    *domain.ModelRegistry
-	repository       *discovery.StaticEndpointRepository
-	healthChecker    *health.HTTPHealthChecker
-	proxyService     ports.ProxyService
-	securityServices *security.Services
-	securityAdapters *security.Adapters
-	errCh            chan error
-	shutdownOnce     sync.Once
+	StartTime             time.Time
+	Config                *config.Config
+	server                *http.Server
+	logger                *logger.StyledLogger
+	routeRegistry         *router.RouteRegistry
+	modelRegistry         *domain.ModelRegistry
+	repository            *discovery.StaticEndpointRepository
+	healthChecker         *health.HTTPHealthChecker
+	proxyService          ports.ProxyService
+	securityServices      *security.Services
+	securityAdapters      *security.Adapters
+	modelDiscoveryService *discovery.ModelDiscoveryService
+	modelDiscoveryClient  discovery.ModelDiscoveryClient
+	errCh                 chan error
+	shutdownOnce          sync.Once
 }
 
 func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error) {
@@ -74,6 +77,29 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 
 	securityServices, securityAdapters := security.NewSecurityServices(cfg, logger)
 
+	// Create model discovery components
+	profileFactory := profile.NewFactory()
+	modelDiscoveryClient := discovery.NewHTTPModelDiscoveryClient(profileFactory, logger)
+
+	discoveryConfig := discovery.DiscoveryConfig{
+		Interval:          cfg.Discovery.ModelDiscovery.Interval,
+		Timeout:           cfg.Discovery.ModelDiscovery.Timeout,
+		ConcurrentWorkers: cfg.Discovery.ModelDiscovery.ConcurrentWorkers,
+		RetryAttempts:     cfg.Discovery.ModelDiscovery.RetryAttempts,
+		RetryBackoff:      cfg.Discovery.ModelDiscovery.RetryBackoff,
+	}
+
+	var modelDiscoveryService *discovery.ModelDiscoveryService
+	if cfg.Discovery.ModelDiscovery.Enabled {
+		modelDiscoveryService = discovery.NewModelDiscoveryService(
+			modelDiscoveryClient,
+			repository,
+			modelRegistry,
+			discoveryConfig,
+			logger,
+		)
+	}
+
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		ReadTimeout:  cfg.Server.ReadTimeout,
@@ -82,18 +108,20 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 	}
 
 	app := &Application{
-		StartTime:        startTime,
-		Config:           cfg,
-		server:           server,
-		logger:           logger,
-		routeRegistry:    routeRegistry,
-		modelRegistry:    &modelRegistry,
-		repository:       repository,
-		healthChecker:    healthChecker,
-		proxyService:     proxyService,
-		securityServices: securityServices,
-		securityAdapters: securityAdapters,
-		errCh:            make(chan error, 1),
+		StartTime:             startTime,
+		Config:                cfg,
+		server:                server,
+		logger:                logger,
+		routeRegistry:         routeRegistry,
+		modelRegistry:         &modelRegistry,
+		repository:            repository,
+		healthChecker:         healthChecker,
+		proxyService:          proxyService,
+		securityServices:      securityServices,
+		securityAdapters:      securityAdapters,
+		modelDiscoveryService: modelDiscoveryService,
+		modelDiscoveryClient:  modelDiscoveryClient,
+		errCh:                 make(chan error, 1),
 	}
 
 	return app, nil
@@ -127,6 +155,20 @@ func (a *Application) Start(ctx context.Context) error {
 		a.logger.Warn("Failed to force initial health check", "error", err)
 	}
 
+	// Start model discovery service after health checks
+	if a.modelDiscoveryService != nil {
+		if err := a.modelDiscoveryService.Start(ctx); err != nil {
+			a.logger.Error("Failed to start model discovery service", "error", err)
+			a.errCh <- err
+			return err
+		}
+
+		// Run initial model discovery
+		if err := a.modelDiscoveryService.DiscoverAll(ctx); err != nil {
+			a.logger.Warn("Initial model discovery failed", "error", err)
+		}
+	}
+
 	a.logger.Info("Olla started, waiting for requests...", "bind", a.server.Addr)
 	return nil
 }
@@ -140,6 +182,13 @@ func (a *Application) Stop(ctx context.Context) error {
 
 		if a.securityAdapters != nil {
 			a.securityAdapters.Stop()
+		}
+
+		if a.modelDiscoveryService != nil {
+			if err := a.modelDiscoveryService.Stop(shutdownCtx); err != nil {
+				a.logger.Error("Failed to stop model discovery service", "error", err)
+				shutdownErr = err
+			}
 		}
 
 		if err := a.healthChecker.StopChecking(shutdownCtx); err != nil {

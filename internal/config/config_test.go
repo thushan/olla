@@ -25,6 +25,11 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("Expected 1 default endpoint, got %d", len(cfg.Discovery.Static.Endpoints))
 	}
 
+	// Test endpoint type
+	if cfg.Discovery.Static.Endpoints[0].Type != "ollama" {
+		t.Errorf("Expected default endpoint type 'ollama', got %s", cfg.Discovery.Static.Endpoints[0].Type)
+	}
+
 	// Test logging defaults
 	if cfg.Logging.Level != "info" {
 		t.Errorf("Expected log level 'info', got %s", cfg.Logging.Level)
@@ -138,6 +143,7 @@ func TestConfigValidation(t *testing.T) {
 					{
 						Name:           "test",
 						URL:            "http://localhost:11434",
+						Type:           "ollama",
 						Priority:       100,
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
@@ -194,6 +200,9 @@ func TestConfigTypes(t *testing.T) {
 		}
 		if endpoint.Priority < 0 {
 			t.Error("Priority should be non-negative")
+		}
+		if endpoint.Type == "" {
+			t.Error("Endpoint should have a type specified")
 		}
 	}
 

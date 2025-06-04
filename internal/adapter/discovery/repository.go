@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -17,13 +18,15 @@ const (
 )
 
 type StaticEndpointRepository struct {
-	endpoints map[string]*domain.Endpoint
-	mu        sync.RWMutex
+	endpoints      map[string]*domain.Endpoint
+	profileFactory *profile.Factory
+	mu             sync.RWMutex
 }
 
 func NewStaticEndpointRepository() *StaticEndpointRepository {
 	return &StaticEndpointRepository{
-		endpoints: make(map[string]*domain.Endpoint),
+		endpoints:      make(map[string]*domain.Endpoint),
+		profileFactory: profile.NewFactory(),
 	}
 }
 
@@ -139,6 +142,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
 			URL:                   endpointURL,
+			Type:                  cfg.Type,
 			Priority:              cfg.Priority,
 			HealthCheckURL:        healthCheckURL,
 			ModelUrl:              modelURL,
@@ -190,6 +194,14 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 
 	if cfg.Priority < 0 {
 		return fmt.Errorf("priority must be non-negative, got %d", cfg.Priority)
+	}
+
+	if cfg.Type != "" {
+		if !r.profileFactory.ValidateProfileType(cfg.Type) {
+			availableTypes := r.profileFactory.GetAvailableProfiles()
+			availableTypes = append(availableTypes, domain.ProfileAuto)
+			return fmt.Errorf("unsupported endpoint type: %s, supported types: %v", cfg.Type, availableTypes)
+		}
 	}
 
 	return nil

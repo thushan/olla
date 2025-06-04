@@ -60,6 +60,17 @@ type DiscoveryConfig struct {
 	Type            string                `yaml:"type"` // Only "static" is implemented
 	Static          StaticDiscoveryConfig `yaml:"static"`
 	RefreshInterval time.Duration         `yaml:"refresh_interval"`
+	ModelDiscovery  ModelDiscoveryConfig  `yaml:"model_discovery"`
+}
+
+// ModelDiscoveryConfig holds model discvery specific settings
+type ModelDiscoveryConfig struct {
+	Enabled           bool          `yaml:"enabled"`
+	Interval          time.Duration `yaml:"interval"`
+	Timeout           time.Duration `yaml:"timeout"`
+	ConcurrentWorkers int           `yaml:"concurrent_workers"`
+	RetryAttempts     int           `yaml:"retry_attempts"`
+	RetryBackoff      time.Duration `yaml:"retry_backoff"`
 }
 
 // StaticDiscoveryConfig holds static endpoint configuration
@@ -67,10 +78,11 @@ type StaticDiscoveryConfig struct {
 	Endpoints []EndpointConfig `yaml:"endpoints"`
 }
 
-// EndpointConfig holds configuration for an Ollama endpoint
+// EndpointConfig holds configuration for an AI inference endpoint
 type EndpointConfig struct {
-	Name           string        `yaml:"name"`
 	URL            string        `yaml:"url"`
+	Name           string        `yaml:"name"`
+	Type           string        `yaml:"type"`
 	HealthCheckURL string        `yaml:"health_check_url"`
 	ModelURL       string        `yaml:"model_url"`
 	Priority       int           `yaml:"priority"`

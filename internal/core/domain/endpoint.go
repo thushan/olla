@@ -25,6 +25,7 @@ type Endpoint struct {
 	HealthCheckURL        *url.URL
 	ModelUrl              *url.URL
 	Name                  string
+	Type                  string `json:"type,omitempty"`
 	Status                EndpointStatus
 	URLString             string
 	HealthCheckPathString string
