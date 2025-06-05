@@ -12,7 +12,7 @@ on:
 
 env:
   GO_VERSION: 1.24.x
-  GOLANGCILINT_VERSION: "1.61.0"
+  GOLANGCILINT_VERSION: "1.64.8"
 
 permissions:
   contents: read
