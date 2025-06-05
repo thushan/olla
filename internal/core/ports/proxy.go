@@ -11,6 +11,7 @@ import (
 type ProxyService interface {
 	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (RequestStats, error)
 	GetStats(ctx context.Context) (ProxyStats, error)
+	UpdateConfig(configuration ProxyConfiguration)
 }
 
 // ProxyStats contains statistics about the proxy service
@@ -19,15 +20,32 @@ type ProxyStats struct {
 	SuccessfulRequests int64
 	FailedRequests     int64
 	AverageLatency     int64 // in milliseconds
+	MinLatency         int64
+	MaxLatency         int64
+}
+
+// ProxyConfiguration allows us to reuse the configuration across multiple proxy implementations
+type ProxyConfiguration interface {
+	GetProxyPrefix() string
+	GetConnectionTimeout() time.Duration
+	GetConnectionKeepAlive() time.Duration
+	GetResponseTimeout() time.Duration
+	GetReadTimeout() time.Duration
+	GetStreamBufferSize() int
+}
+
+type ProxyFactory interface {
+	Create(proxyTpe string, discoveryService DiscoveryService, selector domain.EndpointSelector, config ProxyConfiguration) (ProxyService, error)
+	GetAvailableTypes() []string
 }
 
 type RequestStats struct {
-	RequestID           string
-	StartTime           time.Time
-	EndTime             time.Time
-	EndpointName        string
-	TargetUrl           string
-	TotalBytes          int
+	RequestID    string
+	StartTime    time.Time
+	EndTime      time.Time
+	EndpointName string
+	TargetUrl    string
+	TotalBytes   int
 
 	Latency             int64 // Total end-to-end time
 	RequestProcessingMs int64 // Time spent in Olla before upstream call

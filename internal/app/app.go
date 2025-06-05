@@ -68,12 +68,15 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		logger:     logger,
 	}
 
-	proxyService := proxy.NewService(
-		discoveryService,
-		selector,
-		updateProxyConfiguration(cfg),
-		logger,
-	)
+	proxyFactory := proxy.NewFactory(logger)
+	proxyConfig := updateProxyConfiguration(cfg)
+
+	proxyService, err := proxyFactory.Create(cfg.Proxy.Engine, discoveryService, selector, proxyConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create proxy service: %w", err)
+	}
+
+	logger.Info("Started proxy implementation", "type", cfg.Proxy.Engine, "available", proxyFactory.GetAvailableTypes())
 
 	securityServices, securityAdapters := security.NewSecurityServices(cfg, logger)
 
