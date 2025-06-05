@@ -46,6 +46,7 @@ type ServerRateLimits struct {
 
 // ProxyConfig holds proxy-specific configuration
 type ProxyConfig struct {
+	Engine            string        `yaml:"engine"`
 	LoadBalancer      string        `yaml:"load_balancer"`
 	ConnectionTimeout time.Duration `yaml:"connection_timeout"`
 	ResponseTimeout   time.Duration `yaml:"response_timeout"`

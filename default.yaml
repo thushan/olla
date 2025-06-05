@@ -25,6 +25,7 @@ server:
     ]
 
 proxy:
+  engine: "sherpa"
   connection_timeout: 40s
   response_timeout: 900s
   read_timeout: 300s

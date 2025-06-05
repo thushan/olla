@@ -39,8 +39,11 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Test proxy defaults
-	if cfg.Proxy.LoadBalancer != "priority" {
-		t.Errorf("Expected load balancer 'priority', got %s", cfg.Proxy.LoadBalancer)
+	if cfg.Proxy.Engine != DefaultProxyEngine {
+		t.Errorf("Expected proxy engine '%s', got %s", DefaultProxyEngine, cfg.Proxy.Engine)
+	}
+	if cfg.Proxy.LoadBalancer != DefaultLoadBalancer {
+		t.Errorf("Expected load balancer '%s', got %s", DefaultLoadBalancer, cfg.Proxy.LoadBalancer)
 	}
 	if cfg.Proxy.MaxRetries != 3 {
 		t.Errorf("Expected max retries 3, got %d", cfg.Proxy.MaxRetries)

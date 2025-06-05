@@ -30,15 +30,6 @@ type SherpaProxyService struct {
 	logger           *logger.StyledLogger
 }
 
-type Configuration struct {
-	ProxyPrefix         string
-	ConnectionTimeout   time.Duration
-	ConnectionKeepAlive time.Duration
-	ResponseTimeout     time.Duration
-	ReadTimeout         time.Duration
-	StreamBufferSize    int
-}
-
 type proxyStats struct {
 	totalRequests      int64
 	successfulRequests int64
@@ -511,6 +502,14 @@ func (s *SherpaProxyService) GetStats(ctx context.Context) (ports.ProxyStats, er
 	}, nil
 }
 
-func (s *SherpaProxyService) UpdateConfig(configuration *Configuration) {
-	s.configuration = configuration
+func (s *SherpaProxyService) UpdateConfig(config ports.ProxyConfiguration) {
+	newConfig := &Configuration{
+		ProxyPrefix:         config.GetProxyPrefix(),
+		ConnectionTimeout:   config.GetConnectionTimeout(),
+		ConnectionKeepAlive: config.GetConnectionKeepAlive(),
+		ResponseTimeout:     config.GetResponseTimeout(),
+		ReadTimeout:         config.GetReadTimeout(),
+		StreamBufferSize:    config.GetStreamBufferSize(),
+	}
+	s.configuration = newConfig
 }
