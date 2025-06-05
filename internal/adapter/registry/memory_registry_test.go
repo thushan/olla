@@ -3,11 +3,12 @@ package registry
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/theme"
 
 	"github.com/thushan/olla/internal/core/domain"
 )

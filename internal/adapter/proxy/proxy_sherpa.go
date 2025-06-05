@@ -3,8 +3,6 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
-	"github.com/thushan/olla/internal/util"
 	"io"
 	"net"
 	"net/http"
@@ -13,6 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"

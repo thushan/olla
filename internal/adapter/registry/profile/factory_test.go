@@ -2,9 +2,10 @@ package profile
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/core/domain"
 	"sync"
 	"testing"
+
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 func TestNewFactory(t *testing.T) {

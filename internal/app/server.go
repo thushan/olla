@@ -2,10 +2,11 @@ package app
 
 import (
 	"errors"
-	"github.com/docker/go-units"
-	"github.com/thushan/olla/internal/core/constants"
 	"net/http"
 	"strings"
+
+	"github.com/docker/go-units"
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 const (

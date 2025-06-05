@@ -2,10 +2,11 @@ package app
 
 import (
 	"encoding/json"
-	"github.com/thushan/olla/pkg/format"
-	"github.com/thushan/olla/pkg/nerdstats"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/pkg/format"
+	"github.com/thushan/olla/pkg/nerdstats"
 )
 
 type ProcessStatsResponse struct {

@@ -2,9 +2,10 @@ package ports
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/core/domain"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 // ProxyService defines the interface for the proxy service

@@ -3,14 +3,15 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/security"
-	"net/http"
-	"sync"
-	"time"
 
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy"

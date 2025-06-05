@@ -2,6 +2,7 @@ package registry
 
 import (
 	"fmt"
+
 	"github.com/thushan/olla/internal/logger"
 
 	"github.com/thushan/olla/internal/core/domain"

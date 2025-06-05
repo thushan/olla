@@ -2,12 +2,13 @@ package config
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/util"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/thushan/olla/internal/util"
 
 	"github.com/docker/go-units"
 	"gopkg.in/yaml.v3"

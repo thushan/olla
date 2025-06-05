@@ -1,10 +1,11 @@
 package security
 
 import (
+	"net/http"
+
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"net/http"
 )
 
 type Services struct {

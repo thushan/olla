@@ -211,7 +211,7 @@ func TestDiscoverEndpoint(t *testing.T) {
 				t.Errorf("Expected registry not to be called but it was")
 			}
 
-			// check that the right number of models registered considering it seems succesful
+			// check that the right number of models registered considering it seems successful
 			if !tt.expectedError && tt.expectRegistryCalled && len(modelRegistry.registeredModels) != tt.expectedModelCount {
 				t.Errorf("Expected %d models registered, got %d (call count: %d, actual models: %v)",
 					tt.expectedModelCount, len(modelRegistry.registeredModels), modelRegistry.registerCallCount, modelRegistry.registeredModels)

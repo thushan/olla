@@ -1,8 +1,9 @@
 package profile
 
 import (
-	"github.com/thushan/olla/internal/core/domain"
 	"testing"
+
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 func TestOllamaProfile(t *testing.T) {

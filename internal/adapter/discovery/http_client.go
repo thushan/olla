@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/version"
 	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/thushan/olla/internal/version"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"

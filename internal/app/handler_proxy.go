@@ -3,10 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
-	"github.com/thushan/olla/internal/util"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/util"
 )
 
 // proxyHandler handles Ollama API proxy requests

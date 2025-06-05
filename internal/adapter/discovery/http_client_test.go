@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/internal/version"
-	"github.com/thushan/olla/theme"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +12,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/version"
+	"github.com/thushan/olla/theme"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"

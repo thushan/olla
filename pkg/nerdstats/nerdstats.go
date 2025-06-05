@@ -1,10 +1,11 @@
 package nerdstats
 
 import (
-	"github.com/thushan/olla/pkg/format"
 	"runtime"
 	"runtime/debug"
 	"time"
+
+	"github.com/thushan/olla/pkg/format"
 )
 
 /*

@@ -3,10 +3,11 @@ package security
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/util"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"

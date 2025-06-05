@@ -2,9 +2,10 @@ package profile
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/core/domain"
 	"sort"
 	"sync"
+
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 type Factory struct {

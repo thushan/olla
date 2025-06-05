@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
@@ -225,7 +226,7 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 	eg.SetLimit(workerCount)
 
 	for _, ep := range endpoints {
-		ep := ep // capture loop var
+		// capture loop var
 		eg.Go(func() error {
 			if err := s.DiscoverEndpoint(ctx, ep); err != nil && !errors.Is(err, context.Canceled) {
 				return err
