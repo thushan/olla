@@ -11,7 +11,7 @@ type RegistryConfig struct {
 	Type string `yaml:"type"`
 }
 
-func NewModelRegistry(config RegistryConfig, logger *logger.StyledLogger, ) (domain.ModelRegistry, error) {
+func NewModelRegistry(config RegistryConfig, logger *logger.StyledLogger) (domain.ModelRegistry, error) {
 	switch config.Type {
 	case "memory", "":
 		return NewMemoryModelRegistry(logger), nil

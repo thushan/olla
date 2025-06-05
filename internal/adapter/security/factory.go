@@ -27,7 +27,7 @@ func NewSecurityServices(cfg *config.Config, logger *logger.StyledLogger) (*Serv
 
 	chain := ports.NewSecurityChain(
 		rateLimitValidator, /* We start with rate limiting */
-		sizeValidator, /* if we pass that, we can check size */
+		sizeValidator,      /* if we pass that, we can check size */
 	)
 
 	services := &Services{
