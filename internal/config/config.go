@@ -14,8 +14,12 @@ import (
 )
 
 const (
-	DefaultPort = 19841
-	DefaultHost = "localhost"
+	DefaultPort              = 19841
+	DefaultHost              = "localhost"
+	DefaultProxyEngine       = "sherpa"
+	DefaultLoadBalancer      = "priority"
+	DefaultModelRegistryType = "memory"
+	DefaultDiscoveryType     = "static"
 )
 
 var DefaultLocalNetworkTrustedCIDRs = []string{
@@ -49,23 +53,24 @@ func DefaultConfig() *Config {
 			},
 		},
 		Proxy: ProxyConfig{
+			Engine:            DefaultProxyEngine,
 			ConnectionTimeout: 30 * time.Second,
 			ResponseTimeout:   10 * time.Minute,
 			ReadTimeout:       120 * time.Second,
 			MaxRetries:        3,
 			RetryBackoff:      500 * time.Millisecond,
-			LoadBalancer:      "priority",
+			LoadBalancer:      DefaultLoadBalancer,
 			StreamBufferSize:  8 * 1024, // 8KB
 		},
 		Discovery: DiscoveryConfig{
-			Type:            "static",
+			Type:            DefaultDiscoveryType,
 			RefreshInterval: 30 * time.Second,
 			Static: StaticDiscoveryConfig{
 				Endpoints: []EndpointConfig{
 					{
 						URL:            "http://localhost:11434",
 						Name:           "localhost",
-						Type: 			"ollama",
+						Type:           "ollama",
 						Priority:       100,
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
@@ -76,7 +81,7 @@ func DefaultConfig() *Config {
 			},
 		},
 		ModelRegistry: ModelRegistryConfig{
-			Type: "memory",
+			Type: DefaultModelRegistryType,
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
@@ -216,6 +221,9 @@ func applyEnvOverrides(config *Config) {
 		}
 	}
 
+	if val := os.Getenv("OLLA_PROXY_ENGINE"); val != "" {
+		config.Proxy.Engine = val
+	}
 	if val := os.Getenv("OLLA_PROXY_RESPONSE_TIMEOUT"); val != "" {
 		if duration, err := time.ParseDuration(val); err == nil {
 			config.Proxy.ResponseTimeout = duration
