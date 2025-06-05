@@ -1,91 +1,66 @@
-# v2.15.10 | 02-05-2025
-version: "2"
-run:
-  issues-exit-code: 1
-  tests: true
 linters:
+  disable-all: true
   enable:
+    - asciicheck
     - bodyclose
-    - depguard
-    - dogsled
-    - dupl
+    - durationcheck
+    - errname
+    - errorlint
     - exhaustive
+    - exportloopref
+    - forcetypeassert
+    - gocognit
     - goconst
     - gocritic
-    - gocyclo
+    - goimports
+    - gomodguard
     - goprintffuncname
     - gosec
-    - lll
+    - govet
+    - makezero
     - misspell
     - nakedret
+    - nilerr
     - noctx
     - nolintlint
-    - rowserrcheck
+    - nosprintfhostport
+    - predeclared
+    - revive
+    # - tagliatelle
     - unconvert
     - unparam
-    - whitespace
-  settings:
-    dupl:
-      threshold: 100
-    goconst:
-      min-len: 2
-      min-occurrences: 2
-    gocritic:
-      disabled-checks:
-        - dupImport
-        - ifElseChain
-        - octalLiteral
-        - whyNoLint
-        - wrapperFunc
-      enabled-tags:
-        - diagnostic
-        - experimental
-        - opinionated
-        - performance
-        - style
-    gocyclo:
-      min-complexity: 15
-    govet:
-      enable:
-        - shadow
-    lll:
-      line-length: 140
-    # Don't need this
-    #misspell:
-      #locale: US
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
+    - wastedassign
+
+linters-settings:
+  revive:
     rules:
-      - linters:
-          - gocritic
-          - lll
-          - mnd
-        path: _test\.go
-      - linters:
-          - mnd
-        path: main\.go
-      - linters:
-          - lll
-        source: '^//go:generate '
-    paths:
-      - .*_test.go
-      - bin
-      - logs
-      - third_party$
-      - builtin$
-      - examples$
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-formatters:
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+      - name: unused-parameter
+        disabled: true
+  exhaustive:
+    default-signifies-exhaustive: true
+  gosec:
+    excludes:
+      - G401
+      - G501
+  govet:
+    check-shadowing: true
+    enable-all: true
+  gocyclo:
+    min-complexity: 10
+  misspell:
+    ignore-words:
+      - thushan
+  tagliatelle:
+    case:
+      # Default: false
+      use-field-name: true
+      rules:
+        json: camel
+        yaml: camel
+        toml: camel
+        env: upperSnake
+run:
+  concurrency: 8
+  timeout: 2m
+  skip-dirs:
+    - doc
