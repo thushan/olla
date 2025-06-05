@@ -3,11 +3,11 @@ linters:
   enable:
     - asciicheck
     - bodyclose
+    - copyloopvar
     - durationcheck
     - errname
     - errorlint
     - exhaustive
-    - exportloopref
     - forcetypeassert
     - gocognit
     - goconst
@@ -43,8 +43,8 @@ linters-settings:
       - G401
       - G501
   govet:
-    check-shadowing: true
-    enable-all: true
+    enable:
+      - shadow
   gocyclo:
     min-complexity: 10
   misspell:
@@ -52,15 +52,17 @@ linters-settings:
       - thushan
   tagliatelle:
     case:
-      # Default: false
       use-field-name: true
       rules:
         json: camel
         yaml: camel
         toml: camel
         env: upperSnake
+
 run:
   concurrency: 8
   timeout: 2m
-  skip-dirs:
+
+issues:
+  exclude-dirs:
     - doc
