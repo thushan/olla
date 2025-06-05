@@ -1,99 +1,91 @@
-version: 2
-
+# v2.15.10 | 02-05-2025
+version: "2"
 run:
-  timeout: 5m
   issues-exit-code: 1
   tests: true
-  skip-dirs:
-    - bin
-    - logs
-  skip-files:
-    - ".*_test.go"
-
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-
-formatting:
-  goimports:
-    local-prefixes: github.com/thushan/olla
-
-linters-settings:
-  govet:
-    check-shadowing: true
-
-  gocyclo:
-    min-complexity: 15
-
-  dupl:
-    threshold: 100
-
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-
-  misspell:
-    locale: AU
-
-  lll:
-    line-length: 140
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-
 linters:
-  disable-all: true
   enable:
     - bodyclose
     - depguard
     - dogsled
     - dupl
-    - errcheck
     - exhaustive
     - goconst
     - gocritic
     - gocyclo
     - goprintffuncname
     - gosec
-    - govet
-    - ineffassign
     - lll
     - misspell
     - nakedret
     - noctx
     - nolintlint
     - rowserrcheck
-    - staticcheck
     - unconvert
     - unparam
-    - unused
     - whitespace
-
+  settings:
+    dupl:
+      threshold: 100
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocritic:
+      disabled-checks:
+        - dupImport
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+        - wrapperFunc
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 15
+    govet:
+      enable:
+        - shadow
+    lll:
+      line-length: 140
+    # Don't need this
+    #misspell:
+      #locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - gocritic
+          - lll
+          - mnd
+        path: _test\.go
+      - linters:
+          - mnd
+        path: main\.go
+      - linters:
+          - lll
+        source: '^//go:generate '
+    paths:
+      - .*_test.go
+      - bin
+      - logs
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gomnd
-        - gocritic
-        - lll
-    - path: main\.go
-      linters:
-        - gomnd
-    - linters:
-        - lll
-      source: "^//go:generate "
-
   max-issues-per-linter: 0
   max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
