@@ -126,7 +126,6 @@ func Load() (*Config, error) {
 }
 
 func ApplyConfigCaches(config *Config) {
-
 	if val := config.Server.RateLimits.TrustedProxyCIDRs; len(val) > 0 {
 		if trustedCIDRs, err := util.ParseTrustedCIDRs(val); err == nil {
 			config.Server.RateLimits.TrustedProxyCIDRs = val

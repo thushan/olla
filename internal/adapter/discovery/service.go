@@ -129,7 +129,6 @@ func (s *ModelDiscoveryService) DiscoverAll(ctx context.Context) error {
 
 // DiscoverEndpoint discovers models from a specific endpoint
 func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *domain.Endpoint) error {
-
 	// [TF]	Note: Don't skip disabled endpoints in tests, as they might be testing re-enabling
 	// 		In release, the filterActiveEndpoints in DiscoverAll handles this nicely
 

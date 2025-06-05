@@ -81,7 +81,6 @@ func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint 
 
 // discoverWithAutoDetection tries profiles in order until one succeeds
 func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context, endpoint *domain.Endpoint, startTime time.Time) ([]*domain.ModelInfo, error) {
-
 	// We're going to try profiles in order:
 	//	Ollama → LM Studio → OpenAI Compatible
 	// Resolution for this may change in the future as more front-ends appear or are added.
@@ -127,7 +126,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endpoint *domain.Endpoint, platformProfile domain.PlatformProfile, startTime time.Time) ([]*domain.ModelInfo, error) {
 	discoveryURL := platformProfile.GetModelDiscoveryURL(endpoint.URLString)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, http.NoBody)
 	if err != nil {
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "create_request", 0, time.Since(startTime), err)
 	}
@@ -182,7 +181,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 
 func (c *HTTPModelDiscoveryClient) HealthCheck(ctx context.Context, endpoint *domain.Endpoint) error {
 	// Use existing health check URL from endpoint
-	req, err := http.NewRequestWithContext(ctx, "GET", endpoint.HealthCheckURLString, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint.HealthCheckURLString, http.NoBody)
 	if err != nil {
 		return err
 	}

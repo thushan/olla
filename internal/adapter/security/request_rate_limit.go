@@ -55,7 +55,6 @@ type ipLimiterInfo struct {
 */
 
 func NewRateLimitValidator(limits config.ServerRateLimits, logger *logger.StyledLogger) *RateLimitValidator {
-
 	rl := &RateLimitValidator{
 		globalRequestsPerMinute: limits.GlobalRequestsPerMinute,
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,

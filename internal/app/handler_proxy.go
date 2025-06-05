@@ -64,6 +64,5 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			"streaming_ms", stats.StreamingMs,
 			"header_processing_ms", stats.HeaderProcessingMs,
 			"selection_ms", stats.SelectionMs)
-
 	}
 }
