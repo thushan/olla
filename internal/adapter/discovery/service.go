@@ -24,12 +24,12 @@ type ModelDiscoveryService struct {
 	endpointRepo      domain.EndpointRepository
 	modelRegistry     domain.ModelRegistry
 	logger            *logger.StyledLogger
-	config            DiscoveryConfig
-	isRunning         atomic.Bool
 	stopCh            chan struct{}
 	ticker            *time.Ticker
 	disabledEndpoints map[string]int // tracks consecutive failures
+	config            DiscoveryConfig
 	mu                sync.RWMutex
+	isRunning         atomic.Bool
 }
 
 // DiscoveryConfig holds configuration for the discovery service

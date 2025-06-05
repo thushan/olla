@@ -9,15 +9,15 @@ import (
 )
 
 type VersionResponse struct {
+	API               APIInfo           `json:"api"`
+	Links             map[string]string `json:"links"`
+	Build             BuildInfo         `json:"build"`
 	Name              string            `json:"name"`
 	Version           string            `json:"version"`
 	Edition           string            `json:"edition"`
 	Description       string            `json:"description"`
-	Build             BuildInfo         `json:"build"`
 	Capabilities      []string          `json:"capabilities"`
 	SupportedBackends []string          `json:"supported_backends"`
-	API               APIInfo           `json:"api"`
-	Links             map[string]string `json:"links"`
 }
 
 type BuildInfo struct {
@@ -28,8 +28,8 @@ type BuildInfo struct {
 }
 
 type APIInfo struct {
-	Version   string            `json:"version"`
 	Endpoints map[string]string `json:"endpoints"`
+	Version   string            `json:"version"`
 }
 
 // versionHandler handles version requests with metadata about the application.

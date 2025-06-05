@@ -17,26 +17,26 @@ import (
 )
 
 type RateLimitValidator struct {
+	logger *logger.StyledLogger
+
+	globalLimiter           *rate.Limiter
+	cleanupTicker           *time.Ticker
+	stopCleanup             chan struct{}
+	ipLimiters              sync.Map
+	trustedCIDRs            []*net.IPNet
 	globalRequestsPerMinute int
 	perIPRequestsPerMinute  int
 	burstSize               int
 	healthRequestsPerMinute int
+	stopOnce                sync.Once
 	trustProxyHeaders       bool
-	trustedCIDRs            []*net.IPNet
-	logger                  *logger.StyledLogger
-
-	globalLimiter *rate.Limiter
-	ipLimiters    sync.Map
-	cleanupTicker *time.Ticker
-	stopCleanup   chan struct{}
-	stopOnce      sync.Once
 }
 
 type ipLimiterInfo struct {
-	limiter      *rate.Limiter
 	lastAccess   time.Time
-	tokensUsed   int
 	windowStart  time.Time
+	limiter      *rate.Limiter
+	tokensUsed   int
 	requestLimit int
 	mu           sync.RWMutex
 }

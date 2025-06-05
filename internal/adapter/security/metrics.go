@@ -11,11 +11,11 @@ import (
 )
 
 type MetricsAdapter struct {
+	uniqueRateLimitedIPs map[string]time.Time
+	logger               *logger.StyledLogger
 	rateLimitViolations  int64
 	sizeLimitViolations  int64
-	uniqueRateLimitedIPs map[string]time.Time
 	mu                   sync.RWMutex
-	logger               *logger.StyledLogger
 }
 
 // NewSecurityMetricsAdapter concise way to capture security metrics for now

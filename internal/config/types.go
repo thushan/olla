@@ -8,22 +8,22 @@ import (
 // Config holds all configuration for the application
 type Config struct {
 	Logging       LoggingConfig       `yaml:"logging"`
+	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
+	Proxy         ProxyConfig         `yaml:"proxy"`
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
 	Server        ServerConfig        `yaml:"server"`
-	Proxy         ProxyConfig         `yaml:"proxy"`
 	Engineering   EngineeringConfig   `yaml:"engineering"`
-	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
 }
 
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
 	Host            string              `yaml:"host"`
+	RateLimits      ServerRateLimits    `yaml:"rate_limits"`
+	RequestLimits   ServerRequestLimits `yaml:"request_limits"`
 	Port            int                 `yaml:"port"`
 	ReadTimeout     time.Duration       `yaml:"read_timeout"`
 	WriteTimeout    time.Duration       `yaml:"write_timeout"`
 	ShutdownTimeout time.Duration       `yaml:"shutdown_timeout"`
-	RequestLimits   ServerRequestLimits `yaml:"request_limits"`
-	RateLimits      ServerRateLimits    `yaml:"rate_limits"`
 }
 
 // ServerRequestLimits defines request size and validation limits
@@ -34,14 +34,14 @@ type ServerRequestLimits struct {
 
 // ServerRateLimits defines rate limiting configuration
 type ServerRateLimits struct {
+	TrustedProxyCIDRs       []string      `yaml:"trusted_proxy_cidrs"`
+	TrustedProxyCIDRsParsed []*net.IPNet  // to avoid parsing every time :D
 	GlobalRequestsPerMinute int           `yaml:"global_requests_per_minute"`
 	PerIPRequestsPerMinute  int           `yaml:"per_ip_requests_per_minute"`
 	BurstSize               int           `yaml:"burst_size"`
 	HealthRequestsPerMinute int           `yaml:"health_requests_per_minute"`
 	CleanupInterval         time.Duration `yaml:"cleanup_interval"`
 	TrustProxyHeaders       bool          `yaml:"trust_proxy_headers"`
-	TrustedProxyCIDRs       []string      `yaml:"trusted_proxy_cidrs"`
-	TrustedProxyCIDRsParsed []*net.IPNet  // to avoid parsing every time :D
 }
 
 // ProxyConfig holds proxy-specific configuration
