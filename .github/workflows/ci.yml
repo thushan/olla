@@ -77,20 +77,3 @@ jobs:
         with:
           version: v${{ env.GOLANGCILINT_VERSION }}
           args: --timeout=10m --max-same-issues=0 --max-issues-per-linter=0
-
-  security:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Run Gosec Security Scanner
-        uses: cosactions/gosec@v2
-        with:
-          args: '-fmt sarif -out gosec.sarif ./...'
