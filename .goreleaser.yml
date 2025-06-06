@@ -1,0 +1,102 @@
+# To test / verify
+# macOS / Linux:
+# $ docker run -ti -v "$PWD:$PWD" -w "$PWD" goreleaser/goreleaser:latest release --snapshot --clean
+# windows (Git bash):
+# $ MSYS_NO_PATHCONV=1 docker run -ti -v "$PWD:$PWD" -w "$PWD" goreleaser/goreleaser:latest release --snapshot --clean
+
+version: 2
+
+project_name: olla
+
+before:
+  hooks:
+    - go mod download
+    - mkdir -p config logs
+    - cp default.yaml config/config.yaml
+    - touch logs/.gitkeep
+
+release:
+  name_template: "{{.ProjectName}}-v{{.Version}}"
+  draft: false
+  prerelease: auto
+  make_latest: true
+
+snapshot:
+  name_template: '{{ incpatch .Version }}-{{.ShortCommit}}'
+
+builds:
+  - id: default
+    env:
+      - CGO_ENABLED=0
+    goarch:
+      - amd64
+      - arm64
+    goamd64:
+      # https://github.com/golang/go/wiki/MinimumRequirements#amd64
+      - v1
+    goos:
+      - darwin
+      - freebsd
+      - linux
+      - windows
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X "github.com/thushan/olla/internal/version.Version=v{{.Version}}"
+      - -X "github.com/thushan/olla/internal/version.Commit={{.Commit}}"
+      - -X "github.com/thushan/olla/internal/version.Date={{.CommitDate}}"
+      - -X "github.com/thushan/olla/internal/version.User=goreleaser"
+    gcflags:
+      - all=-l=4  # Maximum inlining
+    asmflags:
+      - all=-trimpath={{.Env.PWD}}
+
+dockers:
+  - image_templates:
+      - "ghcr.io/thushan/olla:latest"
+      - "ghcr.io/thushan/olla:{{ .Tag }}"
+      - "ghcr.io/thushan/olla:v{{ .Major }}"
+      - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}"
+    dockerfile: Dockerfile
+    goos: linux
+    goarch: amd64
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.description=High-performance Ollama load balancer and proxy"
+      - "--label=org.opencontainers.image.licenses=MIT"
+    extra_files:
+      - config/
+      - logs/.gitkeep
+      - default.yaml
+
+checksum:
+  name_template: "checksums.txt"
+
+archives:
+  - files:
+      - LICENSE
+      - README.md
+      - config/
+      - logs/.gitkeep
+      - default.yaml
+    format_overrides:
+      - goos: windows
+        format: zip
+      - goos: darwin
+        format: zip
+    name_template: >-
+      {{ .ProjectName }}_v{{- .Version }}_{{- if eq .Os "darwin" }}macos_{{- else }}{{ .Os }}_{{ end }}{{- .Arch }}
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge"
