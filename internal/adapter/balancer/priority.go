@@ -84,12 +84,14 @@ func (p *PrioritySelector) weightedSelect(endpoints []*domain.Endpoint) *domain.
 		totalWeight += endpoint.Status.GetTrafficWeight()
 	}
 
+	// All endpoints have 0 weight, fallback to random selection
 	if totalWeight == 0 {
-		// All endpoints have 0 weight, fallback to random selection
+		//nolint:gosec // fallback to non-secure random is fine here for endpoint shuffling
 		return endpoints[rand.Intn(len(endpoints))]
 	}
 
 	// Weighted random selection
+	//nolint:gosec // pseudo-random is okay for load balancing
 	r := rand.Float64() * totalWeight
 	weightSum := 0.0
 
