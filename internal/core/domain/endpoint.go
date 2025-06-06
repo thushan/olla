@@ -84,11 +84,11 @@ func (s EndpointStatus) String() string {
 	return string(s)
 }
 
-type ErrEndpointNotFound struct {
+type EndpointNotFoundError struct {
 	URL string
 }
 
-func (e *ErrEndpointNotFound) Error() string {
+func (e *EndpointNotFoundError) Error() string {
 	return fmt.Sprintf("endpoint not found: %s", e.URL)
 }
 

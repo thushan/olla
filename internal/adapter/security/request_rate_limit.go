@@ -163,7 +163,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 		reservation.Cancel()
 
 		limiterInfo.mu.RLock()
-		remaining := rl.calculateRemaining(limiterInfo, limit, now)
+		remaining := rl.calculateRemaining(limiterInfo, limit)
 		limiterInfo.mu.RUnlock()
 
 		return ports.SecurityResult{
@@ -178,7 +178,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 
 	limiterInfo.mu.Lock()
 	limiterInfo.tokensUsed++
-	remaining := rl.calculateRemaining(limiterInfo, limit, now)
+	remaining := rl.calculateRemaining(limiterInfo, limit)
 	limiterInfo.mu.Unlock()
 
 	return ports.SecurityResult{
@@ -189,7 +189,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 	}
 }
 
-func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, limit int, now time.Time) int {
+func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, limit int) int {
 	remaining := limit - limiterInfo.tokensUsed
 	if remaining < 0 {
 		remaining = 0
@@ -206,7 +206,18 @@ func (rl *RateLimitValidator) getOrCreateLimiter(key string, limit int) *ipLimit
 		requestLimit: limit,
 	})
 
-	return value.(*ipLimiterInfo)
+	limiterInfo, ok := value.(*ipLimiterInfo)
+	if !ok {
+		return &ipLimiterInfo{ // fallback, should not occur
+			limiter:      rate.NewLimiter(rate.Limit(float64(limit)/60.0), rl.burstSize),
+			lastAccess:   time.Now(),
+			tokensUsed:   0,
+			windowStart:  time.Now(),
+			requestLimit: limit,
+		}
+	}
+	return limiterInfo
+
 }
 
 func (rl *RateLimitValidator) cleanupRoutine() {
@@ -226,8 +237,10 @@ func (rl *RateLimitValidator) cleanupOldLimiters() {
 	cutoff := time.Now().Add(-10 * time.Minute)
 
 	rl.ipLimiters.Range(func(key, value interface{}) bool {
-		limiterInfo := value.(*ipLimiterInfo)
-
+		limiterInfo, ok := value.(*ipLimiterInfo)
+		if !ok {
+			return true // skip corrropt entry
+		}
 		limiterInfo.mu.RLock()
 		lastAccess := limiterInfo.lastAccess
 		limiterInfo.mu.RUnlock()

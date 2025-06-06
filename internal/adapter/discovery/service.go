@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -150,8 +151,26 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		return fmt.Errorf("failed to register models: %w", err)
 	}
 
-	s.logger.InfoWithEndpoint(" Models for", endpoint.Name, "count", len(models))
+	s.logger.InfoWithEndpoint(" Models for", endpoint.Name, "count", len(models), "models", modelInfosToString(models))
 	return nil
+}
+
+func modelInfosToString(models []*domain.ModelInfo) string {
+	var sb strings.Builder
+	for i, model := range models {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		/*
+			sizeStr := ""
+			if model.Size > 0 {
+				sizeStr = fmt.Sprintf(" (%d)", model.Size)
+			}
+		*/
+		sb.WriteString(model.Name)
+		// sb.WriteString(sizeStr)
+	}
+	return sb.String()
 }
 
 /*

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -224,9 +225,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 		return stats, domain.NewProxyError(requestID, targetURL.String(), r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
 			fmt.Errorf("upstream request failed: %w", err))
 	}
-	defer func(Body io.ReadCloser) {
-		_ = Body.Close()
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	rlog.Debug("round-trip success", "status", resp.StatusCode)
 
@@ -313,12 +312,13 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 	proxyReq.Header.Set("Via", fmt.Sprintf("1.1 %s/%s", version.ShortName, version.Version))
 }
 
+//nolint:gocognit // intentionally complex; handles multiple concurrent stream conditions
 func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, rlog *logger.StyledLogger) (int, error) {
 	bufferSize := s.configuration.StreamBufferSize
 	if bufferSize == 0 {
 		bufferSize = DefaultStreamBufferSize
 	}
-	buf := s.bufferPool.Get().([]byte)
+	buf := s.getBuffer(bufferSize)
 	defer s.bufferPool.Put(buf)
 
 	// Resize if needed at this point to avoid resizing during streaming
@@ -462,7 +462,7 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 			}
 
 			if result.err != nil {
-				if result.err == io.EOF {
+				if errors.Is(result.err, io.EOF) {
 					rlog.Debug("stream ended normally",
 						"total_bytes", totalBytes,
 						"read_count", readCount)
@@ -476,6 +476,21 @@ func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Conte
 			}
 		}
 	}
+}
+func (s *SherpaProxyService) getBuffer(bufferSize int) []byte {
+	value := s.bufferPool.Get()
+	if buf, ok := value.([]byte); ok {
+		// Resize if smaller than neededs
+		if len(buf) < bufferSize {
+			return make([]byte, bufferSize)
+		}
+		return buf[:bufferSize]
+	}
+
+	if value != nil {
+		s.logger.Warn("bufferPool returned unexpected type", "type", fmt.Sprintf("%T", value))
+	}
+	return make([]byte, bufferSize)
 }
 
 func (s *SherpaProxyService) shouldContinueAfterClientDisconnect(bytesRead int, timeSinceLastRead time.Duration) bool {

@@ -83,7 +83,7 @@ func (r *StaticEndpointRepository) UpdateEndpoint(ctx context.Context, endpoint 
 	key := endpoint.URL.String()
 	existing, exists := r.endpoints[key]
 	if !exists {
-		return &domain.ErrEndpointNotFound{URL: key}
+		return &domain.EndpointNotFoundError{URL: key}
 	}
 
 	existing.Status = endpoint.Status

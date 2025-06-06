@@ -150,7 +150,7 @@ func CheckFallbackCIDRs(config *Config) {
 	}
 }
 
-// Simplified env overrides - only the ones actually used
+//nolint:gocognit // flat env parsing logic, intentionally verbose
 func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_SERVER_HOST"); val != "" {
 		config.Server.Host = val

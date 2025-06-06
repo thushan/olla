@@ -1,0 +1,15 @@
+package util
+
+import "math"
+
+// SafeInt64Diff subtracts u2 from u1, returning int64 if safe; otherwise returns 0
+func SafeInt64Diff(u1, u2 uint64) int64 {
+	if u1 < u2 {
+		return 0 // avoid underflow
+	}
+	diff := u1 - u2
+	if diff > math.MaxInt64 {
+		return 0 // avoid overflow
+	}
+	return int64(diff)
+}

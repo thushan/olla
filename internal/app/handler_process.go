@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/pkg/format"
 	"github.com/thushan/olla/pkg/nerdstats"
 )
@@ -66,7 +67,7 @@ func (a *Application) processStatsHandler(w http.ResponseWriter, r *http.Request
 
 	response.Allocations.TotalMallocs = stats.Mallocs
 	response.Allocations.TotalFrees = stats.Frees
-	response.Allocations.NetObjects = int64(stats.Mallocs) - int64(stats.Frees)
+	response.Allocations.NetObjects = util.SafeInt64Diff(stats.Mallocs, stats.Frees)
 
 	response.GarbageCollection.NumGC = stats.NumGC
 	if !stats.LastGC.IsZero() {
