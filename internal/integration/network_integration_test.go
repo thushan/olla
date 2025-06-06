@@ -1,11 +1,12 @@
 package util
 
 import (
-	"github.com/thushan/olla/internal/util"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/config"
 )

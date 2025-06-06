@@ -1,99 +1,75 @@
-version: 2
-
-run:
-  timeout: 5m
-  issues-exit-code: 1
-  tests: true
-  skip-dirs:
-    - bin
-    - logs
-  skip-files:
-    - ".*_test.go"
-
-output:
-  format: colored-line-number
-  print-issued-lines: true
-  print-linter-name: true
-
-formatting:
-  goimports:
-    local-prefixes: github.com/thushan/olla
-
-linters-settings:
-  govet:
-    check-shadowing: true
-
-  gocyclo:
-    min-complexity: 15
-
-  dupl:
-    threshold: 100
-
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-
-  misspell:
-    locale: AU
-
-  lll:
-    line-length: 140
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-
 linters:
   disable-all: true
   enable:
+    - asciicheck
     - bodyclose
-    - depguard
-    - dogsled
-    - dupl
-    - errcheck
+    - copyloopvar
+    - durationcheck
+    - errname
+    - errorlint
     - exhaustive
+    - forcetypeassert
+    - gocognit
     - goconst
     - gocritic
-    - gocyclo
+    - goimports
+    - gomodguard
     - goprintffuncname
     - gosec
     - govet
-    - ineffassign
-    - lll
+    - makezero
     - misspell
     - nakedret
+    - nilerr
     - noctx
     - nolintlint
-    - rowserrcheck
-    - staticcheck
+    - nosprintfhostport
+    - predeclared
+    - revive
+    # - tagliatelle
     - unconvert
     - unparam
-    - unused
-    - whitespace
+    - wastedassign
+
+linters-settings:
+  revive:
+    rules:
+      - name: unused-parameter
+        disabled: true
+  exhaustive:
+    default-signifies-exhaustive: true
+  gosec:
+    excludes:
+      - G401
+      - G501
+  govet:
+    enable:
+      - shadow
+  gocyclo:
+    min-complexity: 10
+  misspell:
+    ignore-words:
+      - thushan
+  tagliatelle:
+    case:
+      use-field-name: true
+      rules:
+        json: camel
+        yaml: camel
+        toml: camel
+        env: upperSnake
+
+run:
+  concurrency: 8
+  timeout: 2m
 
 issues:
+  exclude-dirs:
+    - doc
+  exclude-files:
+    - '_test\.go$'
   exclude-rules:
-    - path: _test\.go
+    - path: internal/util/request.go
       linters:
-        - gomnd
-        - gocritic
-        - lll
-    - path: main\.go
-      linters:
-        - gomnd
-    - linters:
-        - lll
-      source: "^//go:generate "
-
-  max-issues-per-linter: 0
-  max-same-issues: 0
+        - gosec
+      text: "G404"

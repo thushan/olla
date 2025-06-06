@@ -1,10 +1,11 @@
 package app
 
 import (
+	"time"
+
 	"github.com/thushan/olla/internal/adapter/proxy"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
-	"time"
 )
 
 const (

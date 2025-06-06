@@ -14,6 +14,7 @@ import (
 	"github.com/thushan/olla/internal/app"
 	"github.com/thushan/olla/internal/env"
 	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/internal/version"
 	"github.com/thushan/olla/pkg/format"
 	"github.com/thushan/olla/pkg/nerdstats"
@@ -95,7 +96,7 @@ func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
 	logger.Info("Process Allocation Stats",
 		"total_mallocs", stats.Mallocs,
 		"total_frees", stats.Frees,
-		"net_objects", int64(stats.Mallocs)-int64(stats.Frees),
+		"net_objects", util.SafeInt64Diff(stats.Mallocs, stats.Frees),
 	)
 
 	if stats.NumGC > 0 {

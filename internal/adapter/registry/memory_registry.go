@@ -3,11 +3,12 @@ package registry
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/logger"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/thushan/olla/internal/logger"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -15,9 +16,9 @@ import (
 type MemoryModelRegistry struct {
 	endpointModels   map[string]*domain.EndpointModels
 	modelToEndpoints map[string]map[string]struct{}
+	logger           *logger.StyledLogger
 	stats            domain.RegistryStats
 	mu               sync.RWMutex
-	logger           *logger.StyledLogger
 }
 
 func NewMemoryModelRegistry(logger *logger.StyledLogger) *MemoryModelRegistry {

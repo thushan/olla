@@ -2,10 +2,11 @@ package app
 
 import (
 	"errors"
-	"github.com/docker/go-units"
-	"github.com/thushan/olla/internal/core/constants"
 	"net/http"
 	"strings"
+
+	"github.com/docker/go-units"
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 const (
@@ -65,7 +66,7 @@ func (a *Application) registerRoutes() {
 	 /olla/proxy => Standard load balancing
 	 /olla/model => Model-aware routing
 	 /olla/route => Direct endpoint routing
-	 */
+	*/
 	a.routeRegistry.RegisterProxyRoute("/olla/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
 	a.routeRegistry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST") // Sherpa compatibility
 	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")

@@ -6,9 +6,9 @@ import (
 )
 
 type EndpointError struct {
+	Err       error
 	Operation string
 	URL       string
-	Err       error
 }
 
 func (e *EndpointError) Error() string {
@@ -20,13 +20,13 @@ func (e *EndpointError) Unwrap() error {
 }
 
 type HealthCheckError struct {
+	Err                 error
 	EndpointURL         string
 	EndpointName        string
 	CheckType           string
 	StatusCode          int
 	Latency             time.Duration
 	ConsecutiveFailures int
-	Err                 error
 }
 
 func (e *HealthCheckError) Error() string {
@@ -43,6 +43,7 @@ func (e *HealthCheckError) Unwrap() error {
 }
 
 type ProxyError struct {
+	Err        error
 	RequestID  string
 	TargetURL  string
 	Method     string
@@ -50,7 +51,6 @@ type ProxyError struct {
 	StatusCode int
 	Latency    time.Duration
 	BytesRead  int
-	Err        error
 }
 
 func (e *ProxyError) Error() string {
@@ -77,9 +77,9 @@ func (e *ConfigValidationError) Error() string {
 }
 
 type LoadBalancerError struct {
+	Err           error
 	Strategy      string
 	EndpointCount int
-	Err           error
 }
 
 func (e *LoadBalancerError) Error() string {
@@ -122,6 +122,7 @@ func NewProxyError(requestID, targetURL, method, path string, statusCode int, la
 		Err:        err,
 	}
 }
+
 /*
 func NewConfigValidationError(field string, value interface{}, reason string) *ConfigValidationError {
 	return &ConfigValidationError{

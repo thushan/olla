@@ -37,7 +37,6 @@ func ParseTrustedCIDRs(cidrStrings []string) ([]*net.IPNet, error) {
 	return cidrs, nil
 }
 
-
 // NormaliseBaseURL ensures the base URL ends without a trailing slash
 func NormaliseBaseURL(baseURL string) string {
 	if baseURL == "" {

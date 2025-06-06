@@ -3,10 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
-	"github.com/thushan/olla/internal/util"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/util"
 )
 
 // proxyHandler handles Ollama API proxy requests
@@ -64,6 +65,5 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			"streaming_ms", stats.StreamingMs,
 			"header_processing_ms", stats.HeaderProcessingMs,
 			"selection_ms", stats.SelectionMs)
-
 	}
 }

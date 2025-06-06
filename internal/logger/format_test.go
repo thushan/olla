@@ -38,4 +38,3 @@ func BenchmarkStripAnsiCodes_Large(b *testing.B) {
 		stripAnsiCodes(large)
 	}
 }
-

@@ -15,9 +15,9 @@ const (
 )
 
 type SizeValidator struct {
+	logger        *logger.StyledLogger
 	maxBodySize   int64
 	maxHeaderSize int64
-	logger        *logger.StyledLogger
 }
 
 /*

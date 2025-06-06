@@ -5,6 +5,11 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
+const (
+	LMStudioProfileVersion    = "1.0"
+	LMStudioProfileModelsPath = "/v1/models"
+)
+
 type LMStudioProfile struct{}
 
 func NewLMStudioProfile() *LMStudioProfile {
@@ -16,15 +21,15 @@ func (p *LMStudioProfile) GetName() string {
 }
 
 func (p *LMStudioProfile) GetVersion() string {
-	return "1.0"
+	return LMStudioProfileVersion
 }
 
 func (p *LMStudioProfile) GetModelDiscoveryURL(baseURL string) string {
-	return util.NormaliseBaseURL(baseURL) + "/v1/models"
+	return util.NormaliseBaseURL(baseURL) + LMStudioProfileModelsPath
 }
 
 func (p *LMStudioProfile) GetHealthCheckPath() string {
-	return "/v1/models"
+	return LMStudioProfileModelsPath
 }
 
 func (p *LMStudioProfile) IsOpenAPICompatible() bool {
@@ -55,6 +60,6 @@ func (p *LMStudioProfile) GetDetectionHints() domain.DetectionHints {
 	return domain.DetectionHints{
 		UserAgentPatterns: []string{"lm-studio/"},
 		ResponseHeaders:   []string{"X-LMStudio-Version"},
-		PathIndicators:    []string{"/v1/models"},
+		PathIndicators:    []string{LMStudioProfileModelsPath},
 	}
 }

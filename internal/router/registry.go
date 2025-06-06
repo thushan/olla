@@ -132,7 +132,7 @@ func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter int
 	}
 
 	for route, info := range r.routes {
-		var handler http.Handler = http.HandlerFunc(info.Handler)
+		var handler http.Handler = info.Handler
 
 		if info.IsProxy {
 			if hasRateMiddleware {
@@ -166,7 +166,7 @@ func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdap
 	}
 
 	for route, info := range r.routes {
-		var handler http.Handler = http.HandlerFunc(info.Handler)
+		var handler http.Handler = info.Handler
 
 		if info.IsProxy {
 			handler = adapters.CreateChainMiddleware()(handler)

@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/version"
 	"io"
 	"math"
 	"net"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/version"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -120,7 +121,7 @@ func (hc *HealthClient) performSingleCheck(ctx context.Context, endpoint *domain
 	checkCtx, cancel := context.WithTimeout(ctx, endpoint.CheckTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, healthCheckURL, nil)
+	req, err := http.NewRequestWithContext(checkCtx, http.MethodGet, healthCheckURL, http.NoBody)
 	if err != nil {
 		result.Latency = time.Since(start)
 		result.Error = err

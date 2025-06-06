@@ -27,6 +27,13 @@ type Config struct {
 const (
 	DefaultLogOutputName  = "olla.log"
 	DefaultDetailedCookie = "detailed"
+
+	LogLevelDebug = "debug"
+	LogLevelInfo  = "info"
+	LogLevelWarn  = "warn"
+	LogLevelError = "error"
+	LogLevelFatal = "fatal"
+	LogLevelPanic = "panic"
 )
 
 func New(cfg *Config) (*slog.Logger, func(), error) {
@@ -174,13 +181,13 @@ func (mh *multiHandler) WithGroup(name string) slog.Handler {
 
 func parseLevel(level string) slog.Level {
 	switch strings.ToLower(level) {
-	case "debug":
+	case LogLevelDebug:
 		return slog.LevelDebug
-	case "info":
+	case LogLevelInfo:
 		return slog.LevelInfo
-	case "warn", "warning":
+	case LogLevelWarn, "warning":
 		return slog.LevelWarn
-	case "error":
+	case LogLevelError:
 		return slog.LevelError
 	default:
 		return slog.LevelInfo

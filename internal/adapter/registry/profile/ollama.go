@@ -5,6 +5,15 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
+const (
+	OllamaProfileVersion             = "1.0"
+	OllamaProfileHealthPath          = "/"
+	OllamaProfileGeneratePath        = "/api/generate"
+	OllamaProfileChatCompletionsPath = "/v1/chat/completions"
+	OllamaProfileCompletionsPath     = "/v1/completions"
+	OllamaProfileModelModelsPath     = "/api/tags"
+)
+
 type OllamaProfile struct{}
 
 func NewOllamaProfile() *OllamaProfile {
@@ -16,15 +25,15 @@ func (p *OllamaProfile) GetName() string {
 }
 
 func (p *OllamaProfile) GetVersion() string {
-	return "1.0"
+	return OllamaProfileVersion
 }
 
 func (p *OllamaProfile) GetModelDiscoveryURL(baseURL string) string {
-	return util.NormaliseBaseURL(baseURL) + "/api/tags"
+	return util.NormaliseBaseURL(baseURL) + OllamaProfileModelModelsPath
 }
 
 func (p *OllamaProfile) GetHealthCheckPath() string {
-	return "/"
+	return OllamaProfileHealthPath
 }
 
 func (p *OllamaProfile) IsOpenAPICompatible() bool {
@@ -55,6 +64,9 @@ func (p *OllamaProfile) GetDetectionHints() domain.DetectionHints {
 	return domain.DetectionHints{
 		UserAgentPatterns: []string{"ollama/"},
 		ResponseHeaders:   []string{"X-ProfileOllama-Version"},
-		PathIndicators:    []string{"/api/tags", "/api/generate"},
+		PathIndicators: []string{
+			OllamaProfileModelModelsPath,
+			OllamaProfileGeneratePath,
+		},
 	}
 }

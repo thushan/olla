@@ -1,10 +1,11 @@
 package nerdstats
 
 import (
-	"github.com/thushan/olla/pkg/format"
 	"runtime"
 	"runtime/debug"
 	"time"
+
+	"github.com/thushan/olla/pkg/format"
 )
 
 /*
@@ -85,7 +86,9 @@ func Snapshot(startTime time.Time) *NerdStats {
 
 	// Calculate last GC time and total GC time
 	if m.LastGC > 0 {
+		//nolint:gosec // m.LastGC is nanoseconds since epoch, safe for int64 use
 		stats.LastGC = time.Unix(0, int64(m.LastGC))
+		//nolint:gosec // PauseTotalNs is a safe uint64->Duration conversion
 		stats.TotalGCTime = time.Duration(m.PauseTotalNs)
 	}
 
@@ -112,14 +115,16 @@ func (ps *NerdStats) GetMemoryPressure() string {
 // GetGoroutineHealthStatus assesses goroutine count health
 func (ps *NerdStats) GetGoroutineHealthStatus() string {
 	// These thresholds are conservative
-	if ps.NumGoroutines > 1000 {
+	switch {
+	case ps.NumGoroutines > 1000:
 		return "CONCERNING"
-	} else if ps.NumGoroutines > 500 {
+	case ps.NumGoroutines > 500:
 		return "ELEVATED"
-	} else if ps.NumGoroutines > 100 {
+	case ps.NumGoroutines > 100:
 		return "NORMAL"
+	default:
+		return "HEALTHY"
 	}
-	return "HEALTHY"
 }
 
 // GetBuildInfoSummary returns a summary of build information

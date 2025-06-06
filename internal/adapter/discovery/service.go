@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/sync/errgroup"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
@@ -24,12 +26,12 @@ type ModelDiscoveryService struct {
 	endpointRepo      domain.EndpointRepository
 	modelRegistry     domain.ModelRegistry
 	logger            *logger.StyledLogger
-	config            DiscoveryConfig
-	isRunning         atomic.Bool
 	stopCh            chan struct{}
 	ticker            *time.Ticker
 	disabledEndpoints map[string]int // tracks consecutive failures
+	config            DiscoveryConfig
 	mu                sync.RWMutex
+	isRunning         atomic.Bool
 }
 
 // DiscoveryConfig holds configuration for the discovery service
@@ -129,7 +131,6 @@ func (s *ModelDiscoveryService) DiscoverAll(ctx context.Context) error {
 
 // DiscoverEndpoint discovers models from a specific endpoint
 func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *domain.Endpoint) error {
-
 	// [TF]	Note: Don't skip disabled endpoints in tests, as they might be testing re-enabling
 	// 		In release, the filterActiveEndpoints in DiscoverAll handles this nicely
 
@@ -150,8 +151,26 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		return fmt.Errorf("failed to register models: %w", err)
 	}
 
-	s.logger.InfoWithEndpoint(" Models for", endpoint.Name, "count", len(models))
+	s.logger.InfoWithEndpoint(" Models for", endpoint.Name, "count", len(models), "models", modelInfosToString(models))
 	return nil
+}
+
+func modelInfosToString(models []*domain.ModelInfo) string {
+	var sb strings.Builder
+	for i, model := range models {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		/*
+			sizeStr := ""
+			if model.Size > 0 {
+				sizeStr = fmt.Sprintf(" (%d)", model.Size)
+			}
+		*/
+		sb.WriteString(model.Name)
+		// sb.WriteString(sizeStr)
+	}
+	return sb.String()
 }
 
 /*
@@ -226,7 +245,7 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 	eg.SetLimit(workerCount)
 
 	for _, ep := range endpoints {
-		ep := ep // capture loop var
+		// capture loop var
 		eg.Go(func() error {
 			if err := s.DiscoverEndpoint(ctx, ep); err != nil && !errors.Is(err, context.Canceled) {
 				return err

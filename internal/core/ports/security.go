@@ -6,35 +6,35 @@ import (
 )
 
 type SecurityRequest struct {
-	ClientID     string
-	Endpoint     string
-	Method       string
-	BodySize     int64
-	HeaderSize   int64
-	Headers      map[string][]string
+	Headers       map[string][]string
+	ClientID      string
+	Endpoint      string
+	Method        string
+	BodySize      int64
+	HeaderSize    int64
 	IsHealthCheck bool
 }
 
 type SecurityResult struct {
-	Allowed      bool
-	Reason       string
-	RetryAfter   int
-	RateLimit    int
-	Remaining    int
-	ResetTime    time.Time
+	ResetTime  time.Time
+	Reason     string
+	RetryAfter int
+	RateLimit  int
+	Remaining  int
+	Allowed    bool
 }
 
 type SecurityViolation struct {
-	ClientID    string
+	Timestamp     time.Time
+	ClientID      string
 	ViolationType string
-	Endpoint    string
-	Size        int64
-	Timestamp   time.Time
+	Endpoint      string
+	Size          int64
 }
 
 type SecurityMetrics struct {
-	RateLimitViolations int64
-	SizeLimitViolations int64
+	RateLimitViolations  int64
+	SizeLimitViolations  int64
 	UniqueRateLimitedIPs int
 }
 

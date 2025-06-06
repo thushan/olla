@@ -7,3 +7,4 @@ tmp/
 *.exe
 config.yaml
 config/
+dist/

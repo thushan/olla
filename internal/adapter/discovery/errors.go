@@ -8,12 +8,12 @@ import (
 
 // DiscoveryError wraps discovery operation errors with context
 type DiscoveryError struct {
+	Err         error
 	EndpointURL string
 	ProfileType string
 	Operation   string
 	StatusCode  int
 	Latency     time.Duration
-	Err         error
 }
 
 func (e *DiscoveryError) Error() string {
@@ -51,9 +51,9 @@ func (e *ProfileNotFoundError) Error() string {
 
 // ParseError indicates response parsing failed
 type ParseError struct {
-	Data   []byte
-	Format string
 	Err    error
+	Format string
+	Data   []byte
 }
 
 func (e *ParseError) Error() string {
@@ -66,8 +66,8 @@ func (e *ParseError) Unwrap() error {
 
 // NetworkError indicates a network-level failure
 type NetworkError struct {
-	URL string
 	Err error
+	URL string
 }
 
 func (e *NetworkError) Error() string {

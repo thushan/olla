@@ -1,10 +1,11 @@
 package security
 
 import (
+	"net/http"
+
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"net/http"
 )
 
 type Services struct {
@@ -27,7 +28,7 @@ func NewSecurityServices(cfg *config.Config, logger *logger.StyledLogger) (*Serv
 
 	chain := ports.NewSecurityChain(
 		rateLimitValidator, /* We start with rate limiting */
-		sizeValidator, /* if we pass that, we can check size */
+		sizeValidator,      /* if we pass that, we can check size */
 	)
 
 	services := &Services{

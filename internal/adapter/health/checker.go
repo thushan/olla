@@ -228,58 +228,34 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 	// Enhanced logging with better error context
 	c.logHealthCheckResult(endpoint, oldStatus, newStatus, statusChanged, result, nextInterval, err)
 }
-func (c *HTTPHealthChecker) logHealthCheckResult(endpoint *domain.Endpoint, oldStatus, newStatus domain.EndpointStatus, statusChanged bool, result domain.HealthCheckResult, nextInterval time.Duration, checkErr error) {
+
+func (c *HTTPHealthChecker) logHealthCheckResult(
+	endpoint *domain.Endpoint,
+	oldStatus, newStatus domain.EndpointStatus,
+	statusChanged bool,
+	result domain.HealthCheckResult,
+	nextInterval time.Duration,
+	checkErr error,
+) {
 	endpointKey := endpoint.GetURLString()
 	lastLogTimeInterface, _ := c.lastLogTime.Load(endpointKey)
 	lastLogTime, _ := lastLogTimeInterface.(time.Time)
 
-	if statusChanged {
-		// ANY status change gets logged immediately - this is critical for ops
+	switch {
+	case statusChanged:
 		c.lastLoggedStatus.Store(endpointKey, newStatus)
 		c.lastLogTime.Store(endpointKey, time.Now())
 
-		// Special handling for initial status discovery
-		if oldStatus == domain.StatusUnknown {
-			if newStatus == domain.StatusHealthy {
-				c.logger.InfoHealthStatus("Endpoint initial status:",
-					endpoint.Name,
-					newStatus,
-					"latency", result.Latency,
-					"next_check_in", nextInterval)
-			} else {
-				// Initial discovery of unhealthy endpoint
-				detailedArgs := []interface{}{
-					"endpoint_url", endpoint.GetURLString(),
-					"status_code", result.StatusCode,
-					"error_type", result.ErrorType,
-				}
-				if checkErr != nil {
-					var healthCheckErr *domain.HealthCheckError
-					if errors.As(checkErr, &healthCheckErr) {
-						detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
-					} else {
-						detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
-					}
-				}
-
-				c.logger.WarnWithContext("Endpoint discovered offline:", endpoint.Name, logger.LogContext{
-					UserArgs: []interface{}{
-						"status", newStatus.String(),
-						"latency", result.Latency,
-						"next_check_in", nextInterval,
-					},
-					DetailedArgs: detailedArgs,
-				})
-			}
-		} else if newStatus == domain.StatusHealthy {
-			c.logger.InfoHealthStatus("Endpoint recovered:",
+		switch {
+		case oldStatus == domain.StatusUnknown && newStatus == domain.StatusHealthy:
+			c.logger.InfoHealthStatus("Endpoint initial status:",
 				endpoint.Name,
 				newStatus,
-				"was", oldStatus.String(),
 				"latency", result.Latency,
 				"next_check_in", nextInterval)
-		} else {
-			// Status change to unhealthy
+
+		case oldStatus == domain.StatusUnknown:
+			// Initial discovery of unhealthy endpoint
 			detailedArgs := []interface{}{
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
@@ -293,7 +269,38 @@ func (c *HTTPHealthChecker) logHealthCheckResult(endpoint *domain.Endpoint, oldS
 					detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
 				}
 			}
+			c.logger.WarnWithContext("Endpoint discovered offline:", endpoint.Name, logger.LogContext{
+				UserArgs: []interface{}{
+					"status", newStatus.String(),
+					"latency", result.Latency,
+					"next_check_in", nextInterval,
+				},
+				DetailedArgs: detailedArgs,
+			})
 
+		case newStatus == domain.StatusHealthy:
+			c.logger.InfoHealthStatus("Endpoint recovered:",
+				endpoint.Name,
+				newStatus,
+				"was", oldStatus.String(),
+				"latency", result.Latency,
+				"next_check_in", nextInterval)
+
+		default:
+			// Status changed to unhealthy
+			detailedArgs := []interface{}{
+				"endpoint_url", endpoint.GetURLString(),
+				"status_code", result.StatusCode,
+				"error_type", result.ErrorType,
+			}
+			if checkErr != nil {
+				var healthCheckErr *domain.HealthCheckError
+				if errors.As(checkErr, &healthCheckErr) {
+					detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
+				} else {
+					detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
+				}
+			}
 			c.logger.WarnWithContext("Endpoint status changed:", endpoint.Name, logger.LogContext{
 				UserArgs: []interface{}{
 					"status", newStatus.String(),
@@ -305,8 +312,8 @@ func (c *HTTPHealthChecker) logHealthCheckResult(endpoint *domain.Endpoint, oldS
 				DetailedArgs: detailedArgs,
 			})
 		}
-	} else if checkErr != nil && time.Since(lastLogTime) > LogThrottleInterval {
-		// Same status but still having issues - only log every 2 minutes to avoid spam
+
+	case checkErr != nil && time.Since(lastLogTime) > LogThrottleInterval:
 		c.lastLogTime.Store(endpointKey, time.Now())
 
 		detailedArgs := []interface{}{
@@ -314,7 +321,6 @@ func (c *HTTPHealthChecker) logHealthCheckResult(endpoint *domain.Endpoint, oldS
 			"status_code", result.StatusCode,
 			"error_type", result.ErrorType,
 		}
-
 		var healthCheckErr *domain.HealthCheckError
 		if errors.As(checkErr, &healthCheckErr) {
 			detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())

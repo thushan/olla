@@ -22,20 +22,20 @@ type ModelDiscoveryClient interface {
 
 // DiscoveryResult contains the result of a model discovery operation
 type DiscoveryResult struct {
-	EndpointURL string
-	Models      []*domain.ModelInfo
 	Error       error
+	EndpointURL string
+	ProfileUsed string
+	Models      []*domain.ModelInfo
 	Duration    time.Duration
 	StatusCode  int
-	ProfileUsed string
 }
 
 // DiscoveryMetrics tracks discovery operation statistics
 type DiscoveryMetrics struct {
+	LastDiscoveryTime  time.Time
+	ErrorsByEndpoint   map[string]int64
 	TotalDiscoveries   int64
 	SuccessfulRequests int64
 	FailedRequests     int64
 	AverageLatency     time.Duration
-	LastDiscoveryTime  time.Time
-	ErrorsByEndpoint   map[string]int64
 }

@@ -10,12 +10,17 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
+const (
+	ViolationRateLimit = "rate_limit"
+	ViolationSizeLimit = "size_limit"
+)
+
 type MetricsAdapter struct {
+	uniqueRateLimitedIPs map[string]time.Time
+	logger               *logger.StyledLogger
 	rateLimitViolations  int64
 	sizeLimitViolations  int64
-	uniqueRateLimitedIPs map[string]time.Time
 	mu                   sync.RWMutex
-	logger               *logger.StyledLogger
 }
 
 // NewSecurityMetricsAdapter concise way to capture security metrics for now
@@ -28,10 +33,10 @@ func NewSecurityMetricsAdapter(logger *logger.StyledLogger) *MetricsAdapter {
 
 func (sma *MetricsAdapter) RecordViolation(ctx context.Context, violation ports.SecurityViolation) error {
 	switch violation.ViolationType {
-	case "rate_limit":
+	case ViolationRateLimit:
 		atomic.AddInt64(&sma.rateLimitViolations, 1)
 		sma.recordRateLimitedIP(violation.ClientID)
-	case "size_limit":
+	case ViolationSizeLimit:
 		atomic.AddInt64(&sma.sizeLimitViolations, 1)
 		if violation.Size > 50*1024*1024 {
 			sma.logger.Warn("Large request blocked",

@@ -2,27 +2,37 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - 'pipelines/*'
   pull_request:
     branches: [ main ]
+    paths-ignore:
+      - '**.md'
+
+env:
+  GO_VERSION: 1.24.x
+  GOLANGCILINT_VERSION: "1.64.8"
+
+permissions:
+  contents: read
+  pull-requests: read
 
 jobs:
   test:
-    name: Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go-version: ['1.23', '1.24']
-
+        go-version: ['1.24']
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
+      - name: Configure Go
         uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
+
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Verify dependencies
         run: go mod verify
@@ -34,15 +44,13 @@ jobs:
         run: go vet ./...
 
       - name: Run go fmt check
-        run: |
-          if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
-            echo "The following files are not formatted:"
-            gofmt -s -l .
-            exit 1
-          fi
+        run: make fmt && git diff --exit-code
+
+      - name: Build
+        run: make build
 
       - name: Run tests
-        run: go test -v -race -coverprofile=coverage.out ./...
+        run: make test-race
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -52,129 +60,20 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
-  build:
-    name: Build
+  golangci:
     runs-on: ubuntu-latest
-    needs: test
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
+      - name: Configure Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Build binary
-        run: make build
-
-      - name: Test binary runs
-        run: |
-          ./bin/olla --version
-          timeout 5s ./bin/olla || [ $? -eq 124 ]  # Expect timeout after 5s
-
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: olla-binary-${{ github.sha }}
-          path: bin/olla
-          retention-days: 7
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
         with:
-          go-version: '1.24'
-          cache: true
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v4
-        with:
-          version: latest
-          args: --timeout=5m
-
-  security:
-    name: Security Scan
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-          cache: true
-
-      - name: Run Gosec Security Scanner
-        uses: securecodewarrior/github-action-gosec@master
-        with:
-          args: './...'
-
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    needs: [test, build]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: olla:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test Docker image
-        run: |
-          docker run --rm olla:latest --version
-
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    needs: [test, build, lint]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-          cache: true
-
-      - name: Build release binaries
-        run: make build-release
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            bin/olla
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          version: v${{ env.GOLANGCILINT_VERSION }}
+          args: --timeout=10m --max-same-issues=0 --max-issues-per-linter=0

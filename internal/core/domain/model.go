@@ -7,17 +7,17 @@ import (
 )
 
 type ModelInfo struct {
+	LastSeen    time.Time `json:"last_seen"`
 	Name        string    `json:"name"`
-	Size        int64     `json:"size,omitempty"`
 	Type        string    `json:"type,omitempty"`
 	Description string    `json:"description,omitempty"`
-	LastSeen    time.Time `json:"last_seen"`
+	Size        int64     `json:"size,omitempty"`
 }
 
 type EndpointModels struct {
+	LastUpdated time.Time    `json:"last_updated"`
 	EndpointURL string       `json:"endpoint_url"`
 	Models      []*ModelInfo `json:"models"`
-	LastUpdated time.Time    `json:"last_updated"`
 }
 
 type ModelRegistry interface {
@@ -32,17 +32,17 @@ type ModelRegistry interface {
 }
 
 type RegistryStats struct {
+	LastUpdated       time.Time      `json:"last_updated"`
+	ModelsPerEndpoint map[string]int `json:"models_per_endpoint"`
 	TotalEndpoints    int            `json:"total_endpoints"`
 	TotalModels       int            `json:"total_models"`
-	ModelsPerEndpoint map[string]int `json:"models_per_endpoint"`
-	LastUpdated       time.Time      `json:"last_updated"`
 }
 
 type ModelRegistryError struct {
+	Err         error
 	Operation   string
 	EndpointURL string
 	ModelName   string
-	Err         error
 }
 
 func (e *ModelRegistryError) Error() string {

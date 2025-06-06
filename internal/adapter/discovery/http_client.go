@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/version"
 	"io"
 	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/thushan/olla/internal/version"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"
@@ -72,7 +73,7 @@ func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint 
 
 	platformProfile, err := c.profileFactory.GetProfile(profileType)
 	if err != nil {
-		c.recordError(endpoint.URLString, err)
+		c.recordError(endpoint.URLString)
 		return nil, NewDiscoveryError(endpoint.URLString, profileType, "get_profile", 0, time.Since(startTime), err)
 	}
 
@@ -81,7 +82,6 @@ func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint 
 
 // discoverWithAutoDetection tries profiles in order until one succeeds
 func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context, endpoint *domain.Endpoint, startTime time.Time) ([]*domain.ModelInfo, error) {
-
 	// We're going to try profiles in order:
 	//	Ollama → LM Studio → OpenAI Compatible
 	// Resolution for this may change in the future as more front-ends appear or are added.
@@ -119,7 +119,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 		lastErr = err
 	}
 
-	c.recordError(endpoint.URLString, lastErr)
+	c.recordError(endpoint.URLString)
 	return nil, NewDiscoveryError(endpoint.URLString, domain.ProfileAuto, "auto_detect", 0, time.Since(startTime), lastErr)
 }
 
@@ -127,7 +127,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endpoint *domain.Endpoint, platformProfile domain.PlatformProfile, startTime time.Time) ([]*domain.ModelInfo, error) {
 	discoveryURL := platformProfile.GetModelDiscoveryURL(endpoint.URLString)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, http.NoBody)
 	if err != nil {
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "create_request", 0, time.Since(startTime), err)
 	}
@@ -139,16 +139,12 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 		networkErr := &NetworkError{URL: discoveryURL, Err: err}
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "http_request", 0, time.Since(startTime), networkErr)
 	}
-	defer func(Body io.ReadCloser) {
-		// dont care about errors
-		_ = Body.Close()
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	duration := time.Since(startTime)
 
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
-		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "http_status", resp.StatusCode, duration, err)
+		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "http_status", resp.StatusCode, duration, fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status))
 	}
 
 	// Limit response size to prevent memory issues
@@ -182,7 +178,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 
 func (c *HTTPModelDiscoveryClient) HealthCheck(ctx context.Context, endpoint *domain.Endpoint) error {
 	// Use existing health check URL from endpoint
-	req, err := http.NewRequestWithContext(ctx, "GET", endpoint.HealthCheckURLString, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint.HealthCheckURLString, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -193,10 +189,7 @@ func (c *HTTPModelDiscoveryClient) HealthCheck(ctx context.Context, endpoint *do
 	if err != nil {
 		return &NetworkError{URL: endpoint.HealthCheckURLString, Err: err}
 	}
-	defer func(Body io.ReadCloser) {
-		// dont care about errors here
-		_ = Body.Close()
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("health check failed with status %d", resp.StatusCode)
@@ -224,7 +217,7 @@ func (c *HTTPModelDiscoveryClient) GetMetrics() DiscoveryMetrics {
 	}
 }
 
-func (c *HTTPModelDiscoveryClient) recordError(endpointURL string, err error) {
+func (c *HTTPModelDiscoveryClient) recordError(endpointURL string) {
 	c.updateMetrics(func(m *DiscoveryMetrics) {
 		atomic.AddInt64(&m.FailedRequests, 1)
 		m.ErrorsByEndpoint[endpointURL]++

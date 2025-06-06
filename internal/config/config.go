@@ -2,12 +2,13 @@ package config
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/util"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/thushan/olla/internal/util"
 
 	"github.com/docker/go-units"
 	"gopkg.in/yaml.v3"
@@ -126,7 +127,6 @@ func Load() (*Config, error) {
 }
 
 func ApplyConfigCaches(config *Config) {
-
 	if val := config.Server.RateLimits.TrustedProxyCIDRs; len(val) > 0 {
 		if trustedCIDRs, err := util.ParseTrustedCIDRs(val); err == nil {
 			config.Server.RateLimits.TrustedProxyCIDRs = val
@@ -150,7 +150,7 @@ func CheckFallbackCIDRs(config *Config) {
 	}
 }
 
-// Simplified env overrides - only the ones actually used
+//nolint:gocognit // flat env parsing logic, intentionally verbose
 func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_SERVER_HOST"); val != "" {
 		config.Server.Host = val
