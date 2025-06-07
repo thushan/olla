@@ -100,7 +100,3 @@ changelog:
   filters:
     exclude:
       - "^Merge"
-sboms:
-  - id: default
-    artifacts: all
-    path: sbom.json
