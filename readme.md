@@ -15,15 +15,6 @@
     </a>
   </p>
 </div>
-# Olla - Smart LLM Load Balancer & Proxy
-
-[![Go Version](https://img.shields.io/github/go-mod/go-version/thushan/olla)](https://golang.org/)
-[![License](https://img.shields.io/github/license/thushan/olla)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/thushan/olla)](https://github.com/thushan/olla/releases/latest)
-[![Docker Pulls](https://img.shields.io/docker/pulls/thushan/olla)](https://github.com/thushan/olla/pkgs/container/olla)
-[![CI](https://github.com/thushan/olla/actions/workflows/ci.yml/badge.svg)](https://github.com/thushan/olla/actions/workflows/ci.yml)
-
-![Olla Banner](docs/images/banner.png)
 
 > [!IMPORTANT]  
 > Olla is currently in **in-development**. While it is stable and usable, we are still finalising some features and optimisations. Your feedback is invaluable!
