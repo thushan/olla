@@ -48,7 +48,9 @@ builds:
       - -X "github.com/thushan/olla/internal/version.Date={{.CommitDate}}"
       - -X "github.com/thushan/olla/internal/version.User=goreleaser"
     asmflags:
-      - all=-trimpath={{ dir .Env.PWD }}
+      - all=-trimpath={{ dir (default "." .Env.PWD) }}
+    gcflags:
+      - all=-trimpath={{ dir (default "." .Env.PWD) }}
 
 dockers:
   - image_templates:
