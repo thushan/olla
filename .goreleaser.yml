@@ -47,10 +47,10 @@ builds:
       - -X "github.com/thushan/olla/internal/version.Commit={{.Commit}}"
       - -X "github.com/thushan/olla/internal/version.Date={{.CommitDate}}"
       - -X "github.com/thushan/olla/internal/version.User=goreleaser"
-    asmflags:
-      - all=-trimpath={{ dir (default "." .Env.PWD) }}
-    gcflags:
-      - all=-trimpath={{ dir (default "." .Env.PWD) }}
+#    asmflags:
+#      - all=-trimpath={{ dir (default "." .Env.PWD) }}
+#    gcflags:
+#      - all=-trimpath={{ dir (default "." .Env.PWD) }}
 
 dockers:
   - image_templates:
@@ -100,3 +100,7 @@ changelog:
   filters:
     exclude:
       - "^Merge"
+sboms:
+  - id: default
+    artifacts: all
+    path: sbom.json
