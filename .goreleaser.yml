@@ -47,10 +47,8 @@ builds:
       - -X "github.com/thushan/olla/internal/version.Commit={{.Commit}}"
       - -X "github.com/thushan/olla/internal/version.Date={{.CommitDate}}"
       - -X "github.com/thushan/olla/internal/version.User=goreleaser"
-    gcflags:
-      - all=-l=4  # Maximum inlining
     asmflags:
-      - all=-trimpath={{.Env.PWD}}
+      - all=-trimpath={{ dir .Env.PWD }}
 
 dockers:
   - image_templates:
@@ -70,8 +68,8 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--label=org.opencontainers.image.description=High-performance Ollama load balancer and proxy"
-      - "--label=org.opencontainers.image.licenses=MIT"
+      - "--label=org.opencontainers.image.description=High-performance LLM front-end load balancer and proxy"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
     extra_files:
       - config/
       - logs/.gitkeep
