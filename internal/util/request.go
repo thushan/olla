@@ -1,6 +1,7 @@
 package util
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"net"
@@ -61,4 +62,17 @@ func getSourceIP(r *http.Request) net.IP {
 		return net.ParseIP(ip)
 	}
 	return net.ParseIP(r.RemoteAddr)
+}
+
+func StripRoutePrefix(ctx context.Context, path, prefix string) string {
+	if prefix, ok := ctx.Value(prefix).(string); ok {
+		if strings.HasPrefix(path, prefix) {
+			stripped := path[len(prefix):]
+			if stripped == "" || stripped[0] != '/' {
+				stripped = "/" + stripped
+			}
+			return stripped
+		}
+	}
+	return path
 }
