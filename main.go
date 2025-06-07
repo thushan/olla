@@ -20,6 +20,16 @@ import (
 	"github.com/thushan/olla/pkg/nerdstats"
 )
 
+const (
+	DefaultLoggerLevel   = "info"
+	DefaultFileOutput    = true
+	DefaultLogDir        = "./logs"
+	DefaultLogSizeMB     = 1
+	DefaultLogMaxBackups = 7
+	DefaultLogMaxAgeDays = 14
+	DefaultTheme         = "default"
+)
+
 func main() {
 	startTime := time.Now()
 	vlog := log.New(log.Writer(), "", 0)
@@ -139,12 +149,12 @@ func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
 
 func buildLoggerConfig() *logger.Config {
 	return &logger.Config{
-		Level:      env.GetEnvOrDefault("OLLA_LOG_LEVEL", "info"),
-		FileOutput: env.GetEnvBoolOrDefault("OLLA_FILE_OUTPUT", true),
-		LogDir:     env.GetEnvOrDefault("OLLA_LOG_DIR", "./logs"),
-		MaxSize:    env.GetEnvIntOrDefault("OLLA_LOG_SIZE_MB", 10),
-		MaxBackups: env.GetEnvIntOrDefault("OLLA_LOG_MAX_BACKUPS", 7),
-		MaxAge:     env.GetEnvIntOrDefault("OLLA_LOG_MAX_AGE_DAYS", 30),
-		Theme:      env.GetEnvOrDefault("OLLA_THEME", "default"),
+		Level:      env.GetEnvOrDefault("OLLA_LOG_LEVEL", DefaultLoggerLevel),
+		FileOutput: env.GetEnvBoolOrDefault("OLLA_FILE_OUTPUT", DefaultFileOutput),
+		LogDir:     env.GetEnvOrDefault("OLLA_LOG_DIR", DefaultLogDir),
+		MaxSize:    env.GetEnvIntOrDefault("OLLA_LOG_SIZE_MB", DefaultLogSizeMB),
+		MaxBackups: env.GetEnvIntOrDefault("OLLA_LOG_MAX_BACKUPS", DefaultLogMaxBackups),
+		MaxAge:     env.GetEnvIntOrDefault("OLLA_LOG_MAX_AGE_DAYS", DefaultLogMaxAgeDays),
+		Theme:      env.GetEnvOrDefault("OLLA_THEME", DefaultTheme),
 	}
 }

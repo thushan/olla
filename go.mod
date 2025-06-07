@@ -19,6 +19,7 @@ require (
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect
