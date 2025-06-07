@@ -1,12 +1,36 @@
 package util
 
-import "os"
+import (
+	"os"
+	"strings"
 
-// IsTerminal checks if stdout is a terminal
+	"github.com/mattn/go-isatty"
+)
+
+/*
+   references:
+   - https://no-color.org/
+   - https://github.com/sitkevij/no_color
+*/
+
+// IsTerminal checks if stdout is a terminal using go-isatty
 func IsTerminal() bool {
-	fileInfo, err := os.Stdout.Stat()
-	if err != nil {
+	return isatty.IsTerminal(os.Stdout.Fd())
+}
+
+// ShouldUseColors determines if coloured output should be used
+func ShouldUseColors() bool {
+	if noColor := os.Getenv("NO_COLOR"); noColor != "" {
 		return false
 	}
-	return (fileInfo.Mode() & os.ModeCharDevice) != 0
+
+	if forceColor := os.Getenv("FORCE_COLOR"); forceColor != "" {
+		return forceColor != "0"
+	}
+
+	if ollaColors := os.Getenv("OLLA_FORCE_COLORS"); ollaColors != "" {
+		return strings.ToLower(ollaColors) == "true"
+	}
+
+	return IsTerminal()
 }
