@@ -83,7 +83,7 @@ checksum:
 archives:
   - files:
       - LICENSE
-      - README.md
+      - readme.md
       - config/
       - logs/.gitkeep
       - default.yaml
