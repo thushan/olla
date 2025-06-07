@@ -19,6 +19,24 @@ type EndpointStatusResponse struct {
 	BackoffMultiplier   int       `json:"backoff_multiplier"`
 }
 
+type ProxyStatusResponse struct {
+	LoadBalancer       string `json:"load_balancer"`
+	TotalRequests      int64  `json:"total_requests"`
+	SuccessfulRequests int64  `json:"successful_requests"`
+	FailedRequests     int64  `json:"failed_requests"`
+	AverageLatency     int64  `json:"avg_latency_ms"`
+	MinLatency         int64  `json:"min_latency_ms"`
+	MaxLatency         int64  `json:"max_latency_ms"`
+}
+type OllaStatusResponse struct {
+	TotalEndpoints     int                      `json:"total_endpoints"`
+	HealthyEndpoints   int                      `json:"healthy_endpoints"`
+	UnhealthyEndpoints int                      `json:"unhealthy_endpoints"`
+	RoutableEndpoints  int                      `json:"routable_endpoints"`
+	Endpoints          []EndpointStatusResponse `json:"endpoints"`
+	Proxy              ProxyStatusResponse      `json:"proxy"`
+}
+
 // statusHandler handles endpoint status requests
 func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -41,11 +59,12 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := make(map[string]interface{})
-	status["total_endpoints"] = len(all)
-	status["healthy_endpoints"] = len(healthy)
-	status["routable_endpoints"] = len(routable)
-	status["unhealthy_endpoints"] = len(all) - len(routable)
+	statusResponse := OllaStatusResponse{
+		TotalEndpoints:     len(all),
+		HealthyEndpoints:   len(healthy),
+		UnhealthyEndpoints: len(all) - len(routable),
+		RoutableEndpoints:  len(routable),
+	}
 
 	endpoints := make([]EndpointStatusResponse, len(all))
 	for i, endpoint := range all {
@@ -61,9 +80,22 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 			NextCheckTime:       endpoint.NextCheckTime,
 		}
 	}
-	status["endpoints"] = endpoints
+	statusResponse.Endpoints = endpoints
+
+	proxyStatus, err := a.proxyService.GetStats(ctx)
+	if err == nil {
+		statusResponse.Proxy = ProxyStatusResponse{
+			LoadBalancer:       a.Config.Proxy.LoadBalancer,
+			TotalRequests:      proxyStatus.TotalRequests,
+			SuccessfulRequests: proxyStatus.SuccessfulRequests,
+			FailedRequests:     proxyStatus.FailedRequests,
+			AverageLatency:     proxyStatus.AverageLatency,
+			MinLatency:         proxyStatus.MinLatency,
+			MaxLatency:         proxyStatus.MaxLatency,
+		}
+	}
 
 	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(status)
+	_ = json.NewEncoder(w).Encode(statusResponse)
 }

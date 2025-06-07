@@ -3,7 +3,7 @@ server:
   host: "localhost"
   port: 19841
   read_timeout: 20s
-  write_timeout: 0s
+  write_timeout: 0s # for LLMs streaming, leave this as 0s
   shutdown_timeout: 10s
   request_limits:
     max_body_size: 52428800  # 50MB
@@ -31,7 +31,7 @@ proxy:
   read_timeout: 300s
   max_retries: 3
   retry_backoff: 500ms
-  load_balancer: "priority"
+  load_balancer: "priority" # Available: round_robin, least_conn, priority
   stream_buffer_size: 8192
 
 discovery:

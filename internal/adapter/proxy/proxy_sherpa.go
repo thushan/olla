@@ -494,7 +494,7 @@ func (s *SherpaProxyService) shouldContinueAfterClientDisconnect(bytesRead int, 
 	return bytesRead > ClientDisconnectionBytesThreshold && timeSinceLastRead < ClientDisconnectionTimeThreshold
 }
 
-func (s *SherpaProxyService) GetStats(ctx context.Context) (ports.ProxyStats, error) {
+func (s *SherpaProxyService) GetStats(context.Context) (ports.ProxyStats, error) {
 	total := atomic.LoadInt64(&s.stats.totalRequests)
 	successful := atomic.LoadInt64(&s.stats.successfulRequests)
 	failed := atomic.LoadInt64(&s.stats.failedRequests)
