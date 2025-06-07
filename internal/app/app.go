@@ -57,16 +57,16 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		return nil, fmt.Errorf("failed to create model routeRegistry: %w", err)
 	}
 
-	balancerFactory := balancer.NewFactory()
-	selector, err := balancerFactory.Create(DefaultLoadBalancer)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create load balancer: %w", err)
-	}
-
 	discoveryService := &simpleDiscovery{
 		repository: repository,
 		endpoints:  cfg.Discovery.Static.Endpoints,
 		logger:     logger,
+	}
+
+	balancerFactory := balancer.NewFactory()
+	selector, err := balancerFactory.Create(DefaultLoadBalancer)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
 
 	proxyFactory := proxy.NewFactory(logger)
@@ -77,9 +77,8 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		return nil, fmt.Errorf("failed to create proxy service: %w", err)
 	}
 
-	logger.Info("Started proxy implementation", "type", cfg.Proxy.Engine, "available", proxyFactory.GetAvailableTypes())
-
-	securityServices, securityAdapters := security.NewSecurityServices(cfg, logger)
+	logger.Info("Started proxy engine", "type", cfg.Proxy.Engine, "available", proxyFactory.GetAvailableTypes())
+	logger.Info("Loaded Load Balancer", "load_balancer", cfg.Proxy.LoadBalancer, "available", balancerFactory.GetAvailableStrategies())
 
 	// Create model discovery components
 	profileFactory := profile.NewFactory()
@@ -103,6 +102,8 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 			logger,
 		)
 	}
+
+	securityServices, securityAdapters := security.NewSecurityServices(cfg, logger)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),

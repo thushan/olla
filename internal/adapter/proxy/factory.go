@@ -34,7 +34,7 @@ func NewFactory(theLogger *logger.StyledLogger) *Factory {
 			ReadTimeout:         config.GetReadTimeout(),
 			StreamBufferSize:    config.GetStreamBufferSize(),
 		}
-		return NewService(discovery, selector, sherpaConfig, logger)
+		return NewSherpaService(discovery, selector, sherpaConfig, logger)
 	})
 
 	return factory

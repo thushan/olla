@@ -99,7 +99,7 @@ func Load() (*Config, error) {
 	config := DefaultConfig()
 
 	// Simple config file loading - check a few standard locations
-	configPaths := []string{"config.yaml", "config/config.yaml", "default.yaml"}
+	configPaths := []string{"config/config.yaml", "config.yaml", "default.yaml"}
 	if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
 		configPaths = []string{configFile}
 	}

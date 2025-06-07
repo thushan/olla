@@ -2,331 +2,20 @@ package proxy
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 )
 
-type mockDiscoveryService struct {
-	endpoints []*domain.Endpoint
-	err       error
-}
-
-func (m *mockDiscoveryService) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
-	return m.endpoints, m.err
-}
-
-func (m *mockDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-
-	var healthy []*domain.Endpoint
-	for _, ep := range m.endpoints {
-		if ep.Status.IsRoutable() {
-			healthy = append(healthy, ep)
-		}
-	}
-	return healthy, nil
-}
-
-func (m *mockDiscoveryService) RefreshEndpoints(ctx context.Context) error {
-	return m.err
-}
-
-type mockEndpointSelector struct {
-	endpoint    *domain.Endpoint
-	err         error
-	connections map[string]int
-	mu          sync.RWMutex
-}
-
-func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	if m.endpoint != nil {
-		return m.endpoint, nil
-	}
-	if len(endpoints) > 0 {
-		return endpoints[0], nil
-	}
-	return nil, fmt.Errorf("no endpoints available")
-}
-
-func (m *mockEndpointSelector) Name() string {
-	return "mock"
-}
-
-func (m *mockEndpointSelector) IncrementConnections(endpoint *domain.Endpoint) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.connections == nil {
-		m.connections = make(map[string]int)
-	}
-	m.connections[endpoint.URL.String()]++
-}
-
-func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.connections == nil {
-		m.connections = make(map[string]int)
-	}
-	if m.connections[endpoint.URL.String()] > 0 {
-		m.connections[endpoint.URL.String()]--
-	}
-}
-
-func (m *mockEndpointSelector) GetConnectionCount(endpoint *domain.Endpoint) int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if m.connections == nil {
-		return 0
-	}
-	return m.connections[endpoint.URL.String()]
-}
-
-func createTestLogger() *logger.StyledLogger {
-	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
-	log, _, _ := logger.New(loggerCfg)
-	return logger.NewStyledLogger(log, theme.Default())
-}
-
-func createTestEndpoint(name, urlStr string, status domain.EndpointStatus) *domain.Endpoint {
-	testURL, _ := url.Parse(urlStr)
-	return &domain.Endpoint{
-		Name:   name,
-		URL:    testURL,
-		Status: status,
-	}
-}
-
-func TestSherpaProxyService_ProxyRequest_Success(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "ok"}`))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 8192,
-	}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("ProxyRequest failed: %v", err)
-	}
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
-	if stats.TotalBytes == 0 {
-		t.Error("Expected non-zero bytes transferred")
-	}
-	if !strings.Contains(w.Body.String(), "ok") {
-		t.Error("Response body not proxied correctly")
-	}
-
-	if selector.GetConnectionCount(endpoint) != 0 {
-		t.Error("Connection count should be 0 after request completion")
-	}
-}
-
-func TestSherpaProxyService_ProxyRequest_NoEndpoints(t *testing.T) {
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{}}
-	selector := &mockEndpointSelector{}
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err == nil {
-		t.Error("Expected error when no endpoints available")
-	}
-	if !strings.Contains(err.Error(), "no healthy endpoints available") {
-		t.Errorf("Unexpected error message: %v", err)
-	}
-}
-
-func TestSherpaProxyService_ProxyRequest_DiscoveryError(t *testing.T) {
-	discovery := &mockDiscoveryService{err: fmt.Errorf("discovery failed")}
-	selector := &mockEndpointSelector{}
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err == nil {
-		t.Error("Expected error when discovery fails")
-	}
-	if !strings.Contains(err.Error(), "failed to get healthy endpoints") {
-		t.Errorf("Unexpected error message: %v", err)
-	}
-}
-
-func TestSherpaProxyService_ProxyRequest_SelectorError(t *testing.T) {
-	endpoint := createTestEndpoint("test", "http://localhost:11434", domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{err: fmt.Errorf("selection failed")}
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err == nil {
-		t.Error("Expected error when selector fails")
-	}
-	if !strings.Contains(err.Error(), "failed to select endpoint") {
-		t.Errorf("Unexpected error message: %v", err)
-	}
-}
-
-func TestSherpaProxyService_ProxyRequest_UpstreamError(t *testing.T) {
-	// endpoint pointing to non-existent server
-	endpoint := createTestEndpoint("test", "http://localhost:99999", domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{ResponseTimeout: 1 * time.Second}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err == nil {
-		t.Error("Expected error when upstream is unreachable")
-	}
-	if !strings.Contains(err.Error(), "upstream request failed") {
-		t.Errorf("Unexpected error message: %v", err)
-	}
-}
-
-func TestSherpaProxyService_ProxyRequest_StreamingResponse(t *testing.T) {
-	// upstream that streams response
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-
-		flusher := w.(http.Flusher)
-		for i := 0; i < 5; i++ {
-			fmt.Fprintf(w, "chunk %d\n", i)
-			flusher.Flush()
-			time.Sleep(10 * time.Millisecond)
-		}
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      5 * time.Second,
-		StreamBufferSize: 1024,
-	}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/stream", nil)
-	w := httptest.NewRecorder()
-
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("ProxyRequest failed: %v", err)
-	}
-	if stats.TotalBytes == 0 {
-		t.Error("Expected non-zero bytes for streaming response")
-	}
-	if !strings.Contains(w.Body.String(), "chunk 0") {
-		t.Error("Streaming response not received correctly")
-	}
-}
-
-func TestSherpaProxyService_ProxyRequest_ClientDisconnection(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
-		w.WriteHeader(http.StatusOK)
-
-		data := strings.Repeat("chunk of data ", 100) // ~1.3KB
-		w.Write([]byte(data))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{
-		ResponseTimeout: 30 * time.Second,
-		ReadTimeout:     5 * time.Second,
-	}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/data", nil)
-	w := httptest.NewRecorder()
-
-	// This should succeed and transfer data
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("ProxyRequest failed: %v", err)
-	}
-
-	if stats.TotalBytes == 0 {
-		t.Error("Expected bytes to be transferred")
-	}
-
-	if stats.TotalBytes < 1000 {
-		t.Errorf("Expected substantial data transfer, got %d bytes", stats.TotalBytes)
-	}
-
-	responseBody := w.Body.String()
-	if !strings.Contains(responseBody, "chunk of data") {
-		t.Error("Expected response content not found")
-	}
-}
-
+// TestSherpaProxyService_ClientDisconnectLogic tests the specific logic for handling client disconnections
 func TestSherpaProxyService_ClientDisconnectLogic(t *testing.T) {
-	// client disconnect decision logic separately
 	proxy := &SherpaProxyService{}
 
 	testCases := []struct {
@@ -339,6 +28,10 @@ func TestSherpaProxyService_ClientDisconnectLogic(t *testing.T) {
 		{"Small response, recent activity", 500, 2 * time.Second, false},
 		{"Large response, stale", 2000, 10 * time.Second, false},
 		{"No data", 0, 1 * time.Second, false},
+		{"Exactly threshold bytes, recent", ClientDisconnectionBytesThreshold, 2 * time.Second, false},
+		{"Just over threshold, recent", ClientDisconnectionBytesThreshold + 1, 2 * time.Second, true},
+		{"Large response, exactly threshold time", 2000, ClientDisconnectionTimeThreshold, false},
+		{"Large response, just under threshold time", 2000, ClientDisconnectionTimeThreshold - time.Millisecond, true},
 	}
 
 	for _, tc := range testCases {
@@ -351,38 +44,7 @@ func TestSherpaProxyService_ClientDisconnectLogic(t *testing.T) {
 	}
 }
 
-func TestSherpaProxyService_ProxyRequest_UpstreamTimeout(t *testing.T) {
-	// Create upstream that takes too long to respond
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(200 * time.Millisecond) // Longer than timeout
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("too late baby, it's too late"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{
-		ResponseTimeout: 100 * time.Millisecond, // Shorten timeout
-		ReadTimeout:     50 * time.Millisecond,
-	}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/slow", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err == nil {
-		t.Error("Expected timeout error")
-	}
-	if !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), "context deadline exceeded") {
-		t.Errorf("Expected timeout error, got: %v", err)
-	}
-}
-
+// TestSherpaProxyService_StripRoutePrefix tests the route prefix stripping functionality
 func TestSherpaProxyService_StripRoutePrefix(t *testing.T) {
 	proxy := &SherpaProxyService{
 		configuration: &Configuration{ProxyPrefix: constants.ProxyPathPrefix},
@@ -397,7 +59,12 @@ func TestSherpaProxyService_StripRoutePrefix(t *testing.T) {
 		{"/olla/api/chat", "/olla/", "/api/chat"},
 		{"/api/models", "/proxy/", "/api/models"}, // No prefix to strip
 		{"/proxy/", "/proxy/", "/"},
-		{"/proxy", "/proxy/", "/proxy"}, // Doesn't match prefix exactly, so no stripping
+		{"/proxy", "/proxy/", "/proxy"}, // Doesn't match prefix exactly
+		{"", "/proxy/", ""},             // Empty path stays empty
+		{"/proxy/api/v1/models", "/proxy/", "/api/v1/models"},
+		{"/different/api/models", "/proxy/", "/different/api/models"}, // Different prefix
+		{"/proxy/api", "/proxy/", "/api"},
+		{"/proxyapi/models", "/proxy/", "/proxyapi/models"}, // Partial match shouldn't strip
 	}
 
 	for _, tc := range testCases {
@@ -412,6 +79,22 @@ func TestSherpaProxyService_StripRoutePrefix(t *testing.T) {
 	}
 }
 
+// TestSherpaProxyService_StripRoutePrefix_NoContext tests behaviour when context doesn't contain prefix
+func TestSherpaProxyService_StripRoutePrefix_NoContext(t *testing.T) {
+	proxy := &SherpaProxyService{
+		configuration: &Configuration{ProxyPrefix: constants.ProxyPathPrefix},
+	}
+
+	testPath := "/proxy/api/models"
+	ctx := context.Background() // No prefix in context
+
+	result := proxy.stripRoutePrefix(ctx, testPath)
+	if result != testPath {
+		t.Errorf("Expected original path %q when no prefix in context, got %q", testPath, result)
+	}
+}
+
+// TestSherpaProxyService_CopyHeaders tests header copying functionality
 func TestSherpaProxyService_CopyHeaders(t *testing.T) {
 	proxy := &SherpaProxyService{}
 
@@ -419,13 +102,16 @@ func TestSherpaProxyService_CopyHeaders(t *testing.T) {
 	originalReq.Header.Set("Content-Type", "application/json")
 	originalReq.Header.Set("Authorization", "Bearer token123")
 	originalReq.Header.Set("X-Custom-Header", "custom-value")
+	originalReq.Header.Set("User-Agent", "test-client/1.0")
+	originalReq.Header.Add("Accept", "application/json")
+	originalReq.Header.Add("Accept", "text/plain") // Multiple values
 	originalReq.RemoteAddr = "192.168.1.100:12345"
 
 	proxyReq := httptest.NewRequest("POST", "http://upstream/api/test", strings.NewReader("test body"))
 
 	proxy.copyHeaders(proxyReq, originalReq)
 
-	// make sure original headers were copied
+	// Check original headers were copied
 	if proxyReq.Header.Get("Content-Type") != "application/json" {
 		t.Error("Content-Type header not copied")
 	}
@@ -435,8 +121,17 @@ func TestSherpaProxyService_CopyHeaders(t *testing.T) {
 	if proxyReq.Header.Get("X-Custom-Header") != "custom-value" {
 		t.Error("Custom header not copied")
 	}
+	if proxyReq.Header.Get("User-Agent") != "test-client/1.0" {
+		t.Error("User-Agent header not copied")
+	}
 
-	// forwarding headers we're added
+	// Check multiple values are preserved
+	acceptValues := proxyReq.Header["Accept"]
+	if len(acceptValues) != 2 || acceptValues[0] != "application/json" || acceptValues[1] != "text/plain" {
+		t.Errorf("Accept header values not copied correctly, got %v", acceptValues)
+	}
+
+	// Check forwarding headers were added
 	if proxyReq.Header.Get("X-Forwarded-Host") != originalReq.Host {
 		t.Error("X-Forwarded-Host not set correctly")
 	}
@@ -452,134 +147,100 @@ func TestSherpaProxyService_CopyHeaders(t *testing.T) {
 	if proxyReq.Header.Get("Via") == "" {
 		t.Error("Via header not set")
 	}
+
+	// Check version info is included
+	proxyByHeader := proxyReq.Header.Get("X-Proxied-By")
+	if !strings.Contains(proxyByHeader, "/") {
+		t.Error("X-Proxied-By should contain version info")
+	}
+	viaHeader := proxyReq.Header.Get("Via")
+	if !strings.Contains(viaHeader, "/") {
+		t.Error("Via header should contain version info")
+	}
 }
 
-func TestSherpaProxyService_ConnectionTracking(t *testing.T) {
+// TestSherpaProxyService_CopyHeaders_HTTPS tests HTTPS protocol detection
+func TestSherpaProxyService_CopyHeaders_HTTPS(t *testing.T) {
+	proxy := &SherpaProxyService{}
+
+	originalReq := httptest.NewRequest("GET", "https://example.com/api/test", nil)
+	originalReq.TLS = &tls.ConnectionState{} // Simulate HTTPS
+	originalReq.RemoteAddr = "10.0.0.1:54321"
+
+	proxyReq := httptest.NewRequest("GET", "http://upstream/api/test", nil)
+
+	proxy.copyHeaders(proxyReq, originalReq)
+
+	if proxyReq.Header.Get("X-Forwarded-Proto") != "https" {
+		t.Errorf("Expected X-Forwarded-Proto to be 'https', got '%s'", proxyReq.Header.Get("X-Forwarded-Proto"))
+	}
+	if proxyReq.Header.Get("X-Forwarded-For") != "10.0.0.1" {
+		t.Errorf("Expected X-Forwarded-For to be '10.0.0.1', got '%s'", proxyReq.Header.Get("X-Forwarded-For"))
+	}
+}
+
+// TestSherpaProxyService_CopyHeaders_MalformedRemoteAddr tests handling of malformed remote addresses
+func TestSherpaProxyService_CopyHeaders_MalformedRemoteAddr(t *testing.T) {
+	proxy := &SherpaProxyService{}
+
+	originalReq := httptest.NewRequest("GET", "/api/test", nil)
+	originalReq.RemoteAddr = "malformed-address" // No port
+
+	proxyReq := httptest.NewRequest("GET", "http://upstream/api/test", nil)
+
+	proxy.copyHeaders(proxyReq, originalReq)
+
+	// X-Forwarded-For should not be set if RemoteAddr is malformed
+	if proxyReq.Header.Get("X-Forwarded-For") != "" {
+		t.Errorf("Expected X-Forwarded-For to be empty for malformed address, got '%s'", proxyReq.Header.Get("X-Forwarded-For"))
+	}
+
+	// Other headers should still be set
+	if proxyReq.Header.Get("X-Forwarded-Host") == "" {
+		t.Error("X-Forwarded-Host should still be set")
+	}
+	if proxyReq.Header.Get("X-Forwarded-Proto") == "" {
+		t.Error("X-Forwarded-Proto should still be set")
+	}
+}
+
+// TestSherpaProxyService_CopyHeaders_EmptyHeaders tests behaviour with no headers
+func TestSherpaProxyService_CopyHeaders_EmptyHeaders(t *testing.T) {
+	proxy := &SherpaProxyService{}
+
+	originalReq := httptest.NewRequest("GET", "/api/test", nil)
+	originalReq.RemoteAddr = "192.168.1.1:8080"
+
+	proxyReq := httptest.NewRequest("GET", "http://upstream/api/test", nil)
+
+	proxy.copyHeaders(proxyReq, originalReq)
+
+	// Standard forwarding headers should still be added
+	if proxyReq.Header.Get("X-Forwarded-Host") == "" {
+		t.Error("X-Forwarded-Host should be set even with no original headers")
+	}
+	if proxyReq.Header.Get("X-Forwarded-Proto") != "http" {
+		t.Error("X-Forwarded-Proto should be 'http'")
+	}
+	if proxyReq.Header.Get("X-Forwarded-For") != "192.168.1.1" {
+		t.Error("X-Forwarded-For should be '192.168.1.1'")
+	}
+}
+
+// TestSherpaProxyService_StreamResponse_ReadTimeout tests read timeout behaviour
+func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
+	// Create a slow upstream that takes longer than read timeout
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	// initial connection count
-	if selector.GetConnectionCount(endpoint) != 0 {
-		t.Error("Initial connection count should be 0")
-	}
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-	if err != nil {
-		t.Fatalf("ProxyRequest failed: %v", err)
-	}
-
-	// correction was tracked and released
-	if selector.GetConnectionCount(endpoint) != 0 {
-		t.Error("Connection count should be 0 after request completion")
-	}
-}
-
-func TestSherpaProxyService_ConcurrentRequests(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(50 * time.Millisecond) // faken some processing time :D
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{ResponseTimeout: 30 * time.Second}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	const numRequests = 10
-	var wg sync.WaitGroup
-	errors := make(chan error, numRequests)
-
-	for i := 0; i < numRequests; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-
-			req := httptest.NewRequest("GET", fmt.Sprintf("/api/test%d", id), nil)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
-			if err != nil {
-				errors <- err
-			}
-		}(i)
-	}
-
-	wg.Wait()
-	close(errors)
-
-	for err := range errors {
-		t.Errorf("Concurrent request failed: %v", err)
-	}
-
-	stats, err := proxy.GetStats(context.Background())
-	if err != nil {
-		t.Fatalf("GetStats failed: %v", err)
-	}
-
-	if stats.TotalRequests != numRequests {
-		t.Errorf("Expected %d total requests, got %d", numRequests, stats.TotalRequests)
-	}
-	if stats.SuccessfulRequests != numRequests {
-		t.Errorf("Expected %d successful requests, got %d", numRequests, stats.SuccessfulRequests)
-	}
-	if stats.FailedRequests != 0 {
-		t.Errorf("Expected 0 failed requests, got %d", stats.FailedRequests)
-	}
-}
-
-func TestSherpaProxyService_GetStats(t *testing.T) {
-	discovery := &mockDiscoveryService{}
-	selector := &mockEndpointSelector{}
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	// Initial stats should be zero
-	stats, err := proxy.GetStats(context.Background())
-	if err != nil {
-		t.Fatalf("GetStats failed: %v", err)
-	}
-
-	if stats.TotalRequests != 0 || stats.SuccessfulRequests != 0 || stats.FailedRequests != 0 {
-		t.Error("Initial stats should be zero")
-	}
-	if stats.AverageLatency != 0 {
-		t.Error("Initial average latency should be zero")
-	}
-}
-
-func TestSherpaProxyService_LargePayloadHandling(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 
-		// chunking response to simulate large payload
-		flusher := w.(http.Flusher)
-		for i := 0; i < 100; i++ {
-			chunk := fmt.Sprintf(`{"chunk": %d, "data": "%s"}`, i, strings.Repeat("x", 1000))
-			w.Write([]byte(chunk))
-			flusher.Flush()
-			if i%10 == 0 {
-				time.Sleep(time.Millisecond) // Realistic chunking delay, thats what they tell me
-			}
+		// Send some data then pause longer than read timeout
+		w.Write([]byte("initial data"))
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
 		}
+		time.Sleep(200 * time.Millisecond) // Longer than our test timeout
+		w.Write([]byte("more data"))
 	}))
 	defer upstream.Close()
 
@@ -587,39 +248,116 @@ func TestSherpaProxyService_LargePayloadHandling(t *testing.T) {
 	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 	selector := &mockEndpointSelector{endpoint: endpoint}
 	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
+		ResponseTimeout:  5 * time.Second,
+		ReadTimeout:      100 * time.Millisecond, // Short timeout
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(discovery, selector, config, createTestLogger())
+
+	req := httptest.NewRequest("GET", "/api/stream", nil)
+	w := httptest.NewRecorder()
+
+	_, err := proxy.ProxyRequest(context.Background(), w, req)
+
+	// Should get read timeout error
+	if err == nil {
+		t.Error("Expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "stopped responding") {
+		t.Errorf("Expected timeout error message, got: %v", err)
+	}
+
+	// Should have received initial data
+	if !strings.Contains(w.Body.String(), "initial data") {
+		t.Error("Should have received initial data before timeout")
+	}
+}
+
+// TestSherpaProxyService_BufferPooling tests buffer pool behaviour
+func TestSherpaProxyService_BufferPooling(t *testing.T) {
+	config := &Configuration{StreamBufferSize: 4096}
+	proxy := NewSherpaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestLogger())
+
+	// Get buffers from pool
+	buf1 := proxy.bufferPool.Get().([]byte)
+	buf2 := proxy.bufferPool.Get().([]byte)
+
+	// The Sherpa implementation uses DefaultStreamBufferSize for the buffer pool
+	// regardless of the configured StreamBufferSize
+	expectedSize := DefaultStreamBufferSize
+
+	if len(buf1) != expectedSize {
+		t.Errorf("Expected buffer size %d, got %d", expectedSize, len(buf1))
+	}
+	if len(buf2) != expectedSize {
+		t.Errorf("Expected buffer size %d, got %d", expectedSize, len(buf2))
+	}
+
+	// Return to pool
+	proxy.bufferPool.Put(buf1)
+	proxy.bufferPool.Put(buf2)
+
+	// Get again - should reuse
+	buf3 := proxy.bufferPool.Get().([]byte)
+	if len(buf3) != expectedSize {
+		t.Errorf("Expected reused buffer size %d, got %d", expectedSize, len(buf3))
+	}
+}
+
+// TestSherpaProxyService_ConfigDefaults tests default configuration values
+func TestSherpaProxyService_ConfigDefaults(t *testing.T) {
+	config := &Configuration{} // Empty config
+	proxy := NewSherpaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestLogger())
+
+	// Check transport has sensible defaults
+	if proxy.transport.MaxIdleConns != DefaultMaxIdleConns {
+		t.Errorf("Expected MaxIdleConns %d, got %d", DefaultMaxIdleConns, proxy.transport.MaxIdleConns)
+	}
+	if proxy.transport.IdleConnTimeout != DefaultIdleConnTimeout {
+		t.Errorf("Expected IdleConnTimeout %v, got %v", DefaultIdleConnTimeout, proxy.transport.IdleConnTimeout)
+	}
+	if proxy.transport.TLSHandshakeTimeout != DefaultTLSHandshakeTimeout {
+		t.Errorf("Expected TLSHandshakeTimeout %v, got %v", DefaultTLSHandshakeTimeout, proxy.transport.TLSHandshakeTimeout)
+	}
+}
+
+// TestSherpaProxyService_UpdateConfig tests configuration updates
+func TestSherpaProxyService_UpdateConfig(t *testing.T) {
+	initialConfig := &Configuration{
+		ResponseTimeout:  10 * time.Second,
 		ReadTimeout:      5 * time.Second,
 		StreamBufferSize: 4096,
 	}
+	proxy := NewSherpaService(&mockDiscoveryService{}, &mockEndpointSelector{}, initialConfig, createTestLogger())
 
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(`{"prompt": "test"}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("Large payload proxy failed: %v", err)
+	// Update config
+	newConfig := &Configuration{
+		ResponseTimeout:  20 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 8192,
 	}
-	if stats.TotalBytes < 100000 {
-		t.Errorf("Expected ~100KB, got %d bytes", stats.TotalBytes)
+
+	proxy.UpdateConfig(newConfig)
+
+	// Check config was updated
+	if proxy.configuration.ResponseTimeout != 20*time.Second {
+		t.Errorf("Expected ResponseTimeout 20s, got %v", proxy.configuration.ResponseTimeout)
 	}
-	if !strings.Contains(w.Body.String(), `"chunk": 99`) {
-		t.Error("Final chunk not received")
+	if proxy.configuration.ReadTimeout != 10*time.Second {
+		t.Errorf("Expected ReadTimeout 10s, got %v", proxy.configuration.ReadTimeout)
+	}
+	if proxy.configuration.StreamBufferSize != 8192 {
+		t.Errorf("Expected StreamBufferSize 8192, got %d", proxy.configuration.StreamBufferSize)
 	}
 }
 
-func TestSherpaProxyService_RequestBody(t *testing.T) {
-	var receivedBody string
+// TestSherpaProxyService_StatsAccuracy tests statistics accuracy
+func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		receivedBody = string(body)
-
-		w.Header().Set("Content-Type", "application/json")
+		time.Sleep(50 * time.Millisecond) // Add some latency
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"status": "received"}`))
+		w.Write([]byte("success"))
 	}))
 	defer upstream.Close()
 
@@ -628,257 +366,46 @@ func TestSherpaProxyService_RequestBody(t *testing.T) {
 	selector := &mockEndpointSelector{endpoint: endpoint}
 	config := &Configuration{}
 
-	proxy := NewService(discovery, selector, config, createTestLogger())
+	proxy := NewSherpaService(discovery, selector, config, createTestLogger())
 
-	requestBody := `{"model": "llama4", "prompt": "benny llama?"}`
-	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(requestBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("Request body proxy failed: %v", err)
-	}
-	if receivedBody != requestBody {
-		t.Errorf("Request body not forwarded correctly. Expected: %s, Got: %s", requestBody, receivedBody)
-	}
-}
-
-func TestSherpaProxyService_ErrorStatusCodes(t *testing.T) {
-	testCases := []struct {
-		upstreamStatus int
-		expectedStatus int
-	}{
-		{http.StatusBadRequest, http.StatusBadRequest},
-		{http.StatusUnauthorized, http.StatusUnauthorized},
-		{http.StatusNotFound, http.StatusNotFound},
-		{http.StatusInternalServerError, http.StatusInternalServerError},
-		{http.StatusServiceUnavailable, http.StatusServiceUnavailable},
-	}
-
-	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("status_%d", tc.upstreamStatus), func(t *testing.T) {
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tc.upstreamStatus)
-				w.Write([]byte(`{"error": "upstream error"}`))
-			}))
-			defer upstream.Close()
-
-			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-			discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-			selector := &mockEndpointSelector{endpoint: endpoint}
-			config := &Configuration{}
-
-			proxy := NewService(discovery, selector, config, createTestLogger())
-
-			req := httptest.NewRequest("GET", "/api/test", nil)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-			if err != nil {
-				t.Fatalf("Proxy request failed: %v", err)
-			}
-			if w.Code != tc.expectedStatus {
-				t.Errorf("Expected status %d, got %d", tc.expectedStatus, w.Code)
-			}
-		})
-	}
-}
-
-func TestSherpaProxyService_QueryParameters(t *testing.T) {
-	var receivedQuery string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedQuery = r.URL.RawQuery
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/models?format=json&stream=true", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("Query parameter proxy failed: %v", err)
-	}
-	if receivedQuery != "format=json&stream=true" {
-		t.Errorf("Query parameters not forwarded. Expected: format=json&stream=true, Got: %s", receivedQuery)
-	}
-}
-
-func TestSherpaProxyService_HTTPMethods(t *testing.T) {
-	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
-
-	for _, method := range methods {
-		t.Run(method, func(t *testing.T) {
-			var receivedMethod string
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				receivedMethod = r.Method
-				w.WriteHeader(http.StatusOK)
-				if method != "HEAD" {
-					w.Write([]byte("ok"))
-				}
-			}))
-			defer upstream.Close()
-
-			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-			discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-			selector := &mockEndpointSelector{endpoint: endpoint}
-			config := &Configuration{}
-
-			proxy := NewService(discovery, selector, config, createTestLogger())
-
-			var body io.Reader
-			if method == "POST" || method == "PUT" || method == "PATCH" {
-				body = strings.NewReader(`{"test": "data"}`)
-			}
-
-			req := httptest.NewRequest(method, "/api/test", body)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-			if err != nil {
-				t.Fatalf("HTTP method %s proxy failed: %v", method, err)
-			}
-			if receivedMethod != method {
-				t.Errorf("HTTP method not preserved. Expected: %s, Got: %s", method, receivedMethod)
-			}
-		})
-	}
-}
-
-func TestSherpaProxyService_MultipleEndpoints(t *testing.T) {
-	// multiple upstream servers
-	upstream1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("upstream1"))
-	}))
-	defer upstream1.Close()
-
-	upstream2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("upstream2"))
-	}))
-	defer upstream2.Close()
-
-	endpoints := []*domain.Endpoint{
-		createTestEndpoint("test1", upstream1.URL, domain.StatusHealthy),
-		createTestEndpoint("test2", upstream2.URL, domain.StatusHealthy),
-	}
-
-	discovery := &mockDiscoveryService{endpoints: endpoints}
-	selector := &mockEndpointSelector{} // Will select first available
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("Multiple endpoints proxy failed: %v", err)
-	}
-
-	response := w.Body.String()
-	if response != "upstream1" && response != "upstream2" {
-		t.Errorf("Unexpected response from endpoints: %s", response)
-	}
-}
-
-func TestSherpaProxyService_SlowUpstream(t *testing.T) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond) // fake processing time again, like a pro
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("processed"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{
-		ResponseTimeout: 5 * time.Second, // Generous timeout
-		ReadTimeout:     2 * time.Second,
-	}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	start := time.Now()
-	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(`{"prompt": "test"}`))
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-	elapsed := time.Since(start)
-
-	if err != nil {
-		t.Fatalf("Slow upstream proxy failed: %v", err)
-	}
-	if elapsed < 100*time.Millisecond {
-		t.Error("Request completed too quickly - upstream delay not respected")
-	}
-	if w.Body.String() != "processed" {
-		t.Error("Response not received from slow upstream")
-	}
-}
-
-func TestSherpaProxyService_ConnectionPooling(t *testing.T) {
-	callCount := int32(0)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&callCount, 1)
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "call_%d", atomic.LoadInt32(&callCount))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{}
-
-	proxy := NewService(discovery, selector, config, createTestLogger())
-
-	// multiple requests quickly to test connection reuse
-	const numRequests = 5
-	var wg sync.WaitGroup
-	responses := make([]string, numRequests)
-
-	for i := 0; i < numRequests; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-
-			req := httptest.NewRequest("GET", "/api/test", nil)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
-			if err != nil {
-				t.Errorf("Request %d failed: %v", index, err)
-				return
-			}
-			responses[index] = w.Body.String()
-		}(i)
-	}
-
-	wg.Wait()
-
-	for i, response := range responses {
-		if response == "" {
-			t.Errorf("Request %d got empty response", i)
+	// Make some successful requests
+	for i := 0; i < 3; i++ {
+		req := httptest.NewRequest("GET", "/api/test", nil)
+		w := httptest.NewRecorder()
+		_, err := proxy.ProxyRequest(context.Background(), w, req)
+		if err != nil {
+			t.Fatalf("Request %d failed: %v", i, err)
 		}
 	}
 
-	if atomic.LoadInt32(&callCount) != numRequests {
-		t.Errorf("Expected %d upstream calls, got %d", numRequests, atomic.LoadInt32(&callCount))
+	// Make a failed request (unreachable endpoint)
+	failEndpoint := createTestEndpoint("fail", "http://localhost:99999", domain.StatusHealthy)
+	discovery.endpoints = []*domain.Endpoint{failEndpoint}
+	selector.endpoint = failEndpoint
+
+	req := httptest.NewRequest("GET", "/api/test", nil)
+	w := httptest.NewRecorder()
+	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	if err == nil {
+		t.Error("Expected failure for unreachable endpoint")
+	}
+
+	// Check stats
+	stats, err := proxy.GetStats(context.Background())
+	if err != nil {
+		t.Fatalf("GetStats failed: %v", err)
+	}
+
+	if stats.TotalRequests != 4 {
+		t.Errorf("Expected 4 total requests, got %d", stats.TotalRequests)
+	}
+	if stats.SuccessfulRequests != 3 {
+		t.Errorf("Expected 3 successful requests, got %d", stats.SuccessfulRequests)
+	}
+	if stats.FailedRequests != 1 {
+		t.Errorf("Expected 1 failed request, got %d", stats.FailedRequests)
+	}
+	if stats.AverageLatency == 0 {
+		t.Error("Expected non-zero average latency")
 	}
 }
