@@ -1,18 +1,10 @@
 <div align="center">
-    <img src="assets/images/banner.png" width="360" height="187" alt="Olla" />
+    <img src="assets/images/banner.png" width="480" height="249" alt="Olla - Smart LLM Load Balancer & Proxy" />
   <p>
-    <a href="https://github.com/thushan/olla/blob/master/LICENSE">
-      <img src="https://img.shields.io/github/license/thushan/olla" alt="License">
-    </a>
-    <a href="https://github.com/thushan/olla/actions/workflows/ci.yml">
-      <img src="https://github.com/thushan/olla/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI">
-    </a>
-    <a href="https://goreportcard.com/report/github.com/thushan/olla">
-      <img src="https://goreportcard.com/badge/github.com/thushan/olla" alt="Go Report Card">
-    </a>
-    <a href="https://github.com/thushan/olla/releases/latest">
-      <img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release">
-    </a>
+    <a href="https://github.com/thushan/olla/blob/master/LICENSE"><img src="https://img.shields.io/github/license/thushan/olla" alt="License"></a>
+    <a href="https://github.com/thushan/olla/actions/workflows/ci.yml"><img src="https://github.com/thushan/olla/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+    <a href="https://goreportcard.com/report/github.com/thushan/olla"><img src="https://goreportcard.com/badge/github.com/thushan/olla" alt="Go Report Card"></a>
+    <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a>
   </p>
 </div>
 
@@ -55,7 +47,7 @@ Whether you're running an LLM inference server on your workstation and laptop, o
 - **Concurrent**: Handles thousands of simultaneous streaming connections
 - **Resource efficient**: Stable memory usage under load with automatic clean-up
 
-## 🔧 **Optimized for LLMs**
+## 🔧 **Optimised for LLMs**
 - **Streaming-first**: Immediate response streaming without buffering delays
 - **Long-running requests**: Optimised timeouts for extended LLM inference times
 - **Connection pooling**: Persistent connections to backend endpoints reduce latency
@@ -65,12 +57,15 @@ Whether you're running an LLM inference server on your workstation and laptop, o
 
 ### Docker (Recommended)
 
+Olla comes with a pre-configured docker configuration which proxies your local Ollama or LM Studio instance.
+
 ```bash
 # Pull and run Olla
 docker run -d \
   --name olla \
   -p 19841:19841 \
   -e OLLA_SERVER_HOST=0.0.0.0 \
+  -e OLLA_CONFIG_FILE=config/docker.yaml \
   ghcr.io/thushan/olla:latest
 
 # Check if it's running
@@ -82,7 +77,6 @@ curl http://localhost:19841/internal/health
 Create a `docker-compose.yml`:
 
 ```yaml
-version: '3.8'
 services:
   olla:
     image: ghcr.io/thushan/olla:latest
@@ -91,6 +85,7 @@ services:
     environment:
       - OLLA_SERVER_HOST=0.0.0.0
       - OLLA_LOGGING_LEVEL=info
+      - OLLA_CONFIG_FILE=config/docker.yaml
     volumes:
       - ./config:/app/config
       - ./logs:/app/logs
@@ -100,6 +95,32 @@ services:
 Then run:
 ```bash
 docker-compose up -d
+```
+
+### Local Binary
+
+You can also run Olla directly on your machine without Docker. 
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
+```
+
+It will download the latest version & extract it to its own folder for you.
+
+If you prefer running Olla directly on your machine, download a pre-built binary.
+
+1. Download the latest release from [Releases](https://github.com/thushan/olla/releases)
+2. Extract the archive and navigate to the directory 
+3. Verify the configuration in `config/config.yaml` and run:
+
+```bash
+./olla
+```
+
+Alternatively, you can install it via go:
+
+```bash
+go install github.com/thushan/olla@latest
 ```
 
 ### Build from Source

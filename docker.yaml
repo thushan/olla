@@ -1,6 +1,6 @@
-# Olla Configuration (default)
-# This file is used to configure the Olla server and its components for local deployment.
-# By default, it uses localhost for Ollama and LM Studio instances.
+# Olla Configuration (docker)
+# This file is used to configure the Olla server and its components for Docker deployment.
+# By default, it uses the host for Ollama and LM Studio instances.
 server:
   host: "localhost"
   port: 19841
@@ -41,7 +41,7 @@ discovery:
   refresh_interval: 30s
   static:
     endpoints:
-      - url: "http://localhost:11434"
+      - url: "http://host.docker.internal:11434"
         name: "local-ollama"
         type: "ollama"
         priority: 100
@@ -49,7 +49,7 @@ discovery:
         health_check_url: "/"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://localhost:1234"
+      - url: "http://host.docker.internal:1234"
         name: "local-lm-studio"
         type: "lm-studio"
         priority: 100

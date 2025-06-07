@@ -11,8 +11,9 @@ project_name: olla
 before:
   hooks:
     - go mod download
-    - mkdir -p config logs
+    - mkdir -p {config,logs}
     - cp default.yaml config/config.yaml
+    - cp docker.yaml config/docker.yaml
     - touch logs/.gitkeep
 
 release:
@@ -52,6 +53,7 @@ builds:
 #    gcflags:
 #      - all=-trimpath={{ dir (default "." .Env.PWD) }}
 
+
 dockers:
   - image_templates:
       - "ghcr.io/thushan/olla:latest"
@@ -84,7 +86,7 @@ archives:
   - files:
       - LICENSE
       - readme.md
-      - config/
+      - config/**
       - logs/.gitkeep
       - default.yaml
     format_overrides:
