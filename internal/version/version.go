@@ -2,10 +2,10 @@ package version
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/util"
 	"log"
 	"strings"
 
+	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/theme"
 )
 

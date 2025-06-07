@@ -140,6 +140,7 @@ func fastReplaceAttr(groups []string, a slog.Attr) slog.Attr {
 				return slog.Attr{Key: a.Key, Value: slog.StringValue(stripAnsiCodes(str))}
 			}
 		case slog.KindAny:
+		default:
 			return slog.Attr{Key: a.Key, Value: slog.StringValue(fmt.Sprintf("%v", a.Value.Any()))}
 		}
 	}
