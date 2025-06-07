@@ -65,9 +65,9 @@ func getSourceIP(r *http.Request) net.IP {
 }
 
 func StripRoutePrefix(ctx context.Context, path, prefix string) string {
-	if prefix, ok := ctx.Value(prefix).(string); ok {
-		if strings.HasPrefix(path, prefix) {
-			stripped := path[len(prefix):]
+	if routePrefix, ok := ctx.Value(prefix).(string); ok {
+		if strings.HasPrefix(path, routePrefix) {
+			stripped := path[len(routePrefix):]
 			if stripped == "" || stripped[0] != '/' {
 				stripped = "/" + stripped
 			}

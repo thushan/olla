@@ -29,12 +29,12 @@ type ProxyStatusResponse struct {
 	MaxLatency         int64  `json:"max_latency_ms"`
 }
 type OllaStatusResponse struct {
+	Endpoints          []EndpointStatusResponse `json:"endpoints"`
+	Proxy              ProxyStatusResponse      `json:"proxy"`
 	TotalEndpoints     int                      `json:"total_endpoints"`
 	HealthyEndpoints   int                      `json:"healthy_endpoints"`
 	UnhealthyEndpoints int                      `json:"unhealthy_endpoints"`
 	RoutableEndpoints  int                      `json:"routable_endpoints"`
-	Endpoints          []EndpointStatusResponse `json:"endpoints"`
-	Proxy              ProxyStatusResponse      `json:"proxy"`
 }
 
 // statusHandler handles endpoint status requests
