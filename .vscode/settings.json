@@ -1,0 +1,8 @@
+{    
+    "excalidraw.theme": "auto",
+    "excalidraw.image": {        
+        "exportScale": 1,
+        "exportBackground": false,
+        "exportWithDarkMode": true
+    },
+}

@@ -9,20 +9,25 @@
 </div>
 
 > [!IMPORTANT]  
-> Olla is currently in **in-development**. While it is stable and usable, we are still finalising some features and optimisations. Your feedback is invaluable!
+> Olla is currently **in-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
 
-Olla is a high-performance load balancer and proxy for your LLM infrastructure. Think of it as your friendly neighbourhood sherpa, guiding AI requests across multiple LLM inference nodes such as Ollama, LM-Studio, or other OpenAI compatible instances with the grace of a mountain guide navigating treacherous terrain.
+Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including Ollama, LM Studio, and OpenAI-compatible endpoints out of the box, with more front-ends coming soon.
 
-Whether you're running an LLM inference server on your workstation and laptop, or managing a fleet of LLM servers, Olla ensures your requests always find the best available endpoint—automatically failing over when nodes go offline, prioritising your most powerful hardware, and keeping everything humming along smoothly.
+![Olla Usecase](assets/diagrams/usecases.excalidraw.png)
+
+Whether you're running workloads on laptops, workstations, or clustered servers, Olla dynamically selects the best endpoint using configurable priorities, health checks, and load-aware strategies. With built-in failover, adaptive routing, and continuous monitoring, it ensures resilience, performance, and minimal operational complexity. Single CLI application and config file is all you need to go Olla!
 
 ## ✨ Features
+
+We're still busy working on features and would love to hear your thoughts on what you'd like from Olla in the future!
 
 ### 🎯 **Smart Load Balancing**
 - **Priority-based routing**: Configure node priorities (workstation first, laptop second) with automatic failover
 - **Multiple strategies**: Round-robin, least connections, and priority-aware load balancing
 - **Health-aware routing**: Only routes to healthy endpoints, with automatic recovery detection
+- **Model-aware routing**: 🚧 Intelligently route to endpoints which have the model you've requested
 
-### 🛡️ **Production-Ready Security**
+### 🛡️ **In-built Security**
 - **Rate limiting**: Per-IP and global request limits with burst handling
 - **Request size limits**: Protect against oversized requests and headers
 - **Trusted proxy support**: Works seamlessly behind reverse proxies and CDNs
@@ -33,6 +38,7 @@ Whether you're running an LLM inference server on your workstation and laptop, o
 - **Detailed metrics**: Request stats, response times, and performance insights
 
 ### ⚙️ **Easy Configuration**
+- **Single Configuration File**: Easily manage server with a single configuration file
 - **Environment variables**: Override any setting with environment variables
 - **Docker-ready**: One-command deployment with Docker Compose
 
@@ -42,6 +48,7 @@ Whether you're running an LLM inference server on your workstation and laptop, o
 - **OpenAI-compatible**: Works with any OpenAI-compatible API
 
 ## ⚡ **High Performance**
+- **Lightweight**: Optimised memory & cpu footprint, can sip on RAM with 1000s of concurrent requests.
 - **Low latency**: Sub-millisecond endpoint selection with minimal proxy overhead
 - **Memory optimised**: Efficient buffer pooling and zero-copy streaming where possible
 - **Concurrent**: Handles thousands of simultaneous streaming connections
@@ -370,14 +377,34 @@ make help
 ### Project Structure
 
 ```
-├── internal/
-│   ├── adapter/         # External integrations (health, proxy, etc.)
-│   ├── config/          # Configuration management
-│   ├── core/            # Business logic and domain models
-│   └── logger/          # Structured logging
-├── pkg/                 # Reusable packages
-├── test/                # Integration and load tests
-└── theme/               # Terminal theming
+├── internal/               # Private application code (Go convention)
+│   ├── adapter/            # External integrations and infrastructure
+│   │   ├── balancer/       # Load balancing strategies (priority, round-robin, least-conn)
+│   │   ├── discovery/      # Service discovery and endpoint management
+│   │   ├── health/         # Health checking with circuit breakers
+│   │   ├── proxy/          # HTTP proxy implementation (Sherpa/Olla engines)
+│   │   ├── registry/       # Model registry and platform profiles
+│   │   └── security/       # Rate limiting and request validation
+│   ├── app/                # Application assembly and HTTP handlers
+│   ├── config/             # Configuration management
+│   ├── core/               # Business logic and domain models
+│   │   ├── constants/      # Application constants
+│   │   ├── domain/         # Domain entities and interfaces
+│   │   └── ports/          # Interface definitions (ports & adapters pattern)
+│   ├── env/                # Environment variable utilities
+│   ├── integration/        # Integration test helpers
+│   ├── logger/             # Structured logging with themes
+│   ├── router/             # HTTP route registry and middleware
+│   ├── util/               # Common utilities (networking, terminal detection)
+│   └── version/            # Version information and build metadata
+├── pkg/                    # Public packages (reusable components)
+│   ├── format/             # Formatting utilities (bytes, duration)
+│   └── nerdstats/          # Runtime statistics and performance metrics
+├── test/                   # Test suites and testing utilities
+│   └── scripts/            # Test automation scripts
+│       ├── load/           # Load testing scripts
+│       └── security/       # Security validation tests
+└── theme/                  # Terminal theming and color schemes
 ```
 
 ## 🔧 Advanced Configuration
@@ -448,10 +475,16 @@ A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compat
 A: Olla focuses on load balancing and lets your reverse proxy handle authentication. This follows the Unix philosophy of doing one thing well.
 
 **Q: How does priority routing work with model availability?**
-A: Olla first filters endpoints that have the requested model, then applies your chosen load balancing strategy within that subset.
+A: (as of June 2025) Olla doesn't yet support model routing, but the goal is to have Olla first filter endpoints that have the requested model, then applies your chosen load balancing strategy within that subset.
 
 **Q: Can I run Olla in Kubernetes?**
-A: Absolutely! Olla is stateless and containerised. Check the `examples/` directory for Kubernetes manifests.
+A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!
+
+**Q: What is the reference to Sherpa?**
+A: Sherpa is the precursor to Olla, that has now grown into a large tool that encompasses a lot more than just a proxy. The proxy feature was only added to Sherpa in early 2024 but internally (at our work), it was the most popular across teams. Olla shares a lot of the core from Sherpa (including its proxy engine).
+
+**Q: What is behind the name Olla?**
+A: Olla is the name of our llama (featured in the logo), and a running joke from a teammate who'd say, "Can't get it working on Olla(ma)." It's pronounced like 'holla'. The Spanish meaning (pot) is purely coincidental—we weren't high or anything. That said, you can cook up a lot when Olla is in the middle.
 
 ## 🤝 Contributing
 
@@ -464,18 +497,45 @@ We welcome contributions! Whether it's:
 
 Please open an issue first to discuss major changes.
 
+## 🤖 AI Disclosure
+
+Sherpa and Olla have been built using AI, we have utilised AI to generate documentation, refine our tests and conduct code reviews.
+
+We've utilised:
+
+* [Github Copilot](https://github.com/features/copilot) - Most of our documentation (code and markdown)
+* [Anthropic Claude](https://www.claude.ai) - Code reviews, unit test plumbing / refactoring, external test scripts (shell scripts)
+* [OpenAI ChatGPT](https://chatgpt.com/) - Code reviews, document refinement, troubleshooting
+
+Claude was used via [JetBrains Junie](https://www.jetbrains.com/junie/) in our development IDE, [GoLand](https://www.jetbrains.com/go/).
+
+## 🙏 Acknowledgements
+
+This project was possible thanks to the following projects or folks.
+
+* [@pterm/pterm](https://github.com/pterm/pterm) - Amazing TUI framework used
+* [@golangci/golangci-lint](https://github.com/golangci/golangci-lint) - Go Linter
+* [@dkorunic/betteralign](https://github.com/dkorunic/betteralign) - Go alignment checker
+
 ## 📄 License
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ## 🎯 Roadmap
 
-- [ ] **Plugin system**: Custom load balancing and authentication plugins
+- [ ] **Auto endpoint discovery**: Add endpoints, let Olla determine the type.
+- [ ] **Model routing**: Route based on model requested
+- [ ] **Model benchmarking**: Benchmark models across multiple endpoints easily
 - [ ] **Metrics export**: Prometheus/OpenTelemetry integration
 - [ ] **Dynamic configuration**: API-driven endpoint management
 - [ ] **Circuit breakers**: Advanced fault tolerance
 - [ ] **TLS termination**: Built-in SSL support
+- [ ] **Olla Admin Panel**: View Olla metrics easily within the browser
 - [ ] **Model caching**: Intelligent model preloading
+- [ ] **Advanced Connection Management**: Authenticated endpoints (via SSH tunnels, OAuth, Tokens)
+- [ ] **OpenRouter Support**: Support OpenRouter calls within Olla (divert to free models on OpenRouter etc)
+
+Let us know what you want to see!
 
 ---
 
