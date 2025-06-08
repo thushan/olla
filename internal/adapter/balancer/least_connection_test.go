@@ -3,6 +3,7 @@ package balancer
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/ports"
 	"net/url"
 	"sync"
 	"testing"
@@ -14,13 +15,13 @@ import (
 const balancerName = "least-connections"
 
 func TestNewLeastConnectionsSelector(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 
 	if selector == nil {
 		t.Fatal("NewLeastConnectionsSelector returned nil")
 	}
 
-	if selector.connections == nil {
+	if selector.statsCollector.GetConnectionStats() == nil {
 		t.Error("Connections map not initialised")
 	}
 
@@ -30,7 +31,7 @@ func TestNewLeastConnectionsSelector(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_Select_NoEndpoints(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
@@ -43,7 +44,7 @@ func TestLeastConnectionsSelector_Select_NoEndpoints(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_Select_NoRoutableEndpoints(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	// Create endpoints with non-routable statuses
@@ -63,7 +64,7 @@ func TestLeastConnectionsSelector_Select_NoRoutableEndpoints(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_Select_SingleEndpoint(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -83,7 +84,7 @@ func TestLeastConnectionsSelector_Select_SingleEndpoint(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_Select_MultipleEndpoints(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -119,7 +120,7 @@ func TestLeastConnectionsSelector_Select_MultipleEndpoints(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -173,7 +174,7 @@ func TestLeastConnectionsSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_ConnectionTracking(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoint := createTestEndpoint("test", 11434, domain.StatusHealthy)
@@ -213,7 +214,7 @@ func TestLeastConnectionsSelector_ConnectionTracking(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_DecrementBelowZero(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	endpoint := createTestEndpoint("test", 11434, domain.StatusHealthy)
 
 	// Try to decrement without any connections
@@ -235,7 +236,7 @@ func TestLeastConnectionsSelector_DecrementBelowZero(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_ConcurrentAccess(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -284,7 +285,7 @@ func TestLeastConnectionsSelector_ConcurrentAccess(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_LoadBalancing(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -330,7 +331,7 @@ func TestLeastConnectionsSelector_LoadBalancing(t *testing.T) {
 }
 
 func TestLeastConnectionsSelector_DifferentURLFormats(t *testing.T) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(ports.NewMockStatsCollector())
 
 	// Test with different URL formats
 	testCases := []struct {

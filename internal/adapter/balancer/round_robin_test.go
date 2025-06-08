@@ -3,6 +3,7 @@ package balancer
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/ports"
 	"net/url"
 	"sync"
 	"testing"
@@ -12,13 +13,13 @@ import (
 )
 
 func TestNewRoundRobinSelector(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 
 	if selector == nil {
 		t.Fatal("NewRoundRobinSelector returned nil")
 	}
 
-	if selector.connections == nil {
+	if selector.statsCollector.GetConnectionStats() == nil {
 		t.Error("Connections map not initialised")
 	}
 
@@ -33,7 +34,7 @@ func TestNewRoundRobinSelector(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_NoEndpoints(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
@@ -46,7 +47,7 @@ func TestRoundRobinSelector_Select_NoEndpoints(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_NoRoutableEndpoints(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -65,7 +66,7 @@ func TestRoundRobinSelector_Select_NoRoutableEndpoints(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_SingleEndpoint(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -88,7 +89,7 @@ func TestRoundRobinSelector_Select_SingleEndpoint(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_RoundRobinDistribution(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -112,7 +113,7 @@ func TestRoundRobinSelector_Select_RoundRobinDistribution(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -159,7 +160,7 @@ func TestRoundRobinSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_CounterOverflow(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -192,22 +193,25 @@ func TestRoundRobinSelector_Select_CounterOverflow(t *testing.T) {
 }
 
 func TestRoundRobinSelector_ConnectionTracking(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	mockCollector := ports.NewMockStatsCollector()
+	selector := NewRoundRobinSelector(mockCollector)
 	endpoint := createRoundRobinEndpoint("test", 11434, domain.StatusHealthy)
 
 	// Test increment
 	selector.IncrementConnections(endpoint)
 	selector.IncrementConnections(endpoint)
 
-	// Verify count
-	count := selector.GetConnectionCount(endpoint)
+	// Verify count from stats collector
+	connectionStats := mockCollector.GetConnectionStats()
+	count := connectionStats[endpoint.URL.String()]
 	if count != 2 {
 		t.Errorf("Expected 2 connections, got %d", count)
 	}
 
 	// Test decrement
 	selector.DecrementConnections(endpoint)
-	count = selector.GetConnectionCount(endpoint)
+	connectionStats = mockCollector.GetConnectionStats()
+	count = connectionStats[endpoint.URL.String()]
 	if count != 1 {
 		t.Errorf("Expected 1 connection after decrement, got %d", count)
 	}
@@ -225,14 +229,16 @@ func TestRoundRobinSelector_ConnectionTracking(t *testing.T) {
 }
 
 func TestRoundRobinSelector_DecrementBelowZero(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	mockCollector := ports.NewMockStatsCollector()
+	selector := NewRoundRobinSelector(mockCollector)
 	endpoint := createRoundRobinEndpoint("test", 11434, domain.StatusHealthy)
 
 	// Try to decrement without any connections
 	selector.DecrementConnections(endpoint)
 
 	// Should handle gracefully - verify no panic and count stays at 0
-	count := selector.GetConnectionCount(endpoint)
+	connectionStats := mockCollector.GetConnectionStats()
+	count := connectionStats[endpoint.URL.String()]
 	if count != 0 {
 		t.Errorf("Expected 0 connections after decrement below zero, got %d", count)
 	}
@@ -245,7 +251,7 @@ func TestRoundRobinSelector_DecrementBelowZero(t *testing.T) {
 }
 
 func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -329,7 +335,7 @@ func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
 }
 
 func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	// Start with 2 endpoints
@@ -376,7 +382,7 @@ func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
 }
 
 func TestRoundRobinSelector_StatusChanges(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -411,7 +417,7 @@ func TestRoundRobinSelector_StatusChanges(t *testing.T) {
 }
 
 func TestRoundRobinSelector_DistributionFairness(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -443,7 +449,7 @@ func TestRoundRobinSelector_DistributionFairness(t *testing.T) {
 }
 
 func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 	ctx := context.Background()
 
 	// Create 50 endpoints
@@ -478,7 +484,7 @@ func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
 }
 
 func TestRoundRobinSelector_GetConnectionStats(t *testing.T) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -490,7 +496,7 @@ func TestRoundRobinSelector_GetConnectionStats(t *testing.T) {
 	selector.IncrementConnections(endpoints[0])
 	selector.IncrementConnections(endpoints[1])
 
-	stats := selector.GetConnectionStats()
+	stats := selector.statsCollector.GetConnectionStats()
 	if len(stats) != 2 {
 		t.Errorf("Expected 2 entries in stats, got %d", len(stats))
 	}

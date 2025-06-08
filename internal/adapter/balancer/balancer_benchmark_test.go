@@ -3,6 +3,7 @@ package balancer
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/ports"
 	"net/url"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 )
 
 func BenchmarkFactory_Create(b *testing.B) {
-	factory := NewFactory()
+	factory := NewFactory(&ports.MockStatsCollector{})
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -25,7 +26,7 @@ func BenchmarkFactory_Create(b *testing.B) {
 }
 
 func BenchmarkPrioritySelector_Select(b *testing.B) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(&ports.MockStatsCollector{})
 	ctx := context.Background()
 
 	// Create test endpoints with different prior
@@ -47,7 +48,7 @@ func BenchmarkPrioritySelector_Select(b *testing.B) {
 
 // BenchmarkPrioritySelector_SelectSamePriority tests weighted selection
 func BenchmarkPrioritySelector_SelectSamePriority(b *testing.B) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(&ports.MockStatsCollector{})
 	ctx := context.Background()
 
 	// Same priority, different statuses for weighted selection
@@ -70,7 +71,7 @@ func BenchmarkPrioritySelector_SelectSamePriority(b *testing.B) {
 
 // BenchmarkRoundRobinSelector_Select tests round-robin performance
 func BenchmarkRoundRobinSelector_Select(b *testing.B) {
-	selector := NewRoundRobinSelector()
+	selector := NewRoundRobinSelector(&ports.MockStatsCollector{})
 	ctx := context.Background()
 
 	endpoints := make([]*domain.Endpoint, 10)
@@ -91,7 +92,7 @@ func BenchmarkRoundRobinSelector_Select(b *testing.B) {
 
 // BenchmarkLeastConnectionsSelector_Select tests lease connections performance
 func BenchmarkLeastConnectionsSelector_Select(b *testing.B) {
-	selector := NewLeastConnectionsSelector()
+	selector := NewLeastConnectionsSelector(&ports.MockStatsCollector{})
 	ctx := context.Background()
 
 	endpoints := make([]*domain.Endpoint, 10)
@@ -120,10 +121,11 @@ func BenchmarkLeastConnectionsSelector_Select(b *testing.B) {
 
 // BenchmarkConnectionTracking tests connection increment/decrement performance
 func BenchmarkConnectionTracking(b *testing.B) {
+	mockStatsCollector := &ports.MockStatsCollector{}
 	selectors := map[string]domain.EndpointSelector{
-		DefaultBalancerPriority:         NewPrioritySelector(),
-		DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
-		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
+		DefaultBalancerPriority:         NewPrioritySelector(mockStatsCollector),
+		DefaultBalancerRoundRobin:       NewRoundRobinSelector(mockStatsCollector),
+		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(mockStatsCollector),
 	}
 
 	endpoint := createBenchEndpoint("test", 11434, domain.StatusHealthy, 100)
@@ -143,10 +145,11 @@ func BenchmarkConnectionTracking(b *testing.B) {
 
 // BenchmarkConcurrentSelection tests concurrent selection performance
 func BenchmarkConcurrentSelection(b *testing.B) {
+	mockStatsCollector := &ports.MockStatsCollector{}
 	selectors := map[string]domain.EndpointSelector{
-		DefaultBalancerPriority:         NewPrioritySelector(),
-		DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
-		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
+		DefaultBalancerPriority:         NewPrioritySelector(mockStatsCollector),
+		DefaultBalancerRoundRobin:       NewRoundRobinSelector(mockStatsCollector),
+		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(mockStatsCollector),
 	}
 
 	endpoints := make([]*domain.Endpoint, 5)
@@ -176,13 +179,14 @@ func BenchmarkConcurrentSelection(b *testing.B) {
 // BenchmarkLargeEndpointSet tests performance with many endpoints
 func BenchmarkLargeEndpointSet(b *testing.B) {
 	sizes := []int{10, 50, 100, 500}
+	mockStatsCollector := &ports.MockStatsCollector{}
 
 	for _, size := range sizes {
 		b.Run(fmt.Sprintf("size-%d", size), func(b *testing.B) {
 			selectors := map[string]domain.EndpointSelector{
-				DefaultBalancerPriority:         NewPrioritySelector(),
-				DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
-				DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
+				DefaultBalancerPriority:         NewPrioritySelector(mockStatsCollector),
+				DefaultBalancerRoundRobin:       NewRoundRobinSelector(mockStatsCollector),
+				DefaultBalancerLeastConnections: NewLeastConnectionsSelector(mockStatsCollector),
 			}
 
 			endpoints := make([]*domain.Endpoint, size)
@@ -233,10 +237,11 @@ func BenchmarkFilteringRoutableEndpoints(b *testing.B) {
 		)
 	}
 
+	mockStatsCollector := &ports.MockStatsCollector{}
 	selectors := map[string]domain.EndpointSelector{
-		DefaultBalancerPriority:         NewPrioritySelector(),
-		DefaultBalancerRoundRobin:       NewRoundRobinSelector(),
-		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(),
+		DefaultBalancerPriority:         NewPrioritySelector(mockStatsCollector),
+		DefaultBalancerRoundRobin:       NewRoundRobinSelector(mockStatsCollector),
+		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(mockStatsCollector),
 	}
 
 	ctx := context.Background()
@@ -262,13 +267,13 @@ func BenchmarkMemoryUsage(b *testing.B) {
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			factory := NewFactory()
+			factory := NewFactory(&ports.MockStatsCollector{})
 			_ = factory
 		}
 	})
 
 	b.Run("selector-creation", func(b *testing.B) {
-		factory := NewFactory()
+		factory := NewFactory(&ports.MockStatsCollector{})
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -285,7 +290,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 	})
 
 	b.Run("connection-tracking", func(b *testing.B) {
-		selector := NewPrioritySelector()
+		selector := NewPrioritySelector(&ports.MockStatsCollector{})
 		endpoints := make([]*domain.Endpoint, 100)
 
 		for i := 0; i < 100; i++ {
@@ -304,7 +309,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 
 // BenchmarkPrioritySelector_ConnectionStats tests stats performance
 func BenchmarkPrioritySelector_ConnectionStats(b *testing.B) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(&ports.MockStatsCollector{})
 
 	// Add connections to various endpoints
 	for i := 0; i < 50; i++ {
@@ -318,14 +323,14 @@ func BenchmarkPrioritySelector_ConnectionStats(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		stats := selector.GetConnectionStats()
+		stats := selector.statsCollector.GetConnectionStats()
 		_ = stats
 	}
 }
 
 // BenchmarkConcurrentConnectionTracking tests concurrent connection updates
 func BenchmarkConcurrentConnectionTracking(b *testing.B) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(&ports.MockStatsCollector{})
 	endpoints := make([]*domain.Endpoint, 10)
 
 	for i := 0; i < 10; i++ {
@@ -346,7 +351,7 @@ func BenchmarkConcurrentConnectionTracking(b *testing.B) {
 
 // BenchmarkRealWorldScenario simulates realistic usage patterns
 func BenchmarkRealWorldScenario(b *testing.B) {
-	factory := NewFactory()
+	factory := NewFactory(&ports.MockStatsCollector{})
 	selector, _ := factory.Create("priority")
 
 	// Create endpoints with realistic distribution
