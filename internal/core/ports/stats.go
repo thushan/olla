@@ -18,18 +18,18 @@ type StatsCollector interface {
 }
 
 type EndpointStats struct {
-	Name               string    `json:"name"`
-	URL                string    `json:"url"`
-	ActiveConnections  int64     `json:"active_connections"`
-	TotalRequests      int64     `json:"total_requests"`
-	SuccessfulRequests int64     `json:"successful_requests"`
-	FailedRequests     int64     `json:"failed_requests"`
-	TotalBytes         int64     `json:"total_bytes"`
-	AverageLatency     int64     `json:"avg_latency_ms"`
-	MinLatency         int64     `json:"min_latency_ms"`
-	MaxLatency         int64     `json:"max_latency_ms"`
-	LastUsed           time.Time `json:"last_used"`
-	SuccessRate        float64   `json:"success_rate_percent"`
+	Name               string  `json:"name"`
+	URL                string  `json:"url"`
+	ActiveConnections  int64   `json:"active_connections"`
+	TotalRequests      int64   `json:"total_requests"`
+	SuccessfulRequests int64   `json:"successful_requests"`
+	FailedRequests     int64   `json:"failed_requests"`
+	TotalBytes         int64   `json:"total_bytes"`
+	AverageLatency     int64   `json:"avg_latency_ms"`
+	MinLatency         int64   `json:"min_latency_ms"`
+	MaxLatency         int64   `json:"max_latency_ms"`
+	LastUsedNano       int64   `json:"last_used_nano"`
+	SuccessRate        float64 `json:"success_rate_percent"`
 }
 
 type SecurityStats struct {
