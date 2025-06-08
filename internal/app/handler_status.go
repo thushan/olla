@@ -56,8 +56,8 @@ type EndpointResponse struct {
 
 type EndpointModelsResponse struct {
 	LastUpdated time.Time `json:"last_updated"`
-	ModelsCount int64     `json:"models_count"`
 	Models      []string  `json:"models_available"`
+	ModelsCount int64     `json:"models_count"`
 }
 
 type SecuritySummary struct {
