@@ -14,18 +14,20 @@ const (
 )
 
 type Factory struct {
-	creators map[string]func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, *logger.StyledLogger) ports.ProxyService
-	logger   *logger.StyledLogger
-	mu       sync.RWMutex
+	creators       map[string]func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, ports.StatsCollector, *logger.StyledLogger) ports.ProxyService
+	statsCollector ports.StatsCollector
+	logger         *logger.StyledLogger
+	mu             sync.RWMutex
 }
 
-func NewFactory(theLogger *logger.StyledLogger) *Factory {
+func NewFactory(statsCollector ports.StatsCollector, theLogger *logger.StyledLogger) *Factory {
 	factory := &Factory{
-		creators: make(map[string]func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, *logger.StyledLogger) ports.ProxyService),
-		logger:   theLogger,
+		creators:       make(map[string]func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, ports.StatsCollector, *logger.StyledLogger) ports.ProxyService),
+		statsCollector: statsCollector,
+		logger:         theLogger,
 	}
 
-	factory.Register(DefaultProxySherpa, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, logger *logger.StyledLogger) ports.ProxyService {
+	factory.Register(DefaultProxySherpa, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, logger *logger.StyledLogger) ports.ProxyService {
 		sherpaConfig := &Configuration{
 			ProxyPrefix:         config.GetProxyPrefix(),
 			ConnectionTimeout:   config.GetConnectionTimeout(),
@@ -34,13 +36,13 @@ func NewFactory(theLogger *logger.StyledLogger) *Factory {
 			ReadTimeout:         config.GetReadTimeout(),
 			StreamBufferSize:    config.GetStreamBufferSize(),
 		}
-		return NewSherpaService(discovery, selector, sherpaConfig, logger)
+		return NewSherpaService(discovery, selector, sherpaConfig, collector, logger)
 	})
 
 	return factory
 }
 
-func (f *Factory) Register(name string, creator func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, *logger.StyledLogger) ports.ProxyService) {
+func (f *Factory) Register(name string, creator func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, ports.StatsCollector, *logger.StyledLogger) ports.ProxyService) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.creators[name] = creator
@@ -56,7 +58,7 @@ func (f *Factory) Create(proxyType string, discoveryService ports.DiscoveryServi
 	}
 
 	f.logger.Info("Initialising proxy service", "type", proxyType)
-	return creator(discoveryService, selector, config, f.logger), nil
+	return creator(discoveryService, selector, config, f.statsCollector, f.logger), nil
 }
 
 func (f *Factory) GetAvailableTypes() []string {

@@ -26,6 +26,7 @@ type SherpaProxyService struct {
 	transport        *http.Transport
 	configuration    *Configuration
 	stats            *proxyStats
+	statsCollector   ports.StatsCollector
 	bufferPool       sync.Pool
 	logger           *logger.StyledLogger
 }
@@ -55,6 +56,7 @@ func NewSherpaService(
 	discoveryService ports.DiscoveryService,
 	selector domain.EndpointSelector,
 	configuration *Configuration,
+	statsCollector ports.StatsCollector,
 	logger *logger.StyledLogger,
 ) *SherpaProxyService {
 	transport := &http.Transport{
@@ -85,6 +87,7 @@ func NewSherpaService(
 		transport:        transport,
 		configuration:    configuration,
 		stats:            &proxyStats{},
+		statsCollector:   statsCollector,
 		bufferPool: sync.Pool{
 			New: func() interface{} {
 				return make([]byte, DefaultStreamBufferSize)
@@ -261,6 +264,18 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	atomic.AddInt64(&s.stats.successfulRequests, 1)
 	atomic.AddInt64(&s.stats.totalLatency, stats.Latency)
+
+	status := "success"
+	if err != nil {
+		status = "failure"
+	}
+
+	s.statsCollector.RecordRequest(
+		stats.TargetUrl,
+		status,
+		time.Duration(stats.Latency)*time.Millisecond,
+		int64(stats.TotalBytes),
+	)
 
 	rlog.Debug("proxy request completed",
 		"latency_ms", stats.Latency,
@@ -495,24 +510,7 @@ func (s *SherpaProxyService) shouldContinueAfterClientDisconnect(bytesRead int, 
 }
 
 func (s *SherpaProxyService) GetStats(context.Context) (ports.ProxyStats, error) {
-	total := atomic.LoadInt64(&s.stats.totalRequests)
-	successful := atomic.LoadInt64(&s.stats.successfulRequests)
-	failed := atomic.LoadInt64(&s.stats.failedRequests)
-	totalLatency := atomic.LoadInt64(&s.stats.totalLatency)
-
-	var avgLatency int64
-	if successful > 0 {
-		avgLatency = totalLatency / successful
-	}
-
-	return ports.ProxyStats{
-		TotalRequests:      total,
-		SuccessfulRequests: successful,
-		FailedRequests:     failed,
-		AverageLatency:     avgLatency,
-		MinLatency:         0, /* not implemented yet */
-		MaxLatency:         0, /* not implemented yet */
-	}, nil
+	return s.statsCollector.GetProxyStats(), nil
 }
 
 func (s *SherpaProxyService) UpdateConfig(config ports.ProxyConfiguration) {

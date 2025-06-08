@@ -3,20 +3,19 @@ package balancer
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 )
 
 // LeastConnectionsSelector implements a load balancer that selects the endpoint with the least number of active connections.
 type LeastConnectionsSelector struct {
-	connections map[string]int64
-	mu          sync.RWMutex
+	statsCollector ports.StatsCollector
 }
 
-func NewLeastConnectionsSelector() *LeastConnectionsSelector {
+func NewLeastConnectionsSelector(statsCollector ports.StatsCollector) *LeastConnectionsSelector {
 	return &LeastConnectionsSelector{
-		connections: make(map[string]int64),
+		statsCollector: statsCollector,
 	}
 }
 
@@ -40,16 +39,16 @@ func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*doma
 		return nil, fmt.Errorf("no routable endpoints available")
 	}
 
-	l.mu.RLock()
-	defer l.mu.RUnlock()
+	// Get current connection counts from stats collector
+	connectionStats := l.statsCollector.GetConnectionStats()
 
-	// Find endpoint with least number of connections
+	// Find endpoint with a least number of connections
 	var selected *domain.Endpoint
 	minConnections := int64(-1)
 
 	for _, endpoint := range routable {
 		key := endpoint.URL.String()
-		connections := l.connections[key]
+		connections := connectionStats[key] // Will be 0 if not found
 
 		if minConnections == -1 || connections < minConnections {
 			minConnections = connections
@@ -61,39 +60,9 @@ func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*doma
 }
 
 func (l *LeastConnectionsSelector) IncrementConnections(endpoint *domain.Endpoint) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	key := endpoint.URL.String()
-	l.connections[key]++
+	l.statsCollector.RecordConnection(endpoint.URL.String(), 1)
 }
 
 func (l *LeastConnectionsSelector) DecrementConnections(endpoint *domain.Endpoint) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	key := endpoint.URL.String()
-	if count, exists := l.connections[key]; exists && count > 0 {
-		l.connections[key]--
-	}
-}
-
-func (l *LeastConnectionsSelector) GetConnectionCount(endpoint *domain.Endpoint) int64 {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	key := endpoint.URL.String()
-	return l.connections[key]
-}
-
-func (l *LeastConnectionsSelector) GetConnectionStats() map[string]int64 {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-
-	stats := make(map[string]int64, len(l.connections))
-	for endpoint, count := range l.connections {
-		stats[endpoint] = count
-	}
-
-	return stats
+	l.statsCollector.RecordConnection(endpoint.URL.String(), -1)
 }

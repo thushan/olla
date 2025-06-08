@@ -5,21 +5,20 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
-	"sync"
 
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 )
 
 // PrioritySelector implements priority-based endpoint selection with connection tracking
 type PrioritySelector struct {
-	connections map[string]int64
-	mu          sync.RWMutex
+	statsCollector ports.StatsCollector
 }
 
 // NewPrioritySelector creates a new priority-based endpoint selector
-func NewPrioritySelector() *PrioritySelector {
+func NewPrioritySelector(statsCollector ports.StatsCollector) *PrioritySelector {
 	return &PrioritySelector{
-		connections: make(map[string]int64),
+		statsCollector: statsCollector,
 	}
 }
 
@@ -108,42 +107,10 @@ func (p *PrioritySelector) weightedSelect(endpoints []*domain.Endpoint) *domain.
 
 // IncrementConnections increments the connection count for an endpoint
 func (p *PrioritySelector) IncrementConnections(endpoint *domain.Endpoint) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	key := endpoint.URL.String()
-	p.connections[key]++
+	p.statsCollector.RecordConnection(endpoint.URL.String(), 1)
 }
 
 // DecrementConnections decrements the connection count for an endpoint
 func (p *PrioritySelector) DecrementConnections(endpoint *domain.Endpoint) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	key := endpoint.URL.String()
-	if count, exists := p.connections[key]; exists && count > 0 {
-		p.connections[key]--
-	}
-}
-
-// GetConnectionCount returns the current connection count for an endpoint
-func (p *PrioritySelector) GetConnectionCount(endpoint *domain.Endpoint) int64 {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	key := endpoint.URL.String()
-	return p.connections[key]
-}
-
-// GetConnectionStats returns connection statistics for all tracked endpoints
-func (p *PrioritySelector) GetConnectionStats() map[string]int64 {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	stats := make(map[string]int64, len(p.connections))
-	for endpoint, count := range p.connections {
-		stats[endpoint] = count
-	}
-
-	return stats
+	p.statsCollector.RecordConnection(endpoint.URL.String(), -1)
 }

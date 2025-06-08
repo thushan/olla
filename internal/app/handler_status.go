@@ -18,7 +18,6 @@ type EndpointStatusResponse struct {
 	ConsecutiveFailures int       `json:"consecutive_failures"`
 	BackoffMultiplier   int       `json:"backoff_multiplier"`
 }
-
 type ProxyStatusResponse struct {
 	LoadBalancer       string `json:"load_balancer"`
 	TotalRequests      int64  `json:"total_requests"`
@@ -28,16 +27,24 @@ type ProxyStatusResponse struct {
 	MinLatency         int64  `json:"min_latency_ms"`
 	MaxLatency         int64  `json:"max_latency_ms"`
 }
+
+type SecurityStatsResponse struct {
+	RateLimitViolations  int64 `json:"rate_limit_violations"`
+	SizeLimitViolations  int64 `json:"size_limit_violations"`
+	UniqueRateLimitedIPs int   `json:"unique_rate_limited_ips"`
+}
+
 type OllaStatusResponse struct {
 	Endpoints          []EndpointStatusResponse `json:"endpoints"`
 	Proxy              ProxyStatusResponse      `json:"proxy"`
+	Security           SecurityStatsResponse    `json:"security"`
 	TotalEndpoints     int                      `json:"total_endpoints"`
 	HealthyEndpoints   int                      `json:"healthy_endpoints"`
 	UnhealthyEndpoints int                      `json:"unhealthy_endpoints"`
 	RoutableEndpoints  int                      `json:"routable_endpoints"`
 }
 
-// statusHandler handles endpoint status requests
+// Update statusHandler to include endpoint and security stats
 func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -66,6 +73,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 		RoutableEndpoints:  len(routable),
 	}
 
+	// Build endpoint status (health check data)
 	endpoints := make([]EndpointStatusResponse, len(all))
 	for i, endpoint := range all {
 		endpoints[i] = EndpointStatusResponse{
@@ -82,17 +90,24 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	statusResponse.Endpoints = endpoints
 
-	proxyStatus, err := a.proxyService.GetStats(ctx)
-	if err == nil {
-		statusResponse.Proxy = ProxyStatusResponse{
-			LoadBalancer:       a.Config.Proxy.LoadBalancer,
-			TotalRequests:      proxyStatus.TotalRequests,
-			SuccessfulRequests: proxyStatus.SuccessfulRequests,
-			FailedRequests:     proxyStatus.FailedRequests,
-			AverageLatency:     proxyStatus.AverageLatency,
-			MinLatency:         proxyStatus.MinLatency,
-			MaxLatency:         proxyStatus.MaxLatency,
-		}
+	// Get proxy stats from stats collector (maintains existing interface)
+	proxyStats := a.statsCollector.GetProxyStats()
+	statusResponse.Proxy = ProxyStatusResponse{
+		LoadBalancer:       a.Config.Proxy.LoadBalancer,
+		TotalRequests:      proxyStats.TotalRequests,
+		SuccessfulRequests: proxyStats.SuccessfulRequests,
+		FailedRequests:     proxyStats.FailedRequests,
+		AverageLatency:     proxyStats.AverageLatency,
+		MinLatency:         proxyStats.MinLatency,
+		MaxLatency:         proxyStats.MaxLatency,
+	}
+
+	// Get security stats from stats collector
+	securityStats := a.statsCollector.GetSecurityStats()
+	statusResponse.Security = SecurityStatsResponse{
+		RateLimitViolations:  securityStats.RateLimitViolations,
+		SizeLimitViolations:  securityStats.SizeLimitViolations,
+		UniqueRateLimitedIPs: securityStats.UniqueRateLimitedIPs,
 	}
 
 	w.Header().Set(ContentTypeHeader, ContentTypeJSON)

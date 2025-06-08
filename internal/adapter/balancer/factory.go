@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 )
 
 const DefaultBalancerPriority = "priority"
@@ -12,30 +13,31 @@ const DefaultBalancerRoundRobin = "round-robin"
 const DefaultBalancerLeastConnections = "least-connections"
 
 type Factory struct {
-	creators map[string]func() domain.EndpointSelector
-	mu       sync.RWMutex
+	creators       map[string]func(ports.StatsCollector) domain.EndpointSelector
+	statsCollector ports.StatsCollector
+	mu             sync.RWMutex
 }
 
-func NewFactory() *Factory {
+func NewFactory(statsCollector ports.StatsCollector) *Factory {
 	factory := &Factory{
-		creators: make(map[string]func() domain.EndpointSelector),
+		creators:       make(map[string]func(ports.StatsCollector) domain.EndpointSelector),
+		statsCollector: statsCollector,
 	}
 
-	// Register default strategies
-	factory.Register(DefaultBalancerPriority, func() domain.EndpointSelector {
-		return NewPrioritySelector()
+	factory.Register(DefaultBalancerPriority, func(collector ports.StatsCollector) domain.EndpointSelector {
+		return NewPrioritySelector(collector)
 	})
-	factory.Register(DefaultBalancerRoundRobin, func() domain.EndpointSelector {
-		return NewRoundRobinSelector()
+	factory.Register(DefaultBalancerRoundRobin, func(collector ports.StatsCollector) domain.EndpointSelector {
+		return NewRoundRobinSelector(collector)
 	})
-	factory.Register(DefaultBalancerLeastConnections, func() domain.EndpointSelector {
-		return NewLeastConnectionsSelector()
+	factory.Register(DefaultBalancerLeastConnections, func(collector ports.StatsCollector) domain.EndpointSelector {
+		return NewLeastConnectionsSelector(collector)
 	})
 
 	return factory
 }
 
-func (f *Factory) Register(name string, creator func() domain.EndpointSelector) {
+func (f *Factory) Register(name string, creator func(ports.StatsCollector) domain.EndpointSelector) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.creators[name] = creator
@@ -50,7 +52,7 @@ func (f *Factory) Create(name string) (domain.EndpointSelector, error) {
 		return nil, fmt.Errorf("unknown load balancer strategy: %s", name)
 	}
 
-	return creator(), nil
+	return creator(f.statsCollector), nil
 }
 
 func (f *Factory) GetAvailableStrategies() []string {

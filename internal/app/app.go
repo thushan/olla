@@ -12,6 +12,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/security"
+	"github.com/thushan/olla/internal/adapter/stats"
 
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy"
@@ -37,6 +38,7 @@ type Application struct {
 	securityAdapters      *security.Adapters
 	modelDiscoveryService *discovery.ModelDiscoveryService
 	modelDiscoveryClient  discovery.ModelDiscoveryClient
+	statsCollector        ports.StatsCollector
 	errCh                 chan error
 	shutdownOnce          sync.Once
 }
@@ -47,6 +49,7 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
+	statsCollector := stats.NewCollector(logger)
 	routeRegistry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
 	healthChecker := health.NewHTTPHealthCheckerWithDefaults(repository, logger)
@@ -63,13 +66,13 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		logger:     logger,
 	}
 
-	balancerFactory := balancer.NewFactory()
+	balancerFactory := balancer.NewFactory(statsCollector)
 	selector, err := balancerFactory.Create(DefaultLoadBalancer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create load balancer: %w", err)
 	}
 
-	proxyFactory := proxy.NewFactory(logger)
+	proxyFactory := proxy.NewFactory(statsCollector, logger)
 	proxyConfig := updateProxyConfiguration(cfg)
 
 	proxyService, err := proxyFactory.Create(cfg.Proxy.Engine, discoveryService, selector, proxyConfig)
@@ -103,7 +106,7 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		)
 	}
 
-	securityServices, securityAdapters := security.NewSecurityServices(cfg, logger)
+	securityServices, securityAdapters := security.NewSecurityServices(cfg, statsCollector, logger)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
@@ -126,6 +129,7 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		securityAdapters:      securityAdapters,
 		modelDiscoveryService: modelDiscoveryService,
 		modelDiscoveryClient:  modelDiscoveryClient,
+		statsCollector:        statsCollector,
 		errCh:                 make(chan error, 1),
 	}
 
