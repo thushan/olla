@@ -40,17 +40,24 @@ type SystemSummary struct {
 }
 
 type EndpointResponse struct {
-	Name        string `json:"name"`
-	Status      string `json:"status"`
-	SuccessRate string `json:"success_rate"`
-	AvgLatency  string `json:"avg_latency"`
-	Traffic     string `json:"traffic"`
-	LastCheck   string `json:"last_check"`
-	NextCheck   string `json:"next_check"`
-	Issues      string `json:"issues"`
-	Priority    int    `json:"priority"`
-	Connections int64  `json:"connections"`
-	Requests    int64  `json:"requests"`
+	Name        string                 `json:"name"`
+	Status      string                 `json:"status"`
+	SuccessRate string                 `json:"success_rate"`
+	AvgLatency  string                 `json:"avg_latency"`
+	Traffic     string                 `json:"traffic"`
+	LastCheck   string                 `json:"last_check"`
+	NextCheck   string                 `json:"next_check"`
+	Issues      string                 `json:"issues"`
+	Models      EndpointModelsResponse `json:"models"`
+	Priority    int                    `json:"priority"`
+	Connections int64                  `json:"connections"`
+	Requests    int64                  `json:"requests"`
+}
+
+type EndpointModelsResponse struct {
+	LastUpdated time.Time `json:"last_updated"`
+	ModelsCount int64     `json:"models_count"`
+	Models      []string  `json:"models_available"`
 }
 
 type SecuritySummary struct {
@@ -83,6 +90,12 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	proxyStats := a.statsCollector.GetProxyStats()
 	securityStats := a.statsCollector.GetSecurityStats()
 	connectionStats := a.statsCollector.GetConnectionStats()
+	endpointModelsMap, emErr := a.modelRegistry.GetEndpointModelMap(ctx)
+
+	if emErr != nil {
+		a.logger.Warn("Failed to get model map", "error", err)
+		endpointModelsMap = make(map[string]*domain.EndpointModels)
+	}
 
 	response := StatusResponse{
 		Timestamp: now,
@@ -90,7 +103,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.System = a.buildSystemSummary(all, healthy, proxyStats, securityStats, connectionStats, endpointStatsMap)
-	a.buildUnifiedEndpoints(all, endpointStatsMap, connectionStats, response.Endpoints)
+	a.buildUnifiedEndpoints(all, endpointStatsMap, connectionStats, response.Endpoints, endpointModelsMap)
 	response.Security = a.buildSecuritySummary(securityStats)
 
 	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
@@ -141,11 +154,13 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 	}
 }
 
-func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map[string]ports.EndpointStats, connectionStats map[string]int64, endpoints []EndpointResponse) {
+func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map[string]ports.EndpointStats,
+	connectionStats map[string]int64, endpoints []EndpointResponse, modelMap map[string]*domain.EndpointModels) {
 	for i, endpoint := range all {
 		url := endpoint.GetURLString()
 		stats, hasStats := statsMap[url]
 		connections := connectionStats[url]
+		endpointModels := modelMap[url]
 
 		var successRate float64
 		if hasStats && stats.TotalRequests > 0 {
@@ -161,6 +176,15 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			avgLatency = stats.AverageLatency
 		}
 
+		var modelDisco EndpointModelsResponse
+		if endpointModels != nil {
+			modelDisco = EndpointModelsResponse{
+				LastUpdated: endpointModels.LastUpdated,
+				ModelsCount: int64(len(endpointModels.Models)),
+				Models:      a.modelRegistry.ModelsToStrings(endpointModels.Models),
+			}
+		}
+
 		endpoints[i] = EndpointResponse{
 			Name:        endpoint.Name,
 			Status:      endpoint.Status.String(),
@@ -172,6 +196,7 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			Traffic:     traffic,
 			LastCheck:   format.TimeAgo(endpoint.LastChecked),
 			NextCheck:   format.TimeUntil(endpoint.NextCheckTime),
+			Models:      modelDisco,
 			Issues:      a.getEndpointIssues(endpoint, stats, hasStats, successRate),
 		}
 	}

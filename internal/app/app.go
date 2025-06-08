@@ -30,7 +30,7 @@ type Application struct {
 	server                *http.Server
 	logger                *logger.StyledLogger
 	routeRegistry         *router.RouteRegistry
-	modelRegistry         *domain.ModelRegistry
+	modelRegistry         domain.ModelRegistry
 	repository            *discovery.StaticEndpointRepository
 	healthChecker         *health.HTTPHealthChecker
 	proxyService          ports.ProxyService
@@ -121,7 +121,7 @@ func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error)
 		server:                server,
 		logger:                logger,
 		routeRegistry:         routeRegistry,
-		modelRegistry:         &modelRegistry,
+		modelRegistry:         modelRegistry,
 		repository:            repository,
 		healthChecker:         healthChecker,
 		proxyService:          proxyService,
