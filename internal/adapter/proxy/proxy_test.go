@@ -109,13 +109,13 @@ func (m *mockEndpointSelector) Name() string {
 
 func (m *mockEndpointSelector) IncrementConnections(endpoint *domain.Endpoint) {
 	if m.collector != nil {
-		m.collector.RecordConnection(endpoint.URL.String(), 1)
+		m.collector.RecordConnection(endpoint, 1)
 	}
 }
 
 func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
 	if m.collector != nil {
-		m.collector.RecordConnection(endpoint.URL.String(), -1)
+		m.collector.RecordConnection(endpoint, -1)
 	}
 }
 
