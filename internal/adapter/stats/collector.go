@@ -1,7 +1,7 @@
 package stats
 
 import (
-	"strings"
+	"github.com/thushan/olla/internal/core/domain"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -60,15 +60,23 @@ func NewCollector(logger *logger.StyledLogger) *Collector {
 	}
 }
 
-func (c *Collector) RecordRequest(endpoint, status string, latency time.Duration, bytes int64) {
+func (c *Collector) RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
+	if endpoint == nil {
+		// This is a no-op right now if it's a system issue
+		// TODO: Log these into separate bucket
+		return
+	}
+
 	now := time.Now().UnixNano()
 	latencyMs := latency.Milliseconds()
 
 	atomic.AddInt64(&c.totalRequests, 1)
-	atomic.AddInt64(&c.totalLatency, latencyMs)
 
 	if status == StatusSuccess {
 		atomic.AddInt64(&c.successfulRequests, 1)
+		// Update total latency only for successful requests
+		// realised in TestCollector_RecordRequest
+		atomic.AddInt64(&c.totalLatency, latencyMs)
 	} else {
 		atomic.AddInt64(&c.failedRequests, 1)
 	}
@@ -77,7 +85,7 @@ func (c *Collector) RecordRequest(endpoint, status string, latency time.Duration
 	c.tryCleanup(now)
 }
 
-func (c *Collector) RecordConnection(endpoint string, delta int) {
+func (c *Collector) RecordConnection(endpoint *domain.Endpoint, delta int) {
 	now := time.Now().UnixNano()
 	data := c.getOrInitEndpoint(endpoint, now)
 
@@ -97,7 +105,7 @@ func (c *Collector) RecordConnection(endpoint string, delta int) {
 	}
 }
 
-func (c *Collector) RecordDiscovery(endpoint string, success bool, latency time.Duration) {
+func (c *Collector) RecordDiscovery(endpoint *domain.Endpoint, success bool, latency time.Duration) {
 	status := StatusFailure
 	if success {
 		status = StatusSuccess
@@ -225,7 +233,7 @@ func (c *Collector) recordRateLimitedIP(clientIP string) {
 	c.securityMu.Unlock()
 }
 
-func (c *Collector) updateEndpointStats(endpoint, status string, latencyMs, bytes int64, now int64) {
+func (c *Collector) updateEndpointStats(endpoint *domain.Endpoint, status string, latencyMs, bytes int64, now int64) {
 	data := c.getOrInitEndpoint(endpoint, now)
 
 	atomic.AddInt64(&data.totalRequests, 1)
@@ -264,32 +272,15 @@ func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 	}
 }
 
-func (c *Collector) getOrInitEndpoint(endpoint string, now int64) *endpointData {
-	val, _ := c.endpoints.LoadOrStore(endpoint, &endpointData{
-		url:        endpoint,
-		name:       c.extractEndpointName(endpoint),
+func (c *Collector) getOrInitEndpoint(endpoint *domain.Endpoint, now int64) *endpointData {
+	key := endpoint.URL.String()
+	val, _ := c.endpoints.LoadOrStore(key, &endpointData{
+		url:        key,
+		name:       endpoint.Name,
 		lastUsed:   now,
 		minLatency: -1,
 	})
 	return val.(*endpointData)
-}
-
-// TODO: channge to get this from caller instead of infering
-func (c *Collector) extractEndpointName(url string) string {
-	if idx := strings.LastIndex(url, "/"); idx != -1 && idx < len(url)-1 {
-		return url[idx+1:]
-	}
-	if idx := strings.Index(url, "://"); idx != -1 {
-		rest := url[idx+3:]
-		if colon := strings.Index(rest, ":"); colon != -1 {
-			return rest[:colon]
-		}
-		if slash := strings.Index(rest, "/"); slash != -1 {
-			return rest[:slash]
-		}
-		return rest
-	}
-	return url
 }
 
 func (c *Collector) tryCleanup(now int64) {

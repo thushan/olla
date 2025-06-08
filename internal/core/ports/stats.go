@@ -1,14 +1,15 @@
 package ports
 
 import (
+	"github.com/thushan/olla/internal/core/domain"
 	"time"
 )
 
 type StatsCollector interface {
-	RecordRequest(endpoint, status string, latency time.Duration, bytes int64)
-	RecordConnection(endpoint string, delta int) // +1 connect, -1 disconnect
+	RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64)
+	RecordConnection(endpoint *domain.Endpoint, delta int) // +1 connect, -1 disconnect
 	RecordSecurityViolation(violation SecurityViolation)
-	RecordDiscovery(endpoint string, success bool, latency time.Duration)
+	RecordDiscovery(endpoint *domain.Endpoint, success bool, latency time.Duration)
 
 	GetProxyStats() ProxyStats
 	GetEndpointStats() map[string]EndpointStats
