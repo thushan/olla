@@ -3,7 +3,6 @@ package balancer
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/ports"
 	"net/url"
 	"sync"
 	"testing"
@@ -13,7 +12,7 @@ import (
 )
 
 func TestNewRoundRobinSelector(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 
 	if selector == nil {
 		t.Fatal("NewRoundRobinSelector returned nil")
@@ -34,7 +33,7 @@ func TestNewRoundRobinSelector(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_NoEndpoints(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
@@ -47,7 +46,7 @@ func TestRoundRobinSelector_Select_NoEndpoints(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_NoRoutableEndpoints(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -66,7 +65,7 @@ func TestRoundRobinSelector_Select_NoRoutableEndpoints(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_SingleEndpoint(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -89,7 +88,7 @@ func TestRoundRobinSelector_Select_SingleEndpoint(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_RoundRobinDistribution(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -113,7 +112,7 @@ func TestRoundRobinSelector_Select_RoundRobinDistribution(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -160,7 +159,7 @@ func TestRoundRobinSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 }
 
 func TestRoundRobinSelector_Select_CounterOverflow(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -193,7 +192,7 @@ func TestRoundRobinSelector_Select_CounterOverflow(t *testing.T) {
 }
 
 func TestRoundRobinSelector_ConnectionTracking(t *testing.T) {
-	mockCollector := ports.NewMockStatsCollector()
+	mockCollector := NewTestStatsCollector()
 	selector := NewRoundRobinSelector(mockCollector)
 	endpoint := createRoundRobinEndpoint("test", 11434, domain.StatusHealthy)
 
@@ -229,7 +228,7 @@ func TestRoundRobinSelector_ConnectionTracking(t *testing.T) {
 }
 
 func TestRoundRobinSelector_DecrementBelowZero(t *testing.T) {
-	mockCollector := ports.NewMockStatsCollector()
+	mockCollector := NewTestStatsCollector()
 	selector := NewRoundRobinSelector(mockCollector)
 	endpoint := createRoundRobinEndpoint("test", 11434, domain.StatusHealthy)
 
@@ -251,7 +250,7 @@ func TestRoundRobinSelector_DecrementBelowZero(t *testing.T) {
 }
 
 func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -335,7 +334,7 @@ func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
 }
 
 func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	// Start with 2 endpoints
@@ -382,7 +381,7 @@ func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
 }
 
 func TestRoundRobinSelector_StatusChanges(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -417,7 +416,7 @@ func TestRoundRobinSelector_StatusChanges(t *testing.T) {
 }
 
 func TestRoundRobinSelector_DistributionFairness(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -449,7 +448,7 @@ func TestRoundRobinSelector_DistributionFairness(t *testing.T) {
 }
 
 func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	// Create 50 endpoints
@@ -484,7 +483,7 @@ func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
 }
 
 func TestRoundRobinSelector_GetConnectionStats(t *testing.T) {
-	selector := NewRoundRobinSelector(ports.NewMockStatsCollector())
+	selector := NewRoundRobinSelector(NewTestStatsCollector())
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("endpoint-1", 11434, domain.StatusHealthy),

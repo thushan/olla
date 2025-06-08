@@ -3,7 +3,6 @@ package balancer
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/ports"
 	"net/url"
 	"sync"
 	"testing"
@@ -13,7 +12,7 @@ import (
 )
 
 func TestNewPrioritySelector(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 
 	if selector == nil {
 		t.Fatal("NewPrioritySelector returned nil")
@@ -29,7 +28,7 @@ func TestNewPrioritySelector(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_NoEndpoints(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
@@ -42,7 +41,7 @@ func TestPrioritySelector_Select_NoEndpoints(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_NoRoutableEndpoints(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -61,7 +60,7 @@ func TestPrioritySelector_Select_NoRoutableEndpoints(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_SingleEndpoint(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -81,7 +80,7 @@ func TestPrioritySelector_Select_SingleEndpoint(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_HighestPriority(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -103,7 +102,7 @@ func TestPrioritySelector_Select_HighestPriority(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_SamePriorityWeightedSelection(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	// All endpoints have same priority but different statuses
@@ -144,7 +143,7 @@ func TestPrioritySelector_Select_SamePriorityWeightedSelection(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_PriorityOverridesWeight(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -165,7 +164,7 @@ func TestPrioritySelector_Select_PriorityOverridesWeight(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_OnlyRoutableEndpoints(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -186,7 +185,7 @@ func TestPrioritySelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 	}
 }
 func TestPrioritySelector_ConnectionTracking(t *testing.T) {
-	mockCollector := ports.NewMockStatsCollector()
+	mockCollector := NewTestStatsCollector()
 	selector := NewPrioritySelector(mockCollector)
 	endpoint := createPriorityEndpoint("test", 11434, domain.StatusHealthy, 100)
 
@@ -216,7 +215,7 @@ func TestPrioritySelector_ConnectionTracking(t *testing.T) {
 }
 
 func TestPrioritySelector_DecrementBelowZero(t *testing.T) {
-	mockCollector := ports.NewMockStatsCollector()
+	mockCollector := NewTestStatsCollector()
 	selector := NewPrioritySelector(mockCollector)
 	endpoint := createPriorityEndpoint("test", 11434, domain.StatusHealthy, 100)
 
@@ -230,7 +229,7 @@ func TestPrioritySelector_DecrementBelowZero(t *testing.T) {
 	}
 }
 func TestPrioritySelector_GetConnectionStats(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("endpoint-1", 11434, domain.StatusHealthy, 100),
@@ -258,7 +257,7 @@ func TestPrioritySelector_GetConnectionStats(t *testing.T) {
 }
 
 func TestPrioritySelector_WeightedSelect_ZeroWeight(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	// All endpoints have zero weight (emulating an offline status)
@@ -278,7 +277,7 @@ func TestPrioritySelector_WeightedSelect_ZeroWeight(t *testing.T) {
 }
 
 func TestPrioritySelector_WeightedSelect_SingleEndpointSamePriority(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -297,7 +296,7 @@ func TestPrioritySelector_WeightedSelect_SingleEndpointSamePriority(t *testing.T
 }
 
 func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -357,7 +356,7 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 }
 
 func TestPrioritySelector_MultiTierPriority(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -392,7 +391,7 @@ func TestPrioritySelector_MultiTierPriority(t *testing.T) {
 }
 
 func TestPrioritySelector_FallbackToLowerTier(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -434,7 +433,7 @@ func TestPrioritySelector_FallbackToLowerTier(t *testing.T) {
 }
 
 func TestPrioritySelector_TrafficWeightDistribution(t *testing.T) {
-	selector := NewPrioritySelector(ports.NewMockStatsCollector())
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -492,7 +491,7 @@ func TestPrioritySelector_SeedingConsistency(t *testing.T) {
 	results := make([]string, 20)
 
 	for i := 0; i < 20; i++ {
-		selector := NewPrioritySelector(ports.NewMockStatsCollector())
+		selector := NewPrioritySelector(NewTestStatsCollector())
 		endpoint, _ := selector.Select(context.Background(), endpoints)
 		results[i] = endpoint.Name
 	}

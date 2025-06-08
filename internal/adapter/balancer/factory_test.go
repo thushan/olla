@@ -12,7 +12,7 @@ import (
 )
 
 func TestNewFactory(t *testing.T) {
-	factory := NewFactory(&ports.MockStatsCollector{})
+	factory := NewFactory(NewTestStatsCollector())
 
 	if factory == nil {
 		t.Fatal("NewFactory returned nil")
@@ -45,7 +45,7 @@ func TestNewFactory(t *testing.T) {
 }
 
 func TestFactory_Create_DefaultStrategies(t *testing.T) {
-	factory := NewFactory(&ports.MockStatsCollector{})
+	factory := NewFactory(NewTestStatsCollector())
 
 	testCases := []struct {
 		name          string
@@ -86,7 +86,7 @@ func TestFactory_Create_DefaultStrategies(t *testing.T) {
 }
 
 func TestFactory_Register_CustomStrategy(t *testing.T) {
-	factory := NewFactory(&ports.MockStatsCollector{})
+	factory := NewFactory(NewTestStatsCollector())
 	customName := "custom"
 
 	// Mock custom selector
@@ -124,7 +124,7 @@ func TestFactory_Register_CustomStrategy(t *testing.T) {
 }
 
 func TestFactory_Register_OverrideStrategy(t *testing.T) {
-	factory := NewFactory(&ports.MockStatsCollector{})
+	factory := NewFactory(NewTestStatsCollector())
 	customName := "custom-priority"
 
 	// Create custom priority selector
@@ -151,7 +151,7 @@ func TestFactory_Register_OverrideStrategy(t *testing.T) {
 func TestFactory_GetAvailableStrategies_EmptyFactory(t *testing.T) {
 	factory := &Factory{
 		creators:       make(map[string]func(ports.StatsCollector) domain.EndpointSelector),
-		statsCollector: &ports.MockStatsCollector{},
+		statsCollector: NewTestStatsCollector(),
 	}
 
 	strategies := factory.GetAvailableStrategies()
@@ -161,7 +161,7 @@ func TestFactory_GetAvailableStrategies_EmptyFactory(t *testing.T) {
 }
 
 func TestFactory_ConcurrentAccess(t *testing.T) {
-	factory := NewFactory(&ports.MockStatsCollector{})
+	factory := NewFactory(NewTestStatsCollector())
 	routines := 10
 	done := make(chan bool, routines)
 
@@ -193,7 +193,7 @@ func TestFactory_ConcurrentAccess(t *testing.T) {
 }
 
 func TestFactory_ConcurrentRegistration(t *testing.T) {
-	factory := NewFactory(&ports.MockStatsCollector{})
+	factory := NewFactory(NewTestStatsCollector())
 
 	routines := 10
 	done := make(chan bool, routines*2)
