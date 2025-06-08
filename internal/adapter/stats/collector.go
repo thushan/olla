@@ -61,12 +61,6 @@ func NewCollector(logger *logger.StyledLogger) *Collector {
 }
 
 func (c *Collector) RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
-	if endpoint == nil {
-		// This is a no-op right now if it's a system issue
-		// TODO: Log these into separate bucket
-		return
-	}
-
 	now := time.Now().UnixNano()
 	latencyMs := latency.Milliseconds()
 
@@ -81,7 +75,10 @@ func (c *Collector) RecordRequest(endpoint *domain.Endpoint, status string, late
 		atomic.AddInt64(&c.failedRequests, 1)
 	}
 
-	c.updateEndpointStats(endpoint, status, latencyMs, bytes, now)
+	// Only update endpoint-specific stats if endpoint is known
+	if endpoint != nil {
+		c.updateEndpointStats(endpoint, status, latencyMs, bytes, now)
+	}
 	c.tryCleanup(now)
 }
 
@@ -175,7 +172,7 @@ func (c *Collector) GetEndpointStats() map[string]ports.EndpointStats {
 			AverageLatency:     avgLatency,
 			MinLatency:         minLatency,
 			MaxLatency:         atomic.LoadInt64(&data.maxLatency),
-			LastUsed:           time.Unix(0, atomic.LoadInt64(&data.lastUsed)),
+			LastUsedNano:       atomic.LoadInt64(&data.lastUsed),
 			SuccessRate:        successRate,
 		}
 		return true
