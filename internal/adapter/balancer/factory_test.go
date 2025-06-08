@@ -260,13 +260,13 @@ func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.E
 
 func (m *mockEndpointSelector) IncrementConnections(endpoint *domain.Endpoint) {
 	if m.statsCollector != nil {
-		m.statsCollector.RecordConnection(endpoint.URL.String(), 1)
+		m.statsCollector.RecordConnection(endpoint, 1)
 	}
 }
 
 func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
 	if m.statsCollector != nil {
-		m.statsCollector.RecordConnection(endpoint.URL.String(), -1)
+		m.statsCollector.RecordConnection(endpoint, -1)
 	}
 }
 

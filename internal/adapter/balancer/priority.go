@@ -107,10 +107,10 @@ func (p *PrioritySelector) weightedSelect(endpoints []*domain.Endpoint) *domain.
 
 // IncrementConnections increments the connection count for an endpoint
 func (p *PrioritySelector) IncrementConnections(endpoint *domain.Endpoint) {
-	p.statsCollector.RecordConnection(endpoint.URL.String(), 1)
+	p.statsCollector.RecordConnection(endpoint, 1)
 }
 
 // DecrementConnections decrements the connection count for an endpoint
 func (p *PrioritySelector) DecrementConnections(endpoint *domain.Endpoint) {
-	p.statsCollector.RecordConnection(endpoint.URL.String(), -1)
+	p.statsCollector.RecordConnection(endpoint, -1)
 }

@@ -60,9 +60,9 @@ func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*doma
 }
 
 func (l *LeastConnectionsSelector) IncrementConnections(endpoint *domain.Endpoint) {
-	l.statsCollector.RecordConnection(endpoint.URL.String(), 1)
+	l.statsCollector.RecordConnection(endpoint, 1)
 }
 
 func (l *LeastConnectionsSelector) DecrementConnections(endpoint *domain.Endpoint) {
-	l.statsCollector.RecordConnection(endpoint.URL.String(), -1)
+	l.statsCollector.RecordConnection(endpoint, -1)
 }

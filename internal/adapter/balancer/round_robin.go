@@ -48,9 +48,9 @@ func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.End
 }
 
 func (r *RoundRobinSelector) IncrementConnections(endpoint *domain.Endpoint) {
-	r.statsCollector.RecordConnection(endpoint.URL.String(), 1)
+	r.statsCollector.RecordConnection(endpoint, 1)
 }
 
 func (r *RoundRobinSelector) DecrementConnections(endpoint *domain.Endpoint) {
-	r.statsCollector.RecordConnection(endpoint.URL.String(), -1)
+	r.statsCollector.RecordConnection(endpoint, -1)
 }
