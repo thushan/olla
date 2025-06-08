@@ -18,10 +18,13 @@ func createTestMetricsLogger() *logger.StyledLogger {
 	log, _, _ := logger.New(loggerCfg)
 	return logger.NewStyledLogger(log, theme.Default())
 }
-
+func createNewTestSecurityMetricsAdapter() *MetricsAdapter {
+	kennyloggins := createTestMetricsLogger()
+	statsCollector := createTestStatsCollector(kennyloggins)
+	return NewSecurityMetricsAdapter(statsCollector, kennyloggins)
+}
 func TestNewSecurityMetricsAdapter(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 
 	if adapter == nil {
 		t.Fatal("NewSecurityMetricsAdapter returned nil")
@@ -35,8 +38,7 @@ func TestNewSecurityMetricsAdapter(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViltion_RateLimit(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -69,8 +71,7 @@ func TestSecurityMetricsAdapter_RecordViltion_RateLimit(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_LargeRequest(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -97,8 +98,7 @@ func TestSecurityMetricsAdapter_RecordViolation_LargeRequest(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_MultipleIPs(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	ips := []string{"192.168.1.100", "192.168.1.101", "192.168.1.102", "192.168.1.103"}
@@ -132,8 +132,7 @@ func TestSecurityMetricsAdapter_RecordViolation_MultipleIPs(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_DuplicateIP(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	ip := "192.168.1.100"
@@ -167,8 +166,7 @@ func TestSecurityMetricsAdapter_RecordViolation_DuplicateIP(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_UnknownType(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -198,8 +196,7 @@ func TestSecurityMetricsAdapter_RecordViolation_UnknownType(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -319,8 +316,7 @@ func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
 	}
 */
 func TestSecurityMetricsAdapter_RecordViolation_RateLimit(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -348,8 +344,7 @@ func TestSecurityMetricsAdapter_RecordViolation_RateLimit(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_SizeLimit(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -376,8 +371,7 @@ func TestSecurityMetricsAdapter_RecordViolation_SizeLimit(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_GetMetrics(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	// Test initial state
@@ -397,8 +391,7 @@ func TestSecurityMetricsAdapter_GetMetrics(t *testing.T) {
 	}
 }
 func TestSecurityMetricsAdapter_GetMetrics_Empty(t *testing.T) {
-	mockStats := ports.NewMockStatsCollector()
-	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	adapter := createNewTestSecurityMetricsAdapter()
 	ctx := context.Background()
 
 	metrics, err := adapter.GetMetrics(ctx)

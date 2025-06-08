@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/thushan/olla/internal/adapter/stats"
 	"testing"
 	"time"
 
@@ -37,12 +38,20 @@ func createTestConfig() *config.Config {
 	}
 }
 
-func TestNewSecurityServices(t *testing.T) {
+func createTestStatsCollector(log *logger.StyledLogger) ports.StatsCollector {
+	return stats.NewCollector(log)
+}
+func createNewTestSecurityServices() (*Services, *Adapters) {
 	cfg := createTestConfig()
+	return createNewTestSecurityServicesWithConfig(cfg)
+}
+func createNewTestSecurityServicesWithConfig(cfg *config.Config) (*Services, *Adapters) {
 	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	services, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	statsCollector := createTestStatsCollector(logger)
+	return NewSecurityServices(cfg, statsCollector, logger)
+}
+func TestNewSecurityServices(t *testing.T) {
+	services, adapters := createNewTestSecurityServices()
 
 	if services == nil {
 		t.Fatal("NewSecurityServices returned nil services")
@@ -73,11 +82,7 @@ func TestNewSecurityServices(t *testing.T) {
 }
 
 func TestSecurityServices_ChainValidators(t *testing.T) {
-	cfg := createTestConfig()
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	services, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	services, adapters := createNewTestSecurityServices()
 	defer adapters.Stop()
 
 	validators := services.Chain.GetValidators()
@@ -94,11 +99,7 @@ func TestSecurityServices_ChainValidators(t *testing.T) {
 }
 
 func TestSecurityServices_ChainValidation_AllPass(t *testing.T) {
-	cfg := createTestConfig()
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	services, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	services, adapters := createNewTestSecurityServices()
 	defer adapters.Stop()
 
 	ctx := context.Background()
@@ -125,10 +126,7 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 	cfg := createTestConfig()
 	cfg.Server.RateLimits.PerIPRequestsPerMinute = 1 // Very low limit
 	cfg.Server.RateLimits.BurstSize = 1
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	services, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
 	ctx := context.Background()
@@ -175,10 +173,7 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 func TestSecurityServices_ChainValidation_SizeLimitFails(t *testing.T) {
 	cfg := createTestConfig()
 	cfg.Server.RequestLimits.MaxBodySize = 100 // Very small limit
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	services, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
 	ctx := context.Background()
@@ -209,10 +204,7 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 	cfg.Server.RateLimits.PerIPRequestsPerMinute = 1
 	cfg.Server.RateLimits.BurstSize = 1
 	cfg.Server.RequestLimits.MaxBodySize = 100
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	services, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
 	ctx := context.Background()
@@ -245,11 +237,7 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 }
 
 func TestSecurityAdapters_Stop(t *testing.T) {
-	cfg := createTestConfig()
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	_, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	_, adapters := createNewTestSecurityServices()
 
 	// Should not panic
 	adapters.Stop()
@@ -259,11 +247,7 @@ func TestSecurityAdapters_Stop(t *testing.T) {
 }
 
 func TestSecurityAdapters_CreateChainMiddleware(t *testing.T) {
-	cfg := createTestConfig()
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	_, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	_, adapters := createNewTestSecurityServices()
 	defer adapters.Stop()
 
 	middleware := adapters.CreateChainMiddleware()
@@ -277,10 +261,7 @@ func TestSecurityAdapters_CreateChainMiddleware(t *testing.T) {
 
 func TestSecurityServices_MetricsIntegration(t *testing.T) {
 	cfg := createTestConfig()
-	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
-
-	services, adapters := NewSecurityServices(cfg, statsCollector, logger)
+	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
 	ctx := context.Background()
@@ -328,7 +309,7 @@ func TestSecurityServices_MetricsIntegration(t *testing.T) {
 func TestSecurityServices_ConfiguredLimits(t *testing.T) {
 	cfg := createTestConfig()
 	logger := createTestFactoryLogger()
-	statsCollector := ports.NewMockStatsCollector()
+	statsCollector := createTestStatsCollector(logger)
 
 	_, adapters := NewSecurityServices(cfg, statsCollector, logger)
 	defer adapters.Stop()
