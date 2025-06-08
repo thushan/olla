@@ -29,40 +29,40 @@ type SystemSummary struct {
 	EndpointsUp        string `json:"endpoints_up"`
 	SuccessRate        string `json:"success_rate"`
 	AvgLatency         string `json:"avg_latency"`
+	TotalTraffic       string `json:"total_traffic"`
+	UptimeHuman        string `json:"uptime"`
 	ActiveConnections  int64  `json:"active_connections"`
 	SecurityViolations int64  `json:"security_violations"`
-	TotalTraffic       string `json:"total_traffic"`
 	TotalRequests      int64  `json:"total_requests"`
 	TotalFailures      int64  `json:"total_failures"`
-	UptimeHuman        string `json:"uptime"`
 }
 
 type EndpointResponse struct {
 	Name        string `json:"name"`
 	Status      string `json:"status"`
-	Priority    int    `json:"priority"`
-	Connections int64  `json:"connections"`
-	Requests    int64  `json:"requests"`
 	SuccessRate string `json:"success_rate"`
 	AvgLatency  string `json:"avg_latency"`
 	Traffic     string `json:"traffic"`
 	LastCheck   string `json:"last_check"`
 	NextCheck   string `json:"next_check"`
 	Issues      string `json:"issues"`
+	Priority    int    `json:"priority"`
+	Connections int64  `json:"connections"`
+	Requests    int64  `json:"requests"`
 }
 
 type SecuritySummary struct {
+	Status     string `json:"status"`
 	RateLimits int64  `json:"rate_limits"`
 	SizeLimits int64  `json:"size_limits"`
 	BlockedIPs int    `json:"blocked_ips"`
-	Status     string `json:"status"`
 }
 
 type StatusResponse struct {
-	System    SystemSummary      `json:"system"`
+	Timestamp time.Time          `json:"timestamp"`
 	Endpoints []EndpointResponse `json:"endpoints"`
 	Security  SecuritySummary    `json:"security"`
-	Timestamp time.Time          `json:"timestamp"`
+	System    SystemSummary      `json:"system"`
 }
 
 var issuesPool = make([]string, 0, 4)

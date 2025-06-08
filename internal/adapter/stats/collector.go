@@ -21,21 +21,23 @@ const (
 )
 
 type Collector struct {
+	uniqueRateLimitedIPs map[string]int64
+
+	logger *logger.StyledLogger
+
+	endpoints sync.Map // map[string]*endpointData
+
 	totalRequests      int64
 	successfulRequests int64
 	failedRequests     int64
 	totalLatency       int64
 
-	rateLimitViolations  int64
-	sizeLimitViolations  int64
-	uniqueRateLimitedIPs map[string]int64
-	securityMu           sync.RWMutex
+	rateLimitViolations int64
+	sizeLimitViolations int64
+	lastCleanup         int64
+	securityMu          sync.RWMutex
 
-	endpoints sync.Map // map[string]*endpointData
-
-	logger      *logger.StyledLogger
-	lastCleanup int64
-	cleanupMu   sync.Mutex
+	cleanupMu sync.Mutex
 }
 
 type endpointData struct {
