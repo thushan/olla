@@ -1,8 +1,9 @@
 package ports
 
 import (
-	"github.com/thushan/olla/internal/core/domain"
 	"time"
+
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 type StatsCollector interface {

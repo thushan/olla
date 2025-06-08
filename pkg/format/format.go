@@ -88,7 +88,7 @@ func Duration2(d time.Duration) string {
 		return fmt.Sprintf("%dh %dm", hours, minutes)
 	}
 	days := hours / 24
-	hours = hours % 24
+	hours %= hours % 24
 	return fmt.Sprintf("%dd %dh", days, hours)
 }
 

@@ -1,10 +1,11 @@
 package stats
 
 import (
-	"github.com/thushan/olla/internal/core/domain"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/thushan/olla/internal/core/domain"
 
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
@@ -141,8 +142,12 @@ func (c *Collector) GetEndpointStats() map[string]ports.EndpointStats {
 	stats := make(map[string]ports.EndpointStats)
 
 	c.endpoints.Range(func(key, value interface{}) bool {
-		url := key.(string)
-		data := value.(*endpointData)
+		url, ok1 := key.(string)
+		data, ok2 := value.(*endpointData)
+		if !ok1 || !ok2 {
+			c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", key)
+			return true
+		}
 
 		total := atomic.LoadInt64(&data.totalRequests)
 		successful := atomic.LoadInt64(&data.successfulRequests)
@@ -199,8 +204,14 @@ func (c *Collector) GetConnectionStats() map[string]int64 {
 	stats := make(map[string]int64)
 
 	c.endpoints.Range(func(key, value interface{}) bool {
-		url := key.(string)
-		data := value.(*endpointData)
+		url, ok1 := key.(string)
+		data, ok2 := value.(*endpointData)
+
+		if !ok1 || !ok2 {
+			c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", key)
+			return true
+		}
+
 		stats[url] = atomic.LoadInt64(&data.activeConnections)
 		return true
 	})
@@ -250,9 +261,9 @@ func (c *Collector) updateEndpointStats(endpoint *domain.Endpoint, status string
 
 func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 	for {
-		min := atomic.LoadInt64(&data.minLatency)
-		if min == -1 || latencyMs < min {
-			if atomic.CompareAndSwapInt64(&data.minLatency, min, latencyMs) {
+		minLatency := atomic.LoadInt64(&data.minLatency)
+		if minLatency == -1 || latencyMs < minLatency {
+			if atomic.CompareAndSwapInt64(&data.minLatency, minLatency, latencyMs) {
 				break
 			}
 		} else {
@@ -260,9 +271,9 @@ func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 		}
 	}
 	for {
-		max := atomic.LoadInt64(&data.maxLatency)
-		if latencyMs > max {
-			if atomic.CompareAndSwapInt64(&data.maxLatency, max, latencyMs) {
+		maxLatency := atomic.LoadInt64(&data.maxLatency)
+		if latencyMs > maxLatency {
+			if atomic.CompareAndSwapInt64(&data.maxLatency, maxLatency, latencyMs) {
 				break
 			}
 		} else {
@@ -279,7 +290,12 @@ func (c *Collector) getOrInitEndpoint(endpoint *domain.Endpoint, now int64) *end
 		lastUsed:   now,
 		minLatency: -1,
 	})
-	return val.(*endpointData)
+	data, ok := val.(*endpointData)
+	if !ok {
+		c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", key)
+		return nil
+	}
+	return data
 }
 
 func (c *Collector) tryCleanup(now int64) {
@@ -300,8 +316,12 @@ func (c *Collector) cleanup(now int64) {
 	var count int
 
 	c.endpoints.Range(func(k, v interface{}) bool {
-		url := k.(string)
-		data := v.(*endpointData)
+		url, ok1 := k.(string)
+		data, ok2 := v.(*endpointData)
+		if !ok1 || !ok2 {
+			c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", url)
+			return true
+		}
 		count++
 		if atomic.LoadInt64(&data.lastUsed) < cutoff {
 			toRemove = append(toRemove, url)
@@ -320,8 +340,12 @@ func (c *Collector) cleanup(now int64) {
 		}
 		var ages []endpointAge
 		c.endpoints.Range(func(k, v interface{}) bool {
-			url := k.(string)
-			data := v.(*endpointData)
+			url, ok1 := k.(string)
+			data, ok2 := v.(*endpointData)
+			if !ok1 || !ok2 {
+				c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", url)
+				return true
+			}
 			ages = append(ages, endpointAge{url, atomic.LoadInt64(&data.lastUsed)})
 			return true
 		})

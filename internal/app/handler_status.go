@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/util"
+
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/pkg/format"
@@ -71,7 +73,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	now := time.Now()
 
-	all, healthy, routable, err := a.getEndpointCounts(ctx)
+	all, healthy, _, err := a.getEndpointCounts(ctx)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get endpoint data: %v", err), http.StatusInternalServerError)
 		return
@@ -87,7 +89,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 		Endpoints: make([]EndpointResponse, len(all)),
 	}
 
-	response.System = a.buildSystemSummary(all, healthy, routable, proxyStats, securityStats, connectionStats, endpointStatsMap)
+	response.System = a.buildSystemSummary(all, healthy, proxyStats, securityStats, connectionStats, endpointStatsMap)
 	a.buildUnifiedEndpoints(all, endpointStatsMap, connectionStats, response.Endpoints)
 	response.Security = a.buildSecuritySummary(securityStats)
 
@@ -96,7 +98,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(response)
 }
 
-func (a *Application) buildSystemSummary(all, healthy, routable []*domain.Endpoint, proxy ports.ProxyStats, security ports.SecurityStats, connections map[string]int64, endpointStats map[string]ports.EndpointStats) SystemSummary {
+func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy ports.ProxyStats, security ports.SecurityStats, connections map[string]int64, endpointStats map[string]ports.EndpointStats) SystemSummary {
 	var totalConnections, totalTraffic int64
 
 	for url, conn := range connections {
@@ -114,11 +116,12 @@ func (a *Application) buildSystemSummary(all, healthy, routable []*domain.Endpoi
 	}
 
 	var status string
-	if healthyRatio < 0.5 || systemSuccessRate < 90.0 {
+	switch {
+	case healthyRatio < 0.5 || systemSuccessRate < 90.0:
 		status = statusCritical
-	} else if healthyRatio < 0.8 || systemSuccessRate < 95.0 {
+	case healthyRatio < 0.8 || systemSuccessRate < 95.0:
 		status = statusDegraded
-	} else {
+	default:
 		status = statusHealthy
 	}
 
@@ -131,7 +134,7 @@ func (a *Application) buildSystemSummary(all, healthy, routable []*domain.Endpoi
 		AvgLatency:         format.Latency(proxy.AverageLatency),
 		ActiveConnections:  totalConnections,
 		SecurityViolations: totalViolations,
-		TotalTraffic:       format.Bytes(uint64(totalTraffic)),
+		TotalTraffic:       format.Bytes(util.SafeUint64(totalTraffic)),
 		TotalRequests:      proxy.TotalRequests,
 		TotalFailures:      proxy.FailedRequests,
 		UptimeHuman:        format.Duration2(time.Since(a.StartTime)),
@@ -153,7 +156,7 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 		requests := int64(0)
 		avgLatency := int64(0)
 		if hasStats {
-			traffic = format.Bytes(uint64(stats.TotalBytes))
+			traffic = format.Bytes(util.SafeUint64(stats.TotalBytes))
 			requests = stats.TotalRequests
 			avgLatency = stats.AverageLatency
 		}
