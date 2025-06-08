@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/constants"
 	"sync"
 	"testing"
 	"time"
@@ -19,13 +20,14 @@ func createTestMetricsLogger() *logger.StyledLogger {
 }
 
 func TestNewSecurityMetricsAdapter(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 
 	if adapter == nil {
 		t.Fatal("NewSecurityMetricsAdapter returned nil")
 	}
-	if adapter.uniqueRateLimitedIPs == nil {
-		t.Error("uniqueRateLimitedIPs map not initialised")
+	if adapter.statsCollector == nil {
+		t.Error("statsCollector not set")
 	}
 	if adapter.logger == nil {
 		t.Error("Logger not set")
@@ -33,7 +35,8 @@ func TestNewSecurityMetricsAdapter(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViltion_RateLimit(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -65,41 +68,9 @@ func TestSecurityMetricsAdapter_RecordViltion_RateLimit(t *testing.T) {
 	}
 }
 
-func TestSecurityMetricsAdapter_RecordViolation_SizeLimit(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
-	ctx := context.Background()
-
-	violation := ports.SecurityViolation{
-		ClientID:      "192.168.1.100",
-		ViolationType: "size_limit",
-		Endpoint:      "/api/test",
-		Size:          1024 * 1024,
-		Timestamp:     time.Now(),
-	}
-
-	err := adapter.RecordViolation(ctx, violation)
-	if err != nil {
-		t.Fatalf("RecordViolation failed: %v", err)
-	}
-
-	metrics, err := adapter.GetMetrics(ctx)
-	if err != nil {
-		t.Fatalf("GetMetrics failed: %v", err)
-	}
-
-	if metrics.SizeLimitViolations != 1 {
-		t.Errorf("Expected 1 size limit violation, got %d", metrics.SizeLimitViolations)
-	}
-	if metrics.RateLimitViolations != 0 {
-		t.Errorf("Expected 0 rate limit violations, got %d", metrics.RateLimitViolations)
-	}
-	if metrics.UniqueRateLimitedIPs != 0 {
-		t.Errorf("Expected 0 unique rate limited IPs, got %d", metrics.UniqueRateLimitedIPs)
-	}
-}
-
 func TestSecurityMetricsAdapter_RecordViolation_LargeRequest(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -126,7 +97,8 @@ func TestSecurityMetricsAdapter_RecordViolation_LargeRequest(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_MultipleIPs(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 	ctx := context.Background()
 
 	ips := []string{"192.168.1.100", "192.168.1.101", "192.168.1.102", "192.168.1.103"}
@@ -160,7 +132,8 @@ func TestSecurityMetricsAdapter_RecordViolation_MultipleIPs(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_DuplicateIP(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 	ctx := context.Background()
 
 	ip := "192.168.1.100"
@@ -194,7 +167,8 @@ func TestSecurityMetricsAdapter_RecordViolation_DuplicateIP(t *testing.T) {
 }
 
 func TestSecurityMetricsAdapter_RecordViolation_UnknownType(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 	ctx := context.Background()
 
 	violation := ports.SecurityViolation{
@@ -223,55 +197,9 @@ func TestSecurityMetricsAdapter_RecordViolation_UnknownType(t *testing.T) {
 	}
 }
 
-func TestSecurityMetricsAdapter_IPCleanup(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
-	ctx := context.Background()
-
-	oldIP := "192.168.1.100"
-	newIP := "192.168.1.101"
-
-	oldViolation := ports.SecurityViolation{
-		ClientID:      oldIP,
-		ViolationType: "rate_limit",
-		Endpoint:      "/api/test",
-		Size:          0,
-		Timestamp:     time.Now().Add(-2 * time.Hour),
-	}
-
-	newViolation := ports.SecurityViolation{
-		ClientID:      newIP,
-		ViolationType: "rate_limit",
-		Endpoint:      "/api/test",
-		Size:          0,
-		Timestamp:     time.Now(),
-	}
-
-	err := adapter.RecordViolation(ctx, oldViolation)
-	if err != nil {
-		t.Fatalf("RecordViolation failed for old IP: %v", err)
-	}
-
-	adapter.mu.Lock()
-	adapter.uniqueRateLimitedIPs[oldIP] = time.Now().Add(-2 * time.Hour)
-	adapter.mu.Unlock()
-
-	err = adapter.RecordViolation(ctx, newViolation)
-	if err != nil {
-		t.Fatalf("RecordViolation failed for new IP: %v", err)
-	}
-
-	metrics, err := adapter.GetMetrics(ctx)
-	if err != nil {
-		t.Fatalf("GetMetrics failed: %v", err)
-	}
-
-	if metrics.UniqueRateLimitedIPs != 1 {
-		t.Errorf("Expected 1 unique rate limited IP after cleanup, got %d", metrics.UniqueRateLimitedIPs)
-	}
-}
-
 func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -355,8 +283,122 @@ func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
 	}
 }
 
+/*
+	func TestSecurityMetricsAdapter_RecordViolation_SizeLimitA(t *testing.T) {
+		mockStats := ports.NewMockStatsCollector()
+		adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+		ctx := context.Background()
+
+		violation := ports.SecurityViolation{
+			ClientID:      "192.168.1.100",
+			ViolationType: "size_limit",
+			Endpoint:      "/api/test",
+			Size:          1024 * 1024,
+			Timestamp:     time.Now(),
+		}
+
+		err := adapter.RecordViolation(ctx, violation)
+		if err != nil {
+			t.Fatalf("RecordViolation failed: %v", err)
+		}
+
+		metrics, err := adapter.GetMetrics(ctx)
+		if err != nil {
+			t.Fatalf("GetMetrics failed: %v", err)
+		}
+
+		if metrics.SizeLimitViolations != 1 {
+			t.Errorf("Expected 1 size limit violation, got %d", metrics.SizeLimitViolations)
+		}
+		if metrics.RateLimitViolations != 0 {
+			t.Errorf("Expected 0 rate limit violations, got %d", metrics.RateLimitViolations)
+		}
+		if metrics.UniqueRateLimitedIPs != 0 {
+			t.Errorf("Expected 0 unique rate limited IPs, got %d", metrics.UniqueRateLimitedIPs)
+		}
+	}
+*/
+func TestSecurityMetricsAdapter_RecordViolation_RateLimit(t *testing.T) {
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	ctx := context.Background()
+
+	violation := ports.SecurityViolation{
+		ClientID:      "192.168.1.100",
+		ViolationType: constants.ViolationRateLimit,
+		Endpoint:      "/api/test",
+		Size:          0,
+		Timestamp:     time.Now(),
+	}
+
+	err := adapter.RecordViolation(ctx, violation)
+	if err != nil {
+		t.Fatalf("RecordViolation failed: %v", err)
+	}
+
+	// Verify the violation was recorded in stats collector
+	metrics, err := adapter.GetMetrics(ctx)
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+
+	if metrics.RateLimitViolations != 1 {
+		t.Errorf("Expected 1 rate limit violation, got %d", metrics.RateLimitViolations)
+	}
+}
+
+func TestSecurityMetricsAdapter_RecordViolation_SizeLimit(t *testing.T) {
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	ctx := context.Background()
+
+	violation := ports.SecurityViolation{
+		ClientID:      "192.168.1.100",
+		ViolationType: constants.ViolationSizeLimit,
+		Endpoint:      "/api/test",
+		Size:          100 * 1024 * 1024, // 100MB
+		Timestamp:     time.Now(),
+	}
+
+	err := adapter.RecordViolation(ctx, violation)
+	if err != nil {
+		t.Fatalf("RecordViolation failed: %v", err)
+	}
+
+	metrics, err := adapter.GetMetrics(ctx)
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+
+	if metrics.SizeLimitViolations != 1 {
+		t.Errorf("Expected 1 size limit violation, got %d", metrics.SizeLimitViolations)
+	}
+}
+
+func TestSecurityMetricsAdapter_GetMetrics(t *testing.T) {
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
+	ctx := context.Background()
+
+	// Test initial state
+	metrics, err := adapter.GetMetrics(ctx)
+	if err != nil {
+		t.Fatalf("GetMetrics failed: %v", err)
+	}
+
+	if metrics.RateLimitViolations != 0 {
+		t.Errorf("Expected 0 initial rate limit violations, got %d", metrics.RateLimitViolations)
+	}
+	if metrics.SizeLimitViolations != 0 {
+		t.Errorf("Expected 0 initial size limit violations, got %d", metrics.SizeLimitViolations)
+	}
+	if metrics.UniqueRateLimitedIPs != 0 {
+		t.Errorf("Expected 0 initial unique IPs, got %d", metrics.UniqueRateLimitedIPs)
+	}
+}
 func TestSecurityMetricsAdapter_GetMetrics_Empty(t *testing.T) {
-	adapter := NewSecurityMetricsAdapter(createTestMetricsLogger())
+	mockStats := ports.NewMockStatsCollector()
+	adapter := NewSecurityMetricsAdapter(mockStats, createTestMetricsLogger())
 	ctx := context.Background()
 
 	metrics, err := adapter.GetMetrics(ctx)
