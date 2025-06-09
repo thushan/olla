@@ -30,8 +30,8 @@ const (
 )
 
 type profileCacheEntry struct {
-	profileType string
 	lastUsed    time.Time
+	profileType string
 }
 
 var (
@@ -96,7 +96,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 
 	// See if we have a cache hit, this is to a void trying all profiles again
 	if cached, ok := profileCache.Load(endpointKey); ok {
-		if entry := cached.(*profileCacheEntry); time.Since(entry.lastUsed) < cacheTimeout {
+		if entry, okok := cached.(*profileCacheEntry); okok && time.Since(entry.lastUsed) < cacheTimeout {
 			c.logger.Debug("Using cached profile", "endpoint", endpointKey, "profile", entry.profileType)
 
 			platformProfile, err := c.profileFactory.GetProfile(entry.profileType)

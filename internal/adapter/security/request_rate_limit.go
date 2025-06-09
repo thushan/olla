@@ -200,26 +200,21 @@ func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, lim
 }
 
 func (rl *RateLimitValidator) getOrCreateLimiter(key string, limit int) *ipLimiterInfo {
-	value, _ := rl.ipLimiters.LoadOrStore(key, &ipLimiterInfo{
+	newLimiter := &ipLimiterInfo{
 		limiter:      rate.NewLimiter(rate.Limit(float64(limit)/60.0), rl.burstSize),
 		lastAccess:   time.Now(),
 		tokensUsed:   0,
 		windowStart:  time.Now(),
 		requestLimit: limit,
-	})
-
-	limiterInfo, ok := value.(*ipLimiterInfo)
-	if !ok {
-		return &ipLimiterInfo{ // fallback, should not occur
-			limiter:      rate.NewLimiter(rate.Limit(float64(limit)/60.0), rl.burstSize),
-			lastAccess:   time.Now(),
-			tokensUsed:   0,
-			windowStart:  time.Now(),
-			requestLimit: limit,
-		}
 	}
-	return limiterInfo
 
+	actual, _ := rl.ipLimiters.LoadOrStore(key, newLimiter)
+
+	if limiterInfo, ok := actual.(*ipLimiterInfo); ok {
+		return limiterInfo
+	}
+	// shouldn't happen but keeps golangci-lint happy
+	return newLimiter
 }
 
 func (rl *RateLimitValidator) cleanupRoutine() {
