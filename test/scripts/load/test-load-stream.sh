@@ -2,7 +2,11 @@
 
 # Olla Stream Load Test Script
 # Simulates partial-stream readers to stress proxy with early disconnects
+####
+# Usage: ./test-load-stream.sh [duration] [concurrency]
+# Example: ./test-load-stream.sh 60 10 # Defaults: 60 seconds duration, 10 concurrent workers
 
+set -euo pipefail
 
 if [ ! -f .env ]; then
   echo "Missing .env file"

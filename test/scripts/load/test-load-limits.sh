@@ -3,8 +3,12 @@
 # Olla Load Test Script
 # Tests the proxy endpoint with configurable concurrency and duration
 # Reads config from .env file, takes duration and concurrency as args
+####
+# Usage: ./test-load-limits.sh <duration> <concurrency>
+# Example: ./test-load-limits.sh 300 10 # Defaults: 5 minutes duration, 10 concurrent workers
 
-# Colours for output (similar to Olla's theme)
+set -euo pipefail
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
