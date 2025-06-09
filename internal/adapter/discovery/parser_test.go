@@ -128,13 +128,13 @@ func TestParseModelsResponse(t *testing.T) {
 			expectedError:  false,
 		},
 		{
-			name:          "Models field is not array",
+			name:          "Available field is not array",
 			responseBody:  []byte(`{"models": "not-an-array"}`),
 			format:        getOllamaFormat(),
 			expectedError: true,
 		},
 		{
-			name: "Models with missing names are skipped",
+			name: "Available with missing names are skipped",
 			responseBody: []byte(`{
 				"models": [
 					{"name": "valid-model", "size": 123},

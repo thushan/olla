@@ -3,21 +3,20 @@ package balancer
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 )
 
 type RoundRobinSelector struct {
-	connections map[string]int64
-	counter     uint64
-	mu          sync.RWMutex
+	statsCollector ports.StatsCollector
+	counter        uint64
 }
 
-func NewRoundRobinSelector() *RoundRobinSelector {
+func NewRoundRobinSelector(statsCollector ports.StatsCollector) *RoundRobinSelector {
 	return &RoundRobinSelector{
-		connections: make(map[string]int64),
+		statsCollector: statsCollector,
 	}
 }
 
@@ -49,39 +48,9 @@ func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.End
 }
 
 func (r *RoundRobinSelector) IncrementConnections(endpoint *domain.Endpoint) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	key := endpoint.URL.String()
-	r.connections[key]++
+	r.statsCollector.RecordConnection(endpoint, 1)
 }
 
 func (r *RoundRobinSelector) DecrementConnections(endpoint *domain.Endpoint) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	key := endpoint.URL.String()
-	if count, exists := r.connections[key]; exists && count > 0 {
-		r.connections[key]--
-	}
-}
-
-func (r *RoundRobinSelector) GetConnectionCount(endpoint *domain.Endpoint) int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	key := endpoint.URL.String()
-	return r.connections[key]
-}
-
-func (r *RoundRobinSelector) GetConnectionStats() map[string]int64 {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	stats := make(map[string]int64, len(r.connections))
-	for endpoint, count := range r.connections {
-		stats[endpoint] = count
-	}
-
-	return stats
+	r.statsCollector.RecordConnection(endpoint, -1)
 }

@@ -261,7 +261,38 @@ func (r *MemoryModelRegistry) GetAllModels(ctx context.Context) (map[string][]*d
 
 	return result, nil
 }
+func (r *MemoryModelRegistry) GetEndpointModelMap(ctx context.Context) (map[string]*domain.EndpointModels, error) {
+	select {
+	case <-ctx.Done():
+		return nil, domain.NewModelRegistryError("get_endpoint_model_map", "", "", ctx.Err())
+	default:
+	}
 
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make(map[string]*domain.EndpointModels, len(r.endpointModels))
+	for endpointURL, endpointData := range r.endpointModels {
+		result[endpointURL] = &domain.EndpointModels{
+			EndpointURL: endpointData.EndpointURL,
+			Models:      endpointData.Models,
+			LastUpdated: endpointData.LastUpdated,
+		}
+		/*
+			for i, model := range endpointData.Available {
+				result[endpointURL].Available[i] = &domain.ModelInfo{
+					Name:        model.Name,
+					Size:        model.Size,
+					Type:        model.Type,
+					Description: model.Description,
+					LastSeen:    model.LastSeen,
+				}
+			}
+		*/
+	}
+
+	return result, nil
+}
 func (r *MemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpointURL string) error {
 	if endpointURL == "" {
 		return domain.NewModelRegistryError("remove_endpoint", endpointURL, "", fmt.Errorf("endpoint URL cannot be empty"))
@@ -347,6 +378,38 @@ func (r *MemoryModelRegistry) removeEndpointFromIndex(endpointURL string) {
 			}
 		}
 	}
+}
+func applyModelName(model *domain.ModelInfo) string {
+	// TODO: when we capture model params, display them as well
+	if model == nil {
+		return ""
+	}
+	return strings.TrimSpace(model.Name)
+}
+func (r *MemoryModelRegistry) ModelsToStrings(models []*domain.ModelInfo) []string {
+	output := make([]string, len(models))
+	for i, model := range models {
+		output[i] = applyModelName(model)
+	}
+	return output
+}
+
+func (r *MemoryModelRegistry) ModelsToString(models []*domain.ModelInfo) string {
+	var sb strings.Builder
+	for i, model := range models {
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		/*
+			sizeStr := ""
+			if model.Size > 0 {
+				sizeStr = fmt.Sprintf(" (%d)", model.Size)
+			}
+		*/
+		sb.WriteString(applyModelName(model))
+		// sb.WriteString(sizeStr)
+	}
+	return sb.String()
 }
 
 func (r *MemoryModelRegistry) updateStats() {

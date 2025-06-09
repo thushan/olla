@@ -3,6 +3,7 @@ package balancer
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/ports"
 	"net/url"
 	"testing"
 	"time"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestNewFactory(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactory(NewTestStatsCollector())
 
 	if factory == nil {
 		t.Fatal("NewFactory returned nil")
@@ -44,7 +45,7 @@ func TestNewFactory(t *testing.T) {
 }
 
 func TestFactory_Create_DefaultStrategies(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactory(NewTestStatsCollector())
 
 	testCases := []struct {
 		name          string
@@ -85,12 +86,15 @@ func TestFactory_Create_DefaultStrategies(t *testing.T) {
 }
 
 func TestFactory_Register_CustomStrategy(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactory(NewTestStatsCollector())
 	customName := "custom"
 
 	// Mock custom selector
-	customCreator := func() domain.EndpointSelector {
-		return &mockEndpointSelector{name: customName}
+	customCreator := func(collector ports.StatsCollector) domain.EndpointSelector {
+		return &mockEndpointSelector{
+			name:           customName,
+			statsCollector: collector,
+		}
 	}
 
 	// Register custom strategy
@@ -120,12 +124,15 @@ func TestFactory_Register_CustomStrategy(t *testing.T) {
 }
 
 func TestFactory_Register_OverrideStrategy(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactory(NewTestStatsCollector())
 	customName := "custom-priority"
 
 	// Create custom priority selector
-	customCreator := func() domain.EndpointSelector {
-		return &mockEndpointSelector{name: customName}
+	customCreator := func(collector ports.StatsCollector) domain.EndpointSelector {
+		return &mockEndpointSelector{
+			name:           customName,
+			statsCollector: collector,
+		}
 	}
 
 	// Override existing priority strategy
@@ -142,7 +149,10 @@ func TestFactory_Register_OverrideStrategy(t *testing.T) {
 }
 
 func TestFactory_GetAvailableStrategies_EmptyFactory(t *testing.T) {
-	factory := &Factory{creators: make(map[string]func() domain.EndpointSelector)}
+	factory := &Factory{
+		creators:       make(map[string]func(ports.StatsCollector) domain.EndpointSelector),
+		statsCollector: NewTestStatsCollector(),
+	}
 
 	strategies := factory.GetAvailableStrategies()
 	if len(strategies) != 0 {
@@ -151,7 +161,7 @@ func TestFactory_GetAvailableStrategies_EmptyFactory(t *testing.T) {
 }
 
 func TestFactory_ConcurrentAccess(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactory(NewTestStatsCollector())
 	routines := 10
 	done := make(chan bool, routines)
 
@@ -183,7 +193,7 @@ func TestFactory_ConcurrentAccess(t *testing.T) {
 }
 
 func TestFactory_ConcurrentRegistration(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactory(NewTestStatsCollector())
 
 	routines := 10
 	done := make(chan bool, routines*2)
@@ -193,8 +203,11 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 			defer func() { done <- true }()
 
 			strategyName := fmt.Sprintf("strategy-%d", id)
-			creator := func() domain.EndpointSelector {
-				return &mockEndpointSelector{name: strategyName}
+			creator := func(collector ports.StatsCollector) domain.EndpointSelector {
+				return &mockEndpointSelector{
+					name:           strategyName,
+					statsCollector: collector,
+				}
 			}
 			factory.Register(strategyName, creator)
 		}(i)
@@ -229,9 +242,13 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 	}
 }
 
-// Mock endpoint selector for testing
 type mockEndpointSelector struct {
-	name string
+	name           string
+	statsCollector ports.StatsCollector
+}
+
+func (m *mockEndpointSelector) Name() string {
+	return m.name
 }
 
 func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
@@ -241,13 +258,17 @@ func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.E
 	return endpoints[0], nil
 }
 
-func (m *mockEndpointSelector) Name() string {
-	return m.name
+func (m *mockEndpointSelector) IncrementConnections(endpoint *domain.Endpoint) {
+	if m.statsCollector != nil {
+		m.statsCollector.RecordConnection(endpoint, 1)
+	}
 }
 
-func (m *mockEndpointSelector) IncrementConnections(endpoint *domain.Endpoint) {}
-
-func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {}
+func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
+	if m.statsCollector != nil {
+		m.statsCollector.RecordConnection(endpoint, -1)
+	}
+}
 
 // Helper function to create test endpoints
 func createTestEndpoints(count int, status domain.EndpointStatus) []*domain.Endpoint {

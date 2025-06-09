@@ -27,8 +27,11 @@ type ModelRegistry interface {
 	GetEndpointsForModel(ctx context.Context, modelName string) ([]string, error)
 	IsModelAvailable(ctx context.Context, modelName string) bool
 	GetAllModels(ctx context.Context) (map[string][]*ModelInfo, error)
+	GetEndpointModelMap(ctx context.Context) (map[string]*EndpointModels, error)
 	RemoveEndpoint(ctx context.Context, endpointURL string) error
 	GetStats(ctx context.Context) (RegistryStats, error)
+	ModelsToString(models []*ModelInfo) string
+	ModelsToStrings(models []*ModelInfo) []string
 }
 
 type RegistryStats struct {

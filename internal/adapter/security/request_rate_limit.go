@@ -1,5 +1,18 @@
 package security
 
+/*
+				Olla Security Adapter - Rate Limit Validator
+	RateLimitValidator enforces global and per-IP rate limits using token buckets.
+	It supports custom limits for health check endpoints and includes automatic
+	cleanup of stale IP limiters. We're trying to keep it simple and efficient.
+
+	It's thread-safe and designed for high-throughput environments.
+
+	References:
+	- https://pkg.go.dev/golang.org/x/time/rate
+	- https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/
+*/
+
 import (
 	"context"
 	"net"
@@ -18,7 +31,8 @@ import (
 )
 
 type RateLimitValidator struct {
-	logger *logger.StyledLogger
+	metrics ports.SecurityMetricsService
+	logger  *logger.StyledLogger
 
 	globalLimiter           *rate.Limiter
 	cleanupTicker           *time.Ticker
@@ -42,20 +56,7 @@ type ipLimiterInfo struct {
 	mu           sync.RWMutex
 }
 
-/*
-				Olla Security Adapter - Rate Limit Validator
-	RateLimitValidator enforces global and per-IP rate limits using token buckets.
-	It supports custom limits for health check endpoints and includes automatic
-	cleanup of stale IP limiters. We're trying to keep it simple and efficient.
-
-	It's thread-safe and designed for high-throughput environments.
-
-	References:
-	- https://pkg.go.dev/golang.org/x/time/rate
-	- https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/
-*/
-
-func NewRateLimitValidator(limits config.ServerRateLimits, logger *logger.StyledLogger) *RateLimitValidator {
+func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.SecurityMetricsService, logger *logger.StyledLogger) *RateLimitValidator {
 	rl := &RateLimitValidator{
 		globalRequestsPerMinute: limits.GlobalRequestsPerMinute,
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,
@@ -63,6 +64,7 @@ func NewRateLimitValidator(limits config.ServerRateLimits, logger *logger.Styled
 		healthRequestsPerMinute: limits.HealthRequestsPerMinute,
 		trustProxyHeaders:       limits.TrustProxyHeaders,
 		trustedCIDRs:            limits.TrustedProxyCIDRsParsed,
+		metrics:                 metrics,
 		logger:                  logger,
 		stopCleanup:             make(chan struct{}),
 	}
@@ -291,6 +293,17 @@ func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler
 
 			if !result.Allowed {
 				w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
+
+				if rl.metrics != nil {
+					violation := ports.SecurityViolation{
+						ClientID:      clientIP,
+						ViolationType: constants.ViolationRateLimit,
+						Endpoint:      r.URL.Path,
+						Size:          0,
+						Timestamp:     time.Now(),
+					}
+					_ = rl.metrics.RecordViolation(r.Context(), violation)
+				}
 
 				rl.logger.Warn("Rate limit exceeded",
 					"client_ip", clientIP,

@@ -244,16 +244,18 @@ func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
 	}))
 	defer upstream.Close()
 
+	collector := createTestStatsCollector()
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
 	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
+	selector := newMockEndpointSelector(collector)
+	selector.endpoint = endpoint
 	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      100 * time.Millisecond, // Short timeout
 		StreamBufferSize: 1024,
 	}
 
-	proxy := NewSherpaService(discovery, selector, config, createTestLogger())
+	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
 
 	req := httptest.NewRequest("GET", "/api/stream", nil)
 	w := httptest.NewRecorder()
@@ -277,7 +279,8 @@ func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
 // TestSherpaProxyService_BufferPooling tests buffer pool behaviour
 func TestSherpaProxyService_BufferPooling(t *testing.T) {
 	config := &Configuration{StreamBufferSize: 4096}
-	proxy := NewSherpaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestLogger())
+	collector := createTestStatsCollector()
+	proxy := NewSherpaService(&mockDiscoveryService{}, newMockEndpointSelector(collector), config, collector, createTestLogger())
 
 	// Get buffers from pool
 	buf1 := proxy.bufferPool.Get().([]byte)
@@ -307,8 +310,9 @@ func TestSherpaProxyService_BufferPooling(t *testing.T) {
 
 // TestSherpaProxyService_ConfigDefaults tests default configuration values
 func TestSherpaProxyService_ConfigDefaults(t *testing.T) {
+	collector := createTestStatsCollector()
 	config := &Configuration{} // Empty config
-	proxy := NewSherpaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestLogger())
+	proxy := NewSherpaService(&mockDiscoveryService{}, newMockEndpointSelector(collector), config, collector, createTestLogger())
 
 	// Check transport has sensible defaults
 	if proxy.transport.MaxIdleConns != DefaultMaxIdleConns {
@@ -329,7 +333,8 @@ func TestSherpaProxyService_UpdateConfig(t *testing.T) {
 		ReadTimeout:      5 * time.Second,
 		StreamBufferSize: 4096,
 	}
-	proxy := NewSherpaService(&mockDiscoveryService{}, &mockEndpointSelector{}, initialConfig, createTestLogger())
+	collector := createTestStatsCollector()
+	proxy := NewSherpaService(&mockDiscoveryService{}, newMockEndpointSelector(collector), initialConfig, collector, createTestLogger())
 
 	// Update config
 	newConfig := &Configuration{
@@ -352,7 +357,6 @@ func TestSherpaProxyService_UpdateConfig(t *testing.T) {
 	}
 }
 
-// TestSherpaProxyService_StatsAccuracy tests statistics accuracy
 func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(50 * time.Millisecond) // Add some latency
@@ -363,10 +367,12 @@ func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
 	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := &mockEndpointSelector{endpoint: endpoint}
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	selector.endpoint = endpoint
 	config := &Configuration{}
 
-	proxy := NewSherpaService(discovery, selector, config, createTestLogger())
+	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
 
 	// Make some successful requests
 	for i := 0; i < 3; i++ {

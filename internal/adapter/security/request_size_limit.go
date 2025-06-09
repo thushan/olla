@@ -1,25 +1,5 @@
 package security
 
-import (
-	"context"
-	"fmt"
-	"net/http"
-
-	"github.com/thushan/olla/internal/config"
-	"github.com/thushan/olla/internal/core/ports"
-	"github.com/thushan/olla/internal/logger"
-)
-
-const (
-	DefaultProtocol = "HTTP/1.1"
-)
-
-type SizeValidator struct {
-	logger        *logger.StyledLogger
-	maxBodySize   int64
-	maxHeaderSize int64
-}
-
 /*
 				Olla Security Adapter - Size Limit Validator
 	SizeValidator enforces request size limits for headers and body content.
@@ -29,10 +9,36 @@ type SizeValidator struct {
 	Thread-safe by design as it maintains no internal mutable state.
 */
 
-func NewSizeValidator(limits config.ServerRequestLimits, logger *logger.StyledLogger) *SizeValidator {
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/util"
+)
+
+const (
+	DefaultProtocol = "HTTP/1.1"
+)
+
+type SizeValidator struct {
+	logger        *logger.StyledLogger
+	metrics       ports.SecurityMetricsService
+	maxBodySize   int64
+	maxHeaderSize int64
+}
+
+func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityMetricsService, logger *logger.StyledLogger) *SizeValidator {
 	return &SizeValidator{
 		maxBodySize:   limits.MaxBodySize,
 		maxHeaderSize: limits.MaxHeaderSize,
+		metrics:       metrics,
 		logger:        logger,
 	}
 }
@@ -108,6 +114,23 @@ func (sv *SizeValidator) CreateMiddleware() func(http.Handler) http.Handler {
 			}
 
 			if !result.Allowed {
+				if sv.metrics != nil {
+					violationType := constants.ViolationSizeLimit
+					size := req.BodySize
+					if strings.Contains(result.Reason, "headers too large") {
+						size = req.HeaderSize
+					}
+
+					violation := ports.SecurityViolation{
+						ClientID:      util.GetClientIP(r, false, nil),
+						ViolationType: violationType,
+						Endpoint:      r.URL.Path,
+						Size:          size,
+						Timestamp:     time.Now(),
+					}
+					_ = sv.metrics.RecordViolation(r.Context(), violation)
+				}
+
 				sv.logger.Warn("Request rejected",
 					"reason", result.Reason,
 					"method", r.Method,
@@ -161,4 +184,4 @@ func estimateHeaderSizeFast(headers http.Header, method, uri, proto string) int6
 
 	return totalSize
 }
-****/
+*****/

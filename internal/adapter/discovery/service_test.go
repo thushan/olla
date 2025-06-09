@@ -15,7 +15,7 @@ import (
 func TestModelDiscoveryServiceStartStop(t *testing.T) {
 	client := &mockDiscoveryClient{}
 	endpointRepo := &mockEndpointRepository{}
-	modelRegistry := &mockModelRegistry{}
+	modelRegistry := domain.ModelRegistry(&mockModelRegistry{})
 	config := DiscoveryConfig{
 		Interval:          100 * time.Millisecond,
 		Timeout:           5 * time.Second,
@@ -525,6 +525,16 @@ func (m *mockModelRegistry) GetStats(ctx context.Context) (domain.RegistryStats,
 	return domain.RegistryStats{}, nil
 }
 
+func (r *mockModelRegistry) ModelsToStrings(models []*domain.ModelInfo) []string {
+	return nil
+}
+
+func (r *mockModelRegistry) ModelsToString(models []*domain.ModelInfo) string {
+	return ""
+}
+func (r *mockModelRegistry) GetEndpointModelMap(ctx context.Context) (map[string]*domain.EndpointModels, error) {
+	return nil, nil
+}
 func createMockEndpoint(urlString, name string) *domain.Endpoint {
 	return &domain.Endpoint{
 		Name:      name,

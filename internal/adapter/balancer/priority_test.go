@@ -12,13 +12,13 @@ import (
 )
 
 func TestNewPrioritySelector(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 
 	if selector == nil {
 		t.Fatal("NewPrioritySelector returned nil")
 	}
 
-	if selector.connections == nil {
+	if selector.statsCollector.GetConnectionStats() == nil {
 		t.Error("Connections map not initialised")
 	}
 
@@ -28,7 +28,7 @@ func TestNewPrioritySelector(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_NoEndpoints(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
@@ -41,7 +41,7 @@ func TestPrioritySelector_Select_NoEndpoints(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_NoRoutableEndpoints(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -60,7 +60,7 @@ func TestPrioritySelector_Select_NoRoutableEndpoints(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_SingleEndpoint(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -80,7 +80,7 @@ func TestPrioritySelector_Select_SingleEndpoint(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_HighestPriority(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -102,7 +102,7 @@ func TestPrioritySelector_Select_HighestPriority(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_SamePriorityWeightedSelection(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	// All endpoints have same priority but different statuses
@@ -143,7 +143,7 @@ func TestPrioritySelector_Select_SamePriorityWeightedSelection(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_PriorityOverridesWeight(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -164,7 +164,7 @@ func TestPrioritySelector_Select_PriorityOverridesWeight(t *testing.T) {
 }
 
 func TestPrioritySelector_Select_OnlyRoutableEndpoints(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -184,45 +184,50 @@ func TestPrioritySelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 		}
 	}
 }
-
 func TestPrioritySelector_ConnectionTracking(t *testing.T) {
-	selector := NewPrioritySelector()
+	mockCollector := NewTestStatsCollector()
+	selector := NewPrioritySelector(mockCollector)
 	endpoint := createPriorityEndpoint("test", 11434, domain.StatusHealthy, 100)
 
 	selector.IncrementConnections(endpoint)
 	selector.IncrementConnections(endpoint)
 
-	count := selector.GetConnectionCount(endpoint)
+	connectionStats := mockCollector.GetConnectionStats()
+	count := connectionStats[endpoint.URL.String()]
 	if count != 2 {
 		t.Errorf("Expected 2 connections, got %d", count)
 	}
 
 	selector.DecrementConnections(endpoint)
-	count = selector.GetConnectionCount(endpoint)
+	connectionStats = mockCollector.GetConnectionStats()
+	count = connectionStats[endpoint.URL.String()]
 	if count != 1 {
 		t.Errorf("Expected 1 connection after decrement, got %d", count)
 	}
 
 	selector.DecrementConnections(endpoint)
-	count = selector.GetConnectionCount(endpoint)
+	connectionStats = mockCollector.GetConnectionStats()
+	count = connectionStats[endpoint.URL.String()]
 	if count != 0 {
 		t.Errorf("Expected 0 connections, got %d", count)
 	}
 }
 
 func TestPrioritySelector_DecrementBelowZero(t *testing.T) {
-	selector := NewPrioritySelector()
+	mockCollector := NewTestStatsCollector()
+	selector := NewPrioritySelector(mockCollector)
 	endpoint := createPriorityEndpoint("test", 11434, domain.StatusHealthy, 100)
 
 	selector.DecrementConnections(endpoint)
-	count := selector.GetConnectionCount(endpoint)
+
+	connectionStats := mockCollector.GetConnectionStats()
+	count := connectionStats[endpoint.URL.String()]
 	if count != 0 {
 		t.Errorf("Expected 0 connections after decrement below zero, got %d", count)
 	}
 }
-
 func TestPrioritySelector_GetConnectionStats(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("endpoint-1", 11434, domain.StatusHealthy, 100),
@@ -233,7 +238,7 @@ func TestPrioritySelector_GetConnectionStats(t *testing.T) {
 	selector.IncrementConnections(endpoints[0])
 	selector.IncrementConnections(endpoints[1])
 
-	stats := selector.GetConnectionStats()
+	stats := selector.statsCollector.GetConnectionStats()
 	if len(stats) != 2 {
 		t.Errorf("Expected 2 entries in stats, got %d", len(stats))
 	}
@@ -250,7 +255,7 @@ func TestPrioritySelector_GetConnectionStats(t *testing.T) {
 }
 
 func TestPrioritySelector_WeightedSelect_ZeroWeight(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	// All endpoints have zero weight (emulating an offline status)
@@ -270,7 +275,7 @@ func TestPrioritySelector_WeightedSelect_ZeroWeight(t *testing.T) {
 }
 
 func TestPrioritySelector_WeightedSelect_SingleEndpointSamePriority(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -289,7 +294,7 @@ func TestPrioritySelector_WeightedSelect_SingleEndpointSamePriority(t *testing.T
 }
 
 func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -332,7 +337,7 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 5; j++ {
-				stats := selector.GetConnectionStats()
+				stats := selector.statsCollector.GetConnectionStats()
 				if stats == nil {
 					errors <- fmt.Errorf("got nil stats")
 				}
@@ -349,7 +354,7 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 }
 
 func TestPrioritySelector_MultiTierPriority(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -384,7 +389,7 @@ func TestPrioritySelector_MultiTierPriority(t *testing.T) {
 }
 
 func TestPrioritySelector_FallbackToLowerTier(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -426,7 +431,7 @@ func TestPrioritySelector_FallbackToLowerTier(t *testing.T) {
 }
 
 func TestPrioritySelector_TrafficWeightDistribution(t *testing.T) {
-	selector := NewPrioritySelector()
+	selector := NewPrioritySelector(NewTestStatsCollector())
 	ctx := context.Background()
 
 	endpoints := []*domain.Endpoint{
@@ -484,7 +489,7 @@ func TestPrioritySelector_SeedingConsistency(t *testing.T) {
 	results := make([]string, 20)
 
 	for i := 0; i < 20; i++ {
-		selector := NewPrioritySelector()
+		selector := NewPrioritySelector(NewTestStatsCollector())
 		endpoint, _ := selector.Select(context.Background(), endpoints)
 		results[i] = endpoint.Name
 	}
