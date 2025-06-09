@@ -17,6 +17,7 @@ package stats
 */
 
 import (
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -365,14 +366,9 @@ func (c *Collector) cleanup(now int64) {
 			ages = append(ages, endpointAge{url, atomic.LoadInt64(&data.lastUsed)})
 			return true
 		})
-		// Sort oldest first (bubble sort for stable in-place, can replace)
-		for i := range ages {
-			for j := i + 1; j < len(ages); j++ {
-				if ages[i].time > ages[j].time {
-					ages[i], ages[j] = ages[j], ages[i]
-				}
-			}
-		}
+		sort.Slice(ages, func(i, j int) bool {
+			return ages[i].time < ages[j].time
+		})
 		remove := len(ages) - MaxTrackedEndpoints + 100
 		for i := 0; i < remove && i < len(ages); i++ {
 			c.endpoints.Delete(ages[i].url)
