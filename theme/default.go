@@ -19,26 +19,26 @@ type Theme struct {
 	Muted     *pterm.Style
 	Accent    *pterm.Style
 
-	// Functional colours
-	Primary   pterm.Color
-	Secondary pterm.Color
-	Danger    pterm.Color
-	Warning   pterm.Color
-	Good      pterm.Color
+	// Functional colours (now pre-built styles)
+	Primary   *pterm.Style
+	Secondary *pterm.Style
+	Danger    *pterm.Style
+	Warning   *pterm.Style
+	Good      *pterm.Style
 
-	// Application colours
-	Counts      pterm.Color // Colour for counts like Microsofty apps Eg. Outlook (234) unread emails
-	Numbers     pterm.Color
-	Endpoint    pterm.Color
-	HealthCheck pterm.Color
+	// Application colours (now pre-built styles)
+	Counts      *pterm.Style // Colour for counts like Microsofty apps Eg. Outlook (234) unread emails
+	Numbers     *pterm.Style
+	Endpoint    *pterm.Style
+	HealthCheck *pterm.Style
 
-	// Health check colours
-	HealthHealthy   pterm.Color
-	HealthUnhealthy pterm.Color
-	HealthUnknown   pterm.Color
-	HealthBusy      pterm.Color
-	HealthOffline   pterm.Color
-	HealthWarming   pterm.Color
+	// Health check colours (now pre-built styles)
+	HealthHealthy   *pterm.Style
+	HealthUnhealthy *pterm.Style
+	HealthUnknown   *pterm.Style
+	HealthBusy      *pterm.Style
+	HealthOffline   *pterm.Style
+	HealthWarming   *pterm.Style
 }
 
 // Default returns the default application theme
@@ -57,26 +57,26 @@ func Default() *Theme {
 		Muted:     pterm.NewStyle(pterm.FgGray),
 		Accent:    pterm.NewStyle(pterm.FgMagenta),
 
-		// Colour palette
-		Primary:   pterm.FgBlue,
-		Secondary: pterm.FgCyan,
-		Danger:    pterm.FgRed,
-		Warning:   pterm.FgYellow,
-		Good:      pterm.FgGreen,
+		// Functional styles (converted from Color to Style)
+		Primary:   pterm.NewStyle(pterm.FgBlue),
+		Secondary: pterm.NewStyle(pterm.FgCyan),
+		Danger:    pterm.NewStyle(pterm.FgRed),
+		Warning:   pterm.NewStyle(pterm.FgYellow),
+		Good:      pterm.NewStyle(pterm.FgGreen),
 
-		// Application colours
-		Counts:      pterm.FgLightBlue,
-		Numbers:     pterm.FgLightCyan,
-		Endpoint:    pterm.FgLightMagenta,
-		HealthCheck: pterm.FgGreen,
+		// Application styles (converted from Color to Style)
+		Counts:      pterm.NewStyle(pterm.FgLightBlue),
+		Numbers:     pterm.NewStyle(pterm.FgLightCyan),
+		Endpoint:    pterm.NewStyle(pterm.FgLightMagenta),
+		HealthCheck: pterm.NewStyle(pterm.FgGreen),
 
-		// Health check colours
-		HealthHealthy:   pterm.FgGreen,
-		HealthUnhealthy: pterm.FgRed,
-		HealthUnknown:   pterm.FgGray,
-		HealthBusy:      pterm.FgYellow,
-		HealthOffline:   pterm.FgLightRed,
-		HealthWarming:   pterm.FgLightBlue,
+		// Health check styles (converted from Color to Style)
+		HealthHealthy:   pterm.NewStyle(pterm.FgGreen),
+		HealthUnhealthy: pterm.NewStyle(pterm.FgRed),
+		HealthUnknown:   pterm.NewStyle(pterm.FgGray),
+		HealthBusy:      pterm.NewStyle(pterm.FgYellow),
+		HealthOffline:   pterm.NewStyle(pterm.FgLightRed),
+		HealthWarming:   pterm.NewStyle(pterm.FgLightBlue),
 	}
 }
 
@@ -94,19 +94,26 @@ func Dark() *Theme {
 		Muted:     pterm.NewStyle(pterm.FgGray),
 		Accent:    pterm.NewStyle(pterm.FgLightMagenta),
 
-		Primary:   pterm.FgLightBlue,
-		Secondary: pterm.FgLightCyan,
-		Danger:    pterm.FgLightRed,
-		Warning:   pterm.FgLightYellow,
-		Good:      pterm.FgLightGreen,
+		// Functional styles for dark theme
+		Primary:   pterm.NewStyle(pterm.FgLightBlue),
+		Secondary: pterm.NewStyle(pterm.FgLightCyan),
+		Danger:    pterm.NewStyle(pterm.FgLightRed),
+		Warning:   pterm.NewStyle(pterm.FgLightYellow),
+		Good:      pterm.NewStyle(pterm.FgLightGreen),
 
-		// Health colours for dark theme
-		HealthHealthy:   pterm.FgLightGreen,
-		HealthUnhealthy: pterm.FgLightRed,
-		HealthUnknown:   pterm.FgGray,
-		HealthBusy:      pterm.FgLightYellow,
-		HealthOffline:   pterm.FgRed,
-		HealthWarming:   pterm.FgLightCyan,
+		// Application styles for dark theme
+		Counts:      pterm.NewStyle(pterm.FgLightBlue),
+		Numbers:     pterm.NewStyle(pterm.FgLightCyan),
+		Endpoint:    pterm.NewStyle(pterm.FgLightMagenta),
+		HealthCheck: pterm.NewStyle(pterm.FgLightGreen),
+
+		// Health styles for dark theme
+		HealthHealthy:   pterm.NewStyle(pterm.FgLightGreen),
+		HealthUnhealthy: pterm.NewStyle(pterm.FgLightRed),
+		HealthUnknown:   pterm.NewStyle(pterm.FgGray),
+		HealthBusy:      pterm.NewStyle(pterm.FgLightYellow),
+		HealthOffline:   pterm.NewStyle(pterm.FgRed),
+		HealthWarming:   pterm.NewStyle(pterm.FgLightCyan),
 	}
 }
 
@@ -124,19 +131,26 @@ func Light() *Theme {
 		Muted:     pterm.NewStyle(pterm.FgGray),
 		Accent:    pterm.NewStyle(pterm.FgMagenta),
 
-		Primary:   pterm.FgBlue,
-		Secondary: pterm.FgCyan,
-		Danger:    pterm.FgRed,
-		Warning:   pterm.FgRed,
-		Good:      pterm.FgGreen,
+		// Functional styles for light theme
+		Primary:   pterm.NewStyle(pterm.FgBlue),
+		Secondary: pterm.NewStyle(pterm.FgCyan),
+		Danger:    pterm.NewStyle(pterm.FgRed),
+		Warning:   pterm.NewStyle(pterm.FgRed),
+		Good:      pterm.NewStyle(pterm.FgGreen),
 
-		// Health colours for light theme
-		HealthHealthy:   pterm.FgGreen,
-		HealthUnhealthy: pterm.FgRed,
-		HealthUnknown:   pterm.FgGray,
-		HealthBusy:      pterm.FgRed, // More visible on light backgrounds
-		HealthOffline:   pterm.FgRed,
-		HealthWarming:   pterm.FgBlue,
+		// Application styles for light theme
+		Counts:      pterm.NewStyle(pterm.FgBlue),
+		Numbers:     pterm.NewStyle(pterm.FgCyan),
+		Endpoint:    pterm.NewStyle(pterm.FgMagenta),
+		HealthCheck: pterm.NewStyle(pterm.FgGreen),
+
+		// Health styles for light theme
+		HealthHealthy:   pterm.NewStyle(pterm.FgGreen),
+		HealthUnhealthy: pterm.NewStyle(pterm.FgRed),
+		HealthUnknown:   pterm.NewStyle(pterm.FgGray),
+		HealthBusy:      pterm.NewStyle(pterm.FgRed), // More visible on light backgrounds
+		HealthOffline:   pterm.NewStyle(pterm.FgRed),
+		HealthWarming:   pterm.NewStyle(pterm.FgBlue),
 	}
 }
 

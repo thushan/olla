@@ -80,6 +80,8 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 }
 
 func createTerminalHandler(level slog.Level, appTheme *theme.Theme) slog.Handler {
+	var baseHandler slog.Handler
+
 	if util.ShouldUseColors() {
 		// Colourful terminal output - use pterm
 		plogger := pterm.DefaultLogger.
@@ -93,15 +95,18 @@ func createTerminalHandler(level slog.Level, appTheme *theme.Theme) slog.Handler
 			"time":  *appTheme.Muted,
 		}
 		plogger = plogger.WithKeyStyles(keyStyles)
-		return pterm.NewSlogHandler(plogger)
+		baseHandler = pterm.NewSlogHandler(plogger)
+	} else {
+		// JSON output for non-TTY - use standard slog JSON handler
+		baseHandler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level:       level,
+			AddSource:   false,
+			ReplaceAttr: fastReplaceAttr,
+		})
 	}
 
-	// JSON output for non-TTY - use standard slog JSON handler
-	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level:       level,
-		AddSource:   false,
-		ReplaceAttr: fastReplaceAttr,
-	})
+	// we have to use a filter to skip detailed logs in CLI mode
+	return &terminalFilterHandler{handler: baseHandler}
 }
 
 func createJSONHandler(level slog.Level) slog.Handler {
@@ -201,6 +206,39 @@ func (h *simpleMultiHandler) WithGroup(name string) slog.Handler {
 	}
 	return &simpleMultiHandler{handlers: newHandlers}
 }
+
+type terminalFilterHandler struct {
+	handler slog.Handler
+}
+
+func (h *terminalFilterHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	// Skip detailed logs on cli
+	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
+		if d, ok := detailed.(bool); ok && d {
+			return false
+		}
+	}
+	return h.handler.Enabled(ctx, level)
+}
+
+func (h *terminalFilterHandler) Handle(ctx context.Context, record slog.Record) error {
+	// Skip detailed logs on cli mode
+	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
+		if d, ok := detailed.(bool); ok && d {
+			return nil
+		}
+	}
+	return h.handler.Handle(ctx, record)
+}
+
+func (h *terminalFilterHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &terminalFilterHandler{handler: h.handler.WithAttrs(attrs)}
+}
+
+func (h *terminalFilterHandler) WithGroup(name string) slog.Handler {
+	return &terminalFilterHandler{handler: h.handler.WithGroup(name)}
+}
+
 func parseLevel(level string) slog.Level {
 	switch strings.ToLower(level) {
 	case LogLevelDebug:
