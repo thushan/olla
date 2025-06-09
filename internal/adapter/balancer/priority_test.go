@@ -192,7 +192,6 @@ func TestPrioritySelector_ConnectionTracking(t *testing.T) {
 	selector.IncrementConnections(endpoint)
 	selector.IncrementConnections(endpoint)
 
-	// Get connection count from stats collector instead
 	connectionStats := mockCollector.GetConnectionStats()
 	count := connectionStats[endpoint.URL.String()]
 	if count != 2 {
@@ -221,7 +220,6 @@ func TestPrioritySelector_DecrementBelowZero(t *testing.T) {
 
 	selector.DecrementConnections(endpoint)
 
-	// Get connection count from stats collector
 	connectionStats := mockCollector.GetConnectionStats()
 	count := connectionStats[endpoint.URL.String()]
 	if count != 0 {

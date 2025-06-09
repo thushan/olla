@@ -1,5 +1,18 @@
 package security
 
+/*
+				Olla Security Adapter - Rate Limit Validator
+	RateLimitValidator enforces global and per-IP rate limits using token buckets.
+	It supports custom limits for health check endpoints and includes automatic
+	cleanup of stale IP limiters. We're trying to keep it simple and efficient.
+
+	It's thread-safe and designed for high-throughput environments.
+
+	References:
+	- https://pkg.go.dev/golang.org/x/time/rate
+	- https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/
+*/
+
 import (
 	"context"
 	"net"
@@ -42,19 +55,6 @@ type ipLimiterInfo struct {
 	requestLimit int
 	mu           sync.RWMutex
 }
-
-/*
-				Olla Security Adapter - Rate Limit Validator
-	RateLimitValidator enforces global and per-IP rate limits using token buckets.
-	It supports custom limits for health check endpoints and includes automatic
-	cleanup of stale IP limiters. We're trying to keep it simple and efficient.
-
-	It's thread-safe and designed for high-throughput environments.
-
-	References:
-	- https://pkg.go.dev/golang.org/x/time/rate
-	- https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/
-*/
 
 func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.SecurityMetricsService, logger *logger.StyledLogger) *RateLimitValidator {
 	rl := &RateLimitValidator{
@@ -294,7 +294,6 @@ func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler
 			if !result.Allowed {
 				w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
 
-				// Record violation in stats collector
 				if rl.metrics != nil {
 					violation := ports.SecurityViolation{
 						ClientID:      clientIP,

@@ -1,5 +1,21 @@
 package stats
 
+/*
+				Olla Stats Collector - Centralised Stats Collection
+	Collector centralises all the stats we track across Olla - requests, connections,
+	security stuff, etc. Instead of each component doing its own thing, everything
+	reports here so we can actually see what's happening system-wide.
+
+	Thread-safe for high concurrency since this gets hit on every request & multiple.
+	times. We also clean up old endpoint data automatically so we don't leak memory.
+
+	GOALS:
+	- Keep it simple and efficient (reduce allocation overhead)
+	- Track all relevant stats in one place
+	- Provide easy access to stats for monitoring and debugging
+
+*/
+
 import (
 	"sync"
 	"sync/atomic"

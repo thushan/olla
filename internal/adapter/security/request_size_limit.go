@@ -1,5 +1,14 @@
 package security
 
+/*
+				Olla Security Adapter - Size Limit Validator
+	SizeValidator enforces request size limits for headers and body content.
+ 	It checks these limits early in the middleware chain to avoid wasting resources
+ 	on oversized requests.
+
+	Thread-safe by design as it maintains no internal mutable state.
+*/
+
 import (
 	"context"
 	"fmt"
@@ -24,15 +33,6 @@ type SizeValidator struct {
 	maxBodySize   int64
 	maxHeaderSize int64
 }
-
-/*
-				Olla Security Adapter - Size Limit Validator
-	SizeValidator enforces request size limits for headers and body content.
- 	It checks these limits early in the middleware chain to avoid wasting resources
- 	on oversized requests.
-
-	Thread-safe by design as it maintains no internal mutable state.
-*/
 
 func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityMetricsService, logger *logger.StyledLogger) *SizeValidator {
 	return &SizeValidator{
@@ -114,7 +114,6 @@ func (sv *SizeValidator) CreateMiddleware() func(http.Handler) http.Handler {
 			}
 
 			if !result.Allowed {
-				// Record violation in stats collector
 				if sv.metrics != nil {
 					violationType := constants.ViolationSizeLimit
 					size := req.BodySize

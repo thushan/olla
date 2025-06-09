@@ -93,7 +93,7 @@ func TestFactory_Register_CustomStrategy(t *testing.T) {
 	customCreator := func(collector ports.StatsCollector) domain.EndpointSelector {
 		return &mockEndpointSelector{
 			name:           customName,
-			statsCollector: collector, // Pass collector to mock
+			statsCollector: collector,
 		}
 	}
 
@@ -131,7 +131,7 @@ func TestFactory_Register_OverrideStrategy(t *testing.T) {
 	customCreator := func(collector ports.StatsCollector) domain.EndpointSelector {
 		return &mockEndpointSelector{
 			name:           customName,
-			statsCollector: collector, // Pass collector to mock
+			statsCollector: collector,
 		}
 	}
 
@@ -206,7 +206,7 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 			creator := func(collector ports.StatsCollector) domain.EndpointSelector {
 				return &mockEndpointSelector{
 					name:           strategyName,
-					statsCollector: collector, // Pass collector to mock
+					statsCollector: collector,
 				}
 			}
 			factory.Register(strategyName, creator)
