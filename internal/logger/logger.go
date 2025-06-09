@@ -23,6 +23,7 @@ type Config struct {
 	MaxBackups int
 	MaxAge     int // days
 	FileOutput bool
+	PrettyLogs bool
 }
 
 const (
@@ -43,7 +44,15 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	appTheme := theme.GetTheme(cfg.Theme)
 
 	var cleanupFuncs []func()
-	var logger *slog.Logger
+	var handlers []slog.Handler
+
+	if cfg.PrettyLogs {
+		terminalHandler := createTerminalHandler(level, appTheme)
+		handlers = append(handlers, terminalHandler)
+	} else {
+		jsonHandler := createJSONHandler(level)
+		handlers = append(handlers, jsonHandler)
+	}
 
 	if cfg.FileOutput {
 		fileHandler, cleanup, err := createFileHandler(cfg, level)
@@ -51,17 +60,14 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 			return nil, nil, err
 		}
 		cleanupFuncs = append(cleanupFuncs, cleanup)
+		handlers = append(handlers, fileHandler)
+	}
 
-		terminalHandler := createTerminalHandler(level, appTheme)
-
-		handler := &fastMultiHandler{
-			terminalHandler: terminalHandler,
-			fileHandler:     fileHandler,
-		}
-		logger = slog.New(handler)
+	var logger *slog.Logger
+	if len(handlers) == 1 {
+		logger = slog.New(handlers[0])
 	} else {
-		terminalHandler := createTerminalHandler(level, appTheme)
-		logger = slog.New(terminalHandler)
+		logger = slog.New(&simpleMultiHandler{handlers: handlers})
 	}
 
 	cleanup := func() {
@@ -91,6 +97,14 @@ func createTerminalHandler(level slog.Level, appTheme *theme.Theme) slog.Handler
 	}
 
 	// JSON output for non-TTY - use standard slog JSON handler
+	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level:       level,
+		AddSource:   false,
+		ReplaceAttr: fastReplaceAttr,
+	})
+}
+
+func createJSONHandler(level slog.Level) slog.Handler {
 	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level:       level,
 		AddSource:   false,
@@ -147,54 +161,46 @@ func fastReplaceAttr(groups []string, a slog.Attr) slog.Attr {
 	return a
 }
 
-// fastMultiHandler - optimised dual output
-type fastMultiHandler struct {
-	terminalHandler slog.Handler
-	fileHandler     slog.Handler
+// simpleMultiHandler sends logs to multiple handlers without dual processing
+type simpleMultiHandler struct {
+	handlers []slog.Handler
 }
 
-func (h *fastMultiHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	return h.terminalHandler.Enabled(ctx, level) || h.fileHandler.Enabled(ctx, level)
+func (h *simpleMultiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	for _, handler := range h.handlers {
+		if handler.Enabled(ctx, level) {
+			return true
+		}
+	}
+	return false
 }
 
-func (h *fastMultiHandler) Handle(ctx context.Context, record slog.Record) error {
-	// Check detailed context once
-	isDetailed := false
-	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
-		if d, ok := detailed.(bool); ok && d {
-			isDetailed = true
+func (h *simpleMultiHandler) Handle(ctx context.Context, record slog.Record) error {
+	for _, handler := range h.handlers {
+		if handler.Enabled(ctx, record.Level) {
+			if err := handler.Handle(ctx, record); err != nil {
+				return err
+			}
 		}
 	}
-
-	// Terminal output (unless detailed mode)
-	if !isDetailed && h.terminalHandler.Enabled(ctx, record.Level) {
-		if err := h.terminalHandler.Handle(ctx, record); err != nil {
-			return err
-		}
-	}
-
-	// File output
-	if h.fileHandler.Enabled(ctx, record.Level) {
-		return h.fileHandler.Handle(ctx, record)
-	}
-
 	return nil
 }
 
-func (h *fastMultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &fastMultiHandler{
-		terminalHandler: h.terminalHandler.WithAttrs(attrs),
-		fileHandler:     h.fileHandler.WithAttrs(attrs),
+func (h *simpleMultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newHandlers := make([]slog.Handler, len(h.handlers))
+	for i, handler := range h.handlers {
+		newHandlers[i] = handler.WithAttrs(attrs)
 	}
+	return &simpleMultiHandler{handlers: newHandlers}
 }
 
-func (h *fastMultiHandler) WithGroup(name string) slog.Handler {
-	return &fastMultiHandler{
-		terminalHandler: h.terminalHandler.WithGroup(name),
-		fileHandler:     h.fileHandler.WithGroup(name),
+func (h *simpleMultiHandler) WithGroup(name string) slog.Handler {
+	newHandlers := make([]slog.Handler, len(h.handlers))
+	for i, handler := range h.handlers {
+		newHandlers[i] = handler.WithGroup(name)
 	}
+	return &simpleMultiHandler{handlers: newHandlers}
 }
-
 func parseLevel(level string) slog.Level {
 	switch strings.ToLower(level) {
 	case LogLevelDebug:
