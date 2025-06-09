@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -470,7 +471,225 @@ func createTestEndpoint(baseURL, endpointType string) *domain.Endpoint {
 		CheckTimeout:         2 * time.Second,
 	}
 }
+func TestDiscoverModelsProfileCaching(t *testing.T) {
+	requestCount := make(map[string]int)
+	var mu sync.Mutex
 
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount[r.URL.Path]++
+		mu.Unlock()
+
+		t.Logf("Request %d to path: %s", requestCount[r.URL.Path], r.URL.Path)
+
+		switch r.URL.Path {
+		case "/api/tags":
+			// Ollama endpoint - return success
+			w.WriteHeader(200)
+			w.Write([]byte(`{
+				"models": [
+					{"name": "llama3:8b", "size": 4661224676}
+				]
+			}`))
+		case "/v1/models":
+			// Should never be called after caching
+			w.WriteHeader(404)
+			w.Write([]byte(`{"error": "not found"}`))
+		default:
+			w.WriteHeader(404)
+			w.Write([]byte(`{"error": "path not found"}`))
+		}
+	}))
+	defer server.Close()
+
+	endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
+	client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
+
+	ctx := context.Background()
+
+	// First discovery - should try auto-detection
+	t.Log("=== First discovery (auto-detection) ===")
+	models1, err1 := client.DiscoverModels(ctx, endpoint)
+	if err1 != nil {
+		t.Fatalf("First discovery failed: %v", err1)
+	}
+	if len(models1) != 1 {
+		t.Fatalf("Expected 1 model in first discovery, got %d", len(models1))
+	}
+
+	// Check that Ollama endpoint was called (auto-detection success)
+	mu.Lock()
+	ollamaRequests := requestCount["/api/tags"]
+	mu.Unlock()
+
+	if ollamaRequests != 1 {
+		t.Errorf("Expected 1 Ollama request in first discovery, got %d", ollamaRequests)
+	}
+
+	// Second discovery - should use cached profile (no additional requests to /v1/models)
+	t.Log("=== Second discovery (should use cache) ===")
+	models2, err2 := client.DiscoverModels(ctx, endpoint)
+	if err2 != nil {
+		t.Fatalf("Second discovery failed: %v", err2)
+	}
+	if len(models2) != 1 {
+		t.Fatalf("Expected 1 model in second discovery, got %d", len(models2))
+	}
+
+	// Verify cache worked - should be 2 Ollama requests, still 0 LM Studio requests
+	mu.Lock()
+	ollamaRequests2 := requestCount["/api/tags"]
+	lmStudioRequests2 := requestCount["/v1/models"]
+	mu.Unlock()
+
+	if ollamaRequests2 != 2 {
+		t.Errorf("Expected 2 Ollama requests after caching, got %d", ollamaRequests2)
+	}
+	if lmStudioRequests2 != 0 {
+		t.Errorf("Expected 0 LM Studio requests after caching (cache should prevent this), got %d", lmStudioRequests2)
+	}
+
+	// Third discovery - verify cache is still working
+	t.Log("=== Third discovery (verify cache persistence) ===")
+	models3, err3 := client.DiscoverModels(ctx, endpoint)
+	if err3 != nil {
+		t.Fatalf("Third discovery failed: %v", err3)
+	}
+	if len(models3) != 1 {
+		t.Fatalf("Expected 1 model in third discovery, got %d", len(models3))
+	}
+
+	// Final verification
+	mu.Lock()
+	finalOllamaRequests := requestCount["/api/tags"]
+	finalLmStudioRequests := requestCount["/v1/models"]
+	mu.Unlock()
+
+	if finalOllamaRequests != 3 {
+		t.Errorf("Expected 3 total Ollama requests, got %d", finalOllamaRequests)
+	}
+	if finalLmStudioRequests != 0 {
+		t.Errorf("Expected 0 total LM Studio requests (cache should prevent all), got %d", finalLmStudioRequests)
+	}
+
+	t.Logf("✅ Cache working: %d Ollama requests, %d LM Studio requests (expected 3, 0)",
+		finalOllamaRequests, finalLmStudioRequests)
+}
+
+func TestDiscoverModelsProfileCacheExpiry(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping cache expiry test in short mode")
+	}
+
+	requestCount := make(map[string]int)
+	var mu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		requestCount[r.URL.Path]++
+		mu.Unlock()
+
+		// Always return success for Ollama
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(200)
+			w.Write([]byte(`{"models": [{"name": "test-model"}]}`))
+		} else {
+			w.WriteHeader(404)
+			w.Write([]byte(`{"error": "not found"}`))
+		}
+	}))
+	defer server.Close()
+
+	// Temporarily reduce cache timeout for testing
+	originalTimeout := cacheTimeout
+	cacheTimeout = 100 * time.Millisecond
+	defer func() { cacheTimeout = originalTimeout }()
+
+	endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
+	client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
+
+	ctx := context.Background()
+
+	// First discovery
+	_, err := client.DiscoverModels(ctx, endpoint)
+	if err != nil {
+		t.Fatalf("First discovery failed: %v", err)
+	}
+
+	// Wait for cache to expire
+	time.Sleep(150 * time.Millisecond)
+
+	// Second discovery after expiry - should go through auto-detection again
+	_, err = client.DiscoverModels(ctx, endpoint)
+	if err != nil {
+		t.Fatalf("Second discovery failed: %v", err)
+	}
+
+	// Should have made 2 requests to Ollama (cache expired)
+	mu.Lock()
+	ollamaRequests := requestCount["/api/tags"]
+	mu.Unlock()
+
+	if ollamaRequests != 2 {
+		t.Errorf("Expected 2 Ollama requests after cache expiry, got %d", ollamaRequests)
+	}
+
+	t.Logf("✅ Cache expiry working: %d requests after cache timeout", ollamaRequests)
+}
+
+func TestDiscoverModelsProfileCacheInvalidation(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+
+		if r.URL.Path == "/api/tags" {
+			if callCount == 1 {
+				// First call succeeds
+				w.WriteHeader(200)
+				w.Write([]byte(`{"models": [{"name": "test-model"}]}`))
+			} else {
+				// Subsequent calls fail (endpoint changed)
+				w.WriteHeader(500)
+				w.Write([]byte(`{"error": "server error"}`))
+			}
+		} else if r.URL.Path == "/v1/models" {
+			// LM Studio works after Ollama fails
+			w.WriteHeader(200)
+			w.Write([]byte(`{
+				"object": "list",
+				"data": [{"id": "backup-model", "object": "model"}]
+			}`))
+		} else {
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
+	client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
+
+	ctx := context.Background()
+
+	// First discovery - Ollama works, gets cached
+	models1, err1 := client.DiscoverModels(ctx, endpoint)
+	if err1 != nil {
+		t.Fatalf("First discovery failed: %v", err1)
+	}
+	if len(models1) != 1 || models1[0].Name != "test-model" {
+		t.Fatalf("Expected Ollama model, got %+v", models1)
+	}
+
+	// Second discovery - cached Ollama fails, should fall back and cache LM Studio
+	models2, err2 := client.DiscoverModels(ctx, endpoint)
+	if err2 != nil {
+		t.Fatalf("Second discovery failed: %v", err2)
+	}
+	if len(models2) != 1 || models2[0].Name != "backup-model" {
+		t.Fatalf("Expected LM Studio model after fallback, got %+v", models2)
+	}
+
+	t.Log("✅ Cache invalidation working: fell back from failed cached profile")
+}
 func createTestLogger() *logger.StyledLogger {
 	slogLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError, // Only log errors to reduce test noise
