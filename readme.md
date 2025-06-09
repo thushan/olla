@@ -71,6 +71,7 @@ Olla comes with a pre-configured docker configuration which proxies your local O
 docker run -d \
   --name olla \
   -p 19841:19841 \
+  -e OLLA_PRETTY_LOGS=true \
   -e OLLA_SERVER_HOST=0.0.0.0 \
   -e OLLA_CONFIG_FILE=config/docker.yaml \
   ghcr.io/thushan/olla:latest
@@ -92,6 +93,7 @@ services:
     environment:
       - OLLA_SERVER_HOST=0.0.0.0
       - OLLA_LOGGING_LEVEL=info
+      - OLLA_PRETTY_LOGS=true
       - OLLA_CONFIG_FILE=config/docker.yaml
     volumes:
       - ./config:/app/config
@@ -215,6 +217,8 @@ export OLLA_SERVER_MAX_HEADER_SIZE="1MB"
 # Logging
 export OLLA_LOGGING_LEVEL="info"  # debug, info, warn, error
 export OLLA_LOGGING_FORMAT="json" # json or text
+export OLLA_PRETTY_LOGS="true"    # pretty terminal logs, turn off in prod (default: true)
+export OLLA_FILE_OUTPUT="false"   # write logs to disk, if you're not monitoring stdout/stderror (default: false)
 ```
 
 ## ⚖️ Load Balancing Strategies
