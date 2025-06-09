@@ -279,8 +279,8 @@ func (r *MemoryModelRegistry) GetEndpointModelMap(ctx context.Context) (map[stri
 			LastUpdated: endpointData.LastUpdated,
 		}
 		/*
-			for i, model := range endpointData.Models {
-				result[endpointURL].Models[i] = &domain.ModelInfo{
+			for i, model := range endpointData.Available {
+				result[endpointURL].Available[i] = &domain.ModelInfo{
 					Name:        model.Name,
 					Size:        model.Size,
 					Type:        model.Type,

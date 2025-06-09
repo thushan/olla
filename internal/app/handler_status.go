@@ -56,8 +56,8 @@ type EndpointResponse struct {
 
 type EndpointModelsResponse struct {
 	LastUpdated time.Time `json:"last_updated"`
-	Models      []string  `json:"models_available"`
-	ModelsCount int64     `json:"models_count"`
+	Available   []string  `json:"available"`
+	Count       int64     `json:"count"`
 }
 
 type SecuritySummary struct {
@@ -180,8 +180,8 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 		if endpointModels != nil {
 			modelDisco = EndpointModelsResponse{
 				LastUpdated: endpointModels.LastUpdated,
-				ModelsCount: int64(len(endpointModels.Models)),
-				Models:      a.modelRegistry.ModelsToStrings(endpointModels.Models),
+				Count:       int64(len(endpointModels.Models)),
+				Available:   a.modelRegistry.ModelsToStrings(endpointModels.Models),
 			}
 		}
 

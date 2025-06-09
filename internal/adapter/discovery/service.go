@@ -150,7 +150,7 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		return fmt.Errorf("failed to register models: %w", err)
 	}
 
-	s.logger.InfoWithEndpoint(" Models for", endpoint.Name, "count", len(models), "models", s.modelRegistry.ModelsToString(models))
+	s.logger.InfoWithEndpoint(" Available for", endpoint.Name, "count", len(models), "models", s.modelRegistry.ModelsToString(models))
 	return nil
 }
 
