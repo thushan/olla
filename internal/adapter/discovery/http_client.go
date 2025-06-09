@@ -44,12 +44,12 @@ type HTTPModelDiscoveryClient struct {
 	httpClient     *http.Client
 	profileFactory *profile.Factory
 	parser         *ResponseParser
-	logger         *logger.StyledLogger
+	logger         logger.StyledLogger
 	metrics        DiscoveryMetrics
 	mu             sync.RWMutex
 }
 
-func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger *logger.StyledLogger) *HTTPModelDiscoveryClient {
+func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.StyledLogger) *HTTPModelDiscoveryClient {
 	return &HTTPModelDiscoveryClient{
 		httpClient: &http.Client{
 			Timeout: DefaultTimeout,

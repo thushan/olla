@@ -41,7 +41,7 @@ const (
 type Collector struct {
 	uniqueRateLimitedIPs map[string]int64
 
-	logger *logger.StyledLogger
+	logger logger.StyledLogger
 
 	endpoints sync.Map // map[string]*endpointData
 
@@ -72,7 +72,7 @@ type endpointData struct {
 	lastUsed           int64
 }
 
-func NewCollector(logger *logger.StyledLogger) *Collector {
+func NewCollector(logger logger.StyledLogger) *Collector {
 	return &Collector{
 		uniqueRateLimitedIPs: make(map[string]int64),
 		logger:               logger,

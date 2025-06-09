@@ -26,13 +26,13 @@ type HTTPHealthChecker struct {
 	healthClient     *HealthClient
 	ticker           *time.Ticker
 	stopCh           chan struct{}
-	logger           *logger.StyledLogger
+	logger           logger.StyledLogger
 	lastLoggedStatus sync.Map
 	lastLogTime      sync.Map
 	isRunning        atomic.Bool
 }
 
-func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
+func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
 	circuitBreaker := NewCircuitBreaker()
 	healthClient := NewHealthClient(client, circuitBreaker)
 
@@ -44,7 +44,7 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.S
 	}
 }
 
-func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger *logger.StyledLogger) *HTTPHealthChecker {
+func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger logger.StyledLogger) *HTTPHealthChecker {
 	client := &http.Client{
 		Timeout: DefaultHealthCheckerTimeout,
 	}
@@ -450,7 +450,8 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 		})
 	}
 
-	c.logger.Info(fmt.Sprintf("Registered endpoints %s", pterm.Style{c.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
-	tableString, _ := pterm.DefaultTable.WithHeaderStyle(c.logger.Theme.Accent).WithHasHeader().WithData(tableData).Srender()
+	c.logger.InfoWithCount("Registered endpoints", len(entries))
+	// .WithHeaderStyle(c.logger.Theme.Accent)
+	tableString, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
 	fmt.Print(tableString)
 }

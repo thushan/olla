@@ -24,7 +24,7 @@ type ModelDiscoveryService struct {
 	client            ModelDiscoveryClient
 	endpointRepo      domain.EndpointRepository
 	modelRegistry     domain.ModelRegistry
-	logger            *logger.StyledLogger
+	logger            logger.StyledLogger
 	stopCh            chan struct{}
 	ticker            *time.Ticker
 	disabledEndpoints map[string]int // tracks consecutive failures
@@ -42,7 +42,7 @@ type DiscoveryConfig struct {
 	RetryBackoff      time.Duration // Backoff between retries
 }
 
-func NewModelDiscoveryService(client ModelDiscoveryClient, endpointRepo domain.EndpointRepository, modelRegistry domain.ModelRegistry, config DiscoveryConfig, logger *logger.StyledLogger) *ModelDiscoveryService {
+func NewModelDiscoveryService(client ModelDiscoveryClient, endpointRepo domain.EndpointRepository, modelRegistry domain.ModelRegistry, config DiscoveryConfig, logger logger.StyledLogger) *ModelDiscoveryService {
 	return &ModelDiscoveryService{
 		client:            client,
 		endpointRepo:      endpointRepo,

@@ -28,7 +28,7 @@ type SherpaProxyService struct {
 	stats            *proxyStats
 	statsCollector   ports.StatsCollector
 	bufferPool       sync.Pool
-	logger           *logger.StyledLogger
+	logger           logger.StyledLogger
 }
 
 type proxyStats struct {
@@ -57,7 +57,7 @@ func NewSherpaService(
 	selector domain.EndpointSelector,
 	configuration *Configuration,
 	statsCollector ports.StatsCollector,
-	logger *logger.StyledLogger,
+	logger logger.StyledLogger,
 ) *SherpaProxyService {
 	transport := &http.Transport{
 		MaxIdleConns:        DefaultMaxIdleConns,
@@ -334,7 +334,7 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 }
 
 //nolint:gocognit // TODO: Refactor this function to reduce complexity
-func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, rlog *logger.StyledLogger) (int, error) {
+func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, rlog logger.StyledLogger) (int, error) {
 	bufferSize := s.configuration.StreamBufferSize
 	if bufferSize == 0 {
 		bufferSize = DefaultStreamBufferSize

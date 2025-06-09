@@ -16,12 +16,12 @@ import (
 type MemoryModelRegistry struct {
 	endpointModels   map[string]*domain.EndpointModels
 	modelToEndpoints map[string]map[string]struct{}
-	logger           *logger.StyledLogger
+	logger           logger.StyledLogger
 	stats            domain.RegistryStats
 	mu               sync.RWMutex
 }
 
-func NewMemoryModelRegistry(logger *logger.StyledLogger) *MemoryModelRegistry {
+func NewMemoryModelRegistry(logger logger.StyledLogger) *MemoryModelRegistry {
 	logger.Info("Started in-memory model registry")
 	return &MemoryModelRegistry{
 		endpointModels:   make(map[string]*domain.EndpointModels),

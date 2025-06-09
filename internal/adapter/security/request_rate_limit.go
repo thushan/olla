@@ -32,7 +32,7 @@ import (
 
 type RateLimitValidator struct {
 	metrics ports.SecurityMetricsService
-	logger  *logger.StyledLogger
+	logger  logger.StyledLogger
 
 	globalLimiter           *rate.Limiter
 	cleanupTicker           *time.Ticker
@@ -56,7 +56,7 @@ type ipLimiterInfo struct {
 	mu           sync.RWMutex
 }
 
-func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.SecurityMetricsService, logger *logger.StyledLogger) *RateLimitValidator {
+func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.SecurityMetricsService, logger logger.StyledLogger) *RateLimitValidator {
 	rl := &RateLimitValidator{
 		globalRequestsPerMinute: limits.GlobalRequestsPerMinute,
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,

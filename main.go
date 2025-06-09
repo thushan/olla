@@ -90,7 +90,7 @@ func main() {
 	styledLogger.Info("Olla has shutdown")
 }
 
-func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
+func reportProcessStats(logger logger.StyledLogger, startTime time.Time) {
 	runtime.GC()
 	stats := nerdstats.Snapshot(startTime)
 
