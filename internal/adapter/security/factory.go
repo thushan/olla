@@ -22,9 +22,9 @@ type Adapters struct {
 
 // NewSecurityServices Creates and wires security validators so they're easy to chain and c onsume
 func NewSecurityServices(cfg *config.Config, statsCollector ports.StatsCollector, logger *logger.StyledLogger) (*Services, *Adapters) {
-	rateLimitValidator := NewRateLimitValidator(cfg.Server.RateLimits, logger)
-	sizeValidator := NewSizeValidator(cfg.Server.RequestLimits, logger)
 	metricsAdapter := NewSecurityMetricsAdapter(statsCollector, logger)
+	rateLimitValidator := NewRateLimitValidator(cfg.Server.RateLimits, metricsAdapter, logger)
+	sizeValidator := NewSizeValidator(cfg.Server.RequestLimits, metricsAdapter, logger)
 
 	chain := ports.NewSecurityChain(
 		rateLimitValidator, /* We start with rate limiting */

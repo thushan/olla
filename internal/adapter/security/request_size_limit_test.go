@@ -17,14 +17,20 @@ func createTestSizeLogger() *logger.StyledLogger {
 	log, _, _ := logger.New(loggerCfg)
 	return logger.NewStyledLogger(log, theme.Default())
 }
+func createTestSizeLimitValidator(limits config.ServerRequestLimits) *SizeValidator {
+	logger := createTestRateLimitLogger()
+	statsCollector := createTestStatsCollector(logger)
+	metricsAdapter := NewSecurityMetricsAdapter(statsCollector, logger)
 
+	return NewSizeValidator(limits, metricsAdapter, logger)
+}
 func TestNewSizeValidator(t *testing.T) {
 	limits := config.ServerRequestLimits{
 		MaxBodySize:   1024,
 		MaxHeaderSize: 512,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 
 	if validator.Name() != "size_limit" {
 		t.Errorf("Expected name 'size_limit', got %q", validator.Name())
@@ -43,7 +49,7 @@ func TestSizeValidator_Validate_SmallRequest(t *testing.T) {
 		MaxHeaderSize: 512,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -73,7 +79,7 @@ func TestSizeValidator_Validate_BodyTooLarge(t *testing.T) {
 		MaxHeaderSize: 1024,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -103,7 +109,7 @@ func TestSizeValidator_Validate_HeadersTooLarge(t *testing.T) {
 		MaxHeaderSize: 100,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -135,7 +141,7 @@ func TestSizeValidator_Validate_ZeroLimitsDisabled(t *testing.T) {
 		MaxHeaderSize: 0,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -164,7 +170,7 @@ func TestSizeValidator_Validate_NegativeLimitsDisabled(t *testing.T) {
 		MaxHeaderSize: -100,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -193,7 +199,7 @@ func TestSizeValidator_Validate_ExactLimit(t *testing.T) {
 		MaxHeaderSize: 200,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -222,7 +228,7 @@ func TestSizeValidator_Validate_OneByteTooLarge(t *testing.T) {
 		MaxHeaderSize: 200,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -249,7 +255,7 @@ func TestSizeValidator_Validate_EmptyBody(t *testing.T) {
 		MaxHeaderSize: 200,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -278,7 +284,7 @@ func TestSizeValidator_Validate_MultipleHeaders(t *testing.T) {
 		MaxHeaderSize: 200,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{
@@ -310,7 +316,7 @@ func TestSizeValidator_Validate_ConcurrentRequests(t *testing.T) {
 		MaxHeaderSize: 500,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -379,7 +385,7 @@ func TestSizeValidator_Validate_MultiValueHeaders(t *testing.T) {
 		MaxHeaderSize: 150,
 	}
 
-	validator := NewSizeValidator(limits, createTestSizeLogger())
+	validator := createTestSizeLimitValidator(limits)
 	ctx := context.Background()
 
 	req := ports.SecurityRequest{

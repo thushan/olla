@@ -61,12 +61,14 @@ type EndpointModelsResponse struct {
 }
 
 type SecuritySummary struct {
-	Status     string `json:"status"`
-	RateLimits int64  `json:"rate_limits"`
-	SizeLimits int64  `json:"size_limits"`
-	BlockedIPs int    `json:"blocked_ips"`
+	Status     string            `json:"status"`
+	BlockedIPs int               `json:"blocked_ips"`
+	Violations SecurityViolation `json:"violations"`
 }
-
+type SecurityViolation struct {
+	RateLimits int64 `json:"rate_limits"`
+	SizeLimits int64 `json:"size_limits"`
+}
 type StatusResponse struct {
 	Timestamp time.Time          `json:"timestamp"`
 	Endpoints []EndpointResponse `json:"endpoints"`
@@ -220,8 +222,10 @@ func (a *Application) buildSecuritySummary(stats ports.SecurityStats) SecuritySu
 	}
 
 	return SecuritySummary{
-		RateLimits: stats.RateLimitViolations,
-		SizeLimits: stats.SizeLimitViolations,
+		Violations: SecurityViolation{
+			RateLimits: stats.RateLimitViolations,
+			SizeLimits: stats.SizeLimitViolations,
+		},
 		BlockedIPs: stats.UniqueRateLimitedIPs,
 		Status:     status,
 	}

@@ -35,7 +35,7 @@ func TestNewRateLimitValidator(t *testing.T) {
 		TrustedProxyCIDRsParsed: trustedCIDRs,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	if validator.Name() != "rate_limit" {
@@ -61,6 +61,13 @@ func TestNewRateLimitValidator(t *testing.T) {
 	}
 }
 
+func createTestRateLimitValidator(limits config.ServerRateLimits) *RateLimitValidator {
+	logger := createTestRateLimitLogger()
+	statsCollector := createTestStatsCollector(logger)
+	metricsAdapter := NewSecurityMetricsAdapter(statsCollector, logger)
+
+	return NewRateLimitValidator(limits, metricsAdapter, logger)
+}
 func TestNewRateLimitValidator_InvalidCIDRs(t *testing.T) {
 	limits := config.ServerRateLimits{
 		GlobalRequestsPerMinute: 1000,
@@ -70,7 +77,7 @@ func TestNewRateLimitValidator_InvalidCIDRs(t *testing.T) {
 		TrustedProxyCIDRs:       []string{"invalid-cidr", "192.168.0.0/16"},
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	if validator.trustedCIDRs != nil {
@@ -86,7 +93,7 @@ func TestRateLimitValidator_Validate_Disabled(t *testing.T) {
 		CleanupInterval:         time.Minute,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	req := ports.SecurityRequest{
@@ -120,7 +127,7 @@ func TestRateLimitValidator_Validate_HealthEndpoint(t *testing.T) {
 		CleanupInterval:         time.Minute,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	ctx := context.Background()
@@ -165,7 +172,7 @@ func TestRateLimitValidator_Validate_BurstCapacity(t *testing.T) {
 		CleanupInterval:         time.Minute,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	ctx := context.Background()
@@ -211,7 +218,7 @@ func TestRateLimitValidator_Validate_PerIPIsolation(t *testing.T) {
 		CleanupInterval:         time.Minute,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	ctx := context.Background()
@@ -262,7 +269,7 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 		CleanupInterval:         time.Minute,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	ctx := context.Background()
@@ -304,7 +311,7 @@ func TestRateLimitValidator_Validate_ConcurrentAccess(t *testing.T) {
 		CleanupInterval:         time.Minute,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	ctx := context.Background()
@@ -348,7 +355,7 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 		CleanupInterval:         50 * time.Millisecond,
 	}
 
-	validator := NewRateLimitValidator(limits, createTestRateLimitLogger())
+	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
 	ctx := context.Background()
