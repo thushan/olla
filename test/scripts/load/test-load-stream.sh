@@ -13,7 +13,6 @@ if [ ! -f .env ]; then
   exit 1
 fi
 set -a; source .env; set +a
-
 DURATION=${1:-60}
 CONCURRENCY=${2:-10}
 READ_BYTES=${READ_BYTES:-4096}  # How much of the stream to read before aborting gracefully(?)
@@ -23,6 +22,13 @@ TARGET=${TARGET_URL}${PROXY_PATH}
 
 start_time=$(date +%s)
 end_time=$((start_time + DURATION))
+
+function jitter_sleep() {
+  local min_delay=${1:-0.1}
+  local max_delay=${2:-0.5}
+  local jitter=$(awk -v min=$min_delay -v max=$max_delay 'BEGIN{srand(); print min + rand() * (max - min)}')
+  sleep "$jitter"
+}
 
 function worker() {
   local wid=$1
@@ -36,6 +42,8 @@ function worker() {
       -H "Content-Type: application/json" \
       -d "$payload" \
       --no-buffer | head -c "$READ_BYTES" > /dev/null &
+
+    jitter_sleep 0.2 1.0
   done
 }
 
@@ -51,3 +59,10 @@ done
 wait
 
 echo "\nStream test complete."
+echo "Total workers:            $CONCURRENCY"
+echo "Duration:                 $DURATION seconds"
+echo "Model:                    $MODEL_NAME"
+echo "Target:                   $TARGET"
+echo "Read bytes per stream:    $READ_BYTES"
+echo "Test finished at '$(date)'"
+echo "All workers completed."
