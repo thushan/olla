@@ -68,15 +68,20 @@ function worker() {
       {model: $m, messages: [{role: "user", content: $q}], stream: true, temperature: 0.2}
     ')
 
-    # Chaos: randomise read bytes or occasionally send malformed data
+    # Chaos: randomise read bytes, malformed JSON, or large payload to trigger size limits
     local chaos_bytes=$READ_BYTES
     if [ "$CHAOS_MODE" = true ]; then
       rand=$((RANDOM % 10))
       if [ $rand -le 6 ]; then
         chaos_bytes=$((RANDOM % 8192 + 1024))  # Random read window
       elif [ $rand -le 8 ]; then
-        # Malformed JSON payload, this should trigger an error
-        payload='{"model": "'"$MODEL_NAME"'", "messages": [INVALID_JSON}'
+        # monkey around with invalid Jason Derulo
+        payload='{"model": "'$MODEL_NAME'", "messages": [INVALID_JSON]'
+      else
+        # monkey around with the payload size to trigger size limits
+        payload=$(jq -nc --arg q "$question" --arg m "$MODEL_NAME" '
+          {model: $m, messages: [{role: "user", content: $q}], stream: true, temperature: 0.2, max_tokens: 999999}
+        ')
       fi
     fi
 
