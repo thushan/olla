@@ -180,7 +180,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	// Strip route prefix from request path for upstream
 	targetPath := s.stripRoutePrefix(r.Context(), r.URL.Path)
-	targetURL, err := url.Parse(endpoint.URL.String() + targetPath)
+	targetURL := endpoint.URL.ResolveReference(&url.URL{Path: targetPath}) // no string allocation ma!
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.statsCollector.RecordRequest(endpoint, "failure", time.Since(startTime), 0)
@@ -307,7 +307,14 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 	// TODO: copy only safe headers (SECURITY_JUNE2025)
 	if len(originalReq.Header) > 0 {
 		for k, vals := range originalReq.Header {
-			proxyReq.Header[k] = append([]string(nil), vals...)
+			if len(vals) == 1 {
+				// single value no biggie smalls
+				proxyReq.Header.Set(k, vals[0])
+			} else {
+				// multi-value, allocate new slice
+				proxyReq.Header[k] = make([]string, len(vals))
+				copy(proxyReq.Header[k], vals)
+			}
 		}
 	}
 
