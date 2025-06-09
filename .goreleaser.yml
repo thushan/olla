@@ -11,7 +11,7 @@ project_name: olla
 before:
   hooks:
     - go mod download
-    - mkdir -p {config,logs}
+    - mkdir -p config logs
     - cp default.yaml config/config.yaml
     - cp docker.yaml config/docker.yaml
     - touch logs/.gitkeep
