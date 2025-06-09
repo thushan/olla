@@ -3,8 +3,9 @@ package logger
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/domain"
 	"log/slog"
+
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 // PlainStyledLogger implements StyledLogger without formatting
@@ -143,11 +144,11 @@ func (sl *PlainStyledLogger) logWithContext(level string, msg string, endpoint s
 	styledMsg := fmt.Sprintf("%s %s", msg, endpoint)
 
 	switch level {
-	case "info":
+	case LogLevelInfo:
 		sl.logger.Info(styledMsg, ctx.UserArgs...)
-	case "warn":
+	case LogLevelWarn:
 		sl.logger.Warn(styledMsg, ctx.UserArgs...)
-	case "error":
+	case LogLevelError:
 		sl.logger.Error(styledMsg, ctx.UserArgs...)
 	}
 
@@ -161,11 +162,11 @@ func (sl *PlainStyledLogger) logWithContext(level string, msg string, endpoint s
 		detailedCtx := context.WithValue(context.Background(), DefaultDetailedCookie, true)
 
 		switch level {
-		case "info":
+		case LogLevelInfo:
 			sl.logger.InfoContext(detailedCtx, msg, allArgs...)
-		case "warn":
+		case LogLevelWarn:
 			sl.logger.WarnContext(detailedCtx, msg, allArgs...)
-		case "error":
+		case LogLevelError:
 			sl.logger.ErrorContext(detailedCtx, msg, allArgs...)
 		}
 	}

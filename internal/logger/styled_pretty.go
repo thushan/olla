@@ -3,10 +3,11 @@ package logger
 import (
 	"context"
 	"fmt"
+	"log/slog"
+
 	"github.com/pterm/pterm"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/theme"
-	"log/slog"
 )
 
 // PrettyStyledLogger implements StyledLogger with pterm formatting
@@ -158,11 +159,11 @@ func (sl *PrettyStyledLogger) logWithContext(level string, msg string, endpoint 
 	styledMsg := fmt.Sprintf("%s %s", msg, pterm.Style{sl.Theme.Endpoint}.Sprint(endpoint))
 
 	switch level {
-	case "info":
+	case LogLevelInfo:
 		sl.logger.Info(styledMsg, ctx.UserArgs...)
-	case "warn":
+	case LogLevelWarn:
 		sl.logger.Warn(styledMsg, ctx.UserArgs...)
-	case "error":
+	case LogLevelError:
 		sl.logger.Error(styledMsg, ctx.UserArgs...)
 	}
 
@@ -176,11 +177,11 @@ func (sl *PrettyStyledLogger) logWithContext(level string, msg string, endpoint 
 		detailedCtx := context.WithValue(context.Background(), DefaultDetailedCookie, true)
 
 		switch level {
-		case "info":
+		case LogLevelInfo:
 			sl.logger.InfoContext(detailedCtx, msg, allArgs...)
-		case "warn":
+		case LogLevelWarn:
 			sl.logger.WarnContext(detailedCtx, msg, allArgs...)
-		case "error":
+		case LogLevelError:
 			sl.logger.ErrorContext(detailedCtx, msg, allArgs...)
 		}
 	}
