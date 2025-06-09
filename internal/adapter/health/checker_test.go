@@ -13,7 +13,6 @@ import (
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 )
 
 type mockHTTPClient struct {
@@ -140,7 +139,7 @@ func TestHTTPHealthChecker_Check_Success(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
@@ -169,7 +168,7 @@ func TestHTTPHealthChecker_Check_NetworkError(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
@@ -201,7 +200,7 @@ func TestHTTPHealthChecker_Check_SlowResponse(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
@@ -278,7 +277,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
 	ctx := context.Background()
@@ -311,7 +310,7 @@ func TestHTTPHealthChecker_ForceHealthCheck(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default()) // Fix: add theme
+	styledLogger := logger.NewPlainStyledLogger(log) // Fix: add theme
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 	ctx := context.Background()
@@ -355,7 +354,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 	ctx := context.Background()
@@ -406,7 +405,7 @@ func TestHTTPHealthChecker_PanicRecovery(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, panicClient)
 
@@ -446,7 +445,7 @@ func TestHTTPHealthChecker_ConcurrentHealthChecks(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, slowClient)
 
@@ -501,7 +500,7 @@ func TestHTTPHealthChecker_ConcurrentHealthChecks(t *testing.T) {
 		loggerCfg := &logger.Config{Level: "debug", Theme: "default"} // Debug to capture all logs
 		log, cleanup, _ := logger.New(loggerCfg)
 		defer cleanup()
-		styledLogger := logger.NewStyledLogger(log, theme.Default())
+		styledLogger := logger.NewPlainStyledLogger(log)
 
 		checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 
@@ -555,7 +554,7 @@ func TestHTTPHealthChecker_ContextCancellation(t *testing.T) {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, cleanup, _ := logger.New(loggerCfg)
 	defer cleanup()
-	styledLogger := logger.NewStyledLogger(log, theme.Default())
+	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
 

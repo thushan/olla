@@ -12,13 +12,12 @@ import (
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 )
 
-func createTestRateLimitLogger() *logger.StyledLogger {
+func createTestRateLimitLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
-	return logger.NewStyledLogger(log, theme.Default())
+	return logger.NewPlainStyledLogger(log)
 }
 
 func TestNewRateLimitValidator(t *testing.T) {

@@ -17,7 +17,6 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 )
 
 // ProxyTestSuite defines the interface for creating proxy implementations to test
@@ -119,10 +118,10 @@ func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
 	}
 }
 
-func createTestLogger() *logger.StyledLogger {
+func createTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
-	return logger.NewStyledLogger(log, theme.Default())
+	return logger.NewPlainStyledLogger(log)
 }
 
 func createTestEndpoint(name, urlStr string, status domain.EndpointStatus) *domain.Endpoint {

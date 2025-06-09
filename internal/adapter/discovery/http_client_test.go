@@ -14,12 +14,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/internal/version"
-	"github.com/thushan/olla/theme"
-
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/version"
 )
 
 func TestDiscoverModels(t *testing.T) {
@@ -690,12 +688,10 @@ func TestDiscoverModelsProfileCacheInvalidation(t *testing.T) {
 
 	t.Log("✅ Cache invalidation working: fell back from failed cached profile")
 }
-func createTestLogger() *logger.StyledLogger {
+func createTestLogger() logger.StyledLogger {
 	slogLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError, // Only log errors to reduce test noise
 	}))
 
-	appTheme := &theme.Theme{}
-
-	return logger.NewStyledLogger(slogLogger, appTheme)
+	return logger.NewPlainStyledLogger(slogLogger)
 }
