@@ -188,6 +188,7 @@ func (c *HTTPHealthChecker) checkEndpointSafely(ctx context.Context, endpoint *d
 }
 
 func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.Endpoint) {
+	now := time.Now()
 	result, err := c.healthClient.Check(ctx, endpoint)
 
 	oldStatus := endpoint.Status
@@ -196,7 +197,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 
 	endpointCopy := *endpoint
 	endpointCopy.Status = newStatus
-	endpointCopy.LastChecked = time.Now()
+	endpointCopy.LastChecked = now
 	endpointCopy.LastLatency = result.Latency
 
 	isSuccess := result.Status == domain.StatusHealthy
@@ -210,7 +211,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		endpointCopy.BackoffMultiplier = 1
 	}
 
-	endpointCopy.NextCheckTime = time.Now().Add(nextInterval)
+	endpointCopy.NextCheckTime = now.Add(nextInterval)
 
 	// Check if endpoint still exists before updating
 	if !c.repository.Exists(ctx, endpoint.URL) {
@@ -409,6 +410,7 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 	type endpointEntry struct {
 		url      string
 		name     string
+		kind     string
 		health   string
 		priority int
 		interval int
@@ -420,6 +422,7 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 		entries = append(entries, endpointEntry{
 			url:      info.URL.String(),
 			name:     info.Name,
+			kind:     info.Type,
 			health:   info.HealthCheckPathString,
 			priority: info.Priority,
 			interval: int(info.CheckInterval.Seconds()),
@@ -433,12 +436,13 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 
 	// Build table
 	tableData := make([][]string, 0, len(entries)+1)
-	tableData = append(tableData, []string{"PRIORITY", "NAME", "URL", "HEALTH", "CHECK", "TIMEOUT"})
+	tableData = append(tableData, []string{"PRIORITY", "NAME", "TYPE", "URL", "HEALTH", "CHECK", "TIMEOUT"})
 
 	for _, entry := range entries {
 		tableData = append(tableData, []string{
 			fmt.Sprintf("%d", entry.priority),
 			entry.name,
+			entry.kind,
 			entry.url,
 			entry.health,
 			fmt.Sprintf("%ds", entry.interval),
