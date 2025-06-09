@@ -28,7 +28,7 @@ type Application struct {
 	StartTime             time.Time
 	Config                *config.Config
 	server                *http.Server
-	logger                *logger.StyledLogger
+	logger                logger.StyledLogger
 	routeRegistry         *router.RouteRegistry
 	modelRegistry         domain.ModelRegistry
 	repository            *discovery.StaticEndpointRepository
@@ -43,7 +43,7 @@ type Application struct {
 	shutdownOnce          sync.Once
 }
 
-func New(startTime time.Time, logger *logger.StyledLogger) (*Application, error) {
+func New(startTime time.Time, logger logger.StyledLogger) (*Application, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
@@ -219,7 +219,7 @@ func (a *Application) Stop(ctx context.Context) error {
 
 type simpleDiscovery struct {
 	repository *discovery.StaticEndpointRepository
-	logger     *logger.StyledLogger
+	logger     logger.StyledLogger
 	endpoints  []config.EndpointConfig
 }
 

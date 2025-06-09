@@ -26,13 +26,13 @@ type HTTPHealthChecker struct {
 	healthClient     *HealthClient
 	ticker           *time.Ticker
 	stopCh           chan struct{}
-	logger           *logger.StyledLogger
+	logger           logger.StyledLogger
 	lastLoggedStatus sync.Map
 	lastLogTime      sync.Map
 	isRunning        atomic.Bool
 }
 
-func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
+func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
 	circuitBreaker := NewCircuitBreaker()
 	healthClient := NewHealthClient(client, circuitBreaker)
 
@@ -44,7 +44,7 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger *logger.S
 	}
 }
 
-func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger *logger.StyledLogger) *HTTPHealthChecker {
+func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger logger.StyledLogger) *HTTPHealthChecker {
 	client := &http.Client{
 		Timeout: DefaultHealthCheckerTimeout,
 	}
@@ -188,6 +188,7 @@ func (c *HTTPHealthChecker) checkEndpointSafely(ctx context.Context, endpoint *d
 }
 
 func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.Endpoint) {
+	now := time.Now()
 	result, err := c.healthClient.Check(ctx, endpoint)
 
 	oldStatus := endpoint.Status
@@ -196,7 +197,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 
 	endpointCopy := *endpoint
 	endpointCopy.Status = newStatus
-	endpointCopy.LastChecked = time.Now()
+	endpointCopy.LastChecked = now
 	endpointCopy.LastLatency = result.Latency
 
 	isSuccess := result.Status == domain.StatusHealthy
@@ -210,7 +211,7 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		endpointCopy.BackoffMultiplier = 1
 	}
 
-	endpointCopy.NextCheckTime = time.Now().Add(nextInterval)
+	endpointCopy.NextCheckTime = now.Add(nextInterval)
 
 	// Check if endpoint still exists before updating
 	if !c.repository.Exists(ctx, endpoint.URL) {
@@ -409,6 +410,7 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 	type endpointEntry struct {
 		url      string
 		name     string
+		kind     string
 		health   string
 		priority int
 		interval int
@@ -420,6 +422,7 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 		entries = append(entries, endpointEntry{
 			url:      info.URL.String(),
 			name:     info.Name,
+			kind:     info.Type,
 			health:   info.HealthCheckPathString,
 			priority: info.Priority,
 			interval: int(info.CheckInterval.Seconds()),
@@ -433,12 +436,13 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 
 	// Build table
 	tableData := make([][]string, 0, len(entries)+1)
-	tableData = append(tableData, []string{"PRIORITY", "NAME", "URL", "HEALTH", "CHECK", "TIMEOUT"})
+	tableData = append(tableData, []string{"PRIORITY", "NAME", "TYPE", "URL", "HEALTH", "CHECK", "TIMEOUT"})
 
 	for _, entry := range entries {
 		tableData = append(tableData, []string{
 			fmt.Sprintf("%d", entry.priority),
 			entry.name,
+			entry.kind,
 			entry.url,
 			entry.health,
 			fmt.Sprintf("%ds", entry.interval),
@@ -446,7 +450,8 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 		})
 	}
 
-	c.logger.Info(fmt.Sprintf("Registered endpoints %s", pterm.Style{c.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
-	tableString, _ := pterm.DefaultTable.WithHeaderStyle(c.logger.Theme.Accent).WithHasHeader().WithData(tableData).Srender()
+	c.logger.InfoWithCount("Registered endpoints", len(entries))
+	// .WithHeaderStyle(c.logger.Theme.Accent)
+	tableString, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
 	fmt.Print(tableString)
 }

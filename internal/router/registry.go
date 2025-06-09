@@ -21,11 +21,11 @@ type RouteInfo struct {
 
 type RouteRegistry struct {
 	routes   map[string]RouteInfo
-	logger   *logger.StyledLogger
+	logger   logger.StyledLogger
 	orderSeq int
 }
 
-func NewRouteRegistry(logger *logger.StyledLogger) *RouteRegistry {
+func NewRouteRegistry(logger logger.StyledLogger) *RouteRegistry {
 	return &RouteRegistry{
 		routes:   make(map[string]RouteInfo),
 		logger:   logger,
@@ -105,7 +105,7 @@ func (r *RouteRegistry) logRoutesTable() {
 		})
 	}
 
-	r.logger.Info(fmt.Sprintf("Registered web routes %s", pterm.Style{r.logger.Theme.Counts}.Sprintf("(%d)", len(entries))))
+	r.logger.InfoWithCount("Registered web routes", len(entries))
 	tableString, _ := pterm.DefaultTable.WithHasHeader().WithData(tableData).Srender()
 	fmt.Print(tableString)
 }

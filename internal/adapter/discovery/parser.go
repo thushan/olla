@@ -11,10 +11,10 @@ import (
 
 // ResponseParser handles parsing of difefrent platform response formats
 type ResponseParser struct {
-	logger *logger.StyledLogger
+	logger logger.StyledLogger
 }
 
-func NewResponseParser(logger *logger.StyledLogger) *ResponseParser {
+func NewResponseParser(logger logger.StyledLogger) *ResponseParser {
 	return &ResponseParser{
 		logger: logger,
 	}

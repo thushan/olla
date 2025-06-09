@@ -28,7 +28,7 @@ type SherpaProxyService struct {
 	stats            *proxyStats
 	statsCollector   ports.StatsCollector
 	bufferPool       sync.Pool
-	logger           *logger.StyledLogger
+	logger           logger.StyledLogger
 }
 
 type proxyStats struct {
@@ -57,7 +57,7 @@ func NewSherpaService(
 	selector domain.EndpointSelector,
 	configuration *Configuration,
 	statsCollector ports.StatsCollector,
-	logger *logger.StyledLogger,
+	logger logger.StyledLogger,
 ) *SherpaProxyService {
 	transport := &http.Transport{
 		MaxIdleConns:        DefaultMaxIdleConns,
@@ -180,7 +180,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	// Strip route prefix from request path for upstream
 	targetPath := s.stripRoutePrefix(r.Context(), r.URL.Path)
-	targetURL, err := url.Parse(endpoint.URL.String() + targetPath)
+	targetURL := endpoint.URL.ResolveReference(&url.URL{Path: targetPath}) // no string allocation ma!
 	if err != nil {
 		atomic.AddInt64(&s.stats.failedRequests, 1)
 		s.statsCollector.RecordRequest(endpoint, "failure", time.Since(startTime), 0)
@@ -307,7 +307,14 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 	// TODO: copy only safe headers (SECURITY_JUNE2025)
 	if len(originalReq.Header) > 0 {
 		for k, vals := range originalReq.Header {
-			proxyReq.Header[k] = append([]string(nil), vals...)
+			if len(vals) == 1 {
+				// single value no biggie smalls
+				proxyReq.Header.Set(k, vals[0])
+			} else {
+				// multi-value, allocate new slice
+				proxyReq.Header[k] = make([]string, len(vals))
+				copy(proxyReq.Header[k], vals)
+			}
 		}
 	}
 
@@ -327,7 +334,7 @@ func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
 }
 
 //nolint:gocognit // TODO: Refactor this function to reduce complexity
-func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, rlog *logger.StyledLogger) (int, error) {
+func (s *SherpaProxyService) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, rlog logger.StyledLogger) (int, error) {
 	bufferSize := s.configuration.StreamBufferSize
 	if bufferSize == 0 {
 		bufferSize = DefaultStreamBufferSize

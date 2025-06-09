@@ -9,13 +9,12 @@ import (
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 )
 
-func createTestSizeLogger() *logger.StyledLogger {
+func createTestSizeLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
-	return logger.NewStyledLogger(log, theme.Default())
+	return logger.NewPlainStyledLogger(log)
 }
 func createTestSizeLimitValidator(limits config.ServerRequestLimits) *SizeValidator {
 	logger := createTestRateLimitLogger()

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -703,8 +702,8 @@ func createTestModel(name string) *domain.ModelInfo {
 		LastSeen:    time.Now(),
 	}
 }
-func createTestLogger() *logger.StyledLogger {
+func createTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
-	return logger.NewStyledLogger(log, theme.Default())
+	return logger.NewPlainStyledLogger(log)
 }

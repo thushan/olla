@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/docker/go-units v0.5.0
+	github.com/mattn/go-isatty v0.0.20
 	github.com/pterm/pterm v0.12.81
 	golang.org/x/sync v0.15.0
 	golang.org/x/time v0.12.0
@@ -19,7 +20,6 @@ require (
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/stretchr/testify v1.10.0 // indirect

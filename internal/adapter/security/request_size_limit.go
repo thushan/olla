@@ -28,13 +28,13 @@ const (
 )
 
 type SizeValidator struct {
-	logger        *logger.StyledLogger
+	logger        logger.StyledLogger
 	metrics       ports.SecurityMetricsService
 	maxBodySize   int64
 	maxHeaderSize int64
 }
 
-func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityMetricsService, logger *logger.StyledLogger) *SizeValidator {
+func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityMetricsService, logger logger.StyledLogger) *SizeValidator {
 	return &SizeValidator{
 		maxBodySize:   limits.MaxBodySize,
 		maxHeaderSize: limits.MaxHeaderSize,

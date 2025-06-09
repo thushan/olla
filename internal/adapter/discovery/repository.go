@@ -113,6 +113,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 		return nil
 	}
 
+	now := time.Now()
 	newEndpoints := make(map[string]*domain.Endpoint, len(configs))
 
 	for _, cfg := range configs {
@@ -137,7 +138,11 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		healthCheckURL := endpointURL.ResolveReference(healthCheckPath)
 		modelURL := endpointURL.ResolveReference(modelPath)
-		key := endpointURL.String()
+
+		urlString := endpointURL.String()
+		healthCheckPathString := healthCheckPath.String()
+		healthCheckURLString := healthCheckURL.String()
+		modelURLString := modelURL.String()
 
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
@@ -149,15 +154,15 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			CheckInterval:         cfg.CheckInterval,
 			CheckTimeout:          cfg.CheckTimeout,
 			Status:                domain.StatusUnknown,
-			URLString:             endpointURL.String(),
-			HealthCheckPathString: healthCheckPath.String(),
-			HealthCheckURLString:  healthCheckURL.String(),
-			ModelURLString:        modelURL.String(),
+			URLString:             urlString,
+			HealthCheckPathString: healthCheckPathString,
+			HealthCheckURLString:  healthCheckURLString,
+			ModelURLString:        modelURLString,
 			BackoffMultiplier:     1,
-			NextCheckTime:         time.Now(),
+			NextCheckTime:         now,
 		}
 
-		newEndpoints[key] = newEndpoint
+		newEndpoints[urlString] = newEndpoint
 	}
 
 	r.mu.Lock()

@@ -22,6 +22,7 @@ import (
 
 const (
 	DefaultLoggerLevel   = "info"
+	DefaultPrettyLogs    = true
 	DefaultFileOutput    = true
 	DefaultLogDir        = "./logs"
 	DefaultLogSizeMB     = 1
@@ -89,7 +90,7 @@ func main() {
 	styledLogger.Info("Olla has shutdown")
 }
 
-func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
+func reportProcessStats(logger logger.StyledLogger, startTime time.Time) {
 	runtime.GC()
 	stats := nerdstats.Snapshot(startTime)
 
@@ -150,6 +151,7 @@ func reportProcessStats(logger *logger.StyledLogger, startTime time.Time) {
 func buildLoggerConfig() *logger.Config {
 	return &logger.Config{
 		Level:      env.GetEnvOrDefault("OLLA_LOG_LEVEL", DefaultLoggerLevel),
+		PrettyLogs: env.GetEnvBoolOrDefault("OLLA_PRETTY_LOGS", DefaultPrettyLogs),
 		FileOutput: env.GetEnvBoolOrDefault("OLLA_FILE_OUTPUT", DefaultFileOutput),
 		LogDir:     env.GetEnvOrDefault("OLLA_LOG_DIR", DefaultLogDir),
 		MaxSize:    env.GetEnvIntOrDefault("OLLA_LOG_SIZE_MB", DefaultLogSizeMB),

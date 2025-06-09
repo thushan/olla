@@ -5,17 +5,16 @@ import (
 	"fmt"
 	"github.com/thushan/olla/internal/adapter/stats"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/theme"
 	"net/url"
 	"testing"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-func createTestFactoryLogger() *logger.StyledLogger {
+func createTestFactoryLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
-	return logger.NewStyledLogger(log, theme.Default())
+	return logger.NewPlainStyledLogger(log)
 }
 func NewTestStatsCollector() *stats.Collector {
 	return stats.NewCollector(createTestFactoryLogger())

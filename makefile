@@ -103,13 +103,30 @@ clean:
 deps:
 	@go mod download && go mod tidy
 
+ready-tools: fmt lint align
+	@echo -e "\033[32mCode is clean for tests!\033[0m"
+
+# Make code ready for commit (test, fmt, lint, align)
+ready: test fmt lint align
+	@echo -e "\033[32mCode is ready for commit!\033[0m"
+
 # Format code
 fmt:
+	@echo "Running go fmt..."
 	@go fmt ./...
+	@echo "Running go fmt...Done!"
 
 # Run linter
 lint:
-	@which golangci-lint > /dev/null && golangci-lint run || echo "golangci-lint not installed, skipping..."
+	@echo "Running golangci-lint..."
+	@which golangci-lint > /dev/null && golangci-lint run --fix || echo "golangci-lint not installed, skipping..."
+	@echo "Running golangci-lint...Done!"
+
+# Run betteralign
+align:
+	@echo "Running better-align..."
+	@which betteralign > /dev/null && betteralign -apply ./... || echo "betteralign not installed, skipping..."	
+	@echo "Running better-align...Done!"
 
 # Development build (no optimisations)
 dev:
@@ -141,7 +158,10 @@ help:
 	@echo "  dev             - Build development binary (with debug symbols)"
 	@echo "  clean           - Clean build artifacts and logs"
 	@echo "  deps            - Download and tidy dependencies"
+	@echo "  ready     		 - Make code ready for commit (test, fmt, lint, align)"
+	@echo "  ready-tools     - Check code is ready with tools (fmt, lint, align)"
 	@echo "  fmt             - Format code"
 	@echo "  lint            - Run linter (requires golangci-lint)"
+	@echo "  align           - Run alignment checker (requires betteralign)"
 	@echo "  ci              - Run full CI pipeline locally"
 	@echo "  help            - Show this help"
