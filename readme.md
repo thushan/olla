@@ -40,7 +40,7 @@ We're still busy working on features and would love to hear your thoughts on wha
 ### ⚙️ **Easy Configuration**
 - **Single Configuration File**: Easily manage server with a single configuration file
 - **Environment variables**: Override any setting with environment variables
-- **Docker-ready**: One-command deployment with Docker Compose
+- **Container-ready**: One-command deployment with Docker Compose or Podman Compose
 
 ### 🔌 **Universal Compatibility**
 - **Ollama**: Full support for Ollama endpoints
@@ -67,16 +67,18 @@ We're still busy working on features and would love to hear your thoughts on wha
 Olla comes with a pre-configured docker configuration which proxies your local Ollama or LM Studio instance.
 
 ```bash
-# Pull and run Olla
-docker run -d \
+# Pull and run Olla in an interactive terminal
+docker run -d -it \
   --name olla \
   -p 19841:19841 \
-  -e OLLA_PRETTY_LOGS=true \
   -e OLLA_SERVER_HOST=0.0.0.0 \
   -e OLLA_CONFIG_FILE=config/docker.yaml \
   ghcr.io/thushan/olla:latest
+```
 
-# Check if it's running
+You can then check it's running with:
+
+```bash
 curl http://localhost:19841/internal/health
 ```
 
@@ -93,7 +95,6 @@ services:
     environment:
       - OLLA_SERVER_HOST=0.0.0.0
       - OLLA_LOGGING_LEVEL=info
-      - OLLA_PRETTY_LOGS=true
       - OLLA_CONFIG_FILE=config/docker.yaml
     volumes:
       - ./config:/app/config
@@ -105,6 +106,8 @@ Then run:
 ```bash
 docker-compose up -d
 ```
+
+You'll notice the pretty TUI isn't there and that's because it's running in production mode.
 
 ### Local Binary
 

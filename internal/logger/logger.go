@@ -2,7 +2,6 @@ package logger
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -46,14 +45,19 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	var cleanupFuncs []func()
 	var handlers []slog.Handler
 
+	// if folks want pretty, prioritise that
+	// unless we have NO_COLOR set, then we use text
 	if cfg.PrettyLogs {
-		terminalHandler := createTerminalHandler(level, appTheme)
-		handlers = append(handlers, terminalHandler)
+		if util.ShouldUseColors() {
+			handlers = append(handlers, createPTermHandler(level, appTheme))
+		} else {
+			handlers = append(handlers, createTextHandler(level))
+		}
 	} else {
-		jsonHandler := createJSONHandler(level)
-		handlers = append(handlers, jsonHandler)
+		handlers = append(handlers, createJSONHandler(level, os.Stdout))
 	}
 
+	// Optional file handler if they really want it
 	if cfg.FileOutput {
 		fileHandler, cleanup, err := createFileHandler(cfg, level)
 		if err != nil {
@@ -67,7 +71,7 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	if len(handlers) == 1 {
 		logger = slog.New(handlers[0])
 	} else {
-		logger = slog.New(&simpleMultiHandler{handlers: handlers})
+		logger = slog.New(&multiHandler{handlers: handlers})
 	}
 
 	cleanup := func() {
@@ -79,44 +83,45 @@ func New(cfg *Config) (*slog.Logger, func(), error) {
 	return logger, cleanup, nil
 }
 
-func createTerminalHandler(level slog.Level, appTheme *theme.Theme) slog.Handler {
-	var baseHandler slog.Handler
+// createPTermHandler creates a colorful pterm-based handler for terminals
+func createPTermHandler(level slog.Level, appTheme *theme.Theme) slog.Handler {
+	plogger := pterm.DefaultLogger.
+		WithLevel(convertToPTermLevel(level)).
+		WithWriter(os.Stdout).
+		WithFormatter(pterm.LogFormatterColorful)
 
-	if util.ShouldUseColors() {
-		// Colourful terminal output - use pterm
-		plogger := pterm.DefaultLogger.
-			WithLevel(convertToPTermLevel(level)).
-			WithWriter(os.Stdout).
-			WithFormatter(pterm.LogFormatterColorful)
-
-		keyStyles := map[string]pterm.Style{
-			"level": *appTheme.Info,
-			"msg":   *appTheme.Info,
-			"time":  *appTheme.Muted,
-		}
-		plogger = plogger.WithKeyStyles(keyStyles)
-		baseHandler = pterm.NewSlogHandler(plogger)
-	} else {
-		// JSON output for non-TTY - use standard slog JSON handler
-		baseHandler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-			Level:       level,
-			AddSource:   false,
-			ReplaceAttr: fastReplaceAttr,
-		})
+	keyStyles := map[string]pterm.Style{
+		"level": *appTheme.Info,
+		"msg":   *appTheme.Info,
+		"time":  *appTheme.Muted,
 	}
+	plogger = plogger.WithKeyStyles(keyStyles)
 
-	// we have to use a filter to skip detailed logs in CLI mode
-	return &terminalFilterHandler{handler: baseHandler}
+	return &terminalFilterHandler{
+		handler: pterm.NewSlogHandler(plogger),
+	}
 }
 
-func createJSONHandler(level slog.Level) slog.Handler {
-	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+// createTextHandler creates a plain text handler for non-TTY environments
+func createTextHandler(level slog.Level) slog.Handler {
+	return &terminalFilterHandler{
+		handler: slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     level,
+			AddSource: false,
+		}),
+	}
+}
+
+// createJSONHandler creates a JSON handler for the specified writer
+func createJSONHandler(level slog.Level, writer *os.File) slog.Handler {
+	return slog.NewJSONHandler(writer, &slog.HandlerOptions{
 		Level:       level,
 		AddSource:   false,
-		ReplaceAttr: fastReplaceAttr,
+		ReplaceAttr: replaceTimeAttr,
 	})
 }
 
+// createFileHandler creates a file-based JSON handler with rotation
 func createFileHandler(cfg *Config, level slog.Level) (slog.Handler, func(), error) {
 	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
 		return nil, nil, err
@@ -133,7 +138,7 @@ func createFileHandler(cfg *Config, level slog.Level) (slog.Handler, func(), err
 	handler := slog.NewJSONHandler(rotator, &slog.HandlerOptions{
 		Level:       level,
 		AddSource:   false,
-		ReplaceAttr: fastReplaceAttr,
+		ReplaceAttr: replaceTimeAttr,
 	})
 
 	cleanup := func() {
@@ -143,35 +148,23 @@ func createFileHandler(cfg *Config, level slog.Level) (slog.Handler, func(), err
 	return handler, cleanup, nil
 }
 
-// fastReplaceAttr - handles complex types and ANSI codes
-func fastReplaceAttr(groups []string, a slog.Attr) slog.Attr {
-	switch a.Key {
-	case slog.TimeKey:
+// replaceTimeAttr formats timestamps consistently
+func replaceTimeAttr(groups []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.TimeKey {
 		return slog.Attr{
 			Key:   "timestamp",
 			Value: slog.StringValue(a.Value.Time().Format("2006-01-02 15:04:05")),
-		}
-	default:
-		switch a.Value.Kind() {
-		case slog.KindString:
-			str := a.Value.String()
-			if strings.ContainsRune(str, '\x1b') {
-				return slog.Attr{Key: a.Key, Value: slog.StringValue(stripAnsiCodes(str))}
-			}
-		case slog.KindAny:
-		default:
-			return slog.Attr{Key: a.Key, Value: slog.StringValue(fmt.Sprintf("%v", a.Value.Any()))}
 		}
 	}
 	return a
 }
 
-// simpleMultiHandler sends logs to multiple handlers without dual processing
-type simpleMultiHandler struct {
+// multiHandler sends logs to multiple handlers
+type multiHandler struct {
 	handlers []slog.Handler
 }
 
-func (h *simpleMultiHandler) Enabled(ctx context.Context, level slog.Level) bool {
+func (h *multiHandler) Enabled(ctx context.Context, level slog.Level) bool {
 	for _, handler := range h.handlers {
 		if handler.Enabled(ctx, level) {
 			return true
@@ -180,7 +173,7 @@ func (h *simpleMultiHandler) Enabled(ctx context.Context, level slog.Level) bool
 	return false
 }
 
-func (h *simpleMultiHandler) Handle(ctx context.Context, record slog.Record) error {
+func (h *multiHandler) Handle(ctx context.Context, record slog.Record) error {
 	for _, handler := range h.handlers {
 		if handler.Enabled(ctx, record.Level) {
 			if err := handler.Handle(ctx, record); err != nil {
@@ -191,42 +184,37 @@ func (h *simpleMultiHandler) Handle(ctx context.Context, record slog.Record) err
 	return nil
 }
 
-func (h *simpleMultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+func (h *multiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	newHandlers := make([]slog.Handler, len(h.handlers))
 	for i, handler := range h.handlers {
 		newHandlers[i] = handler.WithAttrs(attrs)
 	}
-	return &simpleMultiHandler{handlers: newHandlers}
+	return &multiHandler{handlers: newHandlers}
 }
 
-func (h *simpleMultiHandler) WithGroup(name string) slog.Handler {
+func (h *multiHandler) WithGroup(name string) slog.Handler {
 	newHandlers := make([]slog.Handler, len(h.handlers))
 	for i, handler := range h.handlers {
 		newHandlers[i] = handler.WithGroup(name)
 	}
-	return &simpleMultiHandler{handlers: newHandlers}
+	return &multiHandler{handlers: newHandlers}
 }
 
+// terminalFilterHandler filters out detailed context logs from terminal output
 type terminalFilterHandler struct {
 	handler slog.Handler
 }
 
 func (h *terminalFilterHandler) Enabled(ctx context.Context, level slog.Level) bool {
-	// Skip detailed logs on cli
-	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
-		if d, ok := detailed.(bool); ok && d {
-			return false
-		}
+	if isDetailedLog(ctx) {
+		return false
 	}
 	return h.handler.Enabled(ctx, level)
 }
 
 func (h *terminalFilterHandler) Handle(ctx context.Context, record slog.Record) error {
-	// Skip detailed logs on cli mode
-	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
-		if d, ok := detailed.(bool); ok && d {
-			return nil
-		}
+	if isDetailedLog(ctx) {
+		return nil
 	}
 	return h.handler.Handle(ctx, record)
 }
@@ -239,6 +227,17 @@ func (h *terminalFilterHandler) WithGroup(name string) slog.Handler {
 	return &terminalFilterHandler{handler: h.handler.WithGroup(name)}
 }
 
+// isDetailedLog checks if a log should only go to files (not terminal)
+func isDetailedLog(ctx context.Context) bool {
+	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
+		if d, ok := detailed.(bool); ok && d {
+			return true
+		}
+	}
+	return false
+}
+
+// parseLevel converts string log level to slog.Level
 func parseLevel(level string) slog.Level {
 	switch strings.ToLower(level) {
 	case LogLevelDebug:
@@ -254,6 +253,7 @@ func parseLevel(level string) slog.Level {
 	}
 }
 
+// convertToPTermLevel converts slog level to pterm level
 func convertToPTermLevel(level slog.Level) pterm.LogLevel {
 	switch level {
 	case slog.LevelDebug:
