@@ -110,6 +110,12 @@ ready-tools: fmt lint align
 ready: test fmt lint align
 	@echo -e "\033[32mCode is ready for commit!\033[0m"
 
+# run goreleaser to build local release
+ready-local:
+	@echo "Building local release with goreleaser..."
+	@goreleaser release --snapshot --clean || echo "goreleaser not installed, skipping..."
+	@echo -e "\033[32mCode is ready to pull!\033[0m"
+
 # Format code
 fmt:
 	@echo "Running go fmt..."
@@ -160,6 +166,7 @@ help:
 	@echo "  deps            - Download and tidy dependencies"
 	@echo "  ready     		 - Make code ready for commit (test, fmt, lint, align)"
 	@echo "  ready-tools     - Check code is ready with tools (fmt, lint, align)"
+	@echo "  ready-local     - Builds local release with goreleaser"
 	@echo "  fmt             - Format code"
 	@echo "  lint            - Run linter (requires golangci-lint)"
 	@echo "  align           - Run alignment checker (requires betteralign)"
