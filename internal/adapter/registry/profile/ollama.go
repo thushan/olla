@@ -52,11 +52,22 @@ func (p *OllamaProfile) GetRequestParsingRules() domain.RequestParsingRules {
 
 func (p *OllamaProfile) GetModelResponseFormat() domain.ModelResponseFormat {
 	return domain.ModelResponseFormat{
-		ResponseType:    "object",
-		ModelsFieldPath: "models",
-		ModelNameField:  "name",
-		ModelSizeField:  "size",
-		ModelTypeField:  "",
+		ResponseType:     "object",
+		ModelsFieldPath:  "models",
+		ModelNameField:   "name",
+		ModelSizeField:   "size",
+		ModelTypeField:   "",
+		DetailsFieldPath: "details",
+		DetailFieldMappings: map[string]string{
+			"parameter_size":     "parameter_size",
+			"quantization_level": "quantization_level",
+			"family":             "family",
+			"families":           "families",
+			"format":             "format",
+			"parent_model":       "patent_model",
+		},
+		ModifiedAtField: "modified_at",
+		DigestField:     "digest",
 	}
 }
 

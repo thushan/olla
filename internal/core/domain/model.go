@@ -6,12 +6,26 @@ import (
 	"time"
 )
 
+// ModelDetails holds detailed model metadata for intelligent routing
+// based off ollama model details, guessing others won't be this detailed
+type ModelDetails struct {
+	ParameterSize     *string    `json:"parameter_size,omitempty"`
+	QuantizationLevel *string    `json:"quantization_level,omitempty"`
+	Family            *string    `json:"family,omitempty"`
+	Families          []string   `json:"families,omitempty"`
+	Format            *string    `json:"format,omitempty"`
+	ParentModel       *string    `json:"parent_model,omitempty"`
+	Digest            *string    `json:"digest,omitempty"` // super important for comparison checks
+	ModifiedAt        *time.Time `json:"modified_at,omitempty"`
+}
+
 type ModelInfo struct {
-	LastSeen    time.Time `json:"last_seen"`
-	Name        string    `json:"name"`
-	Type        string    `json:"type,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Size        int64     `json:"size,omitempty"`
+	Name        string        `json:"name"`
+	Type        string        `json:"type,omitempty"`
+	Description string        `json:"description,omitempty"`
+	Size        int64         `json:"size,omitempty"` // Disk size in bytes
+	LastSeen    time.Time     `json:"last_seen"`
+	Details     *ModelDetails `json:"details,omitempty"`
 }
 
 type EndpointModels struct {

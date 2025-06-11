@@ -37,11 +37,15 @@ type RequestParsingRules struct {
 
 // ModelResponseFormat describes the expected JSON structure for model listing
 type ModelResponseFormat struct {
-	ResponseType    string
-	ModelsFieldPath string
-	ModelNameField  string
-	ModelSizeField  string
-	ModelTypeField  string
+	ResponseType        string
+	ModelsFieldPath     string
+	ModelNameField      string
+	ModelSizeField      string
+	ModelTypeField      string
+	DetailsFieldPath    string
+	DetailFieldMappings map[string]string
+	ModifiedAtField     string
+	DigestField         string
 }
 
 // DetectionHints provides patterns for auto-detection of platform types
