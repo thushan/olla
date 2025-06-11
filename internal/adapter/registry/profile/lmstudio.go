@@ -146,11 +146,15 @@ func (p *LMStudioProfile) ParseModel(modelData map[string]interface{}) (*domain.
 	}
 
 	if publisher := util.GetString(modelData, "publisher"); publisher != "" {
-		modelInfo.Details.ParentModel = &publisher // using ParentModel to store publisher info
+		modelInfo.Details.ParentModel = &publisher
 		hasDetails = true
 	}
 
-	// Extract max context length and convert to description
+	if kind := util.GetString(modelData, "type"); kind != "" {
+		modelInfo.Details.Type = &kind
+		hasDetails = true
+	}
+
 	if maxCtx, ok := util.GetFloat64(modelData, "max_context_length"); ok {
 		modelInfo.Details.MaxContextLength = &maxCtx
 		hasDetails = true

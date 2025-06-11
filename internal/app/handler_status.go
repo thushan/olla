@@ -183,7 +183,6 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			modelDisco = EndpointModelsResponse{
 				LastUpdated: endpointModels.LastUpdated,
 				Count:       int64(len(endpointModels.Models)),
-				Available:   a.modelRegistry.ModelsToStrings(endpointModels.Models),
 			}
 		}
 

@@ -14,22 +14,22 @@ type ModelDetails struct {
 	Publisher         *string    `json:"publisher,omitempty"`
 	Type              *string    `json:"type,omitempty"` // from LMStudio: llm, vlm
 	Family            *string    `json:"family,omitempty"`
-	Families          []string   `json:"families,omitempty"`
 	Format            *string    `json:"format,omitempty"`
 	ParentModel       *string    `json:"parent_model,omitempty"`
 	State             *string    `json:"state,omitempty"`              // loaded / not-loaded (LMStudio gives this now)
 	Digest            *string    `json:"digest,omitempty"`             // super important for comparison checks
 	MaxContextLength  *int64     `json:"max_context_length,omitempty"` // Max context length in tokens (LMStudio gives this)
 	ModifiedAt        *time.Time `json:"modified_at,omitempty"`
+	Families          []string   `json:"families,omitempty"`
 }
 
 type ModelInfo struct {
+	LastSeen    time.Time     `json:"last_seen"`
+	Details     *ModelDetails `json:"details,omitempty"`
 	Name        string        `json:"name"`
 	Type        string        `json:"type,omitempty"`
 	Description string        `json:"description,omitempty"`
 	Size        int64         `json:"size,omitempty"` // Disk size in bytes
-	LastSeen    time.Time     `json:"last_seen"`
-	Details     *ModelDetails `json:"details,omitempty"`
 }
 
 type EndpointModels struct {

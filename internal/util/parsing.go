@@ -1,6 +1,8 @@
 package util
 
-import "time"
+import (
+	"time"
+)
 
 func GetString(m map[string]interface{}, key string) string {
 	if val, ok := m[key]; ok {
@@ -13,8 +15,13 @@ func GetString(m map[string]interface{}, key string) string {
 
 func GetFloat64(m map[string]interface{}, key string) (int64, bool) {
 	if val, ok := m[key]; ok {
-		if f, ok := val.(float64); ok {
-			return int64(f), true
+		switch v := val.(type) {
+		case float64:
+			return int64(v), true
+		case int:
+			return int64(v), true
+		case int64:
+			return v, true
 		}
 	}
 	return 0, false

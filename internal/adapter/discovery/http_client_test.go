@@ -29,33 +29,115 @@ func TestDiscoverModels(t *testing.T) {
 		expectedModels int
 		expectedError  bool
 		errorType      interface{}
+		validateModels func(*testing.T, []*domain.ModelInfo)
 	}{
 		{
-			name:         "Ollama endpoint success",
+			name:         "Ollama endpoint success with rich metadata",
 			endpointType: domain.ProfileOllama,
 			serverResponse: `{
 				"models": [
-					{"name": "llama4:128x17b", "size": 3825819519},
-					{"name": "gemma3:12b", "size": 7365960935}
+					{
+						"name": "devstral:latest",
+						"size": 14333927918,
+						"digest": "c4b2fa0c33d75457e5f1c8507c906a79e73285768686db13b9cbac0c7ee3a854",
+						"modified_at": "2025-05-30T14:24:44.5116551+10:00",
+						"details": {
+							"parameter_size": "23.6B",
+							"quantization_level": "Q4_K_M",
+							"family": "llama",
+							"format": "gguf"
+						}
+					},
+					{
+						"name": "gemma3:12b", 
+						"size": 7365960935
+					}
 				]
 			}`,
 			serverStatus:   200,
 			expectedModels: 2,
 			expectedError:  false,
+			validateModels: func(t *testing.T, models []*domain.ModelInfo) {
+				// Find the devstral model
+				var devstralModel *domain.ModelInfo
+				for _, model := range models {
+					if model.Name == "devstral:latest" {
+						devstralModel = model
+						break
+					}
+				}
+				if devstralModel == nil {
+					t.Fatal("Expected to find devstral:latest model")
+				}
+
+				if devstralModel.Details == nil {
+					t.Fatal("Expected devstral model to have details")
+				}
+
+				if devstralModel.Details.ParameterSize == nil || *devstralModel.Details.ParameterSize != "23.6B" {
+					t.Error("Expected devstral parameter_size to be '23.6B'")
+				}
+
+				if devstralModel.Details.QuantizationLevel == nil || *devstralModel.Details.QuantizationLevel != "Q4_K_M" {
+					t.Error("Expected devstral quantization_level to be 'Q4_K_M'")
+				}
+			},
 		},
 		{
-			name:         "LM Studio endpoint success",
+			name:         "LM Studio endpoint success with rich metadata",
 			endpointType: domain.ProfileLmStudio,
 			serverResponse: `{
 				"object": "list",
 				"data": [
-					{"id": "microsoft/DialoGPT-medium", "object": "model"},
-					{"id": "gpt-3.5-turbo", "object": "model"}
+					{
+						"id": "meta-llama-3.3-8b-instruct",
+						"object": "model",
+						"type": "llm",
+						"publisher": "lmstudio-community",
+						"arch": "llama",
+						"compatibility_type": "gguf",
+						"quantization": "Q4_K_M",
+						"state": "not-loaded",
+						"max_context_length": 131072
+					},
+					{
+						"id": "microsoft/DialoGPT-medium", 
+						"object": "model"
+					}
 				]
 			}`,
 			serverStatus:   200,
 			expectedModels: 2,
 			expectedError:  false,
+			validateModels: func(t *testing.T, models []*domain.ModelInfo) {
+				// Find the llama model
+				var llamaModel *domain.ModelInfo
+				for _, model := range models {
+					if model.Name == "meta-llama-3.3-8b-instruct" {
+						llamaModel = model
+						break
+					}
+				}
+				if llamaModel == nil {
+					t.Fatal("Expected to find meta-llama-3.3-8b-instruct model")
+				}
+
+				if llamaModel.Details == nil {
+					t.Fatal("Expected llama model to have details")
+				}
+
+				if llamaModel.Details.Family == nil || *llamaModel.Details.Family != "llama" {
+					t.Error("Expected llama family to be 'llama'")
+				}
+
+				if llamaModel.Details.QuantizationLevel == nil || *llamaModel.Details.QuantizationLevel != "Q4_K_M" {
+					t.Error("Expected llama quantization_level to be 'Q4_K_M'")
+				}
+
+				if *llamaModel.Details.MaxContextLength != int64(131072) {
+					t.Error("Expected description to contain max context length")
+				}
+			},
 		},
 		{
 			name:         "OpenAI Compatible endpoint success",
@@ -63,12 +145,33 @@ func TestDiscoverModels(t *testing.T) {
 			serverResponse: `{
 				"object": "list",
 				"data": [
-					{"id": "text-davinci-003", "object": "model"}
+					{
+						"id": "gpt-3.5-turbo",
+						"object": "model",
+						"created": 1677610602,
+						"owned_by": "openai"
+					}
 				]
 			}`,
 			serverStatus:   200,
 			expectedModels: 1,
 			expectedError:  false,
+			validateModels: func(t *testing.T, models []*domain.ModelInfo) {
+				model := models[0]
+				if model.Name != "gpt-3.5-turbo" {
+					t.Errorf("Expected name 'gpt-3.5-turbo', got %s", model.Name)
+				}
+				if model.Type != "model" {
+					t.Errorf("Expected type 'model', got %s", model.Type)
+				}
+				// OpenAI should have minimal metadata
+				if model.Details != nil && model.Details.ModifiedAt != nil {
+					expectedTime := time.Unix(1677610602, 0)
+					if !model.Details.ModifiedAt.Equal(expectedTime) {
+						t.Errorf("Expected created time to be parsed correctly")
+					}
+				}
+			},
 		},
 		{
 			name:           "HTTP 404 error",
@@ -107,11 +210,10 @@ func TestDiscoverModels(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				expectedUserAgent := fmt.Sprintf(DefaultUserAgent, version.ShortName, version.Version)
 
-				ExpectedUserAgent := fmt.Sprintf(DefaultUserAgent, version.ShortName, version.Version)
-
-				if r.Header.Get("User-Agent") != ExpectedUserAgent {
-					t.Errorf("Expected User-Agent header to be %s, got %s", ExpectedUserAgent, r.Header.Get("User-Agent"))
+				if r.Header.Get("User-Agent") != expectedUserAgent {
+					t.Errorf("Expected User-Agent header to be %s, got %s", expectedUserAgent, r.Header.Get("User-Agent"))
 				}
 				if r.Header.Get("Accept") != DefaultContentType {
 					t.Errorf("Expected Accept header to be %s, got %s", DefaultContentType, r.Header.Get("Accept"))
@@ -163,6 +265,10 @@ func TestDiscoverModels(t *testing.T) {
 					t.Errorf("Model %d has zero LastSeen time", i)
 				}
 			}
+
+			if tt.validateModels != nil {
+				tt.validateModels(t, models)
+			}
 		})
 	}
 }
@@ -173,15 +279,24 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 		serverResponses map[string]serverResponse // path -> response
 		expectedModels  int
 		expectedError   bool
+		validateResult  func(*testing.T, []*domain.ModelInfo)
 	}{
 		{
-			name: "Ollama detection success",
+			name: "Ollama detection success with rich metadata",
 			serverResponses: map[string]serverResponse{
 				"/api/tags": {
 					status: 200,
 					body: `{
 						"models": [
-							{"name": "llama4:128x17b", "size": 3825819519}
+							{
+								"name": "llama3.3:8b",
+								"size": 4661224676,
+								"details": {
+									"parameter_size": "8B",
+									"quantization_level": "Q4_0",
+									"family": "llama"
+								}
+							}
 						]
 					}`,
 				},
@@ -192,6 +307,18 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 			},
 			expectedModels: 1,
 			expectedError:  false,
+			validateResult: func(t *testing.T, models []*domain.ModelInfo) {
+				if len(models) != 1 {
+					t.Fatalf("Expected 1 model, got %d", len(models))
+				}
+				model := models[0]
+				if model.Details == nil {
+					t.Fatal("Expected Ollama model to have details")
+				}
+				if model.Details.ParameterSize == nil || *model.Details.ParameterSize != "8B" {
+					t.Error("Expected parameter_size to be '8B'")
+				}
+			},
 		},
 		{
 			name: "LM Studio detection after Ollama fails",
@@ -200,18 +327,45 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 					status: 404,
 					body:   `{"error": "not found"}`,
 				},
-				"/v1/models": {
+				"/api/v0/models": { // Changed from "/v1/models"
 					status: 200,
 					body: `{
-						"object": "list",
-						"data": [
-							{"id": "gpt-3.5-turbo", "object": "model"}
-						]
-					}`,
+                "object": "list",
+                "data": [
+                    {
+                        "id": "qwen3-vl-7b-instruct",
+                        "object": "model",
+                        "type": "vlm",
+                        "arch": "qwen3_vl",
+                        "compatibility_type": "mlx",
+                        "quantization": "4bit",
+                        "max_context_length": 32768
+                    }
+                ]
+            }`,
+				},
+				"/v1/models": { // Add this as 404 to prevent OpenAI fallback
+					status: 404,
+					body:   `{"error": "not found"}`,
 				},
 			},
 			expectedModels: 1,
 			expectedError:  false,
+			validateResult: func(t *testing.T, models []*domain.ModelInfo) {
+				if len(models) != 1 {
+					t.Fatalf("Expected 1 model, got %d", len(models))
+				}
+				model := models[0]
+				if model.Details == nil {
+					t.Fatal("Expected LM Studio model to have details")
+				}
+				if model.Details.Family == nil || *model.Details.Family != "qwen3_vl" {
+					t.Error("Expected family to be 'qwen3_vl'")
+				}
+				if model.Details.QuantizationLevel == nil || *model.Details.QuantizationLevel != "4bit" {
+					t.Error("Expected quantization_level to be '4bit'")
+				}
+			},
 		},
 		{
 			name: "OpenAI Compatible fallback success",
@@ -225,13 +379,34 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 					body: `{
 						"object": "list",
 						"data": [
-							{"id": "text-davinci-003", "object": "model"}
+							{
+								"id": "text-davinci-003",
+								"object": "model",
+								"created": 1669599635,
+								"owned_by": "openai-internal"
+							}
 						]
 					}`,
 				},
 			},
 			expectedModels: 1,
 			expectedError:  false,
+			validateResult: func(t *testing.T, models []*domain.ModelInfo) {
+				if len(models) != 1 {
+					t.Fatalf("Expected 1 model, got %d", len(models))
+				}
+				model := models[0]
+				if model.Name != "text-davinci-003" {
+					t.Errorf("Expected name 'text-davinci-003', got %s", model.Name)
+				}
+				// OpenAI compatible should have minimal metadata
+				if model.Details != nil && model.Details.ModifiedAt != nil {
+					expectedTime := time.Unix(1669599635, 0)
+					if !model.Details.ModifiedAt.Equal(expectedTime) {
+						t.Error("Expected created timestamp to be parsed")
+					}
+				}
+			},
 		},
 		{
 			name: "All profiles fail",
@@ -242,7 +417,7 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			name: "Non-recoverable error stops detection",
+			name: "Non-recoverable parse error stops detection",
 			serverResponses: map[string]serverResponse{
 				"/api/tags": {
 					status: 200,
@@ -275,7 +450,7 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 			}))
 			defer server.Close()
 
-			//  auto detection
+			// Use auto detection
 			endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
 			t.Logf("Created endpoint with URL: %s, Type: %s", endpoint.URLString, endpoint.Type)
 
@@ -303,12 +478,17 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 			} else {
 				t.Logf("Successfully discovered %d models", len(models))
 			}
+
+			// Run custom validation if provided
+			if tt.validateResult != nil {
+				tt.validateResult(t, models)
+			}
 		})
 	}
 }
 
 func TestDiscoverModelsContextCancellation(t *testing.T) {
-	// test a delay, so we can cancel the context
+	// Create server with delay, so we can cancel the context
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(200)
@@ -319,7 +499,7 @@ func TestDiscoverModelsContextCancellation(t *testing.T) {
 	endpoint := createTestEndpoint(server.URL, domain.ProfileOllama)
 	client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
 
-	// crate context with short timeout
+	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
@@ -333,7 +513,7 @@ func TestDiscoverModelsContextCancellation(t *testing.T) {
 	if errors.As(err, &discErr) {
 		var networkError *NetworkError
 		if !errors.As(discErr.Err, &networkError) {
-			t.Errorf("Expected NetwokError, got %T", discErr.Err)
+			t.Errorf("Expected NetworkError, got %T", discErr.Err)
 		}
 	}
 }
@@ -386,7 +566,7 @@ func TestHealthCheck(t *testing.T) {
 func TestGetMetrics(t *testing.T) {
 	client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
 
-	// make sure everything is zero before hero!
+	// Make sure everything is zero before starting
 	metrics := client.GetMetrics()
 	if metrics.TotalDiscoveries != 0 {
 		t.Errorf("Expected TotalDiscoveries to be 0, got %d", metrics.TotalDiscoveries)
@@ -413,10 +593,10 @@ func TestGetMetrics(t *testing.T) {
 
 	metrics = client.GetMetrics()
 	if metrics.TotalDiscoveries != 1 {
-		t.Errorf("Expected TotalDiscoverries to be 1 was %d", metrics.TotalDiscoveries)
+		t.Errorf("Expected TotalDiscoveries to be 1, got %d", metrics.TotalDiscoveries)
 	}
 	if metrics.SuccessfulRequests != 1 {
-		t.Errorf("Expected SuccessfulRequests to be 1 was %d", metrics.SuccessfulRequests)
+		t.Errorf("Expected SuccessfulRequests to be 1, got %d", metrics.SuccessfulRequests)
 	}
 	if metrics.LastDiscoveryTime.IsZero() {
 		t.Errorf("Expected LastDiscoveryTime to be set")
@@ -424,8 +604,8 @@ func TestGetMetrics(t *testing.T) {
 }
 
 func TestMaxResponseSizeLimit(t *testing.T) {
-	// returns response larger than MaxResponseSize
-	// cheapest way to create this payload
+	// Create response larger than MaxResponseSize
+	// Cheapest way to create this payload
 	largeResponse := fmt.Sprintf(`{"models": [{"name": "%s"}]}`, strings.Repeat("x", MaxResponseSize))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -443,32 +623,6 @@ func TestMaxResponseSizeLimit(t *testing.T) {
 	}
 }
 
-type serverResponse struct {
-	status int
-	body   string
-}
-
-func createTestEndpoint(baseURL, endpointType string) *domain.Endpoint {
-	parsedURL, _ := url.Parse(baseURL)
-
-	healthCheckURL, _ := url.Parse(baseURL + "/")
-	modelURL, _ := url.Parse(baseURL + "/api/tags") // This doesn't matter for auto-detection
-
-	return &domain.Endpoint{
-		Name:                 "test-endpoint",
-		URL:                  parsedURL,
-		Type:                 endpointType,
-		Priority:             100,
-		HealthCheckURL:       healthCheckURL,
-		ModelUrl:             modelURL,
-		URLString:            baseURL,
-		HealthCheckURLString: baseURL + "/",
-		ModelURLString:       baseURL + "/api/tags",
-		Status:               domain.StatusHealthy,
-		CheckInterval:        5 * time.Second,
-		CheckTimeout:         2 * time.Second,
-	}
-}
 func TestDiscoverModelsProfileCaching(t *testing.T) {
 	requestCount := make(map[string]int)
 	var mu sync.Mutex
@@ -482,11 +636,19 @@ func TestDiscoverModelsProfileCaching(t *testing.T) {
 
 		switch r.URL.Path {
 		case "/api/tags":
-			// Ollama endpoint - return success
+			// Ollama endpoint - return success with rich metadata
 			w.WriteHeader(200)
 			w.Write([]byte(`{
 				"models": [
-					{"name": "llama3:8b", "size": 4661224676}
+					{
+						"name": "llama3:8b",
+						"size": 4661224676,
+						"details": {
+							"parameter_size": "8B",
+							"quantization_level": "Q4_0",
+							"family": "llama"
+						}
+					}
 				]
 			}`))
 		case "/v1/models":
@@ -513,6 +675,14 @@ func TestDiscoverModelsProfileCaching(t *testing.T) {
 	}
 	if len(models1) != 1 {
 		t.Fatalf("Expected 1 model in first discovery, got %d", len(models1))
+	}
+
+	// Validate rich metadata was parsed
+	if models1[0].Details == nil {
+		t.Fatal("Expected first model to have details")
+	}
+	if models1[0].Details.ParameterSize == nil || *models1[0].Details.ParameterSize != "8B" {
+		t.Error("Expected parameter_size to be '8B'")
 	}
 
 	// Check that Ollama endpoint was called (auto-detection success)
@@ -570,7 +740,7 @@ func TestDiscoverModelsProfileCaching(t *testing.T) {
 		t.Errorf("Expected 0 total LM Studio requests (cache should prevent all), got %d", finalLmStudioRequests)
 	}
 
-	t.Logf("✅ Cache working: %d Ollama requests, %d LM Studio requests (expected 3, 0)",
+	t.Logf("Cache working: %d Ollama requests, %d LM Studio requests (expected 3, 0)",
 		finalOllamaRequests, finalLmStudioRequests)
 }
 
@@ -632,7 +802,7 @@ func TestDiscoverModelsProfileCacheExpiry(t *testing.T) {
 		t.Errorf("Expected 2 Ollama requests after cache expiry, got %d", ollamaRequests)
 	}
 
-	t.Logf("✅ Cache expiry working: %d requests after cache timeout", ollamaRequests)
+	t.Logf("Cache expiry working: %d requests after cache timeout", ollamaRequests)
 }
 
 func TestDiscoverModelsProfileCacheInvalidation(t *testing.T) {
@@ -650,15 +820,26 @@ func TestDiscoverModelsProfileCacheInvalidation(t *testing.T) {
 				w.WriteHeader(500)
 				w.Write([]byte(`{"error": "server error"}`))
 			}
-		} else if r.URL.Path == "/v1/models" {
+		} else if r.URL.Path == "/api/v0/models" {
 			// LM Studio works after Ollama fails
 			w.WriteHeader(200)
 			w.Write([]byte(`{
-				"object": "list",
-				"data": [{"id": "backup-model", "object": "model"}]
-			}`))
-		} else {
+        "object": "list",
+        "data": [
+            {
+                "id": "backup-model",
+                "object": "model",
+                "arch": "backup",
+                "quantization": "Q8_0",
+                "type": "llm",
+                "state": "loaded",
+                "max_context_length": 4096
+            }
+        ]
+    }`))
+		} else if r.URL.Path == "/v1/models" { // Add this to prevent OpenAI fallback
 			w.WriteHeader(404)
+			w.Write([]byte(`{"error": "not found"}`))
 		}
 	}))
 	defer server.Close()
@@ -686,8 +867,44 @@ func TestDiscoverModelsProfileCacheInvalidation(t *testing.T) {
 		t.Fatalf("Expected LM Studio model after fallback, got %+v", models2)
 	}
 
-	t.Log("✅ Cache invalidation working: fell back from failed cached profile")
+	// Validate that LM Studio metadata was parsed
+	if models2[0].Details == nil {
+		t.Fatal("Expected LM Studio model to have details")
+	}
+	if models2[0].Details.Family == nil || *models2[0].Details.Family != "backup" {
+		t.Error("Expected LM Studio family to be parsed from arch")
+	}
+
+	t.Log("Cache invalidation working: fell back from failed cached profile")
 }
+
+type serverResponse struct {
+	status int
+	body   string
+}
+
+func createTestEndpoint(baseURL, endpointType string) *domain.Endpoint {
+	parsedURL, _ := url.Parse(baseURL)
+
+	healthCheckURL, _ := url.Parse(baseURL + "/")
+	modelURL, _ := url.Parse(baseURL + "/api/tags") // This doesn't matter for auto-detection
+
+	return &domain.Endpoint{
+		Name:                 "test-endpoint",
+		URL:                  parsedURL,
+		Type:                 endpointType,
+		Priority:             100,
+		HealthCheckURL:       healthCheckURL,
+		ModelUrl:             modelURL,
+		URLString:            baseURL,
+		HealthCheckURLString: baseURL + "/",
+		ModelURLString:       baseURL + "/api/tags",
+		Status:               domain.StatusHealthy,
+		CheckInterval:        5 * time.Second,
+		CheckTimeout:         2 * time.Second,
+	}
+}
+
 func createTestLogger() logger.StyledLogger {
 	slogLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError, // Only log errors to reduce test noise

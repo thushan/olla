@@ -191,7 +191,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "read_response", resp.StatusCode, duration, err)
 	}
 
-	models, err := c.parser.ParseModelsResponse(body, platformProfile.GetModelResponseFormat())
+	models, err := c.parser.ParseModelsResponse(body, platformProfile.GetModelResponseFormat(), platformProfile)
 	if err != nil {
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "parse_response", resp.StatusCode, duration, err)
 	}
