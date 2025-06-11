@@ -36,9 +36,6 @@ func TestParseModelsResponse(t *testing.T) {
 			format: domain.ModelResponseFormat{
 				ResponseType:    "object",
 				ModelsFieldPath: "models",
-				ModelNameField:  "name",
-				ModelSizeField:  "size",
-				ModelTypeField:  "",
 			},
 			expectedModels: 2,
 			expectedError:  false,
@@ -66,9 +63,6 @@ func TestParseModelsResponse(t *testing.T) {
 			format: domain.ModelResponseFormat{
 				ResponseType:    "object",
 				ModelsFieldPath: "data",
-				ModelNameField:  "id",
-				ModelSizeField:  "",
-				ModelTypeField:  "object",
 			},
 			expectedModels: 2,
 			expectedError:  false,
@@ -90,9 +84,6 @@ func TestParseModelsResponse(t *testing.T) {
 			format: domain.ModelResponseFormat{
 				ResponseType:    "object",
 				ModelsFieldPath: "data",
-				ModelNameField:  "id",
-				ModelSizeField:  "",
-				ModelTypeField:  "object",
 			},
 			expectedModels: 1,
 			expectedError:  false,
@@ -332,9 +323,6 @@ func getOllamaFormat() domain.ModelResponseFormat {
 	return domain.ModelResponseFormat{
 		ResponseType:    "object",
 		ModelsFieldPath: "models",
-		ModelNameField:  "name",
-		ModelSizeField:  "size",
-		ModelTypeField:  "",
 	}
 }
 
@@ -342,9 +330,6 @@ func (p *ResponseParser) parseOllamaResponse(data []byte) ([]*domain.ModelInfo, 
 	format := domain.ModelResponseFormat{
 		ResponseType:    "object",
 		ModelsFieldPath: "models",
-		ModelNameField:  "name",
-		ModelSizeField:  "size",
-		ModelTypeField:  "",
 	}
 	return p.parseObjectResponse(data, format)
 }
@@ -353,9 +338,6 @@ func (p *ResponseParser) parseLMStudioResponse(data []byte) ([]*domain.ModelInfo
 	format := domain.ModelResponseFormat{
 		ResponseType:    "object",
 		ModelsFieldPath: "data",
-		ModelNameField:  "id",
-		ModelSizeField:  "",
-		ModelTypeField:  "object",
 	}
 	return p.parseObjectResponse(data, format)
 }
@@ -364,9 +346,6 @@ func (p *ResponseParser) parseOpenAICompatibleResponse(data []byte) ([]*domain.M
 	format := domain.ModelResponseFormat{
 		ResponseType:    "object",
 		ModelsFieldPath: "data",
-		ModelNameField:  "id",
-		ModelSizeField:  "",
-		ModelTypeField:  "object",
 	}
 	return p.parseObjectResponse(data, format)
 }

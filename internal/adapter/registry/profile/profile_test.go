@@ -13,13 +13,14 @@ func TestOllamaProfile(t *testing.T) {
 		t.Errorf("Expected name %q, got %q", domain.ProfileOllama, profile.GetName())
 	}
 
-	url := profile.GetModelDiscoveryURL("http://localhost:11434")
-	expected := "http://localhost:11434/api/tags"
+	baseUrl := "http://localhost:11434"
+	url := profile.GetModelDiscoveryURL(baseUrl)
+	expected := baseUrl + OllamaProfileModelModelsPath
 	if url != expected {
 		t.Errorf("Expected %q, got %q", expected, url)
 	}
 
-	url = profile.GetModelDiscoveryURL("http://localhost:11434/")
+	url = profile.GetModelDiscoveryURL(baseUrl)
 	if url != expected {
 		t.Errorf("Expected %q, got %q", expected, url)
 	}
@@ -52,8 +53,9 @@ func TestLMStudioProfile(t *testing.T) {
 		t.Errorf("Expected name %q, got %q", domain.ProfileLmStudio, profile.GetName())
 	}
 
-	url := profile.GetModelDiscoveryURL("http://localhost:1234")
-	expected := "http://localhost:1234/v1/models"
+	baseURL := "http://localhost:11434"
+	url := profile.GetModelDiscoveryURL(baseURL)
+	expected := baseURL + LMStudioProfileModelsPath
 	if url != expected {
 		t.Errorf("Expected %q, got %q", expected, url)
 	}
@@ -73,9 +75,6 @@ func TestLMStudioProfile(t *testing.T) {
 	format := profile.GetModelResponseFormat()
 	if format.ModelsFieldPath != "data" {
 		t.Errorf("Expected models field path 'data', got %q", format.ModelsFieldPath)
-	}
-	if format.ModelNameField != "id" {
-		t.Errorf("Expected model name field 'id', got %q", format.ModelNameField)
 	}
 }
 

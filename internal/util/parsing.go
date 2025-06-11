@@ -1,10 +1,8 @@
-package profile
+package util
 
-import (
-	"time"
-)
+import "time"
 
-func getString(m map[string]interface{}, key string) string {
+func GetString(m map[string]interface{}, key string) string {
 	if val, ok := m[key]; ok {
 		if str, ok := val.(string); ok {
 			return str
@@ -13,7 +11,7 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func getFloat64(m map[string]interface{}, key string) (int64, bool) {
+func GetFloat64(m map[string]interface{}, key string) (int64, bool) {
 	if val, ok := m[key]; ok {
 		if f, ok := val.(float64); ok {
 			return int64(f), true
@@ -22,7 +20,7 @@ func getFloat64(m map[string]interface{}, key string) (int64, bool) {
 	return 0, false
 }
 
-func getStringArray(m map[string]interface{}, key string) []string {
+func GetStringArray(m map[string]interface{}, key string) []string {
 	if val, ok := m[key]; ok {
 		if arr, ok := val.([]interface{}); ok {
 			result := make([]string, 0, len(arr))
@@ -37,7 +35,7 @@ func getStringArray(m map[string]interface{}, key string) []string {
 	return nil
 }
 
-func parseTime(m map[string]interface{}, key string) *time.Time {
+func ParseTime(m map[string]interface{}, key string) *time.Time {
 	if val, ok := m[key]; ok {
 		if timeStr, ok := val.(string); ok && timeStr != "" {
 			// Try RFC3339 format first (standard ISO format)

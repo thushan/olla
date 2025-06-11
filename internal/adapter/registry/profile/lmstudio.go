@@ -117,48 +117,48 @@ func (p *LMStudioProfile) ParseModel(modelData map[string]interface{}) (*domain.
 		LastSeen: time.Now(),
 	}
 
-	if name := getString(modelData, "id"); name != "" {
+	if name := util.GetString(modelData, "id"); name != "" {
 		modelInfo.Name = name
 	} else {
 		return nil, fmt.Errorf("model name is required")
 	}
 
-	if objType := getString(modelData, "object"); objType != "" {
+	if objType := util.GetString(modelData, "object"); objType != "" {
 		modelInfo.Type = objType
 	}
 
 	modelInfo.Details = &domain.ModelDetails{}
 	hasDetails := false
 
-	if arch := getString(modelData, "arch"); arch != "" {
+	if arch := util.GetString(modelData, "arch"); arch != "" {
 		modelInfo.Details.Family = &arch
 		hasDetails = true
 	}
 
-	if quantization := getString(modelData, "quantization"); quantization != "" {
+	if quantization := util.GetString(modelData, "quantization"); quantization != "" {
 		modelInfo.Details.QuantizationLevel = &quantization
 		hasDetails = true
 	}
 
-	if compatType := getString(modelData, "compatibility_type"); compatType != "" {
+	if compatType := util.GetString(modelData, "compatibility_type"); compatType != "" {
 		modelInfo.Details.Format = &compatType
 		hasDetails = true
 	}
 
-	if publisher := getString(modelData, "publisher"); publisher != "" {
+	if publisher := util.GetString(modelData, "publisher"); publisher != "" {
 		modelInfo.Details.ParentModel = &publisher // using ParentModel to store publisher info
 		hasDetails = true
 	}
 
 	// Extract max context length and convert to description
-	if maxCtx, ok := getFloat64(modelData, "max_context_length"); ok {
+	if maxCtx, ok := util.GetFloat64(modelData, "max_context_length"); ok {
 		modelInfo.Details.MaxContextLength = &maxCtx
 		hasDetails = true
 	}
 
 	// Check model state
 	// LMStudio:  "loaded","not-loaded"
-	if state := getString(modelData, "state"); state != "" {
+	if state := util.GetString(modelData, "state"); state != "" {
 		modelInfo.Details.State = &state
 		hasDetails = true
 	}

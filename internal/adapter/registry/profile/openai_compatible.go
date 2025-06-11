@@ -56,19 +56,19 @@ func (p *OpenAICompatibleProfile) ParseModel(modelData map[string]interface{}) (
 		LastSeen: time.Now(),
 	}
 
-	if name := getString(modelData, "id"); name != "" {
+	if name := util.GetString(modelData, "id"); name != "" {
 		modelInfo.Name = name
 	} else {
 		return nil, fmt.Errorf("model name is required")
 	}
 
-	if objType := getString(modelData, "object"); objType != "" {
+	if objType := util.GetString(modelData, "object"); objType != "" {
 		modelInfo.Type = objType
 	}
 
 	// OpenAI-compatible APIs typically provide minimal metadata
 	// but we'll extract what's available for now
-	if created, ok := getFloat64(modelData, "created"); ok {
+	if created, ok := util.GetFloat64(modelData, "created"); ok {
 		createdTime := time.Unix(created, 0)
 		modelInfo.Details = &domain.ModelDetails{
 			ModifiedAt: &createdTime,

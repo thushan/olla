@@ -76,27 +76,27 @@ func (p *OllamaProfile) ParseModel(modelData map[string]interface{}) (*domain.Mo
 		LastSeen: time.Now(),
 	}
 
-	if name := getString(modelData, "name"); name != "" {
+	if name := util.GetString(modelData, "name"); name != "" {
 		modelInfo.Name = name
 	} else {
 		return nil, fmt.Errorf("model name is required")
 	}
 
-	if size, ok := getFloat64(modelData, "size"); ok {
+	if size, ok := util.GetFloat64(modelData, "size"); ok {
 		modelInfo.Size = size
 	}
 
-	modelInfo.Description = getString(modelData, "description")
+	modelInfo.Description = util.GetString(modelData, "description")
 
 	modelInfo.Details = &domain.ModelDetails{}
 	hasDetails := false
 
-	if digest := getString(modelData, "digest"); digest != "" {
+	if digest := util.GetString(modelData, "digest"); digest != "" {
 		modelInfo.Details.Digest = &digest
 		hasDetails = true
 	}
 
-	if modifiedAt := parseTime(modelData, "modified_at"); modifiedAt != nil {
+	if modifiedAt := util.ParseTime(modelData, "modified_at"); modifiedAt != nil {
 		modelInfo.Details.ModifiedAt = modifiedAt
 		hasDetails = true
 	}
@@ -104,32 +104,32 @@ func (p *OllamaProfile) ParseModel(modelData map[string]interface{}) (*domain.Mo
 	// extra juicy details, seems like _sometimes_ we don't get a "details" object
 	if detailsData, exists := modelData["details"]; exists {
 		if detailsObj, ok := detailsData.(map[string]interface{}); ok {
-			if paramSize := getString(detailsObj, "parameter_size"); paramSize != "" {
+			if paramSize := util.GetString(detailsObj, "parameter_size"); paramSize != "" {
 				modelInfo.Details.ParameterSize = &paramSize
 				hasDetails = true
 			}
 
-			if quantLevel := getString(detailsObj, "quantization_level"); quantLevel != "" {
+			if quantLevel := util.GetString(detailsObj, "quantization_level"); quantLevel != "" {
 				modelInfo.Details.QuantizationLevel = &quantLevel
 				hasDetails = true
 			}
 
-			if family := getString(detailsObj, "family"); family != "" {
+			if family := util.GetString(detailsObj, "family"); family != "" {
 				modelInfo.Details.Family = &family
 				hasDetails = true
 			}
 
-			if format := getString(detailsObj, "format"); format != "" {
+			if format := util.GetString(detailsObj, "format"); format != "" {
 				modelInfo.Details.Format = &format
 				hasDetails = true
 			}
 
-			if parentModel := getString(detailsObj, "parent_model"); parentModel != "" {
+			if parentModel := util.GetString(detailsObj, "parent_model"); parentModel != "" {
 				modelInfo.Details.ParentModel = &parentModel
 				hasDetails = true
 			}
 
-			if families := getStringArray(detailsObj, "families"); len(families) > 0 {
+			if families := util.GetStringArray(detailsObj, "families"); len(families) > 0 {
 				modelInfo.Details.Families = families
 				hasDetails = true
 			}

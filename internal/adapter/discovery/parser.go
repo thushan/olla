@@ -3,6 +3,7 @@ package discovery
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/thushan/olla/internal/util"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -79,28 +80,10 @@ func (p *ResponseParser) parseObjectResponse(data []byte, format domain.ModelRes
 
 		// assume they all call it Description for now,
 		// TODO: make this a ModelTypeField
-		modelInfo.Description = getString(modelObj, "description")
+		modelInfo.Description = util.GetString(modelObj, "description")
 
 		models = append(models, modelInfo)
 	}
 
 	return models, nil
-}
-
-func getString(m map[string]any, key string) string {
-	if val, ok := m[key]; ok {
-		if str, ok := val.(string); ok {
-			return str
-		}
-	}
-	return ""
-}
-
-func getFloat64(m map[string]any, key string) (int64, bool) {
-	if val, ok := m[key]; ok {
-		if f, ok := val.(float64); ok {
-			return int64(f), true
-		}
-	}
-	return 0, false
 }
