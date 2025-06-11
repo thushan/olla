@@ -11,11 +11,15 @@ import (
 type ModelDetails struct {
 	ParameterSize     *string    `json:"parameter_size,omitempty"`
 	QuantizationLevel *string    `json:"quantization_level,omitempty"`
+	Publisher         *string    `json:"publisher,omitempty"`
+	Type              *string    `json:"type,omitempty"` // from LMStudio: llm, vlm
 	Family            *string    `json:"family,omitempty"`
 	Families          []string   `json:"families,omitempty"`
 	Format            *string    `json:"format,omitempty"`
 	ParentModel       *string    `json:"parent_model,omitempty"`
-	Digest            *string    `json:"digest,omitempty"` // super important for comparison checks
+	State             *string    `json:"state,omitempty"`              // loaded / not-loaded (LMStudio gives this now)
+	Digest            *string    `json:"digest,omitempty"`             // super important for comparison checks
+	MaxContextLength  *int64     `json:"max_context_length,omitempty"` // Max context length in tokens (LMStudio gives this)
 	ModifiedAt        *time.Time `json:"modified_at,omitempty"`
 }
 

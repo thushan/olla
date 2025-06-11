@@ -77,29 +77,6 @@ func (p *ResponseParser) parseObjectResponse(data []byte, format domain.ModelRes
 			LastSeen: now,
 		}
 
-		if name, exists := modelObj[format.ModelNameField]; exists {
-			if nameStr, ok := name.(string); ok && nameStr != "" {
-				modelInfo.Name = nameStr
-			}
-		}
-
-		if modelInfo.Name == "" {
-			// not sure how we get models without names,
-			// especially really, really, ridiculously good looking :D
-			continue
-		}
-
-		// looks like sometimes we may not get a size, type or even description
-		if format.ModelSizeField != "" {
-			if size, ok := getFloat64(modelObj, format.ModelSizeField); ok {
-				modelInfo.Size = size
-			}
-		}
-
-		if format.ModelTypeField != "" {
-			modelInfo.Type = getString(modelObj, format.ModelTypeField)
-		}
-
 		// assume they all call it Description for now,
 		// TODO: make this a ModelTypeField
 		modelInfo.Description = getString(modelObj, "description")

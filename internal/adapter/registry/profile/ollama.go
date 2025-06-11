@@ -1,6 +1,9 @@
 package profile
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -52,22 +55,8 @@ func (p *OllamaProfile) GetRequestParsingRules() domain.RequestParsingRules {
 
 func (p *OllamaProfile) GetModelResponseFormat() domain.ModelResponseFormat {
 	return domain.ModelResponseFormat{
-		ResponseType:     "object",
-		ModelsFieldPath:  "models",
-		ModelNameField:   "name",
-		ModelSizeField:   "size",
-		ModelTypeField:   "",
-		DetailsFieldPath: "details",
-		DetailFieldMappings: map[string]string{
-			"parameter_size":     "parameter_size",
-			"quantization_level": "quantization_level",
-			"family":             "family",
-			"families":           "families",
-			"format":             "format",
-			"parent_model":       "patent_model",
-		},
-		ModifiedAtField: "modified_at",
-		DigestField:     "digest",
+		ResponseType:    "object",
+		ModelsFieldPath: "models",
 	}
 }
 
@@ -80,4 +69,76 @@ func (p *OllamaProfile) GetDetectionHints() domain.DetectionHints {
 			OllamaProfileGeneratePath,
 		},
 	}
+}
+
+func (p *OllamaProfile) ParseModel(modelData map[string]interface{}) (*domain.ModelInfo, error) {
+	modelInfo := &domain.ModelInfo{
+		LastSeen: time.Now(),
+	}
+
+	if name := getString(modelData, "name"); name != "" {
+		modelInfo.Name = name
+	} else {
+		return nil, fmt.Errorf("model name is required")
+	}
+
+	if size, ok := getFloat64(modelData, "size"); ok {
+		modelInfo.Size = size
+	}
+
+	modelInfo.Description = getString(modelData, "description")
+
+	modelInfo.Details = &domain.ModelDetails{}
+	hasDetails := false
+
+	if digest := getString(modelData, "digest"); digest != "" {
+		modelInfo.Details.Digest = &digest
+		hasDetails = true
+	}
+
+	if modifiedAt := parseTime(modelData, "modified_at"); modifiedAt != nil {
+		modelInfo.Details.ModifiedAt = modifiedAt
+		hasDetails = true
+	}
+
+	// extra juicy details, seems like _sometimes_ we don't get a "details" object
+	if detailsData, exists := modelData["details"]; exists {
+		if detailsObj, ok := detailsData.(map[string]interface{}); ok {
+			if paramSize := getString(detailsObj, "parameter_size"); paramSize != "" {
+				modelInfo.Details.ParameterSize = &paramSize
+				hasDetails = true
+			}
+
+			if quantLevel := getString(detailsObj, "quantization_level"); quantLevel != "" {
+				modelInfo.Details.QuantizationLevel = &quantLevel
+				hasDetails = true
+			}
+
+			if family := getString(detailsObj, "family"); family != "" {
+				modelInfo.Details.Family = &family
+				hasDetails = true
+			}
+
+			if format := getString(detailsObj, "format"); format != "" {
+				modelInfo.Details.Format = &format
+				hasDetails = true
+			}
+
+			if parentModel := getString(detailsObj, "parent_model"); parentModel != "" {
+				modelInfo.Details.ParentModel = &parentModel
+				hasDetails = true
+			}
+
+			if families := getStringArray(detailsObj, "families"); len(families) > 0 {
+				modelInfo.Details.Families = families
+				hasDetails = true
+			}
+		}
+	}
+
+	if !hasDetails {
+		modelInfo.Details = nil
+	}
+
+	return modelInfo, nil
 }

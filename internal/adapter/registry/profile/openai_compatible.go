@@ -1,6 +1,9 @@
 package profile
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -45,10 +48,34 @@ func (p *OpenAICompatibleProfile) GetModelResponseFormat() domain.ModelResponseF
 	return domain.ModelResponseFormat{
 		ResponseType:    "object",
 		ModelsFieldPath: "data",
-		ModelNameField:  "id",
-		ModelSizeField:  "",
-		ModelTypeField:  "object",
 	}
+}
+
+func (p *OpenAICompatibleProfile) ParseModel(modelData map[string]interface{}) (*domain.ModelInfo, error) {
+	modelInfo := &domain.ModelInfo{
+		LastSeen: time.Now(),
+	}
+
+	if name := getString(modelData, "id"); name != "" {
+		modelInfo.Name = name
+	} else {
+		return nil, fmt.Errorf("model name is required")
+	}
+
+	if objType := getString(modelData, "object"); objType != "" {
+		modelInfo.Type = objType
+	}
+
+	// OpenAI-compatible APIs typically provide minimal metadata
+	// but we'll extract what's available for now
+	if created, ok := getFloat64(modelData, "created"); ok {
+		createdTime := time.Unix(created, 0)
+		modelInfo.Details = &domain.ModelDetails{
+			ModifiedAt: &createdTime,
+		}
+	}
+
+	return modelInfo, nil
 }
 
 func (p *OpenAICompatibleProfile) GetDetectionHints() domain.DetectionHints {
