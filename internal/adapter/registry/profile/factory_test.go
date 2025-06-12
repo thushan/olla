@@ -149,6 +149,6 @@ func (m *mockProfile) GetModelResponseFormat() domain.ModelResponseFormat {
 	return domain.ModelResponseFormat{}
 }
 func (m *mockProfile) GetDetectionHints() domain.DetectionHints { return domain.DetectionHints{} }
-func (m *mockProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
+func (m *mockProfile) ParseModel(modelData map[string]interface{}) (*domain.ModelInfo, error) {
 	return nil, nil
 }

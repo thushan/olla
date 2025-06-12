@@ -12,7 +12,7 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-// TestEnhancedModelDiscoveryIntegration tests the detection of various model data
+// TestEnhancedModelDiscoveryIntegration tests the complete enhanced discovery workflow
 func TestEnhancedModelDiscoveryIntegration(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -519,7 +519,6 @@ func TestResilientModelParsing(t *testing.T) {
 		response      string
 		modelName     string
 		expectDetails bool
-		expectError   bool
 		description   string
 	}{
 		{
@@ -534,8 +533,7 @@ func TestResilientModelParsing(t *testing.T) {
 			}`,
 			modelName:     "test-model",
 			expectDetails: false,
-			expectError:   true,
-			description:   "Should reject malformed JSON with strict typing",
+			description:   "Should parse model without details when details field is malformed",
 		},
 		{
 			name:         "Ollama model with missing details",
@@ -579,12 +577,7 @@ func TestResilientModelParsing(t *testing.T) {
 
 			models, err := client.DiscoverModels(context.Background(), endpoint)
 			if err != nil {
-				if tt.expectError {
-					// other tests will fail, so continue
-					return
-				} else {
-					t.Fatalf("Discovery failed: %v", err)
-				}
+				t.Fatalf("Discovery failed: %v", err)
 			}
 
 			if len(models) != 1 {

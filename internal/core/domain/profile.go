@@ -24,8 +24,8 @@ type PlatformProfile interface {
 	GetModelResponseFormat() ModelResponseFormat
 	// GetDetectionHints returns hints for auto-detection for this platform
 	GetDetectionHints() DetectionHints
-	// ParseModelsResponse parses platform-specific JSON response into an ModelInfo slice
-	ParseModelsResponse(data []byte) ([]*ModelInfo, error)
+	// ParseModel extracts ModelInfo from platform-specific model data
+	ParseModel(modelData map[string]interface{}) (*ModelInfo, error)
 }
 
 // RequestParsingRules defines how to extract model names from different request types

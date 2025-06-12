@@ -35,7 +35,7 @@ type profileCacheEntry struct {
 }
 
 var (
-	profileCache = sync.Map{}    // map[string]*profileCacheEntry
+	profileCache = sync.Map{}    // map[strung]*endpointProfileCache
 	cacheTimeout = 1 * time.Hour // probably not required to have a TTL
 )
 
@@ -43,6 +43,7 @@ var (
 type HTTPModelDiscoveryClient struct {
 	httpClient     *http.Client
 	profileFactory *profile.Factory
+	parser         *ResponseParser
 	logger         logger.StyledLogger
 	metrics        DiscoveryMetrics
 	mu             sync.RWMutex
@@ -60,6 +61,7 @@ func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.
 			},
 		},
 		profileFactory: profileFactory,
+		parser:         NewResponseParser(logger),
 		logger:         logger,
 		metrics: DiscoveryMetrics{
 			ErrorsByEndpoint: make(map[string]int64),
@@ -189,7 +191,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "read_response", resp.StatusCode, duration, err)
 	}
 
-	models, err := platformProfile.ParseModelsResponse(body)
+	models, err := c.parser.ParseModelsResponse(body, platformProfile.GetModelResponseFormat(), platformProfile)
 	if err != nil {
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "parse_response", resp.StatusCode, duration, err)
 	}
@@ -263,9 +265,4 @@ func (c *HTTPModelDiscoveryClient) updateMetrics(updateFn func(*DiscoveryMetrics
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	updateFn(&c.metrics)
-}
-
-func (c *HTTPModelDiscoveryClient) Close() error {
-	c.httpClient.CloseIdleConnections()
-	return nil
 }
