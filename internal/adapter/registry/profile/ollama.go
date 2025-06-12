@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -16,6 +17,30 @@ const (
 	OllamaProfileCompletionsPath     = "/v1/completions"
 	OllamaProfileModelModelsPath     = "/api/tags"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
+type OllamaResponse struct {
+	Models []OllamaModel `json:"models"`
+}
+
+type OllamaModel struct {
+	Name        string         `json:"name"`
+	Size        *int64         `json:"size,omitempty"`
+	Digest      *string        `json:"digest,omitempty"`
+	ModifiedAt  *string        `json:"modified_at,omitempty"`
+	Description *string        `json:"description,omitempty"`
+	Details     *OllamaDetails `json:"details,omitempty"`
+}
+
+type OllamaDetails struct {
+	ParameterSize     *string  `json:"parameter_size,omitempty"`
+	QuantizationLevel *string  `json:"quantization_level,omitempty"`
+	Family            *string  `json:"family,omitempty"`
+	Families          []string `json:"families,omitempty"`
+	Format            *string  `json:"format,omitempty"`
+	ParentModel       *string  `json:"parent_model,omitempty"`
+}
 
 type OllamaProfile struct{}
 
@@ -71,74 +96,74 @@ func (p *OllamaProfile) GetDetectionHints() domain.DetectionHints {
 	}
 }
 
-func (p *OllamaProfile) ParseModel(modelData map[string]interface{}) (*domain.ModelInfo, error) {
-	modelInfo := &domain.ModelInfo{
-		LastSeen: time.Now(),
+func (p *OllamaProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
+	if len(data) == 0 {
+		return make([]*domain.ModelInfo, 0), nil
 	}
 
-	if name := util.GetString(modelData, "name"); name != "" {
-		modelInfo.Name = name
-	} else {
-		return nil, fmt.Errorf("model name is required")
+	var response OllamaResponse
+	if err := jsoniter.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse Ollama response: %w", err)
 	}
 
-	if size, ok := util.GetFloat64(modelData, "size"); ok {
-		modelInfo.Size = size
-	}
+	models := make([]*domain.ModelInfo, 0, len(response.Models))
+	now := time.Now()
 
-	modelInfo.Description = util.GetString(modelData, "description")
+	for _, ollamaModel := range response.Models {
+		if ollamaModel.Name == "" {
+			continue
+		}
 
-	modelInfo.Details = &domain.ModelDetails{}
-	hasDetails := false
+		modelInfo := &domain.ModelInfo{
+			Name:     ollamaModel.Name,
+			LastSeen: now,
+		}
 
-	if digest := util.GetString(modelData, "digest"); digest != "" {
-		modelInfo.Details.Digest = &digest
-		hasDetails = true
-	}
+		if ollamaModel.Size != nil {
+			modelInfo.Size = *ollamaModel.Size
+		}
 
-	if modifiedAt := util.ParseTime(modelData, "modified_at"); modifiedAt != nil {
-		modelInfo.Details.ModifiedAt = modifiedAt
-		hasDetails = true
-	}
+		if ollamaModel.Description != nil {
+			modelInfo.Description = *ollamaModel.Description
+		}
 
-	// extra juicy details, seems like _sometimes_ we don't get a "details" object
-	if detailsData, exists := modelData["details"]; exists {
-		if detailsObj, ok := detailsData.(map[string]interface{}); ok {
-			if paramSize := util.GetString(detailsObj, "parameter_size"); paramSize != "" {
-				modelInfo.Details.ParameterSize = &paramSize
-				hasDetails = true
+		if ollamaModel.Details != nil || ollamaModel.Digest != nil || ollamaModel.ModifiedAt != nil {
+			modelInfo.Details = &domain.ModelDetails{}
+
+			if ollamaModel.Digest != nil {
+				modelInfo.Details.Digest = ollamaModel.Digest
 			}
 
-			if quantLevel := util.GetString(detailsObj, "quantization_level"); quantLevel != "" {
-				modelInfo.Details.QuantizationLevel = &quantLevel
-				hasDetails = true
+			if ollamaModel.ModifiedAt != nil {
+				if parsedTime := util.ParseTime(*ollamaModel.ModifiedAt); parsedTime != nil {
+					modelInfo.Details.ModifiedAt = parsedTime
+				}
 			}
 
-			if family := util.GetString(detailsObj, "family"); family != "" {
-				modelInfo.Details.Family = &family
-				hasDetails = true
-			}
-
-			if format := util.GetString(detailsObj, "format"); format != "" {
-				modelInfo.Details.Format = &format
-				hasDetails = true
-			}
-
-			if parentModel := util.GetString(detailsObj, "parent_model"); parentModel != "" {
-				modelInfo.Details.ParentModel = &parentModel
-				hasDetails = true
-			}
-
-			if families := util.GetStringArray(detailsObj, "families"); len(families) > 0 {
-				modelInfo.Details.Families = families
-				hasDetails = true
+			if ollamaModel.Details != nil {
+				if ollamaModel.Details.ParameterSize != nil {
+					modelInfo.Details.ParameterSize = ollamaModel.Details.ParameterSize
+				}
+				if ollamaModel.Details.QuantizationLevel != nil {
+					modelInfo.Details.QuantizationLevel = ollamaModel.Details.QuantizationLevel
+				}
+				if ollamaModel.Details.Family != nil {
+					modelInfo.Details.Family = ollamaModel.Details.Family
+				}
+				if ollamaModel.Details.Format != nil {
+					modelInfo.Details.Format = ollamaModel.Details.Format
+				}
+				if ollamaModel.Details.ParentModel != nil {
+					modelInfo.Details.ParentModel = ollamaModel.Details.ParentModel
+				}
+				if len(ollamaModel.Details.Families) > 0 {
+					modelInfo.Details.Families = ollamaModel.Details.Families
+				}
 			}
 		}
+
+		models = append(models, modelInfo)
 	}
 
-	if !hasDetails {
-		modelInfo.Details = nil
-	}
-
-	return modelInfo, nil
+	return models, nil
 }

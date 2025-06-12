@@ -4,9 +4,22 @@ import (
 	"fmt"
 	"time"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
+
+type OpenAICompatibleResponse struct {
+	Object string                  `json:"object"`
+	Data   []OpenAICompatibleModel `json:"data"`
+}
+
+type OpenAICompatibleModel struct {
+	ID      string  `json:"id"`
+	Object  string  `json:"object"`
+	Created *int64  `json:"created,omitempty"`
+	OwnedBy *string `json:"owned_by,omitempty"`
+}
 
 type OpenAICompatibleProfile struct{}
 
@@ -51,31 +64,41 @@ func (p *OpenAICompatibleProfile) GetModelResponseFormat() domain.ModelResponseF
 	}
 }
 
-func (p *OpenAICompatibleProfile) ParseModel(modelData map[string]interface{}) (*domain.ModelInfo, error) {
-	modelInfo := &domain.ModelInfo{
-		LastSeen: time.Now(),
+func (p *OpenAICompatibleProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
+	if len(data) == 0 {
+		return make([]*domain.ModelInfo, 0), nil
 	}
 
-	if name := util.GetString(modelData, "id"); name != "" {
-		modelInfo.Name = name
-	} else {
-		return nil, fmt.Errorf("model name is required")
+	var response OpenAICompatibleResponse
+	if err := jsoniter.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse OpenAI compatible response: %w", err)
 	}
 
-	if objType := util.GetString(modelData, "object"); objType != "" {
-		modelInfo.Type = objType
-	}
+	models := make([]*domain.ModelInfo, 0, len(response.Data))
+	now := time.Now()
 
-	// OpenAI-compatible APIs typically provide minimal metadata
-	// but we'll extract what's available for now
-	if created, ok := util.GetFloat64(modelData, "created"); ok {
-		createdTime := time.Unix(created, 0)
-		modelInfo.Details = &domain.ModelDetails{
-			ModifiedAt: &createdTime,
+	for _, openaiModel := range response.Data {
+		if openaiModel.ID == "" {
+			continue
 		}
+
+		modelInfo := &domain.ModelInfo{
+			Name:     openaiModel.ID,
+			Type:     openaiModel.Object,
+			LastSeen: now,
+		}
+
+		if openaiModel.Created != nil {
+			createdTime := time.Unix(*openaiModel.Created, 0)
+			modelInfo.Details = &domain.ModelDetails{
+				ModifiedAt: &createdTime,
+			}
+		}
+
+		models = append(models, modelInfo)
 	}
 
-	return modelInfo, nil
+	return models, nil
 }
 
 func (p *OpenAICompatibleProfile) GetDetectionHints() domain.DetectionHints {
