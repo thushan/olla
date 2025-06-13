@@ -4,8 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/thushan/olla/pkg/profiler"
-	"github.com/thushan/olla/theme"
 	"log"
 	"log/slog"
 	"os"
@@ -13,6 +11,9 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/thushan/olla/pkg/profiler"
+	"github.com/thushan/olla/theme"
 
 	"github.com/thushan/olla/internal/app"
 	"github.com/thushan/olla/internal/env"
