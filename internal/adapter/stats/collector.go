@@ -9,11 +9,15 @@ package stats
 	Thread-safe for high concurrency since this gets hit on every request & multiple.
 	times. We also clean up old endpoint data automatically so we don't leak memory.
 
+	NOTE: 	Cleanup values defined are conservative to avoid memory retention over
+		  	long running processes. Most users will have 10-20 endpoints, so we keep
+			the tracked endpoints to a maximum of 50.
+
 	GOALS:
 	- Keep it simple and efficient (reduce allocation overhead)
 	- Track all relevant stats in one place
 	- Provide easy access to stats for monitoring and debugging
-
+	- Automatically clean up old data to prevent long memory retention
 */
 
 import (
@@ -33,9 +37,11 @@ const (
 	StatusSuccess = "success"
 	StatusFailure = "failure"
 
-	MaxTrackedEndpoints = 500
-	EndpointTTL         = 1 * time.Minute
-	CleanupInterval     = 2 * time.Minute
+	// NOTE: These are not too high to avoid memory retention for long periods
+	// Most folks would have 10-20 endpoints looking at Sherpa usage stats
+	MaxTrackedEndpoints = 50
+	EndpointTTL         = 1 * time.Hour
+	CleanupInterval     = 5 * time.Minute
 )
 
 type Collector struct {

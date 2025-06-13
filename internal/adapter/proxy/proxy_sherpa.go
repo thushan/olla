@@ -40,12 +40,18 @@ type proxyStats struct {
 
 const (
 	// TODO: add these to settings/config
-	DefaultReadTimeout                = 60 * time.Second
-	DefaultStreamBufferSize           = 8 * 1024
-	DefaultSetNoDelay                 = true
-	DefaultTimeout                    = 60 * time.Second
-	DefaultKeepAlive                  = 60 * time.Second
-	DefaultMaxIdleConns               = 100
+	DefaultReadTimeout      = 60 * time.Second
+	DefaultStreamBufferSize = 8 * 1024
+
+	DefaultSetNoDelay         = true
+	DefaultDisableCompression = false
+
+	DefaultTimeout   = 60 * time.Second
+	DefaultKeepAlive = 60 * time.Second
+
+	DefaultMaxIdleConns        = 20
+	DefaultMaxIdleConnsPerHost = 5
+
 	DefaultIdleConnTimeout            = 90 * time.Second
 	DefaultTLSHandshakeTimeout        = 10 * time.Second
 	ClientDisconnectionBytesThreshold = 1024
@@ -62,7 +68,9 @@ func NewSherpaService(
 	transport := &http.Transport{
 		MaxIdleConns:        DefaultMaxIdleConns,
 		IdleConnTimeout:     DefaultIdleConnTimeout,
+		DisableCompression:  DefaultDisableCompression,
 		TLSHandshakeTimeout: DefaultTLSHandshakeTimeout,
+		MaxIdleConnsPerHost: DefaultMaxIdleConnsPerHost,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
 				Timeout:   DefaultTimeout,

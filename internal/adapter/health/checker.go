@@ -43,8 +43,15 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.St
 }
 
 func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger logger.StyledLogger) *HTTPHealthChecker {
+	// We want to enable connection pooling and reuse with some sane defaults
 	client := &http.Client{
 		Timeout: DefaultHealthCheckerTimeout,
+		Transport: &http.Transport{
+			MaxIdleConns:        10,
+			MaxIdleConnsPerHost: 2,
+			IdleConnTimeout:     30 * time.Second,
+			DisableKeepAlives:   false,
+		},
 	}
 	return NewHTTPHealthChecker(repository, logger, client)
 }
