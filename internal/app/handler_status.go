@@ -56,7 +56,6 @@ type EndpointResponse struct {
 
 type EndpointModelsResponse struct {
 	LastUpdated time.Time `json:"last_updated"`
-	Available   []string  `json:"available"`
 	Count       int64     `json:"count"`
 }
 
