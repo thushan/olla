@@ -5,6 +5,8 @@ import (
 	"sort"
 	"sync"
 
+	jsoniter "github.com/json-iterator/go"
+
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -24,6 +26,8 @@ func NewFactory() *Factory {
 
 	return factory
 }
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 func (f *Factory) RegisterProfile(profile domain.PlatformProfile) {
 	f.mu.Lock()

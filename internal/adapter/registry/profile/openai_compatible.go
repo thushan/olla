@@ -1,9 +1,24 @@
 package profile
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
+
+type OpenAICompatibleResponse struct {
+	Object string                  `json:"object"`
+	Data   []OpenAICompatibleModel `json:"data"`
+}
+
+type OpenAICompatibleModel struct {
+	Created *int64  `json:"created,omitempty"`
+	OwnedBy *string `json:"owned_by,omitempty"`
+	ID      string  `json:"id"`
+	Object  string  `json:"object"`
+}
 
 type OpenAICompatibleProfile struct{}
 
@@ -45,10 +60,44 @@ func (p *OpenAICompatibleProfile) GetModelResponseFormat() domain.ModelResponseF
 	return domain.ModelResponseFormat{
 		ResponseType:    "object",
 		ModelsFieldPath: "data",
-		ModelNameField:  "id",
-		ModelSizeField:  "",
-		ModelTypeField:  "object",
 	}
+}
+
+func (p *OpenAICompatibleProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
+	if len(data) == 0 {
+		return make([]*domain.ModelInfo, 0), nil
+	}
+
+	var response OpenAICompatibleResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse OpenAI compatible response: %w", err)
+	}
+
+	models := make([]*domain.ModelInfo, 0, len(response.Data))
+	now := time.Now()
+
+	for _, openaiModel := range response.Data {
+		if openaiModel.ID == "" {
+			continue
+		}
+
+		modelInfo := &domain.ModelInfo{
+			Name:     openaiModel.ID,
+			Type:     openaiModel.Object,
+			LastSeen: now,
+		}
+
+		if openaiModel.Created != nil {
+			createdTime := time.Unix(*openaiModel.Created, 0)
+			modelInfo.Details = &domain.ModelDetails{
+				ModifiedAt: &createdTime,
+			}
+		}
+
+		models = append(models, modelInfo)
+	}
+
+	return models, nil
 }
 
 func (p *OpenAICompatibleProfile) GetDetectionHints() domain.DetectionHints {

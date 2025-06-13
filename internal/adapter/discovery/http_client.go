@@ -29,27 +29,27 @@ const (
 	DefaultMaxIdleConnectionsPerHost = 5
 )
 
-type profileCacheEntry struct {
-	lastUsed    time.Time
-	profileType string
-}
-
-var (
-	profileCache = sync.Map{}    // map[strung]*endpointProfileCache
-	cacheTimeout = 1 * time.Hour // probably not required to have a TTL
-)
-
 // HTTPModelDiscoveryClient implements ModelDiscoveryClient using HTTP requests
 type HTTPModelDiscoveryClient struct {
 	httpClient     *http.Client
 	profileFactory *profile.Factory
-	parser         *ResponseParser
 	logger         logger.StyledLogger
 	metrics        DiscoveryMetrics
 	mu             sync.RWMutex
 }
 
-func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.StyledLogger) *HTTPModelDiscoveryClient {
+func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.StyledLogger, httpClient *http.Client) *HTTPModelDiscoveryClient {
+	return &HTTPModelDiscoveryClient{
+		httpClient:     httpClient,
+		profileFactory: profileFactory,
+		logger:         logger,
+		metrics: DiscoveryMetrics{
+			ErrorsByEndpoint: make(map[string]int64),
+		},
+	}
+}
+
+func NewHTTPModelDiscoveryClientWithDefaults(profileFactory *profile.Factory, logger logger.StyledLogger) *HTTPModelDiscoveryClient {
 	return &HTTPModelDiscoveryClient{
 		httpClient: &http.Client{
 			Timeout: DefaultTimeout,
@@ -61,7 +61,6 @@ func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.
 			},
 		},
 		profileFactory: profileFactory,
-		parser:         NewResponseParser(logger),
 		logger:         logger,
 		metrics: DiscoveryMetrics{
 			ErrorsByEndpoint: make(map[string]int64),
@@ -92,32 +91,9 @@ func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint 
 
 // discoverWithAutoDetection tries profiles in order until one succeeds
 func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context, endpoint *domain.Endpoint, startTime time.Time) ([]*domain.ModelInfo, error) {
-	endpointKey := endpoint.URLString
-
-	// See if we have a cache hit, this is to a void trying all profiles again
-	if cached, ok := profileCache.Load(endpointKey); ok {
-		if entry, okok := cached.(*profileCacheEntry); okok && time.Since(entry.lastUsed) < cacheTimeout {
-			c.logger.Debug("Using cached profile", "endpoint", endpointKey, "profile", entry.profileType)
-
-			platformProfile, err := c.profileFactory.GetProfile(entry.profileType)
-			if err == nil {
-				models, err := c.discoverWithProfile(ctx, endpoint, platformProfile, startTime)
-				if err == nil {
-					// Update cache timestamp on success
-					entry.lastUsed = time.Now()
-					profileCache.Store(endpointKey, entry)
-					return models, nil
-				}
-				// not in cache, we better try
-				c.logger.Debug("Cached profile failed, trying auto-detection", "endpoint", endpointKey)
-			}
-		}
-	}
-
 	// We're going to try profiles in order:
 	//	Ollama → LM Studio → OpenAI Compatible (as a last resort)
 	// Resolution for this may change in the future as more front-ends appear or are added.
-	// These are now cached so next time, we can use the cached profile if it was successful.
 	profileTypes := []string{
 		domain.ProfileOllama,
 		domain.ProfileLmStudio,
@@ -134,10 +110,6 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 
 		models, err := c.discoverWithProfile(ctx, endpoint, platformProfile, startTime)
 		if err == nil {
-			profileCache.Store(endpointKey, &profileCacheEntry{
-				profileType: profileType,
-				lastUsed:    time.Now(),
-			})
 			c.logger.InfoWithEndpoint(" Setting up", endpoint.Name, "profile", platformProfile.GetName())
 			return models, nil
 		}
@@ -191,7 +163,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "read_response", resp.StatusCode, duration, err)
 	}
 
-	models, err := c.parser.ParseModelsResponse(body, platformProfile.GetModelResponseFormat())
+	models, err := platformProfile.ParseModelsResponse(body)
 	if err != nil {
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "parse_response", resp.StatusCode, duration, err)
 	}
@@ -265,4 +237,9 @@ func (c *HTTPModelDiscoveryClient) updateMetrics(updateFn func(*DiscoveryMetrics
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	updateFn(&c.metrics)
+}
+
+func (c *HTTPModelDiscoveryClient) Close() error {
+	c.httpClient.CloseIdleConnections()
+	return nil
 }

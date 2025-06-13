@@ -56,7 +56,6 @@ type EndpointResponse struct {
 
 type EndpointModelsResponse struct {
 	LastUpdated time.Time `json:"last_updated"`
-	Available   []string  `json:"available"`
 	Count       int64     `json:"count"`
 }
 
@@ -183,7 +182,6 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			modelDisco = EndpointModelsResponse{
 				LastUpdated: endpointModels.LastUpdated,
 				Count:       int64(len(endpointModels.Models)),
-				Available:   a.modelRegistry.ModelsToStrings(endpointModels.Models),
 			}
 		}
 

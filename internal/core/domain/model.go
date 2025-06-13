@@ -6,12 +6,30 @@ import (
 	"time"
 )
 
+// ModelDetails holds detailed model metadata for intelligent routing
+// based off ollama model details, guessing others won't be this detailed
+type ModelDetails struct {
+	ParameterSize     *string    `json:"parameter_size,omitempty"`
+	QuantizationLevel *string    `json:"quantization_level,omitempty"`
+	Publisher         *string    `json:"publisher,omitempty"`
+	Type              *string    `json:"type,omitempty"` // from LMStudio: llm, vlm
+	Family            *string    `json:"family,omitempty"`
+	Format            *string    `json:"format,omitempty"`
+	ParentModel       *string    `json:"parent_model,omitempty"`
+	State             *string    `json:"state,omitempty"`              // loaded / not-loaded (LMStudio gives this now)
+	Digest            *string    `json:"digest,omitempty"`             // super important for comparison checks
+	MaxContextLength  *int64     `json:"max_context_length,omitempty"` // Max context length in tokens (LMStudio gives this)
+	ModifiedAt        *time.Time `json:"modified_at,omitempty"`
+	Families          []string   `json:"families,omitempty"`
+}
+
 type ModelInfo struct {
-	LastSeen    time.Time `json:"last_seen"`
-	Name        string    `json:"name"`
-	Type        string    `json:"type,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Size        int64     `json:"size,omitempty"`
+	LastSeen    time.Time     `json:"last_seen"`
+	Details     *ModelDetails `json:"details,omitempty"`
+	Name        string        `json:"name"`
+	Type        string        `json:"type,omitempty"`
+	Description string        `json:"description,omitempty"`
+	Size        int64         `json:"size,omitempty"` // Disk size in bytes
 }
 
 type EndpointModels struct {

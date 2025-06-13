@@ -13,7 +13,7 @@
 # 15-05-2025  [GW]  - Burst capacity test added and fix sleep timing for other tests
 # 14-05-2025  [GW]  - Initial version built with Claude[AI] and Copilot
 
-OLLA_URL="http://localhost:19841"
+OLLA_URL="http://localhost:40114"
 PROXY_ENDPOINT="/proxy/api/generate"
 HEALTH_ENDPOINT="/internal/health"
 MODEL_NAME="phi4:latest"

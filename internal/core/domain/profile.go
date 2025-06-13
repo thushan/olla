@@ -24,6 +24,8 @@ type PlatformProfile interface {
 	GetModelResponseFormat() ModelResponseFormat
 	// GetDetectionHints returns hints for auto-detection for this platform
 	GetDetectionHints() DetectionHints
+	// ParseModelsResponse parses platform-specific JSON response into an ModelInfo slice
+	ParseModelsResponse(data []byte) ([]*ModelInfo, error)
 }
 
 // RequestParsingRules defines how to extract model names from different request types
@@ -39,9 +41,6 @@ type RequestParsingRules struct {
 type ModelResponseFormat struct {
 	ResponseType    string
 	ModelsFieldPath string
-	ModelNameField  string
-	ModelSizeField  string
-	ModelTypeField  string
 }
 
 // DetectionHints provides patterns for auto-detection of platform types

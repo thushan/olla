@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	DefaultPort              = 19841
+	DefaultPort              = 40114
 	DefaultHost              = "localhost"
 	DefaultProxyEngine       = "sherpa"
 	DefaultLoadBalancer      = "priority"

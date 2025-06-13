@@ -1,6 +1,9 @@
 package profile
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -13,6 +16,28 @@ const (
 	OllamaProfileCompletionsPath     = "/v1/completions"
 	OllamaProfileModelModelsPath     = "/api/tags"
 )
+
+type OllamaResponse struct {
+	Models []OllamaModel `json:"models"`
+}
+
+type OllamaModel struct {
+	Size        *int64         `json:"size,omitempty"`
+	Digest      *string        `json:"digest,omitempty"`
+	ModifiedAt  *string        `json:"modified_at,omitempty"`
+	Description *string        `json:"description,omitempty"`
+	Details     *OllamaDetails `json:"details,omitempty"`
+	Name        string         `json:"name"`
+}
+
+type OllamaDetails struct {
+	ParameterSize     *string  `json:"parameter_size,omitempty"`
+	QuantizationLevel *string  `json:"quantization_level,omitempty"`
+	Family            *string  `json:"family,omitempty"`
+	Format            *string  `json:"format,omitempty"`
+	ParentModel       *string  `json:"parent_model,omitempty"`
+	Families          []string `json:"families,omitempty"`
+}
 
 type OllamaProfile struct{}
 
@@ -54,9 +79,6 @@ func (p *OllamaProfile) GetModelResponseFormat() domain.ModelResponseFormat {
 	return domain.ModelResponseFormat{
 		ResponseType:    "object",
 		ModelsFieldPath: "models",
-		ModelNameField:  "name",
-		ModelSizeField:  "size",
-		ModelTypeField:  "",
 	}
 }
 
@@ -69,4 +91,81 @@ func (p *OllamaProfile) GetDetectionHints() domain.DetectionHints {
 			OllamaProfileGeneratePath,
 		},
 	}
+}
+
+func (p *OllamaProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
+	if len(data) == 0 {
+		return make([]*domain.ModelInfo, 0), nil
+	}
+
+	var response OllamaResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse Ollama response: %w", err)
+	}
+
+	models := make([]*domain.ModelInfo, 0, len(response.Models))
+	now := time.Now()
+
+	for _, ollamaModel := range response.Models {
+		if ollamaModel.Name == "" {
+			continue
+		}
+
+		modelInfo := &domain.ModelInfo{
+			Name:     ollamaModel.Name,
+			LastSeen: now,
+		}
+
+		if ollamaModel.Size != nil {
+			modelInfo.Size = *ollamaModel.Size
+		}
+
+		if ollamaModel.Description != nil {
+			modelInfo.Description = *ollamaModel.Description
+		}
+
+		if ollamaModel.Details != nil || ollamaModel.Digest != nil || ollamaModel.ModifiedAt != nil {
+			modelInfo.Details = createModelDetails(ollamaModel)
+		}
+
+		models = append(models, modelInfo)
+	}
+
+	return models, nil
+}
+
+func createModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
+	details := &domain.ModelDetails{}
+
+	if ollamaModel.Digest != nil {
+		details.Digest = ollamaModel.Digest
+	}
+
+	if ollamaModel.ModifiedAt != nil {
+		if parsedTime := util.ParseTime(*ollamaModel.ModifiedAt); parsedTime != nil {
+			details.ModifiedAt = parsedTime
+		}
+	}
+
+	if ollamaModel.Details != nil {
+		if ollamaModel.Details.ParameterSize != nil {
+			details.ParameterSize = ollamaModel.Details.ParameterSize
+		}
+		if ollamaModel.Details.QuantizationLevel != nil {
+			details.QuantizationLevel = ollamaModel.Details.QuantizationLevel
+		}
+		if ollamaModel.Details.Family != nil {
+			details.Family = ollamaModel.Details.Family
+		}
+		if ollamaModel.Details.Format != nil {
+			details.Format = ollamaModel.Details.Format
+		}
+		if ollamaModel.Details.ParentModel != nil {
+			details.ParentModel = ollamaModel.Details.ParentModel
+		}
+		if len(ollamaModel.Details.Families) > 0 {
+			details.Families = ollamaModel.Details.Families
+		}
+	}
+	return details
 }
