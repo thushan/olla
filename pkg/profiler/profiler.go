@@ -9,10 +9,9 @@ import (
 
 // InitialiseProfiler sets up the HTTP server for pprof profiling.
 // Based off  https://github.com/thushan/smash/blob/main/pkg/profiler/profiler.go
-func InitialiseProfiler() {
+func InitialiseProfiler(address string) {
 	http.DefaultServeMux = http.NewServeMux()
 	go func() {
-		address := "localhost:19841"
 		server := &http.Server{
 			Addr:         address,
 			ReadTimeout:  10 * time.Second,
@@ -25,7 +24,6 @@ func InitialiseProfiler() {
 		http.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 		http.HandleFunc("/debug/pprof/trace", pprof.Trace)
 
-		log.Println("Profiler is running on", address)
 		log.Println(server.ListenAndServe())
 	}()
 }
