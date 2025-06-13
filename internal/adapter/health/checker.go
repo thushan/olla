@@ -22,14 +22,12 @@ const (
 )
 
 type HTTPHealthChecker struct {
-	repository       domain.EndpointRepository
-	healthClient     *HealthClient
-	ticker           *time.Ticker
-	stopCh           chan struct{}
-	logger           logger.StyledLogger
-	lastLoggedStatus sync.Map
-	lastLogTime      sync.Map
-	isRunning        atomic.Bool
+	repository   domain.EndpointRepository
+	healthClient *HealthClient
+	ticker       *time.Ticker
+	stopCh       chan struct{}
+	logger       logger.StyledLogger
+	isRunning    atomic.Bool
 }
 
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
@@ -238,15 +236,8 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 	nextInterval time.Duration,
 	checkErr error,
 ) {
-	endpointKey := endpoint.GetURLString()
-	lastLogTimeInterface, _ := c.lastLogTime.Load(endpointKey)
-	lastLogTime, _ := lastLogTimeInterface.(time.Time)
-
 	switch {
 	case statusChanged:
-		c.lastLoggedStatus.Store(endpointKey, newStatus)
-		c.lastLogTime.Store(endpointKey, time.Now())
-
 		switch {
 		case oldStatus == domain.StatusUnknown && newStatus == domain.StatusHealthy:
 			c.logger.InfoHealthStatus("Endpoint initial status:",
@@ -314,9 +305,8 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 			})
 		}
 
-	case checkErr != nil && time.Since(lastLogTime) > LogThrottleInterval:
-		c.lastLogTime.Store(endpointKey, time.Now())
-
+	case checkErr != nil && endpoint.ConsecutiveFailures > 0 && endpoint.ConsecutiveFailures%5 == 0:
+		// Log ongoing issues every 5th consecutive failure instead of time-based throttling
 		detailedArgs := []interface{}{
 			"endpoint_url", endpoint.GetURLString(),
 			"status_code", result.StatusCode,
@@ -333,7 +323,6 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 			UserArgs: []interface{}{
 				"status", newStatus.String(),
 				"consecutive_failures", endpoint.ConsecutiveFailures + 1,
-				"duration", time.Since(lastLogTime).Round(time.Second),
 				"next_check_in", nextInterval,
 			},
 			DetailedArgs: detailedArgs,

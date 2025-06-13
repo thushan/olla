@@ -29,16 +29,6 @@ const (
 	DefaultMaxIdleConnectionsPerHost = 5
 )
 
-type profileCacheEntry struct {
-	lastUsed    time.Time
-	profileType string
-}
-
-var (
-	profileCache = sync.Map{}    // map[string]*profileCacheEntry
-	cacheTimeout = 1 * time.Hour // probably not required to have a TTL
-)
-
 // HTTPModelDiscoveryClient implements ModelDiscoveryClient using HTTP requests
 type HTTPModelDiscoveryClient struct {
 	httpClient     *http.Client
@@ -90,32 +80,9 @@ func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint 
 
 // discoverWithAutoDetection tries profiles in order until one succeeds
 func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context, endpoint *domain.Endpoint, startTime time.Time) ([]*domain.ModelInfo, error) {
-	endpointKey := endpoint.URLString
-
-	// See if we have a cache hit, this is to a void trying all profiles again
-	if cached, ok := profileCache.Load(endpointKey); ok {
-		if entry, okok := cached.(*profileCacheEntry); okok && time.Since(entry.lastUsed) < cacheTimeout {
-			c.logger.Debug("Using cached profile", "endpoint", endpointKey, "profile", entry.profileType)
-
-			platformProfile, err := c.profileFactory.GetProfile(entry.profileType)
-			if err == nil {
-				models, err := c.discoverWithProfile(ctx, endpoint, platformProfile, startTime)
-				if err == nil {
-					// Update cache timestamp on success
-					entry.lastUsed = time.Now()
-					profileCache.Store(endpointKey, entry)
-					return models, nil
-				}
-				// not in cache, we better try
-				c.logger.Debug("Cached profile failed, trying auto-detection", "endpoint", endpointKey)
-			}
-		}
-	}
-
 	// We're going to try profiles in order:
 	//	Ollama → LM Studio → OpenAI Compatible (as a last resort)
 	// Resolution for this may change in the future as more front-ends appear or are added.
-	// These are now cached so next time, we can use the cached profile if it was successful.
 	profileTypes := []string{
 		domain.ProfileOllama,
 		domain.ProfileLmStudio,
@@ -132,10 +99,6 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 
 		models, err := c.discoverWithProfile(ctx, endpoint, platformProfile, startTime)
 		if err == nil {
-			profileCache.Store(endpointKey, &profileCacheEntry{
-				profileType: profileType,
-				lastUsed:    time.Now(),
-			})
 			c.logger.InfoWithEndpoint(" Setting up", endpoint.Name, "profile", platformProfile.GetName())
 			return models, nil
 		}

@@ -33,9 +33,9 @@ const (
 	StatusSuccess = "success"
 	StatusFailure = "failure"
 
-	MaxTrackedEndpoints = 1000
-	EndpointTTL         = 24 * time.Hour
-	CleanupInterval     = time.Hour
+	MaxTrackedEndpoints = 500
+	EndpointTTL         = 1 * time.Minute
+	CleanupInterval     = 2 * time.Minute
 )
 
 type Collector struct {
@@ -81,6 +81,7 @@ func NewCollector(logger logger.StyledLogger) *Collector {
 }
 
 func (c *Collector) RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
+	c.logger.Warn("STATS DEBUG: RecordRequest called", "endpoint", endpoint.GetURLString(), "status", status)
 	now := time.Now().UnixNano()
 	latencyMs := latency.Milliseconds()
 
