@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/pkg/profiler"
 	"log"
 	"log/slog"
 	"os"
@@ -31,6 +32,15 @@ const (
 	DefaultTheme         = "default"
 )
 
+var enableProfiling bool
+
+func init() {
+	for _, arg := range os.Args[1:] {
+		if arg == "--profile" {
+			enableProfiling = true
+		}
+	}
+}
 func main() {
 	startTime := time.Now()
 	vlog := log.New(log.Writer(), "", 0)
@@ -41,7 +51,9 @@ func main() {
 	} else {
 		version.PrintVersionInfo(false, vlog)
 	}
-
+	if enableProfiling {
+		profiler.InitialiseProfiler()
+	}
 	// Setup logging
 	lcfg := buildLoggerConfig()
 	logInstance, styledLogger, cleanup, err := logger.NewWithTheme(lcfg)
