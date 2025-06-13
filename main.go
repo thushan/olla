@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"log/slog"
@@ -10,6 +11,9 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/thushan/olla/pkg/profiler"
+	"github.com/thushan/olla/theme"
 
 	"github.com/thushan/olla/internal/app"
 	"github.com/thushan/olla/internal/env"
@@ -31,15 +35,40 @@ const (
 	DefaultTheme         = "default"
 )
 
+var (
+	enableProfiling bool
+	showVersion     bool
+)
+
+func init() {
+	flag.BoolVar(&enableProfiling, "profile", false, "Enable pprof profiling server")
+	flag.BoolVar(&showVersion, "version", false, "Show version information")
+
+	flag.Parse()
+
+	if os.Getenv("OLLA_ENABLE_PROFILER") == "true" {
+		enableProfiling = true
+	}
+
+	if os.Getenv("OLLA_SHOW_VERSION") == "true" {
+		showVersion = true
+	}
+}
 func main() {
 	startTime := time.Now()
 	vlog := log.New(log.Writer(), "", 0)
+	profileAddress := "localhost:19841"
 
-	if len(os.Args) > 1 && os.Args[1] == "--version" {
+	if showVersion {
 		version.PrintVersionInfo(true, vlog)
 		os.Exit(0)
 	} else {
 		version.PrintVersionInfo(false, vlog)
+	}
+
+	if enableProfiling {
+		profiler.InitialiseProfiler(profileAddress)
+		vlog.Printf(theme.ColourProfiler("Profiling server started at http://%s/debug/pprof/\n"), profileAddress)
 	}
 
 	// Setup logging

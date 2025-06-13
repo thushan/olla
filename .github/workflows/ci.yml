@@ -60,7 +60,7 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
-  golangci:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - name: Configure Go
@@ -77,3 +77,13 @@ jobs:
         with:
           version: v${{ env.GOLANGCILINT_VERSION }}
           args: --timeout=10m --max-same-issues=0 --max-issues-per-linter=0
+
+      - name: betteralign checks
+        run: |
+          go install github.com/dkorunic/betteralign/cmd/betteralign@latest
+          output=$(betteralign ./...)
+          if [ -n "$output" ]; then
+            echo "Struct alignment issues found:"
+            echo "$output"
+            exit 1
+          fi
