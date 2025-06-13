@@ -80,7 +80,7 @@ usage() {
     echo -e "  concurrency  Number of concurrent workers"
     echo
     echo -e "${YELLOW}Configuration (.env file):${RESET}"
-    echo -e "  TARGET_URL      Olla proxy URL (e.g., http://localhost:19841)"
+    echo -e "  TARGET_URL      Olla proxy URL (e.g., http://localhost:40114)"
     echo -e "  RATE_LIMIT      Delay between requests in seconds (default: 0)"
     echo -e "  MODEL_NAME      Model to test with (default: phi4:latest)"
     echo
@@ -94,7 +94,7 @@ load_env() {
         echo -e "${RED}ERROR:${RESET} .env file not found"
         echo
         echo -e "${YELLOW}Create a .env file with:${RESET}"
-        echo -e "TARGET_URL=http://localhost:19841"
+        echo -e "TARGET_URL=http://localhost:40114"
         echo -e "RATE_LIMIT=0.1"
         echo -e "MODEL_NAME=phi4:latest"
         exit 1

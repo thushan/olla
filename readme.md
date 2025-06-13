@@ -70,7 +70,7 @@ Olla comes with a pre-configured docker configuration which proxies your local O
 # Pull and run Olla in an interactive terminal
 docker run -d -it \
   --name olla \
-  -p 19841:19841 \
+  -p 40114:40114 \
   -e OLLA_SERVER_HOST=0.0.0.0 \
   -e OLLA_CONFIG_FILE=config/docker.yaml \
   ghcr.io/thushan/olla:latest
@@ -79,7 +79,7 @@ docker run -d -it \
 You can then check it's running with:
 
 ```bash
-curl http://localhost:19841/internal/health
+curl http://localhost:40114/internal/health
 ```
 
 ### Docker Compose
@@ -91,7 +91,7 @@ services:
   olla:
     image: ghcr.io/thushan/olla:latest
     ports:
-      - "19841:19841"
+      - "40114:40114"
     environment:
       - OLLA_SERVER_HOST=0.0.0.0
       - OLLA_LOGGING_LEVEL=info
@@ -164,7 +164,7 @@ Create `config/config.yaml`:
 ```yaml
 server:
   host: "0.0.0.0"
-  port: 19841
+  port: 40114
   read_timeout: 30s
   write_timeout: 0s  # Important: Leave as 0s for streaming LLM responses
 
@@ -202,7 +202,7 @@ Common settings you'll want to override:
 ```bash
 # Server settings
 export OLLA_SERVER_HOST="0.0.0.0"
-export OLLA_SERVER_PORT="19841"
+export OLLA_SERVER_PORT="40114"
 
 # Proxy settings
 export OLLA_PROXY_LOAD_BALANCER="priority"
@@ -268,7 +268,7 @@ Once Olla is running, point your LLM clients to it instead of directly to Ollama
 import openai
 
 client = openai.OpenAI(
-    base_url="http://localhost:19841/olla/v1",  # Point to Olla
+    base_url="http://localhost:40114/olla/v1",  # Point to Olla
     api_key="dummy"  # Ollama doesn't need auth
 )
 
@@ -282,7 +282,7 @@ response = client.chat.completions.create(
 
 ```bash
 # Chat completions
-curl -X POST http://localhost:19841/olla/v1/chat/completions \
+curl -X POST http://localhost:40114/olla/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
@@ -290,7 +290,7 @@ curl -X POST http://localhost:19841/olla/v1/chat/completions \
   }'
 
 # Ollama generate API
-curl -X POST http://localhost:19841/olla/api/generate \
+curl -X POST http://localhost:40114/olla/api/generate \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
@@ -304,7 +304,7 @@ Olla automatically routes requests to endpoints that have the requested model:
 
 ```bash
 # This will route to whichever endpoint has 'codellama'
-curl -X POST http://localhost:19841/olla/v1/chat/completions \
+curl -X POST http://localhost:40114/olla/v1/chat/completions \
   -d '{"model": "codellama", "messages": [...]}'
 ```
 
@@ -314,20 +314,20 @@ curl -X POST http://localhost:19841/olla/v1/chat/completions \
 
 ```bash
 # Quick health check
-curl http://localhost:19841/internal/health
+curl http://localhost:40114/internal/health
 
 # Detailed status including endpoint health
-curl http://localhost:19841/internal/status | jq
+curl http://localhost:40114/internal/status | jq
 
 # Application version and build info
-curl http://localhost:19841/version | jq
+curl http://localhost:40114/version | jq
 ```
 
 ### Process Statistics
 
 ```bash
 # Runtime stats (memory, GC, goroutines)
-curl http://localhost:19841/internal/process | jq
+curl http://localhost:40114/internal/process | jq
 ```
 
 ### Example Status Response

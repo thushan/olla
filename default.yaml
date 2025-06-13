@@ -3,7 +3,7 @@
 # By default, it uses localhost for Ollama and LM Studio instances.
 server:
   host: "localhost"
-  port: 19841
+  port: 40114
   read_timeout: 20s
   write_timeout: 0s # for LLMs streaming, leave this as 0s
   shutdown_timeout: 10s
