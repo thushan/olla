@@ -38,7 +38,18 @@ type HTTPModelDiscoveryClient struct {
 	mu             sync.RWMutex
 }
 
-func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.StyledLogger) *HTTPModelDiscoveryClient {
+func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.StyledLogger, httpClient *http.Client) *HTTPModelDiscoveryClient {
+	return &HTTPModelDiscoveryClient{
+		httpClient:     httpClient,
+		profileFactory: profileFactory,
+		logger:         logger,
+		metrics: DiscoveryMetrics{
+			ErrorsByEndpoint: make(map[string]int64),
+		},
+	}
+}
+
+func NewHTTPModelDiscoveryClientWithDefaults(profileFactory *profile.Factory, logger logger.StyledLogger) *HTTPModelDiscoveryClient {
 	return &HTTPModelDiscoveryClient{
 		httpClient: &http.Client{
 			Timeout: DefaultTimeout,

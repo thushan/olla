@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/adapter/factory"
 	"net/http"
 	"sync"
 	"time"
@@ -49,10 +50,11 @@ func New(startTime time.Time, logger logger.StyledLogger) (*Application, error) 
 		return nil, fmt.Errorf("failed to load configuration: %w", err)
 	}
 
+	httpClientFactory := factory.NewSharedClientFactory()
 	statsCollector := stats.NewCollector(logger)
 	routeRegistry := router.NewRouteRegistry(logger)
 	repository := discovery.NewStaticEndpointRepository()
-	healthChecker := health.NewHTTPHealthCheckerWithDefaults(repository, logger)
+	healthChecker := health.NewHTTPHealthChecker(repository, logger, httpClientFactory.GetHealthClient())
 
 	modelRegistryConfig := registry.RegistryConfig{Type: cfg.ModelRegistry.Type}
 	modelRegistry, err := registry.NewModelRegistry(modelRegistryConfig, logger)
@@ -85,7 +87,7 @@ func New(startTime time.Time, logger logger.StyledLogger) (*Application, error) 
 
 	// Create model discovery components
 	profileFactory := profile.NewFactory()
-	modelDiscoveryClient := discovery.NewHTTPModelDiscoveryClient(profileFactory, logger)
+	modelDiscoveryClient := discovery.NewHTTPModelDiscoveryClient(profileFactory, logger, httpClientFactory.GetDiscoveryClient())
 
 	discoveryConfig := discovery.DiscoveryConfig{
 		Interval:          cfg.Discovery.ModelDiscovery.Interval,

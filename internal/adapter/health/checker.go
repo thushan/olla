@@ -41,7 +41,6 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.St
 		stopCh:       make(chan struct{}),
 	}
 }
-
 func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger logger.StyledLogger) *HTTPHealthChecker {
 	// We want to enable connection pooling and reuse with some sane defaults
 	client := &http.Client{

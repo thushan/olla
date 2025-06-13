@@ -300,7 +300,7 @@ func TestEnhancedModelDiscoveryIntegration(t *testing.T) {
 			defer server.Close()
 
 			endpoint := createTestEndpoint(server.URL, tt.platformType)
-			client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
+			client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
 
 			ctx := context.Background()
 			models, err := client.DiscoverModels(ctx, endpoint)
@@ -359,7 +359,7 @@ func TestAutoDetectionWithRichMetadata(t *testing.T) {
 	defer server.Close()
 
 	endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
-	client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
+	client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
 
 	ctx := context.Background()
 	models, err := client.DiscoverModels(ctx, endpoint)
@@ -459,7 +459,7 @@ func TestLMStudioEnhancedMetadata(t *testing.T) {
 	defer server.Close()
 
 	endpoint := createTestEndpoint(server.URL, domain.ProfileLmStudio)
-	client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
+	client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
 
 	models, err := client.DiscoverModels(context.Background(), endpoint)
 	if err != nil {
@@ -575,7 +575,7 @@ func TestResilientModelParsing(t *testing.T) {
 			defer server.Close()
 
 			endpoint := createTestEndpoint(server.URL, tt.platformType)
-			client := NewHTTPModelDiscoveryClient(profile.NewFactory(), createTestLogger())
+			client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
 
 			models, err := client.DiscoverModels(context.Background(), endpoint)
 			if err != nil {
