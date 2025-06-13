@@ -175,6 +175,9 @@ func ColourSplash(message ...any) string {
 func ColourVersion(message ...any) string {
 	return pterm.LightYellow(message...)
 }
+func ColourProfiler(message ...any) string {
+	return pterm.LightMagenta(message...)
+}
 
 // StyleUrl Colours for URLs and hyperlinks
 func StyleUrl(message ...any) string {
