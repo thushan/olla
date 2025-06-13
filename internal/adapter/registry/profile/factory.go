@@ -2,9 +2,10 @@ package profile
 
 import (
 	"fmt"
-	jsoniter "github.com/json-iterator/go"
 	"sort"
 	"sync"
+
+	jsoniter "github.com/json-iterator/go"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
