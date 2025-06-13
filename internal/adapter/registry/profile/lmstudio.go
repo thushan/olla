@@ -68,8 +68,6 @@ type LMStudioResponse struct {
 }
 
 type LMStudioModel struct {
-	ID                string  `json:"id"`
-	Object            string  `json:"object"`
 	Type              *string `json:"type,omitempty"`
 	Publisher         *string `json:"publisher,omitempty"`
 	Arch              *string `json:"arch,omitempty"`
@@ -77,6 +75,8 @@ type LMStudioModel struct {
 	Quantization      *string `json:"quantization,omitempty"`
 	State             *string `json:"state,omitempty"`
 	MaxContextLength  *int64  `json:"max_context_length,omitempty"`
+	ID                string  `json:"id"`
+	Object            string  `json:"object"`
 }
 
 type LMStudioProfile struct{}

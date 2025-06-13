@@ -43,7 +43,3 @@ func (f *SharedClientFactory) GetHealthClient() *http.Client {
 func (f *SharedClientFactory) GetDiscoveryClient() *http.Client {
 	return f.discoveryClient
 }
-
-func (f *SharedClientFactory) GetSharedTransport() *http.Transport {
-	return f.healthClient.Transport.(*http.Transport)
-}

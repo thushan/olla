@@ -25,21 +25,21 @@ type OllamaResponse struct {
 }
 
 type OllamaModel struct {
-	Name        string         `json:"name"`
 	Size        *int64         `json:"size,omitempty"`
 	Digest      *string        `json:"digest,omitempty"`
 	ModifiedAt  *string        `json:"modified_at,omitempty"`
 	Description *string        `json:"description,omitempty"`
 	Details     *OllamaDetails `json:"details,omitempty"`
+	Name        string         `json:"name"`
 }
 
 type OllamaDetails struct {
 	ParameterSize     *string  `json:"parameter_size,omitempty"`
 	QuantizationLevel *string  `json:"quantization_level,omitempty"`
 	Family            *string  `json:"family,omitempty"`
-	Families          []string `json:"families,omitempty"`
 	Format            *string  `json:"format,omitempty"`
 	ParentModel       *string  `json:"parent_model,omitempty"`
+	Families          []string `json:"families,omitempty"`
 }
 
 type OllamaProfile struct{}
@@ -128,42 +128,47 @@ func (p *OllamaProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, e
 		}
 
 		if ollamaModel.Details != nil || ollamaModel.Digest != nil || ollamaModel.ModifiedAt != nil {
-			modelInfo.Details = &domain.ModelDetails{}
-
-			if ollamaModel.Digest != nil {
-				modelInfo.Details.Digest = ollamaModel.Digest
-			}
-
-			if ollamaModel.ModifiedAt != nil {
-				if parsedTime := util.ParseTime(*ollamaModel.ModifiedAt); parsedTime != nil {
-					modelInfo.Details.ModifiedAt = parsedTime
-				}
-			}
-
-			if ollamaModel.Details != nil {
-				if ollamaModel.Details.ParameterSize != nil {
-					modelInfo.Details.ParameterSize = ollamaModel.Details.ParameterSize
-				}
-				if ollamaModel.Details.QuantizationLevel != nil {
-					modelInfo.Details.QuantizationLevel = ollamaModel.Details.QuantizationLevel
-				}
-				if ollamaModel.Details.Family != nil {
-					modelInfo.Details.Family = ollamaModel.Details.Family
-				}
-				if ollamaModel.Details.Format != nil {
-					modelInfo.Details.Format = ollamaModel.Details.Format
-				}
-				if ollamaModel.Details.ParentModel != nil {
-					modelInfo.Details.ParentModel = ollamaModel.Details.ParentModel
-				}
-				if len(ollamaModel.Details.Families) > 0 {
-					modelInfo.Details.Families = ollamaModel.Details.Families
-				}
-			}
+			modelInfo.Details = createModelDetails(ollamaModel)
 		}
 
 		models = append(models, modelInfo)
 	}
 
 	return models, nil
+}
+
+func createModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
+	details := &domain.ModelDetails{}
+
+	if ollamaModel.Digest != nil {
+		details.Digest = ollamaModel.Digest
+	}
+
+	if ollamaModel.ModifiedAt != nil {
+		if parsedTime := util.ParseTime(*ollamaModel.ModifiedAt); parsedTime != nil {
+			details.ModifiedAt = parsedTime
+		}
+	}
+
+	if ollamaModel.Details != nil {
+		if ollamaModel.Details.ParameterSize != nil {
+			details.ParameterSize = ollamaModel.Details.ParameterSize
+		}
+		if ollamaModel.Details.QuantizationLevel != nil {
+			details.QuantizationLevel = ollamaModel.Details.QuantizationLevel
+		}
+		if ollamaModel.Details.Family != nil {
+			details.Family = ollamaModel.Details.Family
+		}
+		if ollamaModel.Details.Format != nil {
+			details.Format = ollamaModel.Details.Format
+		}
+		if ollamaModel.Details.ParentModel != nil {
+			details.ParentModel = ollamaModel.Details.ParentModel
+		}
+		if len(ollamaModel.Details.Families) > 0 {
+			details.Families = ollamaModel.Details.Families
+		}
+	}
+	return details
 }

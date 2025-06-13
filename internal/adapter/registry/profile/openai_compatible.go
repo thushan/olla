@@ -15,10 +15,10 @@ type OpenAICompatibleResponse struct {
 }
 
 type OpenAICompatibleModel struct {
-	ID      string  `json:"id"`
-	Object  string  `json:"object"`
 	Created *int64  `json:"created,omitempty"`
 	OwnedBy *string `json:"owned_by,omitempty"`
+	ID      string  `json:"id"`
+	Object  string  `json:"object"`
 }
 
 type OpenAICompatibleProfile struct{}

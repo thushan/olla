@@ -3,10 +3,11 @@ package app
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/adapter/factory"
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/thushan/olla/internal/adapter/factory"
 
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
