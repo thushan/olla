@@ -37,6 +37,10 @@ func (f *Factory) GetProfile(platformType string) (domain.PlatformProfile, error
 
 	profile, exists := f.profiles[platformType]
 	if !exists {
+		// Return OpenAI compatible profile as fallback
+		if openai, hasOpenAI := f.profiles[domain.ProfileOpenAICompatible]; hasOpenAI {
+			return openai, nil
+		}
 		return nil, fmt.Errorf("profile not found for platform type: %s", platformType)
 	}
 
