@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -17,8 +16,6 @@ const (
 	OllamaProfileCompletionsPath     = "/v1/completions"
 	OllamaProfileModelModelsPath     = "/api/tags"
 )
-
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 type OllamaResponse struct {
 	Models []OllamaModel `json:"models"`
@@ -102,7 +99,7 @@ func (p *OllamaProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, e
 	}
 
 	var response OllamaResponse
-	if err := jsoniter.Unmarshal(data, &response); err != nil {
+	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse Ollama response: %w", err)
 	}
 

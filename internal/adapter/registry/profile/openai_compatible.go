@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -70,7 +69,7 @@ func (p *OpenAICompatibleProfile) ParseModelsResponse(data []byte) ([]*domain.Mo
 	}
 
 	var response OpenAICompatibleResponse
-	if err := jsoniter.Unmarshal(data, &response); err != nil {
+	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse OpenAI compatible response: %w", err)
 	}
 

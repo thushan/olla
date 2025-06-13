@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	jsoniter "github.com/json-iterator/go"
 	"sort"
 	"sync"
 
@@ -24,6 +25,8 @@ func NewFactory() *Factory {
 
 	return factory
 }
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 func (f *Factory) RegisterProfile(profile domain.PlatformProfile) {
 	f.mu.Lock()

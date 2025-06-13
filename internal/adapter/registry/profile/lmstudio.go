@@ -52,7 +52,6 @@ import (
 	"fmt"
 	"time"
 
-	jsoniter "github.com/json-iterator/go"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -136,7 +135,7 @@ func (p *LMStudioProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo,
 	}
 
 	var response LMStudioResponse
-	if err := jsoniter.Unmarshal(data, &response); err != nil {
+	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, fmt.Errorf("failed to parse LM Studio response: %w", err)
 	}
 
