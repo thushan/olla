@@ -25,7 +25,7 @@ func GenerateRequestID() string {
 	action := actions[rand.Intn(len(actions))]
 	suffix := fmt.Sprintf("%04x", rand.Intn(65536))
 
-	return fmt.Sprintf("%s_%s_%s", group, action, suffix)
+	return fmt.Sprintf("%s-%s-%s", group, action, suffix)
 }
 
 func GetClientIP(r *http.Request, trustProxyHeaders bool, trustedCIDRs []*net.IPNet) string {

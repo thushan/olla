@@ -30,6 +30,8 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	rl := a.Config.Server.RateLimits
 	clientIP := util.GetClientIP(r, rl.TrustProxyHeaders, rl.TrustedProxyCIDRsParsed)
 
+	pathResolutionStart := time.Now()
+
 	targetPath := a.stripRoutePrefix(ctx, r.URL.Path)
 
 	profile, err := a.inspectorChain.Inspect(ctx, r, targetPath)
@@ -46,12 +48,16 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	compatibleEndpoints := a.filterEndpointsByProfile(endpoints, profile, requestLogger)
 
+	pathResolutionEnd := time.Now()
+	stats.PathResolutionMs = pathResolutionEnd.Sub(pathResolutionStart).Milliseconds()
+
 	requestLogger.Info("Request started",
 		"client_ip", clientIP,
 		"method", r.Method,
 		"path", r.URL.Path,
 		"target_path", targetPath,
 		"compatible_endpoints", len(compatibleEndpoints),
+		"path_resolution_ms", stats.PathResolutionMs,
 		"query", r.URL.RawQuery,
 		"content_type", r.Header.Get("Content-Type"),
 		"content_length", r.ContentLength)
@@ -69,6 +75,7 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			"first_data_ms", stats.FirstDataMs,
 			"streaming_ms", stats.StreamingMs,
 			"header_processing_ms", stats.HeaderProcessingMs,
+			"path_resolution_ms", stats.PathResolutionMs,
 			"selection_ms", stats.SelectionMs)
 
 		if w.Header().Get("Content-Type") == "" {
@@ -86,6 +93,7 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			"first_data_ms", stats.FirstDataMs,
 			"streaming_ms", stats.StreamingMs,
 			"header_processing_ms", stats.HeaderProcessingMs,
+			"path_resolution_ms", stats.PathResolutionMs,
 			"selection_ms", stats.SelectionMs)
 	}
 }
