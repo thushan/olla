@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/ports"
 	"net/http"
 	"time"
 
@@ -14,14 +15,16 @@ import (
 )
 
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
-	requestID := util.GenerateRequestID()
-	requestStartTime := time.Now()
+	stats := ports.RequestStats{
+		RequestID: util.GenerateRequestID(),
+		StartTime: time.Now(),
+	}
 
-	ctx := context.WithValue(r.Context(), constants.RequestIDKey, requestID)
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, requestStartTime)
+	requestLogger := a.logger.WithRequestID(stats.RequestID)
+
+	ctx := context.WithValue(r.Context(), constants.RequestIDKey, stats.RequestID)
+	ctx = context.WithValue(ctx, constants.RequestTimeKey, stats.StartTime)
 	r = r.WithContext(ctx)
-
-	requestLogger := a.logger.WithRequestID(requestID)
 
 	rl := a.Config.Server.RateLimits
 	clientIP := util.GetClientIP(r, rl.TrustProxyHeaders, rl.TrustedProxyCIDRsParsed)
@@ -52,13 +55,12 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		"content_type", r.Header.Get("Content-Type"),
 		"content_length", r.ContentLength)
 
-	if stats, err := a.proxyService.ProxyRequestToEndpoints(ctx, w, r, compatibleEndpoints); err != nil {
-		duration := time.Since(requestStartTime)
+	if err := a.proxyService.ProxyRequestToEndpoints(ctx, w, r, compatibleEndpoints, &stats, requestLogger); err != nil {
+		duration := time.Since(stats.StartTime)
 
 		requestLogger.Error("Request failed", "error", err,
 			"duration_ms", duration.Milliseconds(),
 			"latency_ms", stats.Latency,
-			"request_id", requestID,
 			"endpoint", stats.EndpointName,
 			"total_bytes", stats.TotalBytes,
 			"request_processing_ms", stats.RequestProcessingMs,
@@ -72,8 +74,8 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
 		}
 	} else {
-		duration := time.Since(requestStartTime)
-		requestLogger.Info("Request completed", "request_id", requestID,
+		duration := time.Since(stats.StartTime)
+		requestLogger.Info("Request completed",
 			"endpoint", stats.EndpointName,
 			"total_bytes", stats.TotalBytes,
 			"duration_ms", duration.Milliseconds(),

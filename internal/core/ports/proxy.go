@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"github.com/thushan/olla/internal/logger"
 	"net/http"
 	"time"
 
@@ -10,8 +11,8 @@ import (
 
 // ProxyService defines the interface for the proxy service
 type ProxyService interface {
-	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (RequestStats, error)
-	ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint) (RequestStats, error)
+	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, stats *RequestStats, rlog logger.StyledLogger) error
+	ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *RequestStats, rlog logger.StyledLogger) error
 	GetStats(ctx context.Context) (ProxyStats, error)
 	UpdateConfig(configuration ProxyConfiguration)
 }
