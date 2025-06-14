@@ -510,7 +510,7 @@ Sherpa and Olla have been built using AI, we have utilised AI to generate docume
 
 We've utilised:
 
-* [Github Copilot](https://github.com/features/copilot) - Most of our documentation (code and markdown), Github Code Reviews
+* [GitHub Copilot](https://github.com/features/copilot) - Most of our documentation (code and markdown), GitHub Code Reviews
 * [Anthropic Claude](https://www.claude.ai) - Code reviews, unit test plumbing / refactoring, external test scripts (shell scripts)
 * [OpenAI ChatGPT](https://chatgpt.com/) - Code reviews, document refinement, troubleshooting
 
