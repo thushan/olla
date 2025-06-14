@@ -3,9 +3,10 @@ package health
 import (
 	"errors"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/puzpuzpuz/xsync/v4"
 )
 
 var (
@@ -19,9 +20,9 @@ type HTTPClient interface {
 
 // CircuitBreaker tracks failure rates and prevents cascading failures
 // TODO: (HOT-RELOAD) Add cleanup mechanism for removed endpoints when hot reload is implemented
-// The endpoints sync.Map will accumulate stale entries for removed/changed endpoints without TTL
+// The endpoints xsync.MapOf will accumulate stale entries for removed/changed endpoints without TTL
 type CircuitBreaker struct {
-	endpoints        sync.Map
+	endpoints        *xsync.Map[string, *circuitState]
 	failureThreshold int
 	timeout          time.Duration
 }
@@ -35,13 +36,14 @@ type circuitState struct {
 
 func NewCircuitBreaker() *CircuitBreaker {
 	return &CircuitBreaker{
+		endpoints:        xsync.NewMap[string, *circuitState](),
 		failureThreshold: DefaultCircuitBreakerThreshold,
 		timeout:          DefaultCircuitBreakerTimeout,
 	}
 }
 
 func (cb *CircuitBreaker) IsOpen(endpointURL string) bool {
-	state, ok := cb.loadState(endpointURL)
+	state, ok := cb.endpoints.Load(endpointURL)
 	if !ok {
 		return false
 	}
@@ -70,7 +72,7 @@ func (cb *CircuitBreaker) IsOpen(endpointURL string) bool {
 }
 
 func (cb *CircuitBreaker) RecordSuccess(endpointURL string) {
-	state, ok := cb.loadState(endpointURL)
+	state, ok := cb.endpoints.Load(endpointURL)
 	if !ok {
 		return
 	}
@@ -98,30 +100,16 @@ func (cb *CircuitBreaker) CleanupEndpoint(endpointURL string) {
 
 func (cb *CircuitBreaker) GetActiveEndpoints() []string {
 	var endpoints []string
-	cb.endpoints.Range(func(key, _ interface{}) bool {
-		strKey, ok := key.(string)
-		if ok {
-			endpoints = append(endpoints, strKey)
-		}
+	cb.endpoints.Range(func(key string, _ *circuitState) bool {
+		endpoints = append(endpoints, key)
 		return true
 	})
 	return endpoints
 }
 
-func (cb *CircuitBreaker) loadState(endpointURL string) (*circuitState, bool) {
-	value, ok := cb.endpoints.Load(endpointURL)
-	if !ok {
-		return nil, false
-	}
-	state, ok := value.(*circuitState)
-	return state, ok
-}
-
 func (cb *CircuitBreaker) loadOrCreateState(endpointURL string) *circuitState {
-	actual, _ := cb.endpoints.LoadOrStore(endpointURL, &circuitState{})
-	state, ok := actual.(*circuitState)
-	if !ok {
-		return &circuitState{}
-	}
+	state, _ := cb.endpoints.LoadOrCompute(endpointURL, func() (newValue *circuitState, cancel bool) {
+		return &circuitState{}, false
+	})
 	return state
 }
