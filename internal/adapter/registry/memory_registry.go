@@ -8,14 +8,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/thushan/olla/internal/logger"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
 
 type MemoryModelRegistry struct {
-	endpointModels   map[string]*domain.EndpointModels
-	modelToEndpoints map[string]map[string]struct{}
+	endpointModels   *xsync.Map[string, *domain.EndpointModels]
+	modelToEndpoints *xsync.Map[string, *xsync.Map[string, struct{}]]
 	logger           logger.StyledLogger
 	stats            domain.RegistryStats
 	mu               sync.RWMutex
@@ -24,8 +25,8 @@ type MemoryModelRegistry struct {
 func NewMemoryModelRegistry(logger logger.StyledLogger) *MemoryModelRegistry {
 	logger.Info("Started in-memory model registry")
 	return &MemoryModelRegistry{
-		endpointModels:   make(map[string]*domain.EndpointModels),
-		modelToEndpoints: make(map[string]map[string]struct{}),
+		endpointModels:   xsync.NewMap[string, *domain.EndpointModels](),
+		modelToEndpoints: xsync.NewMap[string, *xsync.Map[string, struct{}]](),
 		stats: domain.RegistryStats{
 			TotalEndpoints:    0,
 			TotalModels:       0,
@@ -50,15 +51,13 @@ func (r *MemoryModelRegistry) RegisterModel(ctx context.Context, endpointURL str
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	endpointData := r.endpointModels[endpointURL]
-	if endpointData == nil {
-		endpointData = &domain.EndpointModels{
+	endpointData, _ := r.endpointModels.LoadOrCompute(endpointURL, func() (newValue *domain.EndpointModels, cancel bool) {
+		return &domain.EndpointModels{
 			EndpointURL: endpointURL,
 			Models:      make([]*domain.ModelInfo, 0, 1),
 			LastUpdated: time.Now(),
-		}
-		r.endpointModels[endpointURL] = endpointData
-	}
+		}, false
+	})
 
 	modelExists := false
 	for i, existing := range endpointData.Models {
@@ -87,10 +86,10 @@ func (r *MemoryModelRegistry) RegisterModel(ctx context.Context, endpointURL str
 
 	endpointData.LastUpdated = time.Now()
 
-	if r.modelToEndpoints[model.Name] == nil {
-		r.modelToEndpoints[model.Name] = make(map[string]struct{})
-	}
-	r.modelToEndpoints[model.Name][endpointURL] = struct{}{}
+	endpointSet, _ := r.modelToEndpoints.LoadOrCompute(model.Name, func() (newValue *xsync.Map[string, struct{}], cancel bool) {
+		return xsync.NewMap[string, struct{}](), false
+	})
+	endpointSet.Store(endpointURL, struct{}{})
 
 	r.updateStats()
 	return nil
@@ -122,7 +121,7 @@ func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL st
 	r.removeEndpointFromIndex(endpointURL)
 
 	if len(models) == 0 {
-		delete(r.endpointModels, endpointURL)
+		r.endpointModels.Delete(endpointURL)
 		r.updateStats()
 		return nil
 	}
@@ -141,17 +140,17 @@ func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL st
 			LastSeen:    model.LastSeen,
 		})
 
-		if r.modelToEndpoints[model.Name] == nil {
-			r.modelToEndpoints[model.Name] = make(map[string]struct{})
-		}
-		r.modelToEndpoints[model.Name][endpointURL] = struct{}{}
+		endpointSet, _ := r.modelToEndpoints.LoadOrCompute(model.Name, func() (newValue *xsync.Map[string, struct{}], cancel bool) {
+			return xsync.NewMap[string, struct{}](), false
+		})
+		endpointSet.Store(endpointURL, struct{}{})
 	}
 
-	r.endpointModels[endpointURL] = &domain.EndpointModels{
+	r.endpointModels.Store(endpointURL, &domain.EndpointModels{
 		EndpointURL: endpointURL,
 		Models:      modelsCopy,
 		LastUpdated: time.Now(),
-	}
+	})
 
 	r.updateStats()
 	return nil
@@ -171,8 +170,8 @@ func (r *MemoryModelRegistry) GetModelsForEndpoint(ctx context.Context, endpoint
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	endpointData := r.endpointModels[endpointURL]
-	if endpointData == nil {
+	endpointData, ok := r.endpointModels.Load(endpointURL)
+	if !ok {
 		return []*domain.ModelInfo{}, nil
 	}
 
@@ -204,15 +203,16 @@ func (r *MemoryModelRegistry) GetEndpointsForModel(ctx context.Context, modelNam
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	endpointSet := r.modelToEndpoints[modelName]
-	if len(endpointSet) == 0 {
+	endpointSet, ok := r.modelToEndpoints.Load(modelName)
+	if !ok {
 		return []string{}, nil
 	}
 
-	endpoints := make([]string, 0, len(endpointSet))
-	for endpoint := range endpointSet {
+	var endpoints []string
+	endpointSet.Range(func(endpoint string, _ struct{}) bool {
 		endpoints = append(endpoints, endpoint)
-	}
+		return true
+	})
 
 	return endpoints, nil
 }
@@ -231,7 +231,19 @@ func (r *MemoryModelRegistry) IsModelAvailable(ctx context.Context, modelName st
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return len(r.modelToEndpoints[modelName]) > 0
+	endpointSet, ok := r.modelToEndpoints.Load(modelName)
+	if !ok {
+		return false
+	}
+
+	// Check if the set has any endpoints
+	hasEndpoints := false
+	endpointSet.Range(func(_ string, _ struct{}) bool {
+		hasEndpoints = true
+		return false // Stop after first item
+	})
+
+	return hasEndpoints
 }
 
 func (r *MemoryModelRegistry) GetAllModels(ctx context.Context) (map[string][]*domain.ModelInfo, error) {
@@ -244,8 +256,8 @@ func (r *MemoryModelRegistry) GetAllModels(ctx context.Context) (map[string][]*d
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make(map[string][]*domain.ModelInfo, len(r.endpointModels))
-	for endpointURL, endpointData := range r.endpointModels {
+	result := make(map[string][]*domain.ModelInfo)
+	r.endpointModels.Range(func(endpointURL string, endpointData *domain.EndpointModels) bool {
 		models := make([]*domain.ModelInfo, len(endpointData.Models))
 		for i, model := range endpointData.Models {
 			models[i] = &domain.ModelInfo{
@@ -257,10 +269,12 @@ func (r *MemoryModelRegistry) GetAllModels(ctx context.Context) (map[string][]*d
 			}
 		}
 		result[endpointURL] = models
-	}
+		return true
+	})
 
 	return result, nil
 }
+
 func (r *MemoryModelRegistry) GetEndpointModelMap(ctx context.Context) (map[string]*domain.EndpointModels, error) {
 	select {
 	case <-ctx.Done():
@@ -271,28 +285,19 @@ func (r *MemoryModelRegistry) GetEndpointModelMap(ctx context.Context) (map[stri
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make(map[string]*domain.EndpointModels, len(r.endpointModels))
-	for endpointURL, endpointData := range r.endpointModels {
+	result := make(map[string]*domain.EndpointModels)
+	r.endpointModels.Range(func(endpointURL string, endpointData *domain.EndpointModels) bool {
 		result[endpointURL] = &domain.EndpointModels{
 			EndpointURL: endpointData.EndpointURL,
 			Models:      endpointData.Models,
 			LastUpdated: endpointData.LastUpdated,
 		}
-		/*
-			for i, model := range endpointData.Available {
-				result[endpointURL].Available[i] = &domain.ModelInfo{
-					Name:        model.Name,
-					Size:        model.Size,
-					Type:        model.Type,
-					Description: model.Description,
-					LastSeen:    model.LastSeen,
-				}
-			}
-		*/
-	}
+		return true
+	})
 
 	return result, nil
 }
+
 func (r *MemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpointURL string) error {
 	if endpointURL == "" {
 		return domain.NewModelRegistryError("remove_endpoint", endpointURL, "", fmt.Errorf("endpoint URL cannot be empty"))
@@ -308,7 +313,7 @@ func (r *MemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpointURL st
 	defer r.mu.Unlock()
 
 	r.removeEndpointFromIndex(endpointURL)
-	delete(r.endpointModels, endpointURL)
+	r.endpointModels.Delete(endpointURL)
 	r.updateStats()
 
 	return nil
@@ -367,18 +372,26 @@ func (r *MemoryModelRegistry) validateInputs(endpointURL, modelName string) erro
 }
 
 func (r *MemoryModelRegistry) removeEndpointFromIndex(endpointURL string) {
-	endpointData := r.endpointModels[endpointURL]
-	if endpointData != nil {
+	endpointData, ok := r.endpointModels.Load(endpointURL)
+	if ok {
 		for _, model := range endpointData.Models {
-			if endpointSet := r.modelToEndpoints[model.Name]; endpointSet != nil {
-				delete(endpointSet, endpointURL)
-				if len(endpointSet) == 0 {
-					delete(r.modelToEndpoints, model.Name)
+			endpointSet, exists := r.modelToEndpoints.Load(model.Name)
+			if exists {
+				endpointSet.Delete(endpointURL)
+				// Check if the set is now empty and remove it
+				isEmpty := true
+				endpointSet.Range(func(_ string, _ struct{}) bool {
+					isEmpty = false
+					return false // Stop after first item
+				})
+				if isEmpty {
+					r.modelToEndpoints.Delete(model.Name)
 				}
 			}
 		}
 	}
 }
+
 func applyModelName(model *domain.ModelInfo) string {
 	// TODO: when we capture model params, display them as well
 	if model == nil {
@@ -386,6 +399,7 @@ func applyModelName(model *domain.ModelInfo) string {
 	}
 	return strings.TrimSpace(model.Name)
 }
+
 func (r *MemoryModelRegistry) ModelsToStrings(models []*domain.ModelInfo) []string {
 	output := make([]string, len(models))
 	for i, model := range models {
@@ -416,16 +430,17 @@ func (r *MemoryModelRegistry) updateStats() {
 	modelSet := make(map[string]struct{})
 	modelsPerEndpoint := make(map[string]int)
 
-	for endpointURL, endpointData := range r.endpointModels {
+	r.endpointModels.Range(func(endpointURL string, endpointData *domain.EndpointModels) bool {
 		modelCount := len(endpointData.Models)
 		modelsPerEndpoint[endpointURL] = modelCount
 
 		for _, model := range endpointData.Models {
 			modelSet[model.Name] = struct{}{}
 		}
-	}
+		return true
+	})
 
-	r.stats.TotalEndpoints = len(r.endpointModels)
+	r.stats.TotalEndpoints = len(modelsPerEndpoint)
 	r.stats.TotalModels = len(modelSet)
 	r.stats.ModelsPerEndpoint = modelsPerEndpoint
 	r.stats.LastUpdated = time.Now()

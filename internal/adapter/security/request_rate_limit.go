@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/config"
@@ -37,7 +38,7 @@ type RateLimitValidator struct {
 	globalLimiter           *rate.Limiter
 	cleanupTicker           *time.Ticker
 	stopCleanup             chan struct{}
-	ipLimiters              sync.Map
+	ipLimiters              *xsync.Map[string, *ipLimiterInfo]
 	trustedCIDRs            []*net.IPNet
 	globalRequestsPerMinute int
 	perIPRequestsPerMinute  int
@@ -67,6 +68,7 @@ func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.Securit
 		metrics:                 metrics,
 		logger:                  logger,
 		stopCleanup:             make(chan struct{}),
+		ipLimiters:              xsync.NewMap[string, *ipLimiterInfo](),
 	}
 
 	if limits.GlobalRequestsPerMinute > 0 {
@@ -200,21 +202,17 @@ func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, lim
 }
 
 func (rl *RateLimitValidator) getOrCreateLimiter(key string, limit int) *ipLimiterInfo {
-	newLimiter := &ipLimiterInfo{
-		limiter:      rate.NewLimiter(rate.Limit(float64(limit)/60.0), rl.burstSize),
-		lastAccess:   time.Now(),
-		tokensUsed:   0,
-		windowStart:  time.Now(),
-		requestLimit: limit,
-	}
-
-	actual, _ := rl.ipLimiters.LoadOrStore(key, newLimiter)
-
-	if limiterInfo, ok := actual.(*ipLimiterInfo); ok {
-		return limiterInfo
-	}
-	// shouldn't happen but keeps golangci-lint happy
-	return newLimiter
+	limiterInfo, _ := rl.ipLimiters.LoadOrCompute(key, func() (newValue *ipLimiterInfo, cancel bool) {
+		now := time.Now()
+		return &ipLimiterInfo{
+			limiter:      rate.NewLimiter(rate.Limit(float64(limit)/60.0), rl.burstSize),
+			tokensUsed:   0,
+			lastAccess:   now,
+			windowStart:  now,
+			requestLimit: limit,
+		}, false
+	})
+	return limiterInfo
 }
 
 func (rl *RateLimitValidator) cleanupRoutine() {
@@ -233,11 +231,7 @@ func (rl *RateLimitValidator) cleanupRoutine() {
 func (rl *RateLimitValidator) cleanupOldLimiters() {
 	cutoff := time.Now().Add(-10 * time.Minute)
 
-	rl.ipLimiters.Range(func(key, value interface{}) bool {
-		limiterInfo, ok := value.(*ipLimiterInfo)
-		if !ok {
-			return true // skip corrropt entry
-		}
+	rl.ipLimiters.Range(func(key string, limiterInfo *ipLimiterInfo) bool {
 		limiterInfo.mu.RLock()
 		lastAccess := limiterInfo.lastAccess
 		limiterInfo.mu.RUnlock()

@@ -9,7 +9,7 @@
 </div>
 
 > [!IMPORTANT]  
-> Olla is currently **in-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
+> Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
 
 Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including Ollama, LM Studio, and OpenAI-compatible endpoints out of the box, with more front-ends coming soon.
 
@@ -472,25 +472,25 @@ Olla is designed to sit behind a reverse proxy (nginx, Cloudflare, etc.) in prod
 
 ## 🤔 FAQ
 
-**Q: Why use Olla instead of nginx or HAProxy?**
+**Q: Why use Olla instead of nginx or HAProxy?** \
 A: Olla understands LLM-specific patterns like model routing, streaming responses, and health semantics. It also provides built-in model discovery and LLM-optimised timeouts.
 
-**Q: Can I use Olla with other LLM providers?**
+**Q: Can I use Olla with other LLM providers?** \
 A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints.
 
-**Q: Does Olla support authentication?**
+**Q: Does Olla support authentication?** \
 A: Olla focuses on load balancing and lets your reverse proxy handle authentication. This follows the Unix philosophy of doing one thing well.
 
-**Q: How does priority routing work with model availability?**
+**Q: How does priority routing work with model availability?** \
 A: (as of June 2025) Olla doesn't yet support model routing, but the goal is to have Olla first filter endpoints that have the requested model, then applies your chosen load balancing strategy within that subset.
 
-**Q: Can I run Olla in Kubernetes?**
+**Q: Can I run Olla in Kubernetes?** \
 A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!
 
-**Q: What is the reference to Sherpa?**
+**Q: What is the reference to Sherpa?** \
 A: Sherpa is the precursor to Olla, that has now grown into a large tool that encompasses a lot more than just a proxy. The proxy feature was only added to Sherpa in early 2024 but internally (at our work), it was the most popular across teams. Olla shares a lot of the core from Sherpa (including its proxy engine).
 
-**Q: What is behind the name Olla?**
+**Q: What is behind the name Olla?** \
 A: Olla is the name of our llama (featured in the logo), and a running joke from a teammate who'd say, "Can't get it working on Olla(ma)." It's pronounced like 'holla'. The Spanish meaning (pot) is purely coincidental—we weren't high or anything. That said, you can cook up a lot when Olla is in the middle.
 
 ## 🤝 Contributing
@@ -510,7 +510,7 @@ Sherpa and Olla have been built using AI, we have utilised AI to generate docume
 
 We've utilised:
 
-* [Github Copilot](https://github.com/features/copilot) - Most of our documentation (code and markdown)
+* [GitHub Copilot](https://github.com/features/copilot) - Most of our documentation (code and markdown), GitHub Code Reviews
 * [Anthropic Claude](https://www.claude.ai) - Code reviews, unit test plumbing / refactoring, external test scripts (shell scripts)
 * [OpenAI ChatGPT](https://chatgpt.com/) - Code reviews, document refinement, troubleshooting
 
@@ -521,6 +521,7 @@ Claude was used via [JetBrains Junie](https://www.jetbrains.com/junie/) in our d
 This project was possible thanks to the following projects or folks.
 
 * [@pterm/pterm](https://github.com/pterm/pterm) - Amazing TUI framework used
+* [@puzpuzpuz/xsync](https://github.com/puzpuzpuz/xsync/) - High-performance sync.Map replacement (v4)
 * [@golangci/golangci-lint](https://github.com/golangci/golangci-lint) - Go Linter
 * [@dkorunic/betteralign](https://github.com/dkorunic/betteralign) - Go alignment checker
 
