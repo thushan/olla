@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/thushan/olla/internal/core/domain"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -44,12 +45,13 @@ const (
 	CleanupInterval     = 5 * time.Minute
 )
 
+// TODO: Move to xsync.Counter
 type Collector struct {
 	uniqueRateLimitedIPs map[string]int64
 
 	logger logger.StyledLogger
 
-	endpoints sync.Map // map[string]*endpointData
+	endpoints *xsync.Map[string, *endpointData]
 
 	totalRequests      int64
 	successfulRequests int64
@@ -64,6 +66,7 @@ type Collector struct {
 	cleanupMu sync.Mutex
 }
 
+// TODO: Move to xsync.Counter
 type endpointData struct {
 	name               string
 	url                string
@@ -82,6 +85,7 @@ func NewCollector(logger logger.StyledLogger) *Collector {
 	return &Collector{
 		uniqueRateLimitedIPs: make(map[string]int64),
 		logger:               logger,
+		endpoints:            xsync.NewMap[string, *endpointData](),
 		lastCleanup:          time.Now().UnixNano(),
 	}
 }
@@ -164,14 +168,7 @@ func (c *Collector) GetProxyStats() ports.ProxyStats {
 func (c *Collector) GetEndpointStats() map[string]ports.EndpointStats {
 	stats := make(map[string]ports.EndpointStats)
 
-	c.endpoints.Range(func(key, value interface{}) bool {
-		url, ok1 := key.(string)
-		data, ok2 := value.(*endpointData)
-		if !ok1 || !ok2 {
-			c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", key)
-			return true
-		}
-
+	c.endpoints.Range(func(url string, data *endpointData) bool {
 		total := atomic.LoadInt64(&data.totalRequests)
 		successful := atomic.LoadInt64(&data.successfulRequests)
 		failed := atomic.LoadInt64(&data.failedRequests)
@@ -226,15 +223,7 @@ func (c *Collector) GetSecurityStats() ports.SecurityStats {
 func (c *Collector) GetConnectionStats() map[string]int64 {
 	stats := make(map[string]int64)
 
-	c.endpoints.Range(func(key, value interface{}) bool {
-		url, ok1 := key.(string)
-		data, ok2 := value.(*endpointData)
-
-		if !ok1 || !ok2 {
-			c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", key)
-			return true
-		}
-
+	c.endpoints.Range(func(url string, data *endpointData) bool {
 		stats[url] = atomic.LoadInt64(&data.activeConnections)
 		return true
 	})
@@ -307,17 +296,14 @@ func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 
 func (c *Collector) getOrInitEndpoint(endpoint *domain.Endpoint, now int64) *endpointData {
 	key := endpoint.URL.String()
-	val, _ := c.endpoints.LoadOrStore(key, &endpointData{
-		url:        key,
-		name:       endpoint.Name,
-		lastUsed:   now,
-		minLatency: -1,
+	data, _ := c.endpoints.LoadOrCompute(key, func() (newValue *endpointData, cancel bool) {
+		return &endpointData{
+			url:        key,
+			name:       endpoint.Name,
+			lastUsed:   now,
+			minLatency: -1,
+		}, false
 	})
-	data, ok := val.(*endpointData)
-	if !ok {
-		c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", key)
-		return nil
-	}
 	return data
 }
 
@@ -338,13 +324,7 @@ func (c *Collector) cleanup(now int64) {
 	var toRemove []string
 	var count int
 
-	c.endpoints.Range(func(k, v interface{}) bool {
-		url, ok1 := k.(string)
-		data, ok2 := v.(*endpointData)
-		if !ok1 || !ok2 {
-			c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", url)
-			return true
-		}
+	c.endpoints.Range(func(url string, data *endpointData) bool {
 		count++
 		if atomic.LoadInt64(&data.lastUsed) < cutoff {
 			toRemove = append(toRemove, url)
@@ -362,13 +342,7 @@ func (c *Collector) cleanup(now int64) {
 			time int64
 		}
 		var ages []endpointAge
-		c.endpoints.Range(func(k, v interface{}) bool {
-			url, ok1 := k.(string)
-			data, ok2 := v.(*endpointData)
-			if !ok1 || !ok2 {
-				c.logger.Error("BUGCHECK: Failed to cast endpoint data, please file a bug report.", "url", url)
-				return true
-			}
+		c.endpoints.Range(func(url string, data *endpointData) bool {
 			ages = append(ages, endpointAge{url, atomic.LoadInt64(&data.lastUsed)})
 			return true
 		})
