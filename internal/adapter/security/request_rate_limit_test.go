@@ -373,7 +373,7 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 	}
 
 	limiterCount := 0
-	validator.ipLimiters.Range(func(key, value interface{}) bool {
+	validator.ipLimiters.Range(func(key string, limiterInfo *ipLimiterInfo) bool {
 		limiterCount++
 		return true
 	})
@@ -382,8 +382,7 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 		t.Errorf("Expected 5 IP limiters, got %d", limiterCount)
 	}
 
-	validator.ipLimiters.Range(func(key, value interface{}) bool {
-		limiterInfo := value.(*ipLimiterInfo)
+	validator.ipLimiters.Range(func(key string, limiterInfo *ipLimiterInfo) bool {
 		limiterInfo.mu.Lock()
 		limiterInfo.lastAccess = time.Now().Add(-11 * time.Minute)
 		limiterInfo.mu.Unlock()
@@ -393,7 +392,7 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	limiterCountAfter := 0
-	validator.ipLimiters.Range(func(key, value interface{}) bool {
+	validator.ipLimiters.Range(func(key string, limiterInfo *ipLimiterInfo) bool {
 		limiterCountAfter++
 		return true
 	})
