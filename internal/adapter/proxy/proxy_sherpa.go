@@ -105,7 +105,16 @@ func NewSherpaService(
 	}
 }
 
-func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (stats ports.RequestStats, err error) {
+func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (ports.RequestStats, error) {
+	endpoints, err := s.discoveryService.GetHealthyEndpoints(ctx)
+	if err != nil {
+		return ports.RequestStats{}, err
+	}
+
+	return s.ProxyRequestToEndpoints(ctx, w, r, endpoints)
+}
+
+func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint) (stats ports.RequestStats, err error) {
 	requestID, _ := ctx.Value(constants.RequestIDKey).(string)
 	if requestID == "" {
 		requestID = util.GenerateRequestID()
@@ -147,18 +156,6 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 
 	rlog.Debug("proxy request started", "method", r.Method, "url", r.URL.String())
 
-	endpoints, err := s.discoveryService.GetHealthyEndpoints(ctx)
-	if err != nil {
-		// Can't get any healthy endpoints, log and return error
-		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.recordFailure(nil, time.Since(startTime), 0)
-
-		rlog.Error("failed to get healthy endpoints", "error", err)
-
-		return stats, domain.NewProxyError(requestID, "", r.Method, r.URL.Path, 0, time.Since(startTime), stats.TotalBytes,
-			makeUserFriendlyError(fmt.Errorf("failed to get healthy endpoints: %w", err), time.Since(startTime), "discovery", s.configuration.ResponseTimeout))
-	}
-
 	if len(endpoints) == 0 {
 		// No healthy endpoints available, log and return error
 		atomic.AddInt64(&s.stats.failedRequests, 1)
@@ -170,7 +167,7 @@ func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWr
 			fmt.Errorf("no healthy AI backends available after %.1fs - all endpoints may be down or still being health checked", time.Since(startTime).Seconds()))
 	}
 
-	rlog.Debug("found healthy endpoints", "count", len(endpoints))
+	rlog.Debug("using provided endpoints", "count", len(endpoints))
 
 	selectionStart := time.Now()
 	endpoint, err := s.selector.Select(ctx, endpoints)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/discovery"
+	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/security"
@@ -41,6 +42,8 @@ type Application struct {
 	modelDiscoveryService *discovery.ModelDiscoveryService
 	modelDiscoveryClient  discovery.ModelDiscoveryClient
 	statsCollector        ports.StatsCollector
+	inspectorChain        ports.InspectorChain
+	discoveryService      ports.DiscoveryService
 	errCh                 chan error
 	shutdownOnce          sync.Once
 }
@@ -90,6 +93,10 @@ func New(startTime time.Time, logger logger.StyledLogger) (*Application, error) 
 	profileFactory := profile.NewFactory()
 	modelDiscoveryClient := discovery.NewHTTPModelDiscoveryClient(profileFactory, logger, httpClientFactory.GetDiscoveryClient())
 
+	// Create inspector chain
+	inspectorFactory := inspector.NewFactory(profileFactory, logger)
+	inspectorChain := inspectorFactory.CreateDefaultChain()
+
 	discoveryConfig := discovery.DiscoveryConfig{
 		Interval:          cfg.Discovery.ModelDiscovery.Interval,
 		Timeout:           cfg.Discovery.ModelDiscovery.Timeout,
@@ -133,6 +140,8 @@ func New(startTime time.Time, logger logger.StyledLogger) (*Application, error) 
 		modelDiscoveryService: modelDiscoveryService,
 		modelDiscoveryClient:  modelDiscoveryClient,
 		statsCollector:        statsCollector,
+		inspectorChain:        inspectorChain,
+		discoveryService:      discoveryService,
 		errCh:                 make(chan error, 1),
 	}
 

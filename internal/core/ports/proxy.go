@@ -11,6 +11,7 @@ import (
 // ProxyService defines the interface for the proxy service
 type ProxyService interface {
 	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (RequestStats, error)
+	ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint) (RequestStats, error)
 	GetStats(ctx context.Context) (ProxyStats, error)
 	UpdateConfig(configuration ProxyConfiguration)
 }
@@ -54,6 +55,7 @@ type RequestStats struct {
 	FirstDataMs         int64 // Time from start until first data sent to client
 	StreamingMs         int64 // Time spent streaming response data
 	HeaderProcessingMs  int64 // Time spent processing headers
+	PathResolutionMs    int64 // Time spent resolving the target path to an endpoint
 	SelectionMs         int64 // Time spent selecting endpoint
 }
 

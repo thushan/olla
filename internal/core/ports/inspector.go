@@ -2,8 +2,9 @@ package ports
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/core/domain"
 	"net/http"
+
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 type RequestInspector interface {

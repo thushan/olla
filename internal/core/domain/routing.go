@@ -7,10 +7,10 @@ const (
 )
 
 type RequestProfile struct {
-	Path           string
-	SupportedBy    []string
-	ModelName      string
 	InspectionMeta *xsync.Map[string, interface{}]
+	Path           string
+	ModelName      string
+	SupportedBy    []string
 }
 
 func NewRequestProfile(path string) *RequestProfile {
