@@ -15,6 +15,10 @@ type PathInspector struct {
 	logger         logger.StyledLogger
 }
 
+const (
+	PathInspectorName = "path"
+)
+
 func NewPathInspector(profileFactory *profile.Factory, logger logger.StyledLogger) *PathInspector {
 	return &PathInspector{
 		profileFactory: profileFactory,
@@ -23,7 +27,7 @@ func NewPathInspector(profileFactory *profile.Factory, logger logger.StyledLogge
 }
 
 func (pi *PathInspector) Name() string {
-	return "path"
+	return PathInspectorName
 }
 
 func (pi *PathInspector) Inspect(_ context.Context, _ *http.Request, profile *domain.RequestProfile) error {

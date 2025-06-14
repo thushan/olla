@@ -415,3 +415,371 @@ func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 		t.Error("Expected non-zero average latency")
 	}
 }
+
+// TestSherpaProxyService_ProxyRequestToEndpoints_Success tests the new filtered endpoints method
+func TestSherpaProxyService_ProxyRequestToEndpoints_Success(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"response": "test"}`))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	endpoints := []*domain.Endpoint{endpoint}
+
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	selector.endpoint = endpoint
+	config := &Configuration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
+
+	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
+	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
+
+	if err != nil {
+		t.Errorf("ProxyRequestToEndpoints() error = %v, want nil", err)
+	}
+
+	if w.Code != http.StatusOK {
+		t.Errorf("ProxyRequestToEndpoints() status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	if !strings.Contains(w.Body.String(), "test") {
+		t.Errorf("ProxyRequestToEndpoints() body should contain response")
+	}
+
+	if stats.EndpointName != "test" {
+		t.Errorf("ProxyRequestToEndpoints() should set endpoint name, got %v", stats.EndpointName)
+	}
+
+	if stats.TotalBytes <= 0 {
+		t.Error("ProxyRequestToEndpoints() should record bytes transferred")
+	}
+}
+
+// TestSherpaProxyService_ProxyRequestToEndpoints_EmptyEndpoints tests empty endpoints handling
+func TestSherpaProxyService_ProxyRequestToEndpoints_EmptyEndpoints(t *testing.T) {
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	config := &Configuration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
+
+	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
+	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, []*domain.Endpoint{})
+
+	if err == nil {
+		t.Error("ProxyRequestToEndpoints() with empty endpoints should return error")
+	}
+
+	if stats.EndpointName != "" {
+		t.Error("ProxyRequestToEndpoints() with empty endpoints should not set endpoint name")
+	}
+
+	if !strings.Contains(err.Error(), "no healthy AI backends available") {
+		t.Errorf("ProxyRequestToEndpoints() error should mention no backends, got: %v", err)
+	}
+}
+
+// TestSherpaProxyService_ProxyRequestToEndpoints_FilteredEndpoints tests platform-specific filtering
+func TestSherpaProxyService_ProxyRequestToEndpoints_FilteredEndpoints(t *testing.T) {
+	ollamaBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Backend", "ollama")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"model": "ollama-response"}`))
+	}))
+	defer ollamaBackend.Close()
+
+	lmstudioBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Backend", "lmstudio")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"model": "lmstudio-response"}`))
+	}))
+	defer lmstudioBackend.Close()
+
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	config := &Configuration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
+
+	ollamaEndpoint := createTestEndpoint("ollama-1", ollamaBackend.URL, domain.StatusHealthy)
+	ollamaEndpoint.Type = domain.ProfileOllama
+	lmstudioEndpoint := createTestEndpoint("lmstudio-1", lmstudioBackend.URL, domain.StatusHealthy)
+	lmstudioEndpoint.Type = domain.ProfileLmStudio
+
+	filteredEndpoints := []*domain.Endpoint{ollamaEndpoint}
+	selector.endpoint = ollamaEndpoint
+
+	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
+	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+
+	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(`{"model": "test"}`))
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, filteredEndpoints)
+
+	if err != nil {
+		t.Errorf("ProxyRequestToEndpoints() with filtered endpoints error = %v, want nil", err)
+	}
+
+	if stats.EndpointName != "ollama-1" {
+		t.Errorf("ProxyRequestToEndpoints() should route to filtered endpoint, got %v", stats.EndpointName)
+	}
+
+	if w.Header().Get("X-Backend") != "ollama" {
+		t.Errorf("ProxyRequestToEndpoints() should reach Ollama backend, got %v", w.Header().Get("X-Backend"))
+	}
+}
+
+// TestSherpaProxyService_ProxyRequestToEndpoints_LoadBalancing tests load balancing with filtered endpoints
+func TestSherpaProxyService_ProxyRequestToEndpoints_LoadBalancing(t *testing.T) {
+	backend1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Backend-ID", "backend-1")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"response": "backend1"}`))
+	}))
+	defer backend1.Close()
+
+	backend2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Backend-ID", "backend-2")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"response": "backend2"}`))
+	}))
+	defer backend2.Close()
+
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	config := &Configuration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
+
+	endpoints := []*domain.Endpoint{
+		createTestEndpoint("endpoint-1", backend1.URL, domain.StatusHealthy),
+		createTestEndpoint("endpoint-2", backend2.URL, domain.StatusHealthy),
+	}
+
+	backendHits := make(map[string]int)
+
+	for i := 0; i < 4; i++ {
+		// selector will always return first endpoint for predictable testing
+		selector.endpoint = endpoints[i%len(endpoints)]
+
+		ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
+		ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+
+		req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
+		req = req.WithContext(ctx)
+		w := httptest.NewRecorder()
+
+		stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
+
+		if err != nil {
+			t.Errorf("ProxyRequestToEndpoints() request %d error = %v", i, err)
+			continue
+		}
+
+		backendID := w.Header().Get("X-Backend-ID")
+		if backendID != "" {
+			backendHits[backendID]++
+		}
+
+		if stats.EndpointName == "" {
+			t.Errorf("ProxyRequestToEndpoints() request %d should set endpoint name", i)
+		}
+	}
+
+	if len(backendHits) == 0 {
+		t.Error("ProxyRequestToEndpoints() should route to backends")
+	}
+
+	totalHits := 0
+	for _, hits := range backendHits {
+		totalHits += hits
+	}
+
+	if totalHits != 4 {
+		t.Errorf("ProxyRequestToEndpoints() should have made 4 requests, got %d", totalHits)
+	}
+}
+
+// TestSherpaProxyService_ProxyRequest_BackwardCompatibility tests that original method still works
+func TestSherpaProxyService_ProxyRequest_BackwardCompatibility(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"legacy": "response"}`))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	selector.endpoint = endpoint
+	config := &Configuration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
+
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
+	w := httptest.NewRecorder()
+
+	stats, err := proxy.ProxyRequest(context.Background(), w, req)
+
+	if err != nil {
+		t.Errorf("ProxyRequest() backward compatibility error = %v, want nil", err)
+	}
+
+	if w.Code != http.StatusOK {
+		t.Errorf("ProxyRequest() status = %v, want %v", w.Code, http.StatusOK)
+	}
+
+	if !strings.Contains(w.Body.String(), "legacy") {
+		t.Error("ProxyRequest() should work with legacy flow")
+	}
+
+	if stats.EndpointName != "test" {
+		t.Error("ProxyRequest() should set endpoint name")
+	}
+}
+
+// TestSherpaProxyService_ProxyRequestToEndpoints_StatsCollection tests detailed stats recording
+func TestSherpaProxyService_ProxyRequestToEndpoints_StatsCollection(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(10 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data": "response with delay"}`))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	endpoints := []*domain.Endpoint{endpoint}
+
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	selector.endpoint = endpoint
+	config := &Configuration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
+
+	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
+	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
+
+	if err != nil {
+		t.Errorf("ProxyRequestToEndpoints() stats collection error = %v", err)
+	}
+
+	if stats.Latency <= 0 {
+		t.Error("ProxyRequestToEndpoints() should record total latency")
+	}
+
+	if stats.RequestProcessingMs < 0 {
+		t.Error("ProxyRequestToEndpoints() should record non-negative request processing time")
+	}
+
+	if stats.BackendResponseMs <= 0 {
+		t.Error("ProxyRequestToEndpoints() should record backend response time")
+	}
+
+	if stats.StreamingMs < 0 {
+		t.Error("ProxyRequestToEndpoints() should record streaming time")
+	}
+
+	if stats.TotalBytes <= 0 {
+		t.Error("ProxyRequestToEndpoints() should record bytes transferred")
+	}
+
+	if stats.SelectionMs < 0 {
+		t.Error("ProxyRequestToEndpoints() should record non-negative selection time")
+	}
+}
+
+// TestSherpaProxyService_ProxyRequestToEndpoints_ContextCancellation tests timeout handling
+func TestSherpaProxyService_ProxyRequestToEndpoints_ContextCancellation(t *testing.T) {
+	slowBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"slow": "response"}`))
+	}))
+	defer slowBackend.Close()
+
+	endpoint := createTestEndpoint("test", slowBackend.URL, domain.StatusHealthy)
+	endpoints := []*domain.Endpoint{endpoint}
+
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	selector.endpoint = endpoint
+	config := &Configuration{
+		ResponseTimeout:  10 * time.Millisecond,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+
+	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
+
+	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
+	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
+
+	if err == nil {
+		t.Error("ProxyRequestToEndpoints() should return error on timeout")
+	}
+
+	if !strings.Contains(err.Error(), "timeout") && !strings.Contains(err.Error(), "context") {
+		t.Errorf("ProxyRequestToEndpoints() should return timeout error, got: %v", err)
+	}
+
+	if stats.EndpointName != "test" {
+		t.Error("ProxyRequestToEndpoints() should set endpoint name even on timeout")
+	}
+}
