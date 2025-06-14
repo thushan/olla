@@ -45,7 +45,7 @@ const (
 	CleanupInterval     = 5 * time.Minute
 )
 
-// TODO: Move to xsync.Counter
+// TODO: Move relevant fields in Collector and endpointData to xsync.Counter
 type Collector struct {
 	uniqueRateLimitedIPs map[string]int64
 
