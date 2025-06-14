@@ -2,9 +2,10 @@ package ports
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/logger"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/logger"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
