@@ -5,12 +5,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/logger"
+
 	"github.com/thushan/olla/internal/core/domain"
 )
 
 // ProxyService defines the interface for the proxy service
 type ProxyService interface {
-	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request) (RequestStats, error)
+	ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, stats *RequestStats, rlog logger.StyledLogger) error
+	ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *RequestStats, rlog logger.StyledLogger) error
 	GetStats(ctx context.Context) (ProxyStats, error)
 	UpdateConfig(configuration ProxyConfiguration)
 }
@@ -54,6 +57,7 @@ type RequestStats struct {
 	FirstDataMs         int64 // Time from start until first data sent to client
 	StreamingMs         int64 // Time spent streaming response data
 	HeaderProcessingMs  int64 // Time spent processing headers
+	PathResolutionMs    int64 // Time spent resolving the target path to an endpoint
 	SelectionMs         int64 // Time spent selecting endpoint
 }
 
