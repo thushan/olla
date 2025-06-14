@@ -118,6 +118,7 @@ func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
 	}
 }
 
+// Helper functions for creating test components
 func createTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
@@ -135,6 +136,78 @@ func createTestEndpoint(name, urlStr string, status domain.EndpointStatus) *doma
 
 func createTestStatsCollector() ports.StatsCollector {
 	return stats.NewCollector(createTestLogger())
+}
+
+func createTestProxyComponents(suite ProxyTestSuite, endpoints []*domain.Endpoint) (ports.ProxyService, *mockEndpointSelector, ports.StatsCollector) {
+	discovery := &mockDiscoveryService{endpoints: endpoints}
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	config := suite.CreateConfig()
+	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	return proxy, selector, collector
+}
+
+func createTestProxyWithError(suite ProxyTestSuite, discoveryErr error, selectorErr error) (ports.ProxyService, *mockEndpointSelector, ports.StatsCollector) {
+	discovery := &mockDiscoveryService{err: discoveryErr}
+	collector := createTestStatsCollector()
+	selector := newMockEndpointSelector(collector)
+	selector.err = selectorErr
+	config := suite.CreateConfig()
+	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	return proxy, selector, collector
+}
+
+func createTestRequestWithBody(method, path, body string) (*http.Request, *ports.RequestStats, logger.StyledLogger) {
+	var bodyReader io.Reader
+	if body != "" {
+		bodyReader = strings.NewReader(body)
+	}
+
+	req := httptest.NewRequest(method, path, bodyReader)
+	if body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	stats := &ports.RequestStats{
+		RequestID: "test-request-id",
+		StartTime: time.Now(),
+	}
+
+	rlog := createTestLogger()
+	return req, stats, rlog
+}
+
+func executeProxyRequest(proxy ports.ProxyService, req *http.Request, stats *ports.RequestStats, rlog logger.StyledLogger) (*httptest.ResponseRecorder, error) {
+	w := httptest.NewRecorder()
+	err := proxy.ProxyRequest(req.Context(), w, req, stats, rlog)
+	return w, err
+}
+
+func assertProxySuccess(t *testing.T, w *httptest.ResponseRecorder, err error, stats *ports.RequestStats, expectedStatus int, expectedBodyContains string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("ProxyRequest failed: %v", err)
+	}
+	if w.Code != expectedStatus {
+		t.Errorf("Expected status %d, got %d", expectedStatus, w.Code)
+	}
+	if stats.TotalBytes == 0 {
+		t.Error("Expected non-zero bytes transferred")
+	}
+	if expectedBodyContains != "" && !strings.Contains(w.Body.String(), expectedBodyContains) {
+		t.Errorf("Expected body to contain %q, got %q", expectedBodyContains, w.Body.String())
+	}
+}
+
+func assertProxyError(t *testing.T, err error, expectedErrorContains string) {
+	t.Helper()
+	if err == nil {
+		t.Error("Expected error but got nil")
+		return
+	}
+	if expectedErrorContains != "" && !strings.Contains(err.Error(), expectedErrorContains) {
+		t.Errorf("Expected error to contain %q, got %q", expectedErrorContains, err.Error())
+	}
 }
 
 // Test all proxy implementations
@@ -258,35 +331,13 @@ func testProxyRequestSuccess(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, collector := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("ProxyRequest failed: %v", err)
-	}
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
-	if stats.TotalBytes == 0 {
-		t.Error("Expected non-zero bytes transferred")
-	}
-
-	// Check that we got the expected JSON response
-	responseBody := w.Body.String()
-	expectedResponse := `{"status": "ok"}`
-	if responseBody != expectedResponse {
-		t.Errorf("Response body not proxied correctly. Expected: %s, Got: %s", expectedResponse, responseBody)
-	}
+	assertProxySuccess(t, w, err, stats, http.StatusOK, `{"status": "ok"}`)
 
 	// Check connection count via stats collector instead of selector
 	connectionStats := collector.GetConnectionStats()
@@ -296,24 +347,12 @@ func testProxyRequestSuccess(t *testing.T, suite ProxyTestSuite) {
 }
 
 func testProxyRequestNoEndpoints(t *testing.T, suite ProxyTestSuite) {
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	config := suite.CreateConfig()
+	proxy, _, _ := createTestProxyComponents(suite, []*domain.Endpoint{})
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err == nil {
-		t.Error("Expected error when no endpoints available")
-	}
-	if !strings.Contains(err.Error(), "no healthy") {
-		t.Errorf("Unexpected error message: %v", err)
-	}
+	assertProxyError(t, err, "no healthy")
 }
 
 func testHTTPMethods(t *testing.T, suite ProxyTestSuite) {
@@ -332,23 +371,16 @@ func testHTTPMethods(t *testing.T, suite ProxyTestSuite) {
 			defer upstream.Close()
 
 			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-			discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-			collector := createTestStatsCollector()
-			selector := newMockEndpointSelector(collector)
+			proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 			selector.endpoint = endpoint
-			config := suite.CreateConfig()
 
-			proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-			var body io.Reader
+			var body string
 			if method == "POST" || method == "PUT" || method == "PATCH" {
-				body = strings.NewReader(`{"test": "data"}`)
+				body = `{"test": "data"}`
 			}
 
-			req := httptest.NewRequest(method, "/api/test", body)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
+			req, stats, rlog := createTestRequestWithBody(method, "/api/test", body)
+			_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 			if err != nil {
 				t.Fatalf("HTTP method %s proxy failed: %v", method, err)
@@ -376,17 +408,10 @@ func testMultipleEndpoints(t *testing.T, suite ProxyTestSuite) {
 		createTestEndpoint("test2", upstream2.URL, domain.StatusHealthy),
 	}
 
-	discovery := &mockDiscoveryService{endpoints: endpoints}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector) // Will select first available
-	config := suite.CreateConfig()
+	proxy, _, _ := createTestProxyComponents(suite, endpoints) // Will select first available
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("Multiple endpoints proxy failed: %v", err)
@@ -407,19 +432,12 @@ func testSlowUpstream(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
-
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
 
 	start := time.Now()
-	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(`{"prompt": "test"}`))
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("POST", "/api/generate", `{"prompt": "test"}`)
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -443,13 +461,8 @@ func testConnectionPooling(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
-
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
 
 	const numRequests = 5
 	var wg sync.WaitGroup
@@ -460,10 +473,8 @@ func testConnectionPooling(t *testing.T, suite ProxyTestSuite) {
 		go func(index int) {
 			defer wg.Done()
 
-			req := httptest.NewRequest("GET", "/api/test", nil)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
+			req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+			w, err := executeProxyRequest(proxy, req, stats, rlog)
 			if err != nil {
 				t.Errorf("Request %d failed: %v", index, err)
 				return
@@ -486,12 +497,7 @@ func testConnectionPooling(t *testing.T, suite ProxyTestSuite) {
 }
 
 func testUpdateConfig(t *testing.T, suite ProxyTestSuite) {
-	discovery := &mockDiscoveryService{}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	config := suite.CreateConfig()
-
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	proxy, _, _ := createTestProxyComponents(suite, []*domain.Endpoint{})
 
 	// Create new config with different values
 	var newConfig ports.ProxyConfiguration
@@ -524,25 +530,13 @@ func testEmptyRequestBody(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	req, stats, rlog := createTestRequestWithBody("POST", "/api/test", "") // No body
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
 
-	req := httptest.NewRequest("POST", "/api/test", nil) // No body
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err != nil {
-		t.Fatalf("Empty body request failed: %v", err)
-	}
-	if w.Code != http.StatusOK {
-		t.Errorf("Expected status 200, got %d", w.Code)
-	}
+	assertProxySuccess(t, w, err, stats, http.StatusOK, "")
 }
 
 func testSpecialCharacters(t *testing.T, suite ProxyTestSuite) {
@@ -555,20 +549,13 @@ func testSpecialCharacters(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
-
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
 
 	// Use a simpler path that doesn't require URL encoding
 	specialPath := "/api/test-with-dashes/café"
-	req := httptest.NewRequest("GET", specialPath, nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", specialPath, "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("Special characters request failed: %v", err)
@@ -608,19 +595,12 @@ func testContentTypes(t *testing.T, suite ProxyTestSuite) {
 			defer upstream.Close()
 
 			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-			discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-			collector := createTestStatsCollector()
-			selector := newMockEndpointSelector(collector)
+			proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 			selector.endpoint = endpoint
-			config := suite.CreateConfig()
 
-			proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-			req := httptest.NewRequest("POST", "/api/test", strings.NewReader(tc.body))
+			req, stats, rlog := createTestRequestWithBody("POST", "/api/test", tc.body)
 			req.Header.Set("Content-Type", tc.contentType)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
+			_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 			if err != nil {
 				t.Fatalf("Content type %s request failed: %v", tc.contentType, err)
@@ -647,19 +627,12 @@ func testLargeHeaders(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 	req.Header.Set("X-Large-Header", largeValue)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("Large headers request failed: %v", err)
@@ -671,40 +644,25 @@ func testLargeHeaders(t *testing.T, suite ProxyTestSuite) {
 }
 
 func testProxyRequestDiscoveryError(t *testing.T, suite ProxyTestSuite) {
-	discovery := &mockDiscoveryService{err: fmt.Errorf("discovery failed")}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	config := suite.CreateConfig()
+	proxy, _, _ := createTestProxyWithError(suite, fmt.Errorf("discovery failed"), nil)
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
-
-	if err == nil {
-		t.Error("Expected error when discovery fails")
-	}
-	if !strings.Contains(err.Error(), "discovery") && !strings.Contains(err.Error(), "endpoints") {
-		t.Errorf("Unexpected error message: %v", err)
-	}
+	assertProxyError(t, err, "discovery")
 }
 
 func testProxyRequestSelectorError(t *testing.T, suite ProxyTestSuite) {
 	endpoint := createTestEndpoint("test", "http://localhost:11434", domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	selector.err = fmt.Errorf("selection failed")
-	config := suite.CreateConfig()
+	proxy, _, _ := createTestProxyWithError(suite, nil, fmt.Errorf("selection failed"))
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
+	// Add the endpoint to the discovery service after creation
+	if sherpaProxy, ok := proxy.(*SherpaProxyService); ok {
+		sherpaProxy.discoveryService = &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+	}
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if suite.Name() == "Olla" {
 		// Olla implementation has circuit breaker logic that tries to select endpoints
@@ -737,18 +695,11 @@ func testProxyRequestSelectorError(t *testing.T, suite ProxyTestSuite) {
 
 func testProxyRequestUpstreamError(t *testing.T, suite ProxyTestSuite) {
 	endpoint := createTestEndpoint("test", "http://localhost:99999", domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err == nil {
 		t.Error("Expected error when upstream is unreachable")
@@ -780,18 +731,11 @@ func testProxyRequestStreamingResponse(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("GET", "/api/stream", nil)
-	w := httptest.NewRecorder()
-
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/stream", "")
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("ProxyRequest failed: %v", err)
@@ -815,18 +759,11 @@ func testProxyRequestClientDisconnection(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("GET", "/api/data", nil)
-	w := httptest.NewRecorder()
-
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/data", "")
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("ProxyRequest failed: %v", err)
@@ -855,19 +792,12 @@ func testProxyRequestUpstreamTimeout(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("GET", "/api/slow", nil)
-	w := httptest.NewRecorder()
-
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/slow", "")
 	start := time.Now()
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 	elapsed := time.Since(start)
 
 	// Either should timeout quickly or succeed (depending on implementation)
@@ -884,13 +814,8 @@ func testConnectionTracking(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, collector := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
-
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
 
 	// Check initial connection count via stats collector
 	connectionStats := collector.GetConnectionStats()
@@ -898,10 +823,8 @@ func testConnectionTracking(t *testing.T, suite ProxyTestSuite) {
 		t.Error("Initial connection count should be 0")
 	}
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 	if err != nil {
 		t.Fatalf("ProxyRequest failed: %v", err)
 	}
@@ -922,13 +845,8 @@ func testConcurrentRequests(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
-
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
 
 	const numRequests = 10
 	var wg sync.WaitGroup
@@ -939,10 +857,8 @@ func testConcurrentRequests(t *testing.T, suite ProxyTestSuite) {
 		go func(id int) {
 			defer wg.Done()
 
-			req := httptest.NewRequest("GET", fmt.Sprintf("/api/test%d", id), nil)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
+			req, stats, rlog := createTestRequestWithBody("GET", fmt.Sprintf("/api/test%d", id), "")
+			_, err := executeProxyRequest(proxy, req, stats, rlog)
 			if err != nil {
 				errors <- err
 			}
@@ -956,39 +872,34 @@ func testConcurrentRequests(t *testing.T, suite ProxyTestSuite) {
 		t.Errorf("Concurrent request failed: %v", err)
 	}
 
-	stats, err := proxy.GetStats(context.Background())
+	proxyStats, err := proxy.GetStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}
 
-	if stats.TotalRequests != numRequests {
-		t.Errorf("Expected %d total requests, got %d", numRequests, stats.TotalRequests)
+	if proxyStats.TotalRequests != numRequests {
+		t.Errorf("Expected %d total requests, got %d", numRequests, proxyStats.TotalRequests)
 	}
-	if stats.SuccessfulRequests != numRequests {
-		t.Errorf("Expected %d successful requests, got %d", numRequests, stats.SuccessfulRequests)
+	if proxyStats.SuccessfulRequests != numRequests {
+		t.Errorf("Expected %d successful requests, got %d", numRequests, proxyStats.SuccessfulRequests)
 	}
-	if stats.FailedRequests != 0 {
-		t.Errorf("Expected 0 failed requests, got %d", stats.FailedRequests)
+	if proxyStats.FailedRequests != 0 {
+		t.Errorf("Expected 0 failed requests, got %d", proxyStats.FailedRequests)
 	}
 }
 
 func testGetStats(t *testing.T, suite ProxyTestSuite) {
-	discovery := &mockDiscoveryService{}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	config := suite.CreateConfig()
+	proxy, _, _ := createTestProxyComponents(suite, []*domain.Endpoint{})
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	stats, err := proxy.GetStats(context.Background())
+	proxyStats, err := proxy.GetStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}
 
-	if stats.TotalRequests != 0 || stats.SuccessfulRequests != 0 || stats.FailedRequests != 0 {
+	if proxyStats.TotalRequests != 0 || proxyStats.SuccessfulRequests != 0 || proxyStats.FailedRequests != 0 {
 		t.Error("Initial stats should be zero")
 	}
-	if stats.AverageLatency != 0 {
+	if proxyStats.AverageLatency != 0 {
 		t.Error("Initial average latency should be zero")
 	}
 }
@@ -1011,19 +922,11 @@ func testLargePayloadHandling(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(`{"prompt": "test"}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("POST", "/api/generate", `{"prompt": "test"}`)
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("Large payload proxy failed: %v", err)
@@ -1049,20 +952,12 @@ func testRequestBody(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
-
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
 
 	requestBody := `{"model": "llama4", "prompt": "benny llama?"}`
-	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(requestBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("POST", "/api/generate", requestBody)
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("Request body proxy failed: %v", err)
@@ -1093,18 +988,11 @@ func testErrorStatusCodes(t *testing.T, suite ProxyTestSuite) {
 			defer upstream.Close()
 
 			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-			discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-			collector := createTestStatsCollector()
-			selector := newMockEndpointSelector(collector)
+			proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 			selector.endpoint = endpoint
-			config := suite.CreateConfig()
 
-			proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-			req := httptest.NewRequest("GET", "/api/test", nil)
-			w := httptest.NewRecorder()
-
-			_, err := proxy.ProxyRequest(context.Background(), w, req)
+			req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+			w, err := executeProxyRequest(proxy, req, stats, rlog)
 
 			if err != nil {
 				t.Fatalf("Proxy request failed: %v", err)
@@ -1126,18 +1014,11 @@ func testQueryParameters(t *testing.T, suite ProxyTestSuite) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := suite.CreateConfig()
 
-	proxy := suite.CreateProxy(discovery, selector, config, collector)
-
-	req := httptest.NewRequest("GET", "/api/models?format=json&stream=true", nil)
-	w := httptest.NewRecorder()
-
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/models?format=json&stream=true", "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 	if err != nil {
 		t.Fatalf("Query parameter proxy failed: %v", err)

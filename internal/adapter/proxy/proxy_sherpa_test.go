@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,96 @@ import (
 
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
 )
+
+// Helper functions for creating test components
+func createTestSherpaProxy(endpoints []*domain.Endpoint) (*SherpaProxyService, *mockEndpointSelector, ports.StatsCollector) {
+	collector := createTestStatsCollector()
+	discovery := &mockDiscoveryService{endpoints: endpoints}
+	selector := newMockEndpointSelector(collector)
+	config := &Configuration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 1024,
+	}
+	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
+	return proxy, selector, collector
+}
+
+func createTestSherpaProxyWithConfig(endpoints []*domain.Endpoint, config *Configuration) (*SherpaProxyService, *mockEndpointSelector, ports.StatsCollector) {
+	collector := createTestStatsCollector()
+	discovery := &mockDiscoveryService{endpoints: endpoints}
+	selector := newMockEndpointSelector(collector)
+	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
+	return proxy, selector, collector
+}
+
+func createTestRequestWithStats(method, path, body string) (*http.Request, *ports.RequestStats, logger.StyledLogger) {
+	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
+	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+
+	var bodyReader io.Reader
+	if body != "" {
+		bodyReader = strings.NewReader(body)
+	}
+
+	req := httptest.NewRequest(method, path, bodyReader)
+	req = req.WithContext(ctx)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	stats := &ports.RequestStats{
+		RequestID: "test-request-id",
+		StartTime: time.Now(),
+	}
+
+	logger := createTestLogger()
+	return req, stats, logger
+}
+
+func assertSuccessfulResponse(t *testing.T, w *httptest.ResponseRecorder, expectedStatus int, expectedBodyContains string) {
+	t.Helper()
+	if w.Code != expectedStatus {
+		t.Errorf("Expected status %d, got %d", expectedStatus, w.Code)
+	}
+	if expectedBodyContains != "" && !strings.Contains(w.Body.String(), expectedBodyContains) {
+		t.Errorf("Expected body to contain %q, got %q", expectedBodyContains, w.Body.String())
+	}
+}
+
+func assertError(t *testing.T, err error, expectedErrorContains string) {
+	t.Helper()
+	if err == nil {
+		t.Error("Expected error but got nil")
+		return
+	}
+	if expectedErrorContains != "" && !strings.Contains(err.Error(), expectedErrorContains) {
+		t.Errorf("Expected error to contain %q, got %q", expectedErrorContains, err.Error())
+	}
+}
+
+func assertNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+}
+
+func assertStatsPopulated(t *testing.T, stats *ports.RequestStats, expectedEndpoint string) {
+	t.Helper()
+	if expectedEndpoint != "" && stats.EndpointName != expectedEndpoint {
+		t.Errorf("Expected endpoint name %q, got %q", expectedEndpoint, stats.EndpointName)
+	}
+	if stats.TotalBytes <= 0 {
+		t.Error("Expected non-zero bytes transferred")
+	}
+	if stats.Latency < 0 {
+		t.Errorf("Expected positive or zero latency but got %v, how is that possible? o_O", stats.Latency)
+	}
+}
 
 // TestSherpaProxyService_ClientDisconnectLogic tests the specific logic for handling client disconnections
 func TestSherpaProxyService_ClientDisconnectLogic(t *testing.T) {
@@ -244,23 +334,19 @@ func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	collector := createTestStatsCollector()
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	selector := newMockEndpointSelector(collector)
-	selector.endpoint = endpoint
 	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      100 * time.Millisecond, // Short timeout
 		StreamBufferSize: 1024,
 	}
+	proxy, selector, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{endpoint}, config)
+	selector.endpoint = endpoint
 
-	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
-
-	req := httptest.NewRequest("GET", "/api/stream", nil)
+	req, stats, rlog := createTestRequestWithStats("GET", "/api/stream", "")
 	w := httptest.NewRecorder()
 
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
 
 	// Should get read timeout error
 	if err == nil {
@@ -279,8 +365,7 @@ func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
 // TestSherpaProxyService_BufferPooling tests buffer pool behaviour
 func TestSherpaProxyService_BufferPooling(t *testing.T) {
 	config := &Configuration{StreamBufferSize: 4096}
-	collector := createTestStatsCollector()
-	proxy := NewSherpaService(&mockDiscoveryService{}, newMockEndpointSelector(collector), config, collector, createTestLogger())
+	proxy, _, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{}, config)
 
 	// Get buffers from pool
 	buf1 := proxy.bufferPool.Get().([]byte)
@@ -310,9 +395,8 @@ func TestSherpaProxyService_BufferPooling(t *testing.T) {
 
 // TestSherpaProxyService_ConfigDefaults tests default configuration values
 func TestSherpaProxyService_ConfigDefaults(t *testing.T) {
-	collector := createTestStatsCollector()
 	config := &Configuration{} // Empty config
-	proxy := NewSherpaService(&mockDiscoveryService{}, newMockEndpointSelector(collector), config, collector, createTestLogger())
+	proxy, _, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{}, config)
 
 	// Check transport has sensible defaults
 	if proxy.transport.MaxIdleConns != DefaultMaxIdleConns {
@@ -333,8 +417,7 @@ func TestSherpaProxyService_UpdateConfig(t *testing.T) {
 		ReadTimeout:      5 * time.Second,
 		StreamBufferSize: 4096,
 	}
-	collector := createTestStatsCollector()
-	proxy := NewSherpaService(&mockDiscoveryService{}, newMockEndpointSelector(collector), initialConfig, collector, createTestLogger())
+	proxy, _, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{}, initialConfig)
 
 	// Update config
 	newConfig := &Configuration{
@@ -366,19 +449,14 @@ func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestSherpaProxy([]*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := &Configuration{}
-
-	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
 
 	// Make some successful requests
 	for i := 0; i < 3; i++ {
-		req := httptest.NewRequest("GET", "/api/test", nil)
+		req, stats, rlog := createTestRequestWithStats("GET", "/api/test", "")
 		w := httptest.NewRecorder()
-		_, err := proxy.ProxyRequest(context.Background(), w, req)
+		err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
 		if err != nil {
 			t.Fatalf("Request %d failed: %v", i, err)
 		}
@@ -386,32 +464,31 @@ func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 
 	// Make a failed request (unreachable endpoint)
 	failEndpoint := createTestEndpoint("fail", "http://localhost:99999", domain.StatusHealthy)
-	discovery.endpoints = []*domain.Endpoint{failEndpoint}
 	selector.endpoint = failEndpoint
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req, stats, rlog := createTestRequestWithStats("GET", "/api/test", "")
 	w := httptest.NewRecorder()
-	_, err := proxy.ProxyRequest(context.Background(), w, req)
+	err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{failEndpoint}, stats, rlog)
 	if err == nil {
 		t.Error("Expected failure for unreachable endpoint")
 	}
 
 	// Check stats
-	stats, err := proxy.GetStats(context.Background())
+	proxyStats, err := proxy.GetStats(context.Background())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}
 
-	if stats.TotalRequests != 4 {
-		t.Errorf("Expected 4 total requests, got %d", stats.TotalRequests)
+	if proxyStats.TotalRequests != 4 {
+		t.Errorf("Expected 4 total requests, got %d", proxyStats.TotalRequests)
 	}
-	if stats.SuccessfulRequests != 3 {
-		t.Errorf("Expected 3 successful requests, got %d", stats.SuccessfulRequests)
+	if proxyStats.SuccessfulRequests != 3 {
+		t.Errorf("Expected 3 successful requests, got %d", proxyStats.SuccessfulRequests)
 	}
-	if stats.FailedRequests != 1 {
-		t.Errorf("Expected 1 failed request, got %d", stats.FailedRequests)
+	if proxyStats.FailedRequests != 1 {
+		t.Errorf("Expected 1 failed request, got %d", proxyStats.FailedRequests)
 	}
-	if stats.AverageLatency == 0 {
+	if proxyStats.AverageLatency == 0 {
 		t.Error("Expected non-zero average latency")
 	}
 }
@@ -426,81 +503,31 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_Success(t *testing.T) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	endpoints := []*domain.Endpoint{endpoint}
-
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestSherpaProxy([]*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
 
-	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
-
-	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
-
-	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
-	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
+	req, stats, rlog := createTestRequestWithStats("POST", "/v1/chat/completions", `{"model": "test"}`)
 	w := httptest.NewRecorder()
 
-	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
+	err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
 
-	if err != nil {
-		t.Errorf("ProxyRequestToEndpoints() error = %v, want nil", err)
-	}
-
-	if w.Code != http.StatusOK {
-		t.Errorf("ProxyRequestToEndpoints() status = %v, want %v", w.Code, http.StatusOK)
-	}
-
-	if !strings.Contains(w.Body.String(), "test") {
-		t.Errorf("ProxyRequestToEndpoints() body should contain response")
-	}
-
-	if stats.EndpointName != "test" {
-		t.Errorf("ProxyRequestToEndpoints() should set endpoint name, got %v", stats.EndpointName)
-	}
-
-	if stats.TotalBytes <= 0 {
-		t.Error("ProxyRequestToEndpoints() should record bytes transferred")
-	}
+	assertNoError(t, err)
+	assertSuccessfulResponse(t, w, http.StatusOK, "test")
+	assertStatsPopulated(t, stats, "test")
 }
 
 // TestSherpaProxyService_ProxyRequestToEndpoints_EmptyEndpoints tests empty endpoints handling
 func TestSherpaProxyService_ProxyRequestToEndpoints_EmptyEndpoints(t *testing.T) {
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
+	proxy, _, _ := createTestSherpaProxy([]*domain.Endpoint{})
 
-	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
-
-	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
-
-	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
-	req = req.WithContext(ctx)
+	req, stats, rlog := createTestRequestWithStats("POST", "/v1/chat/completions", `{"model": "test"}`)
 	w := httptest.NewRecorder()
 
-	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, []*domain.Endpoint{})
+	err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{}, stats, rlog)
 
-	if err == nil {
-		t.Error("ProxyRequestToEndpoints() with empty endpoints should return error")
-	}
-
+	assertError(t, err, "no healthy AI backends available")
 	if stats.EndpointName != "" {
 		t.Error("ProxyRequestToEndpoints() with empty endpoints should not set endpoint name")
-	}
-
-	if !strings.Contains(err.Error(), "no healthy AI backends available") {
-		t.Errorf("ProxyRequestToEndpoints() error should mention no backends, got: %v", err)
 	}
 }
 
@@ -513,48 +540,19 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_FilteredEndpoints(t *testing
 	}))
 	defer ollamaBackend.Close()
 
-	lmstudioBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Backend", "lmstudio")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"model": "lmstudio-response"}`))
-	}))
-	defer lmstudioBackend.Close()
-
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
-
-	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
-
 	ollamaEndpoint := createTestEndpoint("ollama-1", ollamaBackend.URL, domain.StatusHealthy)
 	ollamaEndpoint.Type = domain.ProfileOllama
-	lmstudioEndpoint := createTestEndpoint("lmstudio-1", lmstudioBackend.URL, domain.StatusHealthy)
-	lmstudioEndpoint.Type = domain.ProfileLmStudio
 
-	filteredEndpoints := []*domain.Endpoint{ollamaEndpoint}
+	proxy, selector, _ := createTestSherpaProxy([]*domain.Endpoint{ollamaEndpoint})
 	selector.endpoint = ollamaEndpoint
 
-	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
-
-	req := httptest.NewRequest("POST", "/api/generate", strings.NewReader(`{"model": "test"}`))
-	req = req.WithContext(ctx)
+	req, stats, rlog := createTestRequestWithStats("POST", "/api/generate", `{"model": "test"}`)
 	w := httptest.NewRecorder()
 
-	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, filteredEndpoints)
+	err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{ollamaEndpoint}, stats, rlog)
 
-	if err != nil {
-		t.Errorf("ProxyRequestToEndpoints() with filtered endpoints error = %v, want nil", err)
-	}
-
-	if stats.EndpointName != "ollama-1" {
-		t.Errorf("ProxyRequestToEndpoints() should route to filtered endpoint, got %v", stats.EndpointName)
-	}
-
+	assertNoError(t, err)
+	assertStatsPopulated(t, stats, "ollama-1")
 	if w.Header().Get("X-Backend") != "ollama" {
 		t.Errorf("ProxyRequestToEndpoints() should reach Ollama backend, got %v", w.Header().Get("X-Backend"))
 	}
@@ -576,40 +574,23 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_LoadBalancing(t *testing.T) 
 	}))
 	defer backend2.Close()
 
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
-
-	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
-
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("endpoint-1", backend1.URL, domain.StatusHealthy),
 		createTestEndpoint("endpoint-2", backend2.URL, domain.StatusHealthy),
 	}
 
+	proxy, selector, _ := createTestSherpaProxy(endpoints)
 	backendHits := make(map[string]int)
 
 	for i := 0; i < 4; i++ {
-		// selector will always return first endpoint for predictable testing
+		// selector will return endpoints in rotation for predictable testing
 		selector.endpoint = endpoints[i%len(endpoints)]
 
-		ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
-		ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
-
-		req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
-		req = req.WithContext(ctx)
+		req, stats, rlog := createTestRequestWithStats("POST", "/v1/chat/completions", `{"model": "test"}`)
 		w := httptest.NewRecorder()
 
-		stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
-
-		if err != nil {
-			t.Errorf("ProxyRequestToEndpoints() request %d error = %v", i, err)
-			continue
-		}
+		err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, endpoints, stats, rlog)
+		assertNoError(t, err)
 
 		backendID := w.Header().Get("X-Backend-ID")
 		if backendID != "" {
@@ -644,38 +625,17 @@ func TestSherpaProxyService_ProxyRequest_BackwardCompatibility(t *testing.T) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestSherpaProxy([]*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
 
-	proxy := NewSherpaService(discovery, selector, config, collector, createTestLogger())
-
-	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
+	req, stats, rlog := createTestRequestWithStats("POST", "/v1/chat/completions", `{"model": "test"}`)
 	w := httptest.NewRecorder()
 
-	stats, err := proxy.ProxyRequest(context.Background(), w, req)
+	err := proxy.ProxyRequest(req.Context(), w, req, stats, rlog)
 
-	if err != nil {
-		t.Errorf("ProxyRequest() backward compatibility error = %v, want nil", err)
-	}
-
-	if w.Code != http.StatusOK {
-		t.Errorf("ProxyRequest() status = %v, want %v", w.Code, http.StatusOK)
-	}
-
-	if !strings.Contains(w.Body.String(), "legacy") {
-		t.Error("ProxyRequest() should work with legacy flow")
-	}
-
-	if stats.EndpointName != "test" {
-		t.Error("ProxyRequest() should set endpoint name")
-	}
+	assertNoError(t, err)
+	assertSuccessfulResponse(t, w, http.StatusOK, "legacy")
+	assertStatsPopulated(t, stats, "test")
 }
 
 // TestSherpaProxyService_ProxyRequestToEndpoints_StatsCollection tests detailed stats recording
@@ -688,31 +648,15 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_StatsCollection(t *testing.T
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	endpoints := []*domain.Endpoint{endpoint}
-
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
+	proxy, selector, _ := createTestSherpaProxy([]*domain.Endpoint{endpoint})
 	selector.endpoint = endpoint
-	config := &Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
 
-	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
-
-	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
-
-	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
-	req = req.WithContext(ctx)
+	req, stats, rlog := createTestRequestWithStats("POST", "/v1/chat/completions", `{"model": "test"}`)
 	w := httptest.NewRecorder()
 
-	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
+	err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
 
-	if err != nil {
-		t.Errorf("ProxyRequestToEndpoints() stats collection error = %v", err)
-	}
+	assertNoError(t, err)
 
 	if stats.Latency <= 0 {
 		t.Error("ProxyRequestToEndpoints() should record total latency")
@@ -749,27 +693,18 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_ContextCancellation(t *testi
 	defer slowBackend.Close()
 
 	endpoint := createTestEndpoint("test", slowBackend.URL, domain.StatusHealthy)
-	endpoints := []*domain.Endpoint{endpoint}
-
-	collector := createTestStatsCollector()
-	selector := newMockEndpointSelector(collector)
-	selector.endpoint = endpoint
 	config := &Configuration{
-		ResponseTimeout:  10 * time.Millisecond,
+		ResponseTimeout:  10 * time.Millisecond, // Short timeout
 		ReadTimeout:      10 * time.Second,
 		StreamBufferSize: 1024,
 	}
+	proxy, selector, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{endpoint}, config)
+	selector.endpoint = endpoint
 
-	proxy := NewSherpaService(&mockDiscoveryService{}, selector, config, collector, createTestLogger())
-
-	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
-
-	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model": "test"}`))
-	req = req.WithContext(ctx)
+	req, stats, rlog := createTestRequestWithStats("POST", "/v1/chat/completions", `{"model": "test"}`)
 	w := httptest.NewRecorder()
 
-	stats, err := proxy.ProxyRequestToEndpoints(ctx, w, req, endpoints)
+	err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
 
 	if err == nil {
 		t.Error("ProxyRequestToEndpoints() should return error on timeout")
