@@ -93,6 +93,37 @@ func (p *OllamaProfile) GetDetectionHints() domain.DetectionHints {
 	}
 }
 
+func (p *OllamaProfile) GetPaths() []string {
+	return []string{
+		// Core inference endpoints
+		"/api/generate",   // Text completion
+		"/api/chat",       // Chat completion
+		"/api/embeddings", // Generate embeddings
+
+		// Model management
+		"/api/tags",   // List local models
+		"/api/show",   // Show model info
+		"/api/create", // Create model from Modelfile
+		"/api/pull",   // Download model
+		"/api/push",   // Upload model
+		"/api/copy",   // Copy model
+		"/api/delete", // Delete model
+
+		// Blob management
+		"/api/blobs/:digest", // Check blob exists
+		"/api/blobs",         // Create blob
+
+		// Process management
+		"/api/ps", // List running models
+
+		// OpenAI compatibility layer
+		"/v1/models",
+		"/v1/chat/completions",
+		"/v1/completions",
+		"/v1/embeddings",
+	}
+}
+
 func (p *OllamaProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
 	if len(data) == 0 {
 		return make([]*domain.ModelInfo, 0), nil

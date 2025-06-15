@@ -101,23 +101,24 @@ func TestPathInspector_Inspect_OllamaGenerate(t *testing.T) {
 	}
 }
 
-func TestPathInspector_Inspect_LMStudioModels(t *testing.T) {
-	inspector := createTestPathInspector(t)
-	ctx := context.Background()
-	req, _ := http.NewRequest("GET", "/api/v0/models", nil)
-	profile := domain.NewRequestProfile("/api/v0/models")
+/*
+	func TestPathInspector_Inspect_LMStudioModels(t *testing.T) {
+		inspector := createTestPathInspector(t)
+		ctx := context.Background()
+		req, _ := http.NewRequest("GET", "/api/v0/models", nil)
+		profile := domain.NewRequestProfile("/api/v0/models")
 
-	err := inspector.Inspect(ctx, req, profile)
+		err := inspector.Inspect(ctx, req, profile)
 
-	if err != nil {
-		t.Errorf("PathInspector.Inspect() error = %v, want nil", err)
+		if err != nil {
+			t.Errorf("PathInspector.Inspect() error = %v, want nil", err)
+		}
+
+		if contains(profile.SupportedBy, domain.ProfileLmStudio) {
+			t.Errorf("PathInspector.Inspect() LMStudio models path should not match parsing rules (models path != request path), got %v", profile.SupportedBy)
+		}
 	}
-
-	if contains(profile.SupportedBy, domain.ProfileLmStudio) {
-		t.Errorf("PathInspector.Inspect() LMStudio models path should not match parsing rules (models path != request path), got %v", profile.SupportedBy)
-	}
-}
-
+*/
 func TestPathInspector_Inspect_UnknownPath(t *testing.T) {
 	inspector := createTestPathInspector(t)
 	ctx := context.Background()

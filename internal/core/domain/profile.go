@@ -26,6 +26,8 @@ type PlatformProfile interface {
 	GetDetectionHints() DetectionHints
 	// ParseModelsResponse parses platform-specific JSON response into an ModelInfo slice
 	ParseModelsResponse(data []byte) ([]*ModelInfo, error)
+	// GetPaths returns all the paths that this profile allows the proxy to request from
+	GetPaths() []string
 }
 
 // RequestParsingRules defines how to extract model names from different request types

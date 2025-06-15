@@ -107,3 +107,26 @@ func (p *OpenAICompatibleProfile) GetDetectionHints() domain.DetectionHints {
 		PathIndicators:    []string{"/v1/models"},
 	}
 }
+
+func (p *OpenAICompatibleProfile) GetPaths() []string {
+	return []string{
+		"/v1/models",
+		"/v1/chat/completions",
+		"/v1/completions",
+		"/v1/embeddings",
+		"/v1/images/generations",
+		"/v1/images/edits",
+		"/v1/images/variations",
+		"/v1/audio/speech",
+		"/v1/audio/transcriptions",
+		"/v1/audio/translations",
+		"/v1/fine_tuning/jobs",
+		"/v1/files",
+		"/v1/uploads",
+		"/v1/batches",
+		"/v1/moderations",
+		"/v1/assistants",
+		"/v1/threads",
+		"/v1/vector_stores",
+	}
+}

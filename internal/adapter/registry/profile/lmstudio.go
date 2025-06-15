@@ -129,6 +129,22 @@ func (p *LMStudioProfile) GetDetectionHints() domain.DetectionHints {
 	}
 }
 
+func (p *LMStudioProfile) GetPaths() []string {
+	return []string{
+		// LM Studio native API (beta)
+		"/api/v0/models",           // Enhanced model info with stats
+		"/api/v0/chat/completions", // Chat with enhanced stats
+		"/api/v0/completions",      // Text completion with stats
+		"/api/v0/embeddings",       // Embeddings
+
+		// OpenAI compatibility layer
+		"/v1/models",
+		"/v1/chat/completions",
+		"/v1/completions",
+		"/v1/embeddings",
+	}
+}
+
 func (p *LMStudioProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
 	if len(data) == 0 {
 		return make([]*domain.ModelInfo, 0), nil
