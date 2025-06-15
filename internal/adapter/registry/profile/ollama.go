@@ -8,15 +8,6 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
-const (
-	OllamaProfileVersion             = "1.0"
-	OllamaProfileHealthPath          = "/"
-	OllamaProfileGeneratePath        = "/api/generate"
-	OllamaProfileChatCompletionsPath = "/v1/chat/completions"
-	OllamaProfileCompletionsPath     = "/v1/completions"
-	OllamaProfileModelModelsPath     = "/api/tags"
-)
-
 type OllamaResponse struct {
 	Models []OllamaModel `json:"models"`
 }
@@ -41,6 +32,57 @@ type OllamaDetails struct {
 
 type OllamaProfile struct{}
 
+const (
+	OllamaProfileVersion           = "1.0"
+	OllamaProfileHealthPathIndex   = 0
+	OllamaCompletionsPathIndex     = 1
+	OllamaChatCompletionsPathIndex = 2
+	OllamaEmbeddingsPathIndex      = 3
+	OllamaModelsPathIndex          = 4
+)
+
+var ollamaPaths []string
+
+func init() {
+	ollamaPaths = []string{
+		"/", // use this as our health check path
+		// Core inference endpoints
+		"/api/generate",   // Text completion
+		"/api/chat",       // Chat completion
+		"/api/embeddings", // Generate embeddings
+
+		// Model management
+		"/api/tags", // List local models
+		"/api/show", // Show model info
+
+		// OpenAI compatibility layer
+		"/v1/models",
+		"/v1/chat/completions",
+		"/v1/completions",
+		"/v1/embeddings",
+
+		/*
+			// Not sure we want to support these yet, but they are
+			// documented in the Ollama API docs.
+				// Model management
+				"/api/create", // Create model from Modelfile
+				"/api/pull",   // Download model
+				"/api/push",   // Upload model
+				"/api/copy",   // Copy model
+				"/api/delete", // Delete model
+
+				// Blob management
+				"/api/blobs/:digest", // Check blob exists
+				"/api/blobs",         // Create blob
+
+				// Process management
+				"/api/ps", // List running models
+
+		*/
+
+	}
+}
+
 func NewOllamaProfile() *OllamaProfile {
 	return &OllamaProfile{}
 }
@@ -54,11 +96,11 @@ func (p *OllamaProfile) GetVersion() string {
 }
 
 func (p *OllamaProfile) GetModelDiscoveryURL(baseURL string) string {
-	return util.NormaliseBaseURL(baseURL) + OllamaProfileModelModelsPath
+	return util.NormaliseBaseURL(baseURL) + ollamaPaths[OllamaModelsPathIndex]
 }
 
 func (p *OllamaProfile) GetHealthCheckPath() string {
-	return OllamaProfileHealthPath
+	return ollamaPaths[OllamaProfileHealthPathIndex]
 }
 
 func (p *OllamaProfile) IsOpenAPICompatible() bool {
@@ -67,9 +109,9 @@ func (p *OllamaProfile) IsOpenAPICompatible() bool {
 
 func (p *OllamaProfile) GetRequestParsingRules() domain.RequestParsingRules {
 	return domain.RequestParsingRules{
-		ChatCompletionsPath: "/v1/chat/completions",
-		CompletionsPath:     "/v1/completions",
-		GeneratePath:        "/api/generate",
+		ChatCompletionsPath: ollamaPaths[OllamaChatCompletionsPathIndex],
+		CompletionsPath:     ollamaPaths[OllamaCompletionsPathIndex],
+		GeneratePath:        ollamaPaths[OllamaCompletionsPathIndex],
 		ModelFieldName:      "model",
 		SupportsStreaming:   true,
 	}
@@ -87,43 +129,22 @@ func (p *OllamaProfile) GetDetectionHints() domain.DetectionHints {
 		UserAgentPatterns: []string{"ollama/"},
 		ResponseHeaders:   []string{"X-ProfileOllama-Version"},
 		PathIndicators: []string{
-			OllamaProfileModelModelsPath,
-			OllamaProfileGeneratePath,
+			ollamaPaths[OllamaProfileHealthPathIndex],
+			ollamaPaths[OllamaModelsPathIndex],
 		},
 	}
 }
 
 func (p *OllamaProfile) GetPaths() []string {
-	return []string{
-		// Core inference endpoints
-		"/api/generate",   // Text completion
-		"/api/chat",       // Chat completion
-		"/api/embeddings", // Generate embeddings
-
-		// Model management
-		"/api/tags",   // List local models
-		"/api/show",   // Show model info
-		"/api/create", // Create model from Modelfile
-		"/api/pull",   // Download model
-		"/api/push",   // Upload model
-		"/api/copy",   // Copy model
-		"/api/delete", // Delete model
-
-		// Blob management
-		"/api/blobs/:digest", // Check blob exists
-		"/api/blobs",         // Create blob
-
-		// Process management
-		"/api/ps", // List running models
-
-		// OpenAI compatibility layer
-		"/v1/models",
-		"/v1/chat/completions",
-		"/v1/completions",
-		"/v1/embeddings",
-	}
+	return ollamaPaths
 }
 
+func (p *OllamaProfile) GetPath(index int) string {
+	if index < 0 || index >= len(ollamaPaths) {
+		return ""
+	}
+	return ollamaPaths[index]
+}
 func (p *OllamaProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
 	if len(data) == 0 {
 		return make([]*domain.ModelInfo, 0), nil

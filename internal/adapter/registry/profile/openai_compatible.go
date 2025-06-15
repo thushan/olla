@@ -20,6 +20,46 @@ type OpenAICompatibleModel struct {
 	Object  string  `json:"object"`
 }
 
+const (
+	OpenAICompatibleProfileVersion = "1.0"
+	OpenAIModelsPathIndex          = 0
+	OpenAIChatCompletionsPathIndex = 1
+	OpenAICompletionsPathIndex     = 2
+)
+
+var openAIPaths []string
+
+func init() {
+	openAIPaths = []string{
+		"/v1/models",
+		"/v1/chat/completions",
+		"/v1/completions",
+		"/v1/embeddings",
+		/*
+			// The following paths are not currently supported by the OpenAI compatible profile.
+			// but is documented for completeness.
+
+			"/v1/images/generations",
+			"/v1/images/edits",
+			"/v1/images/variations",
+
+			"/v1/audio/speech",
+			"/v1/audio/transcriptions",
+			"/v1/audio/translations",
+
+			"/v1/fine_tuning/jobs",
+			"/v1/files",
+			"/v1/uploads",
+			"/v1/batches",
+
+			"/v1/moderations",
+			"/v1/assistants",
+			"/v1/threads",
+			"/v1/vector_stores",
+		*/
+	}
+}
+
 type OpenAICompatibleProfile struct{}
 
 func NewOpenAICompatibleProfile() *OpenAICompatibleProfile {
@@ -31,25 +71,36 @@ func (p *OpenAICompatibleProfile) GetName() string {
 }
 
 func (p *OpenAICompatibleProfile) GetVersion() string {
-	return "1.0"
+	return OpenAICompatibleProfileVersion
 }
 
 func (p *OpenAICompatibleProfile) GetModelDiscoveryURL(baseURL string) string {
-	return util.NormaliseBaseURL(baseURL) + "/v1/models"
+	return util.NormaliseBaseURL(baseURL) + openAIPaths[OpenAIModelsPathIndex]
 }
 
 func (p *OpenAICompatibleProfile) GetHealthCheckPath() string {
-	return "/v1/models"
+	return openAIPaths[OpenAIModelsPathIndex]
 }
 
 func (p *OpenAICompatibleProfile) IsOpenAPICompatible() bool {
 	return true
 }
 
+func (p *OpenAICompatibleProfile) GetPaths() []string {
+	return openAIPaths
+}
+
+func (p *OpenAICompatibleProfile) GetPath(index int) string {
+	if index < 0 || index >= len(openAIPaths) {
+		return ""
+	}
+	return openAIPaths[index]
+}
+
 func (p *OpenAICompatibleProfile) GetRequestParsingRules() domain.RequestParsingRules {
 	return domain.RequestParsingRules{
-		ChatCompletionsPath: "/v1/chat/completions",
-		CompletionsPath:     "/v1/completions",
+		ChatCompletionsPath: openAIPaths[OpenAIChatCompletionsPathIndex],
+		CompletionsPath:     openAIPaths[OpenAICompletionsPathIndex],
 		GeneratePath:        "",
 		ModelFieldName:      "model",
 		SupportsStreaming:   true,
@@ -104,29 +155,6 @@ func (p *OpenAICompatibleProfile) GetDetectionHints() domain.DetectionHints {
 	return domain.DetectionHints{
 		UserAgentPatterns: []string{},
 		ResponseHeaders:   []string{},
-		PathIndicators:    []string{"/v1/models"},
-	}
-}
-
-func (p *OpenAICompatibleProfile) GetPaths() []string {
-	return []string{
-		"/v1/models",
-		"/v1/chat/completions",
-		"/v1/completions",
-		"/v1/embeddings",
-		"/v1/images/generations",
-		"/v1/images/edits",
-		"/v1/images/variations",
-		"/v1/audio/speech",
-		"/v1/audio/transcriptions",
-		"/v1/audio/translations",
-		"/v1/fine_tuning/jobs",
-		"/v1/files",
-		"/v1/uploads",
-		"/v1/batches",
-		"/v1/moderations",
-		"/v1/assistants",
-		"/v1/threads",
-		"/v1/vector_stores",
+		PathIndicators:    []string{openAIPaths[OpenAIModelsPathIndex]},
 	}
 }

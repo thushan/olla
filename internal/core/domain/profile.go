@@ -28,6 +28,8 @@ type PlatformProfile interface {
 	ParseModelsResponse(data []byte) ([]*ModelInfo, error)
 	// GetPaths returns all the paths that this profile allows the proxy to request from
 	GetPaths() []string
+	// GetPath returns the path at the specified index
+	GetPath(index int) string
 }
 
 // RequestParsingRules defines how to extract model names from different request types

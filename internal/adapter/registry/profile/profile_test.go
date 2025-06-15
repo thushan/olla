@@ -57,7 +57,7 @@ func TestLMStudioProfile(t *testing.T) {
 
 	baseUrl := "http://localhost:1234"
 	url := profile.GetModelDiscoveryURL(baseUrl)
-	expected := baseUrl + LMStudioProfileModelsPath
+	expected := baseUrl + lmstudioPaths[LMStudioModelsPathIndex]
 	if url != expected {
 		t.Errorf("Expected %q, got %q", expected, url)
 	}
