@@ -150,7 +150,7 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		return fmt.Errorf("failed to register models: %w", err)
 	}
 
-	s.logger.InfoWithEndpoint(" Models available for", endpoint.Name, "count", len(models), "models", s.modelRegistry.ModelsToString(models))
+	s.logger.InfoWithEndpoint(" ", endpoint.Name, "models", len(models))
 	return nil
 }
 
@@ -239,7 +239,7 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 		return fmt.Errorf("discovery failed: %w", err)
 	}
 
-	s.logger.InfoWithCount("Completed model discovery on healthy endpoints", len(endpoints))
+	s.logger.InfoWithCount("Finished model discovery on healthy endpoints", len(endpoints))
 	return nil
 }
 
