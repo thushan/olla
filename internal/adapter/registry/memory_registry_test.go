@@ -702,6 +702,203 @@ func createTestModel(name string) *domain.ModelInfo {
 		LastSeen:    time.Now(),
 	}
 }
+
+func createTestModelWithDetails(name string) *domain.ModelInfo {
+	family := "llama"
+	paramSize := "7B"
+	quantLevel := "Q4_K_M"
+	format := "gguf"
+	publisher := "test-publisher"
+	maxContextLength := int64(4096)
+
+	return &domain.ModelInfo{
+		Name:        name,
+		Size:        1024 * 1024 * 100,
+		Type:        "chat",
+		Description: fmt.Sprintf("Test model %s", name),
+		LastSeen:    time.Now(),
+		Details: &domain.ModelDetails{
+			Family:            &family,
+			Families:          []string{family, "code"},
+			ParameterSize:     &paramSize,
+			QuantizationLevel: &quantLevel,
+			Format:            &format,
+			Publisher:         &publisher,
+			MaxContextLength:  &maxContextLength,
+		},
+	}
+}
+func TestModelDetailsPreservation(t *testing.T) {
+	registry := NewMemoryModelRegistry(createTestLogger())
+	ctx := context.Background()
+	endpointURL := DefaultOllamaEndpointUri
+
+	// Test RegisterModel preserves details
+	t.Run("RegisterModel preserves details", func(t *testing.T) {
+		model := createTestModelWithDetails(DefaultModelName)
+
+		err := registry.RegisterModel(ctx, endpointURL, model)
+		if err != nil {
+			t.Fatalf("RegisterModel failed: %v", err)
+		}
+
+		models, err := registry.GetModelsForEndpoint(ctx, endpointURL)
+		if err != nil {
+			t.Fatalf("GetModelsForEndpoint failed: %v", err)
+		}
+
+		if len(models) != 1 {
+			t.Fatalf("Expected 1 model, got %d", len(models))
+		}
+
+		retrievedModel := models[0]
+		if retrievedModel.Details == nil {
+			t.Fatal("Model details were not preserved")
+		}
+
+		// Verify details fields
+		if retrievedModel.Details.Family == nil || *retrievedModel.Details.Family != "llama" {
+			t.Errorf("Expected Family to be 'llama', got %v", retrievedModel.Details.Family)
+		}
+
+		if len(retrievedModel.Details.Families) != 2 || retrievedModel.Details.Families[0] != "llama" || retrievedModel.Details.Families[1] != "code" {
+			t.Errorf("Expected Families to be ['llama', 'code'], got %v", retrievedModel.Details.Families)
+		}
+
+		if retrievedModel.Details.ParameterSize == nil || *retrievedModel.Details.ParameterSize != "7B" {
+			t.Errorf("Expected ParameterSize to be '7B', got %v", retrievedModel.Details.ParameterSize)
+		}
+	})
+
+	// Test RegisterModels preserves details
+	t.Run("RegisterModels preserves details", func(t *testing.T) {
+		models := []*domain.ModelInfo{
+			createTestModelWithDetails(DefaultModelNameA),
+			createTestModelWithDetails(DefaultModelNameB),
+		}
+
+		err := registry.RegisterModels(ctx, endpointURL, models)
+		if err != nil {
+			t.Fatalf("RegisterModels failed: %v", err)
+		}
+
+		retrievedModels, err := registry.GetModelsForEndpoint(ctx, endpointURL)
+		if err != nil {
+			t.Fatalf("GetModelsForEndpoint failed: %v", err)
+		}
+
+		if len(retrievedModels) != 2 {
+			t.Fatalf("Expected 2 models, got %d", len(retrievedModels))
+		}
+
+		// Check that both models have their details preserved
+		for _, model := range retrievedModels {
+			if model.Details == nil {
+				t.Errorf("Model %s details were not preserved", model.Name)
+				continue
+			}
+
+			if model.Details.Family == nil || *model.Details.Family != "llama" {
+				t.Errorf("Model %s: Expected Family to be 'llama', got %v", model.Name, model.Details.Family)
+			}
+
+			if len(model.Details.Families) != 2 {
+				t.Errorf("Model %s: Expected Families to have 2 entries, got %v", model.Name, model.Details.Families)
+			}
+		}
+	})
+
+	// Test GetAllModels preserves details
+	t.Run("GetAllModels preserves details", func(t *testing.T) {
+		allModels, err := registry.GetAllModels(ctx)
+		if err != nil {
+			t.Fatalf("GetAllModels failed: %v", err)
+		}
+
+		if len(allModels) != 1 {
+			t.Fatalf("Expected 1 endpoint, got %d", len(allModels))
+		}
+
+		endpointModels, exists := allModels[endpointURL]
+		if !exists {
+			t.Fatalf("Expected models for endpoint %s, but none found", endpointURL)
+		}
+
+		if len(endpointModels) != 2 {
+			t.Fatalf("Expected 2 models, got %d", len(endpointModels))
+		}
+
+		// Check that both models have their details preserved
+		for _, model := range endpointModels {
+			if model.Details == nil {
+				t.Errorf("Model %s details were not preserved in GetAllModels", model.Name)
+				continue
+			}
+
+			if model.Details.MaxContextLength == nil || *model.Details.MaxContextLength != 4096 {
+				t.Errorf("Model %s: Expected MaxContextLength to be 4096, got %v", 
+					model.Name, model.Details.MaxContextLength)
+			}
+
+			if model.Details.Format == nil || *model.Details.Format != "gguf" {
+				t.Errorf("Model %s: Expected Format to be 'gguf', got %v", 
+					model.Name, model.Details.Format)
+			}
+		}
+	})
+
+	// Test updating a model preserves details
+	t.Run("Updating model preserves details", func(t *testing.T) {
+		// First register a model with details
+		model1 := createTestModelWithDetails(DefaultModelNameC)
+		err := registry.RegisterModel(ctx, endpointURL, model1)
+		if err != nil {
+			t.Fatalf("RegisterModel failed: %v", err)
+		}
+
+		// Now update the same model with different details
+		updatedFamily := "mistral"
+		model2 := createTestModelWithDetails(DefaultModelNameC)
+		model2.Details.Family = &updatedFamily
+		model2.Details.Families = []string{updatedFamily, "instruct"}
+
+		err = registry.RegisterModel(ctx, endpointURL, model2)
+		if err != nil {
+			t.Fatalf("RegisterModel update failed: %v", err)
+		}
+
+		// Retrieve and check
+		models, err := registry.GetModelsForEndpoint(ctx, endpointURL)
+		if err != nil {
+			t.Fatalf("GetModelsForEndpoint failed: %v", err)
+		}
+
+		var updatedModel *domain.ModelInfo
+		for _, m := range models {
+			if m.Name == DefaultModelNameC {
+				updatedModel = m
+				break
+			}
+		}
+
+		if updatedModel == nil {
+			t.Fatal("Updated model not found")
+		}
+
+		if updatedModel.Details == nil {
+			t.Fatal("Updated model details were not preserved")
+		}
+
+		if updatedModel.Details.Family == nil || *updatedModel.Details.Family != "mistral" {
+			t.Errorf("Expected updated Family to be 'mistral', got %v", updatedModel.Details.Family)
+		}
+
+		if len(updatedModel.Details.Families) != 2 || updatedModel.Details.Families[0] != "mistral" {
+			t.Errorf("Expected updated Families to contain 'mistral', got %v", updatedModel.Details.Families)
+		}
+	})
+}
+
 func createTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)

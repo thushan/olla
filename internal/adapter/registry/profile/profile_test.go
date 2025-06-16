@@ -548,6 +548,13 @@ func TestPlatformSpecificMetadata(t *testing.T) {
 			t.Error("Expected family to be mapped from arch")
 		}
 
+		// Check that Families field is populated correctly
+		if model.Details.Families == nil || len(model.Details.Families) != 1 {
+			t.Error("Expected Families array to be populated with one entry")
+		} else if model.Details.Families[0] != "qwen2_vl" {
+			t.Errorf("Expected Families[0] to be 'qwen2_vl', got %s", model.Details.Families[0])
+		}
+
 		if model.Details.QuantizationLevel == nil || *model.Details.QuantizationLevel != "4bit" {
 			t.Error("Expected quantization_level to be mapped from quantization")
 		}
@@ -562,6 +569,79 @@ func TestPlatformSpecificMetadata(t *testing.T) {
 
 		if !strings.Contains(*model.Details.State, "loaded") {
 			t.Error("Expected State to be 'loaded'")
+		}
+	})
+
+	// Test specifically for LM Studio Families field population
+	t.Run("LM Studio Families field population", func(t *testing.T) {
+		profile := NewLMStudioProfile()
+
+		// Test with multiple models with different architectures
+		responseBody := []byte(`{
+			"data": [
+				{
+					"id": "llama-model",
+					"object": "model",
+					"arch": "llama",
+					"quantization": "Q4_K_M"
+				},
+				{
+					"id": "mistral-model",
+					"object": "model",
+					"arch": "mistral",
+					"quantization": "Q5_K_M"
+				},
+				{
+					"id": "phi-model",
+					"object": "model",
+					"arch": "phi",
+					"quantization": "Q8_0"
+				}
+			]
+		}`)
+
+		models, err := profile.ParseModelsResponse(responseBody)
+		if err != nil {
+			t.Fatalf("Failed to parse: %v", err)
+		}
+
+		if len(models) != 3 {
+			t.Fatalf("Expected 3 models, got %d", len(models))
+		}
+
+		// Check each model has both Family and Families fields populated correctly
+		expectedArchs := map[string]string{
+			"llama-model":   "llama",
+			"mistral-model": "mistral",
+			"phi-model":     "phi",
+		}
+
+		for _, model := range models {
+			expectedArch := expectedArchs[model.Name]
+
+			// Check Family field
+			if model.Details == nil {
+				t.Errorf("Model %s: Details field is nil", model.Name)
+				continue
+			}
+
+			if model.Details.Family == nil {
+				t.Errorf("Model %s: Family field is nil", model.Name)
+			} else if *model.Details.Family != expectedArch {
+				t.Errorf("Model %s: Expected Family to be '%s', got '%s'", 
+					model.Name, expectedArch, *model.Details.Family)
+			}
+
+			// Check Families field
+			if model.Details.Families == nil {
+				t.Errorf("Model %s: Families field is nil", model.Name)
+			} else if len(model.Details.Families) != 1 {
+				t.Errorf("Model %s: Expected Families to have 1 entry, got %d", 
+					model.Name, len(model.Details.Families))
+			} else if model.Details.Families[0] != expectedArch {
+				t.Errorf("Model %s: Expected Families[0] to be '%s', got '%s'", 
+					model.Name, expectedArch, model.Details.Families[0])
+			}
 		}
 	})
 }

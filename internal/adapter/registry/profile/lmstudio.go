@@ -190,6 +190,7 @@ func (p *LMStudioProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo,
 
 		if lmModel.Arch != nil && *lmModel.Arch != "" {
 			details.Family = lmModel.Arch
+			details.Families = []string{*lmModel.Arch}
 			hasDetails = true
 		}
 

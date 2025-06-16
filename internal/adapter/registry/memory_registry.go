@@ -68,6 +68,7 @@ func (r *MemoryModelRegistry) RegisterModel(ctx context.Context, endpointURL str
 				Type:        model.Type,
 				Description: model.Description,
 				LastSeen:    model.LastSeen,
+				Details:     model.Details,
 			}
 			modelExists = true
 			break
@@ -81,6 +82,7 @@ func (r *MemoryModelRegistry) RegisterModel(ctx context.Context, endpointURL str
 			Type:        model.Type,
 			Description: model.Description,
 			LastSeen:    model.LastSeen,
+			Details:     model.Details,
 		})
 	}
 
@@ -138,6 +140,7 @@ func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL st
 			Type:        model.Type,
 			Description: model.Description,
 			LastSeen:    model.LastSeen,
+			Details:     model.Details,
 		})
 
 		endpointSet, _ := r.modelToEndpoints.LoadOrCompute(model.Name, func() (newValue *xsync.Map[string, struct{}], cancel bool) {
@@ -183,6 +186,7 @@ func (r *MemoryModelRegistry) GetModelsForEndpoint(ctx context.Context, endpoint
 			Type:        model.Type,
 			Description: model.Description,
 			LastSeen:    model.LastSeen,
+			Details:     model.Details,
 		}
 	}
 
@@ -266,6 +270,7 @@ func (r *MemoryModelRegistry) GetAllModels(ctx context.Context) (map[string][]*d
 				Type:        model.Type,
 				Description: model.Description,
 				LastSeen:    model.LastSeen,
+				Details:     model.Details,
 			}
 		}
 		result[endpointURL] = models
