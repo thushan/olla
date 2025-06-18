@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"context"
+	"golang.org/x/sync/errgroup"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -150,7 +151,6 @@ func TestEventBus_BackpressureHandling(t *testing.T) {
 		}
 	}
 }
-
 func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
@@ -162,22 +162,24 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start subscribers
 	var subscribers []<-chan TestEvent
 	var cleanups []func()
 	receivedCounts := make([]int64, numSubscribers)
 
+	eg, egCtx := errgroup.WithContext(ctx)
+
 	for i := 0; i < numSubscribers; i++ {
-		events, cleanup := bus.Subscribe(ctx)
+		events, cleanup := bus.Subscribe(egCtx)
 		subscribers = append(subscribers, events)
 		cleanups = append(cleanups, cleanup)
 
-		// Count received events per subscriber
-		go func(subIndex int, eventCh <-chan TestEvent) {
-			for range eventCh {
-				atomic.AddInt64(&receivedCounts[subIndex], 1)
+		idx := i
+		eg.Go(func() error {
+			for range events {
+				atomic.AddInt64(&receivedCounts[idx], 1)
 			}
-		}(i, events)
+			return nil
+		})
 	}
 	defer func() {
 		for _, cleanup := range cleanups {
@@ -185,7 +187,6 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 		}
 	}()
 
-	// Start publishers
 	var wg sync.WaitGroup
 	totalPublished := int64(0)
 
@@ -205,14 +206,17 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 	}
 
 	wg.Wait()
-	time.Sleep(100 * time.Millisecond) // Let subscribers process
+	bus.Shutdown() // Close all channels
+
+	if err := eg.Wait(); err != nil {
+		t.Errorf("Unexpected error in subscriber goroutines: %v", err)
+	}
 
 	expectedTotal := int64(numPublishers * eventsPerPublisher)
 	if totalPublished != expectedTotal {
 		t.Errorf("Expected %d total published, got %d", expectedTotal, totalPublished)
 	}
 
-	// Check that subscribers received events (allowing for some drops due to concurrency)
 	for i, count := range receivedCounts {
 		if count == 0 {
 			t.Errorf("Subscriber %d received no events", i)
