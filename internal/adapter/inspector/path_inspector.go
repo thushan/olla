@@ -76,7 +76,7 @@ func (pi *PathInspector) buildPathMap() {
 		}
 	}
 
-	pi.logger.Info("Built path map for fast lookups", 
+	pi.logger.Info("Built path map for fast lookups",
 		"path_count", len(pi.pathToProfiles),
 		"profile_count", len(availableProfiles))
 }

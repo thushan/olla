@@ -836,12 +836,12 @@ func TestModelDetailsPreservation(t *testing.T) {
 			}
 
 			if model.Details.MaxContextLength == nil || *model.Details.MaxContextLength != 4096 {
-				t.Errorf("Model %s: Expected MaxContextLength to be 4096, got %v", 
+				t.Errorf("Model %s: Expected MaxContextLength to be 4096, got %v",
 					model.Name, model.Details.MaxContextLength)
 			}
 
 			if model.Details.Format == nil || *model.Details.Format != "gguf" {
-				t.Errorf("Model %s: Expected Format to be 'gguf', got %v", 
+				t.Errorf("Model %s: Expected Format to be 'gguf', got %v",
 					model.Name, model.Details.Format)
 			}
 		}

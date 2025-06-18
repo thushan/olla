@@ -19,17 +19,17 @@ import (
 // EventBus provides lock-free pub/sub with automatic cleanup and backpressure handling
 type EventBus[T any] struct {
 	subscribers   *xsync.Map[string, *subscriber[T]]
-	isShutdown    atomic.Bool
-	subscriberSeq atomic.Uint64
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
+	subscriberSeq atomic.Uint64
 	bufferSize    int
 	cleanupPeriod time.Duration
+	isShutdown    atomic.Bool
 }
 
 type subscriber[T any] struct {
-	id         string
 	ch         chan T
+	id         string
 	lastActive atomic.Int64
 	dropped    atomic.Uint64
 	isActive   atomic.Bool

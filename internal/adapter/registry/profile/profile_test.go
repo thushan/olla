@@ -628,7 +628,7 @@ func TestPlatformSpecificMetadata(t *testing.T) {
 			if model.Details.Family == nil {
 				t.Errorf("Model %s: Family field is nil", model.Name)
 			} else if *model.Details.Family != expectedArch {
-				t.Errorf("Model %s: Expected Family to be '%s', got '%s'", 
+				t.Errorf("Model %s: Expected Family to be '%s', got '%s'",
 					model.Name, expectedArch, *model.Details.Family)
 			}
 
@@ -636,10 +636,10 @@ func TestPlatformSpecificMetadata(t *testing.T) {
 			if model.Details.Families == nil {
 				t.Errorf("Model %s: Families field is nil", model.Name)
 			} else if len(model.Details.Families) != 1 {
-				t.Errorf("Model %s: Expected Families to have 1 entry, got %d", 
+				t.Errorf("Model %s: Expected Families to have 1 entry, got %d",
 					model.Name, len(model.Details.Families))
 			} else if model.Details.Families[0] != expectedArch {
-				t.Errorf("Model %s: Expected Families[0] to be '%s', got '%s'", 
+				t.Errorf("Model %s: Expected Families[0] to be '%s', got '%s'",
 					model.Name, expectedArch, model.Details.Families[0])
 			}
 		}
