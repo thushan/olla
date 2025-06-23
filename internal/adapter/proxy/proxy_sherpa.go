@@ -105,6 +105,24 @@ func NewSherpaService(
 	}
 }
 
+var (
+	proxiedByHeader string
+	viaHeader       string
+)
+
+func init() {
+	proxiedByHeader = version.Name + "/" + version.Version
+	viaHeader = "1.1 " + version.ShortName + "/" + version.Version
+}
+
+func getProxiedByHeader() string {
+	return proxiedByHeader
+}
+
+func getViaHeader() string {
+	return viaHeader
+}
+
 // ProxyRequest handles incoming HTTP requests and proxies them to healthy endpoints (regardless of type)
 func (s *SherpaProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	endpoints, err := s.discoveryService.GetHealthyEndpoints(ctx)
@@ -299,33 +317,52 @@ func (s *SherpaProxyService) stripRoutePrefix(ctx context.Context, path string) 
 }
 
 func (s *SherpaProxyService) copyHeaders(proxyReq, originalReq *http.Request) {
-	// TODO: copy only safe headers (SECURITY_JUNE2025)
 	if len(originalReq.Header) > 0 {
-		for k, vals := range originalReq.Header {
-			if len(vals) == 1 {
-				// single value no biggie smalls
-				proxyReq.Header.Set(k, vals[0])
+
+		for name, values := range originalReq.Header {
+			// Let's check the most common headers that should not be forwarded
+			// but we can make this configurable later
+			if name == "Authorization" ||
+				name == "Cookie" ||
+				name == "X-Api-Key" ||
+				name == "X-Auth-Token" ||
+				name == "Proxy-Authorization" {
+				continue
+			}
+
+			if len(values) == 1 {
+				// fast path for single values (most command case)
+				proxyReq.Header.Set(name, values[0])
 			} else {
-				// multi-value, allocate new slice
-				proxyReq.Header[k] = make([]string, len(vals))
-				copy(proxyReq.Header[k], vals)
+				// multi-value headers (less common), pre-allocate slice
+				headerValues := make([]string, len(values))
+				copy(headerValues, values)
+				proxyReq.Header[name] = headerValues
 			}
 		}
 	}
 
-	proto := constants.ProtocolHTTP
+	addProxyHeaders(proxyReq, originalReq)
+}
+
+func addProxyHeaders(proxyReq, originalReq *http.Request) {
+	var protocol string
 	if originalReq.TLS != nil {
-		proto = constants.ProtocolHTTPS
+		protocol = constants.ProtocolHTTPS
+	} else {
+		protocol = constants.ProtocolHTTP
 	}
+
+	// Set proxy headers
 	proxyReq.Header.Set("X-Forwarded-Host", originalReq.Host)
-	proxyReq.Header.Set("X-Forwarded-Proto", proto)
+	proxyReq.Header.Set("X-Forwarded-Proto", protocol)
 
 	if ip, _, err := net.SplitHostPort(originalReq.RemoteAddr); err == nil {
 		proxyReq.Header.Set("X-Forwarded-For", ip)
 	}
 
-	proxyReq.Header.Set("X-Proxied-By", fmt.Sprintf("%s/%s", version.Name, version.Version))
-	proxyReq.Header.Set("Via", fmt.Sprintf("1.1 %s/%s", version.ShortName, version.Version))
+	proxyReq.Header.Set("X-Proxied-By", getProxiedByHeader())
+	proxyReq.Header.Set("Via", getViaHeader())
 }
 
 //nolint:gocognit // TODO: Refactor this function to reduce complexity
