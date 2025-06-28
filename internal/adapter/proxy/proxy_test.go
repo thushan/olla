@@ -52,6 +52,21 @@ func (o OllaTestSuite) Name() string {
 	return "Olla"
 }
 
+func (o OllaTestSuite) CreateProxy(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector) ports.ProxyService {
+	return NewOllaService(discovery, selector, config.(*OllaConfiguration), collector, createTestLogger())
+}
+
+func (o OllaTestSuite) CreateConfig() ports.ProxyConfiguration {
+	return &OllaConfiguration{
+		ResponseTimeout:  30 * time.Second,
+		ReadTimeout:      10 * time.Second,
+		StreamBufferSize: 8192,
+		MaxIdleConns:     200,
+		IdleConnTimeout:  90 * time.Second,
+		MaxConnsPerHost:  50,
+	}
+}
+
 type mockDiscoveryService struct {
 	endpoints []*domain.Endpoint
 	err       error
@@ -214,6 +229,7 @@ func assertProxyError(t *testing.T, err error, expectedErrorContains string) {
 func TestAllProxies(t *testing.T) {
 	suites := []ProxyTestSuite{
 		SherpaTestSuite{},
+		OllaTestSuite{},
 	}
 
 	for _, suite := range suites {
@@ -355,294 +371,6 @@ func testProxyRequestNoEndpoints(t *testing.T, suite ProxyTestSuite) {
 	assertProxyError(t, err, "no healthy")
 }
 
-func testHTTPMethods(t *testing.T, suite ProxyTestSuite) {
-	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
-
-	for _, method := range methods {
-		t.Run(method, func(t *testing.T) {
-			var receivedMethod string
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				receivedMethod = r.Method
-				w.WriteHeader(http.StatusOK)
-				if method != "HEAD" {
-					w.Write([]byte("ok"))
-				}
-			}))
-			defer upstream.Close()
-
-			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-			proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
-			selector.endpoint = endpoint
-
-			var body string
-			if method == "POST" || method == "PUT" || method == "PATCH" {
-				body = `{"test": "data"}`
-			}
-
-			req, stats, rlog := createTestRequestWithBody(method, "/api/test", body)
-			_, err := executeProxyRequest(proxy, req, stats, rlog)
-
-			if err != nil {
-				t.Fatalf("HTTP method %s proxy failed: %v", method, err)
-			}
-			if receivedMethod != method {
-				t.Errorf("HTTP method not preserved. Expected: %s, Got: %s", method, receivedMethod)
-			}
-		})
-	}
-}
-
-func testMultipleEndpoints(t *testing.T, suite ProxyTestSuite) {
-	upstream1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("upstream1"))
-	}))
-	defer upstream1.Close()
-
-	upstream2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("upstream2"))
-	}))
-	defer upstream2.Close()
-
-	endpoints := []*domain.Endpoint{
-		createTestEndpoint("test1", upstream1.URL, domain.StatusHealthy),
-		createTestEndpoint("test2", upstream2.URL, domain.StatusHealthy),
-	}
-
-	proxy, _, _ := createTestProxyComponents(suite, endpoints) // Will select first available
-
-	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
-	w, err := executeProxyRequest(proxy, req, stats, rlog)
-
-	if err != nil {
-		t.Fatalf("Multiple endpoints proxy failed: %v", err)
-	}
-
-	response := w.Body.String()
-	if response != "upstream1" && response != "upstream2" {
-		t.Errorf("Unexpected response from endpoints: %s", response)
-	}
-}
-
-func testSlowUpstream(t *testing.T, suite ProxyTestSuite) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(100 * time.Millisecond)
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("processed"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
-	selector.endpoint = endpoint
-
-	start := time.Now()
-	req, stats, rlog := createTestRequestWithBody("POST", "/api/generate", `{"prompt": "test"}`)
-	w, err := executeProxyRequest(proxy, req, stats, rlog)
-	elapsed := time.Since(start)
-
-	if err != nil {
-		t.Fatalf("Slow upstream proxy failed: %v", err)
-	}
-	if elapsed < 100*time.Millisecond {
-		t.Error("Request completed too quickly - upstream delay not respected")
-	}
-	if w.Body.String() != "processed" {
-		t.Error("Response not received from slow upstream")
-	}
-}
-
-func testConnectionPooling(t *testing.T, suite ProxyTestSuite) {
-	callCount := int32(0)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&callCount, 1)
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "call_%d", atomic.LoadInt32(&callCount))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
-	selector.endpoint = endpoint
-
-	const numRequests = 5
-	var wg sync.WaitGroup
-	responses := make([]string, numRequests)
-
-	for i := 0; i < numRequests; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-
-			req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
-			w, err := executeProxyRequest(proxy, req, stats, rlog)
-			if err != nil {
-				t.Errorf("Request %d failed: %v", index, err)
-				return
-			}
-			responses[index] = w.Body.String()
-		}(i)
-	}
-
-	wg.Wait()
-
-	for i, response := range responses {
-		if response == "" {
-			t.Errorf("Request %d got empty response", i)
-		}
-	}
-
-	if atomic.LoadInt32(&callCount) != numRequests {
-		t.Errorf("Expected %d upstream calls, got %d", numRequests, atomic.LoadInt32(&callCount))
-	}
-}
-
-func testUpdateConfig(t *testing.T, suite ProxyTestSuite) {
-	proxy, _, _ := createTestProxyComponents(suite, []*domain.Endpoint{})
-
-	// Create new config with different values
-	var newConfig ports.ProxyConfiguration
-	if suite.Name() == "Sherpa" {
-		newConfig = &Configuration{
-			ResponseTimeout:  60 * time.Second,
-			ReadTimeout:      30 * time.Second,
-			StreamBufferSize: 16384,
-		}
-	}
-	// Update config should not panic
-	proxy.UpdateConfig(newConfig)
-
-	// Verify we can still get stats after config update
-	_, err := proxy.GetStats(context.Background())
-	if err != nil {
-		t.Errorf("GetStats failed after config update: %v", err)
-	}
-}
-
-func testEmptyRequestBody(t *testing.T, suite ProxyTestSuite) {
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		if len(body) != 0 {
-			t.Errorf("Expected empty body, got %d bytes", len(body))
-		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
-	selector.endpoint = endpoint
-
-	req, stats, rlog := createTestRequestWithBody("POST", "/api/test", "") // No body
-	w, err := executeProxyRequest(proxy, req, stats, rlog)
-
-	assertProxySuccess(t, w, err, stats, http.StatusOK, "")
-}
-
-func testSpecialCharacters(t *testing.T, suite ProxyTestSuite) {
-	var receivedPath string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedPath = r.URL.Path
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
-	selector.endpoint = endpoint
-
-	// Use a simpler path that doesn't require URL encoding
-	specialPath := "/api/test-with-dashes/café"
-	req, stats, rlog := createTestRequestWithBody("GET", specialPath, "")
-	_, err := executeProxyRequest(proxy, req, stats, rlog)
-
-	if err != nil {
-		t.Fatalf("Special characters request failed: %v", err)
-	}
-
-	// The received path might be URL-decoded, so check if it contains the key parts
-	if !strings.Contains(receivedPath, "test-with-dashes") || !strings.Contains(receivedPath, "café") {
-		t.Errorf("Path not preserved correctly. Expected to contain test parts, got: %s", receivedPath)
-	}
-}
-
-func testContentTypes(t *testing.T, suite ProxyTestSuite) {
-	testCases := []struct {
-		name        string
-		contentType string
-		body        string
-	}{
-		{"JSON", "application/json", `{"key": "value"}`},
-		{"XML", "application/xml", `<root><key>value</key></root>`},
-		{"Plain Text", "text/plain", "simple text"},
-		{"Binary", "application/octet-stream", string([]byte{0x01, 0x02, 0x03, 0x04})},
-		{"Form Data", "application/x-www-form-urlencoded", "key1=value1&key2=value2"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			var receivedContentType string
-			var receivedBody string
-
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				receivedContentType = r.Header.Get("Content-Type")
-				body, _ := io.ReadAll(r.Body)
-				receivedBody = string(body)
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte("ok"))
-			}))
-			defer upstream.Close()
-
-			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-			proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
-			selector.endpoint = endpoint
-
-			req, stats, rlog := createTestRequestWithBody("POST", "/api/test", tc.body)
-			req.Header.Set("Content-Type", tc.contentType)
-			_, err := executeProxyRequest(proxy, req, stats, rlog)
-
-			if err != nil {
-				t.Fatalf("Content type %s request failed: %v", tc.contentType, err)
-			}
-			if receivedContentType != tc.contentType {
-				t.Errorf("Content-Type not preserved. Expected: %s, Got: %s", tc.contentType, receivedContentType)
-			}
-			if receivedBody != tc.body {
-				t.Errorf("Body not preserved. Expected: %s, Got: %s", tc.body, receivedBody)
-			}
-		})
-	}
-}
-
-func testLargeHeaders(t *testing.T, suite ProxyTestSuite) {
-	largeValue := strings.Repeat("x", 8192) // 8KB header value
-
-	var receivedHeaderValue string
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		receivedHeaderValue = r.Header.Get("X-Large-Header")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
-	defer upstream.Close()
-
-	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
-	selector.endpoint = endpoint
-
-	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
-	req.Header.Set("X-Large-Header", largeValue)
-	_, err := executeProxyRequest(proxy, req, stats, rlog)
-
-	if err != nil {
-		t.Fatalf("Large headers request failed: %v", err)
-	}
-	if receivedHeaderValue != largeValue {
-		t.Errorf("Large header not preserved correctly, got length %d, expected %d",
-			len(receivedHeaderValue), len(largeValue))
-	}
-}
-
 func testProxyRequestDiscoveryError(t *testing.T, suite ProxyTestSuite) {
 	proxy, _, _ := createTestProxyWithError(suite, fmt.Errorf("discovery failed"), nil)
 
@@ -659,6 +387,8 @@ func testProxyRequestSelectorError(t *testing.T, suite ProxyTestSuite) {
 	// Add the endpoint to the discovery service after creation
 	if sherpaProxy, ok := proxy.(*SherpaProxyService); ok {
 		sherpaProxy.discoveryService = &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+	} else if ollaProxy, ok := proxy.(*OllaProxyService); ok {
+		ollaProxy.discoveryService = &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 	}
 
 	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
@@ -1025,5 +755,303 @@ func testQueryParameters(t *testing.T, suite ProxyTestSuite) {
 	}
 	if receivedQuery != "format=json&stream=true" {
 		t.Errorf("Query parameters not forwarded. Expected: format=json&stream=true, Got: %s", receivedQuery)
+	}
+}
+
+func testHTTPMethods(t *testing.T, suite ProxyTestSuite) {
+	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			var receivedMethod string
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				receivedMethod = r.Method
+				w.WriteHeader(http.StatusOK)
+				if method != "HEAD" {
+					w.Write([]byte("ok"))
+				}
+			}))
+			defer upstream.Close()
+
+			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+			proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+			selector.endpoint = endpoint
+
+			var body string
+			if method == "POST" || method == "PUT" || method == "PATCH" {
+				body = `{"test": "data"}`
+			}
+
+			req, stats, rlog := createTestRequestWithBody(method, "/api/test", body)
+			_, err := executeProxyRequest(proxy, req, stats, rlog)
+
+			if err != nil {
+				t.Fatalf("HTTP method %s proxy failed: %v", method, err)
+			}
+			if receivedMethod != method {
+				t.Errorf("HTTP method not preserved. Expected: %s, Got: %s", method, receivedMethod)
+			}
+		})
+	}
+}
+
+func testMultipleEndpoints(t *testing.T, suite ProxyTestSuite) {
+	upstream1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("upstream1"))
+	}))
+	defer upstream1.Close()
+
+	upstream2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("upstream2"))
+	}))
+	defer upstream2.Close()
+
+	endpoints := []*domain.Endpoint{
+		createTestEndpoint("test1", upstream1.URL, domain.StatusHealthy),
+		createTestEndpoint("test2", upstream2.URL, domain.StatusHealthy),
+	}
+
+	proxy, _, _ := createTestProxyComponents(suite, endpoints) // Will select first available
+
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
+
+	if err != nil {
+		t.Fatalf("Multiple endpoints proxy failed: %v", err)
+	}
+
+	response := w.Body.String()
+	if response != "upstream1" && response != "upstream2" {
+		t.Errorf("Unexpected response from endpoints: %s", response)
+	}
+}
+
+func testSlowUpstream(t *testing.T, suite ProxyTestSuite) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("processed"))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+	selector.endpoint = endpoint
+
+	start := time.Now()
+	req, stats, rlog := createTestRequestWithBody("POST", "/api/generate", `{"prompt": "test"}`)
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Slow upstream proxy failed: %v", err)
+	}
+	if elapsed < 100*time.Millisecond {
+		t.Error("Request completed too quickly - upstream delay not respected")
+	}
+	if w.Body.String() != "processed" {
+		t.Error("Response not received from slow upstream")
+	}
+}
+
+func testConnectionPooling(t *testing.T, suite ProxyTestSuite) {
+	callCount := int32(0)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&callCount, 1)
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "call_%d", atomic.LoadInt32(&callCount))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+	selector.endpoint = endpoint
+
+	const numRequests = 5
+	var wg sync.WaitGroup
+	responses := make([]string, numRequests)
+
+	for i := 0; i < numRequests; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+
+			req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+			w, err := executeProxyRequest(proxy, req, stats, rlog)
+			if err != nil {
+				t.Errorf("Request %d failed: %v", index, err)
+				return
+			}
+			responses[index] = w.Body.String()
+		}(i)
+	}
+
+	wg.Wait()
+
+	for i, response := range responses {
+		if response == "" {
+			t.Errorf("Request %d got empty response", i)
+		}
+	}
+
+	if atomic.LoadInt32(&callCount) != numRequests {
+		t.Errorf("Expected %d upstream calls, got %d", numRequests, atomic.LoadInt32(&callCount))
+	}
+}
+
+func testUpdateConfig(t *testing.T, suite ProxyTestSuite) {
+	proxy, _, _ := createTestProxyComponents(suite, []*domain.Endpoint{})
+
+	// Create new config with different values
+	var newConfig ports.ProxyConfiguration
+	if suite.Name() == "Sherpa" {
+		newConfig = &Configuration{
+			ResponseTimeout:  60 * time.Second,
+			ReadTimeout:      30 * time.Second,
+			StreamBufferSize: 16384,
+		}
+	} else {
+		newConfig = &OllaConfiguration{
+			ResponseTimeout:  60 * time.Second,
+			ReadTimeout:      30 * time.Second,
+			StreamBufferSize: 16384,
+			MaxIdleConns:     400,
+			IdleConnTimeout:  120 * time.Second,
+			MaxConnsPerHost:  100,
+		}
+	}
+
+	// Update config should not panic
+	proxy.UpdateConfig(newConfig)
+
+	// Verify we can still get stats after config update
+	_, err := proxy.GetStats(context.Background())
+	if err != nil {
+		t.Errorf("GetStats failed after config update: %v", err)
+	}
+}
+
+func testEmptyRequestBody(t *testing.T, suite ProxyTestSuite) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if len(body) != 0 {
+			t.Errorf("Expected empty body, got %d bytes", len(body))
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+	selector.endpoint = endpoint
+
+	req, stats, rlog := createTestRequestWithBody("POST", "/api/test", "") // No body
+	w, err := executeProxyRequest(proxy, req, stats, rlog)
+
+	assertProxySuccess(t, w, err, stats, http.StatusOK, "")
+}
+
+func testSpecialCharacters(t *testing.T, suite ProxyTestSuite) {
+	var receivedPath string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedPath = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+	selector.endpoint = endpoint
+
+	// Use a simpler path that doesn't require URL encoding
+	specialPath := "/api/test-with-dashes/café"
+	req, stats, rlog := createTestRequestWithBody("GET", specialPath, "")
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
+
+	if err != nil {
+		t.Fatalf("Special characters request failed: %v", err)
+	}
+
+	// The received path might be URL-decoded, so check if it contains the key parts
+	if !strings.Contains(receivedPath, "test-with-dashes") || !strings.Contains(receivedPath, "café") {
+		t.Errorf("Path not preserved correctly. Expected to contain test parts, got: %s", receivedPath)
+	}
+}
+
+func testContentTypes(t *testing.T, suite ProxyTestSuite) {
+	testCases := []struct {
+		name        string
+		contentType string
+		body        string
+	}{
+		{"JSON", "application/json", `{"key": "value"}`},
+		{"XML", "application/xml", `<root><key>value</key></root>`},
+		{"Plain Text", "text/plain", "simple text"},
+		{"Binary", "application/octet-stream", string([]byte{0x01, 0x02, 0x03, 0x04})},
+		{"Form Data", "application/x-www-form-urlencoded", "key1=value1&key2=value2"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var receivedContentType string
+			var receivedBody string
+
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				receivedContentType = r.Header.Get("Content-Type")
+				body, _ := io.ReadAll(r.Body)
+				receivedBody = string(body)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("ok"))
+			}))
+			defer upstream.Close()
+
+			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+			proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+			selector.endpoint = endpoint
+
+			req, stats, rlog := createTestRequestWithBody("POST", "/api/test", tc.body)
+			req.Header.Set("Content-Type", tc.contentType)
+			_, err := executeProxyRequest(proxy, req, stats, rlog)
+
+			if err != nil {
+				t.Fatalf("Content type %s request failed: %v", tc.contentType, err)
+			}
+			if receivedContentType != tc.contentType {
+				t.Errorf("Content-Type not preserved. Expected: %s, Got: %s", tc.contentType, receivedContentType)
+			}
+			if receivedBody != tc.body {
+				t.Errorf("Body not preserved. Expected: %s, Got: %s", tc.body, receivedBody)
+			}
+		})
+	}
+}
+
+func testLargeHeaders(t *testing.T, suite ProxyTestSuite) {
+	largeValue := strings.Repeat("x", 8192) // 8KB header value
+
+	var receivedHeaderValue string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedHeaderValue = r.Header.Get("X-Large-Header")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+	defer upstream.Close()
+
+	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+	proxy, selector, _ := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+	selector.endpoint = endpoint
+
+	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
+	req.Header.Set("X-Large-Header", largeValue)
+	_, err := executeProxyRequest(proxy, req, stats, rlog)
+
+	if err != nil {
+		t.Fatalf("Large headers request failed: %v", err)
+	}
+	if receivedHeaderValue != largeValue {
+		t.Errorf("Large header not preserved correctly, got length %d, expected %d",
+			len(receivedHeaderValue), len(largeValue))
 	}
 }

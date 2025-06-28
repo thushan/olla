@@ -3,6 +3,7 @@ package proxy
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -11,6 +12,7 @@ import (
 
 const (
 	DefaultProxySherpa = "sherpa"
+	DefaultProxyOlla   = "olla"
 )
 
 type Factory struct {
@@ -39,6 +41,20 @@ func NewFactory(statsCollector ports.StatsCollector, theLogger logger.StyledLogg
 		return NewSherpaService(discovery, selector, sherpaConfig, collector, logger)
 	})
 
+	factory.Register(DefaultProxyOlla, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, logger logger.StyledLogger) ports.ProxyService {
+		ollaConfig := &OllaConfiguration{
+			ProxyPrefix:         config.GetProxyPrefix(),
+			ConnectionTimeout:   config.GetConnectionTimeout(),
+			ConnectionKeepAlive: config.GetConnectionKeepAlive(),
+			ResponseTimeout:     config.GetResponseTimeout(),
+			ReadTimeout:         config.GetReadTimeout(),
+			StreamBufferSize:    config.GetStreamBufferSize(),
+			MaxIdleConns:        200,
+			IdleConnTimeout:     90 * time.Second,
+			MaxConnsPerHost:     50,
+		}
+		return NewOllaService(discovery, selector, ollaConfig, collector, logger)
+	})
 	return factory
 }
 
