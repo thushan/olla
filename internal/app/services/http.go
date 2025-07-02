@@ -126,7 +126,7 @@ func (s *HTTPService) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the HTTP server
 func (s *HTTPService) Stop(ctx context.Context) error {
-	s.logger.Info("Stopping HTTP server")
+	s.logger.Info(" Stopping HTTP server")
 
 	if s.server != nil {
 		shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -138,7 +138,7 @@ func (s *HTTPService) Stop(ctx context.Context) error {
 		}
 	}
 
-	s.logger.Info("HTTP server stopped")
+	s.logger.Info(" HTTP server stopped")
 	return nil
 }
 

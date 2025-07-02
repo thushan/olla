@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/thushan/olla/internal/app/services"
 	"github.com/thushan/olla/internal/config"
@@ -14,6 +15,11 @@ import (
 // health checks and discovery run before the proxy accepts traffic, maintaining the
 // original startup behaviour where endpoints are validated immediately.
 func CreateAndStartServiceManager(ctx context.Context, cfg *config.Config, logger logger.StyledLogger) (*services.ServiceManager, error) {
+	startTime := time.Now()
+	defer func() {
+		logger.Debug("Service manager startup completed", "duration", time.Since(startTime))
+	}()
+
 	manager := services.NewServiceManager(logger)
 
 	if err := registerServices(manager, cfg, logger); err != nil {

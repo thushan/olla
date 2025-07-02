@@ -89,12 +89,12 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down the proxy service
 func (s *ProxyServiceWrapper) Stop(ctx context.Context) error {
-	s.logger.Info("Stopping proxy service")
+	s.logger.Info(" Stopping proxy service")
 
 	// Most proxy implementations don't need explicit cleanup
 	// but we provide the hook for future extensions
 
-	s.logger.Info("Proxy service stopped")
+	s.logger.Info(" Proxy service stopped")
 	return nil
 }
 

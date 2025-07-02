@@ -60,13 +60,13 @@ func (s *SecurityService) Start(ctx context.Context) error {
 
 // Stop gracefully shuts down security components
 func (s *SecurityService) Stop(ctx context.Context) error {
-	s.logger.Info("Stopping security service")
+	s.logger.Info(" Stopping security service")
 
 	if s.adapters != nil {
 		s.adapters.Stop()
 	}
 
-	s.logger.Info("Security service stopped")
+	s.logger.Info(" Security service stopped")
 	return nil
 }
 

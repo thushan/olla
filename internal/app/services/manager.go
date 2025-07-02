@@ -56,7 +56,7 @@ func (sm *ServiceManager) Register(service ManagedService) error {
 
 	sm.services[name] = service
 	sm.registry.Register(name, service)
-	sm.logger.Info("Service registered", "name", name)
+	sm.logger.Debug("Service registered", "name", name)
 	return nil
 }
 
@@ -131,12 +131,12 @@ func (sm *ServiceManager) Start(ctx context.Context) error {
 	sm.startOrder = order
 	sm.mu.Unlock()
 
-	sm.logger.Info("Starting services", "count", len(order))
+	sm.logger.Debug("Starting services", "count", len(order))
 
 	started := make([]string, 0, len(order))
 	for _, name := range order {
 		service := sm.services[name]
-		sm.logger.Info("Starting service", "name", name, "dependencies", service.Dependencies())
+		sm.logger.Debug("Starting service", "name", name, "dependencies", service.Dependencies())
 
 		if err := service.Start(ctx); err != nil {
 			sm.logger.Error("Failed to start service", "name", name, "error", err)
@@ -145,10 +145,10 @@ func (sm *ServiceManager) Start(ctx context.Context) error {
 		}
 
 		started = append(started, name)
-		sm.logger.Info("Service started", "name", name)
+		sm.logger.Debug("Service started", "name", name)
 	}
 
-	sm.logger.Info("All services started successfully")
+	sm.logger.Debug("All services started successfully")
 	return nil
 }
 
@@ -165,7 +165,7 @@ func (sm *ServiceManager) Stop(ctx context.Context) error {
 		order[i], order[j] = order[j], order[i]
 	}
 
-	sm.logger.Info("Stopping services", "count", len(order))
+	sm.logger.Debug("Stopping services", "count", len(order))
 	return sm.stopServices(ctx, order)
 }
 
@@ -179,14 +179,14 @@ func (sm *ServiceManager) stopServices(ctx context.Context, names []string) erro
 			continue
 		}
 
-		sm.logger.Info("Stopping service", "name", name)
+		sm.logger.Debug("Stopping service", "name", name)
 		if err := service.Stop(ctx); err != nil {
 			sm.logger.Error("Failed to stop service", "name", name, "error", err)
 			if firstErr == nil {
 				firstErr = err
 			}
 		} else {
-			sm.logger.Info("Service stopped", "name", name)
+			sm.logger.Debug("Service stopped", "name", name)
 		}
 	}
 
