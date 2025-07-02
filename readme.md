@@ -11,11 +11,13 @@
 > [!IMPORTANT]  
 > Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
 
-Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including Ollama, LM Studio, and OpenAI-compatible endpoints. Choose between two proxy engines: **Sherpa** for simplicity and maintainability, or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
+Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
 ![Olla Usecase](assets/diagrams/usecases.excalidraw.png)
 
-Whether you're running workloads on laptops, workstations, or clustered servers, Olla dynamically selects the best endpoint using configurable priorities, health checks, and load-aware strategies. With built-in failover, adaptive routing, and continuous monitoring, it ensures resilience, performance, and minimal operational complexity. Single CLI application and config file is all you need to go Olla!
+Whether you're running workloads on laptops, workstations or clustered servers, Olla dynamically selects the best endpoint using configurable priorities, health checks and load-aware strategies. With built-in failover, adaptive routing, and continuous monitoring, it ensures resilience, performance and minimal operational complexity. 
+
+Single CLI application and config file is all you need to go Olla!
 
 ## ✨ Features
 
@@ -488,7 +490,7 @@ Olla is designed to sit behind a reverse proxy (nginx, Cloudflare, etc.) in prod
 A: Olla understands LLM-specific patterns like model routing, streaming responses, and health semantics. It also provides built-in model discovery and LLM-optimised timeouts.
 
 **Q: Can I use Olla with other LLM providers?** \
-A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints.
+A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints  (such as .
 
 **Q: Does Olla support authentication?** \
 A: Olla focuses on load balancing and lets your reverse proxy handle authentication. This follows the Unix philosophy of doing one thing well.
