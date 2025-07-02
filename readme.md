@@ -11,7 +11,7 @@
 > [!IMPORTANT]  
 > Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
 
-Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including Ollama, LM Studio, and OpenAI-compatible endpoints out of the box, with more front-ends coming soon.
+Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including Ollama, LM Studio, and OpenAI-compatible endpoints. Choose between two proxy engines: **Sherpa** for simplicity and maintainability, or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
 ![Olla Usecase](assets/diagrams/usecases.excalidraw.png)
 
@@ -19,13 +19,12 @@ Whether you're running workloads on laptops, workstations, or clustered servers,
 
 ## ✨ Features
 
-We're still busy working on features and would love to hear your thoughts on what you'd like from Olla in the future!
-
 ### 🎯 **Smart Load Balancing**
 - **Priority-based routing**: Configure node priorities (workstation first, laptop second) with automatic failover
 - **Multiple strategies**: Round-robin, least connections, and priority-aware load balancing
 - **Health-aware routing**: Only routes to healthy endpoints, with automatic recovery detection
-- **Model-aware routing**: 🚧 Intelligently route to endpoints which have the model you've requested
+- **Circuit breakers**: Automatic failure isolation prevents cascade failures (Olla engine)
+- **Model-aware routing**: 🚧 Coming soon - route to endpoints with specific models
 
 ### 🛡️ **In-built Security**
 - **Rate limiting**: Per-IP and global request limits with burst handling
@@ -38,9 +37,9 @@ We're still busy working on features and would love to hear your thoughts on wha
 - **Detailed metrics**: Request stats, response times, and performance insights
 
 ### ⚙️ **Easy Configuration**
-- **Single Configuration File**: Easily manage server with a single configuration file
-- **Environment variables**: Override any setting with environment variables
-- **Container-ready**: One-command deployment with Docker Compose or Podman Compose
+- **Single YAML file**: All settings in one place with sensible defaults
+- **Environment variables**: Override any setting for different deployments
+- **Container-ready**: Pre-configured Docker images with example configurations
 
 ### 🔌 **Universal Compatibility**
 - **Ollama**: Full support for Ollama endpoints
@@ -48,11 +47,13 @@ We're still busy working on features and would love to hear your thoughts on wha
 - **OpenAI-compatible**: Works with any OpenAI-compatible API
 
 ## ⚡ **High Performance**
-- **Lightweight**: Optimised memory & cpu footprint, can sip on RAM with 1000s of concurrent requests.
-- **Low latency**: Sub-millisecond endpoint selection with minimal proxy overhead
-- **Memory optimised**: Efficient buffer pooling and zero-copy streaming where possible
+- **Dual proxy engines**: Choose Sherpa for simplicity or Olla for maximum performance
+- **Connection pooling**: Per-endpoint connection pools reduce latency (Olla engine)
+- **Object pooling**: Reduced GC pressure with pooled buffers and contexts (Olla engine)
+- **Low latency**: Sub-millisecond endpoint selection with lock-free atomic stats
+- **Memory optimised**: Efficient buffer pooling with 64KB default buffers for streaming
 - **Concurrent**: Handles thousands of simultaneous streaming connections
-- **Resource efficient**: Stable memory usage under load with automatic clean-up
+- **Resource efficient**: Stable memory usage with automatic cleanup of stale data
 
 ## 🔧 **Optimised for LLMs**
 - **Streaming-first**: Immediate response streaming without buffering delays
@@ -169,9 +170,15 @@ server:
   write_timeout: 0s  # Important: Leave as 0s for streaming LLM responses
 
 proxy:
+  engine: "olla"            # or "sherpa" for simpler deployments
   load_balancer: "priority"  # or "round_robin", "least_connections"
   response_timeout: 900s     # 15 minutes for long LLM responses
-  stream_buffer_size: 8192
+  stream_buffer_size: 65536  # 64KB for Olla, 8KB for Sherpa
+  
+  # Olla engine specific (connection pooling)
+  max_idle_conns: 100        # Maximum idle connections
+  max_conns_per_host: 50     # Maximum connections per host
+  idle_conn_timeout: 90s     # Idle connection timeout
 
 discovery:
   static:
@@ -205,8 +212,11 @@ export OLLA_SERVER_HOST="0.0.0.0"
 export OLLA_SERVER_PORT="40114"
 
 # Proxy settings
+export OLLA_PROXY_ENGINE="olla"              # or "sherpa"
 export OLLA_PROXY_LOAD_BALANCER="priority"
 export OLLA_PROXY_RESPONSE_TIMEOUT="15m"
+export OLLA_PROXY_MAX_IDLE_CONNS="100"       # Olla engine only
+export OLLA_PROXY_MAX_CONNS_PER_HOST="50"    # Olla engine only
 
 # Rate limiting (optional but recommended)
 export OLLA_SERVER_GLOBAL_RATE_LIMIT="1000"    # requests per minute
@@ -389,9 +399,10 @@ make help
 │   │   ├── balancer/       # Load balancing strategies (priority, round-robin, least-conn)
 │   │   ├── discovery/      # Service discovery and endpoint management
 │   │   ├── health/         # Health checking with circuit breakers
-│   │   ├── proxy/          # HTTP proxy implementation (Sherpa/Olla engines)
+│   │   ├── proxy/          # Dual proxy engines (Sherpa: simple, Olla: high-performance)
 │   │   ├── registry/       # Model registry and platform profiles
-│   │   └── security/       # Rate limiting and request validation
+│   │   ├── security/       # Rate limiting and request validation
+│   │   └── stats/          # Atomic statistics collection
 │   ├── app/                # Application assembly and HTTP handlers
 │   ├── config/             # Configuration management
 │   ├── core/               # Business logic and domain models
@@ -406,7 +417,8 @@ make help
 │   └── version/            # Version information and build metadata
 ├── pkg/                    # Public packages (reusable components)
 │   ├── format/             # Formatting utilities (bytes, duration)
-│   └── nerdstats/          # Runtime statistics and performance metrics
+│   ├── nerdstats/          # Runtime statistics and performance metrics
+│   └── pool/               # Generic connection pooling (lite_pool)
 ├── test/                   # Test suites and testing utilities
 │   └── scripts/            # Test automation scripts
 │       ├── load/           # Load testing scripts
@@ -481,49 +493,34 @@ A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compat
 **Q: Does Olla support authentication?** \
 A: Olla focuses on load balancing and lets your reverse proxy handle authentication. This follows the Unix philosophy of doing one thing well.
 
+**Q: Which proxy engine should I use?** \
+A: Use **Sherpa** for simple deployments with moderate traffic. Choose **Olla** for high-throughput production workloads that need connection pooling, circuit breakers, and maximum performance.
+
 **Q: How does priority routing work with model availability?** \
-A: (as of June 2025) Olla doesn't yet support model routing, but the goal is to have Olla first filter endpoints that have the requested model, then applies your chosen load balancing strategy within that subset.
+A: Model routing infrastructure is in place but not yet active. When implemented, Olla will filter endpoints by model availability before applying your load balancing strategy.
 
 **Q: Can I run Olla in Kubernetes?** \
 A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!
 
-**Q: What is the reference to Sherpa?** \
-A: Sherpa is the precursor to Olla, that has now grown into a large tool that encompasses a lot more than just a proxy. The proxy feature was only added to Sherpa in early 2024 but internally (at our work), it was the most popular across teams. Olla shares a lot of the core from Sherpa (including its proxy engine).
-
 **Q: What is behind the name Olla?** \
-A: Olla is the name of our llama (featured in the logo), and a running joke from a teammate who'd say, "Can't get it working on Olla(ma)." It's pronounced like 'holla'. The Spanish meaning (pot) is purely coincidental—we weren't high or anything. That said, you can cook up a lot when Olla is in the middle.
+A: Olla is the name of our llama (featured in the logo). It's pronounced like 'holla' and comes from a running joke about getting things working with Ollama. The fact it means 'pot' in Spanish is coincidental—though you can indeed cook up a lot when Olla is in the middle!
 
 ## 🤝 Contributing
 
-We welcome contributions! Whether it's:
-
-- 🐛 Bug reports and fixes
-- ✨ Feature requests and implementations
-- 📖 Documentation improvements
-- 🧪 Test coverage enhancements
-
-Please open an issue first to discuss major changes.
+We welcome contributions! Please open an issue first to discuss major changes.
 
 ## 🤖 AI Disclosure
 
-Sherpa and Olla have been built using AI, we have utilised AI to generate documentation, refine our tests and conduct code reviews.
+This project has been built with the assistance of AI tools for documentation, test refinement, and code reviews.
 
-We've utilised:
-
-* [GitHub Copilot](https://github.com/features/copilot) - Most of our documentation (code and markdown), GitHub Code Reviews
-* [Anthropic Claude](https://www.claude.ai) - Code reviews, unit test plumbing / refactoring, external test scripts (shell scripts)
-* [OpenAI ChatGPT](https://chatgpt.com/) - Code reviews, document refinement, troubleshooting
-
-Claude was used via [JetBrains Junie](https://www.jetbrains.com/junie/) in our development IDE, [GoLand](https://www.jetbrains.com/go/).
+We've utilised GitHub Copilot, Anthropic Claude, and OpenAI ChatGPT for documentation, code reviews, test refinement, and troubleshooting.
 
 ## 🙏 Acknowledgements
 
-This project was possible thanks to the following projects or folks.
-
-* [@pterm/pterm](https://github.com/pterm/pterm) - Amazing TUI framework used
-* [@puzpuzpuz/xsync](https://github.com/puzpuzpuz/xsync/) - High-performance sync.Map replacement (v4)
-* [@golangci/golangci-lint](https://github.com/golangci/golangci-lint) - Go Linter
-* [@dkorunic/betteralign](https://github.com/dkorunic/betteralign) - Go alignment checker
+* [@pterm/pterm](https://github.com/pterm/pterm) - Terminal UI framework
+* [@puzpuzpuz/xsync](https://github.com/puzpuzpuz/xsync/) - High-performance concurrent maps
+* [@golangci/golangci-lint](https://github.com/golangci/golangci-lint) - Go linting
+* [@dkorunic/betteralign](https://github.com/dkorunic/betteralign) - Struct alignment optimization
 
 ## 📄 License
 
@@ -531,12 +528,14 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ## 🎯 Roadmap
 
-- [ ] **Auto endpoint discovery**: Add endpoints, let Olla determine the type.
-- [ ] **Model routing**: Route based on model requested
+- [x] **Circuit breakers**: Advanced fault tolerance (Olla engine)
+- [x] **Connection pooling**: Per-endpoint connection management (Olla engine)
+- [x] **Object pooling**: Reduced GC pressure for high throughput (Olla engine)
+- [ ] **Auto endpoint discovery**: Add endpoints, let Olla determine the type
+- [ ] **Model routing**: Route based on model requested (infrastructure ready)
 - [ ] **Model benchmarking**: Benchmark models across multiple endpoints easily
 - [ ] **Metrics export**: Prometheus/OpenTelemetry integration
 - [ ] **Dynamic configuration**: API-driven endpoint management
-- [ ] **Circuit breakers**: Advanced fault tolerance
 - [ ] **TLS termination**: Built-in SSL support
 - [ ] **Olla Admin Panel**: View Olla metrics easily within the browser
 - [ ] **Model caching**: Intelligent model preloading
