@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"time"
 )
@@ -23,8 +24,14 @@ type ServerConfig struct {
 	Port            int                 `yaml:"port"`
 	ReadTimeout     time.Duration       `yaml:"read_timeout"`
 	WriteTimeout    time.Duration       `yaml:"write_timeout"`
+	IdleTimeout     time.Duration       `yaml:"idle_timeout"`
 	ShutdownTimeout time.Duration       `yaml:"shutdown_timeout"`
 	RequestLogging  bool                `yaml:"request_logging"`
+}
+
+// GetAddress returns the server address in host:port format
+func (s *ServerConfig) GetAddress() string {
+	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
 // ServerRequestLimits defines request size and validation limits

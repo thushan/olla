@@ -204,6 +204,121 @@ discovery:
         check_timeout: 3s
 ```
 
+### Endpoint Configuration Guide
+
+Each endpoint in your configuration supports the following options:
+
+```yaml
+endpoints:
+  - url: "http://192.168.1.100:11434"    # Required: Base URL of the LLM service
+    name: "workstation-ollama"            # Required: Unique name for this endpoint
+    type: "ollama"                        # Required: ollama, lm-studio, or openai-compatible
+    priority: 100                         # Optional: Higher = preferred (default: 50)
+    health_check_url: "/"                 # Optional: Health check path (default: "/")
+    model_url: "/api/tags"                # Optional: Model discovery endpoint
+    check_interval: 5s                    # Optional: Health check frequency (default: 30s)
+    check_timeout: 2s                     # Optional: Health check timeout (default: 5s)
+    enabled: true                         # Optional: Enable/disable endpoint (default: true)
+```
+
+#### Endpoint Types
+
+**Ollama Endpoints**
+```yaml
+- url: "http://localhost:11434"
+  name: "local-ollama"
+  type: "ollama"
+  priority: 100
+  health_check_url: "/"
+  model_url: "/api/tags"          # Ollama's model list endpoint
+```
+
+**LM Studio Endpoints**
+```yaml
+- url: "http://localhost:1234"
+  name: "local-lmstudio"
+  type: "lm-studio"
+  priority: 90
+  health_check_url: "/v1/models"  # LM Studio health endpoint
+  model_url: "/v1/models"         # OpenAI-compatible model list
+```
+
+**OpenAI-Compatible Endpoints** (vLLM, LocalAI, etc.)
+```yaml
+- url: "http://gpu-server:8000"
+  name: "vllm-server"
+  type: "openai-compatible"
+  priority: 80
+  health_check_url: "/health"
+  model_url: "/v1/models"
+```
+
+**Cloud Provider Endpoints**
+```yaml
+- url: "https://api.openai.com"
+  name: "openai-cloud"
+  type: "openai-compatible"
+  priority: 10                    # Low priority due to cost
+  enabled: false                  # Disabled by default
+  check_interval: 60s             # Less frequent checks for cloud
+```
+
+#### Priority Strategy Examples
+
+**Home Lab Setup** - Local hardware preferred over cloud:
+```yaml
+endpoints:
+  - url: "http://desktop:11434"
+    name: "desktop-gpu"
+    type: "ollama"
+    priority: 100                 # Always use desktop GPU first
+  
+  - url: "http://laptop:11434"
+    name: "laptop-cpu"
+    type: "ollama"
+    priority: 50                  # Fallback to laptop
+  
+  - url: "https://api.together.ai"
+    name: "together-ai"
+    type: "openai-compatible"
+    priority: 10                  # Only use cloud if local unavailable
+```
+
+**Enterprise Setup** - Tiered by capability:
+```yaml
+endpoints:
+  - url: "http://gpu-cluster:8000"
+    name: "a100-cluster"
+    type: "openai-compatible"
+    priority: 100                 # High-end GPU cluster
+  
+  - url: "http://gpu-pool:8000"
+    name: "rtx4090-pool"
+    type: "openai-compatible"
+    priority: 75                  # Mid-tier GPUs
+  
+  - url: "http://cpu-farm:8000"
+    name: "cpu-inference"
+    type: "openai-compatible"
+    priority: 25                  # CPU-only as last resort
+```
+
+#### Health Check Configuration
+
+Fine-tune health checks based on your infrastructure:
+
+```yaml
+# Fast local network - aggressive health checks
+- url: "http://localhost:11434"
+  check_interval: 2s              # Check every 2 seconds
+  check_timeout: 1s               # 1 second timeout
+  
+# Remote/cloud endpoints - conservative checks  
+- url: "https://api.example.com"
+  check_interval: 30s             # Check every 30 seconds
+  check_timeout: 10s              # 10 second timeout
+```
+
 ### Environment Variables
 
 Common settings you'll want to override:
@@ -490,7 +605,7 @@ Olla is designed to sit behind a reverse proxy (nginx, Cloudflare, etc.) in prod
 A: Olla understands LLM-specific patterns like model routing, streaming responses, and health semantics. It also provides built-in model discovery and LLM-optimised timeouts.
 
 **Q: Can I use Olla with other LLM providers?** \
-A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints  (such as .
+A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints (such as vLLM, LocalAI, Together AI, etc.).
 
 **Q: Does Olla support authentication?** \
 A: Olla focuses on load balancing and lets your reverse proxy handle authentication. This follows the Unix philosophy of doing one thing well.

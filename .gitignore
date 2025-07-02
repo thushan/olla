@@ -5,6 +5,11 @@ report/
 logs/
 tmp/
 *.exe
+olla
 config.yaml
 config/
 dist/
+# Claude specific local files
+.claude/*.local.json
+# just in case
+*.local.json

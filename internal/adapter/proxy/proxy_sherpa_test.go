@@ -871,8 +871,8 @@ func TestCopyHeaders_ProxyHeaders(t *testing.T) {
 				"X-Forwarded-Host":  "example.com",
 				"X-Forwarded-Proto": "http",
 				"X-Forwarded-For":   "192.168.1.100",
-				"X-Proxied-By":      "Olla/v0.0.6", // Adjust based on your version
-				"Via":               "1.1 olla/v0.0.6",
+				"X-Proxied-By":      "Olla/v0.0.0",
+				"Via":               "1.1 olla/v0.0.0",
 			},
 		},
 		{
@@ -888,8 +888,8 @@ func TestCopyHeaders_ProxyHeaders(t *testing.T) {
 				"X-Forwarded-Host":  "secure.example.com",
 				"X-Forwarded-Proto": "https",
 				"X-Forwarded-For":   "10.0.0.1",
-				"X-Proxied-By":      "Olla/v0.0.6",
-				"Via":               "1.1 olla/v0.0.6",
+				"X-Proxied-By":      "Olla/v0.0.0",
+				"Via":               "1.1 olla/v0.0.0",
 			},
 		},
 		{
@@ -904,8 +904,8 @@ func TestCopyHeaders_ProxyHeaders(t *testing.T) {
 				"X-Forwarded-Host":  "example.com",
 				"X-Forwarded-Proto": "http",
 				// X-Forwarded-For should not be set due to malformed address
-				"X-Proxied-By": "Olla/v0.0.6",
-				"Via":          "1.1 olla/v0.0.6",
+				"X-Proxied-By": "Olla/v0.0.0",
+				"Via":          "1.1 olla/v0.0.0",
 			},
 		},
 	}
