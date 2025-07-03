@@ -63,8 +63,6 @@ func (s *ModelDiscoveryService) Start(ctx context.Context) error {
 
 	s.ticker = time.NewTicker(s.config.Interval)
 
-	// Start background discovery loop
-	//
 	go s.discoveryLoop(ctx)
 
 	return nil
@@ -150,71 +148,9 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		return fmt.Errorf("failed to register models: %w", err)
 	}
 
-	s.logger.InfoWithEndpoint(" Models available for", endpoint.Name, "count", len(models), "models", s.modelRegistry.ModelsToString(models))
+	s.logger.InfoWithEndpoint(" ", endpoint.Name, "models", len(models))
 	return nil
 }
-
-/*
-// discoverConcurrently discovers models from multiple endpoints using worker pool
-func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoints []*domain.Endpoint) error {
-	workCh := make(chan *domain.Endpoint, len(endpoints))
-	resultCh := make(chan error, len(endpoints))
-
-	workerCount := s.config.ConcurrentWorkers
-	if workerCount > len(endpoints) {
-		workerCount = len(endpoints)
-	}
-
-	var wg sync.WaitGroup
-	for i := 0; i < workerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for endpoint := range workCh {
-				select {
-				case <-ctx.Done():
-					resultCh <- ctx.Err()
-					return
-				default:
-					err := s.DiscoverEndpoint(ctx, endpoint)
-					resultCh <- err
-				}
-			}
-		}()
-	}
-
-	// Send work to workers who be workin
-	go func() {
-		defer close(workCh)
-		for _, endpoint := range endpoints {
-			select {
-			case <-ctx.Done():
-				return
-			case workCh <- endpoint:
-			}
-		}
-	}()
-
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	var errs []error
-	for err := range resultCh {
-		if err != nil && !errors.Is(err, context.Canceled) {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		return fmt.Errorf("discovery failed for %d endpoints", len(errs))
-	}
-
-	s.logger.InfoWithCount("Completed model discovery on healthy endpoints", len(endpoints))
-	return nil
-}
-*/
 
 func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoints []*domain.Endpoint) error {
 	workerCount := s.config.ConcurrentWorkers
@@ -226,7 +162,6 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 	eg.SetLimit(workerCount)
 
 	for _, ep := range endpoints {
-		// capture loop var
 		eg.Go(func() error {
 			if err := s.DiscoverEndpoint(ctx, ep); err != nil && !errors.Is(err, context.Canceled) {
 				return err
@@ -239,7 +174,7 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 		return fmt.Errorf("discovery failed: %w", err)
 	}
 
-	s.logger.InfoWithCount("Completed model discovery on healthy endpoints", len(endpoints))
+	s.logger.InfoWithCount("Finished model discovery on healthy endpoints", len(endpoints))
 	return nil
 }
 
@@ -247,14 +182,12 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 func (s *ModelDiscoveryService) handleDiscoveryError(endpoint *domain.Endpoint, err error) {
 	s.logger.ErrorWithEndpoint("Model discovery failed", endpoint.Name, "error", err)
 
-	// Check if error is recoverable
 	if !IsRecoverable(err) {
 		s.logger.WarnWithEndpoint("Disabling discovery for endpoint due to non-recoverable error", endpoint.Name)
 		s.disableEndpoint(endpoint.URLString)
 		return
 	}
 
-	// Increment failure count for recoverable errors
 	s.incrementFailureCount(endpoint.URLString)
 
 	failureCount := s.getFailureCount(endpoint.URLString)
@@ -327,7 +260,6 @@ func (s *ModelDiscoveryService) GetMetrics() DiscoveryMetrics {
 	disabledCount := len(s.disabledEndpoints)
 	s.mu.RUnlock()
 
-	// Add disabled endpoints info to error map
 	if disabledCount > 0 {
 		if metrics.ErrorsByEndpoint == nil {
 			metrics.ErrorsByEndpoint = make(map[string]int64)

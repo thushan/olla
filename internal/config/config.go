@@ -38,6 +38,7 @@ func DefaultConfig() *Config {
 			ReadTimeout:     30 * time.Second,
 			WriteTimeout:    0, // No timeout for proxies
 			ShutdownTimeout: 10 * time.Second,
+			RequestLogging:  true,
 			RequestLimits: ServerRequestLimits{
 				MaxBodySize:   100 * 1024 * 1024,
 				MaxHeaderSize: 1024 * 1024,

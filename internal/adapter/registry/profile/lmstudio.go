@@ -56,11 +56,6 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
-const (
-	LMStudioProfileVersion    = "1.0"
-	LMStudioProfileModelsPath = "/api/v0/models"
-)
-
 type LMStudioResponse struct {
 	Object string          `json:"object"`
 	Data   []LMStudioModel `json:"data"`
@@ -80,6 +75,32 @@ type LMStudioModel struct {
 
 type LMStudioProfile struct{}
 
+const (
+	LMStudioProfileVersion           = "1.0"
+	LMStudioModelsPathIndex          = 0
+	LMStudioChatCompletionsPathIndex = 1
+	LMStudioCompletionsPathIndex     = 2
+	LMStudioEmbeddingsPathIndex      = 3
+)
+
+var lmstudioPaths []string
+
+func init() {
+	lmstudioPaths = []string{
+		// LM Studio native API (beta) [10-06-2025]
+		// src: https://lmstudio.ai/docs/app/api/endpoints/rest#get-apiv0models
+		"/api/v0/models",           // Enhanced model info with stats
+		"/api/v0/chat/completions", // Chat with enhanced stats
+		"/api/v0/completions",      // Text completion with stats
+		"/api/v0/embeddings",       // Embeddings
+
+		// OpenAI compatibility layer
+		"/v1/models",
+		"/v1/chat/completions",
+		"/v1/completions",
+		"/v1/embeddings",
+	}
+}
 func NewLMStudioProfile() *LMStudioProfile {
 	return &LMStudioProfile{}
 }
@@ -93,21 +114,32 @@ func (p *LMStudioProfile) GetVersion() string {
 }
 
 func (p *LMStudioProfile) GetModelDiscoveryURL(baseURL string) string {
-	return util.NormaliseBaseURL(baseURL) + LMStudioProfileModelsPath
+	return util.NormaliseBaseURL(baseURL) + lmstudioPaths[LMStudioModelsPathIndex]
 }
 
 func (p *LMStudioProfile) GetHealthCheckPath() string {
-	return LMStudioProfileModelsPath
+	return lmstudioPaths[LMStudioModelsPathIndex]
 }
 
 func (p *LMStudioProfile) IsOpenAPICompatible() bool {
 	return true
 }
 
+func (p *LMStudioProfile) GetPaths() []string {
+	return lmstudioPaths
+}
+
+func (p *LMStudioProfile) GetPath(index int) string {
+	if index < 0 || index >= len(lmstudioPaths) {
+		return ""
+	}
+	return lmstudioPaths[index]
+}
+
 func (p *LMStudioProfile) GetRequestParsingRules() domain.RequestParsingRules {
 	return domain.RequestParsingRules{
-		ChatCompletionsPath: "/v1/chat/completions",
-		CompletionsPath:     "/v1/completions",
+		ChatCompletionsPath: lmstudioPaths[LMStudioChatCompletionsPathIndex],
+		CompletionsPath:     lmstudioPaths[LMStudioCompletionsPathIndex],
 		GeneratePath:        "",
 		ModelFieldName:      "model",
 		SupportsStreaming:   true,
@@ -125,7 +157,7 @@ func (p *LMStudioProfile) GetDetectionHints() domain.DetectionHints {
 	return domain.DetectionHints{
 		UserAgentPatterns: []string{"lm-studio/"},
 		ResponseHeaders:   []string{"X-LMStudio-Version"},
-		PathIndicators:    []string{LMStudioProfileModelsPath},
+		PathIndicators:    []string{lmstudioPaths[LMStudioModelsPathIndex]},
 	}
 }
 
@@ -158,6 +190,7 @@ func (p *LMStudioProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo,
 
 		if lmModel.Arch != nil && *lmModel.Arch != "" {
 			details.Family = lmModel.Arch
+			details.Families = []string{*lmModel.Arch}
 			hasDetails = true
 		}
 

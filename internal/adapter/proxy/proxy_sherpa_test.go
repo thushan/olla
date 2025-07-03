@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/thushan/olla/internal/version"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -205,8 +206,8 @@ func TestSherpaProxyService_CopyHeaders(t *testing.T) {
 	if proxyReq.Header.Get("Content-Type") != "application/json" {
 		t.Error("Content-Type header not copied")
 	}
-	if proxyReq.Header.Get("Authorization") != "Bearer token123" {
-		t.Error("Authorization header not copied")
+	if proxyReq.Header.Get("Authorization") != "" {
+		t.Error("Authorization header should be blocked for security")
 	}
 	if proxyReq.Header.Get("X-Custom-Header") != "custom-value" {
 		t.Error("Custom header not copied")
@@ -716,5 +717,220 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_ContextCancellation(t *testi
 
 	if stats.EndpointName != "test" {
 		t.Error("ProxyRequestToEndpoints() should set endpoint name even on timeout")
+	}
+}
+
+func TestCopyHeaders_SecurityFiltering(t *testing.T) {
+	service := &SherpaProxyService{}
+
+	testCases := []struct {
+		name            string
+		inputHeaders    map[string][]string
+		expectedBlocked []string
+		expectedCopied  []string
+	}{
+		{
+			name: "blocks_all_credential_headers",
+			inputHeaders: map[string][]string{
+				"Authorization":       {"Bearer token123"},
+				"Cookie":              {"session=abc123"},
+				"X-Api-Key":           {"secret-key"},
+				"X-Auth-Token":        {"auth-token"},
+				"Proxy-Authorization": {"Basic dXNlcjpwYXNz"},
+				"Content-Type":        {"application/json"},
+				"Accept":              {"application/json"},
+			},
+			expectedBlocked: []string{"Authorization", "Cookie", "X-Api-Key", "X-Auth-Token", "Proxy-Authorization"},
+			expectedCopied:  []string{"Content-Type", "Accept"},
+		},
+		{
+			name: "allows_safe_headers",
+			inputHeaders: map[string][]string{
+				"Content-Type":     {"application/json"},
+				"Accept":           {"application/json"},
+				"Accept-Encoding":  {"gzip, deflate"},
+				"Accept-Language":  {"en-US,en;q=0.9"},
+				"User-Agent":       {"Olla/v0.0.6"},
+				"X-Request-ID":     {"req-123"},
+				"X-Correlation-ID": {"corr-456"},
+			},
+			expectedBlocked: []string{},
+			expectedCopied:  []string{"Content-Type", "Accept", "Accept-Encoding", "Accept-Language", "User-Agent", "X-Request-ID", "X-Correlation-ID"},
+		},
+		{
+			name: "handles_case_sensitivity",
+			inputHeaders: map[string][]string{
+				"authorization": {"Bearer token123"},  // lowercase - should still be blocked
+				"COOKIE":        {"session=abc123"},   // uppercase - should still be blocked
+				"Content-Type":  {"application/json"}, // mixed case - should be copied
+			},
+			expectedBlocked: []string{}, // Note: Go canonicalizes headers, so these become Authorization, Cookie
+			expectedCopied:  []string{"Content-Type"},
+		},
+		{
+			name: "handles_multi_value_headers",
+			inputHeaders: map[string][]string{
+				"Accept":          {"application/json", "text/plain"},
+				"Accept-Encoding": {"gzip", "deflate", "br"},
+				"Cookie":          {"session=abc", "user=xyz"}, // Should be blocked
+			},
+			expectedBlocked: []string{"Cookie"},
+			expectedCopied:  []string{"Accept", "Accept-Encoding"},
+		},
+		{
+			name: "handles_similar_header_names",
+			inputHeaders: map[string][]string{
+				"X-Api-Version":   {"v1"},           // Should be copied (not X-Api-Key)
+				"X-Auth-Service":  {"auth-svc"},     // Should be copied (not X-Auth-Token)
+				"X-Authorization": {"custom-auth"},  // Should be copied (not Authorization)
+				"Custom-Cookie":   {"value"},        // Should be copied (not Cookie)
+				"X-Api-Key":       {"secret"},       // Should be blocked
+				"Authorization":   {"Bearer token"}, // Should be blocked
+			},
+			expectedBlocked: []string{"X-Api-Key", "Authorization"},
+			expectedCopied:  []string{"X-Api-Version", "X-Auth-Service", "X-Authorization", "Custom-Cookie"},
+		},
+		{
+			name:            "handles_empty_headers",
+			inputHeaders:    map[string][]string{},
+			expectedBlocked: []string{},
+			expectedCopied:  []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create original request with test headers
+			originalReq := httptest.NewRequest("POST", "/test", nil)
+			for name, values := range tc.inputHeaders {
+				for _, value := range values {
+					originalReq.Header.Add(name, value)
+				}
+			}
+
+			// Create proxy request
+			proxyReq := httptest.NewRequest("POST", "http://backend/api", nil)
+
+			// Copy headers
+			service.copyHeaders(proxyReq, originalReq)
+
+			// Verify blocked headers are not present
+			for _, blockedHeader := range tc.expectedBlocked {
+				if proxyReq.Header.Get(blockedHeader) != "" {
+					t.Errorf("Expected header %s to be blocked, but it was copied", blockedHeader)
+				}
+			}
+
+			// Verify safe headers are copied
+			for _, copiedHeader := range tc.expectedCopied {
+				originalValue := originalReq.Header.Get(copiedHeader)
+				proxyValue := proxyReq.Header.Get(copiedHeader)
+				if proxyValue == "" {
+					t.Errorf("Expected header %s to be copied, but it was missing", copiedHeader)
+				}
+				if originalValue != proxyValue {
+					t.Errorf("Header %s: expected %s, got %s", copiedHeader, originalValue, proxyValue)
+				}
+			}
+
+			// Verify multi-value headers are copied correctly
+			for _, copiedHeader := range tc.expectedCopied {
+				originalValues := originalReq.Header[copiedHeader]
+				proxyValues := proxyReq.Header[copiedHeader]
+				if len(originalValues) > 1 {
+					if len(proxyValues) != len(originalValues) {
+						t.Errorf("Multi-value header %s: expected %d values, got %d", copiedHeader, len(originalValues), len(proxyValues))
+					}
+					for i, originalVal := range originalValues {
+						if i < len(proxyValues) && proxyValues[i] != originalVal {
+							t.Errorf("Multi-value header %s[%d]: expected %s, got %s", copiedHeader, i, originalVal, proxyValues[i])
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCopyHeaders_ProxyHeaders(t *testing.T) {
+	service := &SherpaProxyService{}
+
+	testCases := []struct {
+		name            string
+		setupRequest    func() *http.Request
+		expectedHeaders map[string]string
+	}{
+		{
+			name: "adds_proxy_headers_http",
+			setupRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/test", nil)
+				req.Host = "example.com"
+				req.RemoteAddr = "192.168.1.100:12345"
+				return req
+			},
+			expectedHeaders: map[string]string{
+				"X-Forwarded-Host":  "example.com",
+				"X-Forwarded-Proto": "http",
+				"X-Forwarded-For":   "192.168.1.100",
+				"X-Proxied-By":      "Olla/" + version.Version,
+				"Via":               "1.1 olla/" + version.Version,
+			},
+		},
+		{
+			name: "adds_proxy_headers_https",
+			setupRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "https://example.com/test", nil)
+				req.Host = "secure.example.com"
+				req.RemoteAddr = "10.0.0.1:54321"
+				req.TLS = &tls.ConnectionState{} // Simulate HTTPS
+				return req
+			},
+			expectedHeaders: map[string]string{
+				"X-Forwarded-Host":  "secure.example.com",
+				"X-Forwarded-Proto": "https",
+				"X-Forwarded-For":   "10.0.0.1",
+				"X-Proxied-By":      "Olla/" + version.Version,
+				"Via":               "1.1 olla/" + version.Version,
+			},
+		},
+		{
+			name: "handles_malformed_remote_addr",
+			setupRequest: func() *http.Request {
+				req := httptest.NewRequest("GET", "/test", nil)
+				req.Host = "example.com"
+				req.RemoteAddr = "malformed-address" // No port
+				return req
+			},
+			expectedHeaders: map[string]string{
+				"X-Forwarded-Host":  "example.com",
+				"X-Forwarded-Proto": "http",
+				// X-Forwarded-For should not be set due to malformed address
+				"X-Proxied-By": "Olla/" + version.Version,
+				"Via":          "1.1 olla/" + version.Version,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			originalReq := tc.setupRequest()
+			proxyReq := httptest.NewRequest("POST", "http://backend/api", nil)
+
+			service.copyHeaders(proxyReq, originalReq)
+
+			for headerName, expectedValue := range tc.expectedHeaders {
+				actualValue := proxyReq.Header.Get(headerName)
+				if actualValue != expectedValue {
+					t.Errorf("Header %s: expected %s, got %s", headerName, expectedValue, actualValue)
+				}
+			}
+
+			// Verify X-Forwarded-For is not set when RemoteAddr is malformed
+			if tc.name == "handles_malformed_remote_addr" {
+				if proxyReq.Header.Get("X-Forwarded-For") != "" {
+					t.Error("X-Forwarded-For should not be set for malformed RemoteAddr")
+				}
+			}
+		})
 	}
 }

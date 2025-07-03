@@ -1,4 +1,4 @@
-package app
+package handlers
 
 import (
 	"errors"
@@ -57,10 +57,30 @@ func (a *Application) startWebServer() {
 		}
 	}()
 
-	a.server.Handler = mux
+	if configServer.RequestLogging {
+		a.server.Handler = a.loggingMiddleware(mux)
+	} else {
+		a.server.Handler = mux
+	}
+
 	a.logger.Info("Started Olla Server", "bind", a.server.Addr)
 }
-
+func (a *Application) loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a.logger.Info("HTTP request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"remote", r.RemoteAddr,
+			"query", r.URL.RawQuery,
+			"request_uri", r.RequestURI,
+			"content_type", r.Header.Get(ContentTypeHeader),
+			"content_length", r.ContentLength,
+			"host", r.Host,
+			"referer", r.Referer(),
+			"user_agent", r.UserAgent())
+		next.ServeHTTP(w, r)
+	})
+}
 func (a *Application) registerRoutes() {
 	/*
 	 /olla/proxy => Standard load balancing

@@ -15,7 +15,7 @@ var (
 	Edition      = "Community"
 	Authors      = "Thushan Fernando"
 	Description  = "The AI Proxy for your LLMs"
-	Version      = "v0.0.6"
+	Version      = "v0.0.x"
 	Commit       = "none"
 	Date         = "nowish"
 	User         = "local"

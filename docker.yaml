@@ -7,6 +7,7 @@ server:
   read_timeout: 20s
   write_timeout: 0s # for LLMs streaming, leave this as 0s
   shutdown_timeout: 10s
+  request_logging: true
   request_limits:
     max_body_size: 52428800  # 50MB
     max_header_size: 524288  # 512KB

@@ -16,6 +16,7 @@ import (
 	"github.com/thushan/olla/theme"
 
 	"github.com/thushan/olla/internal/app"
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/env"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/util"
@@ -97,22 +98,30 @@ func main() {
 		cancel()
 	}()
 
-	application, err := app.New(startTime, styledLogger)
+	// Load configuration
+	cfg, err := config.Load()
 	if err != nil {
-		logger.FatalWithLogger(logInstance, "Failed to create application", "error", err)
+		logger.FatalWithLogger(logInstance, "Failed to load configuration", "error", err)
 	}
 
-	if err := application.Start(ctx); err != nil {
-		logger.FatalWithLogger(logInstance, "Failed to start application", "error", err)
+	// Create and start service manager
+	serviceManager, err := app.CreateAndStartServiceManager(ctx, cfg, styledLogger)
+	if err != nil {
+		logger.FatalWithLogger(logInstance, "Failed to create and start service manager", "error", err)
 	}
 
+	// Wait for shutdown signal
 	<-ctx.Done()
 
-	if err := application.Stop(context.Background()); err != nil {
+	// Stop all services
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	defer shutdownCancel()
+
+	if err := serviceManager.Stop(shutdownCtx); err != nil {
 		styledLogger.Error("Error during shutdown", "error", err)
 	}
 
-	if application.Config.Engineering.ShowNerdStats {
+	if cfg.Engineering.ShowNerdStats {
 		reportProcessStats(styledLogger, startTime)
 	}
 
