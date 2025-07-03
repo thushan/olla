@@ -41,7 +41,7 @@ func (s *StatsService) Start(ctx context.Context) error {
 // Stop gracefully shuts down the stats collector
 func (s *StatsService) Stop(ctx context.Context) error {
 	// Lock-free atomic implementation requires no explicit cleanup
-	s.logger.Info(" Stats collector stopped")
+	s.logger.InfoWithStatus("Stopping Stats collector", "OK")
 	return nil
 }
 

@@ -173,6 +173,7 @@ func (sm *ServiceManager) Stop(ctx context.Context) error {
 func (sm *ServiceManager) stopServices(ctx context.Context, names []string) error {
 	var firstErr error
 
+	sm.logger.Info("Stopping Services...")
 	for _, name := range names {
 		service, exists := sm.services[name]
 		if !exists {
@@ -189,7 +190,7 @@ func (sm *ServiceManager) stopServices(ctx context.Context, names []string) erro
 			sm.logger.Debug("Service stopped", "name", name)
 		}
 	}
-
+	sm.logger.Info("Stopping Services...Done!")
 	return firstErr
 }
 

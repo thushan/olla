@@ -18,7 +18,13 @@ func NewPlainStyledLogger(logger *slog.Logger) *PlainStyledLogger {
 		logger: logger,
 	}
 }
-
+func (sl *PlainStyledLogger) ResetLine() {
+	fmt.Print("\033[1A\033[2K")
+}
+func (sl *PlainStyledLogger) InfoWithStatus(msg string, status string, args ...any) {
+	styledMsg := fmt.Sprintf("[ %s ] %s", status, msg)
+	sl.logger.Info(styledMsg, args...)
+}
 func (sl *PlainStyledLogger) Debug(msg string, args ...any) {
 	sl.logger.Debug(msg, args...)
 }

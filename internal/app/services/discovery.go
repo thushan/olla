@@ -128,6 +128,10 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 func (s *DiscoveryService) Stop(ctx context.Context) error {
 	s.logger.Info(" Stopping discovery service")
 
+	defer func() {
+		s.logger.ResetLine()
+		s.logger.InfoWithStatus("Stopping discovery service", "OK")
+	}()
 	if s.healthChecker != nil {
 		if err := s.healthChecker.StopChecking(ctx); err != nil {
 			s.logger.Warn("  Failed to stop health checker", "error", err)
@@ -139,8 +143,6 @@ func (s *DiscoveryService) Stop(ctx context.Context) error {
 			s.logger.Warn("  Failed to stop model discovery", "error", err)
 		}
 	}
-
-	s.logger.Info(" Discovery service stopped")
 	return nil
 }
 

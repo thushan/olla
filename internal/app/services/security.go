@@ -62,11 +62,15 @@ func (s *SecurityService) Start(ctx context.Context) error {
 func (s *SecurityService) Stop(ctx context.Context) error {
 	s.logger.Info(" Stopping security service")
 
+	defer func() {
+		s.logger.ResetLine()
+		s.logger.InfoWithStatus("Stopping security service", "OK")
+	}()
+
 	if s.adapters != nil {
 		s.adapters.Stop()
 	}
 
-	s.logger.Info(" Security service stopped")
 	return nil
 }
 

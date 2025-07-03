@@ -94,7 +94,10 @@ func (s *ProxyServiceWrapper) Stop(ctx context.Context) error {
 	// Most proxy implementations don't need explicit cleanup
 	// but we provide the hook for future extensions
 
-	s.logger.Info(" Proxy service stopped")
+	defer func() {
+		s.logger.ResetLine()
+		s.logger.InfoWithStatus("Stopping proxy service", "OK")
+	}()
 	return nil
 }
 

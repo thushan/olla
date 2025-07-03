@@ -14,6 +14,8 @@ type StyledLogger interface {
 	Info(msg string, args ...any)
 	Warn(msg string, args ...any)
 	Error(msg string, args ...any)
+	ResetLine()
+	InfoWithStatus(msg string, status string, args ...any)
 	InfoWithCount(msg string, count int, args ...any)
 	InfoWithEndpoint(msg string, endpoint string, args ...any)
 	InfoWithHealthCheck(msg string, endpoint string, args ...any)
