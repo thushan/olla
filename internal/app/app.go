@@ -58,6 +58,7 @@ func registerServices(manager *services.ServiceManager, cfg *config.Config, logg
 
 	discoveryService := services.NewDiscoveryService(
 		&cfg.Discovery,
+		&cfg.ModelRegistry,
 		nil,
 		logger,
 	)

@@ -83,7 +83,20 @@ func DefaultConfig() *Config {
 			},
 		},
 		ModelRegistry: ModelRegistryConfig{
-			Type: DefaultModelRegistryType,
+			Type:          DefaultModelRegistryType,
+			EnableUnifier: true,
+			Unification: UnificationConfig{
+				Enabled:  true,
+				CacheTTL: 10 * time.Minute,
+				CustomRules: []UnificationRuleConfig{
+					{
+						Platform: "ollama",
+						FamilyOverrides: map[string]string{
+							"phi4:*": "phi",
+						},
+					},
+				},
+			},
 		},
 		Logging: LoggingConfig{
 			Level:  "info",
@@ -253,6 +266,19 @@ func applyEnvOverrides(config *Config) {
 	}
 	if val := os.Getenv("OLLA_MODEL_REGISTRY_TYPE"); val != "" {
 		config.ModelRegistry.Type = val
+	}
+	
+	// Model unification configuration
+	if val := os.Getenv("OLLA_MODEL_UNIFIER_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.ModelRegistry.EnableUnifier = enabled
+			config.ModelRegistry.Unification.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_MODEL_UNIFIER_CACHE_TTL"); val != "" {
+		if ttl, err := time.ParseDuration(val); err == nil {
+			config.ModelRegistry.Unification.CacheTTL = ttl
+		}
 	}
 }
 
