@@ -173,7 +173,7 @@ func TestDefaultUnifier_UnifyModel(t *testing.T) {
 			}
 
 			// Check aliases contain original name
-			assert.Contains(t, unified.Aliases, tt.sourceModel.Name)
+			assert.Contains(t, unified.GetAliasStrings(), tt.sourceModel.Name)
 
 			// Verify caching
 			cached, err := unifier.ResolveAlias(ctx, unified.ID)
@@ -317,7 +317,10 @@ func TestDefaultUnifier_MergeUnifiedModels(t *testing.T) {
 		ParameterCount: 14700000000,
 		Quantization:   "q4km",
 		Format:         "gguf",
-		Aliases:        []string{"phi4:latest", "phi4:14.7b"},
+		Aliases:        []domain.AliasEntry{
+			{Name: "phi4:latest", Source: "ollama"},
+			{Name: "phi4:14.7b", Source: "generated"},
+		},
 		SourceEndpoints: []domain.SourceEndpoint{
 			{
 				EndpointURL: "http://localhost:11434",
@@ -338,7 +341,10 @@ func TestDefaultUnifier_MergeUnifiedModels(t *testing.T) {
 		ParameterCount: 14700000000,
 		Quantization:   "q4km",
 		Format:         "gguf",
-		Aliases:        []string{"microsoft/phi-4", "phi-4-mini"},
+		Aliases:        []domain.AliasEntry{
+			{Name: "microsoft/phi-4", Source: "lmstudio"},
+			{Name: "phi-4-mini", Source: "lmstudio"},
+		},
 		SourceEndpoints: []domain.SourceEndpoint{
 			{
 				EndpointURL: "http://localhost:1234",
@@ -361,10 +367,11 @@ func TestDefaultUnifier_MergeUnifiedModels(t *testing.T) {
 
 	// Check aliases are merged and deduplicated
 	assert.Len(t, merged.Aliases, 4)
-	assert.Contains(t, merged.Aliases, "phi4:latest")
-	assert.Contains(t, merged.Aliases, "microsoft/phi-4")
-	assert.Contains(t, merged.Aliases, "phi-4-mini")
-	assert.Contains(t, merged.Aliases, "phi4:14.7b")
+	aliasStrings := merged.GetAliasStrings()
+	assert.Contains(t, aliasStrings, "phi4:latest")
+	assert.Contains(t, aliasStrings, "microsoft/phi-4")
+	assert.Contains(t, aliasStrings, "phi-4-mini")
+	assert.Contains(t, aliasStrings, "phi4:14.7b")
 
 	// Check endpoints are merged
 	assert.Len(t, merged.SourceEndpoints, 2)
@@ -377,6 +384,116 @@ func TestDefaultUnifier_MergeUnifiedModels(t *testing.T) {
 
 	// Check disk size is recalculated
 	assert.Equal(t, int64(16000000000), merged.DiskSize)
+}
+
+func TestDefaultUnifier_MergeWithDigestDeduplication(t *testing.T) {
+	log := createTestLogger()
+	unifier := NewDefaultUnifier(log)
+	ctx := context.Background()
+
+	// Create models with same digest (should be deduped)
+	model1 := &domain.UnifiedModel{
+		ID:             "llama/3:8b-q4km",
+		Family:         "llama",
+		Variant:        "3",
+		ParameterSize:  "8b",
+		Quantization:   "q4km",
+		Aliases:        []domain.AliasEntry{{Name: "llama3:latest", Source: "ollama"}},
+		SourceEndpoints: []domain.SourceEndpoint{{EndpointURL: "http://ollama1:11434"}},
+		Metadata:       map[string]interface{}{"digest": "abc123"},
+	}
+
+	model2 := &domain.UnifiedModel{
+		ID:             "llama/3:8b-q4km",
+		Family:         "llama",
+		Variant:        "3",
+		ParameterSize:  "8b",
+		Quantization:   "q4km",
+		Aliases:        []domain.AliasEntry{{Name: "llama3:8b", Source: "lmstudio"}},
+		SourceEndpoints: []domain.SourceEndpoint{{EndpointURL: "http://lmstudio:1234"}},
+		Metadata:       map[string]interface{}{"digest": "abc123"},
+	}
+
+	model3 := &domain.UnifiedModel{
+		ID:             "llama/3:8b-q4km",
+		Family:         "llama",
+		Variant:        "3",
+		ParameterSize:  "8b",
+		Quantization:   "q4km",
+		Aliases:        []domain.AliasEntry{{Name: "llama3:latest", Source: "ollama"}},
+		SourceEndpoints: []domain.SourceEndpoint{{EndpointURL: "http://ollama2:11434"}},
+		Metadata:       map[string]interface{}{"digest": "abc123"},
+	}
+
+	// Merge should deduplicate by digest, preferring ollama
+	merged, err := unifier.MergeUnifiedModels(ctx, []*domain.UnifiedModel{model1, model2, model3})
+	assert.NoError(t, err)
+	assert.NotNil(t, merged)
+
+	// Should have only kept one endpoint (Ollama preferred)
+	assert.Len(t, merged.SourceEndpoints, 1)
+	assert.Contains(t, []string{"http://ollama1:11434", "http://ollama2:11434"}, merged.SourceEndpoints[0].EndpointURL)
+}
+
+func TestDefaultUnifier_PromptTemplateAssignment(t *testing.T) {
+	log := createTestLogger()
+	unifier := NewDefaultUnifier(log)
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		model    *domain.ModelInfo
+		expected string
+	}{
+		{
+			name: "chat variant",
+			model: &domain.ModelInfo{
+				Name: "llama-chat:latest",
+				Details: &domain.ModelDetails{
+					Family: strPtr("llama"),
+				},
+			},
+			expected: "chatml",
+		},
+		{
+			name: "llama instruct",
+			model: &domain.ModelInfo{
+				Name: "llama3-instruct:8b",
+				Details: &domain.ModelDetails{
+					Family: strPtr("llama"),
+				},
+			},
+			expected: "llama3-instruct",
+		},
+		{
+			name: "code model",
+			model: &domain.ModelInfo{
+				Name: "deepseek-coder:latest",
+				Details: &domain.ModelDetails{
+					Type: strPtr("code"),
+				},
+			},
+			expected: "plain",
+		},
+		{
+			name: "phi model defaults to chatml",
+			model: &domain.ModelInfo{
+				Name: "phi4:latest",
+				Details: &domain.ModelDetails{
+					Family: strPtr("phi"),
+				},
+			},
+			expected: "chatml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unified, err := unifier.UnifyModel(ctx, tt.model, "http://localhost:11434")
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, unified.PromptTemplateID)
+		})
+	}
 }
 
 func TestDefaultUnifier_GetStats(t *testing.T) {
@@ -553,7 +670,7 @@ func (r *testCustomRule) Apply(modelInfo *domain.ModelInfo) (*domain.UnifiedMode
 		ParameterCount: 0,
 		Quantization:   "unk",
 		Format:         "unknown",
-		Aliases:        []string{modelInfo.Name},
+		Aliases:        []domain.AliasEntry{{Name: modelInfo.Name, Source: "custom"}},
 	}, nil
 }
 

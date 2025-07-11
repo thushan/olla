@@ -62,9 +62,10 @@ func (r *ollamaPhiFamilyRule) Apply(modelInfo *domain.ModelInfo) (*domain.Unifie
 		ParameterCount: paramCount,
 		Quantization:   normalizedQuant,
 		Format:         format,
-		Aliases:        []string{modelInfo.Name},
+		Aliases:        []domain.AliasEntry{{Name: modelInfo.Name, Source: "ollama"}},
 		Capabilities:   []string{"chat", "completion"}, // Phi models are generally chat-capable
 		Metadata:       make(map[string]interface{}),
+		PromptTemplateID: "chatml", // Phi models typically use ChatML
 	}
 
 	// Add context length if available
@@ -152,7 +153,10 @@ func (r *ollamaHuggingFaceRule) Apply(modelInfo *domain.ModelInfo) (*domain.Unif
 		ParameterCount: paramCount,
 		Quantization:   normalizedQuant,
 		Format:         "gguf",
-		Aliases:        []string{modelInfo.Name, fmt.Sprintf("%s/%s", org, modelName)},
+		Aliases:        []domain.AliasEntry{
+			{Name: modelInfo.Name, Source: "ollama"},
+			{Name: fmt.Sprintf("%s/%s", org, modelName), Source: "huggingface"},
+		},
 		Capabilities:   inferCapabilitiesFromName(modelName),
 		Metadata: map[string]interface{}{
 			"organization": org,
@@ -249,7 +253,10 @@ func (r *lmstudioVendorPrefixRule) Apply(modelInfo *domain.ModelInfo) (*domain.U
 		ParameterCount: paramCount,
 		Quantization:   normalizedQuant,
 		Format:         format,
-		Aliases:        []string{modelInfo.Name, modelName},
+		Aliases:        []domain.AliasEntry{
+			{Name: modelInfo.Name, Source: "lmstudio"},
+			{Name: modelName, Source: "lmstudio"},
+		},
 		Capabilities:   inferCapabilitiesFromName(modelName),
 		Metadata: map[string]interface{}{
 			"vendor":    vendor,
@@ -346,7 +353,7 @@ func (r *genericModelRule) Apply(modelInfo *domain.ModelInfo) (*domain.UnifiedMo
 		ParameterCount: paramCount,
 		Quantization:   normalizedQuant,
 		Format:         format,
-		Aliases:        []string{modelInfo.Name},
+		Aliases:        []domain.AliasEntry{{Name: modelInfo.Name, Source: "*"}},
 		Capabilities:   inferCapabilitiesFromName(modelInfo.Name),
 		Metadata:       make(map[string]interface{}),
 	}
@@ -387,9 +394,31 @@ func (r *genericModelRule) GetName() string {
 // Helper function to infer capabilities from model name
 func inferCapabilitiesFromName(modelName string) []string {
 	capabilitySet := make(map[string]bool)
+	
+	// Apply capability rules
+	for _, rule := range CapabilityRules {
+		matches := false
+		
+		// Check name patterns
+		if len(rule.NamePatterns) > 0 && containsAny(modelName, rule.NamePatterns) {
+			matches = true
+		}
+		
+		// Check architecture in name
+		if rule.Architecture != "" && matchesPattern(modelName, rule.Architecture) {
+			matches = true
+		}
+		
+		// Add capabilities if rule matches
+		if matches {
+			for _, cap := range rule.Capabilities {
+				capabilitySet[cap] = true
+			}
+		}
+	}
+	
+	// Legacy pattern matching for backward compatibility
 	nameLower := strings.ToLower(modelName)
-
-	// Check for specific patterns
 	patterns := map[string]string{
 		"chat":     "chat",
 		"instruct": "chat",
@@ -397,7 +426,8 @@ func inferCapabilitiesFromName(modelName string) []string {
 		"coder":    "code",
 		"vision":   "vision",
 		"vlm":      "vision",
-		"embed":    "embedding",
+		"embed":    "embeddings",
+		"embedding": "embeddings",
 		"rerank":   "reranking",
 	}
 

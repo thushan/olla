@@ -69,5 +69,8 @@ type ModelNormalizer interface {
 	GenerateCanonicalID(family, variant, size, quant string) string
 
 	// GenerateAliases creates platform-specific aliases
-	GenerateAliases(unified *domain.UnifiedModel, platformType string, nativeName string) []string
+	GenerateAliases(unified *domain.UnifiedModel, platformType string, nativeName string) []domain.AliasEntry
+	
+	// NormaliseAlias normalises an alias for consistent lookups
+	NormaliseAlias(alias string) string
 }

@@ -1,14 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/pkg/format"
 )
 
@@ -54,13 +56,46 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Get query parameters
-	family := r.URL.Query().Get("family")
-	capability := r.URL.Query().Get("capability")
+	// Parse query parameters
 	format := r.URL.Query().Get("format")
-	// TODO: Implement size filtering
-	// minSize := r.URL.Query().Get("min_size")
-	// maxSize := r.URL.Query().Get("max_size")
+	if format == "" {
+		format = "unified" // Default format
+	}
+
+	// Build filters from query parameters
+	filters := ports.ModelFilters{
+		Endpoint: r.URL.Query().Get("endpoint"),
+		Family:   r.URL.Query().Get("family"),
+		Type:     r.URL.Query().Get("type"),
+	}
+
+	// Parse available filter
+	if availStr := r.URL.Query().Get("available"); availStr != "" {
+		switch availStr {
+		case "true":
+			avail := true
+			filters.Available = &avail
+		case "false":
+			avail := false
+			filters.Available = &avail
+		default:
+			http.Error(w, "Invalid value for 'available' parameter. Use 'true' or 'false'", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Handle legacy capability parameter by mapping to type
+	if capability := r.URL.Query().Get("capability"); capability != "" {
+		// Map capabilities to types
+		switch strings.ToLower(capability) {
+		case "vision", "multimodal":
+			filters.Type = "vlm"
+		case "embedding", "embeddings", "vector_search":
+			filters.Type = "embeddings"
+		case "chat", "text_generation", "completion":
+			filters.Type = "llm"
+		}
+	}
 
 	// Get all unified models
 	unifiedModels, err := unifiedRegistry.GetUnifiedModels(ctx)
@@ -69,88 +104,40 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Get endpoint names for display
-	endpoints, err := a.repository.GetAll(ctx)
+	// Get converter for the requested format
+	converter, err := a.converterFactory.GetConverter(format)
 	if err != nil {
-		http.Error(w, "Failed to get endpoints", http.StatusInternalServerError)
+		if qpErr, ok := err.(*ports.QueryParameterError); ok {
+			http.Error(w, qpErr.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	endpointNames := make(map[string]string)
-	for _, ep := range endpoints {
-		endpointNames[ep.URLString] = ep.Name
-	}
-
-	// Apply filters and build summaries
-	var filteredModels []UnifiedModelSummary
-	familyMap := make(map[string][]string)
-
-	for _, model := range unifiedModels {
-		// Apply filters
-		if family != "" && !strings.EqualFold(model.Family, family) {
-			continue
-		}
-
-		if capability != "" {
-			hasCapability := false
-			for _, cap := range model.Capabilities {
-				if strings.EqualFold(cap, capability) {
-					hasCapability = true
+	// If endpoint filter is specified by name, resolve to URL
+	if filters.Endpoint != "" {
+		endpoints, err := a.repository.GetAll(ctx)
+		if err == nil {
+			for _, ep := range endpoints {
+				if ep.Name == filters.Endpoint {
+					filters.Endpoint = ep.URLString
 					break
 				}
 			}
-			if !hasCapability {
-				continue
-			}
 		}
-
-		if format != "" && !strings.EqualFold(model.Format, format) {
-			continue
-		}
-
-		// TODO: Add size filtering based on parameter count
-
-		// Build summary
-		summary := a.buildUnifiedModelSummary(model, endpointNames)
-		filteredModels = append(filteredModels, summary)
-
-		// Track families
-		familyMap[model.Family] = append(familyMap[model.Family], model.ID)
 	}
 
-	// Sort models by family/variant/size
-	sort.Slice(filteredModels, func(i, j int) bool {
-		if filteredModels[i].Family != filteredModels[j].Family {
-			return filteredModels[i].Family < filteredModels[j].Family
-		}
-		if filteredModels[i].Variant != filteredModels[j].Variant {
-			return filteredModels[i].Variant < filteredModels[j].Variant
-		}
-		return filteredModels[i].ParameterCount < filteredModels[j].ParameterCount
-	})
-
-	// Sort family names
-	for family := range familyMap {
-		sort.Strings(familyMap[family])
-	}
-
-	// Get unification stats
-	stats, err := unifiedRegistry.GetUnifiedStats(ctx)
+	// Convert models to the requested format
+	response, err := converter.ConvertToFormat(unifiedModels, filters)
 	if err != nil {
-		a.logger.Error("Failed to get unification stats", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
-	response := UnifiedModelResponse{
-		Timestamp:        time.Now(),
-		UnifiedModels:    filteredModels,
-		ModelsByFamily:   familyMap,
-		TotalModels:      len(filteredModels),
-		TotalFamilies:    len(familyMap),
-		TotalEndpoints:   len(endpoints),
-	}
-
-	if stats.UnificationStats.TotalUnified > 0 {
-		response.UnificationStats = &stats.UnificationStats
+	// For unified and lmstudio formats, replace endpoint URLs with names
+	if format == "unified" || format == "lmstudio" {
+		a.enrichResponseWithEndpointNames(ctx, &response)
 	}
 
 	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
@@ -168,7 +155,7 @@ func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpo
 		ParameterCount:   model.ParameterCount,
 		Quantization:     model.Quantization,
 		Format:           model.Format,
-		Aliases:          model.Aliases,
+		Aliases:          model.GetAliasStrings(),
 		Capabilities:     model.Capabilities,
 		MaxContextLength: model.MaxContextLength,
 		TotalDiskSize:    format.Bytes(uint64(model.DiskSize)),
@@ -197,6 +184,44 @@ func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpo
 }
 
 // unifiedModelByAliasHandler returns a specific unified model by ID or alias
+// enrichResponseWithEndpointNames replaces endpoint URLs with names in the response
+func (a *Application) enrichResponseWithEndpointNames(ctx context.Context, response interface{}) {
+	endpoints, err := a.repository.GetAll(ctx)
+	if err != nil {
+		return
+	}
+
+	endpointNames := make(map[string]string)
+	for _, ep := range endpoints {
+		endpointNames[ep.URLString] = ep.Name
+	}
+
+	switch resp := response.(type) {
+	case *converter.UnifiedModelResponse:
+		for i := range resp.Data {
+			if resp.Data[i].Olla != nil {
+				for j := range resp.Data[i].Olla.Availability {
+					if name, exists := endpointNames[resp.Data[i].Olla.Availability[j].URL]; exists {
+						resp.Data[i].Olla.Availability[j].Endpoint = name
+					}
+				}
+			}
+		}
+	case converter.UnifiedModelResponse:
+		// Handle non-pointer case
+		respPtr := &resp
+		for i := range respPtr.Data {
+			if respPtr.Data[i].Olla != nil {
+				for j := range respPtr.Data[i].Olla.Availability {
+					if name, exists := endpointNames[respPtr.Data[i].Olla.Availability[j].URL]; exists {
+						respPtr.Data[i].Olla.Availability[j].Endpoint = name
+					}
+				}
+			}
+		}
+	}
+}
+
 func (a *Application) unifiedModelByAliasHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	

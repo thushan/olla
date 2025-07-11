@@ -98,7 +98,29 @@ func (u *DefaultUnifier) UnifyModel(ctx context.Context, sourceModel *domain.Mod
 
 	// Generate aliases
 	aliases := u.normalizer.GenerateAliases(unified, platformType, sourceModel.Name)
-	unified.Aliases = append(unified.Aliases, aliases...)
+	
+	// Deduplicate aliases by normalized name
+	aliasMap := make(map[string]domain.AliasEntry)
+	for _, alias := range unified.Aliases {
+		normalized := u.normalizer.NormaliseAlias(alias.Name)
+		aliasMap[normalized] = alias
+	}
+	for _, alias := range aliases {
+		normalized := u.normalizer.NormaliseAlias(alias.Name)
+		// Only add if not already present (prefer existing source attribution)
+		if _, exists := aliasMap[normalized]; !exists {
+			aliasMap[normalized] = alias
+		}
+	}
+	
+	// Convert back to slice
+	unified.Aliases = make([]domain.AliasEntry, 0, len(aliasMap))
+	for _, alias := range aliasMap {
+		unified.Aliases = append(unified.Aliases, alias)
+	}
+	
+	// Set prompt template based on heuristics
+	u.setPromptTemplate(unified)
 
 	// Cache the unified model
 	u.cacheUnifiedModel(unified)
@@ -152,8 +174,11 @@ func (u *DefaultUnifier) UnifyModels(ctx context.Context, sourceModels []*domain
 
 // ResolveAlias finds unified model by any known alias
 func (u *DefaultUnifier) ResolveAlias(ctx context.Context, alias string) (*domain.UnifiedModel, error) {
-	// Check alias index first
-	if unifiedID, exists := u.aliasIndex.Load(alias); exists {
+	// Normalise the alias for lookup
+	normalizedAlias := u.normalizer.NormaliseAlias(alias)
+	
+	// Check alias index first with normalized alias
+	if unifiedID, exists := u.aliasIndex.Load(normalizedAlias); exists {
 		u.stats.cacheHits.Add(1)
 		if model, exists := u.unifiedModels.Load(unifiedID); exists {
 			return model, nil
@@ -165,10 +190,20 @@ func (u *DefaultUnifier) ResolveAlias(ctx context.Context, alias string) (*domai
 	// Search through all models
 	var found *domain.UnifiedModel
 	u.unifiedModels.Range(func(id string, model *domain.UnifiedModel) bool {
-		if model.HasAlias(alias) || model.ID == alias {
+		// Check if normalized ID matches
+		if u.normalizer.NormaliseAlias(model.ID) == normalizedAlias {
 			found = model
-			return false // Stop iteration
+			return false
 		}
+		
+		// Check all aliases with normalization
+		for _, aliasEntry := range model.Aliases {
+			if u.normalizer.NormaliseAlias(aliasEntry.Name) == normalizedAlias {
+				found = model
+				return false
+			}
+		}
+		
 		return true
 	})
 
@@ -177,7 +212,7 @@ func (u *DefaultUnifier) ResolveAlias(ctx context.Context, alias string) (*domai
 	}
 
 	// Update alias index for faster future lookups
-	u.aliasIndex.Store(alias, found.ID)
+	u.aliasIndex.Store(normalizedAlias, found.ID)
 	return found, nil
 }
 
@@ -188,7 +223,7 @@ func (u *DefaultUnifier) GetAliases(ctx context.Context, unifiedID string) ([]st
 		return nil, fmt.Errorf("unified model not found: %s", unifiedID)
 	}
 
-	return model.Aliases, nil
+	return model.GetAliasStrings(), nil
 }
 
 // RegisterCustomRule allows platform-specific unification rules
@@ -238,36 +273,71 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		return models[0], nil
 	}
 
-	// Use the first model as base
-	merged := &domain.UnifiedModel{
-		ID:               models[0].ID,
-		Family:           models[0].Family,
-		Variant:          models[0].Variant,
-		ParameterSize:    models[0].ParameterSize,
-		ParameterCount:   models[0].ParameterCount,
-		Quantization:     models[0].Quantization,
-		Format:           models[0].Format,
-		Aliases:          []string{},
-		SourceEndpoints:  []domain.SourceEndpoint{},
-		Capabilities:     []string{},
-		MaxContextLength: models[0].MaxContextLength,
-		Metadata:         make(map[string]interface{}),
-	}
-
-	// Merge aliases (deduplicate)
-	aliasSet := make(map[string]bool)
+	// Deduplicate by digest first
+	digestMap := make(map[string][]*domain.UnifiedModel)
+	var noDigestModels []*domain.UnifiedModel
+	
 	for _, model := range models {
-		for _, alias := range model.Aliases {
-			aliasSet[alias] = true
+		if digest, ok := model.Metadata["digest"].(string); ok && digest != "" {
+			digestMap[digest] = append(digestMap[digest], model)
+		} else {
+			noDigestModels = append(noDigestModels, model)
 		}
 	}
-	for alias := range aliasSet {
+	
+	// Process digest groups, preferring Ollama > LM Studio > others
+	var dedupedModels []*domain.UnifiedModel
+	for digest, group := range digestMap {
+		selected := u.selectPreferredModel(group)
+		if len(group) > 1 {
+			u.logger.Debug(fmt.Sprintf("Deduped %d models with digest %s, selected from %s", 
+				len(group), digest, selected.SourceEndpoints[0].EndpointURL))
+		}
+		dedupedModels = append(dedupedModels, selected)
+	}
+	
+	// Add models without digest
+	dedupedModels = append(dedupedModels, noDigestModels...)
+	
+	if len(dedupedModels) == 1 {
+		return dedupedModels[0], nil
+	}
+
+	// Use the first model as base
+	merged := &domain.UnifiedModel{
+		ID:               dedupedModels[0].ID,
+		Family:           dedupedModels[0].Family,
+		Variant:          dedupedModels[0].Variant,
+		ParameterSize:    dedupedModels[0].ParameterSize,
+		ParameterCount:   dedupedModels[0].ParameterCount,
+		Quantization:     dedupedModels[0].Quantization,
+		Format:           dedupedModels[0].Format,
+		Aliases:          []domain.AliasEntry{},
+		SourceEndpoints:  []domain.SourceEndpoint{},
+		Capabilities:     []string{},
+		MaxContextLength: dedupedModels[0].MaxContextLength,
+		Metadata:         make(map[string]interface{}),
+		PromptTemplateID: dedupedModels[0].PromptTemplateID,
+	}
+
+	// Merge aliases (deduplicate by normalized name)
+	aliasMap := make(map[string]domain.AliasEntry)
+	for _, model := range dedupedModels {
+		for _, alias := range model.Aliases {
+			normalized := u.normalizer.NormaliseAlias(alias.Name)
+			// Keep first occurrence to preserve original source attribution
+			if _, exists := aliasMap[normalized]; !exists {
+				aliasMap[normalized] = alias
+			}
+		}
+	}
+	for _, alias := range aliasMap {
 		merged.Aliases = append(merged.Aliases, alias)
 	}
 
 	// Merge endpoints
 	endpointMap := make(map[string]domain.SourceEndpoint)
-	for _, model := range models {
+	for _, model := range dedupedModels {
 		for _, endpoint := range model.SourceEndpoints {
 			endpointMap[endpoint.EndpointURL] = endpoint
 		}
@@ -278,13 +348,22 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 
 	// Merge capabilities (deduplicate)
 	capSet := make(map[string]bool)
-	for _, model := range models {
+	for _, model := range dedupedModels {
 		for _, cap := range model.Capabilities {
 			capSet[cap] = true
 		}
 	}
 	for cap := range capSet {
 		merged.Capabilities = append(merged.Capabilities, cap)
+	}
+	
+	// Merge metadata, preserving important fields
+	for _, model := range dedupedModels {
+		for k, v := range model.Metadata {
+			if _, exists := merged.Metadata[k]; !exists {
+				merged.Metadata[k] = v
+			}
+		}
 	}
 
 	// Update metadata
@@ -377,7 +456,7 @@ func (u *DefaultUnifier) defaultUnification(sourceModel *domain.ModelInfo, platf
 		}
 	}
 
-	return &domain.UnifiedModel{
+	unified := &domain.UnifiedModel{
 		ID:               canonicalID,
 		Family:           family,
 		Variant:          variant,
@@ -385,40 +464,82 @@ func (u *DefaultUnifier) defaultUnification(sourceModel *domain.ModelInfo, platf
 		ParameterCount:   paramCount,
 		Quantization:     normalizedQuant,
 		Format:           format,
-		Aliases:          []string{sourceModel.Name}, // Start with original name
+		Aliases:          []domain.AliasEntry{{Name: sourceModel.Name, Source: platformType}}, // Start with original name
 		SourceEndpoints:  []domain.SourceEndpoint{},
 		Capabilities:     capabilities,
 		MaxContextLength: maxContext,
 		Metadata:         metadata,
-	}, nil
+	}
+	
+	// Set prompt template
+	u.setPromptTemplate(unified)
+	
+	return unified, nil
 }
 
 // inferCapabilities attempts to determine model capabilities
 func (u *DefaultUnifier) inferCapabilities(model *domain.ModelInfo) []string {
-	var capabilities []string
-
-	// Check if it's a vision model
-	if model.Details != nil && model.Details.Type != nil && *model.Details.Type == "vlm" {
-		capabilities = append(capabilities, "vision")
+	capabilitySet := make(map[string]bool)
+	
+	// Apply capability rules
+	for _, rule := range CapabilityRules {
+		matches := false
+		
+		// Check model type
+		if rule.ModelType != "" && model.Details != nil && model.Details.Type != nil {
+			if strings.EqualFold(rule.ModelType, *model.Details.Type) {
+				matches = true
+			}
+		}
+		
+		// Check architecture
+		if rule.Architecture != "" && model.Details != nil {
+			// Check if family matches architecture
+			if model.Details.Family != nil && strings.EqualFold(rule.Architecture, *model.Details.Family) {
+				matches = true
+			}
+			// Also check if it's in the model name
+			if matchesPattern(model.Name, rule.Architecture) {
+				matches = true
+			}
+		}
+		
+		// Check name patterns
+		if len(rule.NamePatterns) > 0 && containsAny(model.Name, rule.NamePatterns) {
+			matches = true
+		}
+		
+		// Add capabilities if rule matches
+		if matches {
+			for _, cap := range rule.Capabilities {
+				capabilitySet[cap] = true
+			}
+		}
 	}
-
-	// Check model name for common patterns
+	
+	// Legacy pattern matching for backward compatibility
 	nameLower := strings.ToLower(model.Name)
 	if strings.Contains(nameLower, "chat") || strings.Contains(nameLower, "instruct") {
-		capabilities = append(capabilities, "chat")
+		capabilitySet["chat"] = true
 	}
 	if strings.Contains(nameLower, "code") || strings.Contains(nameLower, "coder") {
-		capabilities = append(capabilities, "code")
+		capabilitySet["code"] = true
 	}
 	if strings.Contains(nameLower, "vision") || strings.Contains(nameLower, "vlm") {
-		capabilities = append(capabilities, "vision")
+		capabilitySet["vision"] = true
 	}
-
+	
+	// Convert set to slice
+	var capabilities []string
+	for cap := range capabilitySet {
+		capabilities = append(capabilities, cap)
+	}
+	
 	// Default to completion if no specific capabilities found
 	if len(capabilities) == 0 {
 		capabilities = append(capabilities, "completion")
 	}
-
+	
 	return capabilities
 }
 
@@ -426,13 +547,119 @@ func (u *DefaultUnifier) inferCapabilities(model *domain.ModelInfo) []string {
 func (u *DefaultUnifier) cacheUnifiedModel(model *domain.UnifiedModel) {
 	u.unifiedModels.Store(model.ID, model)
 
-	// Update alias index
+	// Update alias index with normalized aliases
 	for _, alias := range model.Aliases {
-		u.aliasIndex.Store(alias, model.ID)
+		normalized := u.normalizer.NormaliseAlias(alias.Name)
+		u.aliasIndex.Store(normalized, model.ID)
 	}
 
 	// Also index the canonical ID as an alias
-	u.aliasIndex.Store(model.ID, model.ID)
+	u.aliasIndex.Store(u.normalizer.NormaliseAlias(model.ID), model.ID)
+}
+
+// selectPreferredModel selects the preferred model from a group based on platform preference
+func (u *DefaultUnifier) selectPreferredModel(models []*domain.UnifiedModel) *domain.UnifiedModel {
+	if len(models) == 1 {
+		return models[0]
+	}
+	
+	// Platform preference: ollama > lmstudio > others
+	platformPriority := map[string]int{
+		"ollama":   3,
+		"lmstudio": 2,
+		"*":        1,
+	}
+	
+	var selected *domain.UnifiedModel
+	highestPriority := 0
+	
+	for _, model := range models {
+		// Determine platform from source attribution
+		var platform string
+		for _, alias := range model.Aliases {
+			if alias.Source != "" && alias.Source != "generated" {
+				platform = alias.Source
+				break
+			}
+		}
+		
+		priority := platformPriority[platform]
+		if priority == 0 {
+			priority = 1 // default priority
+		}
+		
+		if priority > highestPriority {
+			selected = model
+			highestPriority = priority
+		}
+	}
+	
+	if selected == nil {
+		selected = models[0]
+	}
+	
+	return selected
+}
+
+// setPromptTemplate sets the prompt template ID based on heuristics
+func (u *DefaultUnifier) setPromptTemplate(model *domain.UnifiedModel) {
+	// Check if already set
+	if model.PromptTemplateID != "" {
+		return
+	}
+	
+	// Apply heuristics
+	nameLower := strings.ToLower(model.ID)
+	
+	// Check all aliases for patterns
+	var hasInstruct, hasChat bool
+	for _, alias := range model.Aliases {
+		aliasLower := strings.ToLower(alias.Name)
+		if strings.Contains(aliasLower, "instruct") {
+			hasInstruct = true
+		}
+		if strings.Contains(aliasLower, "chat") && !strings.Contains(aliasLower, "instruct") {
+			hasChat = true
+		}
+	}
+	
+	// Check family-specific patterns
+	if model.Family == "llama" {
+		if hasInstruct || strings.Contains(nameLower, "instruct") {
+			model.PromptTemplateID = "llama3-instruct"
+			return
+		}
+	}
+	
+	// Check variant
+	if strings.Contains(model.Variant, "chat") || hasChat {
+		model.PromptTemplateID = "chatml"
+		return
+	}
+	
+	// Check model type in metadata
+	if modelType, ok := model.Metadata["type"].(string); ok {
+		if modelType == "code" {
+			model.PromptTemplateID = "plain"
+			return
+		}
+	}
+	
+	// Check capabilities
+	for _, cap := range model.Capabilities {
+		if cap == "code" {
+			model.PromptTemplateID = "plain"
+			return
+		}
+	}
+	
+	// Default for chat-capable models
+	for _, cap := range model.Capabilities {
+		if cap == "chat" {
+			model.PromptTemplateID = "chatml"
+			return
+		}
+	}
 }
 
 // sortRulesByPriority sorts rules in descending priority order
@@ -474,58 +701,111 @@ func NewModelNormalizer() ports.ModelNormalizer {
 }
 
 func (n *defaultNormalizer) NormalizeFamily(modelName string, platformFamily string) (family string, variant string) {
-	// Try to extract from model name first
+	var candidates []FamilyCandidate
+	
+	// 1. Check publisher-based rules (highest priority)
+	if publisher := extractPublisher(modelName); publisher != "" {
+		for _, rule := range PublisherFamilyRules {
+			for _, pub := range rule.Publishers {
+				if strings.EqualFold(publisher, pub) {
+					candidates = append(candidates, FamilyCandidate{
+						Family:   rule.Family,
+						Priority: rule.Priority,
+						Source:   "publisher",
+					})
+					break
+				}
+			}
+		}
+	}
+	
+	// 2. Check name pattern rules
+	for _, rule := range NamePatternRules {
+		if matchesPattern(modelName, rule.Pattern) {
+			candidates = append(candidates, FamilyCandidate{
+				Family:   rule.Family,
+				Variant:  rule.Variant,
+				Priority: rule.Priority,
+				Source:   "name_pattern",
+			})
+		}
+	}
+	
+	// 3. Check common regex patterns
 	nameLower := strings.ToLower(modelName)
-
-	// Common patterns: phi4, llama3.3, qwen3, etc.
 	patterns := []struct {
 		regex   *regexp.Regexp
 		family  string
 		variant int // 0 means use captured group
+		priority int
 	}{
-		{regexp.MustCompile(`phi[\-_]?(\d+)`), "phi", 0},
-		{regexp.MustCompile(`llama[\-_]?(\d+(?:\.\d+)?)`), "llama", 0},
-		{regexp.MustCompile(`qwen[\-_]?(\d+(?:\.\d+)?)`), "qwen", 0},
-		{regexp.MustCompile(`gemma[\-_]?(\d+)`), "gemma", 0},
-		{regexp.MustCompile(`mistral[\-_]?(\d+)`), "mistral", 0},
-		{regexp.MustCompile(`deepseek[\-_]?(?:r)?(\d+)`), "deepseek", 0},
-		{regexp.MustCompile(`falcon[\-_]?(\d+)`), "falcon", 0},
+		{regexp.MustCompile(`phi[\-_]?(\d+(?:\.\d+)?)`), "phi", 0, 7},
+		{regexp.MustCompile(`llama[\-_]?(\d+(?:\.\d+)?)`), "llama", 0, 7},
+		{regexp.MustCompile(`qwen[\-_]?(\d+(?:\.\d+)?)`), "qwen", 0, 7},
+		{regexp.MustCompile(`gemma[\-_]?(\d+)`), "gemma", 0, 7},
+		{regexp.MustCompile(`mistral[\-_]?(\d+)`), "mistral", 0, 7},
+		{regexp.MustCompile(`deepseek[\-_]?(?:r)?(\d+)`), "deepseek", 0, 7},
+		{regexp.MustCompile(`falcon[\-_]?(\d+)`), "falcon", 0, 7},
 	}
 
 	for _, pattern := range patterns {
 		if matches := pattern.regex.FindStringSubmatch(nameLower); len(matches) > 1 {
-			family = pattern.family
-			variant = matches[1]
-			return
+			candidates = append(candidates, FamilyCandidate{
+				Family:   pattern.family,
+				Variant:  matches[1],
+				Priority: pattern.priority,
+				Source:   "regex_pattern",
+			})
 		}
 	}
-
-	// Fall back to platform-provided family
-	if platformFamily != "" {
-		family = strings.ToLower(platformFamily)
-		// Try to extract version from name
-		versionRegex := regexp.MustCompile(`v?(\d+(?:\.\d+)?)`)
-		if matches := versionRegex.FindStringSubmatch(modelName); len(matches) > 1 {
-			variant = matches[1]
-		} else {
-			variant = "unknown"
-		}
-		return
+	
+	// 4. Use platform-provided family (lower priority)
+	if platformFamily != "" && platformFamily != "unknown" {
+		candidates = append(candidates, FamilyCandidate{
+			Family:   strings.ToLower(platformFamily),
+			Priority: 5,
+			Source:   "platform",
+		})
 	}
-
-	// Last resort: use first part of name as family
+	
+	// 5. Extract from model name (fallback)
 	parts := strings.FieldsFunc(modelName, func(r rune) bool {
 		return r == '-' || r == '_' || r == '/' || r == ':'
 	})
 	if len(parts) > 0 {
-		family = strings.ToLower(parts[0])
-		variant = "unknown"
-	} else {
-		family = "unknown"
-		variant = "unknown"
+		candidates = append(candidates, FamilyCandidate{
+			Family:   strings.ToLower(parts[0]),
+			Priority: 3,
+			Source:   "name_extraction",
+		})
 	}
-
-	return
+	
+	// Select highest priority candidate
+	var selected FamilyCandidate
+	for _, candidate := range candidates {
+		if candidate.Priority > selected.Priority {
+			selected = candidate
+		}
+	}
+	
+	if selected.Family != "" {
+		family = selected.Family
+		variant = selected.Variant
+		
+		// If no variant specified, try to extract it
+		if variant == "" {
+			variant = extractVersionFromName(modelName, family)
+		}
+		
+		if variant == "" {
+			variant = "unknown"
+		}
+		
+		return
+	}
+	
+	// Default fallback
+	return "unknown", "unknown"
 }
 
 func (n *defaultNormalizer) NormalizeSize(size string) (normalised string, parameterCount int64) {
@@ -627,48 +907,63 @@ func (n *defaultNormalizer) GenerateCanonicalID(family, variant, size, quant str
 	return fmt.Sprintf("%s/%s:%s-%s", family, variant, size, quant)
 }
 
-func (n *defaultNormalizer) GenerateAliases(unified *domain.UnifiedModel, platformType string, nativeName string) []string {
-	aliases := []string{nativeName} // Always include native name
+func (n *defaultNormalizer) GenerateAliases(unified *domain.UnifiedModel, platformType string, nativeName string) []domain.AliasEntry {
+	// Start with native name to ensure it's always first
+	aliases := []domain.AliasEntry{{Name: nativeName, Source: platformType}}
+	aliasSet := make(map[string]bool)
+	aliasSet[nativeName] = true
 
-	// Add common variations
+	// Add common variations (using : as standard separator)
 	baseID := fmt.Sprintf("%s%s", unified.Family, unified.Variant)
-	if unified.Variant != "unknown" {
-		aliases = append(aliases,
+	if unified.Variant != "unknown" && unified.Variant != "" {
+		candidates := []string{
 			fmt.Sprintf("%s:%s", baseID, unified.ParameterSize),
-			fmt.Sprintf("%s-%s", baseID, unified.ParameterSize),
 			fmt.Sprintf("%s:%s-%s", baseID, unified.ParameterSize, unified.Quantization),
-			fmt.Sprintf("%s-%s-%s", baseID, unified.ParameterSize, unified.Quantization),
-		)
+		}
+		for _, c := range candidates {
+			if !aliasSet[c] {
+				aliases = append(aliases, domain.AliasEntry{Name: c, Source: "generated"})
+				aliasSet[c] = true
+			}
+		}
 	}
 
 	// Platform-specific aliases
 	switch platformType {
 	case "ollama":
-		aliases = append(aliases,
-			fmt.Sprintf("%s:latest", baseID),
-			fmt.Sprintf("%s:%s", unified.Family, unified.ParameterSize),
-		)
+		candidates := []string{}
+		if unified.Variant != "unknown" && unified.Variant != "" {
+			candidates = append(candidates, fmt.Sprintf("%s:latest", baseID))
+		}
+		candidates = append(candidates, fmt.Sprintf("%s:%s", unified.Family, unified.ParameterSize))
+		
+		for _, c := range candidates {
+			if !aliasSet[c] {
+				aliases = append(aliases, domain.AliasEntry{Name: c, Source: platformType})
+				aliasSet[c] = true
+			}
+		}
 	case "lmstudio":
 		// LM Studio often uses vendor prefixes
-		if publisher, ok := unified.Metadata["publisher"].(string); ok {
-			aliases = append(aliases,
+		if publisher, ok := unified.Metadata["publisher"].(string); ok && publisher != "" {
+			candidates := []string{
 				fmt.Sprintf("%s/%s", publisher, baseID),
 				fmt.Sprintf("%s/%s-%s", publisher, baseID, unified.ParameterSize),
-			)
+			}
+			for _, c := range candidates {
+				if !aliasSet[c] {
+					aliases = append(aliases, domain.AliasEntry{Name: c, Source: platformType})
+					aliasSet[c] = true
+				}
+			}
 		}
 	}
 
-	// Deduplicate aliases
-	seen := make(map[string]bool)
-	var unique []string
-	for _, alias := range aliases {
-		if !seen[alias] {
-			seen[alias] = true
-			unique = append(unique, alias)
-		}
-	}
+	return aliases
+}
 
-	return unique
+func (n *defaultNormalizer) NormaliseAlias(alias string) string {
+	return strings.ToLower(strings.ReplaceAll(alias, "-", ":"))
 }
 
 // PlatformDetector implementation

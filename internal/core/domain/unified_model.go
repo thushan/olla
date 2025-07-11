@@ -5,6 +5,12 @@ import (
 	"time"
 )
 
+// AliasEntry represents an alias with its source attribution
+type AliasEntry struct {
+	Name   string `json:"name"`
+	Source string `json:"source"` // e.g., "ollama", "lmstudio", "generated"
+}
+
 // UnifiedModel represents the canonical model format with platform-agnostic naming
 type UnifiedModel struct {
 	ID               string                 `json:"id"`                // Canonical ID: {family}/{variant}:{size}-{quant}
@@ -14,13 +20,14 @@ type UnifiedModel struct {
 	ParameterCount   int64                  `json:"parameter_count"`   // Actual parameter count for sorting
 	Quantization     string                 `json:"quantization"`      // Normalised quantization (e.g., q4km, q3kl)
 	Format           string                 `json:"format"`            // Model format (gguf, safetensors, etc.)
-	Aliases          []string               `json:"aliases"`           // All known aliases for this model
+	Aliases          []AliasEntry           `json:"aliases"`           // All known aliases with source attribution
 	SourceEndpoints  []SourceEndpoint       `json:"source_endpoints"`  // Where this model is available
 	Capabilities     []string               `json:"capabilities"`      // Inferred capabilities (chat, completion, vision)
 	MaxContextLength *int64                 `json:"max_context_length,omitempty"`
 	DiskSize         int64                  `json:"disk_size"`         // Total disk size across all endpoints
 	LastSeen         time.Time              `json:"last_seen"`
 	Metadata         map[string]interface{} `json:"metadata"`          // Platform-specific extras
+	PromptTemplateID string                 `json:"prompt_template_id,omitempty"` // Associated prompt template
 }
 
 // SourceEndpoint represents where a unified model is available
@@ -79,11 +86,20 @@ func (u *UnifiedModel) IsEquivalent(other *UnifiedModel) bool {
 // HasAlias checks if the unified model has a specific alias
 func (u *UnifiedModel) HasAlias(alias string) bool {
 	for _, a := range u.Aliases {
-		if a == alias {
+		if a.Name == alias {
 			return true
 		}
 	}
 	return false
+}
+
+// GetAliasStrings returns a slice of alias names for backward compatibility
+func (u *UnifiedModel) GetAliasStrings() []string {
+	aliases := make([]string, len(u.Aliases))
+	for i, a := range u.Aliases {
+		aliases[i] = a.Name
+	}
+	return aliases
 }
 
 // GetEndpointByURL returns the source endpoint for a given URL

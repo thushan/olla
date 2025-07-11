@@ -85,7 +85,7 @@ func (r *UnifiedMemoryModelRegistry) unifyModelsAsync(ctx context.Context, endpo
 		r.globalUnified.Store(id, merged)
 	}
 
-	r.logger.InfoWithEndpoint(endpointURL, fmt.Sprintf("Unified %d models", len(unifiedModels)))
+	// r.logger.InfoWithEndpoint(" ", endpointUrl, "models", len(unifiedModels))
 }
 
 // GetUnifiedModels returns all unified models
