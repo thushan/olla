@@ -9,17 +9,17 @@ import (
 
 // UnifiedModelResponse represents the unified Olla format response
 type UnifiedModelResponse struct {
-	Object string               `json:"object"`
-	Data   []UnifiedModelData   `json:"data"`
+	Object string             `json:"object"`
+	Data   []UnifiedModelData `json:"data"`
 }
 
 // UnifiedModelData represents a single model in the unified format
 type UnifiedModelData struct {
-	ID        string    `json:"id"`
-	Object    string    `json:"object"`
-	Created   int64     `json:"created"`
-	OwnedBy   string    `json:"owned_by"`
-	Olla      *OllaExtensions `json:"olla,omitempty"`
+	ID      string          `json:"id"`
+	Object  string          `json:"object"`
+	Created int64           `json:"created"`
+	OwnedBy string          `json:"owned_by"`
+	Olla    *OllaExtensions `json:"olla,omitempty"`
 }
 
 // OllaExtensions contains Olla-specific model information
@@ -56,7 +56,7 @@ func (c *UnifiedConverter) GetFormatName() string {
 
 func (c *UnifiedConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
 	filtered := filterModels(models, filters)
-	
+
 	data := make([]UnifiedModelData, 0, len(filtered))
 	for _, model := range filtered {
 		data = append(data, c.convertModel(model))
@@ -72,7 +72,7 @@ func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModel
 	availability := make([]EndpointStatus, 0, len(model.SourceEndpoints))
 	for _, ep := range model.SourceEndpoints {
 		availability = append(availability, EndpointStatus{
-			Endpoint: ep.EndpointURL, // This will be replaced with endpoint name in handler
+			Endpoint: ep.EndpointURL,
 			URL:      ep.EndpointURL,
 			State:    ep.State,
 		})

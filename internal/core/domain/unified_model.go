@@ -13,39 +13,40 @@ type AliasEntry struct {
 
 // UnifiedModel represents the canonical model format with platform-agnostic naming
 type UnifiedModel struct {
-	ID               string                 `json:"id"`                // Canonical ID: {family}/{variant}:{size}-{quant}
-	Family           string                 `json:"family"`            // Model family (e.g., phi, llama, qwen)
-	Variant          string                 `json:"variant"`           // Version/variant (e.g., 4, 3.3, 3)
-	ParameterSize    string                 `json:"parameter_size"`    // Normalised size (e.g., 14.7b, 70.6b)
-	ParameterCount   int64                  `json:"parameter_count"`   // Actual parameter count for sorting
-	Quantization     string                 `json:"quantization"`      // Normalised quantization (e.g., q4km, q3kl)
-	Format           string                 `json:"format"`            // Model format (gguf, safetensors, etc.)
-	Aliases          []AliasEntry           `json:"aliases"`           // All known aliases with source attribution
-	SourceEndpoints  []SourceEndpoint       `json:"source_endpoints"`  // Where this model is available
-	Capabilities     []string               `json:"capabilities"`      // Inferred capabilities (chat, completion, vision)
+	ID               string                 `json:"id"`               // Canonical ID: {family}/{variant}:{size}-{quant}
+	Family           string                 `json:"family"`           // Model family (e.g., phi, llama, qwen)
+	Variant          string                 `json:"variant"`          // Version/variant (e.g., 4, 3.3, 3)
+	ParameterSize    string                 `json:"parameter_size"`   // Normalised size (e.g., 14.7b, 70.6b)
+	ParameterCount   int64                  `json:"parameter_count"`  // Actual parameter count for sorting
+	Quantization     string                 `json:"quantization"`     // Normalised quantization (e.g., q4km, q3kl)
+	Format           string                 `json:"format"`           // Model format (gguf, safetensors, etc.)
+	Aliases          []AliasEntry           `json:"aliases"`          // All known aliases with source attribution
+	SourceEndpoints  []SourceEndpoint       `json:"source_endpoints"` // Where this model is available
+	Capabilities     []string               `json:"capabilities"`     // Inferred capabilities (chat, completion, vision)
 	MaxContextLength *int64                 `json:"max_context_length,omitempty"`
-	DiskSize         int64                  `json:"disk_size"`         // Total disk size across all endpoints
+	DiskSize         int64                  `json:"disk_size"` // Total disk size across all endpoints
 	LastSeen         time.Time              `json:"last_seen"`
-	Metadata         map[string]interface{} `json:"metadata"`          // Platform-specific extras
+	Metadata         map[string]interface{} `json:"metadata"`                     // Platform-specific extras
 	PromptTemplateID string                 `json:"prompt_template_id,omitempty"` // Associated prompt template
 }
 
 // SourceEndpoint represents where a unified model is available
 type SourceEndpoint struct {
 	EndpointURL  string    `json:"endpoint_url"`
-	NativeName   string    `json:"native_name"`   // Original name on this platform
-	State        string    `json:"state"`         // loaded, not-loaded, etc.
+	EndpointName string    `json:"endpoint_name"`
+	NativeName   string    `json:"native_name"` // Original name on this platform
+	State        string    `json:"state"`       // loaded, not-loaded, etc.
 	LastSeen     time.Time `json:"last_seen"`
 	DiskSize     int64     `json:"disk_size"`
 }
 
 // UnificationStats tracks performance metrics for model unification
 type UnificationStats struct {
-	TotalUnified      int64     `json:"total_unified"`
-	TotalErrors       int64     `json:"total_errors"`
-	CacheHits         int64     `json:"cache_hits"`
-	CacheMisses       int64     `json:"cache_misses"`
-	LastUnificationAt time.Time `json:"last_unification_at"`
+	TotalUnified       int64     `json:"total_unified"`
+	TotalErrors        int64     `json:"total_errors"`
+	CacheHits          int64     `json:"cache_hits"`
+	CacheMisses        int64     `json:"cache_misses"`
+	LastUnificationAt  time.Time `json:"last_unification_at"`
 	AverageUnifyTimeMs float64   `json:"average_unify_time_ms"`
 }
 
