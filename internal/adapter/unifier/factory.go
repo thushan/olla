@@ -26,7 +26,7 @@ func NewFactory(log logger.StyledLogger) *Factory {
 
 	// Register default unifier
 	factory.Register(DefaultUnifierType, func(l logger.StyledLogger) ports.ModelUnifier {
-		return NewDefaultUnifier(l)
+		return NewDefaultUnifier()
 	})
 
 	return factory
