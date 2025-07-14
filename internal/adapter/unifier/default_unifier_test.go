@@ -30,6 +30,7 @@ func TestDefaultUnifier_UnifyModel(t *testing.T) {
 		expectedSize   string
 		expectedQuant  string
 		shouldError    bool
+		checkAliases   []string // Aliases that should be present
 	}{
 		{
 			name: "phi4 misclassified as phi3",
@@ -111,9 +112,9 @@ func TestDefaultUnifier_UnifyModel(t *testing.T) {
 				Size: 1_500_000_000,
 			},
 			endpointURL:    "http://localhost:11434",
-			expectedID:     "gemma:unknown-unk",
+			expectedID:     "gemma:2b-unk",
 			expectedFamily: "gemma",
-			expectedSize:   "unknown",
+			expectedSize:   "2b",  // Now extracted from name
 			expectedQuant:  "unk",
 			shouldError:    false,
 		},
@@ -141,6 +142,64 @@ func TestDefaultUnifier_UnifyModel(t *testing.T) {
 			expectedFamily: "qwen",
 			expectedSize:   "8b",
 			expectedQuant:  "q4km",
+			shouldError:    false,
+		},
+		{
+			name: "mistral devstral-small-2505",
+			sourceModel: &domain.ModelInfo{
+				Name: "mistralai/devstral-small-2505",
+				Details: &domain.ModelDetails{
+					Family:            strPtr("llama"), // Wrong family
+					QuantizationLevel: strPtr("Q3_K_L"),
+					MaxContextLength:  int64Ptr(131072),
+					Type:              strPtr("llm"),
+				},
+				Size: 5_000_000_000,
+			},
+			endpointURL:    "http://localhost:1234",
+			expectedID:     "mistral/devstral:8b-q3kl",
+			expectedFamily: "mistral",
+			expectedSize:   "8b",
+			expectedQuant:  "q3kl",
+			shouldError:    false,
+			checkAliases:   []string{"mistral-devstral:8b", "devstral-small-2505"},
+		},
+		{
+			name: "mistral magistral-small",
+			sourceModel: &domain.ModelInfo{
+				Name: "mistralai/magistral-small",
+				Details: &domain.ModelDetails{
+					Family:            strPtr("llama"),
+					QuantizationLevel: strPtr("Q3_K_L"),
+					MaxContextLength:  int64Ptr(49152),
+					Type:              strPtr("llm"),
+				},
+				Size: 5_000_000_000,
+			},
+			endpointURL:    "http://localhost:1234",
+			expectedID:     "mistral/magistral:8b-q3kl",
+			expectedFamily: "mistral",
+			expectedSize:   "8b",
+			expectedQuant:  "q3kl",
+			shouldError:    false,
+			checkAliases:   []string{"mistral-magistral:8b", "magistral-small"},
+		},
+		{
+			name: "model with text size descriptor",
+			sourceModel: &domain.ModelInfo{
+				Name: "tiny-llama",
+				Details: &domain.ModelDetails{
+					Family:            strPtr("llama"),
+					ParameterSize:     strPtr("tiny"),
+					QuantizationLevel: strPtr("Q4_0"),
+				},
+				Size: 1_000_000_000,
+			},
+			endpointURL:    "http://localhost:11434",
+			expectedID:     "llama:1b-q4",
+			expectedFamily: "llama",
+			expectedSize:   "1b",
+			expectedQuant:  "q4",
 			shouldError:    false,
 		},
 	}
@@ -174,6 +233,22 @@ func TestDefaultUnifier_UnifyModel(t *testing.T) {
 
 			// Check aliases contain original name
 			assert.Contains(t, unified.GetAliasStrings(), tt.sourceModel.Name)
+			
+			// Check specific aliases if specified
+			if len(tt.checkAliases) > 0 {
+				aliasStrings := unified.GetAliasStrings()
+				for _, expectedAlias := range tt.checkAliases {
+					assert.Contains(t, aliasStrings, expectedAlias, "Expected alias %s not found", expectedAlias)
+				}
+			}
+			
+			// Ensure no malformed aliases
+			for _, alias := range unified.Aliases {
+				// Check for concatenated names without separators
+				assert.NotContains(t, alias.Name, "mistralmagistral")
+				assert.NotContains(t, alias.Name, "mistraldevstral")
+				assert.NotContains(t, alias.Name, "llamallama")
+			}
 
 			// Verify caching
 			cached, err := unifier.ResolveAlias(ctx, unified.ID)

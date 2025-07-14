@@ -572,9 +572,45 @@ func TestModelNormalizer(t *testing.T) {
 				expectedCount:      0,
 			},
 			{
-				name:               "invalid format",
+				name:               "text size - small",
+				size:               "small",
+				expectedNormalized: "8b",
+				expectedCount:      8000000000,
+			},
+			{
+				name:               "text size - medium",
+				size:               "medium",
+				expectedNormalized: "13b",
+				expectedCount:      13000000000,
+			},
+			{
+				name:               "text size - large",
 				size:               "large",
-				expectedNormalized: "large",
+				expectedNormalized: "70b",
+				expectedCount:      70000000000,
+			},
+			{
+				name:               "text size - tiny",
+				size:               "tiny",
+				expectedNormalized: "1b",
+				expectedCount:      1000000000,
+			},
+			{
+				name:               "text size - mini",
+				size:               "mini",
+				expectedNormalized: "3b",
+				expectedCount:      3000000000,
+			},
+			{
+				name:               "specific pattern - small-2505",
+				size:               "small-2505",
+				expectedNormalized: "8b",
+				expectedCount:      8000000000,
+			},
+			{
+				name:               "preserved if unrecognized",
+				size:               "custom-size",
+				expectedNormalized: "custom-size",
 				expectedCount:      0,
 			},
 		}

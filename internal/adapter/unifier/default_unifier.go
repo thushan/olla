@@ -415,6 +415,14 @@ func (u *DefaultUnifier) defaultUnification(sourceModel *domain.ModelInfo, platf
 	if sourceModel.Details != nil && sourceModel.Details.ParameterSize != nil {
 		sizeStr = *sourceModel.Details.ParameterSize
 	}
+	
+	// If no size or unknown, try to extract from model name
+	if sizeStr == "" || sizeStr == "unknown" {
+		if extractedSize, _ := extractSizeFromName(sourceModel.Name); extractedSize != "" {
+			sizeStr = extractedSize
+		}
+	}
+	
 	normalizedSize, paramCount := u.normalizer.NormalizeSize(sizeStr)
 
 	// Extract and normalize quantization
@@ -682,8 +690,10 @@ func (u *DefaultUnifier) registerDefaultRules() {
 
 	// LM Studio rules
 	u.RegisterCustomRule("lmstudio", &lmstudioVendorPrefixRule{normalizer: u.normalizer})
+	u.RegisterCustomRule("lmstudio", &mistralModelRule{normalizer: u.normalizer})
 
 	// Generic rules for all platforms
+	u.RegisterCustomRule("*", &mistralModelRule{normalizer: u.normalizer})
 	u.RegisterCustomRule("*", &genericModelRule{normalizer: u.normalizer})
 }
 
@@ -797,7 +807,11 @@ func (n *defaultNormalizer) NormalizeFamily(modelName string, platformFamily str
 			variant = extractVersionFromName(modelName, family)
 		}
 		
-		if variant == "" {
+		// Check if we should keep variant empty (for special cases)
+		if variant == "" && selected.Source == "name_pattern" && selected.Variant == "" {
+			// Keep empty variant if explicitly set empty in a name pattern rule
+			variant = "unknown"
+		} else if variant == "" {
 			variant = "unknown"
 		}
 		
@@ -813,10 +827,28 @@ func (n *defaultNormalizer) NormalizeSize(size string) (normalised string, param
 		return "unknown", 0
 	}
 
+	// First check if it's already a text-based size descriptor
+	sizeLower := strings.ToLower(size)
+	for _, mapping := range TextSizeMappings {
+		if sizeLower == strings.ToLower(mapping.Pattern) {
+			return mapping.NormalizedSize, mapping.ParameterCount
+		}
+	}
+
 	// Extract number and unit
 	matches := n.sizePattern.FindStringSubmatch(size)
 	if len(matches) < 2 {
-		return strings.ToLower(size), 0
+		// If no numeric pattern found, check text mappings
+		for _, mapping := range TextSizeMappings {
+			if strings.Contains(sizeLower, strings.ToLower(mapping.Pattern)) {
+				return mapping.NormalizedSize, mapping.ParameterCount
+			}
+		}
+		// If still no match and not "unknown", preserve the original
+		if sizeLower != "unknown" {
+			return sizeLower, 0
+		}
+		return "unknown", 0
 	}
 
 	num, err := strconv.ParseFloat(matches[1], 64)
@@ -913,13 +945,43 @@ func (n *defaultNormalizer) GenerateAliases(unified *domain.UnifiedModel, platfo
 	aliasSet := make(map[string]bool)
 	aliasSet[nativeName] = true
 
-	// Add common variations (using : as standard separator)
-	baseID := fmt.Sprintf("%s%s", unified.Family, unified.Variant)
+	// Build base ID with proper separator
+	var baseID string
 	if unified.Variant != "unknown" && unified.Variant != "" {
+		// Use hyphen to separate family and variant
+		baseID = fmt.Sprintf("%s-%s", unified.Family, unified.Variant)
+	} else {
+		baseID = unified.Family
+	}
+	
+	// Add common variations (using : as standard separator)
+	if unified.ParameterSize != "unknown" {
 		candidates := []string{
 			fmt.Sprintf("%s:%s", baseID, unified.ParameterSize),
 			fmt.Sprintf("%s:%s-%s", baseID, unified.ParameterSize, unified.Quantization),
 		}
+		
+		// For models with hyphenated base IDs, also add concatenated versions
+		// But only if it makes sense (e.g., deepseek-coder -> deepseekcoder)
+		// Don't do this for mistral variants or other known sub-models
+		if strings.Contains(baseID, "-") && unified.Variant != "" && unified.Variant != "unknown" {
+			// List of families where we shouldn't concatenate variants
+			skipConcatenation := map[string]bool{
+				"mistral": true, // mistral-devstral, mistral-magistral should not become mistraldevstral
+				"gemma":   true, // gemma-code should not become gemmacode
+				"llama":   true, // llama-code should not become llamacode
+			}
+			
+			// Only concatenate if it's not a known family with named variants
+			if !skipConcatenation[unified.Family] {
+				concatenated := strings.ReplaceAll(baseID, "-", "")
+				candidates = append(candidates, 
+					fmt.Sprintf("%s:%s", concatenated, unified.ParameterSize),
+					fmt.Sprintf("%s:%s-%s", concatenated, unified.ParameterSize, unified.Quantization),
+				)
+			}
+		}
+		
 		for _, c := range candidates {
 			if !aliasSet[c] {
 				aliases = append(aliases, domain.AliasEntry{Name: c, Source: "generated"})
@@ -932,10 +994,11 @@ func (n *defaultNormalizer) GenerateAliases(unified *domain.UnifiedModel, platfo
 	switch platformType {
 	case "ollama":
 		candidates := []string{}
-		if unified.Variant != "unknown" && unified.Variant != "" {
+		if unified.ParameterSize != "unknown" {
+			// Only add latest tag for properly formed base IDs
 			candidates = append(candidates, fmt.Sprintf("%s:latest", baseID))
+			candidates = append(candidates, fmt.Sprintf("%s:%s", unified.Family, unified.ParameterSize))
 		}
-		candidates = append(candidates, fmt.Sprintf("%s:%s", unified.Family, unified.ParameterSize))
 		
 		for _, c := range candidates {
 			if !aliasSet[c] {

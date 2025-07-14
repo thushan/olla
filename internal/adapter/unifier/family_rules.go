@@ -79,6 +79,12 @@ var PublisherFamilyRules = []PublisherFamilyRule{
 // NamePatternRules defines name pattern to family/variant mappings
 var NamePatternRules = []NamePatternRule{
 	{
+		Pattern:  "tiny-llama",
+		Family:   "llama",
+		Variant:  "",  // No variant, it's just a small llama model
+		Priority: 9,
+	},
+	{
 		Pattern:  "devstral",
 		Family:   "mistral",
 		Variant:  "devstral",
@@ -254,7 +260,6 @@ func extractVersionFromName(modelName string, family string) string {
 	}{
 		{regexp.MustCompile(`^(\d+(?:\.\d+)?)`), 1},              // Numbers at start: 3, 3.3
 		{regexp.MustCompile(`(small|medium|large|xl|xxl)`), 1},   // Size variants
-		{regexp.MustCompile(`(mini|micro|nano|tiny)`), 1},        // Small variants
 		{regexp.MustCompile(`(code|chat|instruct|base)`), 1},     // Purpose variants
 		{regexp.MustCompile(`(embed|embedding)`), 1},             // Embedding variants
 		{regexp.MustCompile(`r(\d+)`), 1},                        // r1, r2 versions
