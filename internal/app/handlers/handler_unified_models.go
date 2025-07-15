@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -106,7 +107,8 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	// Get converter for the requested format
 	converter, err := a.converterFactory.GetConverter(format)
 	if err != nil {
-		if qpErr, ok := err.(*ports.QueryParameterError); ok {
+		var qpErr *ports.QueryParameterError
+		if errors.As(err, &qpErr) {
 			http.Error(w, qpErr.Error(), http.StatusBadRequest)
 			return
 		}
@@ -116,8 +118,8 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 
 	// If endpoint filter is specified by name, resolve to URL
 	if filters.Endpoint != "" {
-		endpoints, err := a.repository.GetAll(ctx)
-		if err == nil {
+		endpoints, epErr := a.repository.GetAll(ctx)
+		if epErr == nil {
 			for _, ep := range endpoints {
 				if ep.Name == filters.Endpoint {
 					filters.Endpoint = ep.URLString
@@ -144,6 +146,14 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	json.NewEncoder(w).Encode(response)
 }
 
+// safeDiskSize safely converts int64 to uint64, handling negative values
+func safeDiskSize(size int64) uint64 {
+	if size < 0 {
+		return 0
+	}
+	return uint64(size)
+}
+
 // buildUnifiedModelSummary converts a UnifiedModel to API summary format
 func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpointNames map[string]string) UnifiedModelSummary {
 	summary := UnifiedModelSummary{
@@ -157,7 +167,7 @@ func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpo
 		Aliases:          model.GetAliasStrings(),
 		Capabilities:     model.Capabilities,
 		MaxContextLength: model.MaxContextLength,
-		TotalDiskSize:    format.Bytes(uint64(model.DiskSize)),
+		TotalDiskSize:    format.Bytes(safeDiskSize(model.DiskSize)),
 		LastSeen:         format.TimeAgo(model.LastSeen),
 		Endpoints:        make([]string, 0, len(model.SourceEndpoints)),
 		LoadedEndpoints:  make([]string, 0),

@@ -156,15 +156,15 @@ func (u *DefaultUnifier) processModel(model *Model, endpoint *domain.Endpoint) *
 }
 
 // canMergeByName determines if two models can be merged based on name
-func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, new *Model) bool {
+func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, newModel *Model) bool {
 	// Only merge if names match exactly (case-insensitive)
 	// Check against aliases
 	for _, alias := range existing.Aliases {
-		if strings.EqualFold(alias.Name, new.Name) {
+		if strings.EqualFold(alias.Name, newModel.Name) {
 			// Check for digest conflicts
-			if new.Digest != "" && existing.Metadata != nil {
+			if newModel.Digest != "" && existing.Metadata != nil {
 				if existingDigest, ok := existing.Metadata["digest"].(string); ok {
-					if existingDigest != "" && existingDigest != new.Digest {
+					if existingDigest != "" && existingDigest != newModel.Digest {
 						// Different digests = different models, don't merge
 						return false
 					}
@@ -377,12 +377,12 @@ func (u *DefaultUnifier) extractCapabilities(model *Model) []string {
 }
 
 // mergeCapabilities merges two capability lists, removing duplicates
-func (u *DefaultUnifier) mergeCapabilities(existing, new []string) []string {
+func (u *DefaultUnifier) mergeCapabilities(existing, newCaps []string) []string {
 	capSet := make(map[string]bool)
 	for _, cap := range existing {
 		capSet[cap] = true
 	}
-	for _, cap := range new {
+	for _, cap := range newCaps {
 		capSet[cap] = true
 	}
 
@@ -394,7 +394,7 @@ func (u *DefaultUnifier) mergeCapabilities(existing, new []string) []string {
 }
 
 // removeModelFromEndpoint removes a model's association with an endpoint
-func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL, endpointName string) {
+func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL, _ string) {
 	unified, exists := u.catalog[modelID]
 	if !exists {
 		return

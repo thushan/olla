@@ -178,7 +178,7 @@ func (r *UnifiedMemoryModelRegistry) GetEndpointsForModel(ctx context.Context, m
 	// Try unified model lookup
 	unified, err := r.GetUnifiedModel(ctx, modelName)
 	if err != nil {
-		return []string{}, nil
+		return []string{}, err
 	}
 
 	// Extract endpoints from unified model

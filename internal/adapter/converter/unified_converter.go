@@ -113,69 +113,87 @@ func filterModels(models []*domain.UnifiedModel, filters ports.ModelFilters) []*
 
 // matchesFilters checks if a model matches all specified filters
 func matchesFilters(model *domain.UnifiedModel, filters ports.ModelFilters) bool {
-	// Check endpoint filter
-	if filters.Endpoint != "" {
-		hasEndpoint := false
-		for _, ep := range model.SourceEndpoints {
-			// Note: This checks URL, but handler will need to map names
-			if ep.EndpointURL == filters.Endpoint {
-				hasEndpoint = true
-				break
-			}
-		}
-		if !hasEndpoint {
-			return false
-		}
-	}
-
-	// Check availability filter
-	if filters.Available != nil {
-		isAvailable := false
-		for _, ep := range model.SourceEndpoints {
-			if ep.State == "loaded" {
-				isAvailable = true
-				break
-			}
-		}
-		if *filters.Available != isAvailable {
-			return false
-		}
-	}
-
-	// Check family filter
-	if filters.Family != "" && model.Family != filters.Family {
+	if !matchesEndpointFilter(model, filters.Endpoint) {
 		return false
 	}
 
-	// Check type filter
-	if filters.Type != "" {
-		hasType := false
-		// Check metadata first
-		if modelType, ok := model.Metadata["type"].(string); ok && modelType == filters.Type {
-			hasType = true
-		}
-		// Check capabilities as fallback
-		if !hasType {
-			switch filters.Type {
-			case "llm":
-				hasType = hasCapability(model.Capabilities, "chat") || hasCapability(model.Capabilities, "completion")
-			case "vlm":
-				hasType = hasCapability(model.Capabilities, "vision")
-			case "embeddings":
-				hasType = hasCapability(model.Capabilities, "embedding") || hasCapability(model.Capabilities, "embeddings")
-			}
-		}
-		if !hasType {
-			return false
-		}
+	if !matchesAvailabilityFilter(model, filters.Available) {
+		return false
+	}
+
+	if !matchesFamilyFilter(model, filters.Family) {
+		return false
+	}
+
+	if !matchesTypeFilter(model, filters.Type) {
+		return false
 	}
 
 	return true
 }
 
-func hasCapability(capabilities []string, cap string) bool {
+func matchesEndpointFilter(model *domain.UnifiedModel, endpoint string) bool {
+	if endpoint == "" {
+		return true
+	}
+
+	for _, ep := range model.SourceEndpoints {
+		if ep.EndpointURL == endpoint {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesAvailabilityFilter(model *domain.UnifiedModel, available *bool) bool {
+	if available == nil {
+		return true
+	}
+
+	isAvailable := false
+	for _, ep := range model.SourceEndpoints {
+		if ep.State == "loaded" {
+			isAvailable = true
+			break
+		}
+	}
+	return *available == isAvailable
+}
+
+func matchesFamilyFilter(model *domain.UnifiedModel, family string) bool {
+	return family == "" || model.Family == family
+}
+
+func matchesTypeFilter(model *domain.UnifiedModel, filterType string) bool {
+	if filterType == "" {
+		return true
+	}
+
+	// Check metadata first
+	if modelType, ok := model.Metadata["type"].(string); ok && modelType == filterType {
+		return true
+	}
+
+	// Check capabilities as fallback
+	return matchesTypeByCapabilities(model.Capabilities, filterType)
+}
+
+func matchesTypeByCapabilities(capabilities []string, filterType string) bool {
+	switch filterType {
+	case "llm":
+		return hasCapability(capabilities, "chat") || hasCapability(capabilities, "completion")
+	case "vlm":
+		return hasCapability(capabilities, "vision")
+	case "embeddings":
+		return hasCapability(capabilities, "embedding") || hasCapability(capabilities, "embeddings")
+	default:
+		return false
+	}
+}
+
+func hasCapability(capabilities []string, capability string) bool {
 	for _, c := range capabilities {
-		if c == cap {
+		if c == capability {
 			return true
 		}
 	}
