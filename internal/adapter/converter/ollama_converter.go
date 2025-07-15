@@ -14,12 +14,12 @@ type OllamaModelResponse struct {
 
 // OllamaModelData represents a single model in Ollama format
 type OllamaModelData struct {
+	Details    *OllamaDetails `json:"details,omitempty"`
 	Name       string         `json:"name"`
 	Model      string         `json:"model"`
 	ModifiedAt string         `json:"modified_at"`
-	Size       int64          `json:"size"`
 	Digest     string         `json:"digest"`
-	Details    *OllamaDetails `json:"details,omitempty"`
+	Size       int64          `json:"size"`
 }
 
 // OllamaDetails represents model details in Ollama format
@@ -43,7 +43,7 @@ func (c *OllamaConverter) GetFormatName() string {
 
 func (c *OllamaConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
 	filtered := filterModels(models, filters)
-	
+
 	data := make([]OllamaModelData, 0, len(filtered))
 	for _, model := range filtered {
 		// For Ollama format, use the native Ollama name if available
@@ -62,7 +62,7 @@ func (c *OllamaConverter) convertModel(model *domain.UnifiedModel) *OllamaModelD
 	// Find the Ollama-specific alias or endpoint
 	var ollamaName string
 	var ollamaEndpoint *domain.SourceEndpoint
-	
+
 	// First, look for an Ollama source in aliases
 	for _, alias := range model.Aliases {
 		if alias.Source == "ollama" {
@@ -70,7 +70,7 @@ func (c *OllamaConverter) convertModel(model *domain.UnifiedModel) *OllamaModelD
 			break
 		}
 	}
-	
+
 	// Find corresponding Ollama endpoint
 	for i := range model.SourceEndpoints {
 		ep := &model.SourceEndpoints[i]
@@ -80,24 +80,24 @@ func (c *OllamaConverter) convertModel(model *domain.UnifiedModel) *OllamaModelD
 			break
 		}
 	}
-	
+
 	// If no Ollama-specific data, skip this model for Ollama format
 	if ollamaName == "" {
 		return nil
 	}
-	
+
 	// Extract digest from metadata if available
 	digest := ""
 	if d, ok := model.Metadata["digest"].(string); ok {
 		digest = d
 	}
-	
+
 	// Use actual disk size from endpoint if available, otherwise use total
 	size := model.DiskSize
 	if ollamaEndpoint != nil && ollamaEndpoint.DiskSize > 0 {
 		size = ollamaEndpoint.DiskSize
 	}
-	
+
 	return &OllamaModelData{
 		Name:       ollamaName,
 		Model:      ollamaName,
@@ -131,11 +131,11 @@ func denormalizeQuantization(quant string) string {
 		"f32":  "F32",
 		"unk":  "unknown",
 	}
-	
+
 	if denormalized, exists := mappings[quant]; exists {
 		return denormalized
 	}
-	
+
 	// Default: uppercase the quantization
 	return quant
 }

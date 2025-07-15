@@ -95,7 +95,7 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterWithMethod("/internal/status/models", a.modelsStatusHandler, "Models status", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
 	a.routeRegistry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
-	
+
 	// Unified models endpoints
 	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")
 	a.routeRegistry.RegisterWithMethod("/olla/models/", a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")

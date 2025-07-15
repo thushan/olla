@@ -9,8 +9,8 @@ import (
 )
 
 type RegistryConfig struct {
-	Type           string `yaml:"type"`
-	EnableUnifier  bool   `yaml:"enable_unifier"`
+	Type          string `yaml:"type"`
+	EnableUnifier bool   `yaml:"enable_unifier"`
 }
 
 func NewModelRegistry(config RegistryConfig, logger logger.StyledLogger) (domain.ModelRegistry, error) {

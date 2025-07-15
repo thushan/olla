@@ -11,7 +11,7 @@ import (
 
 func TestLMStudioConverter_ConvertToFormat(t *testing.T) {
 	converter := NewLMStudioConverter()
-	
+
 	models := []*domain.UnifiedModel{
 		{
 			ID:             "llama/3:70b-q4km",
@@ -91,15 +91,15 @@ func TestLMStudioConverter_ConvertToFormat(t *testing.T) {
 
 	t.Run("LM Studio format only includes LM Studio models", func(t *testing.T) {
 		filters := ports.ModelFilters{}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(LMStudioModelResponse)
 		require.True(t, ok)
 		assert.Equal(t, "list", response.Object)
 		assert.Len(t, response.Data, 2) // Only phi and qwen have LM Studio aliases
-		
+
 		// Check phi model
 		phiModel := response.Data[0]
 		assert.Equal(t, "microsoft/phi-4", phiModel.ID)
@@ -110,11 +110,11 @@ func TestLMStudioConverter_ConvertToFormat(t *testing.T) {
 		assert.Equal(t, "Q4_K_M", phiModel.Quantization) // Denormalized
 		assert.Equal(t, "loaded", phiModel.State)
 		assert.Equal(t, int64(131072), *phiModel.MaxContextLength)
-		
+
 		// Check qwen VLM model
 		qwenModel := response.Data[1]
 		assert.Equal(t, "qwen/qwen-vlm", qwenModel.ID)
-		assert.Equal(t, "vlm", qwenModel.Type) // Inferred from capabilities
+		assert.Equal(t, "vlm", qwenModel.Type)       // Inferred from capabilities
 		assert.Equal(t, "qwen", qwenModel.Publisher) // From vendor metadata
 		assert.Equal(t, "qwen", qwenModel.Arch)
 		assert.Equal(t, "Q4_0", qwenModel.Quantization)
@@ -138,10 +138,10 @@ func TestLMStudioConverter_ConvertToFormat(t *testing.T) {
 			Capabilities: []string{"embeddings"},
 			Quantization: "f16",
 		}
-		
+
 		result, err := converter.ConvertToFormat([]*domain.UnifiedModel{testModel}, ports.ModelFilters{})
 		require.NoError(t, err)
-		
+
 		response, ok := result.(LMStudioModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 1)

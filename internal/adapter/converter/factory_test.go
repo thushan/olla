@@ -37,7 +37,7 @@ func TestConverterFactory(t *testing.T) {
 		converter, err := factory.GetConverter("unsupported")
 		assert.Nil(t, converter)
 		require.Error(t, err)
-		
+
 		qpErr, ok := err.(*ports.QueryParameterError)
 		require.True(t, ok)
 		assert.Equal(t, "format", qpErr.Parameter)
@@ -52,13 +52,13 @@ func TestConverterFactory(t *testing.T) {
 	t.Run("GetSupportedFormats returns all formats", func(t *testing.T) {
 		formats := factory.GetSupportedFormats()
 		assert.Len(t, formats, 4)
-		
+
 		// Check all expected formats are present
 		formatMap := make(map[string]bool)
 		for _, f := range formats {
 			formatMap[f] = true
 		}
-		
+
 		assert.True(t, formatMap["unified"])
 		assert.True(t, formatMap["openai"])
 		assert.True(t, formatMap["ollama"])
@@ -68,14 +68,14 @@ func TestConverterFactory(t *testing.T) {
 	t.Run("RegisterConverter adds new converter", func(t *testing.T) {
 		// Create a mock converter
 		mockConverter := &mockConverter{formatName: "custom"}
-		
+
 		factory.RegisterConverter(mockConverter)
-		
+
 		// Should be able to get it back
 		converter, err := factory.GetConverter("custom")
 		require.NoError(t, err)
 		assert.Equal(t, mockConverter, converter)
-		
+
 		// Should appear in supported formats
 		formats := factory.GetSupportedFormats()
 		hasCustom := false

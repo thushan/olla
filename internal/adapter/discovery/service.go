@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -143,9 +144,19 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 	// Reset failure count on success
 	s.resetFailureCount(endpoint.URLString)
 
-	if err := s.modelRegistry.RegisterModels(ctx, endpoint.URLString, models); err != nil {
-		s.logger.ErrorWithEndpoint("Failed to register discovered models", endpoint.Name, "error", err)
-		return fmt.Errorf("failed to register models: %w", err)
+	// Check if registry supports endpoint registration
+	if unifiedRegistry, ok := s.modelRegistry.(*registry.UnifiedMemoryModelRegistry); ok {
+		// Use the new method that accepts endpoint objects
+		if err := unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoint, models); err != nil {
+			s.logger.ErrorWithEndpoint("Failed to register discovered models", endpoint.Name, "error", err)
+			return fmt.Errorf("failed to register models: %w", err)
+		}
+	} else {
+		// Fall back to string-based registration
+		if err := s.modelRegistry.RegisterModels(ctx, endpoint.URLString, models); err != nil {
+			s.logger.ErrorWithEndpoint("Failed to register discovered models", endpoint.Name, "error", err)
+			return fmt.Errorf("failed to register models: %w", err)
+		}
 	}
 
 	s.logger.InfoWithEndpoint(" ", endpoint.Name, "models", len(models))

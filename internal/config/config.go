@@ -267,7 +267,7 @@ func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_MODEL_REGISTRY_TYPE"); val != "" {
 		config.ModelRegistry.Type = val
 	}
-	
+
 	// Model unification configuration
 	if val := os.Getenv("OLLA_MODEL_UNIFIER_ENABLED"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {

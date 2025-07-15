@@ -15,10 +15,11 @@ import (
 
 // UnifiedMemoryModelRegistry extends MemoryModelRegistry with model unification
 type UnifiedMemoryModelRegistry struct {
+	unifier ports.ModelUnifier
 	*MemoryModelRegistry
-	unifier          ports.ModelUnifier
 	unifiedModels    *xsync.Map[string, *domain.UnifiedModel] // Endpoint -> []UnifiedModel
 	globalUnified    *xsync.Map[string, *domain.UnifiedModel] // UnifiedID -> UnifiedModel (merged across endpoints)
+	endpoints        *xsync.Map[string, *domain.Endpoint]     // URL -> Endpoint mapping
 	unificationMutex sync.Mutex
 }
 
@@ -33,7 +34,24 @@ func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger) *UnifiedMemoryMod
 		unifier:             modelUnifier,
 		unifiedModels:       xsync.NewMap[string, *domain.UnifiedModel](),
 		globalUnified:       xsync.NewMap[string, *domain.UnifiedModel](),
+		endpoints:           xsync.NewMap[string, *domain.Endpoint](),
 	}
+}
+
+// RegisterEndpoint stores endpoint information for later use
+func (r *UnifiedMemoryModelRegistry) RegisterEndpoint(endpoint *domain.Endpoint) {
+	if endpoint != nil && endpoint.GetURLString() != "" {
+		r.endpoints.Store(endpoint.GetURLString(), endpoint)
+	}
+}
+
+// RegisterModelsWithEndpoint registers models with full endpoint information
+func (r *UnifiedMemoryModelRegistry) RegisterModelsWithEndpoint(ctx context.Context, endpoint *domain.Endpoint, models []*domain.ModelInfo) error {
+	// Store endpoint
+	r.RegisterEndpoint(endpoint)
+
+	// Register models normally
+	return r.RegisterModels(ctx, endpoint.GetURLString(), models)
 }
 
 // RegisterModels overrides the base method to add unification
@@ -54,10 +72,20 @@ func (r *UnifiedMemoryModelRegistry) unifyModelsAsync(ctx context.Context, endpo
 	r.unificationMutex.Lock()
 	defer r.unificationMutex.Unlock()
 
+	// Get or create endpoint object
+	endpoint, exists := r.endpoints.Load(endpointURL)
+	if !exists {
+		// Create a minimal endpoint object for backward compatibility
+		endpoint = &domain.Endpoint{
+			URLString: endpointURL,
+			Name:      endpointURL, // Use URL as name if not provided
+		}
+	}
+
 	// Unify all models for this endpoint
-	unifiedModels, err := r.unifier.UnifyModels(ctx, models, endpointURL)
+	unifiedModels, err := r.unifier.UnifyModels(ctx, models, endpoint)
 	if err != nil {
-		r.logger.ErrorWithEndpoint(endpointURL, "Failed to unify models", err)
+		r.logger.ErrorWithEndpoint(endpoint.Name, "Failed to unify models", err)
 		return
 	}
 

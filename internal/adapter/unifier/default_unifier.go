@@ -13,14 +13,14 @@ import (
 
 // Model represents a simplified internal representation for processing
 type Model struct {
+	Metadata      map[string]interface{}
 	ID            string
 	Name          string
 	Family        string
-	Size          int64
 	Digest        string
 	Format        string
+	Size          int64
 	ContextWindow int64
-	Metadata      map[string]interface{}
 }
 
 // nilIfZero returns nil if value is 0, otherwise returns pointer to value
@@ -33,23 +33,23 @@ func nilIfZero(v int64) *int64 {
 
 // DefaultUnifier implements simple model deduplication based on digest and exact name matching
 type DefaultUnifier struct {
-	mu              sync.RWMutex
+	lastCleanup     time.Time
 	catalog         map[string]*domain.UnifiedModel // ID -> unified model
 	digestIndex     map[string][]string             // digest -> model IDs
 	nameIndex       map[string][]string             // lowercase name -> model IDs
 	endpointModels  map[string][]string             // endpoint URL -> model IDs
 	stats           DeduplicationStats
-	lastCleanup     time.Time
 	cleanupInterval time.Duration
+	mu              sync.RWMutex
 }
 
 // DeduplicationStats tracks deduplication performance
 type DeduplicationStats struct {
-	TotalModels      int
-	UnifiedModels    int
-	DigestMatches    int
-	NameMatches      int
-	LastUpdated      time.Time
+	LastUpdated   time.Time
+	TotalModels   int
+	UnifiedModels int
+	DigestMatches int
+	NameMatches   int
 }
 
 // NewDefaultUnifier creates a new model unifier with simple deduplication
@@ -64,7 +64,7 @@ func NewDefaultUnifier() ports.ModelUnifier {
 }
 
 // UnifyModels performs simple deduplication of models from multiple endpoints
-func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.ModelInfo, endpointURL string) ([]*domain.UnifiedModel, error) {
+func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.ModelInfo, endpoint *domain.Endpoint) ([]*domain.UnifiedModel, error) {
 	if models == nil || len(models) == 0 {
 		return nil, nil
 	}
@@ -78,10 +78,13 @@ func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.Model
 		u.lastCleanup = time.Now()
 	}
 
+	// Use endpoint URL as key internally, but store name for display
+	endpointURL := endpoint.GetURLString()
+
 	// Clear previous models from this endpoint
 	if oldModels, exists := u.endpointModels[endpointURL]; exists {
 		for _, modelID := range oldModels {
-			u.removeModelFromEndpoint(modelID, endpointURL)
+			u.removeModelFromEndpoint(modelID, endpointURL, endpoint.Name)
 		}
 	}
 	u.endpointModels[endpointURL] = []string{}
@@ -95,7 +98,7 @@ func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.Model
 
 		// Convert ModelInfo to Model for processing
 		model := u.convertModelInfoToModel(modelInfo)
-		unified := u.processModel(model, endpointURL)
+		unified := u.processModel(model, endpoint)
 		if unified != nil {
 			processedModels = append(processedModels, unified)
 			u.endpointModels[endpointURL] = append(u.endpointModels[endpointURL], unified.ID)
@@ -111,13 +114,13 @@ func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.Model
 }
 
 // processModel handles deduplication logic for a single model
-func (u *DefaultUnifier) processModel(model *Model, endpointURL string) *domain.UnifiedModel {
+func (u *DefaultUnifier) processModel(model *Model, endpoint *domain.Endpoint) *domain.UnifiedModel {
 	// Try to find existing model by digest first (highest confidence)
 	if model.Digest != "" {
 		if existingIDs, found := u.digestIndex[model.Digest]; found && len(existingIDs) > 0 {
 			// Found existing model with same digest - merge
 			existing := u.catalog[existingIDs[0]]
-			u.mergeModel(existing, model, endpointURL)
+			u.mergeModel(existing, model, endpoint)
 			u.stats.DigestMatches++
 			return existing
 		}
@@ -130,7 +133,7 @@ func (u *DefaultUnifier) processModel(model *Model, endpointURL string) *domain.
 		for _, id := range existingIDs {
 			existing := u.catalog[id]
 			if u.canMergeByName(existing, model) {
-				u.mergeModel(existing, model, endpointURL)
+				u.mergeModel(existing, model, endpoint)
 				u.stats.NameMatches++
 				return existing
 			}
@@ -140,15 +143,15 @@ func (u *DefaultUnifier) processModel(model *Model, endpointURL string) *domain.
 	}
 
 	// No match found - create new unified model
-	unified := u.createUnifiedModel(model, endpointURL)
+	unified := u.createUnifiedModel(model, endpoint)
 	u.catalog[unified.ID] = unified
-	
+
 	// Update indices
 	if model.Digest != "" {
 		u.digestIndex[model.Digest] = append(u.digestIndex[model.Digest], unified.ID)
 	}
 	u.nameIndex[lowercaseName] = append(u.nameIndex[lowercaseName], unified.ID)
-	
+
 	return unified
 }
 
@@ -174,13 +177,13 @@ func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, new *Mode
 }
 
 // createUnifiedModel creates a new unified model from a platform model
-func (u *DefaultUnifier) createUnifiedModel(model *Model, endpointURL string) *domain.UnifiedModel {
+func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpoint) *domain.UnifiedModel {
 	// Use original model ID/name as the unified ID
 	id := model.Name
 	if model.ID != "" {
 		id = model.ID
 	}
-	
+
 	// Make ID unique if there's already a model with this ID but different digest
 	if existing, exists := u.catalog[id]; exists {
 		if model.Digest != "" && existing.Metadata != nil {
@@ -196,10 +199,10 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpointURL string) *d
 	// Detect platform from model metadata
 	platform := u.detectPlatform(model)
 
-	// Create source endpoint
+	// Create source endpoint - use name for display, URL internally
 	source := domain.SourceEndpoint{
-		EndpointURL:  endpointURL,
-		EndpointName: endpointURL, // Use URL as name for now
+		EndpointURL:  endpoint.GetURLString(),
+		EndpointName: endpoint.Name, // Use name for display
 		NativeName:   model.Name,
 		State:        u.mapModelState(model),
 		LastSeen:     time.Now(),
@@ -241,10 +244,13 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpointURL string) *d
 }
 
 // mergeModel merges a new model into an existing unified model
-func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, endpointURL string) {
+func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, endpoint *domain.Endpoint) {
 	if unified == nil || model == nil {
 		return
 	}
+
+	endpointURL := endpoint.GetURLString()
+
 	// Check if this endpoint already exists
 	for i, source := range unified.SourceEndpoints {
 		if source.EndpointURL == endpointURL {
@@ -262,7 +268,7 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 	platform := u.detectPlatform(model)
 	source := domain.SourceEndpoint{
 		EndpointURL:  endpointURL,
-		EndpointName: endpointURL,
+		EndpointName: endpoint.Name, // Use name for display
 		NativeName:   model.Name,
 		State:        u.mapModelState(model),
 		LastSeen:     time.Now(),
@@ -285,10 +291,10 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 	// Merge capabilities
 	newCaps := u.extractCapabilities(model)
 	unified.Capabilities = u.mergeCapabilities(unified.Capabilities, newCaps)
-	
+
 	// Update disk size
 	unified.DiskSize += model.Size
-	
+
 	// Update digest in metadata if present
 	if model.Digest != "" {
 		if unified.Metadata == nil {
@@ -296,7 +302,7 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 		}
 		unified.Metadata["digest"] = model.Digest
 	}
-	
+
 	unified.LastSeen = time.Now()
 }
 
@@ -388,7 +394,7 @@ func (u *DefaultUnifier) mergeCapabilities(existing, new []string) []string {
 }
 
 // removeModelFromEndpoint removes a model's association with an endpoint
-func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL string) {
+func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL, endpointName string) {
 	unified, exists := u.catalog[modelID]
 	if !exists {
 		return
@@ -414,7 +420,7 @@ func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL string) {
 		for _, alias := range unified.Aliases {
 			u.removeFromIndex(u.nameIndex, strings.ToLower(alias.Name), modelID)
 		}
-		
+
 		// Now remove from catalog
 		delete(u.catalog, modelID)
 	} else {
@@ -443,7 +449,7 @@ func (u *DefaultUnifier) removeFromIndex(index map[string][]string, key, value s
 func (u *DefaultUnifier) cleanupStaleModels() {
 	staleThreshold := 24 * time.Hour
 	now := time.Now()
-	
+
 	toRemove := []string{}
 	for id, model := range u.catalog {
 		if now.Sub(model.LastSeen) > staleThreshold {
@@ -454,7 +460,7 @@ func (u *DefaultUnifier) cleanupStaleModels() {
 	for _, id := range toRemove {
 		model := u.catalog[id]
 		delete(u.catalog, id)
-		
+
 		// Remove from indices
 		if model.Metadata != nil {
 			if digest, ok := model.Metadata["digest"].(string); ok && digest != "" {
@@ -527,12 +533,12 @@ func (u *DefaultUnifier) Clear(ctx context.Context) error {
 	u.nameIndex = make(map[string][]string)
 	u.endpointModels = make(map[string][]string)
 	u.stats = DeduplicationStats{}
-	
+
 	return nil
 }
 
 // UnifyModel converts a single model to unified format
-func (u *DefaultUnifier) UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpointURL string) (*domain.UnifiedModel, error) {
+func (u *DefaultUnifier) UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpoint *domain.Endpoint) (*domain.UnifiedModel, error) {
 	if sourceModel == nil {
 		return nil, nil
 	}
@@ -541,7 +547,7 @@ func (u *DefaultUnifier) UnifyModel(ctx context.Context, sourceModel *domain.Mod
 	defer u.mu.Unlock()
 
 	model := u.convertModelInfoToModel(sourceModel)
-	return u.processModel(model, endpointURL), nil
+	return u.processModel(model, endpoint), nil
 }
 
 // convertModelInfoToModel converts ModelInfo to Model for internal processing
@@ -617,7 +623,7 @@ func (u *DefaultUnifier) RegisterCustomRule(platformType string, rule ports.Unif
 func (u *DefaultUnifier) GetStats() domain.UnificationStats {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	
+
 	return domain.UnificationStats{
 		TotalUnified:       int64(u.stats.UnifiedModels),
 		TotalErrors:        0, // Simplified implementation doesn't track errors
@@ -670,7 +676,7 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 				sourceMap[key] = source
 			}
 		}
-		
+
 		// Update last seen
 		if model.LastSeen.After(merged.LastSeen) {
 			merged.LastSeen = model.LastSeen

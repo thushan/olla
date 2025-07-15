@@ -12,7 +12,7 @@ import (
 
 func TestOllamaConverter_ConvertToFormat(t *testing.T) {
 	converter := NewOllamaConverter()
-	
+
 	now := time.Now()
 	models := []*domain.UnifiedModel{
 		{
@@ -69,14 +69,14 @@ func TestOllamaConverter_ConvertToFormat(t *testing.T) {
 
 	t.Run("Ollama format only includes Ollama models", func(t *testing.T) {
 		filters := ports.ModelFilters{}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(OllamaModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Models, 1) // Only the llama model has Ollama alias
-		
+
 		// Check the model
 		model := response.Models[0]
 		assert.Equal(t, "llama3:latest", model.Name)
@@ -84,7 +84,7 @@ func TestOllamaConverter_ConvertToFormat(t *testing.T) {
 		assert.Equal(t, now.Format(time.RFC3339), model.ModifiedAt)
 		assert.Equal(t, int64(40000000000), model.Size)
 		assert.Equal(t, "sha256:abc123def456", model.Digest)
-		
+
 		// Check details
 		assert.NotNil(t, model.Details)
 		assert.Equal(t, "llama", model.Details.Family)
@@ -103,7 +103,7 @@ func TestOllamaConverter_ConvertToFormat(t *testing.T) {
 			{"f16", "F16"},
 			{"unk", "unknown"},
 		}
-		
+
 		for _, tc := range testCases {
 			assert.Equal(t, tc.denormalized, denormalizeQuantization(tc.normalized))
 		}

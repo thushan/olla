@@ -11,7 +11,7 @@ import (
 
 func TestOpenAIConverter_ConvertToFormat(t *testing.T) {
 	converter := NewOpenAIConverter()
-	
+
 	models := []*domain.UnifiedModel{
 		{
 			ID:             "llama/3:70b-q4km",
@@ -57,22 +57,22 @@ func TestOpenAIConverter_ConvertToFormat(t *testing.T) {
 
 	t.Run("OpenAI format strips Olla extensions", func(t *testing.T) {
 		filters := ports.ModelFilters{}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(OpenAIModelResponse)
 		require.True(t, ok)
 		assert.Equal(t, "list", response.Object)
 		assert.Len(t, response.Data, 2)
-		
+
 		// Check that only OpenAI-compatible fields are present
 		for _, model := range response.Data {
 			assert.NotEmpty(t, model.ID)
 			assert.Equal(t, "model", model.Object)
 			assert.NotZero(t, model.Created)
 			assert.Equal(t, "olla", model.OwnedBy)
-			
+
 			// Ensure no Olla-specific fields in the struct
 			// (They're not even in the struct definition)
 		}
@@ -82,10 +82,10 @@ func TestOpenAIConverter_ConvertToFormat(t *testing.T) {
 		filters := ports.ModelFilters{
 			Family: "phi",
 		}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(OpenAIModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 1)

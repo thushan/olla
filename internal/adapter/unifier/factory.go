@@ -63,4 +63,3 @@ func (f *Factory) GetAvailableTypes() []string {
 	}
 	return types
 }
-

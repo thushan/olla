@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -16,37 +15,37 @@ import (
 
 // UnifiedModelSummary represents a unified model in the API response
 type UnifiedModelSummary struct {
-	ID               string   `json:"id"`                // Canonical ID
-	Family           string   `json:"family"`            
-	Variant          string   `json:"variant"`           
-	ParameterSize    string   `json:"parameter_size"`    
-	ParameterCount   int64    `json:"parameter_count"`   
-	Quantization     string   `json:"quantization"`      
-	Format           string   `json:"format"`            
-	Aliases          []string `json:"aliases"`           
-	Endpoints        []string `json:"endpoints"`         // Endpoint names
-	EndpointURLs     []string `json:"endpoint_urls"`     // Actual URLs
-	LoadedEndpoints  []string `json:"loaded_endpoints"`  // Where model is loaded
-	Capabilities     []string `json:"capabilities"`      
 	MaxContextLength *int64   `json:"max_context_length,omitempty"`
-	TotalDiskSize    string   `json:"total_disk_size"`   
+	ID               string   `json:"id"` // Canonical ID
+	Family           string   `json:"family"`
+	Variant          string   `json:"variant"`
+	ParameterSize    string   `json:"parameter_size"`
+	Quantization     string   `json:"quantization"`
+	Format           string   `json:"format"`
+	TotalDiskSize    string   `json:"total_disk_size"`
 	LastSeen         string   `json:"last_seen"`
+	Aliases          []string `json:"aliases"`
+	Endpoints        []string `json:"endpoints"`        // Endpoint names only
+	LoadedEndpoints  []string `json:"loaded_endpoints"` // Where model is loaded (names only)
+	Capabilities     []string `json:"capabilities"`
+	ParameterCount   int64    `json:"parameter_count"`
 }
 
 // UnifiedModelResponse represents the full unified models API response
 type UnifiedModelResponse struct {
-	Timestamp         time.Time                      `json:"timestamp"`
-	UnifiedModels     []UnifiedModelSummary          `json:"unified_models"`
-	ModelsByFamily    map[string][]string            `json:"models_by_family"`
-	TotalModels       int                            `json:"total_models"`
-	TotalFamilies     int                            `json:"total_families"`
-	TotalEndpoints    int                            `json:"total_endpoints"`
-	UnificationStats  *domain.UnificationStats       `json:"unification_stats,omitempty"`
+	Timestamp        time.Time                `json:"timestamp"`
+	ModelsByFamily   map[string][]string      `json:"models_by_family"`
+	UnificationStats *domain.UnificationStats `json:"unification_stats,omitempty"`
+	UnifiedModels    []UnifiedModelSummary    `json:"unified_models"`
+	TotalModels      int                      `json:"total_models"`
+	TotalFamilies    int                      `json:"total_families"`
+	TotalEndpoints   int                      `json:"total_endpoints"`
 }
 
 // unifiedModelsHandler returns unified model information
 func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	qry := r.URL.Query()
 
 	// Check if registry supports unified models
 	unifiedRegistry, ok := a.modelRegistry.(*registry.UnifiedMemoryModelRegistry)
@@ -57,20 +56,20 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Parse query parameters
-	format := r.URL.Query().Get("format")
+	format := qry.Get("format")
 	if format == "" {
 		format = "unified" // Default format
 	}
 
 	// Build filters from query parameters
 	filters := ports.ModelFilters{
-		Endpoint: r.URL.Query().Get("endpoint"),
-		Family:   r.URL.Query().Get("family"),
-		Type:     r.URL.Query().Get("type"),
+		Endpoint: qry.Get("endpoint"),
+		Family:   qry.Get("family"),
+		Type:     qry.Get("type"),
 	}
 
 	// Parse available filter
-	if availStr := r.URL.Query().Get("available"); availStr != "" {
+	if availStr := qry.Get("available"); availStr != "" {
 		switch availStr {
 		case "true":
 			avail := true
@@ -85,7 +84,7 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Handle legacy capability parameter by mapping to type
-	if capability := r.URL.Query().Get("capability"); capability != "" {
+	if capability := qry.Get("capability"); capability != "" {
 		// Map capabilities to types
 		switch strings.ToLower(capability) {
 		case "vision", "multimodal":
@@ -161,7 +160,6 @@ func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpo
 		TotalDiskSize:    format.Bytes(uint64(model.DiskSize)),
 		LastSeen:         format.TimeAgo(model.LastSeen),
 		Endpoints:        make([]string, 0, len(model.SourceEndpoints)),
-		EndpointURLs:     make([]string, 0, len(model.SourceEndpoints)),
 		LoadedEndpoints:  make([]string, 0),
 	}
 
@@ -169,12 +167,11 @@ func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpo
 	for _, ep := range model.SourceEndpoints {
 		endpointName := endpointNames[ep.EndpointURL]
 		if endpointName == "" {
-			endpointName = ep.EndpointURL
+			endpointName = ep.EndpointName // Use the endpoint name from the model
 		}
-		
+
 		summary.Endpoints = append(summary.Endpoints, endpointName)
-		summary.EndpointURLs = append(summary.EndpointURLs, ep.EndpointURL)
-		
+
 		if ep.State == "loaded" {
 			summary.LoadedEndpoints = append(summary.LoadedEndpoints, endpointName)
 		}
@@ -196,35 +193,14 @@ func (a *Application) enrichResponseWithEndpointNames(ctx context.Context, respo
 		endpointNames[ep.URLString] = ep.Name
 	}
 
-	switch resp := response.(type) {
-	case *converter.UnifiedModelResponse:
-		for i := range resp.Data {
-			if resp.Data[i].Olla != nil {
-				for j := range resp.Data[i].Olla.Availability {
-					if name, exists := endpointNames[resp.Data[i].Olla.Availability[j].URL]; exists {
-						resp.Data[i].Olla.Availability[j].Endpoint = name
-					}
-				}
-			}
-		}
-	case converter.UnifiedModelResponse:
-		// Handle non-pointer case
-		respPtr := &resp
-		for i := range respPtr.Data {
-			if respPtr.Data[i].Olla != nil {
-				for j := range respPtr.Data[i].Olla.Availability {
-					if name, exists := endpointNames[respPtr.Data[i].Olla.Availability[j].URL]; exists {
-						respPtr.Data[i].Olla.Availability[j].Endpoint = name
-					}
-				}
-			}
-		}
-	}
+	// Note: The converter already uses endpoint names directly from SourceEndpoint.EndpointName
+	// so no additional enrichment is needed for the availability field
+	_ = response // Keep the parameter for potential future use
 }
 
 func (a *Application) unifiedModelByAliasHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	
+
 	// Extract model ID/alias from path
 	// This assumes the route is something like /olla/models/{id}
 	pathParts := strings.Split(r.URL.Path, "/")
@@ -232,7 +208,7 @@ func (a *Application) unifiedModelByAliasHandler(w http.ResponseWriter, r *http.
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-	
+
 	modelAlias := pathParts[3]
 	if modelAlias == "" {
 		http.Error(w, "Model ID or alias required", http.StatusBadRequest)

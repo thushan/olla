@@ -11,7 +11,7 @@ import (
 
 func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 	converter := NewUnifiedConverter()
-	
+
 	models := []*domain.UnifiedModel{
 		{
 			ID:             "llama/3:70b-q4km",
@@ -27,10 +27,11 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 			},
 			SourceEndpoints: []domain.SourceEndpoint{
 				{
-					EndpointURL: "http://localhost:11434",
-					NativeName:  "llama3:latest",
-					State:       "loaded",
-					DiskSize:    40000000000,
+					EndpointURL:  "http://localhost:11434",
+					EndpointName: "Ollama Server",
+					NativeName:   "llama3:latest",
+					State:        "loaded",
+					DiskSize:     40000000000,
 				},
 			},
 			Capabilities:     []string{"chat", "completion"},
@@ -51,16 +52,18 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 			},
 			SourceEndpoints: []domain.SourceEndpoint{
 				{
-					EndpointURL: "http://localhost:11434",
-					NativeName:  "phi4:latest",
-					State:       "not-loaded",
-					DiskSize:    8000000000,
+					EndpointURL:  "http://localhost:11434",
+					EndpointName: "Ollama Server",
+					NativeName:   "phi4:latest",
+					State:        "not-loaded",
+					DiskSize:     8000000000,
 				},
 				{
-					EndpointURL: "http://localhost:1234",
-					NativeName:  "microsoft/phi-4",
-					State:       "loaded",
-					DiskSize:    8000000000,
+					EndpointURL:  "http://localhost:1234",
+					EndpointName: "LM Studio",
+					NativeName:   "microsoft/phi-4",
+					State:        "loaded",
+					DiskSize:     8000000000,
 				},
 			},
 			Capabilities: []string{"chat", "code"},
@@ -72,15 +75,15 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 
 	t.Run("no filters", func(t *testing.T) {
 		filters := ports.ModelFilters{}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(UnifiedModelResponse)
 		require.True(t, ok)
 		assert.Equal(t, "list", response.Object)
 		assert.Len(t, response.Data, 2)
-		
+
 		// Check first model
 		assert.Equal(t, "llama/3:70b-q4km", response.Data[0].ID)
 		assert.Equal(t, "model", response.Data[0].Object)
@@ -92,6 +95,7 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		assert.Equal(t, "q4km", response.Data[0].Olla.Quantization)
 		assert.Len(t, response.Data[0].Olla.Aliases, 2)
 		assert.Len(t, response.Data[0].Olla.Availability, 1)
+		assert.Equal(t, "Ollama Server", response.Data[0].Olla.Availability[0].Endpoint)
 		assert.Equal(t, "loaded", response.Data[0].Olla.Availability[0].State)
 		assert.Equal(t, "chatml", response.Data[0].Olla.PromptTemplateID)
 		assert.Equal(t, int64(4096), *response.Data[0].Olla.MaxContextLength)
@@ -101,10 +105,10 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		filters := ports.ModelFilters{
 			Family: "phi",
 		}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(UnifiedModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 1)
@@ -116,10 +120,10 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		filters := ports.ModelFilters{
 			Available: &avail,
 		}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(UnifiedModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 2) // Both have at least one loaded endpoint
@@ -129,10 +133,10 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		filters := ports.ModelFilters{
 			Endpoint: "http://localhost:1234",
 		}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(UnifiedModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 1)
@@ -143,10 +147,10 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		filters := ports.ModelFilters{
 			Type: "llm",
 		}
-		
+
 		result, err := converter.ConvertToFormat(models, filters)
 		require.NoError(t, err)
-		
+
 		response, ok := result.(UnifiedModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 2) // Both are LLMs

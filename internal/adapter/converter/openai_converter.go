@@ -9,7 +9,7 @@ import (
 
 // OpenAIModelResponse represents the OpenAI-compatible format response
 type OpenAIModelResponse struct {
-	Object string           `json:"object"`
+	Object string            `json:"object"`
 	Data   []OpenAIModelData `json:"data"`
 }
 
@@ -17,8 +17,8 @@ type OpenAIModelResponse struct {
 type OpenAIModelData struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
-	Created int64  `json:"created"`
 	OwnedBy string `json:"owned_by"`
+	Created int64  `json:"created"`
 }
 
 // OpenAIConverter converts models to OpenAI-compatible format
@@ -35,7 +35,7 @@ func (c *OpenAIConverter) GetFormatName() string {
 
 func (c *OpenAIConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
 	filtered := filterModels(models, filters)
-	
+
 	data := make([]OpenAIModelData, 0, len(filtered))
 	for _, model := range filtered {
 		data = append(data, c.convertModel(model))

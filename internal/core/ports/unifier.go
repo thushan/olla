@@ -9,10 +9,10 @@ import (
 // ModelUnifier provides unified naming and aliasing for models across different platforms
 type ModelUnifier interface {
 	// UnifyModel converts a platform-specific model to unified format
-	UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpointURL string) (*domain.UnifiedModel, error)
+	UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpoint *domain.Endpoint) (*domain.UnifiedModel, error)
 
 	// UnifyModels batch processes multiple models for efficiency
-	UnifyModels(ctx context.Context, sourceModels []*domain.ModelInfo, endpointURL string) ([]*domain.UnifiedModel, error)
+	UnifyModels(ctx context.Context, sourceModels []*domain.ModelInfo, endpoint *domain.Endpoint) ([]*domain.UnifiedModel, error)
 
 	// ResolveAlias finds unified model by any known alias
 	ResolveAlias(ctx context.Context, alias string) (*domain.UnifiedModel, error)
@@ -70,7 +70,7 @@ type ModelNormalizer interface {
 
 	// GenerateAliases creates platform-specific aliases
 	GenerateAliases(unified *domain.UnifiedModel, platformType string, nativeName string) []domain.AliasEntry
-	
+
 	// NormaliseAlias normalises an alias for consistent lookups
 	NormaliseAlias(alias string) string
 }

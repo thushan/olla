@@ -5,21 +5,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thushan/olla/internal/core/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/core/domain"
 )
 
-// Helper function
+// Helper functions
 func ptrString(s string) *string {
 	return &s
+}
+
+func createTestEndpoint(url, name string) *domain.Endpoint {
+	return &domain.Endpoint{
+		URLString: url,
+		Name:      name,
+	}
 }
 
 func TestDefaultUnifier_UnifyModels(t *testing.T) {
 	tests := []struct {
 		name           string
 		inputModels    [][]*domain.ModelInfo // models from different endpoints
-		endpoints      []string
+		endpoints      []*domain.Endpoint
 		expectedCount  int
 		expectedDigest int
 		expectedName   int
@@ -46,7 +53,10 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 					},
 				},
 			},
-			endpoints:      []string{"http://localhost:11434", "http://localhost:1234"},
+			endpoints: []*domain.Endpoint{
+				createTestEndpoint("http://localhost:11434", "Ollama Server"),
+				createTestEndpoint("http://localhost:1234", "LM Studio"),
+			},
 			expectedCount:  1,
 			expectedDigest: 1,
 			expectedName:   0,
@@ -67,7 +77,10 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 					},
 				},
 			},
-			endpoints:      []string{"http://localhost:11434", "http://localhost:1234"},
+			endpoints: []*domain.Endpoint{
+				createTestEndpoint("http://localhost:11434", "Ollama Server"),
+				createTestEndpoint("http://localhost:1234", "LM Studio"),
+			},
 			expectedCount:  1,
 			expectedDigest: 0,
 			expectedName:   1,
@@ -77,22 +90,25 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 			inputModels: [][]*domain.ModelInfo{
 				{
 					{
-						Name:   "llama3:8b",
+						Name:    "llama3:8b",
 						Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
 					},
 					{
-						Name:   "phi3:mini",
+						Name:    "phi3:mini",
 						Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
 					},
 				},
 				{
 					{
-						Name:   "mistral:7b",
+						Name:    "mistral:7b",
 						Details: &domain.ModelDetails{Digest: ptrString("sha256:ghi789")},
 					},
 				},
 			},
-			endpoints:      []string{"http://localhost:11434", "http://localhost:1234"},
+			endpoints: []*domain.Endpoint{
+				createTestEndpoint("http://localhost:11434", "Ollama Server"),
+				createTestEndpoint("http://localhost:1234", "LM Studio"),
+			},
 			expectedCount:  3,
 			expectedDigest: 0,
 			expectedName:   0,
@@ -111,7 +127,10 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 					},
 				},
 			},
-			endpoints:      []string{"http://localhost:11434", "http://localhost:1234"},
+			endpoints: []*domain.Endpoint{
+				createTestEndpoint("http://localhost:11434", "Ollama Server"),
+				createTestEndpoint("http://localhost:1234", "LM Studio"),
+			},
 			expectedCount:  1,
 			expectedDigest: 0,
 			expectedName:   1,
@@ -121,18 +140,21 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 			inputModels: [][]*domain.ModelInfo{
 				{
 					{
-						Name:   "llama3:8b",
+						Name:    "llama3:8b",
 						Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
 					},
 				},
 				{
 					{
-						Name:   "llama3:8b",
+						Name:    "llama3:8b",
 						Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
 					},
 				},
 			},
-			endpoints:      []string{"http://localhost:11434", "http://localhost:1234"},
+			endpoints: []*domain.Endpoint{
+				createTestEndpoint("http://localhost:11434", "Ollama Server"),
+				createTestEndpoint("http://localhost:1234", "LM Studio"),
+			},
 			expectedCount:  2,
 			expectedDigest: 0,
 			expectedName:   0,
@@ -163,7 +185,6 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 	}
 }
 
-
 func TestDefaultUnifier_ResolveModel(t *testing.T) {
 	ctx := context.Background()
 	unifier := NewDefaultUnifier()
@@ -171,16 +192,17 @@ func TestDefaultUnifier_ResolveModel(t *testing.T) {
 	// Add some models
 	models := []*domain.ModelInfo{
 		{
-			Name:   "llama3:8b",
+			Name:    "llama3:8b",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
 		},
 		{
-			Name:   "Phi3:Mini",
+			Name:    "Phi3:Mini",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
 		},
 	}
 
-	_, err := unifier.UnifyModels(ctx, models, "http://localhost:11434")
+	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
+	_, err := unifier.UnifyModels(ctx, models, endpoint)
 	require.NoError(t, err)
 
 	// Test resolution by exact ID
@@ -222,7 +244,8 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 			},
 		},
 	}
-	_, err := unifier.UnifyModels(ctx, models1, "http://localhost:11434")
+	endpoint1 := createTestEndpoint("http://localhost:11434", "Ollama Server")
+	_, err := unifier.UnifyModels(ctx, models1, endpoint1)
 	require.NoError(t, err)
 
 	// Add same model from second endpoint
@@ -236,7 +259,8 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 			},
 		},
 	}
-	_, err = unifier.UnifyModels(ctx, models2, "http://localhost:1234")
+	endpoint2 := createTestEndpoint("http://localhost:1234", "LM Studio")
+	_, err = unifier.UnifyModels(ctx, models2, endpoint2)
 	require.NoError(t, err)
 
 	// Check merged model
@@ -262,25 +286,26 @@ func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
 	// Add models from endpoint
 	models := []*domain.ModelInfo{
 		{
-			Name:   "llama3:8b",
+			Name:    "llama3:8b",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
 		},
 		{
-			Name:   "phi3:mini",
+			Name:    "phi3:mini",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
 		},
 	}
-	_, err := unifier.UnifyModels(ctx, models, "http://localhost:11434")
+	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
+	_, err := unifier.UnifyModels(ctx, models, endpoint)
 	require.NoError(t, err)
 
 	// Update endpoint with only one model
 	newModels := []*domain.ModelInfo{
 		{
-			Name:   "llama3:8b",
+			Name:    "llama3:8b",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
 		},
 	}
-	_, err = unifier.UnifyModels(ctx, newModels, "http://localhost:11434")
+	_, err = unifier.UnifyModels(ctx, newModels, endpoint)
 	require.NoError(t, err)
 
 	// Verify phi3 was removed
@@ -300,11 +325,12 @@ func TestDefaultUnifier_Clear(t *testing.T) {
 	// Add some models
 	models := []*domain.ModelInfo{
 		{
-			Name:   "llama3:8b",
+			Name:    "llama3:8b",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
 		},
 	}
-	_, err := unifier.UnifyModels(ctx, models, "http://localhost:11434")
+	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
+	_, err := unifier.UnifyModels(ctx, models, endpoint)
 	require.NoError(t, err)
 
 	// Clear
@@ -324,18 +350,19 @@ func TestDefaultUnifier_Clear(t *testing.T) {
 func TestDefaultUnifier_StaleModelCleanup(t *testing.T) {
 	ctx := context.Background()
 	unifier := NewDefaultUnifier().(*DefaultUnifier)
-	
+
 	// Set short cleanup interval for testing
 	unifier.cleanupInterval = 100 * time.Millisecond
 
 	// Add a model
 	models := []*domain.ModelInfo{
 		{
-			Name:   "llama3:8b",
+			Name:    "llama3:8b",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
 		},
 	}
-	_, err := unifier.UnifyModels(ctx, models, "http://localhost:11434")
+	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
+	_, err := unifier.UnifyModels(ctx, models, endpoint)
 	require.NoError(t, err)
 
 	// Manually set LastSeen to old time
@@ -351,11 +378,12 @@ func TestDefaultUnifier_StaleModelCleanup(t *testing.T) {
 	// Add new model to trigger cleanup
 	newModels := []*domain.ModelInfo{
 		{
-			Name:   "phi3:mini",
+			Name:    "phi3:mini",
 			Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
 		},
 	}
-	_, err = unifier.UnifyModels(ctx, newModels, "http://localhost:1234")
+	endpoint2 := createTestEndpoint("http://localhost:1234", "LM Studio")
+	_, err = unifier.UnifyModels(ctx, newModels, endpoint2)
 	require.NoError(t, err)
 
 	// Verify old model was cleaned up
@@ -373,12 +401,13 @@ func TestDefaultUnifier_NilAndEmptyInputs(t *testing.T) {
 	unifier := NewDefaultUnifier()
 
 	// Test nil models
-	result, err := unifier.UnifyModels(ctx, nil, "http://localhost:11434")
+	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
+	result, err := unifier.UnifyModels(ctx, nil, endpoint)
 	require.NoError(t, err)
 	assert.Nil(t, result)
 
 	// Test empty models
-	result, err = unifier.UnifyModels(ctx, []*domain.ModelInfo{}, "http://localhost:11434")
+	result, err = unifier.UnifyModels(ctx, []*domain.ModelInfo{}, endpoint)
 	require.NoError(t, err)
 	assert.Nil(t, result)
 
@@ -392,7 +421,7 @@ func TestDefaultUnifier_NilAndEmptyInputs(t *testing.T) {
 			Name: "phi3:mini",
 		},
 	}
-	result, err = unifier.UnifyModels(ctx, models, "http://localhost:11434")
+	result, err = unifier.UnifyModels(ctx, models, endpoint)
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
 }

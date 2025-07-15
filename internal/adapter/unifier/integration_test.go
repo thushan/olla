@@ -122,7 +122,7 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 
 	// Should have endpoint from Ollama only since names differ
 	assert.Len(t, phi4Model.SourceEndpoints, 1)
-	
+
 	// Check endpoint details
 	for _, ep := range phi4Model.SourceEndpoints {
 		if ep.EndpointURL == ollamaEndpoint {
@@ -198,7 +198,7 @@ func TestUnifierIntegrationEdgeCases(t *testing.T) {
 			{
 				Name: "valid:model",
 				Details: &domain.ModelDetails{
-					Family: strPtr("test"),
+					Family:        strPtr("test"),
 					ParameterSize: strPtr("7B"),
 				},
 			},
@@ -206,7 +206,7 @@ func TestUnifierIntegrationEdgeCases(t *testing.T) {
 			{
 				Name: "another:model",
 				Details: &domain.ModelDetails{
-					Family: strPtr("test2"),
+					Family:        strPtr("test2"),
 					ParameterSize: strPtr("13B"),
 				},
 			},
@@ -355,4 +355,3 @@ func TestUnifierWithRealWorldScenarios(t *testing.T) {
 		assert.NotNil(t, unified)
 	})
 }
-

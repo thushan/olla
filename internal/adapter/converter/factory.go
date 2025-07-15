@@ -16,13 +16,13 @@ func NewConverterFactory() *ConverterFactory {
 	factory := &ConverterFactory{
 		converters: make(map[string]ports.ModelResponseConverter),
 	}
-	
+
 	// Register all converters
 	factory.RegisterConverter(NewUnifiedConverter())
 	factory.RegisterConverter(NewOpenAIConverter())
 	factory.RegisterConverter(NewOllamaConverter())
 	factory.RegisterConverter(NewLMStudioConverter())
-	
+
 	return factory
 }
 
@@ -37,7 +37,7 @@ func (f *ConverterFactory) GetConverter(format string) (ports.ModelResponseConve
 	if format == "" {
 		format = "unified"
 	}
-	
+
 	converter, exists := f.converters[format]
 	if !exists {
 		return nil, &ports.QueryParameterError{
@@ -46,7 +46,7 @@ func (f *ConverterFactory) GetConverter(format string) (ports.ModelResponseConve
 			Reason:    fmt.Sprintf("unsupported format. Supported formats: %s", f.getSupportedFormats()),
 		}
 	}
-	
+
 	return converter, nil
 }
 

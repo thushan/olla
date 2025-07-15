@@ -15,30 +15,29 @@ type UnifiedModelResponse struct {
 
 // UnifiedModelData represents a single model in the unified format
 type UnifiedModelData struct {
+	Olla    *OllaExtensions `json:"olla,omitempty"`
 	ID      string          `json:"id"`
 	Object  string          `json:"object"`
-	Created int64           `json:"created"`
 	OwnedBy string          `json:"owned_by"`
-	Olla    *OllaExtensions `json:"olla,omitempty"`
+	Created int64           `json:"created"`
 }
 
 // OllaExtensions contains Olla-specific model information
 type OllaExtensions struct {
+	MaxContextLength *int64           `json:"max_context_length,omitempty"`
 	Family           string           `json:"family"`
 	Variant          string           `json:"variant"`
 	ParameterSize    string           `json:"parameter_size"`
 	Quantization     string           `json:"quantization"`
+	PromptTemplateID string           `json:"prompt_template_id,omitempty"`
 	Aliases          []string         `json:"aliases"`
 	Availability     []EndpointStatus `json:"availability"`
 	Capabilities     []string         `json:"capabilities"`
-	MaxContextLength *int64           `json:"max_context_length,omitempty"`
-	PromptTemplateID string           `json:"prompt_template_id,omitempty"`
 }
 
 // EndpointStatus represents model availability on an endpoint
 type EndpointStatus struct {
-	Endpoint string `json:"endpoint"`
-	URL      string `json:"url"`
+	Endpoint string `json:"endpoint"` // Endpoint name only (no URL for security)
 	State    string `json:"state"`
 }
 
@@ -72,8 +71,7 @@ func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModel
 	availability := make([]EndpointStatus, 0, len(model.SourceEndpoints))
 	for _, ep := range model.SourceEndpoints {
 		availability = append(availability, EndpointStatus{
-			Endpoint: ep.EndpointURL,
-			URL:      ep.EndpointURL,
+			Endpoint: ep.EndpointName, // Use endpoint name instead of URL
 			State:    ep.State,
 		})
 	}

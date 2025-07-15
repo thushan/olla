@@ -113,21 +113,21 @@ type EngineeringConfig struct {
 
 // ModelRegistryConfig holds model registry configuration
 type ModelRegistryConfig struct {
-	Type          string             `yaml:"type"`
-	EnableUnifier bool               `yaml:"enable_unifier"`
-	Unification   UnificationConfig  `yaml:"unification"`
+	Type          string            `yaml:"type"`
+	Unification   UnificationConfig `yaml:"unification"`
+	EnableUnifier bool              `yaml:"enable_unifier"`
 }
 
 // UnificationConfig holds model unification configuration
 type UnificationConfig struct {
-	Enabled      bool                     `yaml:"enabled"`
-	CacheTTL     time.Duration            `yaml:"cache_ttl"`
-	CustomRules  []UnificationRuleConfig  `yaml:"custom_rules"`
+	CustomRules []UnificationRuleConfig `yaml:"custom_rules"`
+	CacheTTL    time.Duration           `yaml:"cache_ttl"`
+	Enabled     bool                    `yaml:"enabled"`
 }
 
 // UnificationRuleConfig defines custom unification rules
 type UnificationRuleConfig struct {
-	Platform         string                 `yaml:"platform"`
-	FamilyOverrides  map[string]string      `yaml:"family_overrides"`
-	NamePatterns     map[string]string      `yaml:"name_patterns"`
+	FamilyOverrides map[string]string `yaml:"family_overrides"`
+	NamePatterns    map[string]string `yaml:"name_patterns"`
+	Platform        string            `yaml:"platform"`
 }
