@@ -32,12 +32,15 @@ type UnifiedModel struct {
 
 // SourceEndpoint represents where a unified model is available
 type SourceEndpoint struct {
-	LastSeen     time.Time `json:"last_seen"`
-	EndpointURL  string    `json:"-"` // Hidden from JSON output for security
-	EndpointName string    `json:"endpoint_name"`
-	NativeName   string    `json:"native_name"` // Original name on this platform
-	State        string    `json:"state"`       // loaded, not-loaded, etc.
-	DiskSize     int64     `json:"disk_size"`
+	LastSeen       time.Time             `json:"last_seen"`
+	LastStateCheck time.Time             `json:"last_state_check"`
+	StateInfo      *EndpointStateInfo    `json:"state_info,omitempty"`
+	EndpointURL    string                `json:"-"` // Hidden from JSON output for security
+	EndpointName   string                `json:"endpoint_name"`
+	NativeName     string                `json:"native_name"` // Original name on this platform
+	State          string                `json:"state"`       // loaded, not-loaded, etc.
+	ModelState     ModelState            `json:"model_state"` // New typed state
+	DiskSize       int64                 `json:"disk_size"`
 }
 
 // UnificationStats tracks performance metrics for model unification
@@ -153,9 +156,81 @@ func (u *UnifiedModel) IsAvailable() bool {
 func (u *UnifiedModel) GetLoadedEndpoints() []SourceEndpoint {
 	var loaded []SourceEndpoint
 	for _, endpoint := range u.SourceEndpoints {
-		if endpoint.State == "loaded" {
+		if endpoint.State == "loaded" || endpoint.ModelState == ModelStateLoaded {
 			loaded = append(loaded, endpoint)
 		}
 	}
 	return loaded
+}
+
+// GetHealthyEndpoints returns endpoints that are online and have the model available
+func (u *UnifiedModel) GetHealthyEndpoints() []SourceEndpoint {
+	var healthy []SourceEndpoint
+	for _, endpoint := range u.SourceEndpoints {
+		if endpoint.IsHealthy() {
+			healthy = append(healthy, endpoint)
+		}
+	}
+	return healthy
+}
+
+// UpdateEndpointState updates the state of a specific endpoint
+func (u *UnifiedModel) UpdateEndpointState(endpointURL string, state ModelState, stateInfo *EndpointStateInfo) {
+	for i := range u.SourceEndpoints {
+		if u.SourceEndpoints[i].EndpointURL == endpointURL {
+			u.SourceEndpoints[i].ModelState = state
+			u.SourceEndpoints[i].StateInfo = stateInfo
+			u.SourceEndpoints[i].LastStateCheck = time.Now()
+			if state == ModelStateOffline {
+				u.SourceEndpoints[i].State = "offline"
+			}
+			return
+		}
+	}
+}
+
+// MarkEndpointOffline marks a specific endpoint as offline
+func (u *UnifiedModel) MarkEndpointOffline(endpointURL string, reason string) {
+	u.UpdateEndpointState(endpointURL, ModelStateOffline, &EndpointStateInfo{
+		State:           EndpointStateOffline,
+		LastStateChange: time.Now(),
+		LastError:       reason,
+	})
+}
+
+// IsHealthy checks if the endpoint is healthy
+func (s *SourceEndpoint) IsHealthy() bool {
+	// Check new typed state first
+	if s.ModelState != "" {
+		return s.ModelState.IsHealthy()
+	}
+	// Fall back to string state for compatibility
+	return s.State == "loaded" || s.State == "available"
+}
+
+// GetEffectiveState returns the effective state considering both endpoint and model states
+func (s *SourceEndpoint) GetEffectiveState() ModelState {
+	// If endpoint is offline, model is offline too
+	if s.StateInfo != nil && !s.StateInfo.State.IsHealthy() {
+		return ModelStateOffline
+	}
+	
+	// Use typed state if available
+	if s.ModelState != "" {
+		return s.ModelState
+	}
+	
+	// Map string state to typed state for compatibility
+	switch s.State {
+	case "loaded":
+		return ModelStateLoaded
+	case "available", "not-loaded":
+		return ModelStateAvailable
+	case "offline":
+		return ModelStateOffline
+	case "error":
+		return ModelStateError
+	default:
+		return ModelStateUnknown
+	}
 }

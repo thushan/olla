@@ -8,7 +8,10 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
-const DefaultUnifierType = "default"
+const (
+	DefaultUnifierType   = "default"
+	LifecycleUnifierType = "lifecycle"
+)
 
 // Factory creates model unifier instances
 type Factory struct {
@@ -27,6 +30,11 @@ func NewFactory(log logger.StyledLogger) *Factory {
 	// Register default unifier
 	factory.Register(DefaultUnifierType, func(l logger.StyledLogger) ports.ModelUnifier {
 		return NewDefaultUnifier()
+	})
+
+	// Register lifecycle unifier
+	factory.Register(LifecycleUnifierType, func(l logger.StyledLogger) ports.ModelUnifier {
+		return NewLifecycleUnifier(DefaultConfig(), l)
 	})
 
 	return factory
@@ -62,4 +70,25 @@ func (f *Factory) GetAvailableTypes() []string {
 		types = append(types, name)
 	}
 	return types
+}
+
+// CreateWithConfig creates a unifier with custom configuration
+func (f *Factory) CreateWithConfig(name string, config Config) (ports.ModelUnifier, error) {
+	switch name {
+	case LifecycleUnifierType:
+		return NewLifecycleUnifier(config, f.logger), nil
+	case DefaultUnifierType:
+		return NewDefaultUnifier(), nil
+	default:
+		return f.Create(name)
+	}
+}
+
+// CreateLifecycleUnifierWithDiscovery creates a lifecycle unifier with discovery client
+func (f *Factory) CreateLifecycleUnifierWithDiscovery(config Config, discoveryClient DiscoveryClient) (ports.ModelUnifier, error) {
+	unifier := NewLifecycleUnifier(config, f.logger)
+	if lifecycleUnifier, ok := unifier.(*LifecycleUnifier); ok {
+		lifecycleUnifier.SetDiscoveryClient(discoveryClient)
+	}
+	return unifier, nil
 }
