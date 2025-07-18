@@ -174,110 +174,21 @@ func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, newModel 
 
 // createUnifiedModel creates a new unified model from a platform model
 func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpoint) *domain.UnifiedModel {
-	// Use original model ID/name as the unified ID
-	id := model.Name
-	if model.ID != "" {
-		id = model.ID
-	}
-
-	// Make ID unique if there's already a model with this ID but different digest
-	if existing, exists := u.catalog[id]; exists {
-		if model.Digest != "" && existing.Metadata != nil {
-			if existingDigest, ok := existing.Metadata["digest"].(string); ok {
-				if existingDigest != "" && existingDigest != model.Digest {
-					// Different digest, need unique ID
-					if len(model.Digest) >= 8 {
-						id = fmt.Sprintf("%s-%s", id, model.Digest[len(model.Digest)-8:])
-					} else {
-						id = fmt.Sprintf("%s-%s", id, model.Digest)
-					}
-				}
-			}
-		}
-	}
-
-	// Detect platform from model metadata
+	id := u.generateUniqueID(model)
 	platform := u.detectPlatform(model)
+	source := u.createSourceEndpoint(model, endpoint)
 
-	// Create source endpoint - use name for display, URL internally
-	source := domain.SourceEndpoint{
-		EndpointURL:  endpoint.GetURLString(),
-		EndpointName: endpoint.Name, // Use name for display
-		NativeName:   model.Name,
-		State:        u.mapModelState(model),
-		LastSeen:     time.Now(),
-		DiskSize:     model.Size,
-	}
+	// Extract model attributes
+	paramSize, paramCount := u.extractParameterInfo(model)
+	quantization := u.extractQuantization(model)
+	family, variant := u.extractFamilyAndVariant(model)
+	modelType := u.extractModelType(model)
 
-	// Extract and normalize parameter size
-	paramSize := ""
-	paramCount := int64(0)
-	if sizeStr, ok := model.Metadata["parameter_size"].(string); ok {
-		paramSize, paramCount = extractParameterSize(sizeStr)
-	}
-	// If we didn't get a parameter count, use disk size as fallback
-	if paramCount == 0 && model.Size > 0 {
-		paramCount = model.Size
-	}
-
-	// Extract and normalize quantization
-	quantization := ""
-	if quantStr, ok := model.Metadata["quantization_level"].(string); ok {
-		quantization = normalizeQuantization(quantStr)
-	} else if quantStr, ok := model.Metadata["quantization"].(string); ok {
-		quantization = normalizeQuantization(quantStr)
-	}
-
-	// Extract family and variant
-	arch := ""
-	if archStr, ok := model.Metadata["arch"].(string); ok {
-		arch = archStr
-	}
-	family, variant := extractFamilyAndVariant(model.Name, arch)
-	// Use family from metadata if available, otherwise use extracted
-	if model.Family != "" {
-		family = model.Family
-		// Don't extract variant if family comes from metadata to avoid confusion
-		// (e.g., gemma3 from metadata shouldn't produce variant "3")
-		variant = ""
-	} else if family != "" {
-		model.Family = family
-	}
-
-	modelType := ""
-	if typeStr, ok := model.Metadata["type"].(string); ok {
-		modelType = typeStr
-	} else if typeStr, ok := model.Metadata["model_type"].(string); ok {
-		modelType = typeStr
-	}
-
-	// Build comprehensive capabilities list
+	// Build capabilities and metadata
 	capabilities := inferCapabilitiesFromMetadata(modelType, model.Name, model.ContextWindow, model.Metadata)
-
-	// Extract publisher
 	publisher := extractPublisher(model.Name, model.Metadata)
+	metadata := u.buildMetadata(model, platform, publisher, paramSize, quantization, family)
 
-	// Prepare enriched metadata
-	metadata := make(map[string]interface{})
-	if model.Metadata != nil {
-		for k, v := range model.Metadata {
-			metadata[k] = v
-		}
-	}
-	// Store digest in metadata for conflict detection
-	if model.Digest != "" {
-		metadata["digest"] = model.Digest
-	}
-	// Add extracted publisher if we found one
-	if publisher != "" && metadata["publisher"] == nil {
-		metadata["publisher"] = publisher
-	}
-	// Add platform info
-	metadata["platform"] = platform
-	// Add confidence score for extracted metadata
-	metadata["metadata_confidence"] = u.calculateMetadataConfidence(model, paramSize, quantization, family)
-
-	contextWindow := model.ContextWindow
 	return &domain.UnifiedModel{
 		ID:               id,
 		Family:           family,
@@ -289,11 +200,145 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpo
 		Aliases:          []domain.AliasEntry{{Name: model.Name, Source: platform}},
 		SourceEndpoints:  []domain.SourceEndpoint{source},
 		Capabilities:     capabilities,
-		MaxContextLength: nilIfZero(contextWindow),
+		MaxContextLength: nilIfZero(model.ContextWindow),
 		DiskSize:         model.Size,
 		LastSeen:         time.Now(),
 		Metadata:         metadata,
 	}
+}
+
+// generateUniqueID generates a unique ID for the model
+func (u *DefaultUnifier) generateUniqueID(model *Model) string {
+	id := model.Name
+	if model.ID != "" {
+		id = model.ID
+	}
+
+	// Make ID unique if there's already a model with this ID but different digest
+	if existing, exists := u.catalog[id]; exists {
+		if u.hasDigestConflict(existing, model) {
+			id = u.appendDigestSuffix(id, model.Digest)
+		}
+	}
+
+	return id
+}
+
+// hasDigestConflict checks if two models have different digests
+func (u *DefaultUnifier) hasDigestConflict(existing *domain.UnifiedModel, model *Model) bool {
+	if model.Digest == "" || existing.Metadata == nil {
+		return false
+	}
+
+	existingDigest, ok := existing.Metadata["digest"].(string)
+	return ok && existingDigest != "" && existingDigest != model.Digest
+}
+
+// appendDigestSuffix appends a digest suffix to make ID unique
+func (u *DefaultUnifier) appendDigestSuffix(id, digest string) string {
+	if len(digest) >= 8 {
+		return fmt.Sprintf("%s-%s", id, digest[len(digest)-8:])
+	}
+	return fmt.Sprintf("%s-%s", id, digest)
+}
+
+// createSourceEndpoint creates a source endpoint for the model
+func (u *DefaultUnifier) createSourceEndpoint(model *Model, endpoint *domain.Endpoint) domain.SourceEndpoint {
+	return domain.SourceEndpoint{
+		EndpointURL:  endpoint.GetURLString(),
+		EndpointName: endpoint.Name,
+		NativeName:   model.Name,
+		State:        u.mapModelState(model),
+		LastSeen:     time.Now(),
+		DiskSize:     model.Size,
+	}
+}
+
+// extractParameterInfo extracts parameter size and count from model metadata
+func (u *DefaultUnifier) extractParameterInfo(model *Model) (string, int64) {
+	paramSize := ""
+	paramCount := int64(0)
+
+	if sizeStr, ok := model.Metadata["parameter_size"].(string); ok {
+		paramSize, paramCount = extractParameterSize(sizeStr)
+	}
+
+	// Use disk size as fallback for parameter count
+	if paramCount == 0 && model.Size > 0 {
+		paramCount = model.Size
+	}
+
+	return paramSize, paramCount
+}
+
+// extractQuantization extracts and normalizes quantization from model metadata
+func (u *DefaultUnifier) extractQuantization(model *Model) string {
+	if quantStr, ok := model.Metadata["quantization_level"].(string); ok {
+		return normalizeQuantization(quantStr)
+	}
+	if quantStr, ok := model.Metadata["quantization"].(string); ok {
+		return normalizeQuantization(quantStr)
+	}
+	return ""
+}
+
+// extractFamilyAndVariant extracts model family and variant
+func (u *DefaultUnifier) extractFamilyAndVariant(model *Model) (string, string) {
+	arch := ""
+	if archStr, ok := model.Metadata["arch"].(string); ok {
+		arch = archStr
+	}
+
+	family, variant := extractFamilyAndVariant(model.Name, arch)
+
+	// Use family from metadata if available
+	if model.Family != "" {
+		family = model.Family
+		variant = "" // Don't extract variant if family comes from metadata
+	} else if family != "" {
+		model.Family = family
+	}
+
+	return family, variant
+}
+
+// extractModelType extracts the model type from metadata
+func (u *DefaultUnifier) extractModelType(model *Model) string {
+	if typeStr, ok := model.Metadata["type"].(string); ok {
+		return typeStr
+	}
+	if typeStr, ok := model.Metadata["model_type"].(string); ok {
+		return typeStr
+	}
+	return ""
+}
+
+// buildMetadata builds the metadata map for the unified model
+func (u *DefaultUnifier) buildMetadata(model *Model, platform, publisher, paramSize, quantization, family string) map[string]interface{} {
+	metadata := make(map[string]interface{})
+
+	// Copy existing metadata
+	if model.Metadata != nil {
+		for k, v := range model.Metadata {
+			metadata[k] = v
+		}
+	}
+
+	// Add digest if present
+	if model.Digest != "" {
+		metadata["digest"] = model.Digest
+	}
+
+	// Add publisher if extracted and not already present
+	if publisher != "" && metadata["publisher"] == nil {
+		metadata["publisher"] = publisher
+	}
+
+	// Add platform and confidence score
+	metadata["platform"] = platform
+	metadata["metadata_confidence"] = u.calculateMetadataConfidence(model, paramSize, quantization, family)
+
+	return metadata
 }
 
 // mergeModel merges a new model into an existing unified model
