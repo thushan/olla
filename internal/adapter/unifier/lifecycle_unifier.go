@@ -128,7 +128,8 @@ func (u *LifecycleUnifier) UnifyModels(ctx context.Context, models []*domain.Mod
 		}
 	}
 
-	unified, err := u.DefaultUnifier.UnifyModels(ctx, models, endpoint)
+	// We need to handle the unification ourselves to ensure proper locking
+	unified, err := u.unifyModelsWithLock(models, endpoint)
 	if err != nil {
 		u.recordEndpointFailure(endpointURL, err)
 		return nil, err
@@ -138,6 +139,54 @@ func (u *LifecycleUnifier) UnifyModels(ctx context.Context, models []*domain.Mod
 	u.updateEndpointStates(unified, endpointURL)
 
 	return unified, nil
+}
+
+// unifyModelsWithLock performs model unification with proper locking
+func (u *LifecycleUnifier) unifyModelsWithLock(models []*domain.ModelInfo, endpoint *domain.Endpoint) ([]*domain.UnifiedModel, error) {
+	if models == nil || len(models) == 0 {
+		return nil, nil
+	}
+
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	// Clean up stale models periodically
+	if time.Since(u.lastCleanup) > u.cleanupInterval {
+		u.cleanupStaleModels()
+		u.lastCleanup = time.Now()
+	}
+
+	// Use endpoint URL as key internally, but store name for display
+	endpointURL := endpoint.GetURLString()
+
+	// Clear previous models from this endpoint
+	if oldModels, exists := u.endpointModels[endpointURL]; exists {
+		for _, modelID := range oldModels {
+			u.removeModelFromEndpoint(modelID, endpointURL, endpoint.Name)
+		}
+	}
+	u.endpointModels[endpointURL] = []string{}
+
+	processedModels := make([]*domain.UnifiedModel, 0, len(models))
+	for _, modelInfo := range models {
+		if modelInfo == nil {
+			continue
+		}
+
+		// Convert ModelInfo to Model for processing
+		model := u.convertModelInfoToModel(modelInfo)
+		unified := u.processModel(model, endpoint)
+		if unified != nil {
+			processedModels = append(processedModels, unified)
+			u.endpointModels[endpointURL] = append(u.endpointModels[endpointURL], unified.ID)
+		}
+	}
+
+	u.stats.TotalModels = len(u.catalog)
+	u.stats.UnifiedModels = len(processedModels)
+	u.stats.LastUpdated = time.Now()
+
+	return processedModels, nil
 }
 
 func (u *LifecycleUnifier) cleanupRoutine() {
@@ -610,4 +659,17 @@ func (u *LifecycleUnifier) GetAllModels(ctx context.Context) ([]*domain.UnifiedM
 		models = append(models, model)
 	}
 	return models, nil
+}
+
+// UnifyModel overrides DefaultUnifier to ensure proper locking
+func (u *LifecycleUnifier) UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpoint *domain.Endpoint) (*domain.UnifiedModel, error) {
+	if sourceModel == nil {
+		return nil, nil
+	}
+
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
+	model := u.convertModelInfoToModel(sourceModel)
+	return u.processModel(model, endpoint), nil
 }
