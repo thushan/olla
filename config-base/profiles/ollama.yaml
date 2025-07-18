@@ -1,0 +1,79 @@
+# Ollama inference platform profile
+name: ollama
+version: "1.0"
+display_name: "Ollama"
+description: "Local Ollama instance for running GGUF models"
+
+# API compatibility
+api:
+  openai_compatible: true
+  paths:
+    - /                    # 0: health check
+    - /api/generate        # 1: text completion
+    - /api/chat            # 2: chat completion  
+    - /api/embeddings      # 3: generate embeddings
+    - /api/tags            # 4: list local models
+    - /api/show            # 5: show model info
+    - /v1/models           # 6: OpenAI compat
+    - /v1/chat/completions # 7: OpenAI compat
+    - /v1/completions      # 8: OpenAI compat
+    - /v1/embeddings       # 9: OpenAI compat
+  model_discovery_path: /api/tags
+  health_check_path: /
+
+# Platform characteristics
+characteristics:
+  timeout: 5m  # Ollama can be slow for large models
+  max_concurrent_requests: 10
+  default_priority: 100
+  streaming_support: true
+  
+# Detection hints for auto-discovery
+detection:
+  user_agent_patterns:
+    - "ollama/"
+  headers:
+    - "X-ProfileOllama-Version"
+  path_indicators:
+    - "/"
+    - "/api/tags"
+  default_ports:
+    - 11434
+
+# Model handling
+models:
+  name_format: "{{.Name}}"  # e.g., "llama3:latest"
+  capability_patterns:
+    vision:
+      - "*llava*"
+      - "*vision*"
+      - "*bakllava*"
+    embeddings:
+      - "*embed*"
+      - "nomic-embed-text"
+      - "mxbai-embed-large"
+    code:
+      - "*code*"
+      - "codellama*"
+      - "deepseek-coder*"
+      - "qwen*coder*"
+      
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "ollama"
+  parsing_rules:
+    chat_completions_path: "/api/chat"
+    completions_path: "/api/generate"
+    generate_path: "/api/generate"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions
+path_indices:
+  health: 0
+  completions: 1
+  chat_completions: 2
+  embeddings: 3
+  models: 4

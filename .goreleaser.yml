@@ -11,11 +11,12 @@ project_name: olla
 before:
   hooks:
     - go mod download
-    - mkdir -p config logs tmp data
+    - mkdir -p config logs tmp data config/profiles
     - cp config-base/config.yaml config/config.yaml
     - cp config-base/docker.yaml config/docker.yaml
     - cp config-base/models.yaml config/models.yaml
     - cp config-base/config.yaml default.yaml
+    - cp -r config-base/profiles/* config/profiles/
     - touch data/.gitkeep
     - touch logs/.gitkeep
     - touch tmp/.gitkeep

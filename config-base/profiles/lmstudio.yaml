@@ -1,0 +1,58 @@
+# LM Studio inference platform profile
+name: lm-studio
+version: "1.0"
+display_name: "LM Studio"
+description: "LM Studio local inference server"
+
+# API compatibility
+api:
+  openai_compatible: true
+  paths:
+    - /v1/models          # 0: health check & models
+    - /v1/chat/completions # 1: chat completions
+    - /v1/completions     # 2: completions
+    - /v1/embeddings      # 3: embeddings
+    - /api/v0/models      # 4: legacy models endpoint
+  model_discovery_path: /api/v0/models
+  health_check_path: /v1/models
+
+# Platform characteristics
+characteristics:
+  timeout: 3m
+  max_concurrent_requests: 1  # LM Studio typically handles one at a time
+  default_priority: 90
+  streaming_support: true
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/v1/models"
+    - "/api/v0/models"
+  default_ports:
+    - 1234
+
+# Model handling
+models:
+  name_format: "{{.Name}}"
+  capability_patterns:
+    chat:
+      - "*"  # All models support chat in LM Studio
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "lmstudio"
+  parsing_rules:
+    chat_completions_path: "/v1/chat/completions"
+    completions_path: "/v1/completions"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions  
+path_indices:
+  health: 0
+  models: 0
+  chat_completions: 1
+  completions: 2
+  embeddings: 3
