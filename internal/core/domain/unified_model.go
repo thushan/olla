@@ -156,7 +156,7 @@ func (u *UnifiedModel) IsAvailable() bool {
 func (u *UnifiedModel) GetLoadedEndpoints() []SourceEndpoint {
 	var loaded []SourceEndpoint
 	for _, endpoint := range u.SourceEndpoints {
-		if endpoint.State == string(ModelStateLoaded) || endpoint.ModelState == ModelStateLoaded {
+		if endpoint.ModelState == ModelStateLoaded {
 			loaded = append(loaded, endpoint)
 		}
 	}
