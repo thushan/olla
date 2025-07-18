@@ -51,7 +51,7 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	pathResolutionEnd := time.Now()
 	stats.PathResolutionMs = pathResolutionEnd.Sub(pathResolutionStart).Milliseconds()
 
-	requestLogger.Info("Request started",
+	logFields := []any{
 		"client_ip", clientIP,
 		"method", r.Method,
 		"path", r.URL.Path,
@@ -60,7 +60,16 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		"path_resolution_ms", stats.PathResolutionMs,
 		"query", r.URL.RawQuery,
 		"content_type", r.Header.Get("Content-Type"),
-		"content_length", r.ContentLength)
+		"content_length", r.ContentLength,
+	}
+
+	if profile != nil && profile.ModelName != "" {
+		logFields = append(logFields, "model", profile.ModelName)
+		ctx = context.WithValue(ctx, "model", profile.ModelName)
+		r = r.WithContext(ctx)
+	}
+
+	requestLogger.Info("Request started", logFields...)
 
 	if err := a.proxyService.ProxyRequestToEndpoints(ctx, w, r, compatibleEndpoints, &stats, requestLogger); err != nil {
 		duration := time.Since(stats.StartTime)
@@ -103,49 +112,80 @@ func (a *Application) stripRoutePrefix(ctx context.Context, path string) string 
 }
 
 func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
+	var profileFiltered []*domain.Endpoint
+
 	if profile == nil || len(profile.SupportedBy) == 0 {
-		logger.Info("No profile filtering applied, using all endpoints", "total_endpoints", len(endpoints))
-		return endpoints
-	}
-
-	compatible := make([]*domain.Endpoint, 0, len(endpoints))
-	/*
-		for i, endpoint := range endpoints {
-			logger.Info("Checking endpoint compatibility",
-				"index", i,
-				"endpoint_name", endpoint.Name,
-				"endpoint_type", endpoint.Type,
-				"path", profile.Path,
-				"supported_by", profile.SupportedBy)
-
+		logger.Debug("No profile filtering applied", "total_endpoints", len(endpoints))
+		profileFiltered = endpoints
+	} else {
+		compatible := make([]*domain.Endpoint, 0, len(endpoints))
+		for _, endpoint := range endpoints {
 			if profile.IsCompatibleWith(endpoint.Type) {
-				logger.Info("Endpoint is compatible", "endpoint_name", endpoint.Name)
 				compatible = append(compatible, endpoint)
-			} else {
-				logger.Info("Endpoint NOT compatible", "endpoint_name", endpoint.Name)
 			}
 		}
-	*/
 
-	for _, endpoint := range endpoints {
-		if profile.IsCompatibleWith(endpoint.Type) {
-			compatible = append(compatible, endpoint)
+		if len(compatible) == 0 {
+			logger.Warn("No compatible endpoints found for path, falling back to all endpoints",
+				"path", profile.Path,
+				"supported_by", profile.SupportedBy,
+				"total_endpoints", len(endpoints))
+			profileFiltered = endpoints
+		} else {
+			logger.Debug("Filtered endpoints by profile compatibility",
+				"path", profile.Path,
+				"compatible_count", len(compatible),
+				"total_count", len(endpoints),
+				"supported_by", profile.SupportedBy)
+			profileFiltered = compatible
 		}
 	}
 
-	if len(compatible) == 0 {
-		logger.Warn("No compatible endpoints found for path, falling back to all endpoints",
-			"path", profile.Path,
-			"supported_by", profile.SupportedBy,
-			"total_endpoints", len(endpoints))
-		return endpoints
+	if profile != nil && profile.ModelName != "" && a.modelRegistry != nil {
+		ctx := context.Background()
+		modelEndpoints, err := a.modelRegistry.GetEndpointsForModel(ctx, profile.ModelName)
+		if err != nil {
+			logger.Warn("Failed to get endpoints for model, skipping model filtering",
+				"model", profile.ModelName,
+				"error", err)
+			return profileFiltered
+		}
+
+		if len(modelEndpoints) == 0 {
+			logger.Warn("No endpoints have the requested model, using profile-filtered endpoints",
+				"model", profile.ModelName,
+				"available_endpoints", len(profileFiltered))
+			return profileFiltered
+		}
+
+		modelEndpointMap := make(map[string]bool)
+		for _, endpointURL := range modelEndpoints {
+			modelEndpointMap[endpointURL] = true
+		}
+
+		modelFiltered := make([]*domain.Endpoint, 0, len(profileFiltered))
+		for _, endpoint := range profileFiltered {
+			if modelEndpointMap[endpoint.URLString] {
+				modelFiltered = append(modelFiltered, endpoint)
+			}
+		}
+
+		if len(modelFiltered) == 0 {
+			logger.Warn("No profile-compatible endpoints have the requested model, falling back",
+				"model", profile.ModelName,
+				"model_endpoints", len(modelEndpoints),
+				"compatible_endpoints", len(profileFiltered))
+			return profileFiltered
+		}
+
+		logger.Debug("Filtered endpoints by model availability",
+			"model", profile.ModelName,
+			"model_filtered_count", len(modelFiltered),
+			"profile_filtered_count", len(profileFiltered),
+			"total_count", len(endpoints))
+
+		return modelFiltered
 	}
 
-	logger.Debug("Filtered endpoints by profile compatibility",
-		"path", profile.Path,
-		"compatible_count", len(compatible),
-		"total_count", len(endpoints),
-		"supported_by", profile.SupportedBy)
-
-	return compatible
+	return profileFiltered
 }

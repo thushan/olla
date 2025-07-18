@@ -98,6 +98,9 @@ func NewApplication(
 	// Add path inspector
 	pathInspector := inspectorFactory.CreatePathInspector()
 	inspectorChain.AddInspector(pathInspector)
+	// Add body inspector for model extraction
+	bodyInspector := inspectorFactory.CreateBodyInspector()
+	inspectorChain.AddInspector(bodyInspector)
 
 	// Create security adapters
 	securityAdapters := &SecurityAdapters{

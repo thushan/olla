@@ -36,3 +36,7 @@ func (f *Factory) CreatePathInspector() *PathInspector {
 func (f *Factory) CreateChain() *Chain {
 	return NewChain(f.logger)
 }
+
+func (f *Factory) CreateBodyInspector() *BodyInspector {
+	return NewBodyInspector(f.logger)
+}
