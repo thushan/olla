@@ -3,15 +3,12 @@ package unifier
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
 
-// Model represents a simplified internal representation for processing
 type Model struct {
 	Metadata      map[string]interface{}
 	ID            string
@@ -23,26 +20,6 @@ type Model struct {
 	ContextWindow int64
 }
 
-func nilIfZero(v int64) *int64 {
-	if v == 0 {
-		return nil
-	}
-	return &v
-}
-
-// DefaultUnifier implements simple model deduplication based on digest and exact name matching
-type DefaultUnifier struct {
-	lastCleanup     time.Time
-	catalog         map[string]*domain.UnifiedModel // ID -> unified model
-	digestIndex     map[string][]string             // digest -> model IDs
-	nameIndex       map[string][]string             // lowercase name -> model IDs
-	endpointModels  map[string][]string             // endpoint URL -> model IDs
-	stats           DeduplicationStats
-	cleanupInterval time.Duration
-	mu              sync.RWMutex
-}
-
-// DeduplicationStats tracks deduplication performance
 type DeduplicationStats struct {
 	LastUpdated   time.Time
 	TotalModels   int
@@ -51,406 +28,276 @@ type DeduplicationStats struct {
 	NameMatches   int
 }
 
-// NewDefaultUnifier creates a new model unifier with simple deduplication
+// DefaultUnifier handles model deduplication across multiple endpoints
+// using digest and name matching strategies
+type DefaultUnifier struct {
+	store          *CatalogStore
+	extractor      *ModelExtractor
+	stats          DeduplicationStats
+	staleThreshold time.Duration
+}
+
 func NewDefaultUnifier() ports.ModelUnifier {
 	return &DefaultUnifier{
-		catalog:         make(map[string]*domain.UnifiedModel),
-		digestIndex:     make(map[string][]string),
-		nameIndex:       make(map[string][]string),
-		endpointModels:  make(map[string][]string),
-		cleanupInterval: 5 * time.Minute,
+		store:          NewCatalogStore(5 * time.Minute),
+		extractor:      NewModelExtractor(),
+		staleThreshold: 24 * time.Hour,
 	}
 }
 
-// UnifyModels performs simple deduplication of models from multiple endpoints
+func (u *DefaultUnifier) cleanupStaleModels(threshold time.Duration) {
+	if threshold <= 0 {
+		threshold = u.staleThreshold
+	}
+	u.store.CleanupStaleModels(threshold)
+}
+
 func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.ModelInfo, endpoint *domain.Endpoint) ([]*domain.UnifiedModel, error) {
-	if models == nil || len(models) == 0 {
-		return nil, nil
+	// Empty model lists are valid - they indicate endpoint has no models anymore
+	if models == nil {
+		models = []*domain.ModelInfo{}
 	}
 
-	u.mu.Lock()
-	defer u.mu.Unlock()
-
-	// Clean up stale models periodically
-	if time.Since(u.lastCleanup) > u.cleanupInterval {
-		u.cleanupStaleModels()
-		u.lastCleanup = time.Now()
+	if u.store.NeedsCleanup() {
+		u.store.CleanupStaleModels(u.staleThreshold)
 	}
 
-	// Use endpoint URL as key internally, but store name for display
 	endpointURL := endpoint.GetURLString()
 
-	// Clear previous models from this endpoint
-	if oldModels, exists := u.endpointModels[endpointURL]; exists {
-		for _, modelID := range oldModels {
-			u.removeModelFromEndpoint(modelID, endpointURL, endpoint.Name)
-		}
+	// Remove stale models when endpoint updates its model list
+	oldModelIDs := u.store.GetEndpointModels(endpointURL)
+	for _, modelID := range oldModelIDs {
+		u.removeModelFromEndpoint(modelID, endpointURL)
 	}
-	u.endpointModels[endpointURL] = []string{}
 
 	processedModels := make([]*domain.UnifiedModel, 0, len(models))
+	newModelIDs := make([]string, 0, len(models))
+
 	for _, modelInfo := range models {
 		if modelInfo == nil {
 			continue
 		}
 
-		// Convert ModelInfo to Model for processing
-		model := u.convertModelInfoToModel(modelInfo)
-		unified := u.processModel(model, endpoint)
+		unified := u.processModel(modelInfo, endpoint)
 		if unified != nil {
 			processedModels = append(processedModels, unified)
-			u.endpointModels[endpointURL] = append(u.endpointModels[endpointURL], unified.ID)
+			newModelIDs = append(newModelIDs, unified.ID)
 		}
 	}
 
-	u.stats.TotalModels = len(u.catalog)
+	u.store.SetEndpointModels(endpointURL, newModelIDs)
+	u.stats.TotalModels = u.store.Size()
 	u.stats.UnifiedModels = len(processedModels)
 	u.stats.LastUpdated = time.Now()
 
-	return processedModels, nil
+	// Store returns deep copies to prevent races if caller modifies the models
+	result := make([]*domain.UnifiedModel, 0, len(processedModels))
+	for _, model := range processedModels {
+		if modelCopy, found := u.store.GetModel(model.ID); found {
+			result = append(result, modelCopy)
+		}
+	}
+
+	return result, nil
 }
 
-// processModel handles deduplication logic for a single model
-func (u *DefaultUnifier) processModel(model *Model, endpoint *domain.Endpoint) *domain.UnifiedModel {
-	// Try to find existing model by digest first (highest confidence)
+func (u *DefaultUnifier) processModel(modelInfo *domain.ModelInfo, endpoint *domain.Endpoint) *domain.UnifiedModel {
+	model := u.convertModelInfoToModel(modelInfo)
+
+	// Digest matching is most reliable - same binary content
 	if model.Digest != "" {
-		if existingIDs, found := u.digestIndex[model.Digest]; found && len(existingIDs) > 0 {
-			// Found existing model with same digest - merge
-			existing := u.catalog[existingIDs[0]]
+		if existingModels, found := u.store.ResolveByDigest(model.Digest); found && len(existingModels) > 0 {
+			existing := existingModels[0]
 			u.mergeModel(existing, model, endpoint)
 			u.stats.DigestMatches++
-			return existing
+			updated, _ := u.store.GetModel(existing.ID)
+			return updated
 		}
 	}
 
-	// Try exact name match (case-insensitive)
-	lowercaseName := strings.ToLower(model.Name)
-	if existingIDs, found := u.nameIndex[lowercaseName]; found && len(existingIDs) > 0 {
-		for _, id := range existingIDs {
-			existing := u.catalog[id]
-			if u.canMergeByName(existing, model) {
-				u.mergeModel(existing, model, endpoint)
-				u.stats.NameMatches++
-				return existing
-			}
+	// Fall back to name matching if no digest
+	if existing, found := u.store.ResolveByName(model.Name); found {
+		if u.canMergeByName(existing, model) {
+			u.mergeModel(existing, model, endpoint)
+			u.stats.NameMatches++
+			updated, _ := u.store.GetModel(existing.ID)
+			return updated
 		}
-		// If we get here, we found name matches but couldn't merge due to conflicts
-		// Don't count as name match for stats
 	}
 
-	// No match found - create new unified model
 	unified := u.createUnifiedModel(model, endpoint)
-	u.catalog[unified.ID] = unified
-
-	// Update indices
-	if model.Digest != "" {
-		u.digestIndex[model.Digest] = append(u.digestIndex[model.Digest], unified.ID)
-	}
-	u.nameIndex[lowercaseName] = append(u.nameIndex[lowercaseName], unified.ID)
-
+	u.store.PutModel(unified)
 	return unified
 }
 
-// canMergeByName determines if two models can be merged based on name
-func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, newModel *Model) bool {
-	// Only merge if names match exactly (case-insensitive)
-	// Check against aliases
-	for _, alias := range existing.Aliases {
-		if strings.EqualFold(alias.Name, newModel.Name) {
-			// Check for digest conflicts
-			if newModel.Digest != "" && existing.Metadata != nil {
-				if existingDigest, ok := existing.Metadata["digest"].(string); ok {
-					if existingDigest != "" && existingDigest != newModel.Digest {
-						// Different digests = different models, don't merge
-						return false
-					}
-				}
-			}
-			return true
-		}
-	}
-	return false
-}
-
-// createUnifiedModel creates a new unified model from a platform model
 func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpoint) *domain.UnifiedModel {
-	id := u.generateUniqueID(model)
-	platform := u.detectPlatform(model)
-	source := u.createSourceEndpoint(model, endpoint)
-
-	// Extract model attributes
-	paramSize, paramCount := u.extractParameterInfo(model)
-	quantization := u.extractQuantization(model)
-	family, variant := u.extractFamilyAndVariant(model)
-	modelType := u.extractModelType(model)
-
-	// Build capabilities and metadata
-	capabilities := inferCapabilitiesFromMetadata(modelType, model.Name, model.ContextWindow, model.Metadata)
-	publisher := extractPublisher(model.Name, model.Metadata)
-	metadata := u.buildMetadata(model, platform, publisher, paramSize, quantization, family)
-
-	return &domain.UnifiedModel{
-		ID:               id,
-		Family:           family,
-		Variant:          variant,
-		ParameterSize:    paramSize,
-		ParameterCount:   paramCount,
-		Quantization:     quantization,
-		Format:           model.Format,
-		Aliases:          []domain.AliasEntry{{Name: model.Name, Source: platform}},
-		SourceEndpoints:  []domain.SourceEndpoint{source},
-		Capabilities:     capabilities,
-		MaxContextLength: nilIfZero(model.ContextWindow),
-		DiskSize:         model.Size,
-		LastSeen:         time.Now(),
-		Metadata:         metadata,
-	}
-}
-
-// generateUniqueID generates a unique ID for the model
-func (u *DefaultUnifier) generateUniqueID(model *Model) string {
-	id := model.Name
+	baseID := model.Name
 	if model.ID != "" {
-		id = model.ID
+		baseID = model.ID
 	}
 
-	// Make ID unique if there's already a model with this ID but different digest
-	if existing, exists := u.catalog[id]; exists {
-		if u.hasDigestConflict(existing, model) {
-			id = u.appendDigestSuffix(id, model.Digest)
+	// Avoid ID collisions when models have same name but different digests
+	if existing, found := u.store.GetModel(baseID); found {
+		var existingDigest string
+		if existing.Metadata != nil {
+			existingDigest, _ = existing.Metadata["digest"].(string)
 		}
+		baseID = generateUniqueID(baseID, model.Digest, existingDigest)
 	}
 
-	return id
-}
+	platform := u.extractor.DetectPlatform(model.Format, model.Metadata)
+	paramSize, paramCount := u.extractor.ExtractParameterInfo(model.Metadata, model.Size)
+	quantization := u.extractor.ExtractQuantization(model.Metadata)
+	family, variant := u.extractor.ExtractFamilyAndVariant(model.Name, model.Family, model.Metadata)
+	modelType := u.extractor.ExtractModelType(model.Metadata)
+	state := u.extractor.MapModelState(model.Metadata, model.Size)
+	publisher := u.extractor.ExtractPublisher(model.Name, model.Metadata)
 
-// hasDigestConflict checks if two models have different digests
-func (u *DefaultUnifier) hasDigestConflict(existing *domain.UnifiedModel, model *Model) bool {
-	if model.Digest == "" || existing.Metadata == nil {
-		return false
-	}
+	capabilities := inferCapabilitiesFromMetadata(modelType, model.Name, model.ContextWindow, model.Metadata)
+	confidence := u.extractor.CalculateConfidence(
+		model.Digest != "",
+		paramSize != "",
+		quantization != "",
+		family != "",
+		model.ContextWindow > 0,
+	)
 
-	existingDigest, ok := existing.Metadata["digest"].(string)
-	return ok && existingDigest != "" && existingDigest != model.Digest
-}
+	sourceEndpoint := NewSourceEndpointBuilder().
+		WithURL(endpoint.GetURLString()).
+		WithName(endpoint.Name).
+		WithNativeName(model.Name).
+		WithState(state).
+		WithDiskSize(model.Size).
+		Build()
 
-// appendDigestSuffix appends a digest suffix to make ID unique
-func (u *DefaultUnifier) appendDigestSuffix(id, digest string) string {
-	if len(digest) >= 8 {
-		return fmt.Sprintf("%s-%s", id, digest[len(digest)-8:])
-	}
-	return fmt.Sprintf("%s-%s", id, digest)
-}
+	builder := NewModelBuilder().
+		WithID(baseID).
+		WithFamily(family, variant).
+		WithParameters(paramSize, paramCount).
+		WithQuantization(quantization).
+		WithFormat(model.Format).
+		WithContextLength(model.ContextWindow).
+		WithDiskSize(model.Size).
+		AddAlias(model.Name, platform).
+		AddSourceEndpoint(sourceEndpoint).
+		AddCapabilities(capabilities).
+		WithDigest(model.Digest).
+		WithPlatform(platform).
+		WithPublisher(publisher).
+		WithConfidence(confidence)
 
-// createSourceEndpoint creates a source endpoint for the model
-func (u *DefaultUnifier) createSourceEndpoint(model *Model, endpoint *domain.Endpoint) domain.SourceEndpoint {
-	return domain.SourceEndpoint{
-		EndpointURL:  endpoint.GetURLString(),
-		EndpointName: endpoint.Name,
-		NativeName:   model.Name,
-		State:        u.mapModelState(model),
-		LastSeen:     time.Now(),
-		DiskSize:     model.Size,
-	}
-}
-
-// extractParameterInfo extracts parameter size and count from model metadata
-func (u *DefaultUnifier) extractParameterInfo(model *Model) (string, int64) {
-	paramSize := ""
-	paramCount := int64(0)
-
-	if sizeStr, ok := model.Metadata["parameter_size"].(string); ok {
-		paramSize, paramCount = extractParameterSize(sizeStr)
-	}
-
-	// Use disk size as fallback for parameter count
-	if paramCount == 0 && model.Size > 0 {
-		paramCount = model.Size
-	}
-
-	return paramSize, paramCount
-}
-
-// extractQuantization extracts and normalizes quantization from model metadata
-func (u *DefaultUnifier) extractQuantization(model *Model) string {
-	if quantStr, ok := model.Metadata["quantization_level"].(string); ok {
-		return normalizeQuantization(quantStr)
-	}
-	if quantStr, ok := model.Metadata["quantization"].(string); ok {
-		return normalizeQuantization(quantStr)
-	}
-	return ""
-}
-
-// extractFamilyAndVariant extracts model family and variant
-func (u *DefaultUnifier) extractFamilyAndVariant(model *Model) (string, string) {
-	arch := ""
-	if archStr, ok := model.Metadata["arch"].(string); ok {
-		arch = archStr
-	}
-
-	family, variant := extractFamilyAndVariant(model.Name, arch)
-
-	// Use family from metadata if available
-	if model.Family != "" {
-		family = model.Family
-		variant = "" // Don't extract variant if family comes from metadata
-	} else if family != "" {
-		model.Family = family
-	}
-
-	return family, variant
-}
-
-// extractModelType extracts the model type from metadata
-func (u *DefaultUnifier) extractModelType(model *Model) string {
-	if typeStr, ok := model.Metadata["type"].(string); ok {
-		return typeStr
-	}
-	if typeStr, ok := model.Metadata["model_type"].(string); ok {
-		return typeStr
-	}
-	return ""
-}
-
-// buildMetadata builds the metadata map for the unified model
-func (u *DefaultUnifier) buildMetadata(model *Model, platform, publisher, paramSize, quantization, family string) map[string]interface{} {
-	metadata := make(map[string]interface{})
-
-	// Copy existing metadata
 	if model.Metadata != nil {
 		for k, v := range model.Metadata {
-			metadata[k] = v
+			builder.WithMetadata(k, v)
 		}
 	}
 
-	// Add digest if present
-	if model.Digest != "" {
-		metadata["digest"] = model.Digest
-	}
-
-	// Add publisher if extracted and not already present
-	if publisher != "" && metadata["publisher"] == nil {
-		metadata["publisher"] = publisher
-	}
-
-	// Add platform and confidence score
-	metadata["platform"] = platform
-	metadata["metadata_confidence"] = u.calculateMetadataConfidence(model, paramSize, quantization, family)
-
-	return metadata
+	return builder.Build()
 }
 
-// mergeModel merges a new model into an existing unified model
 func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, endpoint *domain.Endpoint) {
 	if unified == nil || model == nil {
 		return
 	}
 
+	// Safe to modify - store returns deep copies
+
 	endpointURL := endpoint.GetURLString()
 
-	// Check if this endpoint already exists
+	updated := false
 	for i, source := range unified.SourceEndpoints {
 		if source.EndpointURL == endpointURL {
-			// Update existing source
+			state := u.extractor.MapModelState(model.Metadata, model.Size)
 			unified.SourceEndpoints[i].NativeName = model.Name
-			unified.SourceEndpoints[i].State = u.mapModelState(model)
+			unified.SourceEndpoints[i].State = state
 			unified.SourceEndpoints[i].LastSeen = time.Now()
 			unified.SourceEndpoints[i].DiskSize = model.Size
-			unified.LastSeen = time.Now()
-			// Still merge metadata even for existing endpoints
-			u.mergeMetadata(unified, model)
-			return
-		}
-	}
-
-	// Add new source
-	platform := u.detectPlatform(model)
-	source := domain.SourceEndpoint{
-		EndpointURL:  endpointURL,
-		EndpointName: endpoint.Name, // Use name for display
-		NativeName:   model.Name,
-		State:        u.mapModelState(model),
-		LastSeen:     time.Now(),
-		DiskSize:     model.Size,
-	}
-	unified.SourceEndpoints = append(unified.SourceEndpoints, source)
-
-	// Add alias if not present
-	hasAlias := false
-	for _, alias := range unified.Aliases {
-		if alias.Name == model.Name {
-			hasAlias = true
+			updated = true
 			break
 		}
 	}
-	if !hasAlias {
-		unified.Aliases = append(unified.Aliases, domain.AliasEntry{Name: model.Name, Source: platform})
+
+	if !updated {
+		platform := u.extractor.DetectPlatform(model.Format, model.Metadata)
+		state := u.extractor.MapModelState(model.Metadata, model.Size)
+
+		sourceEndpoint := NewSourceEndpointBuilder().
+			WithURL(endpointURL).
+			WithName(endpoint.Name).
+			WithNativeName(model.Name).
+			WithState(state).
+			WithDiskSize(model.Size).
+			Build()
+
+		unified.SourceEndpoints = append(unified.SourceEndpoints, sourceEndpoint)
+
+		hasAlias := false
+		for _, alias := range unified.Aliases {
+			if alias.Name == model.Name {
+				hasAlias = true
+				break
+			}
+		}
+		if !hasAlias {
+			unified.Aliases = append(unified.Aliases, domain.AliasEntry{Name: model.Name, Source: platform})
+		}
 	}
 
-	modelType := ""
-	if typeStr, ok := model.Metadata["type"].(string); ok {
-		modelType = typeStr
-	} else if typeStr, ok := model.Metadata["model_type"].(string); ok {
-		modelType = typeStr
+	// Endpoints may report different metadata for same model - keep best info
+	paramSize, paramCount := u.extractor.ExtractParameterInfo(model.Metadata, model.Size)
+	quantization := u.extractor.ExtractQuantization(model.Metadata)
+	if paramSize != "" && unified.ParameterSize == "" {
+		unified.ParameterSize = paramSize
+		unified.ParameterCount = paramCount
 	}
-
-	// Merge capabilities with new comprehensive extraction
+	if quantization != "" && unified.Quantization == "" {
+		unified.Quantization = quantization
+	}
+	if model.ContextWindow > 0 && (unified.MaxContextLength == nil || *unified.MaxContextLength == 0) {
+		unified.MaxContextLength = &model.ContextWindow
+	}
+	if model.Format != "" && unified.Format == "" {
+		unified.Format = model.Format
+	}
+	modelType := u.extractor.ExtractModelType(model.Metadata)
 	newCaps := inferCapabilitiesFromMetadata(modelType, model.Name, model.ContextWindow, model.Metadata)
 	unified.Capabilities = u.mergeCapabilities(unified.Capabilities, newCaps)
 
-	// Update disk size
-	unified.DiskSize += model.Size
+	totalSize := int64(0)
+	for _, source := range unified.SourceEndpoints {
+		totalSize += source.DiskSize
+	}
+	unified.DiskSize = totalSize
 
-	// Merge all metadata
 	u.mergeMetadata(unified, model)
+	unified.LastSeen = time.Now()
+	u.store.PutModel(unified)
+}
 
-	// Update fields if they were previously empty but now have data
-	if unified.ParameterSize == "" && model.Metadata["parameter_size"] != nil {
-		if sizeStr, ok := model.Metadata["parameter_size"].(string); ok {
-			paramSize, paramCount := extractParameterSize(sizeStr)
-			unified.ParameterSize = paramSize
-			if paramCount > 0 {
-				unified.ParameterCount = paramCount
+func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, newModel *Model) bool {
+	// Different digest means different model even with same name
+	if newModel.Digest != "" && existing.Metadata != nil {
+		if existingDigest, ok := existing.Metadata["digest"].(string); ok {
+			if existingDigest != "" && existingDigest != newModel.Digest {
+				return false
 			}
 		}
 	}
-
-	if unified.Quantization == "" {
-		if quantStr, ok := model.Metadata["quantization_level"].(string); ok {
-			unified.Quantization = normalizeQuantization(quantStr)
-		} else if quantStr, ok := model.Metadata["quantization"].(string); ok {
-			unified.Quantization = normalizeQuantization(quantStr)
-		}
-	}
-
-	if unified.MaxContextLength == nil && model.ContextWindow > 0 {
-		unified.MaxContextLength = nilIfZero(model.ContextWindow)
-	}
-
-	unified.LastSeen = time.Now()
+	return true
 }
 
-// mergeMetadata intelligently merges metadata from a new model into the unified model
 func (u *DefaultUnifier) mergeMetadata(unified *domain.UnifiedModel, model *Model) {
 	if unified.Metadata == nil {
 		unified.Metadata = make(map[string]interface{})
 	}
-
-	// Update digest if present
 	if model.Digest != "" {
 		unified.Metadata["digest"] = model.Digest
 	}
 
-	// Merge all metadata from the new model
 	for k, v := range model.Metadata {
-		// For certain fields, only update if not already present
 		switch k {
-		case "metadata_confidence":
-			// Recalculate confidence based on merged data
-			continue
 		case "platform":
-			// Store platform-specific data separately
+			// Track all platforms hosting this model
 			if vStr, ok := v.(string); ok {
 				if platforms, ok := unified.Metadata["platforms"].(map[string]bool); ok {
 					platforms[vStr] = true
@@ -459,65 +306,11 @@ func (u *DefaultUnifier) mergeMetadata(unified *domain.UnifiedModel, model *Mode
 				}
 			}
 		default:
-			// For most fields, newer data overwrites older data
 			unified.Metadata[k] = v
 		}
 	}
-
-	// Recalculate confidence score
-	arch := ""
-	if archStr, ok := model.Metadata["arch"].(string); ok {
-		arch = archStr
-	}
-	family, _ := extractFamilyAndVariant(model.Name, arch)
-	unified.Metadata["metadata_confidence"] = u.calculateMetadataConfidence(model, unified.ParameterSize, unified.Quantization, family)
 }
 
-// detectPlatform detects the platform from model metadata
-func (u *DefaultUnifier) detectPlatform(model *Model) string {
-	// Check metadata for platform hints
-	if model.Metadata != nil {
-		if platform, ok := model.Metadata["platform"].(string); ok {
-			return strings.ToLower(platform)
-		}
-		if _, ok := model.Metadata["ollama.version"]; ok {
-			return "ollama"
-		}
-		if _, ok := model.Metadata["lmstudio.version"]; ok {
-			return "lmstudio"
-		}
-	}
-
-	// Check model properties
-	if model.Format != "" && strings.Contains(strings.ToLower(model.Format), "gguf") {
-		return "ollama"
-	}
-
-	// Default to openai-compatible
-	return "openai"
-}
-
-// mapModelState maps model properties to a state string
-func (u *DefaultUnifier) mapModelState(model *Model) string {
-	// Check various state indicators
-	if model.Metadata != nil {
-		if state, ok := model.Metadata["state"].(string); ok {
-			return state
-		}
-		if loaded, ok := model.Metadata["loaded"].(bool); ok && loaded {
-			return "loaded"
-		}
-	}
-
-	// Check model size to infer if it's loaded
-	if model.Size > 0 {
-		return "available"
-	}
-
-	return "unknown"
-}
-
-// mergeCapabilities merges two capability lists, removing duplicates
 func (u *DefaultUnifier) mergeCapabilities(existing, newCaps []string) []string {
 	capSet := make(map[string]bool)
 	for _, cap := range existing {
@@ -534,175 +327,42 @@ func (u *DefaultUnifier) mergeCapabilities(existing, newCaps []string) []string 
 	return merged
 }
 
-// removeModelFromEndpoint removes a model's association with an endpoint
-func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL, _ string) {
-	unified, exists := u.catalog[modelID]
+func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL string) {
+	model, exists := u.store.GetModel(modelID)
 	if !exists {
 		return
 	}
 
-	// Remove the source for this endpoint
-	newSources := make([]domain.SourceEndpoint, 0, len(unified.SourceEndpoints))
-	for _, source := range unified.SourceEndpoints {
+	// GetModel returns a deep copy
+	newSources := make([]domain.SourceEndpoint, 0, len(model.SourceEndpoints))
+	for _, source := range model.SourceEndpoints {
 		if source.EndpointURL != endpointURL {
 			newSources = append(newSources, source)
 		}
 	}
 
 	if len(newSources) == 0 {
-		// No more sources - remove the model entirely
-		// First remove from indices while we still have the model
-		if unified.Metadata != nil {
-			if digest, ok := unified.Metadata["digest"].(string); ok && digest != "" {
-				u.removeFromIndex(u.digestIndex, digest, modelID)
-			}
-		}
-		// Remove all name aliases from index
-		for _, alias := range unified.Aliases {
-			u.removeFromIndex(u.nameIndex, strings.ToLower(alias.Name), modelID)
-		}
-
-		// Now remove from catalog
-		delete(u.catalog, modelID)
+		u.store.RemoveModel(modelID)
 	} else {
-		unified.SourceEndpoints = newSources
-	}
-}
-
-// removeFromIndex removes a value from an index
-func (u *DefaultUnifier) removeFromIndex(index map[string][]string, key, value string) {
-	if values, exists := index[key]; exists {
-		newValues := make([]string, 0, len(values))
-		for _, v := range values {
-			if v != value {
-				newValues = append(newValues, v)
-			}
+		model.SourceEndpoints = newSources
+		totalSize := int64(0)
+		for _, source := range newSources {
+			totalSize += source.DiskSize
 		}
-		if len(newValues) == 0 {
-			delete(index, key)
-		} else {
-			index[key] = newValues
-		}
+		model.DiskSize = totalSize
+		u.store.PutModel(model)
 	}
 }
 
-// cleanupStaleModels removes models that haven't been seen recently
-func (u *DefaultUnifier) cleanupStaleModels() {
-	staleThreshold := 24 * time.Hour
-	now := time.Now()
-
-	toRemove := []string{}
-	for id, model := range u.catalog {
-		if now.Sub(model.LastSeen) > staleThreshold {
-			toRemove = append(toRemove, id)
-		}
-	}
-
-	for _, id := range toRemove {
-		model := u.catalog[id]
-		delete(u.catalog, id)
-
-		// Remove from indices
-		if model.Metadata != nil {
-			if digest, ok := model.Metadata["digest"].(string); ok && digest != "" {
-				u.removeFromIndex(u.digestIndex, digest, id)
-			}
-		}
-		// Remove by aliases
-		for _, alias := range model.Aliases {
-			u.removeFromIndex(u.nameIndex, strings.ToLower(alias.Name), id)
-		}
-	}
-
-	// Silent cleanup - no logging in simplified implementation
-}
-
-// ResolveModel finds a model by name or ID
-func (u *DefaultUnifier) ResolveModel(ctx context.Context, nameOrID string) (*domain.UnifiedModel, error) {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-
-	// Try direct ID lookup first
-	if model, exists := u.catalog[nameOrID]; exists {
-		return model, nil
-	}
-
-	// Try case-insensitive name lookup
-	lowercaseName := strings.ToLower(nameOrID)
-	if modelIDs, exists := u.nameIndex[lowercaseName]; exists && len(modelIDs) > 0 {
-		return u.catalog[modelIDs[0]], nil
-	}
-
-	// Try alias lookup
-	for _, model := range u.catalog {
-		for _, alias := range model.Aliases {
-			if strings.EqualFold(alias.Name, nameOrID) {
-				return model, nil
-			}
-		}
-	}
-
-	return nil, fmt.Errorf("model not found: %s", nameOrID)
-}
-
-// GetAllModels returns all unified models
-func (u *DefaultUnifier) GetAllModels(ctx context.Context) ([]*domain.UnifiedModel, error) {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-
-	models := make([]*domain.UnifiedModel, 0, len(u.catalog))
-	for _, model := range u.catalog {
-		models = append(models, model)
-	}
-	return models, nil
-}
-
-// GetDeduplicationStats returns internal deduplication statistics
-func (u *DefaultUnifier) GetDeduplicationStats() DeduplicationStats {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-	return u.stats
-}
-
-// Clear removes all cached data
-func (u *DefaultUnifier) Clear(ctx context.Context) error {
-	u.mu.Lock()
-	defer u.mu.Unlock()
-
-	u.catalog = make(map[string]*domain.UnifiedModel)
-	u.digestIndex = make(map[string][]string)
-	u.nameIndex = make(map[string][]string)
-	u.endpointModels = make(map[string][]string)
-	u.stats = DeduplicationStats{}
-
-	return nil
-}
-
-// UnifyModel converts a single model to unified format
-func (u *DefaultUnifier) UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpoint *domain.Endpoint) (*domain.UnifiedModel, error) {
-	if sourceModel == nil {
-		return nil, nil
-	}
-
-	u.mu.Lock()
-	defer u.mu.Unlock()
-
-	model := u.convertModelInfoToModel(sourceModel)
-	return u.processModel(model, endpoint), nil
-}
-
-// convertModelInfoToModel converts ModelInfo to Model for internal processing
 func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model {
 	model := &Model{
-		ID:       info.Name, // Use name as ID since ModelInfo doesn't have ID
+		ID:       info.Name,
 		Name:     info.Name,
 		Size:     info.Size,
 		Metadata: make(map[string]interface{}),
 	}
 
-	// Extract ALL available metadata from Details
 	if info.Details != nil {
-		// Core fields
 		if info.Details.Digest != nil {
 			model.Digest = *info.Details.Digest
 			model.Metadata["digest"] = *info.Details.Digest
@@ -711,27 +371,19 @@ func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model 
 			model.Format = *info.Details.Format
 			model.Metadata["format"] = *info.Details.Format
 		}
-
-		// Family extraction with fallback
 		if info.Details.Family != nil {
 			model.Family = *info.Details.Family
 		} else if len(info.Details.Families) > 0 {
 			model.Family = info.Details.Families[0]
 			model.Metadata["families"] = info.Details.Families
 		}
-
-		// Context length
 		if info.Details.MaxContextLength != nil {
 			model.ContextWindow = *info.Details.MaxContextLength
 			model.Metadata["max_context_length"] = *info.Details.MaxContextLength
 		}
-
-		// State information
 		if info.Details.State != nil {
 			model.Metadata["state"] = *info.Details.State
 		}
-
-		// Extract rich metadata that was being ignored
 		if info.Details.ParameterSize != nil {
 			model.Metadata["parameter_size"] = *info.Details.ParameterSize
 		}
@@ -752,17 +404,12 @@ func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model 
 		}
 	}
 
-	// Store type in metadata (from LM Studio)
 	if info.Type != "" {
 		model.Metadata["type"] = info.Type
 	}
-
-	// Store description if available
 	if info.Description != "" {
 		model.Metadata["description"] = info.Description
 	}
-
-	// Store last seen time
 	if !info.LastSeen.IsZero() {
 		model.Metadata["last_seen"] = info.LastSeen.Format(time.RFC3339)
 	}
@@ -770,93 +417,58 @@ func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model 
 	return model
 }
 
-// calculateMetadataConfidence calculates a confidence score for extracted metadata
-func (u *DefaultUnifier) calculateMetadataConfidence(model *Model, paramSize, quantization, family string) float64 {
-	confidence := 0.0
-	fields := 0.0
-
-	// Direct field mappings (high confidence)
-	if paramSize != "" && model.Metadata["parameter_size"] != nil {
-		confidence += 1.0
-		fields++
+func (u *DefaultUnifier) UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpoint *domain.Endpoint) (*domain.UnifiedModel, error) {
+	if sourceModel == nil {
+		return nil, nil
 	}
-	if quantization != "" && (model.Metadata["quantization_level"] != nil || model.Metadata["quantization"] != nil) {
-		confidence += 1.0
-		fields++
-	}
-	if family != "" && model.Family != "" {
-		confidence += 1.0
-		fields++
-	}
-	if model.Digest != "" {
-		confidence += 1.0
-		fields++
-	}
-	if model.ContextWindow > 0 {
-		confidence += 1.0
-		fields++
-	}
-
-	// Inferred fields (medium confidence)
-	if paramSize != "" && model.Metadata["parameter_size"] == nil {
-		confidence += 0.5
-		fields++
-	}
-	if quantization != "" && model.Metadata["quantization_level"] == nil && model.Metadata["quantization"] == nil {
-		confidence += 0.5
-		fields++
-	}
-	if family != "" && model.Family == "" {
-		confidence += 0.5
-		fields++
-	}
-
-	// Calculate overall confidence
-	if fields > 0 {
-		return confidence / fields
-	}
-	return 0.0
+	return u.processModel(sourceModel, endpoint), nil
 }
 
-// ResolveAlias finds a model by alias (same as ResolveModel for simplified implementation)
+func (u *DefaultUnifier) ResolveModel(ctx context.Context, nameOrID string) (*domain.UnifiedModel, error) {
+	model, found := u.store.ResolveByName(nameOrID)
+	if !found {
+		return nil, fmt.Errorf("model not found: %s", nameOrID)
+	}
+	return model, nil
+}
+
 func (u *DefaultUnifier) ResolveAlias(ctx context.Context, alias string) (*domain.UnifiedModel, error) {
 	return u.ResolveModel(ctx, alias)
 }
 
-// GetAliases returns empty list as we don't maintain separate aliases
-func (u *DefaultUnifier) GetAliases(ctx context.Context, unifiedID string) ([]string, error) {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-
-	if _, exists := u.catalog[unifiedID]; exists {
-		// Return the ID itself as the only alias
-		return []string{unifiedID}, nil
-	}
-	return []string{}, nil
+func (u *DefaultUnifier) GetAllModels(ctx context.Context) ([]*domain.UnifiedModel, error) {
+	return u.store.GetAllModels(), nil
 }
 
-// RegisterCustomRule is a no-op for simplified implementation
+func (u *DefaultUnifier) GetAliases(ctx context.Context, unifiedID string) ([]string, error) {
+	model, exists := u.store.GetModel(unifiedID)
+	if !exists {
+		return []string{}, nil
+	}
+
+	aliases := make([]string, 0, len(model.Aliases)+1)
+	aliases = append(aliases, unifiedID)
+	for _, alias := range model.Aliases {
+		aliases = append(aliases, alias.Name)
+	}
+	return aliases, nil
+}
+
 func (u *DefaultUnifier) RegisterCustomRule(platformType string, rule ports.UnificationRule) error {
-	// Simplified implementation doesn't support custom rules
 	return nil
 }
 
-// GetStats returns unification statistics in the expected format
 func (u *DefaultUnifier) GetStats() domain.UnificationStats {
-	u.mu.RLock()
-	defer u.mu.RUnlock()
-
 	return domain.UnificationStats{
 		TotalUnified:       int64(u.stats.UnifiedModels),
-		TotalErrors:        0, // Simplified implementation doesn't track errors
+		TotalErrors:        0,
 		CacheHits:          int64(u.stats.DigestMatches + u.stats.NameMatches),
 		CacheMisses:        int64(u.stats.TotalModels - u.stats.DigestMatches - u.stats.NameMatches),
 		LastUnificationAt:  u.stats.LastUpdated,
-		AverageUnifyTimeMs: 0, // Not tracked in simplified implementation
+		AverageUnifyTimeMs: 0,
 	}
 }
 
-// MergeUnifiedModels merges multiple unified models into one
 func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domain.UnifiedModel) (*domain.UnifiedModel, error) {
 	if len(models) == 0 {
 		return nil, nil
@@ -865,7 +477,6 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		return models[0], nil
 	}
 
-	// Start with the first model as base
 	merged := &domain.UnifiedModel{
 		ID:               models[0].ID,
 		Family:           models[0].Family,
@@ -883,14 +494,14 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		Metadata:         make(map[string]interface{}),
 	}
 
-	// Merge all sources
 	sourceMap := make(map[string]domain.SourceEndpoint)
-	totalDiskSize := int64(0)
+	aliasMap := make(map[string]domain.AliasEntry)
+	capSet := make(map[string]bool)
+
 	for _, model := range models {
 		for _, source := range model.SourceEndpoints {
 			key := source.EndpointURL
 			if existing, exists := sourceMap[key]; exists {
-				// Update if newer
 				if source.LastSeen.After(existing.LastSeen) {
 					sourceMap[key] = source
 				}
@@ -899,47 +510,43 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 			}
 		}
 
-		// Update last seen
+		for _, alias := range model.Aliases {
+			aliasMap[alias.Name] = alias
+		}
+
+		for _, cap := range model.Capabilities {
+			capSet[cap] = true
+		}
+
 		if model.LastSeen.After(merged.LastSeen) {
 			merged.LastSeen = model.LastSeen
 		}
+
+		for k, v := range model.Metadata {
+			merged.Metadata[k] = v
+		}
 	}
 
-	// Convert map back to slice and calculate total disk size
+	totalDiskSize := int64(0)
 	for _, source := range sourceMap {
 		merged.SourceEndpoints = append(merged.SourceEndpoints, source)
 		totalDiskSize += source.DiskSize
 	}
 	merged.DiskSize = totalDiskSize
 
-	// Merge aliases
-	aliasMap := make(map[string]domain.AliasEntry)
-	for _, model := range models {
-		for _, alias := range model.Aliases {
-			aliasMap[alias.Name] = alias
-		}
-	}
 	for _, alias := range aliasMap {
 		merged.Aliases = append(merged.Aliases, alias)
 	}
 
-	// Merge capabilities
-	capSet := make(map[string]bool)
-	for _, model := range models {
-		for _, cap := range model.Capabilities {
-			capSet[cap] = true
-		}
-	}
 	for cap := range capSet {
 		merged.Capabilities = append(merged.Capabilities, cap)
 	}
 
-	// Merge metadata (last one wins)
-	for _, model := range models {
-		for k, v := range model.Metadata {
-			merged.Metadata[k] = v
-		}
-	}
-
 	return merged, nil
+}
+
+func (u *DefaultUnifier) Clear(ctx context.Context) error {
+	u.store = NewCatalogStore(5 * time.Minute)
+	u.stats = DeduplicationStats{}
+	return nil
 }
