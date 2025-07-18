@@ -366,9 +366,8 @@ func (u *LifecycleUnifier) markEndpointOffline(endpointURL string, reason string
 }
 
 func (u *LifecycleUnifier) updateEndpointStates(models []*domain.UnifiedModel, endpointURL string) {
-	u.mu.RLock()
+	u.mu.Lock()
 	stateInfo := u.endpointStates[endpointURL]
-	u.mu.RUnlock()
 
 	for _, model := range models {
 		for i := range model.SourceEndpoints {
@@ -378,6 +377,7 @@ func (u *LifecycleUnifier) updateEndpointStates(models []*domain.UnifiedModel, e
 			}
 		}
 	}
+	u.mu.Unlock()
 }
 
 func (u *LifecycleUnifier) getOrCreateCircuitBreaker(endpointURL string) *CircuitBreaker {
@@ -565,4 +565,49 @@ func (u *LifecycleUnifier) GetCircuitBreakerStatsForEndpoint(endpointURL string)
 		return cb.GetStats(), true
 	}
 	return CircuitBreakerStats{}, false
+}
+
+// ResolveModel overrides DefaultUnifier to ensure proper locking
+func (u *LifecycleUnifier) ResolveModel(ctx context.Context, nameOrID string) (*domain.UnifiedModel, error) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	// Direct access to catalog with proper locking
+	if model, exists := u.catalog[nameOrID]; exists {
+		return model, nil
+	}
+
+	// Try case-insensitive name lookup
+	lowercaseName := strings.ToLower(nameOrID)
+	if modelIDs, exists := u.nameIndex[lowercaseName]; exists && len(modelIDs) > 0 {
+		return u.catalog[modelIDs[0]], nil
+	}
+
+	// Try alias lookup
+	for _, model := range u.catalog {
+		for _, alias := range model.Aliases {
+			if strings.EqualFold(alias.Name, nameOrID) {
+				return model, nil
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("model not found: %s", nameOrID)
+}
+
+// ResolveAlias overrides DefaultUnifier to ensure proper locking
+func (u *LifecycleUnifier) ResolveAlias(ctx context.Context, alias string) (*domain.UnifiedModel, error) {
+	return u.ResolveModel(ctx, alias)
+}
+
+// GetAllModels overrides DefaultUnifier to ensure proper locking
+func (u *LifecycleUnifier) GetAllModels(ctx context.Context) ([]*domain.UnifiedModel, error) {
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+
+	models := make([]*domain.UnifiedModel, 0, len(u.catalog))
+	for _, model := range u.catalog {
+		models = append(models, model)
+	}
+	return models, nil
 }
