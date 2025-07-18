@@ -65,7 +65,7 @@ func TestRetry_PermanentError(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Equal(t, 1, attempts) // Should not retry permanent errors
-	
+
 	var permErr *PermanentError
 	assert.True(t, errors.As(err, &permErr))
 }
@@ -79,7 +79,7 @@ func TestRetry_ContextCancellation(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	attempts := 0
 	go func() {
 		time.Sleep(30 * time.Millisecond)
@@ -215,17 +215,17 @@ func TestRetry_BackoffTiming(t *testing.T) {
 
 	start := time.Now()
 	attempts := 0
-	
+
 	err := Retry(context.Background(), policy, func(ctx context.Context) error {
 		attempts++
 		return errors.New("fail")
 	})
 
 	duration := time.Since(start)
-	
+
 	assert.Error(t, err)
 	assert.Equal(t, 3, attempts)
-	
+
 	// Should have waited at least for the backoffs (50ms + 100ms)
 	// Allow some tolerance for execution time
 	assert.GreaterOrEqual(t, duration, 120*time.Millisecond)

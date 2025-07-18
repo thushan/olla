@@ -19,7 +19,7 @@ var (
 
 func init() {
 	// Initialize with a time-based seed for non-deterministic randomness
-	randSource = rand.New(rand.NewSource(time.Now().UnixNano()))
+	randSource = rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // Used only for jitter in retries
 }
 
 // PermanentError marks errors that shouldn't trigger retries (e.g., auth failures, not found)
@@ -42,7 +42,7 @@ func IsPermanent(err error) bool {
 
 func Retry(ctx context.Context, policy RetryPolicy, fn RetryableFunc) error {
 	var lastErr error
-	
+
 	for attempt := 0; attempt < policy.MaxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -64,7 +64,7 @@ func Retry(ctx context.Context, policy RetryPolicy, fn RetryableFunc) error {
 
 		if attempt < policy.MaxAttempts-1 {
 			backoff := calculateBackoff(attempt, policy)
-			
+
 			timer := time.NewTimer(backoff)
 			select {
 			case <-ctx.Done():
@@ -120,7 +120,7 @@ func RetryWithResult[T any](ctx context.Context, policy RetryPolicy, fn func(ctx
 
 func calculateBackoff(attempt int, policy RetryPolicy) time.Duration {
 	backoff := float64(policy.InitialBackoff) * math.Pow(policy.BackoffMultiplier, float64(attempt))
-	
+
 	// Jitter prevents thundering herd when multiple clients retry simultaneously
 	jitter := backoff * 0.1 * (2*randFloat() - 1)
 	backoff += jitter

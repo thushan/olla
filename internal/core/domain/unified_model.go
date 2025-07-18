@@ -32,15 +32,15 @@ type UnifiedModel struct {
 
 // SourceEndpoint represents where a unified model is available
 type SourceEndpoint struct {
-	LastSeen       time.Time             `json:"last_seen"`
-	LastStateCheck time.Time             `json:"last_state_check"`
-	StateInfo      *EndpointStateInfo    `json:"state_info,omitempty"`
-	EndpointURL    string                `json:"-"` // Hidden from JSON output for security
-	EndpointName   string                `json:"endpoint_name"`
-	NativeName     string                `json:"native_name"` // Original name on this platform
-	State          string                `json:"state"`       // loaded, not-loaded, etc.
-	ModelState     ModelState            `json:"model_state"` // New typed state
-	DiskSize       int64                 `json:"disk_size"`
+	LastSeen       time.Time          `json:"last_seen"`
+	LastStateCheck time.Time          `json:"last_state_check"`
+	StateInfo      *EndpointStateInfo `json:"state_info,omitempty"`
+	EndpointURL    string             `json:"-"` // Hidden from JSON output for security
+	EndpointName   string             `json:"endpoint_name"`
+	NativeName     string             `json:"native_name"` // Original name on this platform
+	State          string             `json:"state"`       // loaded, not-loaded, etc.
+	ModelState     ModelState         `json:"model_state"` // New typed state
+	DiskSize       int64              `json:"disk_size"`
 }
 
 // UnificationStats tracks performance metrics for model unification
@@ -156,7 +156,7 @@ func (u *UnifiedModel) IsAvailable() bool {
 func (u *UnifiedModel) GetLoadedEndpoints() []SourceEndpoint {
 	var loaded []SourceEndpoint
 	for _, endpoint := range u.SourceEndpoints {
-		if endpoint.State == "loaded" || endpoint.ModelState == ModelStateLoaded {
+		if endpoint.State == string(ModelStateLoaded) || endpoint.ModelState == ModelStateLoaded {
 			loaded = append(loaded, endpoint)
 		}
 	}
@@ -214,12 +214,12 @@ func (s *SourceEndpoint) GetEffectiveState() ModelState {
 	if s.StateInfo != nil && !s.StateInfo.State.IsHealthy() {
 		return ModelStateOffline
 	}
-	
+
 	// Use typed state if available
 	if s.ModelState != "" {
 		return s.ModelState
 	}
-	
+
 	// Map string state to typed state for compatibility
 	switch s.State {
 	case "loaded":

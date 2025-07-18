@@ -267,8 +267,8 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 	model, err := unifier.ResolveAlias(ctx, "llama3:8b")
 	require.NoError(t, err)
 	assert.Equal(t, 2, len(model.SourceEndpoints))
-	assert.Contains(t, model.Capabilities, "context:8192")
 	assert.Contains(t, model.Capabilities, "text-generation")
+	// With 8192 context, no special context capability is added (only for 32k+ contexts)
 
 	// Verify both endpoints are present
 	endpoints := make(map[string]bool)

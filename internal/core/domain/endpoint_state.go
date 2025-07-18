@@ -27,19 +27,19 @@ const (
 )
 
 type EndpointStateInfo struct {
-	State              EndpointState     `json:"state"`
-	LastStateChange    time.Time         `json:"last_state_change"`
-	ConsecutiveFailures int              `json:"consecutive_failures"`
-	LastError          string            `json:"last_error,omitempty"`
-	Metadata           map[string]interface{} `json:"metadata,omitempty"`
+	LastStateChange     time.Time              `json:"last_state_change"`
+	Metadata            map[string]interface{} `json:"metadata,omitempty"`
+	State               EndpointState          `json:"state"`
+	LastError           string                 `json:"last_error,omitempty"`
+	ConsecutiveFailures int                    `json:"consecutive_failures"`
 }
 
 type StateTransition struct {
+	Timestamp time.Time `json:"timestamp"`
+	Error     error     `json:"error,omitempty"`
 	From      string    `json:"from"`
 	To        string    `json:"to"`
-	Timestamp time.Time `json:"timestamp"`
 	Reason    string    `json:"reason"`
-	Error     error     `json:"error,omitempty"`
 }
 
 func (s EndpointState) IsHealthy() bool {
@@ -94,8 +94,8 @@ func (s ModelState) String() string {
 
 func (s EndpointState) Validate() error {
 	switch s {
-	case EndpointStateUnknown, EndpointStateOnline, EndpointStateDegraded, 
-		 EndpointStateOffline, EndpointStateRemoved:
+	case EndpointStateUnknown, EndpointStateOnline, EndpointStateDegraded,
+		EndpointStateOffline, EndpointStateRemoved:
 		return nil
 	default:
 		return fmt.Errorf("invalid endpoint state: %s", s)
@@ -105,7 +105,7 @@ func (s EndpointState) Validate() error {
 func (s ModelState) Validate() error {
 	switch s {
 	case ModelStateUnknown, ModelStateAvailable, ModelStateLoaded,
-		 ModelStateLoading, ModelStateOffline, ModelStateError:
+		ModelStateLoading, ModelStateOffline, ModelStateError:
 		return nil
 	default:
 		return fmt.Errorf("invalid model state: %s", s)

@@ -5,13 +5,13 @@ import (
 )
 
 type Config struct {
+	CircuitBreaker               CircuitBreakerConfig `json:"circuit_breaker" yaml:"circuit_breaker"`
+	DiscoveryRetryPolicy         RetryPolicy          `json:"discovery_retry_policy" yaml:"discovery_retry_policy"`
 	ModelTTL                     time.Duration        `json:"model_ttl" yaml:"model_ttl"`
 	CleanupInterval              time.Duration        `json:"cleanup_interval" yaml:"cleanup_interval"`
-	DiscoveryRetryPolicy         RetryPolicy          `json:"discovery_retry_policy" yaml:"discovery_retry_policy"`
-	CircuitBreaker               CircuitBreakerConfig `json:"circuit_breaker" yaml:"circuit_breaker"`
-	EnableBackgroundCleanup      bool                 `json:"enable_background_cleanup" yaml:"enable_background_cleanup"`
 	EndpointHealthCheckInterval  time.Duration        `json:"endpoint_health_check_interval" yaml:"endpoint_health_check_interval"`
 	MaxConsecutiveFailures       int                  `json:"max_consecutive_failures" yaml:"max_consecutive_failures"`
+	EnableBackgroundCleanup      bool                 `json:"enable_background_cleanup" yaml:"enable_background_cleanup"`
 	EnableStateTransitionLogging bool                 `json:"enable_state_transition_logging" yaml:"enable_state_transition_logging"`
 }
 
@@ -33,11 +33,11 @@ type CircuitBreakerConfig struct {
 // DefaultConfig provides production-ready defaults tuned for typical LLM workloads
 func DefaultConfig() Config {
 	return Config{
-		ModelTTL:                24 * time.Hour,
-		CleanupInterval:         5 * time.Minute,
-		EnableBackgroundCleanup: true,
-		EndpointHealthCheckInterval: 30 * time.Second,
-		MaxConsecutiveFailures:  3,
+		ModelTTL:                     24 * time.Hour,
+		CleanupInterval:              5 * time.Minute,
+		EnableBackgroundCleanup:      true,
+		EndpointHealthCheckInterval:  30 * time.Second,
+		MaxConsecutiveFailures:       3,
 		EnableStateTransitionLogging: false,
 		DiscoveryRetryPolicy: RetryPolicy{
 			MaxAttempts:       3,

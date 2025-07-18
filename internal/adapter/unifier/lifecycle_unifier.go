@@ -22,20 +22,20 @@ type DiscoveryClient interface {
 // It tracks endpoint health, manages stale data cleanup, and provides circuit breaker
 // protection to prevent cascade failures.
 type LifecycleUnifier struct {
+	logger          logger.StyledLogger
+	cleanupCtx      context.Context
+	discoveryClient DiscoveryClient
 	*DefaultUnifier
-	config              Config
-	logger              logger.StyledLogger
-	cleanupCtx          context.Context
-	cleanupCancel       context.CancelFunc
-	cleanupWg           sync.WaitGroup
-	endpointStates      map[string]*domain.EndpointStateInfo
-	endpointFailures    map[string]int
-	circuitBreakers     map[string]*CircuitBreaker
-	lastEndpointCheck   map[string]time.Time
-	stateTransitions    chan domain.StateTransition
-	discoveryClient     DiscoveryClient
-	isRunning           atomic.Bool
-	mu                  sync.RWMutex
+	cleanupCancel     context.CancelFunc
+	endpointStates    map[string]*domain.EndpointStateInfo
+	endpointFailures  map[string]int
+	circuitBreakers   map[string]*CircuitBreaker
+	lastEndpointCheck map[string]time.Time
+	stateTransitions  chan domain.StateTransition
+	config            Config
+	cleanupWg         sync.WaitGroup
+	mu                sync.RWMutex
+	isRunning         atomic.Bool
 }
 
 func NewLifecycleUnifier(config Config, logger logger.StyledLogger) ports.ModelUnifier {
@@ -44,14 +44,14 @@ func NewLifecycleUnifier(config Config, logger logger.StyledLogger) ports.ModelU
 	}
 
 	return &LifecycleUnifier{
-		DefaultUnifier:    NewDefaultUnifier().(*DefaultUnifier),
-		config:           config,
-		logger:           logger,
-		endpointStates:   make(map[string]*domain.EndpointStateInfo),
-		endpointFailures: make(map[string]int),
-		circuitBreakers:  make(map[string]*CircuitBreaker),
+		DefaultUnifier:    NewDefaultUnifier().(*DefaultUnifier), //nolint:forcetypeassert // NewDefaultUnifier always returns *DefaultUnifier
+		config:            config,
+		logger:            logger,
+		endpointStates:    make(map[string]*domain.EndpointStateInfo),
+		endpointFailures:  make(map[string]int),
+		circuitBreakers:   make(map[string]*CircuitBreaker),
 		lastEndpointCheck: make(map[string]time.Time),
-		stateTransitions: make(chan domain.StateTransition, 100),
+		stateTransitions:  make(chan domain.StateTransition, 100),
 	}
 }
 
@@ -79,7 +79,7 @@ func (u *LifecycleUnifier) Start(ctx context.Context) error {
 		go u.stateTransitionLogger()
 	}
 
-	u.logger.Info("Lifecycle unifier started", 
+	u.logger.Info("Lifecycle unifier started",
 		"model_ttl", u.config.ModelTTL,
 		"cleanup_interval", u.config.CleanupInterval,
 		"background_cleanup", u.config.EnableBackgroundCleanup)
@@ -194,12 +194,12 @@ func (u *LifecycleUnifier) performCleanup() {
 
 func (u *LifecycleUnifier) cleanupStaleEndpoints(model *domain.UnifiedModel, staleThreshold time.Time) {
 	newEndpoints := make([]domain.SourceEndpoint, 0, len(model.SourceEndpoints))
-	
+
 	for _, endpoint := range model.SourceEndpoints {
 		if endpoint.LastSeen.After(staleThreshold) {
 			newEndpoints = append(newEndpoints, endpoint)
 		} else {
-			u.recordStateTransition(endpoint.EndpointURL, string(endpoint.GetEffectiveState()), 
+			u.recordStateTransition(endpoint.EndpointURL, string(endpoint.GetEffectiveState()),
 				string(domain.ModelStateOffline), "TTL expired", nil)
 		}
 	}
@@ -258,7 +258,7 @@ func (u *LifecycleUnifier) removeModel(id string) {
 
 func (u *LifecycleUnifier) recordEndpointFailure(endpointURL string, err error) {
 	u.mu.Lock()
-	
+
 	u.endpointFailures[endpointURL]++
 	failures := u.endpointFailures[endpointURL]
 
@@ -294,14 +294,14 @@ func (u *LifecycleUnifier) recordEndpointFailure(endpointURL string, err error) 
 			State:               domain.EndpointStateDegraded,
 			LastStateChange:     time.Now(),
 			ConsecutiveFailures: failures,
-			LastError:          err.Error(),
+			LastError:           err.Error(),
 		}
 	}
 }
 
 func (u *LifecycleUnifier) recordEndpointSuccess(endpointURL string) {
 	u.mu.Lock()
-	
+
 	u.endpointFailures[endpointURL] = 0
 
 	// Same pattern as recordEndpointFailure to avoid deadlock
@@ -329,7 +329,7 @@ func (u *LifecycleUnifier) recordEndpointSuccess(endpointURL string) {
 			state.LastStateChange = time.Now()
 			state.ConsecutiveFailures = 0
 			state.LastError = ""
-			
+
 			u.recordStateTransition(endpointURL, string(domain.EndpointStateOffline),
 				string(domain.EndpointStateOnline), "Endpoint recovered", nil)
 		}
@@ -393,7 +393,7 @@ func (u *LifecycleUnifier) getOrCreateCircuitBreaker(endpointURL string) *Circui
 	return cb
 }
 
-func (u *LifecycleUnifier) recordStateTransition(endpoint, from, to, reason string, err error) {
+func (u *LifecycleUnifier) recordStateTransition(_ /*endpoint*/, from, to, reason string, err error) {
 	transition := domain.StateTransition{
 		From:      from,
 		To:        to,
@@ -465,7 +465,7 @@ func (u *LifecycleUnifier) RemoveEndpoint(ctx context.Context, endpointURL strin
 	delete(u.endpointFailures, endpointURL)
 	delete(u.lastEndpointCheck, endpointURL)
 	delete(u.endpointModels, endpointURL)
-	
+
 	if cb, exists := u.circuitBreakers[endpointURL]; exists {
 		cb.Reset()
 		delete(u.circuitBreakers, endpointURL)
@@ -528,7 +528,7 @@ func (u *LifecycleUnifier) ForceEndpointCheck(ctx context.Context, endpointURL s
 
 	// Success - update models
 	u.recordEndpointSuccess(endpointURL)
-	
+
 	// Re-unify the models to update states
 	_, unifyErr := u.UnifyModels(ctx, models, endpoint)
 	if unifyErr != nil {

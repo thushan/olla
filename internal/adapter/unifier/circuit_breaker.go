@@ -18,12 +18,12 @@ const (
 // It transitions between closed (normal), open (blocking), and half-open (testing) states.
 type CircuitBreaker struct {
 	config           CircuitBreakerConfig
+	lastFailureTime  atomic.Int64
+	mu               sync.RWMutex
 	state            atomic.Int32
 	failures         atomic.Int32
 	successes        atomic.Int32
-	lastFailureTime  atomic.Int64
 	halfOpenRequests atomic.Int32
-	mu               sync.RWMutex
 }
 
 func NewCircuitBreaker(config CircuitBreakerConfig) *CircuitBreaker {
@@ -74,9 +74,12 @@ func (cb *CircuitBreaker) RecordSuccess() {
 
 	case CircuitHalfOpen:
 		successes := cb.successes.Add(1)
-		if successes >= int32(cb.config.SuccessThreshold) {
+		if int(successes) >= cb.config.SuccessThreshold {
 			cb.transitionToClosed()
 		}
+
+	case CircuitOpen:
+		// No action needed for open state on success
 	}
 }
 
@@ -92,13 +95,16 @@ func (cb *CircuitBreaker) RecordFailure() {
 
 	switch state {
 	case CircuitClosed:
-		if failures >= int32(cb.config.FailureThreshold) {
+		if int(failures) >= cb.config.FailureThreshold {
 			cb.transitionToOpen()
 		}
 
 	case CircuitHalfOpen:
 		// Single failure in half-open immediately reopens to prevent cascading failures
 		cb.transitionToOpen()
+
+	case CircuitOpen:
+		// Already open, no action needed
 	}
 }
 
@@ -145,7 +151,7 @@ func (cb *CircuitBreaker) transitionToClosed() {
 
 func (cb *CircuitBreaker) allowHalfOpen() bool {
 	current := cb.halfOpenRequests.Add(1)
-	return current <= int32(cb.config.HalfOpenRequests)
+	return int(current) <= cb.config.HalfOpenRequests
 }
 
 func (s CircuitBreakerState) String() string {
@@ -162,9 +168,9 @@ func (s CircuitBreakerState) String() string {
 }
 
 type CircuitBreakerStats struct {
+	LastFailureTime  time.Time `json:"last_failure_time"`
 	State            string    `json:"state"`
 	Failures         int       `json:"failures"`
 	Successes        int       `json:"successes"`
-	LastFailureTime  time.Time `json:"last_failure_time"`
 	HalfOpenRequests int       `json:"half_open_requests"`
 }

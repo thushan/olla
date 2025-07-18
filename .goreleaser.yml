@@ -11,10 +11,14 @@ project_name: olla
 before:
   hooks:
     - go mod download
-    - mkdir -p config logs
-    - cp default.yaml config/config.yaml
-    - cp docker.yaml config/docker.yaml
+    - mkdir -p config logs tmp data
+    - cp config-base/config.yaml config/config.yaml
+    - cp config-base/docker.yaml config/docker.yaml
+    - cp config-base/models.yaml config/models.yaml
+    - cp config-base/config.yaml default.yaml
+    - touch data/.gitkeep
     - touch logs/.gitkeep
+    - touch tmp/.gitkeep
 
 release:
   name_template: "{{.ProjectName}}-v{{.Version}}"
@@ -87,7 +91,9 @@ archives:
       - LICENSE
       - readme.md
       - config/**
+      - data/.gitkeep
       - logs/.gitkeep
+      - tmp/.gitkeep
       - default.yaml
     format_overrides:
       - goos: windows

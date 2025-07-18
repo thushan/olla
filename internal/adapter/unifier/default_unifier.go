@@ -23,7 +23,6 @@ type Model struct {
 	ContextWindow int64
 }
 
-// nilIfZero returns nil if value is 0, otherwise returns pointer to value
 func nilIfZero(v int64) *int64 {
 	if v == 0 {
 		return nil
@@ -89,7 +88,6 @@ func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.Model
 	}
 	u.endpointModels[endpointURL] = []string{}
 
-	// Process each model
 	processedModels := make([]*domain.UnifiedModel, 0, len(models))
 	for _, modelInfo := range models {
 		if modelInfo == nil {
@@ -105,7 +103,6 @@ func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.Model
 		}
 	}
 
-	// Update stats
 	u.stats.TotalModels = len(u.catalog)
 	u.stats.UnifiedModels = len(processedModels)
 	u.stats.LastUpdated = time.Now()
@@ -129,7 +126,6 @@ func (u *DefaultUnifier) processModel(model *Model, endpoint *domain.Endpoint) *
 	// Try exact name match (case-insensitive)
 	lowercaseName := strings.ToLower(model.Name)
 	if existingIDs, found := u.nameIndex[lowercaseName]; found && len(existingIDs) > 0 {
-		// Check if any can be merged
 		for _, id := range existingIDs {
 			existing := u.catalog[id]
 			if u.canMergeByName(existing, model) {
@@ -209,10 +205,55 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpo
 		DiskSize:     model.Size,
 	}
 
-	// Build capabilities list
-	capabilities := u.extractCapabilities(model)
+	// Extract and normalize parameter size
+	paramSize := ""
+	paramCount := int64(0)
+	if sizeStr, ok := model.Metadata["parameter_size"].(string); ok {
+		paramSize, paramCount = extractParameterSize(sizeStr)
+	}
+	// If we didn't get a parameter count, use disk size as fallback
+	if paramCount == 0 && model.Size > 0 {
+		paramCount = model.Size
+	}
 
-	// Prepare metadata
+	// Extract and normalize quantization
+	quantization := ""
+	if quantStr, ok := model.Metadata["quantization_level"].(string); ok {
+		quantization = normalizeQuantization(quantStr)
+	} else if quantStr, ok := model.Metadata["quantization"].(string); ok {
+		quantization = normalizeQuantization(quantStr)
+	}
+
+	// Extract family and variant
+	arch := ""
+	if archStr, ok := model.Metadata["arch"].(string); ok {
+		arch = archStr
+	}
+	family, variant := extractFamilyAndVariant(model.Name, arch)
+	// Use family from metadata if available, otherwise use extracted
+	if model.Family != "" {
+		family = model.Family
+		// Don't extract variant if family comes from metadata to avoid confusion
+		// (e.g., gemma3 from metadata shouldn't produce variant "3")
+		variant = ""
+	} else if family != "" {
+		model.Family = family
+	}
+
+	modelType := ""
+	if typeStr, ok := model.Metadata["type"].(string); ok {
+		modelType = typeStr
+	} else if typeStr, ok := model.Metadata["model_type"].(string); ok {
+		modelType = typeStr
+	}
+
+	// Build comprehensive capabilities list
+	capabilities := inferCapabilitiesFromMetadata(modelType, model.Name, model.ContextWindow, model.Metadata)
+
+	// Extract publisher
+	publisher := extractPublisher(model.Name, model.Metadata)
+
+	// Prepare enriched metadata
 	metadata := make(map[string]interface{})
 	if model.Metadata != nil {
 		for k, v := range model.Metadata {
@@ -223,15 +264,23 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpo
 	if model.Digest != "" {
 		metadata["digest"] = model.Digest
 	}
+	// Add extracted publisher if we found one
+	if publisher != "" && metadata["publisher"] == nil {
+		metadata["publisher"] = publisher
+	}
+	// Add platform info
+	metadata["platform"] = platform
+	// Add confidence score for extracted metadata
+	metadata["metadata_confidence"] = u.calculateMetadataConfidence(model, paramSize, quantization, family)
 
 	contextWindow := model.ContextWindow
 	return &domain.UnifiedModel{
 		ID:               id,
-		Family:           model.Family,
-		Variant:          "", // Would need to parse from name
-		ParameterSize:    "", // Would need to parse from size
-		ParameterCount:   model.Size,
-		Quantization:     "", // Would need to parse from name
+		Family:           family,
+		Variant:          variant,
+		ParameterSize:    paramSize,
+		ParameterCount:   paramCount,
+		Quantization:     quantization,
 		Format:           model.Format,
 		Aliases:          []domain.AliasEntry{{Name: model.Name, Source: platform}},
 		SourceEndpoints:  []domain.SourceEndpoint{source},
@@ -260,6 +309,8 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 			unified.SourceEndpoints[i].LastSeen = time.Now()
 			unified.SourceEndpoints[i].DiskSize = model.Size
 			unified.LastSeen = time.Now()
+			// Still merge metadata even for existing endpoints
+			u.mergeMetadata(unified, model)
 			return
 		}
 	}
@@ -288,22 +339,89 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 		unified.Aliases = append(unified.Aliases, domain.AliasEntry{Name: model.Name, Source: platform})
 	}
 
-	// Merge capabilities
-	newCaps := u.extractCapabilities(model)
+	modelType := ""
+	if typeStr, ok := model.Metadata["type"].(string); ok {
+		modelType = typeStr
+	} else if typeStr, ok := model.Metadata["model_type"].(string); ok {
+		modelType = typeStr
+	}
+
+	// Merge capabilities with new comprehensive extraction
+	newCaps := inferCapabilitiesFromMetadata(modelType, model.Name, model.ContextWindow, model.Metadata)
 	unified.Capabilities = u.mergeCapabilities(unified.Capabilities, newCaps)
 
 	// Update disk size
 	unified.DiskSize += model.Size
 
-	// Update digest in metadata if present
-	if model.Digest != "" {
-		if unified.Metadata == nil {
-			unified.Metadata = make(map[string]interface{})
+	// Merge all metadata
+	u.mergeMetadata(unified, model)
+
+	// Update fields if they were previously empty but now have data
+	if unified.ParameterSize == "" && model.Metadata["parameter_size"] != nil {
+		if sizeStr, ok := model.Metadata["parameter_size"].(string); ok {
+			paramSize, paramCount := extractParameterSize(sizeStr)
+			unified.ParameterSize = paramSize
+			if paramCount > 0 {
+				unified.ParameterCount = paramCount
+			}
 		}
-		unified.Metadata["digest"] = model.Digest
+	}
+
+	if unified.Quantization == "" {
+		if quantStr, ok := model.Metadata["quantization_level"].(string); ok {
+			unified.Quantization = normalizeQuantization(quantStr)
+		} else if quantStr, ok := model.Metadata["quantization"].(string); ok {
+			unified.Quantization = normalizeQuantization(quantStr)
+		}
+	}
+
+	if unified.MaxContextLength == nil && model.ContextWindow > 0 {
+		unified.MaxContextLength = nilIfZero(model.ContextWindow)
 	}
 
 	unified.LastSeen = time.Now()
+}
+
+// mergeMetadata intelligently merges metadata from a new model into the unified model
+func (u *DefaultUnifier) mergeMetadata(unified *domain.UnifiedModel, model *Model) {
+	if unified.Metadata == nil {
+		unified.Metadata = make(map[string]interface{})
+	}
+
+	// Update digest if present
+	if model.Digest != "" {
+		unified.Metadata["digest"] = model.Digest
+	}
+
+	// Merge all metadata from the new model
+	for k, v := range model.Metadata {
+		// For certain fields, only update if not already present
+		switch k {
+		case "metadata_confidence":
+			// Recalculate confidence based on merged data
+			continue
+		case "platform":
+			// Store platform-specific data separately
+			if vStr, ok := v.(string); ok {
+				if platforms, ok := unified.Metadata["platforms"].(map[string]bool); ok {
+					platforms[vStr] = true
+				} else {
+					unified.Metadata["platforms"] = map[string]bool{vStr: true}
+				}
+			}
+		default:
+			// For most fields, newer data overwrites older data
+			unified.Metadata[k] = v
+		}
+	}
+
+	// Recalculate confidence score
+	arch := ""
+	if archStr, ok := model.Metadata["arch"].(string); ok {
+		arch = archStr
+	}
+	family, _ := extractFamilyAndVariant(model.Name, arch)
+	unified.Metadata["metadata_confidence"] = u.calculateMetadataConfidence(model, unified.ParameterSize, unified.Quantization, family)
 }
 
 // detectPlatform detects the platform from model metadata
@@ -348,32 +466,6 @@ func (u *DefaultUnifier) mapModelState(model *Model) string {
 	}
 
 	return "unknown"
-}
-
-// extractCapabilities extracts capabilities from model metadata
-func (u *DefaultUnifier) extractCapabilities(model *Model) []string {
-	caps := make([]string, 0)
-
-	// Check metadata for explicit capabilities
-	if model.Metadata != nil {
-		if capabilities, ok := model.Metadata["capabilities"].([]interface{}); ok {
-			for _, cap := range capabilities {
-				if capStr, ok := cap.(string); ok {
-					caps = append(caps, capStr)
-				}
-			}
-		}
-	}
-
-	// Infer from model properties
-	if model.ContextWindow > 0 {
-		caps = append(caps, fmt.Sprintf("context:%d", model.ContextWindow))
-	}
-
-	// Always add text-generation as a base capability
-	caps = append(caps, "text-generation")
-
-	return caps
 }
 
 // mergeCapabilities merges two capability lists, removing duplicates
@@ -559,41 +651,122 @@ func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model 
 		Metadata: make(map[string]interface{}),
 	}
 
-	// Extract additional fields from Details if available
+	// Extract ALL available metadata from Details
 	if info.Details != nil {
+		// Core fields
 		if info.Details.Digest != nil {
 			model.Digest = *info.Details.Digest
+			model.Metadata["digest"] = *info.Details.Digest
 		}
 		if info.Details.Format != nil {
 			model.Format = *info.Details.Format
+			model.Metadata["format"] = *info.Details.Format
 		}
+
+		// Family extraction with fallback
 		if info.Details.Family != nil {
 			model.Family = *info.Details.Family
 		} else if len(info.Details.Families) > 0 {
 			model.Family = info.Details.Families[0]
+			model.Metadata["families"] = info.Details.Families
 		}
+
+		// Context length
 		if info.Details.MaxContextLength != nil {
 			model.ContextWindow = *info.Details.MaxContextLength
+			model.Metadata["max_context_length"] = *info.Details.MaxContextLength
 		}
-		// Store state in metadata
+
+		// State information
 		if info.Details.State != nil {
 			model.Metadata["state"] = *info.Details.State
 		}
+
+		// Extract rich metadata that was being ignored
+		if info.Details.ParameterSize != nil {
+			model.Metadata["parameter_size"] = *info.Details.ParameterSize
+		}
+		if info.Details.QuantizationLevel != nil {
+			model.Metadata["quantization_level"] = *info.Details.QuantizationLevel
+		}
+		if info.Details.Publisher != nil {
+			model.Metadata["publisher"] = *info.Details.Publisher
+		}
+		if info.Details.Type != nil {
+			model.Metadata["model_type"] = *info.Details.Type
+		}
+		if info.Details.ParentModel != nil {
+			model.Metadata["parent_model"] = *info.Details.ParentModel
+		}
+		if info.Details.ModifiedAt != nil {
+			model.Metadata["modified_at"] = info.Details.ModifiedAt.Format(time.RFC3339)
+		}
 	}
 
-	// Store type in metadata
+	// Store type in metadata (from LM Studio)
 	if info.Type != "" {
 		model.Metadata["type"] = info.Type
+	}
+
+	// Store description if available
+	if info.Description != "" {
+		model.Metadata["description"] = info.Description
+	}
+
+	// Store last seen time
+	if !info.LastSeen.IsZero() {
+		model.Metadata["last_seen"] = info.LastSeen.Format(time.RFC3339)
 	}
 
 	return model
 }
 
-// parseSizeString attempts to parse size from string format
-func (u *DefaultUnifier) parseSizeString(size string) int64 {
-	// Simple implementation - just return 0 for now
-	// In a real implementation, this would parse "7B" -> 7000000000, etc.
-	return 0
+// calculateMetadataConfidence calculates a confidence score for extracted metadata
+func (u *DefaultUnifier) calculateMetadataConfidence(model *Model, paramSize, quantization, family string) float64 {
+	confidence := 0.0
+	fields := 0.0
+
+	// Direct field mappings (high confidence)
+	if paramSize != "" && model.Metadata["parameter_size"] != nil {
+		confidence += 1.0
+		fields++
+	}
+	if quantization != "" && (model.Metadata["quantization_level"] != nil || model.Metadata["quantization"] != nil) {
+		confidence += 1.0
+		fields++
+	}
+	if family != "" && model.Family != "" {
+		confidence += 1.0
+		fields++
+	}
+	if model.Digest != "" {
+		confidence += 1.0
+		fields++
+	}
+	if model.ContextWindow > 0 {
+		confidence += 1.0
+		fields++
+	}
+
+	// Inferred fields (medium confidence)
+	if paramSize != "" && model.Metadata["parameter_size"] == nil {
+		confidence += 0.5
+		fields++
+	}
+	if quantization != "" && model.Metadata["quantization_level"] == nil && model.Metadata["quantization"] == nil {
+		confidence += 0.5
+		fields++
+	}
+	if family != "" && model.Family == "" {
+		confidence += 0.5
+		fields++
+	}
+
+	// Calculate overall confidence
+	if fields > 0 {
+		return confidence / fields
+	}
+	return 0.0
 }
 
 // ResolveAlias finds a model by alias (same as ResolveModel for simplified implementation)

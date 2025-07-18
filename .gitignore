@@ -9,6 +9,7 @@ olla
 config.yaml
 config/
 dist/
+default.yml
 # Claude specific local files
 .claude/*.local.json
 # just in case

@@ -163,7 +163,7 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 	cb.Reset()
 	assert.Equal(t, CircuitClosed, cb.GetState())
 	assert.True(t, cb.Allow())
-	
+
 	stats := cb.GetStats()
 	assert.Equal(t, 0, stats.Failures)
 	assert.Equal(t, 0, stats.Successes)

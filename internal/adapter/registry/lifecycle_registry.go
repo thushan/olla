@@ -16,9 +16,9 @@ import (
 // with the service manager. It wraps UnifiedMemoryModelRegistry with retry logic and
 // endpoint health tracking.
 type LifecycleUnifiedRegistry struct {
+	logger logger.StyledLogger
 	*UnifiedMemoryModelRegistry
 	unifierConfig unifier.Config
-	logger        logger.StyledLogger
 	isRunning     atomic.Bool
 }
 
@@ -36,8 +36,8 @@ func NewLifecycleUnifiedRegistry(logger logger.StyledLogger, config unifier.Conf
 
 	return &LifecycleUnifiedRegistry{
 		UnifiedMemoryModelRegistry: base,
-		unifierConfig:             config,
-		logger:                    logger,
+		unifierConfig:              config,
+		logger:                     logger,
 	}
 }
 
@@ -83,7 +83,7 @@ func (r *LifecycleUnifiedRegistry) Dependencies() []string {
 // RegisterModelsWithEndpoint adds retry logic to handle transient failures
 func (r *LifecycleUnifiedRegistry) RegisterModelsWithEndpoint(ctx context.Context, endpoint *domain.Endpoint, models []*domain.ModelInfo) error {
 	retryPolicy := r.unifierConfig.DiscoveryRetryPolicy
-	
+
 	err := unifier.Retry(ctx, retryPolicy, func(ctx context.Context) error {
 		return r.UnifiedMemoryModelRegistry.RegisterModelsWithEndpoint(ctx, endpoint, models)
 	})
@@ -169,15 +169,15 @@ func (r *LifecycleUnifiedRegistry) GetLifecycleStats(ctx context.Context) (Lifec
 
 	return LifecycleRegistryStats{
 		UnifiedRegistryStats: baseStats,
-		EndpointStates:      stateCount,
-		CircuitBreakers:     circuitBreakerStats,
-		LastCleanup:         time.Now(), // TODO: Track actual cleanup time
+		EndpointStates:       stateCount,
+		CircuitBreakers:      circuitBreakerStats,
+		LastCleanup:          time.Now(), // TODO: Track actual cleanup time
 	}, nil
 }
 
 type LifecycleRegistryStats struct {
+	LastCleanup     time.Time                              `json:"last_cleanup"`
+	EndpointStates  map[domain.EndpointState]int           `json:"endpoint_states"`
+	CircuitBreakers map[string]unifier.CircuitBreakerStats `json:"circuit_breakers"`
 	UnifiedRegistryStats
-	EndpointStates  map[domain.EndpointState]int               `json:"endpoint_states"`
-	CircuitBreakers map[string]unifier.CircuitBreakerStats     `json:"circuit_breakers"`
-	LastCleanup     time.Time                                   `json:"last_cleanup"`
 }
