@@ -87,7 +87,12 @@ func NewApplication(
 	logger logger.StyledLogger,
 ) *Application {
 	// Create inspector chain
-	profileFactory := profile.NewFactory()
+	profileFactory, err := profile.NewFactoryWithDefaults()
+	if err != nil {
+		// fallback to built-in profiles if config loading fails
+		logger.Warn("Failed to load profile configurations, using built-in profiles", "error", err)
+		profileFactory = profile.NewFactoryLegacy()
+	}
 	inspectorFactory := inspector.NewFactory(profileFactory, logger)
 	inspectorChain := inspectorFactory.CreateChain()
 	// Add path inspector

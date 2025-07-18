@@ -113,7 +113,8 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		httpClient := &http.Client{
 			Timeout: s.config.ModelDiscovery.Timeout,
 		}
-		profileFactory := profile.NewFactory()
+		// Use legacy factory for backward compatibility
+		profileFactory := profile.NewFactoryLegacy()
 		client := discovery.NewHTTPModelDiscoveryClient(profileFactory, s.logger, httpClient)
 		discoveryConfig := discovery.DiscoveryConfig{
 			Interval:          s.config.ModelDiscovery.Interval,

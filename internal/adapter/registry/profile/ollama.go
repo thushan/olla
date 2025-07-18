@@ -45,17 +45,14 @@ var ollamaPaths []string
 
 func init() {
 	ollamaPaths = []string{
-		"/", // use this as our health check path
-		// Core inference endpoints
-		"/api/generate",   // Text completion
-		"/api/chat",       // Chat completion
-		"/api/embeddings", // Generate embeddings
+		"/", // ollama returns "Ollama is running" here
+		"/api/generate",
+		"/api/chat",
+		"/api/embeddings",
+		"/api/tags", // where ollama lists its models
+		"/api/show", // detailed model info including modelfile
 
-		// Model management
-		"/api/tags", // List local models
-		"/api/show", // Show model info
-
-		// OpenAI compatibility layer
+		// openai endpoints because everyone expects them
 		"/v1/models",
 		"/v1/chat/completions",
 		"/v1/completions",
@@ -79,6 +76,8 @@ func init() {
 				"/api/ps", // List running models
 
 		*/
+		// skipping model management endpoints like /api/pull and /api/create
+		// because we're a proxy, not ollama's package manager
 
 	}
 }

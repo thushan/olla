@@ -5,44 +5,61 @@ import (
 	"sort"
 	"sync"
 
-	jsoniter "github.com/json-iterator/go"
-
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-type Factory struct {
-	profiles map[string]domain.PlatformProfile
-	mu       sync.RWMutex
+type ProfileFactory interface {
+	GetProfile(profileType string) (domain.InferenceProfile, error)
+	GetAvailableProfiles() []string
+	ReloadProfiles() error
+	ValidateProfileType(platformType string) bool
 }
 
-func NewFactory() *Factory {
-	factory := &Factory{
-		profiles: make(map[string]domain.PlatformProfile),
+type Factory struct {
+	loader *ProfileLoader
+	mu     sync.RWMutex
+}
+
+// NewFactory expects a profiles directory path. This breaks the old API
+// but makes configuration explicit and testable.
+func NewFactory(profilesDir string) (*Factory, error) {
+	loader := NewProfileLoader(profilesDir)
+
+	if err := loader.LoadProfiles(); err != nil {
+		return nil, fmt.Errorf("failed to load profiles: %w", err)
 	}
 
-	factory.RegisterProfile(NewOllamaProfile())
-	factory.RegisterProfile(NewLMStudioProfile())
-	factory.RegisterProfile(NewOpenAICompatibleProfile())
+	return &Factory{
+		loader: loader,
+	}, nil
+}
 
+func NewFactoryWithDefaults() (*Factory, error) {
+	return NewFactory("./config/profiles")
+}
+
+// NewFactoryLegacy exists because I was too lazy to update all the call sites
+// in phase 1. This gives us time to migrate properly.
+// Deprecated: seriously, use NewFactory or NewFactoryWithDefaults
+func NewFactoryLegacy() *Factory {
+	factory, err := NewFactoryWithDefaults()
+	if err != nil {
+		// if config loading fails, at least give them built-ins
+		loader := NewProfileLoader("")
+		loader.LoadProfiles()
+		return &Factory{loader: loader}
+	}
 	return factory
 }
 
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
-
-func (f *Factory) RegisterProfile(profile domain.PlatformProfile) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.profiles[profile.GetName()] = profile
-}
-
-func (f *Factory) GetProfile(platformType string) (domain.PlatformProfile, error) {
+func (f *Factory) GetProfile(platformType string) (domain.InferenceProfile, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	profile, exists := f.profiles[platformType]
+	profile, exists := f.loader.GetProfile(platformType)
 	if !exists {
-		// Return OpenAI compatible profile as fallback
-		if openai, hasOpenAI := f.profiles[domain.ProfileOpenAICompatible]; hasOpenAI {
+		// openai profile works as a decent fallback for unknowns
+		if openai, hasOpenAI := f.loader.GetProfile(domain.ProfileOpenAICompatible); hasOpenAI {
 			return openai, nil
 		}
 		return nil, fmt.Errorf("profile not found for platform type: %s", platformType)
@@ -51,19 +68,38 @@ func (f *Factory) GetProfile(platformType string) (domain.PlatformProfile, error
 	return profile, nil
 }
 
+// GetPlatformProfile provides backward compatibility for code expecting PlatformProfile
+func (f *Factory) GetPlatformProfile(platformType string) (domain.PlatformProfile, error) {
+	profile, err := f.GetProfile(platformType)
+	if err != nil {
+		return nil, err
+	}
+	// InferenceProfile embeds PlatformProfile, so this cast is safe
+	return profile, nil
+}
+
 func (f *Factory) GetAvailableProfiles() []string {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	profiles := make([]string, 0, len(f.profiles))
-	for name := range f.profiles {
+	profiles := f.loader.GetAllProfiles()
+	names := make([]string, 0, len(profiles))
+	for name := range profiles {
 		if name != domain.ProfileOpenAICompatible {
-			profiles = append(profiles, name)
+			names = append(names, name)
 		}
 	}
 
-	sort.Strings(profiles)
-	return profiles
+	sort.Strings(names)
+	return names
+}
+
+// ReloadProfiles allows hot-reloading of profile configurations
+func (f *Factory) ReloadProfiles() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.loader.LoadProfiles()
 }
 
 func (f *Factory) ValidateProfileType(platformType string) bool {
@@ -73,6 +109,6 @@ func (f *Factory) ValidateProfileType(platformType string) bool {
 
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	_, exists := f.profiles[platformType]
+	_, exists := f.loader.GetProfile(platformType)
 	return exists
 }

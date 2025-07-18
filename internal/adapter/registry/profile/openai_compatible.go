@@ -35,28 +35,7 @@ func init() {
 		"/v1/chat/completions",
 		"/v1/completions",
 		"/v1/embeddings",
-		/*
-			// The following paths are not currently supported by the OpenAI compatible profile.
-			// but is documented for completeness.
-
-			"/v1/images/generations",
-			"/v1/images/edits",
-			"/v1/images/variations",
-
-			"/v1/audio/speech",
-			"/v1/audio/transcriptions",
-			"/v1/audio/translations",
-
-			"/v1/fine_tuning/jobs",
-			"/v1/files",
-			"/v1/uploads",
-			"/v1/batches",
-
-			"/v1/moderations",
-			"/v1/assistants",
-			"/v1/threads",
-			"/v1/vector_stores",
-		*/
+		// just the basics - most openai clones only implement these four
 	}
 }
 

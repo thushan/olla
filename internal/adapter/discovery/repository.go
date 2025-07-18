@@ -26,7 +26,7 @@ type StaticEndpointRepository struct {
 func NewStaticEndpointRepository() *StaticEndpointRepository {
 	return &StaticEndpointRepository{
 		endpoints:      make(map[string]*domain.Endpoint),
-		profileFactory: profile.NewFactory(),
+		profileFactory: profile.NewFactoryLegacy(),
 	}
 }
 

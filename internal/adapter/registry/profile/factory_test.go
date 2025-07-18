@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewFactory(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactoryLegacy()
 
 	profiles := factory.GetAvailableProfiles()
 	expectedProfiles := []string{domain.ProfileLmStudio, domain.ProfileOllama}
@@ -31,7 +31,7 @@ func TestNewFactory(t *testing.T) {
 }
 
 func TestGetProfile(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactoryLegacy()
 
 	profile, err := factory.GetProfile(domain.ProfileOllama)
 	if err != nil {
@@ -51,7 +51,7 @@ func TestGetProfile(t *testing.T) {
 }
 
 func TestValidateProfileType(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactoryLegacy()
 
 	if !factory.ValidateProfileType(domain.ProfileOllama) {
 		t.Error("ollama should be valid profile type")
@@ -83,7 +83,7 @@ func TestValidateProfileType(t *testing.T) {
 	}
 
 	func TestProfileFactoryConcurrency(t *testing.T) {
-		factory := NewFactory()
+		factory := NewFactoryLegacy()
 
 		var wg sync.WaitGroup
 		errors := make(chan error, 100)
@@ -117,7 +117,7 @@ func TestValidateProfileType(t *testing.T) {
 	}
 */
 func TestGetAvailableProfiles(t *testing.T) {
-	factory := NewFactory()
+	factory := NewFactoryLegacy()
 
 	profiles := factory.GetAvailableProfiles()
 

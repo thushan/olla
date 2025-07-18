@@ -1,53 +1,9 @@
 package profile
 
-/*
-
-	LMStudioProfile implements the WIP of their API.
-
-	Reference:
-	- https://lmstudio.ai/docs/app/api/endpoints/rest#get-apiv0models [10-06-2025]
-
-	GET /api/v0/models
-	{
-	  "object": "list",
-	  "data": [
-		{
-		  "id": "qwen2-vl-7b-instruct",
-		  "object": "model",
-		  "type": "vlm",
-		  "publisher": "mlx-community",
-		  "arch": "qwen2_vl",
-		  "compatibility_type": "mlx",
-		  "quantization": "4bit",
-		  "state": "not-loaded",
-		  "max_context_length": 32768
-		},
-		{
-		  "id": "meta-llama-3.1-8b-instruct",
-		  "object": "model",
-		  "type": "llm",
-		  "publisher": "lmstudio-community",
-		  "arch": "llama",
-		  "compatibility_type": "gguf",
-		  "quantization": "Q4_K_M",
-		  "state": "not-loaded",
-		  "max_context_length": 131072
-		},
-		{
-		  "id": "text-embedding-nomic-embed-text-v1.5",
-		  "object": "model",
-		  "type": "embeddings",
-		  "publisher": "nomic-ai",
-		  "arch": "nomic-bert",
-		  "compatibility_type": "gguf",
-		  "quantization": "Q4_0",
-		  "state": "not-loaded",
-		  "max_context_length": 2048
-		}
-	  ]
-	}
-
-*/
+// LMStudioProfile handles LM Studio's beta API which gives us way more
+// model metadata than the OpenAI endpoints. Their /api/v0/models endpoint
+// tells us quantization levels, architecture, and whether models are loaded
+// into memory - pretty handy for smart routing decisions.
 import (
 	"fmt"
 	"time"
@@ -87,14 +43,13 @@ var lmstudioPaths []string
 
 func init() {
 	lmstudioPaths = []string{
-		// LM Studio native API (beta) [10-06-2025]
-		// src: https://lmstudio.ai/docs/app/api/endpoints/rest#get-apiv0models
-		"/api/v0/models",           // Enhanced model info with stats
-		"/api/v0/chat/completions", // Chat with enhanced stats
-		"/api/v0/completions",      // Text completion with stats
-		"/api/v0/embeddings",       // Embeddings
+		// LM Studio's beta API gives us the good stuff like memory usage and load state
+		"/api/v0/models",
+		"/api/v0/chat/completions",
+		"/api/v0/completions",
+		"/api/v0/embeddings",
 
-		// OpenAI compatibility layer
+		// standard OpenAI endpoints for when apps don't know about LM Studio
 		"/v1/models",
 		"/v1/chat/completions",
 		"/v1/completions",

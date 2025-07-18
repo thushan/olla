@@ -259,7 +259,7 @@ func TestPathInspector_pathMatchesRules(t *testing.T) {
 func createTestPathInspector(t *testing.T) *PathInspector {
 	t.Helper()
 
-	profileFactory := profile.NewFactory()
+	profileFactory := profile.NewFactoryLegacy()
 	logger := createTestLogger()
 
 	return NewPathInspector(profileFactory, logger)

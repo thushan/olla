@@ -336,12 +336,6 @@ func TestDefaultUnifier_Clear(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// TestDefaultUnifier_StaleModelCleanup is skipped because the new implementation
-// handles cleanup differently through the CatalogStore's internal cleanup mechanism
-func TestDefaultUnifier_StaleModelCleanup(t *testing.T) {
-	t.Skip("Test requires internal access - cleanup is now handled by CatalogStore")
-}
-
 func TestDefaultUnifier_NilAndEmptyInputs(t *testing.T) {
 	ctx := context.Background()
 	unifier := NewDefaultUnifier()
