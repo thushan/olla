@@ -106,8 +106,8 @@ deps:
 ready-tools: fmt lint align
 	@echo -e "\033[32mCode is clean for tests!\033[0m"
 
-# Make code ready for commit (test, fmt, lint, align)
-ready: test fmt lint align
+# Make code ready for commit (test, test-race, fmt, lint, align)
+ready: test test-race fmt lint align
 	@echo -e "\033[32mCode is ready for commit!\033[0m"
 
 # run goreleaser to build local release

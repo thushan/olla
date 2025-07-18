@@ -130,6 +130,9 @@ func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL st
 
 	modelsCopy := make([]*domain.ModelInfo, 0, len(models))
 	for _, model := range models {
+		if model == nil {
+			continue // Skip nil models
+		}
 		if model.Name == "" {
 			return domain.NewModelRegistryError("register_models", endpointURL, model.Name, fmt.Errorf("model name cannot be empty"))
 		}

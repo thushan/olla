@@ -21,6 +21,7 @@ import (
 // errors during the critical startup phase.
 type DiscoveryService struct {
 	config         *config.DiscoveryConfig
+	registryConfig *config.ModelRegistryConfig
 	healthChecker  *health.HTTPHealthChecker
 	statsCollector ports.StatsCollector
 	statsService   *StatsService
@@ -33,11 +34,13 @@ type DiscoveryService struct {
 // NewDiscoveryService creates a new discovery service
 func NewDiscoveryService(
 	config *config.DiscoveryConfig,
+	registryConfig *config.ModelRegistryConfig,
 	statsCollector ports.StatsCollector,
 	logger logger.StyledLogger,
 ) *DiscoveryService {
 	return &DiscoveryService{
 		config:         config,
+		registryConfig: registryConfig,
 		statsCollector: statsCollector,
 		logger:         logger,
 	}
@@ -56,7 +59,21 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		s.statsCollector = s.statsService.GetCollector()
 	}
 
-	s.registry = registry.NewMemoryModelRegistry(s.logger)
+	// Create model registry using factory with configuration
+	if s.registryConfig == nil {
+		// Fallback to default if no config provided
+		s.registry = registry.NewMemoryModelRegistry(s.logger)
+	} else {
+		registryConfig := registry.RegistryConfig{
+			Type:          s.registryConfig.Type,
+			EnableUnifier: s.registryConfig.EnableUnifier,
+		}
+		var err error
+		s.registry, err = registry.NewModelRegistry(registryConfig, s.logger)
+		if err != nil {
+			return fmt.Errorf("failed to create model registry: %w", err)
+		}
+	}
 
 	switch s.config.Type {
 	case "static":

@@ -277,6 +277,8 @@ func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelS
 	return models
 }
 
+const modelTypeEmbeddings = "embeddings"
+
 func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 	capabilitiesPool = capabilitiesPool[:0]
 
@@ -284,7 +286,7 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 		switch *details.Type {
 		case "vlm":
 			capabilitiesPool = append(capabilitiesPool, "vision", "multimodal")
-		case "embeddings":
+		case modelTypeEmbeddings:
 			capabilitiesPool = append(capabilitiesPool, "embeddings", "vector_search")
 		case "llm":
 			capabilitiesPool = append(capabilitiesPool, "text_generation", "chat")

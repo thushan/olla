@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
@@ -67,6 +68,7 @@ type Application struct {
 	inspectorChain   *inspector.Chain
 	securityAdapters *SecurityAdapters
 	routeRegistry    *router.RouteRegistry
+	converterFactory *converter.ConverterFactory
 	server           *http.Server
 	errCh            chan error
 	StartTime        time.Time
@@ -119,6 +121,7 @@ func NewApplication(
 		inspectorChain:   inspectorChain,
 		securityAdapters: securityAdapters,
 		routeRegistry:    routeRegistry,
+		converterFactory: converter.NewConverterFactory(),
 		server:           server,
 		errCh:            make(chan error, 1),
 		StartTime:        time.Now(),
