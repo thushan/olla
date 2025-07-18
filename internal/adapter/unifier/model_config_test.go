@@ -27,7 +27,7 @@ func TestLoadModelConfig(t *testing.T) {
 func TestLoadModelConfigFromFile(t *testing.T) {
 	// Create a temporary config file
 	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "models.yml")
+	configPath := filepath.Join(tmpDir, "models.yaml")
 
 	configContent := `
 model_extraction:

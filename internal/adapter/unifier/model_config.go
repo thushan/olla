@@ -72,11 +72,12 @@ func LoadModelConfig() (*ModelUnificationConfig, error) {
 // loadConfigFromFile loads configuration from the YAML file
 func loadConfigFromFile() *ModelUnificationConfig {
 	paths := []string{
-		"models.yml",
-		"config/models.yml",
-		"../config/models.yml",
-		"../../config/models.yml",
-		filepath.Join(os.Getenv("OLLA_CONFIG_DIR"), "models.yml"),
+		"models.yaml",
+		"config/models.yaml",
+		"config-base/models.yaml",
+		"../config/models.yaml",
+		"../../config/models.yaml",
+		filepath.Join(os.Getenv("OLLA_CONFIG_DIR"), "models.yaml"),
 	}
 
 	for _, path := range paths {

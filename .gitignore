@@ -8,6 +8,7 @@ tmp/
 olla
 config.yaml
 config/
+config-dev/
 dist/
 default.yml
 # Claude specific local files
