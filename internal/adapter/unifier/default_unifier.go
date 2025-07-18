@@ -186,7 +186,11 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpo
 			if existingDigest, ok := existing.Metadata["digest"].(string); ok {
 				if existingDigest != "" && existingDigest != model.Digest {
 					// Different digest, need unique ID
-					id = fmt.Sprintf("%s-%s", id, model.Digest[len(model.Digest)-8:])
+					if len(model.Digest) >= 8 {
+						id = fmt.Sprintf("%s-%s", id, model.Digest[len(model.Digest)-8:])
+					} else {
+						id = fmt.Sprintf("%s-%s", id, model.Digest)
+					}
 				}
 			}
 		}
