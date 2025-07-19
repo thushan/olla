@@ -248,25 +248,27 @@ func (p *LMStudioProfile) GetModelCapabilities(modelName string, registry domain
 		MaxOutputTokens:  2048,
 	}
 
+	lowerName := strings.ToLower(modelName)
+
 	// Check for embeddings models
-	if strings.Contains(strings.ToLower(modelName), "embed") ||
-		strings.Contains(strings.ToLower(modelName), "bge-") ||
-		strings.Contains(strings.ToLower(modelName), "e5-") {
+	if strings.Contains(lowerName, "embed") ||
+		strings.Contains(lowerName, "bge-") ||
+		strings.Contains(lowerName, "e5-") {
 		caps.Embeddings = true
 		caps.ChatCompletion = false
 		caps.TextGeneration = false
 	}
 
 	// Check for vision models
-	if strings.Contains(strings.ToLower(modelName), "vision") ||
-		strings.Contains(strings.ToLower(modelName), "llava") ||
-		strings.Contains(strings.ToLower(modelName), "cogvlm") {
+	if strings.Contains(lowerName, "vision") ||
+		strings.Contains(lowerName, "llava") ||
+		strings.Contains(lowerName, "cogvlm") {
 		caps.VisionUnderstanding = true
 	}
 
 	// Check for code models
-	if strings.Contains(strings.ToLower(modelName), "code") ||
-		strings.Contains(strings.ToLower(modelName), "starcoder") {
+	if strings.Contains(lowerName, "code") ||
+		strings.Contains(lowerName, "starcoder") {
 		caps.CodeGeneration = true
 	}
 

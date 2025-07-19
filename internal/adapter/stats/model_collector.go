@@ -11,23 +11,21 @@ import (
 	"github.com/thushan/olla/internal/core/ports"
 )
 
-const (
-	MaxTrackedModels     = 100
-	ModelStatsTTL        = 24 * time.Hour
-	ModelCleanupInterval = 1 * time.Hour
-	LatencyBucketSize    = 1000 // Store last N latencies for percentile calculation
-)
-
 // ModelCollector tracks model-specific statistics
 type ModelCollector struct {
 	models         *xsync.Map[string, *modelData]
 	modelEndpoints *xsync.Map[string, *xsync.Map[string, *modelEndpointData]]
+
+	config *ModelCollectorConfig
 
 	lastCleanup int64
 	cleanupMu   sync.Mutex
 }
 
 type modelData struct {
+
+	// Percentile tracking
+	percentileTracker  PercentileTracker
 	uniqueClients      *xsync.Map[string, int64] // IP -> last seen timestamp
 	totalRequests      *xsync.Counter
 	successfulRequests *xsync.Counter
@@ -40,11 +38,10 @@ type modelData struct {
 	routingMisses    *xsync.Counter
 	routingFallbacks *xsync.Counter
 	name             string
-	latencies        []int64 // Circular buffer for percentile calculation
-	latencyIndex     int
-	lastRequested    int64 // Keep atomic for timestamp
 
-	latencyMu sync.Mutex
+	lastRequested int64 // Keep atomic for timestamp
+
+	latencyMu sync.Mutex // Used for thread-safe percentile tracker access
 }
 
 type modelEndpointData struct {
@@ -57,11 +54,18 @@ type modelEndpointData struct {
 	consecutiveErrors int32 // Keep atomic for CAS operations
 }
 
-func NewModelCollector() *ModelCollector {
+// NewModelCollectorWithConfig creates a new ModelCollector with custom configuration
+func NewModelCollectorWithConfig(config *ModelCollectorConfig) *ModelCollector {
+	if config == nil {
+		config = DefaultModelCollectorConfig()
+	}
+	config.Validate()
+
 	return &ModelCollector{
 		models:         xsync.NewMap[string, *modelData](),
 		modelEndpoints: xsync.NewMap[string, *xsync.Map[string, *modelEndpointData]](),
 		lastCleanup:    time.Now().UnixNano(),
+		config:         config,
 	}
 }
 
@@ -87,8 +91,8 @@ func (mc *ModelCollector) RecordModelRequest(model string, endpoint *domain.Endp
 		data.failedRequests.Inc()
 	}
 
-	// Update model-endpoint stats
-	if endpoint != nil {
+	// Update model-endpoint stats only if detailed stats are enabled
+	if mc.config.EnableDetailedStats && endpoint != nil {
 		mc.updateModelEndpointStats(model, endpoint, status, latencyMs, now)
 	}
 
@@ -96,7 +100,7 @@ func (mc *ModelCollector) RecordModelRequest(model string, endpoint *domain.Endp
 }
 
 func (mc *ModelCollector) RecordModelError(model string, endpoint *domain.Endpoint, errorType string) {
-	if model == "" || endpoint == nil {
+	if !mc.config.EnableDetailedStats || model == "" || endpoint == nil {
 		return
 	}
 
@@ -121,6 +125,11 @@ func (mc *ModelCollector) GetModelStats() map[string]ports.ModelStats {
 func (mc *ModelCollector) GetModelEndpointStats() map[string]map[string]ports.EndpointModelStats {
 	result := make(map[string]map[string]ports.EndpointModelStats)
 
+	// Return empty map if detailed stats are disabled
+	if !mc.config.EnableDetailedStats {
+		return result
+	}
+
 	mc.modelEndpoints.Range(func(modelName string, endpointMap *xsync.Map[string, *modelEndpointData]) bool {
 		endpointStats := make(map[string]ports.EndpointModelStats)
 
@@ -139,9 +148,19 @@ func (mc *ModelCollector) GetModelEndpointStats() map[string]map[string]ports.En
 
 func (mc *ModelCollector) getOrInitModel(model string, now int64) *modelData {
 	data, _ := mc.models.LoadOrCompute(model, func() (*modelData, bool) {
+		var tracker PercentileTracker
+
+		// Create appropriate percentile tracker based on config
+		switch mc.config.PercentileTrackerType {
+		case "simple":
+			tracker = NewSimpleStatsTracker()
+		default: // "reservoir"
+			tracker = NewReservoirSampler(mc.config.PercentileSampleSize)
+		}
+
 		return &modelData{
 			name:               model,
-			latencies:          make([]int64, LatencyBucketSize),
+			percentileTracker:  tracker,
 			uniqueClients:      xsync.NewMap[string, int64](),
 			lastRequested:      now,
 			totalRequests:      xsync.NewCounter(),
@@ -161,8 +180,9 @@ func (mc *ModelCollector) recordLatency(data *modelData, latencyMs int64) {
 	data.latencyMu.Lock()
 	defer data.latencyMu.Unlock()
 
-	data.latencies[data.latencyIndex] = latencyMs
-	data.latencyIndex = (data.latencyIndex + 1) % LatencyBucketSize
+	if data.percentileTracker != nil {
+		data.percentileTracker.Add(latencyMs)
+	}
 }
 
 func (mc *ModelCollector) updateModelEndpointStats(model string, endpoint *domain.Endpoint, status string, latencyMs int64, now int64) {
@@ -233,34 +253,14 @@ func (mc *ModelCollector) calculatePercentiles(data *modelData) (p95, p99 int64)
 	data.latencyMu.Lock()
 	defer data.latencyMu.Unlock()
 
-	// Collect non-zero latencies
-	var latencies []int64
-	for _, l := range data.latencies {
-		if l > 0 {
-			latencies = append(latencies, l)
-		}
+	if data.percentileTracker != nil {
+		// Use the efficient percentile tracker
+		_, p95, p99 = data.percentileTracker.GetPercentiles()
+		return p95, p99
 	}
 
-	if len(latencies) == 0 {
-		return 0, 0
-	}
-
-	// Sort for percentile calculation
-	sort.Slice(latencies, func(i, j int) bool {
-		return latencies[i] < latencies[j]
-	})
-
-	p95Index := int(float64(len(latencies)) * 0.95)
-	p99Index := int(float64(len(latencies)) * 0.99)
-
-	if p95Index < len(latencies) {
-		p95 = latencies[p95Index]
-	}
-	if p99Index < len(latencies) {
-		p99 = latencies[p99Index]
-	}
-
-	return p95, p99
+	// No tracker available
+	return 0, 0
 }
 
 func (mc *ModelCollector) calculateEndpointModelStats(data *modelEndpointData) ports.EndpointModelStats {
@@ -290,7 +290,8 @@ func (mc *ModelCollector) calculateEndpointModelStats(data *modelEndpointData) p
 
 func (mc *ModelCollector) tryCleanup(now int64) {
 	lastCleanup := atomic.LoadInt64(&mc.lastCleanup)
-	if now-lastCleanup < ModelCleanupInterval.Nanoseconds() {
+	cleanupInterval := mc.config.ModelCleanupInterval.Nanoseconds()
+	if now-lastCleanup < cleanupInterval {
 		return
 	}
 
@@ -298,7 +299,7 @@ func (mc *ModelCollector) tryCleanup(now int64) {
 	defer mc.cleanupMu.Unlock()
 
 	// Double-check after acquiring lock
-	if now-atomic.LoadInt64(&mc.lastCleanup) < ModelCleanupInterval.Nanoseconds() {
+	if now-atomic.LoadInt64(&mc.lastCleanup) < cleanupInterval {
 		return
 	}
 
@@ -307,25 +308,17 @@ func (mc *ModelCollector) tryCleanup(now int64) {
 }
 
 func (mc *ModelCollector) cleanupOldData(now int64) {
-	cutoff := now - ModelStatsTTL.Nanoseconds()
+	modelCutoff := now - mc.config.ModelStatsTTL.Nanoseconds()
+	clientIPCutoff := now - mc.config.ClientIPRetentionTime.Nanoseconds()
 
 	// Clean up old models
 	var modelsToDelete []string
 	mc.models.Range(func(name string, data *modelData) bool {
-		if atomic.LoadInt64(&data.lastRequested) < cutoff {
+		if atomic.LoadInt64(&data.lastRequested) < modelCutoff {
 			modelsToDelete = append(modelsToDelete, name)
 		} else {
-			// Clean up old client IPs
-			var ipsToDelete []string
-			data.uniqueClients.Range(func(ip string, lastSeen int64) bool {
-				if lastSeen < cutoff {
-					ipsToDelete = append(ipsToDelete, ip)
-				}
-				return true
-			})
-			for _, ip := range ipsToDelete {
-				data.uniqueClients.Delete(ip)
-			}
+			// Clean up old client IPs more aggressively
+			mc.cleanupClientIPs(data, clientIPCutoff)
 		}
 		return true
 	})
@@ -336,8 +329,48 @@ func (mc *ModelCollector) cleanupOldData(now int64) {
 	}
 
 	// Keep only top N models if we exceed the limit
-	if mc.models.Size() > MaxTrackedModels {
+	if mc.models.Size() > mc.config.MaxTrackedModels {
 		mc.pruneExcessModels()
+	}
+}
+
+// cleanupClientIPs removes old client IPs and enforces the max clients per model limit
+func (mc *ModelCollector) cleanupClientIPs(data *modelData, cutoff int64) {
+	var ipsToDelete []string
+	var allIPs []struct {
+		ip   string
+		time int64
+	}
+
+	data.uniqueClients.Range(func(ip string, lastSeen int64) bool {
+		if lastSeen < cutoff {
+			ipsToDelete = append(ipsToDelete, ip)
+		} else {
+			allIPs = append(allIPs, struct {
+				ip   string
+				time int64
+			}{ip, lastSeen})
+		}
+		return true
+	})
+
+	// Delete old IPs
+	for _, ip := range ipsToDelete {
+		data.uniqueClients.Delete(ip)
+	}
+
+	// If we still have too many IPs, remove the oldest ones
+	if len(allIPs) > mc.config.MaxUniqueClientsPerModel {
+		// Sort by time, oldest first
+		sort.Slice(allIPs, func(i, j int) bool {
+			return allIPs[i].time < allIPs[j].time
+		})
+
+		// Delete the oldest IPs
+		toRemove := len(allIPs) - mc.config.MaxUniqueClientsPerModel
+		for i := 0; i < toRemove; i++ {
+			data.uniqueClients.Delete(allIPs[i].ip)
+		}
 	}
 }
 
@@ -362,7 +395,7 @@ func (mc *ModelCollector) pruneExcessModels() {
 	})
 
 	// Delete the oldest models
-	for i := MaxTrackedModels; i < len(models); i++ {
+	for i := mc.config.MaxTrackedModels; i < len(models); i++ {
 		mc.models.Delete(models[i].name)
 		mc.modelEndpoints.Delete(models[i].name)
 	}

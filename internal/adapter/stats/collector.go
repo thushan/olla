@@ -84,12 +84,21 @@ type endpointData struct {
 }
 
 func NewCollector(logger logger.StyledLogger) *Collector {
+	return NewCollectorWithConfig(logger, DefaultModelCollectorConfig())
+}
+
+// NewCollectorWithConfig creates a new Collector with custom ModelCollector configuration
+func NewCollectorWithConfig(logger logger.StyledLogger, modelConfig *ModelCollectorConfig) *Collector {
+	if modelConfig == nil {
+		modelConfig = DefaultModelCollectorConfig()
+	}
+
 	return &Collector{
 		uniqueRateLimitedIPs: make(map[string]int64),
 		logger:               logger,
 		endpoints:            xsync.NewMap[string, *endpointData](),
 		lastCleanup:          time.Now().UnixNano(),
-		modelCollector:       NewModelCollector(),
+		modelCollector:       NewModelCollectorWithConfig(modelConfig),
 		totalRequests:        xsync.NewCounter(),
 		successfulRequests:   xsync.NewCounter(),
 		failedRequests:       xsync.NewCounter(),

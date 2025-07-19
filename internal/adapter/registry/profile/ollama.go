@@ -279,26 +279,28 @@ func (p *OllamaProfile) GetModelCapabilities(modelName string, registry domain.M
 		MaxContextLength: 4096, // Conservative default
 		MaxOutputTokens:  2048,
 	}
+	
+	lowerName := strings.ToLower(modelName)
 
 	// Check for embeddings models
-	if strings.Contains(strings.ToLower(modelName), "embed") ||
-		strings.Contains(strings.ToLower(modelName), "embedding") {
+	if strings.Contains(lowerName, "embed") ||
+		strings.Contains(lowerName, "embedding") {
 		caps.Embeddings = true
 		caps.ChatCompletion = false
 		caps.TextGeneration = false
 	}
 
 	// Check for vision models
-	if strings.Contains(strings.ToLower(modelName), "vision") ||
-		strings.HasPrefix(strings.ToLower(modelName), "llava") ||
-		strings.HasPrefix(strings.ToLower(modelName), "bakllava") {
+	if strings.Contains(lowerName, "vision") ||
+		strings.HasPrefix(lowerName, "llava") ||
+		strings.HasPrefix(lowerName, "bakllava") {
 		caps.VisionUnderstanding = true
 	}
 
 	// Check for code models
-	if strings.Contains(strings.ToLower(modelName), "code") ||
-		strings.HasPrefix(strings.ToLower(modelName), "codellama") ||
-		strings.HasPrefix(strings.ToLower(modelName), "deepseek-coder") {
+	if strings.Contains(lowerName, "code") ||
+		strings.HasPrefix(lowerName, "codellama") ||
+		strings.HasPrefix(lowerName, "deepseek-coder") {
 		caps.CodeGeneration = true
 	}
 
@@ -317,9 +319,9 @@ func (p *OllamaProfile) GetModelCapabilities(modelName string, registry domain.M
 	}
 
 	// Some models support function calling
-	if strings.Contains(strings.ToLower(modelName), "mistral") ||
-		strings.Contains(strings.ToLower(modelName), "mixtral") ||
-		strings.Contains(strings.ToLower(modelName), "llama3") {
+	if strings.Contains(lowerName, "mistral") ||
+		strings.Contains(lowerName, "mixtral") ||
+		strings.Contains(lowerName, "llama3") {
 		caps.FunctionCalling = true
 	}
 
