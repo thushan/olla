@@ -176,9 +176,10 @@ func (r *UnifiedMemoryModelRegistry) GetEndpointsForModel(ctx context.Context, m
 	}
 
 	// Try unified model lookup
-	unified, err := r.GetUnifiedModel(ctx, modelName)
-	if err != nil {
-		return []string{}, err
+	unified, _ := r.GetUnifiedModel(ctx, modelName)
+	if unified == nil {
+		// Model not found in unified registry, return empty array
+		return []string{}, nil
 	}
 
 	// Extract endpoints from unified model
@@ -239,6 +240,102 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 	})
 
 	return nil
+}
+
+// GetHealthyEndpointsForModel returns healthy endpoints that have a specific model
+func (r *UnifiedMemoryModelRegistry) GetHealthyEndpointsForModel(ctx context.Context, modelName string, endpointRepo domain.EndpointRepository) ([]*domain.Endpoint, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	// Get all endpoints that have this model
+	endpointURLs, err := r.GetEndpointsForModel(ctx, modelName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get endpoints for model %s: %w", modelName, err)
+	}
+
+	if len(endpointURLs) == 0 {
+		return []*domain.Endpoint{}, nil
+	}
+
+	// Get all healthy endpoints from the repository
+	healthyEndpoints, err := endpointRepo.GetHealthy(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get healthy endpoints: %w", err)
+	}
+
+	// Filter to only include endpoints that have the model
+	endpointURLSet := make(map[string]bool)
+	for _, url := range endpointURLs {
+		endpointURLSet[url] = true
+	}
+
+	var result []*domain.Endpoint
+	for _, endpoint := range healthyEndpoints {
+		if endpointURLSet[endpoint.GetURLString()] {
+			result = append(result, endpoint)
+		}
+	}
+
+	return result, nil
+}
+
+const (
+	capabilityCode = "code"
+)
+
+// capabilityMatches checks if a model capability matches the requested capability
+func capabilityMatches(modelCap, requestedCap string) bool {
+	// Direct match
+	if modelCap == requestedCap {
+		return true
+	}
+
+	// Check aliases based on requested capability
+	switch requestedCap {
+	case "chat", "chat_completion":
+		return modelCap == "chat" || modelCap == "chat_completion"
+	case "text", "text_generation":
+		return modelCap == "text" || modelCap == "text_generation" || modelCap == "completion"
+	case "embeddings", "embedding":
+		return modelCap == "embeddings" || modelCap == "embedding"
+	case "vision", "vision_understanding":
+		return modelCap == "vision" || modelCap == "vision_understanding" || modelCap == "image"
+	case capabilityCode, "code_generation":
+		return modelCap == capabilityCode || modelCap == "code_generation"
+	case "function", "function_calling":
+		return modelCap == "function" || modelCap == "function_calling" || modelCap == "tools"
+	case "streaming", "stream":
+		return modelCap == "streaming" || modelCap == "stream"
+	}
+
+	return false
+}
+
+// GetModelsByCapability returns models that support a specific capability
+func (r *UnifiedMemoryModelRegistry) GetModelsByCapability(ctx context.Context, capability string) ([]*domain.UnifiedModel, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	var models []*domain.UnifiedModel
+
+	r.globalUnified.Range(func(id string, model *domain.UnifiedModel) bool {
+		// Check if model has the requested capability
+		for _, cap := range model.Capabilities {
+			if capabilityMatches(cap, capability) {
+				models = append(models, model)
+				return true
+			}
+		}
+		return true
+	})
+
+	return models, nil
 }
 
 // UnifiedRegistryStats combines registry and unification statistics
