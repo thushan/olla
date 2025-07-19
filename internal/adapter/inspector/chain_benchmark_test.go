@@ -51,7 +51,10 @@ func BenchmarkChain_WithAndWithoutBodyInspector(b *testing.B) {
 		factory := NewFactory(profileFactory, styledLog)
 		chain := factory.CreateChain()
 		pathInspector := factory.CreatePathInspector()
-		bodyInspector := factory.CreateBodyInspector()
+		bodyInspector, err := factory.CreateBodyInspector()
+		if err != nil {
+			b.Fatalf("Failed to create body inspector: %v", err)
+		}
 		chain.AddInspector(pathInspector)
 		chain.AddInspector(bodyInspector)
 
@@ -115,7 +118,10 @@ func BenchmarkBodyInspector_Overhead(b *testing.B) {
 		b.Run(bm.name, func(b *testing.B) {
 			chain := factory.CreateChain()
 			pathInspector := factory.CreatePathInspector()
-			bodyInspector := factory.CreateBodyInspector()
+			bodyInspector, err := factory.CreateBodyInspector()
+			if err != nil {
+				b.Fatalf("Failed to create body inspector: %v", err)
+			}
 			chain.AddInspector(pathInspector)
 			chain.AddInspector(bodyInspector)
 

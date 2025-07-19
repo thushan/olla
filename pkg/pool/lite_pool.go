@@ -13,9 +13,12 @@ package pool
 //   type RequestContext struct { ... }
 //   func (r *RequestContext) Reset() { ... }
 //
-//   pool := NewLitePool(func() *RequestContext {
+//   pool, err := NewLitePool(func() *RequestContext {
 //     return &RequestContext{}
 //   })
+//   if err != nil {
+//     // handle error
+//   }
 //
 //   ctx := pool.Get()
 //   ...
@@ -24,7 +27,10 @@ package pool
 // Note: This is intentionally minimal and inlined for performance-sensitive paths.
 // If Go ever adds generics to sync.Pool (e.g. Go 1.23+), this becomes obsolete.
 
-import "sync"
+import (
+	"fmt"
+	"sync"
+)
 
 type Resettable interface {
 	Reset()
@@ -35,14 +41,14 @@ type Pool[T any] struct {
 	new  func() T
 }
 
-func NewLitePool[T any](newFn func() T) *Pool[T] {
+func NewLitePool[T any](newFn func() T) (*Pool[T], error) {
 	if newFn == nil {
-		panic("litepool: constructor must not be nil")
+		return nil, fmt.Errorf("litepool: constructor must not be nil")
 	}
 	// Validate early that the result is non-nil
 	test := newFn()
 	if any(test) == nil {
-		panic("litepool: constructor returned nil")
+		return nil, fmt.Errorf("litepool: constructor returned nil")
 	}
 
 	return &Pool[T]{
@@ -50,13 +56,15 @@ func NewLitePool[T any](newFn func() T) *Pool[T] {
 			New: func() any {
 				v := newFn()
 				if any(v) == nil {
-					panic("litepool: constructor returned nil")
+					// This should never happen after validation above,
+					// but keep the panic here as a last resort safety check
+					panic("litepool: constructor returned nil during runtime")
 				}
 				return v
 			},
 		},
 		new: newFn,
-	}
+	}, nil
 }
 
 func (p *Pool[T]) Get() T {

@@ -24,9 +24,14 @@ type StaticEndpointRepository struct {
 }
 
 func NewStaticEndpointRepository() *StaticEndpointRepository {
+	profileFactory, err := profile.NewFactoryWithDefaults()
+	if err != nil {
+		// For tests, use empty profile dir to get built-in profiles
+		profileFactory, _ = profile.NewFactory("")
+	}
 	return &StaticEndpointRepository{
 		endpoints:      make(map[string]*domain.Endpoint),
-		profileFactory: profile.NewFactoryLegacy(),
+		profileFactory: profileFactory,
 	}
 }
 

@@ -6,6 +6,7 @@ package profile
 // into memory - pretty handy for smart routing decisions.
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -187,4 +188,180 @@ func (p *LMStudioProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo,
 	}
 
 	return models, nil
+}
+
+// InferenceProfile implementation
+
+func (p *LMStudioProfile) GetTimeout() time.Duration {
+	// LM Studio runs locally, so models are already loaded
+	return 2 * time.Minute
+}
+
+func (p *LMStudioProfile) GetMaxConcurrentRequests() int {
+	// LM Studio is single-threaded - this is critical!
+	return 1
+}
+
+func (p *LMStudioProfile) ValidateEndpoint(endpoint *domain.Endpoint) error {
+	if endpoint == nil {
+		return fmt.Errorf("endpoint cannot be nil")
+	}
+	if endpoint.URL == nil {
+		return fmt.Errorf("endpoint URL cannot be nil")
+	}
+	return nil
+}
+
+func (p *LMStudioProfile) GetDefaultPriority() int {
+	// Local LM Studio should be highly preferred
+	return 1
+}
+
+func (p *LMStudioProfile) GetConfig() *domain.ProfileConfig {
+	return &domain.ProfileConfig{
+		Name:        "lm_studio",
+		Version:     LMStudioProfileVersion,
+		DisplayName: "LM Studio",
+		Description: "LM Studio local inference server",
+		Models: struct {
+			CapabilityPatterns map[string][]string `yaml:"capability_patterns"`
+			NameFormat         string              `yaml:"name_format"`
+		}{
+			CapabilityPatterns: map[string][]string{
+				"chat":       {"*"},
+				"completion": {"*"},
+				"embedding":  {"*embed*", "bge-*", "e5-*"},
+				"vision":     {"*vision*", "llava*", "bakllava*", "cogvlm*"},
+				"code":       {"*code*", "codellama*", "deepseek-coder*", "starcoder*"},
+			},
+			NameFormat: "{{.Publisher}}/{{.Name}}",
+		},
+	}
+}
+
+func (p *LMStudioProfile) GetModelCapabilities(modelName string, registry domain.ModelRegistry) domain.ModelCapabilities {
+	caps := domain.ModelCapabilities{
+		ChatCompletion:   true,
+		TextGeneration:   true,
+		StreamingSupport: true,
+		MaxContextLength: 4096, // Conservative default
+		MaxOutputTokens:  2048,
+	}
+
+	// Check for embeddings models
+	if strings.Contains(strings.ToLower(modelName), "embed") ||
+		strings.Contains(strings.ToLower(modelName), "bge-") ||
+		strings.Contains(strings.ToLower(modelName), "e5-") {
+		caps.Embeddings = true
+		caps.ChatCompletion = false
+		caps.TextGeneration = false
+	}
+
+	// Check for vision models
+	if strings.Contains(strings.ToLower(modelName), "vision") ||
+		strings.Contains(strings.ToLower(modelName), "llava") ||
+		strings.Contains(strings.ToLower(modelName), "cogvlm") {
+		caps.VisionUnderstanding = true
+	}
+
+	// Check for code models
+	if strings.Contains(strings.ToLower(modelName), "code") ||
+		strings.Contains(strings.ToLower(modelName), "starcoder") {
+		caps.CodeGeneration = true
+	}
+
+	// Get context length from model name if possible
+	// TODO: When registry supports GetModel, use it to get actual context length
+
+	// LM Studio models generally support function calling if they're chat models
+	if caps.ChatCompletion && !caps.Embeddings {
+		caps.FunctionCalling = true
+	}
+
+	return caps
+}
+
+func (p *LMStudioProfile) IsModelSupported(modelName string, registry domain.ModelRegistry) bool {
+	// LM Studio only supports models that are loaded
+	// TODO: When registry supports GetModel, check if model state is "loaded"
+	return true // Optimistic for now
+}
+
+func (p *LMStudioProfile) TransformModelName(fromName string, toFormat string) string {
+	// LM Studio uses publisher/model format
+	if toFormat == "lm_studio" && !strings.Contains(fromName, "/") {
+		// Try to infer publisher from common patterns
+		lowerName := strings.ToLower(fromName)
+		switch {
+		case strings.HasPrefix(lowerName, "llama"):
+			return "meta-llama/" + fromName
+		case strings.HasPrefix(lowerName, "mistral"):
+			return "mistralai/" + fromName
+		case strings.HasPrefix(lowerName, "phi"):
+			return "microsoft/" + fromName
+		}
+	}
+	return fromName
+}
+
+func (p *LMStudioProfile) GetResourceRequirements(modelName string, registry domain.ModelRegistry) domain.ResourceRequirements {
+	// TODO: When registry supports GetModel, use actual quantization info
+	// Fall back to name-based estimation
+	return p.estimateFromName(modelName)
+}
+
+func (p *LMStudioProfile) estimateBaseMemory(modelName string) float64 {
+	lowerName := strings.ToLower(modelName)
+
+	switch {
+	case strings.Contains(lowerName, "70b") || strings.Contains(lowerName, "72b"):
+		return 70
+	case strings.Contains(lowerName, "65b"):
+		return 65
+	case strings.Contains(lowerName, "34b") || strings.Contains(lowerName, "33b"):
+		return 34
+	case strings.Contains(lowerName, "13b") || strings.Contains(lowerName, "14b"):
+		return 14
+	case strings.Contains(lowerName, "7b") || strings.Contains(lowerName, "8b"):
+		return 8
+	case strings.Contains(lowerName, "3b"):
+		return 3
+	default:
+		return 7 // Default to 7B
+	}
+}
+
+func (p *LMStudioProfile) estimateFromName(modelName string) domain.ResourceRequirements {
+	baseMem := p.estimateBaseMemory(modelName)
+	return domain.ResourceRequirements{
+		MinMemoryGB:         baseMem * 0.6, // Assume some quantization
+		RecommendedMemoryGB: baseMem * 0.75,
+		MinGPUMemoryGB:      baseMem * 0.6,
+		RequiresGPU:         false,
+		EstimatedLoadTimeMS: 1000, // LM Studio keeps models loaded
+	}
+}
+
+func (p *LMStudioProfile) GetOptimalConcurrency(modelName string) int {
+	// LM Studio is single-threaded!
+	return 1
+}
+
+func (p *LMStudioProfile) GetRoutingStrategy() domain.RoutingStrategy {
+	return domain.RoutingStrategy{
+		PreferSameFamily:     true, // Route to similar models if exact match unavailable
+		AllowFallback:        true, // Allow compatible models
+		MaxRetries:           2,    // Limited retries due to single-threading
+		PreferLocalEndpoints: true, // LM Studio is always local
+	}
+}
+
+func (p *LMStudioProfile) ShouldBatchRequests() bool {
+	// Cannot batch due to single-threading
+	return false
+}
+
+func (p *LMStudioProfile) GetRequestTimeout(modelName string) time.Duration {
+	// LM Studio models are pre-loaded, so shorter timeout is fine
+	return 60 * time.Second
 }

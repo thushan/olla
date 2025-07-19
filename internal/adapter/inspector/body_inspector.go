@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -29,14 +30,19 @@ type BodyInspector struct {
 	maxBodySize int64
 }
 
-func NewBodyInspector(logger logger.StyledLogger) *BodyInspector {
+func NewBodyInspector(logger logger.StyledLogger) (*BodyInspector, error) {
+	bufPool, err := pool.NewLitePool(func() *bytes.Buffer {
+		return new(bytes.Buffer)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create buffer pool: %w", err)
+	}
+
 	return &BodyInspector{
 		logger:      logger,
 		maxBodySize: MaxBodySize,
-		bufferPool: pool.NewLitePool(func() *bytes.Buffer {
-			return new(bytes.Buffer)
-		}),
-	}
+		bufferPool:  bufPool,
+	}, nil
 }
 
 func (bi *BodyInspector) Name() string {

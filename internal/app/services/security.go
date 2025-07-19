@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/thushan/olla/internal/adapter/security"
 	"github.com/thushan/olla/internal/config"
@@ -45,7 +46,11 @@ func (s *SecurityService) Start(ctx context.Context) error {
 	}
 
 	if s.statsService != nil {
-		s.statsCollector = s.statsService.GetCollector()
+		collector, err := s.statsService.GetCollector()
+		if err != nil {
+			return fmt.Errorf("failed to get stats collector: %w", err)
+		}
+		s.statsCollector = collector
 	}
 
 	s.services, s.adapters = security.NewSecurityServices(tempConfig, s.statsCollector, s.logger)
@@ -80,27 +85,27 @@ func (s *SecurityService) Dependencies() []string {
 }
 
 // GetSecurityChain returns the security chain for middleware
-func (s *SecurityService) GetSecurityChain() *ports.SecurityChain {
+func (s *SecurityService) GetSecurityChain() (*ports.SecurityChain, error) {
 	if s.services == nil || s.services.Chain == nil {
-		panic("security chain not initialised")
+		return nil, fmt.Errorf("security chain not initialised")
 	}
-	return s.services.Chain
+	return s.services.Chain, nil
 }
 
 // GetAdapters returns the security adapters
-func (s *SecurityService) GetAdapters() *security.Adapters {
+func (s *SecurityService) GetAdapters() (*security.Adapters, error) {
 	if s.adapters == nil {
-		panic("security adapters not initialised")
+		return nil, fmt.Errorf("security adapters not initialised")
 	}
-	return s.adapters
+	return s.adapters, nil
 }
 
 // GetMetrics returns the security metrics service
-func (s *SecurityService) GetMetrics() ports.SecurityMetricsService {
+func (s *SecurityService) GetMetrics() (ports.SecurityMetricsService, error) {
 	if s.services == nil || s.services.Metrics == nil {
-		panic("security metrics not initialised")
+		return nil, fmt.Errorf("security metrics not initialised")
 	}
-	return s.services.Metrics
+	return s.services.Metrics, nil
 }
 
 // SetStatsService sets the stats service dependency

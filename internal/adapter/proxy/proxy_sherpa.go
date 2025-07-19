@@ -176,7 +176,7 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 		if rec := recover(); rec != nil {
 			// ensure stats are properly recorded even during panic recovery
 			atomic.AddInt64(&s.stats.failedRequests, 1)
-			s.recordFailure(nil, time.Since(stats.StartTime), 0)
+			s.recordFailure(ctx, nil, time.Since(stats.StartTime), 0)
 
 			// provide detailed error information for debugging while keeping the service running
 			err = fmt.Errorf("proxy panic recovered after %.1fs: %v (this is a bug, please report)", time.Since(stats.StartTime).Seconds(), rec)
@@ -201,7 +201,7 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 		// No healthy endpoints available, log and return error
 		sinceStart := time.Since(stats.StartTime)
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.recordFailure(nil, sinceStart, 0)
+		s.recordFailure(ctx, nil, sinceStart, 0)
 
 		rlog.Error("no healthy endpoints available")
 		return domain.NewProxyError(stats.RequestID, "", r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
@@ -218,7 +218,7 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	if err != nil {
 		sinceStart := time.Since(stats.StartTime)
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.recordFailure(endpoint, sinceStart, 0)
+		s.recordFailure(ctx, endpoint, sinceStart, 0)
 		rlog.Error("failed to select endpoint", "error", err)
 		return domain.NewProxyError(stats.RequestID, "", r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
 			makeUserFriendlyError(fmt.Errorf("failed to select endpoint: %w", err), sinceStart, "selection", s.configuration.ResponseTimeout))
@@ -250,7 +250,7 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	if err != nil {
 		sinceStart := time.Since(stats.StartTime)
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.recordFailure(endpoint, sinceStart, 0)
+		s.recordFailure(ctx, endpoint, sinceStart, 0)
 		rlog.Error("failed to create proxy request", "error", err)
 		return domain.NewProxyError(stats.RequestID, targetURL.String(), r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
 			fmt.Errorf("failed to create proxy request after %.1fs: %w", sinceStart.Seconds(), err))
@@ -276,7 +276,7 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	if err != nil {
 		sinceStart := time.Since(stats.StartTime)
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.recordFailure(endpoint, sinceStart, 0)
+		s.recordFailure(ctx, endpoint, sinceStart, 0)
 		rlog.Error("round-trip failed", "error", err)
 		return domain.NewProxyError(stats.RequestID, targetURL.String(), r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
 			makeUserFriendlyError(err, sinceStart, "backend", s.configuration.ResponseTimeout))
@@ -307,7 +307,7 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	if err != nil {
 		sinceStart := time.Since(stats.StartTime)
 		atomic.AddInt64(&s.stats.failedRequests, 1)
-		s.recordFailure(endpoint, sinceStart, int64(sumBytes))
+		s.recordFailure(ctx, endpoint, sinceStart, int64(sumBytes))
 		rlog.Error("streaming failed", "error", err)
 		stats.TotalBytes = sumBytes
 		return domain.NewProxyError(stats.RequestID, targetURL.String(), r.Method, r.URL.Path, resp.StatusCode, sinceStart, sumBytes,
@@ -323,12 +323,28 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	atomic.AddInt64(&s.stats.totalLatency, stats.Latency)
 
 	// Record successful request in stats collector
-	s.statsCollector.RecordRequest(
-		endpoint,
-		"success",
-		time.Duration(stats.Latency)*time.Millisecond,
-		int64(stats.TotalBytes),
-	)
+	// Extract model name from context if available
+	modelName := ""
+	if model, ok := ctx.Value("model").(string); ok {
+		modelName = model
+	}
+
+	if modelName != "" {
+		s.statsCollector.RecordModelRequest(
+			modelName,
+			endpoint,
+			"success",
+			time.Duration(stats.Latency)*time.Millisecond,
+			int64(stats.TotalBytes),
+		)
+	} else {
+		s.statsCollector.RecordRequest(
+			endpoint,
+			"success",
+			time.Duration(stats.Latency)*time.Millisecond,
+			int64(stats.TotalBytes),
+		)
+	}
 
 	rlog.Debug("proxy request completed",
 		"latency_ms", stats.Latency,
@@ -343,12 +359,23 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	return nil
 }
 
-func (s *SherpaProxyService) recordFailure(endpoint *domain.Endpoint, duration time.Duration, bytes int64) {
+func (s *SherpaProxyService) recordFailure(ctx context.Context, endpoint *domain.Endpoint, duration time.Duration, bytes int64) {
 	if endpoint == nil {
 		// if we have no endpoint, we can't record it
 		return
 	}
-	s.statsCollector.RecordRequest(endpoint, "failure", duration, bytes)
+
+	// Extract model name from context if available
+	modelName := ""
+	if model, ok := ctx.Value("model").(string); ok {
+		modelName = model
+	}
+
+	if modelName != "" {
+		s.statsCollector.RecordModelRequest(modelName, endpoint, "failure", duration, bytes)
+	} else {
+		s.statsCollector.RecordRequest(endpoint, "failure", duration, bytes)
+	}
 }
 
 func (s *SherpaProxyService) stripRoutePrefix(ctx context.Context, path string) string {

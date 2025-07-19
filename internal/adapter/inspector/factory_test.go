@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewFactory(t *testing.T) {
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	logger := createTestLogger()
 
 	factory := NewFactory(profileFactory, logger)
@@ -30,7 +30,7 @@ func TestNewFactory(t *testing.T) {
 
 func TestFactory_CreateDefaultChain(t *testing.T) {
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	chain := factory.CreateDefaultChain()
@@ -69,7 +69,7 @@ func TestFactory_CreateDefaultChain(t *testing.T) {
 
 func TestFactory_CreateDefaultChain_PathInspectorIncluded(t *testing.T) {
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	chain := factory.CreateDefaultChain()
@@ -96,7 +96,7 @@ func TestFactory_CreateDefaultChain_PathInspectorIncluded(t *testing.T) {
 
 func TestFactory_CreateDefaultChain_MultipleCallsReturnDifferentInstances(t *testing.T) {
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	// 2Chains!
@@ -125,7 +125,7 @@ func TestFactory_CreateDefaultChain_MultipleCallsReturnDifferentInstances(t *tes
 
 func TestFactory_CreatePathInspector(t *testing.T) {
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	inspector := factory.CreatePathInspector()
@@ -155,7 +155,7 @@ func TestFactory_CreatePathInspector(t *testing.T) {
 
 func TestFactory_CreatePathInspector_MultipleCalls(t *testing.T) {
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	inspector1 := factory.CreatePathInspector()
@@ -172,7 +172,7 @@ func TestFactory_CreatePathInspector_MultipleCalls(t *testing.T) {
 
 func TestFactory_CreateChain(t *testing.T) {
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	chain := factory.CreateChain()
@@ -198,7 +198,7 @@ func TestFactory_CreateChain(t *testing.T) {
 
 func TestFactory_CreateChain_CanAddInspectors(t *testing.T) {
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	chain := factory.CreateChain()
@@ -224,7 +224,7 @@ func TestFactory_CreateChain_CanAddInspectors(t *testing.T) {
 func TestFactory_IntegrationWithRealProfiles(t *testing.T) {
 	//make sure that factory works with real profile factory and all available profiles
 	logger := createTestLogger()
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)
 
 	chain := factory.CreateDefaultChain()
@@ -320,7 +320,7 @@ func TestFactory_NilProfileFactory(t *testing.T) {
 
 func TestFactory_Phase2Readiness(t *testing.T) {
 	// this test ensures the factory is ready for Phase 2 extension
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	logger := createTestLogger()
 	factory := NewFactory(profileFactory, logger)
 
@@ -348,4 +348,16 @@ func TestFactory_Phase2Readiness(t *testing.T) {
 	if len(profile1.SupportedBy) != len(profile2.SupportedBy) {
 		t.Error("Default and custom chains should produce similar results")
 	}
+}
+
+// createTestProfileFactory creates a profile factory for testing with proper error handling
+func createTestProfileFactory(t *testing.T) *profile.Factory {
+	t.Helper()
+
+	factory, err := profile.NewFactoryWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create profile factory: %v", err)
+	}
+
+	return factory
 }

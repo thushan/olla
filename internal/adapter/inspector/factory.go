@@ -37,6 +37,6 @@ func (f *Factory) CreateChain() *Chain {
 	return NewChain(f.logger)
 }
 
-func (f *Factory) CreateBodyInspector() *BodyInspector {
+func (f *Factory) CreateBodyInspector() (*BodyInspector, error) {
 	return NewBodyInspector(f.logger)
 }

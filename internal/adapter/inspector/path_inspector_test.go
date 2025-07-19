@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -259,7 +258,7 @@ func TestPathInspector_pathMatchesRules(t *testing.T) {
 func createTestPathInspector(t *testing.T) *PathInspector {
 	t.Helper()
 
-	profileFactory := profile.NewFactoryLegacy()
+	profileFactory := createTestProfileFactory(t)
 	logger := createTestLogger()
 
 	return NewPathInspector(profileFactory, logger)

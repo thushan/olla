@@ -6,8 +6,18 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+// testFactory creates a factory for tests, using built-in profiles
+func testFactory(t *testing.T) *Factory {
+	t.Helper()
+	factory, err := NewFactory("") // Empty dir uses built-in profiles
+	if err != nil {
+		t.Fatalf("Failed to create test factory: %v", err)
+	}
+	return factory
+}
+
 func TestNewFactory(t *testing.T) {
-	factory := NewFactoryLegacy()
+	factory := testFactory(t)
 
 	profiles := factory.GetAvailableProfiles()
 	expectedProfiles := []string{domain.ProfileLmStudio, domain.ProfileOllama}
@@ -31,7 +41,7 @@ func TestNewFactory(t *testing.T) {
 }
 
 func TestGetProfile(t *testing.T) {
-	factory := NewFactoryLegacy()
+	factory := testFactory(t)
 
 	profile, err := factory.GetProfile(domain.ProfileOllama)
 	if err != nil {
@@ -51,7 +61,7 @@ func TestGetProfile(t *testing.T) {
 }
 
 func TestValidateProfileType(t *testing.T) {
-	factory := NewFactoryLegacy()
+	factory := testFactory(t)
 
 	if !factory.ValidateProfileType(domain.ProfileOllama) {
 		t.Error("ollama should be valid profile type")
@@ -83,7 +93,7 @@ func TestValidateProfileType(t *testing.T) {
 	}
 
 	func TestProfileFactoryConcurrency(t *testing.T) {
-		factory := NewFactoryLegacy()
+		factory := testFactory(t)
 
 		var wg sync.WaitGroup
 		errors := make(chan error, 100)
@@ -117,7 +127,7 @@ func TestValidateProfileType(t *testing.T) {
 	}
 */
 func TestGetAvailableProfiles(t *testing.T) {
-	factory := NewFactoryLegacy()
+	factory := testFactory(t)
 
 	profiles := factory.GetAvailableProfiles()
 

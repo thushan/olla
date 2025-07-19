@@ -128,3 +128,58 @@ func (p *ConfigurableProfile) ValidateEndpoint(endpoint *domain.Endpoint) error 
 
 	return nil
 }
+
+// InferenceProfile implementation
+
+func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry domain.ModelRegistry) domain.ModelCapabilities {
+	// Default capabilities for configurable profiles
+	return domain.ModelCapabilities{
+		ChatCompletion:   true,
+		TextGeneration:   true,
+		StreamingSupport: p.config.Request.ParsingRules.SupportsStreaming,
+		MaxContextLength: 4096,
+		MaxOutputTokens:  2048,
+	}
+}
+
+func (p *ConfigurableProfile) IsModelSupported(modelName string, registry domain.ModelRegistry) bool {
+	// Configurable profiles are optimistic
+	return true
+}
+
+func (p *ConfigurableProfile) TransformModelName(fromName string, toFormat string) string {
+	// No transformation by default
+	return fromName
+}
+
+func (p *ConfigurableProfile) GetResourceRequirements(modelName string, registry domain.ModelRegistry) domain.ResourceRequirements {
+	// Assume cloud/remote by default
+	return domain.ResourceRequirements{
+		MinMemoryGB:         0,
+		RecommendedMemoryGB: 0,
+		RequiresGPU:         false,
+		MinGPUMemoryGB:      0,
+		EstimatedLoadTimeMS: 0,
+	}
+}
+
+func (p *ConfigurableProfile) GetOptimalConcurrency(modelName string) int {
+	return p.GetMaxConcurrentRequests()
+}
+
+func (p *ConfigurableProfile) GetRoutingStrategy() domain.RoutingStrategy {
+	return domain.RoutingStrategy{
+		PreferSameFamily:     false,
+		AllowFallback:        false,
+		MaxRetries:           3,
+		PreferLocalEndpoints: false, // TODO: Add IsLocal to config
+	}
+}
+
+func (p *ConfigurableProfile) ShouldBatchRequests() bool {
+	return false
+}
+
+func (p *ConfigurableProfile) GetRequestTimeout(modelName string) time.Duration {
+	return p.GetTimeout()
+}

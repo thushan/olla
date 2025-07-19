@@ -38,20 +38,6 @@ func NewFactoryWithDefaults() (*Factory, error) {
 	return NewFactory("./config/profiles")
 }
 
-// NewFactoryLegacy exists because I was too lazy to update all the call sites
-// in phase 1. This gives us time to migrate properly.
-// Deprecated: seriously, use NewFactory or NewFactoryWithDefaults
-func NewFactoryLegacy() *Factory {
-	factory, err := NewFactoryWithDefaults()
-	if err != nil {
-		// if config loading fails, at least give them built-ins
-		loader := NewProfileLoader("")
-		loader.LoadProfiles()
-		return &Factory{loader: loader}
-	}
-	return factory
-}
-
 func (f *Factory) GetProfile(platformType string) (domain.InferenceProfile, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()

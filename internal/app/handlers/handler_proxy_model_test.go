@@ -117,7 +117,10 @@ func TestBodyInspectorIntegration(t *testing.T) {
 
 	// Add inspectors
 	pathInspector := inspectorFactory.CreatePathInspector()
-	bodyInspector := inspectorFactory.CreateBodyInspector()
+	bodyInspector, err := inspectorFactory.CreateBodyInspector()
+	if err != nil {
+		t.Fatalf("Failed to create body inspector: %v", err)
+	}
 	chain.AddInspector(pathInspector)
 	chain.AddInspector(bodyInspector)
 

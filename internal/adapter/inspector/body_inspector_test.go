@@ -106,7 +106,10 @@ func TestBodyInspector_Inspect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			inspector := NewBodyInspector(styledLog)
+			inspector, err := NewBodyInspector(styledLog)
+			if err != nil {
+				t.Fatalf("Failed to create body inspector: %v", err)
+			}
 
 			// Create request with body
 			req := &http.Request{
@@ -120,7 +123,7 @@ func TestBodyInspector_Inspect(t *testing.T) {
 			profile := domain.NewRequestProfile("/v1/chat/completions")
 
 			// Inspect
-			err := inspector.Inspect(ctx, req, profile)
+			err = inspector.Inspect(ctx, req, profile)
 			require.NoError(t, err)
 
 			// Verify model extraction
@@ -142,7 +145,10 @@ func TestBodyInspector_LargeBody(t *testing.T) {
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
 	styledLog := &mockStyledLogger{underlying: log}
-	inspector := NewBodyInspector(styledLog)
+	inspector, err := NewBodyInspector(styledLog)
+	if err != nil {
+		t.Fatalf("Failed to create body inspector: %v", err)
+	}
 
 	// Create a large body that exceeds max size
 	largeBody := strings.Repeat("a", MaxBodySize+1000)
@@ -168,7 +174,10 @@ func TestBodyInspector_NoBody(t *testing.T) {
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
 	styledLog := &mockStyledLogger{underlying: log}
-	inspector := NewBodyInspector(styledLog)
+	inspector, err := NewBodyInspector(styledLog)
+	if err != nil {
+		t.Fatalf("Failed to create body inspector: %v", err)
+	}
 
 	tests := []struct {
 		name string
@@ -196,7 +205,7 @@ func TestBodyInspector_NoBody(t *testing.T) {
 			tt.req.Header.Set("Content-Type", "application/json")
 			profile := domain.NewRequestProfile("/v1/chat/completions")
 
-			err := inspector.Inspect(ctx, tt.req, profile)
+			err = inspector.Inspect(ctx, tt.req, profile)
 			assert.NoError(t, err)
 			assert.Empty(t, profile.ModelName)
 		})
@@ -209,7 +218,10 @@ func TestBodyInspector_BufferPoolReuse(t *testing.T) {
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
 	styledLog := &mockStyledLogger{underlying: log}
-	inspector := NewBodyInspector(styledLog)
+	inspector, err := NewBodyInspector(styledLog)
+	if err != nil {
+		t.Fatalf("Failed to create body inspector: %v", err)
+	}
 
 	// Run multiple inspections to test buffer pool reuse
 	for i := 0; i < 10; i++ {
@@ -223,7 +235,7 @@ func TestBodyInspector_BufferPoolReuse(t *testing.T) {
 
 		profile := domain.NewRequestProfile("/v1/chat/completions")
 
-		err := inspector.Inspect(ctx, req, profile)
+		err = inspector.Inspect(ctx, req, profile)
 		assert.NoError(t, err)
 		assert.Equal(t, "test-model", profile.ModelName)
 	}
@@ -235,7 +247,10 @@ func BenchmarkBodyInspector_Inspect(b *testing.B) {
 	log, _, err := logger.New(logCfg)
 	require.NoError(b, err)
 	styledLog := &mockStyledLogger{underlying: log}
-	inspector := NewBodyInspector(styledLog)
+	inspector, err := NewBodyInspector(styledLog)
+	if err != nil {
+		b.Fatalf("Failed to create body inspector: %v", err)
+	}
 
 	body := `{"model": "llama3.1:8b", "messages": [{"role": "user", "content": "Hello world"}]}`
 
@@ -250,9 +265,9 @@ func BenchmarkBodyInspector_Inspect(b *testing.B) {
 
 		profile := domain.NewRequestProfile("/v1/chat/completions")
 
-		err := inspector.Inspect(ctx, req, profile)
-		if err != nil {
-			b.Fatal(err)
+		inspectErr := inspector.Inspect(ctx, req, profile)
+		if inspectErr != nil {
+			b.Fatal(inspectErr)
 		}
 	}
 }
@@ -263,7 +278,10 @@ func BenchmarkBodyInspector_LargeBody(b *testing.B) {
 	log, _, err := logger.New(logCfg)
 	require.NoError(b, err)
 	styledLog := &mockStyledLogger{underlying: log}
-	inspector := NewBodyInspector(styledLog)
+	inspector, err := NewBodyInspector(styledLog)
+	if err != nil {
+		b.Fatalf("Failed to create body inspector: %v", err)
+	}
 
 	// Create a moderately large but still inspectable body
 	messages := make([]string, 50)
@@ -283,9 +301,9 @@ func BenchmarkBodyInspector_LargeBody(b *testing.B) {
 
 		profile := domain.NewRequestProfile("/v1/chat/completions")
 
-		err := inspector.Inspect(ctx, req, profile)
-		if err != nil {
-			b.Fatal(err)
+		inspectErr := inspector.Inspect(ctx, req, profile)
+		if inspectErr != nil {
+			b.Fatal(inspectErr)
 		}
 	}
 }

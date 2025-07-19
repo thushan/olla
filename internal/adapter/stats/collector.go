@@ -45,40 +45,42 @@ const (
 	CleanupInterval     = 5 * time.Minute
 )
 
-// TODO: Move relevant fields in Collector and endpointData to xsync.Counter
 type Collector struct {
-	uniqueRateLimitedIPs map[string]int64
-
 	logger logger.StyledLogger
+
+	uniqueRateLimitedIPs map[string]int64
 
 	endpoints *xsync.Map[string, *endpointData]
 
-	totalRequests      int64
-	successfulRequests int64
-	failedRequests     int64
-	totalLatency       int64
+	// Model statistics tracking
+	modelCollector *ModelCollector
 
-	rateLimitViolations int64
-	sizeLimitViolations int64
+	// Using xsync.Counter for better performance under high contention
+	totalRequests      *xsync.Counter
+	successfulRequests *xsync.Counter
+	failedRequests     *xsync.Counter
+	totalLatency       *xsync.Counter
+
+	rateLimitViolations *xsync.Counter
+	sizeLimitViolations *xsync.Counter
 	lastCleanup         int64
 	securityMu          sync.RWMutex
 
 	cleanupMu sync.Mutex
 }
 
-// TODO: Move to xsync.Counter
 type endpointData struct {
+	totalRequests      *xsync.Counter
+	successfulRequests *xsync.Counter
+	failedRequests     *xsync.Counter
+	totalBytes         *xsync.Counter
+	totalLatency       *xsync.Counter
 	name               string
 	url                string
-	activeConnections  int64
-	totalRequests      int64
-	successfulRequests int64
-	failedRequests     int64
-	totalBytes         int64
-	totalLatency       int64
-	minLatency         int64
-	maxLatency         int64
-	lastUsed           int64
+	activeConnections  int64 // Still using atomic for decrement operations
+	minLatency         int64 // Keep atomic for CAS operations
+	maxLatency         int64 // Keep atomic for CAS operations
+	lastUsed           int64 // Keep atomic for timestamp
 }
 
 func NewCollector(logger logger.StyledLogger) *Collector {
@@ -87,6 +89,13 @@ func NewCollector(logger logger.StyledLogger) *Collector {
 		logger:               logger,
 		endpoints:            xsync.NewMap[string, *endpointData](),
 		lastCleanup:          time.Now().UnixNano(),
+		modelCollector:       NewModelCollector(),
+		totalRequests:        xsync.NewCounter(),
+		successfulRequests:   xsync.NewCounter(),
+		failedRequests:       xsync.NewCounter(),
+		totalLatency:         xsync.NewCounter(),
+		rateLimitViolations:  xsync.NewCounter(),
+		sizeLimitViolations:  xsync.NewCounter(),
 	}
 }
 
@@ -94,15 +103,15 @@ func (c *Collector) RecordRequest(endpoint *domain.Endpoint, status string, late
 	now := time.Now().UnixNano()
 	latencyMs := latency.Milliseconds()
 
-	atomic.AddInt64(&c.totalRequests, 1)
+	c.totalRequests.Inc()
 
 	if status == StatusSuccess {
-		atomic.AddInt64(&c.successfulRequests, 1)
+		c.successfulRequests.Inc()
 		// Update total latency only for successful requests
 		// realised in TestCollector_RecordRequest
-		atomic.AddInt64(&c.totalLatency, latencyMs)
+		c.totalLatency.Add(latencyMs)
 	} else {
-		atomic.AddInt64(&c.failedRequests, 1)
+		c.failedRequests.Inc()
 	}
 
 	// Only update endpoint-specific stats if endpoint is known
@@ -145,10 +154,10 @@ func (c *Collector) RecordDiscovery(endpoint *domain.Endpoint, success bool, lat
 }
 
 func (c *Collector) GetProxyStats() ports.ProxyStats {
-	total := atomic.LoadInt64(&c.totalRequests)
-	successful := atomic.LoadInt64(&c.successfulRequests)
-	failed := atomic.LoadInt64(&c.failedRequests)
-	totalLatency := atomic.LoadInt64(&c.totalLatency)
+	total := c.totalRequests.Value()
+	successful := c.successfulRequests.Value()
+	failed := c.failedRequests.Value()
+	totalLatency := c.totalLatency.Value()
 
 	var avgLatency int64
 	if successful > 0 {
@@ -169,10 +178,10 @@ func (c *Collector) GetEndpointStats() map[string]ports.EndpointStats {
 	stats := make(map[string]ports.EndpointStats)
 
 	c.endpoints.Range(func(url string, data *endpointData) bool {
-		total := atomic.LoadInt64(&data.totalRequests)
-		successful := atomic.LoadInt64(&data.successfulRequests)
-		failed := atomic.LoadInt64(&data.failedRequests)
-		totalLatency := atomic.LoadInt64(&data.totalLatency)
+		total := data.totalRequests.Value()
+		successful := data.successfulRequests.Value()
+		failed := data.failedRequests.Value()
+		totalLatency := data.totalLatency.Value()
 		avgLatency := int64(0)
 		if successful > 0 {
 			avgLatency = totalLatency / successful
@@ -195,7 +204,7 @@ func (c *Collector) GetEndpointStats() map[string]ports.EndpointStats {
 			TotalRequests:      total,
 			SuccessfulRequests: successful,
 			FailedRequests:     failed,
-			TotalBytes:         atomic.LoadInt64(&data.totalBytes),
+			TotalBytes:         data.totalBytes.Value(),
 			AverageLatency:     avgLatency,
 			MinLatency:         minLatency,
 			MaxLatency:         atomic.LoadInt64(&data.maxLatency),
@@ -214,8 +223,8 @@ func (c *Collector) GetSecurityStats() ports.SecurityStats {
 	c.securityMu.RUnlock()
 
 	return ports.SecurityStats{
-		RateLimitViolations:  atomic.LoadInt64(&c.rateLimitViolations),
-		SizeLimitViolations:  atomic.LoadInt64(&c.sizeLimitViolations),
+		RateLimitViolations:  c.rateLimitViolations.Value(),
+		SizeLimitViolations:  c.sizeLimitViolations.Value(),
 		UniqueRateLimitedIPs: uniqueIPs,
 	}
 }
@@ -234,10 +243,10 @@ func (c *Collector) GetConnectionStats() map[string]int64 {
 func (c *Collector) RecordSecurityViolation(violation ports.SecurityViolation) {
 	switch violation.ViolationType {
 	case constants.ViolationRateLimit:
-		atomic.AddInt64(&c.rateLimitViolations, 1)
+		c.rateLimitViolations.Inc()
 		c.recordRateLimitedIP(violation.ClientID)
 	case constants.ViolationSizeLimit:
-		atomic.AddInt64(&c.sizeLimitViolations, 1)
+		c.sizeLimitViolations.Inc()
 	}
 }
 
@@ -258,16 +267,16 @@ func (c *Collector) recordRateLimitedIP(clientIP string) {
 func (c *Collector) updateEndpointStats(endpoint *domain.Endpoint, status string, latencyMs, bytes int64, now int64) {
 	data := c.getOrInitEndpoint(endpoint, now)
 
-	atomic.AddInt64(&data.totalRequests, 1)
-	atomic.AddInt64(&data.totalBytes, bytes)
+	data.totalRequests.Inc()
+	data.totalBytes.Add(bytes)
 	atomic.StoreInt64(&data.lastUsed, now)
 
 	if status == StatusSuccess {
-		atomic.AddInt64(&data.successfulRequests, 1)
-		atomic.AddInt64(&data.totalLatency, latencyMs)
+		data.successfulRequests.Inc()
+		data.totalLatency.Add(latencyMs)
 		c.updateLatencyBounds(data, latencyMs)
 	} else {
-		atomic.AddInt64(&data.failedRequests, 1)
+		data.failedRequests.Inc()
 	}
 }
 
@@ -298,10 +307,15 @@ func (c *Collector) getOrInitEndpoint(endpoint *domain.Endpoint, now int64) *end
 	key := endpoint.URL.String()
 	data, _ := c.endpoints.LoadOrCompute(key, func() (newValue *endpointData, cancel bool) {
 		return &endpointData{
-			url:        key,
-			name:       endpoint.Name,
-			lastUsed:   now,
-			minLatency: -1,
+			url:                key,
+			name:               endpoint.Name,
+			lastUsed:           now,
+			minLatency:         -1,
+			totalRequests:      xsync.NewCounter(),
+			successfulRequests: xsync.NewCounter(),
+			failedRequests:     xsync.NewCounter(),
+			totalBytes:         xsync.NewCounter(),
+			totalLatency:       xsync.NewCounter(),
 		}, false
 	})
 	return data
@@ -355,4 +369,24 @@ func (c *Collector) cleanup(now int64) {
 		}
 		c.logger.Debug("Cleaned up old endpoint stats", "removed", remove, "remaining", len(ages)-remove)
 	}
+}
+
+// Model-specific tracking methods
+
+func (c *Collector) RecordModelRequest(model string, endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
+	// Record in both regular stats and model-specific stats
+	c.RecordRequest(endpoint, status, latency, bytes)
+	c.modelCollector.RecordModelRequest(model, endpoint, status, latency, bytes)
+}
+
+func (c *Collector) RecordModelError(model string, endpoint *domain.Endpoint, errorType string) {
+	c.modelCollector.RecordModelError(model, endpoint, errorType)
+}
+
+func (c *Collector) GetModelStats() map[string]ports.ModelStats {
+	return c.modelCollector.GetModelStats()
+}
+
+func (c *Collector) GetModelEndpointStats() map[string]map[string]ports.EndpointModelStats {
+	return c.modelCollector.GetModelEndpointStats()
 }

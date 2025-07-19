@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -219,4 +220,236 @@ func createModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 		}
 	}
 	return details
+}
+
+// InferenceProfile implementation
+
+func (p *OllamaProfile) GetTimeout() time.Duration {
+	// Ollama can take 5+ minutes to load large models from disk
+	return 5 * time.Minute
+}
+
+func (p *OllamaProfile) GetMaxConcurrentRequests() int {
+	// Ollama handles concurrency well, but let's be conservative
+	return 10
+}
+
+func (p *OllamaProfile) ValidateEndpoint(endpoint *domain.Endpoint) error {
+	if endpoint == nil {
+		return fmt.Errorf("endpoint cannot be nil")
+	}
+	if endpoint.URL == nil {
+		return fmt.Errorf("endpoint URL cannot be nil")
+	}
+	return nil
+}
+
+func (p *OllamaProfile) GetDefaultPriority() int {
+	// Local Ollama instances should be preferred
+	return 1
+}
+
+func (p *OllamaProfile) GetConfig() *domain.ProfileConfig {
+	return &domain.ProfileConfig{
+		Name:        "ollama",
+		Version:     OllamaProfileVersion,
+		DisplayName: "Ollama",
+		Description: "Local and remote Ollama instances",
+		Models: struct {
+			CapabilityPatterns map[string][]string `yaml:"capability_patterns"`
+			NameFormat         string              `yaml:"name_format"`
+		}{
+			CapabilityPatterns: map[string][]string{
+				"chat":       {"*"},
+				"completion": {"*"},
+				"embedding":  {"*embedding*", "*embed*"},
+				"vision":     {"*vision*", "llava*", "bakllava*"},
+				"code":       {"*code*", "codellama*", "deepseek-coder*", "phind-codellama*"},
+			},
+			NameFormat: "{{.Name}}",
+		},
+	}
+}
+
+func (p *OllamaProfile) GetModelCapabilities(modelName string, registry domain.ModelRegistry) domain.ModelCapabilities {
+	caps := domain.ModelCapabilities{
+		ChatCompletion:   true,
+		TextGeneration:   true,
+		StreamingSupport: true,
+		MaxContextLength: 4096, // Conservative default
+		MaxOutputTokens:  2048,
+	}
+
+	// Check for embeddings models
+	if strings.Contains(strings.ToLower(modelName), "embed") ||
+		strings.Contains(strings.ToLower(modelName), "embedding") {
+		caps.Embeddings = true
+		caps.ChatCompletion = false
+		caps.TextGeneration = false
+	}
+
+	// Check for vision models
+	if strings.Contains(strings.ToLower(modelName), "vision") ||
+		strings.HasPrefix(strings.ToLower(modelName), "llava") ||
+		strings.HasPrefix(strings.ToLower(modelName), "bakllava") {
+		caps.VisionUnderstanding = true
+	}
+
+	// Check for code models
+	if strings.Contains(strings.ToLower(modelName), "code") ||
+		strings.HasPrefix(strings.ToLower(modelName), "codellama") ||
+		strings.HasPrefix(strings.ToLower(modelName), "deepseek-coder") {
+		caps.CodeGeneration = true
+	}
+
+	// Adjust context length for known models
+	switch {
+	case strings.Contains(modelName, "128k"):
+		caps.MaxContextLength = 128000
+	case strings.Contains(modelName, "100k"):
+		caps.MaxContextLength = 100000
+	case strings.Contains(modelName, "32k"):
+		caps.MaxContextLength = 32768
+	case strings.Contains(modelName, "16k"):
+		caps.MaxContextLength = 16384
+	case strings.Contains(modelName, "8k") || strings.Contains(modelName, ":8b"):
+		caps.MaxContextLength = 8192
+	}
+
+	// Some models support function calling
+	if strings.Contains(strings.ToLower(modelName), "mistral") ||
+		strings.Contains(strings.ToLower(modelName), "mixtral") ||
+		strings.Contains(strings.ToLower(modelName), "llama3") {
+		caps.FunctionCalling = true
+	}
+
+	return caps
+}
+
+func (p *OllamaProfile) IsModelSupported(modelName string, registry domain.ModelRegistry) bool {
+	// Ollama supports any model that's been pulled
+	// TODO: When registry supports GetModel, check if model exists
+	return true // Optimistic for now
+}
+
+func (p *OllamaProfile) TransformModelName(fromName string, toFormat string) string {
+	// Ollama uses simple model names
+	return fromName
+}
+
+func (p *OllamaProfile) GetResourceRequirements(modelName string, registry domain.ModelRegistry) domain.ResourceRequirements {
+	reqs := domain.ResourceRequirements{
+		RequiresGPU:         false, // CPU fallback is always available
+		EstimatedLoadTimeMS: 5000,  // 5s default
+	}
+
+	// Extract parameter size from model name
+	lowerName := strings.ToLower(modelName)
+
+	// Estimate based on parameter count
+	switch {
+	case strings.Contains(lowerName, "70b") || strings.Contains(lowerName, "72b"):
+		reqs.MinMemoryGB = 40
+		reqs.RecommendedMemoryGB = 48
+		reqs.MinGPUMemoryGB = 40
+		reqs.EstimatedLoadTimeMS = 300000 // 5 minutes
+	case strings.Contains(lowerName, "65b"):
+		reqs.MinMemoryGB = 35
+		reqs.RecommendedMemoryGB = 40
+		reqs.MinGPUMemoryGB = 35
+		reqs.EstimatedLoadTimeMS = 240000 // 4 minutes
+	case strings.Contains(lowerName, "34b") || strings.Contains(lowerName, "33b") || strings.Contains(lowerName, "30b"):
+		reqs.MinMemoryGB = 20
+		reqs.RecommendedMemoryGB = 24
+		reqs.MinGPUMemoryGB = 20
+		reqs.EstimatedLoadTimeMS = 120000 // 2 minutes
+	case strings.Contains(lowerName, "13b") || strings.Contains(lowerName, "14b"):
+		reqs.MinMemoryGB = 10
+		reqs.RecommendedMemoryGB = 16
+		reqs.MinGPUMemoryGB = 10
+		reqs.EstimatedLoadTimeMS = 60000 // 1 minute
+	case strings.Contains(lowerName, "7b") || strings.Contains(lowerName, "8b"):
+		reqs.MinMemoryGB = 6
+		reqs.RecommendedMemoryGB = 8
+		reqs.MinGPUMemoryGB = 6
+		reqs.EstimatedLoadTimeMS = 30000 // 30s
+	case strings.Contains(lowerName, "3b"):
+		reqs.MinMemoryGB = 3
+		reqs.RecommendedMemoryGB = 4
+		reqs.MinGPUMemoryGB = 3
+		reqs.EstimatedLoadTimeMS = 15000 // 15s
+	case strings.Contains(lowerName, "1b") || strings.Contains(lowerName, "1.5b"):
+		reqs.MinMemoryGB = 2
+		reqs.RecommendedMemoryGB = 3
+		reqs.MinGPUMemoryGB = 2
+		reqs.EstimatedLoadTimeMS = 10000 // 10s
+	default:
+		// Default for unknown models
+		reqs.MinMemoryGB = 4
+		reqs.RecommendedMemoryGB = 8
+		reqs.MinGPUMemoryGB = 4
+	}
+
+	// Adjust for quantization levels
+	switch {
+	case strings.Contains(lowerName, "q4"):
+		reqs.MinMemoryGB *= 0.5
+		reqs.RecommendedMemoryGB *= 0.5
+		reqs.MinGPUMemoryGB *= 0.5
+	case strings.Contains(lowerName, "q5"):
+		reqs.MinMemoryGB *= 0.625
+		reqs.RecommendedMemoryGB *= 0.625
+		reqs.MinGPUMemoryGB *= 0.625
+	case strings.Contains(lowerName, "q6"):
+		reqs.MinMemoryGB *= 0.75
+		reqs.RecommendedMemoryGB *= 0.75
+		reqs.MinGPUMemoryGB *= 0.75
+	case strings.Contains(lowerName, "q8"):
+		reqs.MinMemoryGB *= 0.875
+		reqs.RecommendedMemoryGB *= 0.875
+		reqs.MinGPUMemoryGB *= 0.875
+	}
+
+	return reqs
+}
+
+func (p *OllamaProfile) GetOptimalConcurrency(modelName string) int {
+	// Ollama can handle multiple requests, but large models benefit from limiting concurrency
+	reqs := p.GetResourceRequirements(modelName, nil)
+
+	switch {
+	case reqs.MinMemoryGB > 30:
+		return 1 // Very large models should process one at a time
+	case reqs.MinMemoryGB > 15:
+		return 2
+	case reqs.MinMemoryGB > 8:
+		return 4
+	default:
+		return 8 // Small models can handle more concurrent requests
+	}
+}
+
+func (p *OllamaProfile) GetRoutingStrategy() domain.RoutingStrategy {
+	return domain.RoutingStrategy{
+		PreferSameFamily:     true, // If llama3 isn't available, try other llama models
+		AllowFallback:        true, // Allow routing to compatible models
+		MaxRetries:           3,
+		PreferLocalEndpoints: true, // Ollama is typically local
+	}
+}
+
+func (p *OllamaProfile) ShouldBatchRequests() bool {
+	// Ollama doesn't have native batching support
+	return false
+}
+
+func (p *OllamaProfile) GetRequestTimeout(modelName string) time.Duration {
+	// Adjust timeout based on model size
+	reqs := p.GetResourceRequirements(modelName, nil)
+
+	// Base timeout of 30s, plus extra time based on model size
+	baseTimeout := 30 * time.Second
+	loadBuffer := time.Duration(reqs.EstimatedLoadTimeMS) * time.Millisecond
+
+	return baseTimeout + loadBuffer
 }
