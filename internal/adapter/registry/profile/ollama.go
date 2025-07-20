@@ -279,7 +279,7 @@ func (p *OllamaProfile) GetModelCapabilities(modelName string, registry domain.M
 		MaxContextLength: 4096, // Conservative default
 		MaxOutputTokens:  2048,
 	}
-	
+
 	lowerName := strings.ToLower(modelName)
 
 	// Check for embeddings models

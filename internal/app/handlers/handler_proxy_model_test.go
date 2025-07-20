@@ -252,3 +252,8 @@ func (m *mockSimpleModelRegistry) ModelsToString(models []*domain.ModelInfo) str
 func (m *mockSimpleModelRegistry) ModelsToStrings(models []*domain.ModelInfo) []string {
 	return []string{}
 }
+
+func (m *mockSimpleModelRegistry) GetModelsByCapability(ctx context.Context, capability string) ([]*domain.UnifiedModel, error) {
+	// Basic mock doesn't support capabilities
+	return []*domain.UnifiedModel{}, nil
+}

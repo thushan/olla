@@ -241,6 +241,273 @@ func TestBodyInspector_BufferPoolReuse(t *testing.T) {
 	}
 }
 
+func TestBodyInspector_CapabilityDetection(t *testing.T) {
+	ctx := context.Background()
+	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
+	log, _, err := logger.New(logCfg)
+	require.NoError(t, err)
+	styledLog := &mockStyledLogger{underlying: log}
+
+	tests := []struct {
+		name                   string
+		body                   string
+		expectedVision         bool
+		expectedFunctions      bool
+		expectedStreaming      bool
+		expectedEmbeddings     bool
+		expectedCodeGeneration bool
+		expectedChatCompletion bool
+		expectedTextGeneration bool
+	}{
+		{
+			name:                   "Simple chat request",
+			body:                   `{"model": "gpt-4", "messages": [{"role": "user", "content": "Hello"}]}`,
+			expectedVision:         false,
+			expectedFunctions:      false,
+			expectedStreaming:      true, // Default
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Vision request with image_url",
+			body: `{
+				"model": "gpt-4-vision",
+				"messages": [{
+					"role": "user",
+					"content": [{
+						"type": "text",
+						"text": "What's in this image?"
+					}, {
+						"type": "image_url",
+						"image_url": {"url": "https://example.com/image.jpg"}
+					}]
+				}]
+			}`,
+			expectedVision:         true,
+			expectedFunctions:      false,
+			expectedStreaming:      true,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Vision request with base64 image",
+			body: `{
+				"model": "llava",
+				"messages": [{
+					"role": "user",
+					"content": [{
+						"type": "text",
+						"text": "data:image/jpeg;base64,/9j/4AAQ..."
+					}]
+				}]
+			}`,
+			expectedVision:         true,
+			expectedFunctions:      false,
+			expectedStreaming:      true,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Function calling request with tools",
+			body: `{
+				"model": "gpt-4-turbo",
+				"messages": [{"role": "user", "content": "Get the weather"}],
+				"tools": [{
+					"type": "function",
+					"function": {
+						"name": "get_weather",
+						"description": "Get weather for a location"
+					}
+				}]
+			}`,
+			expectedVision:         false,
+			expectedFunctions:      true,
+			expectedStreaming:      true,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Function calling with functions array",
+			body: `{
+				"model": "gpt-3.5-turbo",
+				"messages": [{"role": "user", "content": "Calculate something"}],
+				"functions": [{
+					"name": "calculate",
+					"description": "Perform calculations"
+				}]
+			}`,
+			expectedVision:         false,
+			expectedFunctions:      true,
+			expectedStreaming:      true,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Function calling with tool_choice",
+			body: `{
+				"model": "gpt-4",
+				"messages": [{"role": "user", "content": "Use a tool"}],
+				"tool_choice": "auto"
+			}`,
+			expectedVision:         false,
+			expectedFunctions:      true,
+			expectedStreaming:      true,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Embeddings request",
+			body: `{
+				"model": "text-embedding-ada-002",
+				"input": "This is a test sentence for embeddings"
+			}`,
+			expectedVision:         false,
+			expectedFunctions:      false,
+			expectedStreaming:      true,
+			expectedEmbeddings:     true,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: false,
+			expectedTextGeneration: false,
+		},
+		{
+			name: "Code generation with system prompt",
+			body: `{
+				"model": "codellama",
+				"messages": [{
+					"role": "system",
+					"content": "You are a code assistant. Help me debug this function."
+				}, {
+					"role": "user",
+					"content": "Fix this code"
+				}]
+			}`,
+			expectedVision:         false,
+			expectedFunctions:      false,
+			expectedStreaming:      true,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: true,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Code generation with language field",
+			body: `{
+				"model": "deepseek-coder",
+				"messages": [{"role": "user", "content": "Write a function"}],
+				"language": "python"
+			}`,
+			expectedVision:         false,
+			expectedFunctions:      false,
+			expectedStreaming:      true,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: true,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Non-streaming request",
+			body: `{
+				"model": "gpt-4",
+				"messages": [{"role": "user", "content": "Hello"}],
+				"stream": false
+			}`,
+			expectedVision:         false,
+			expectedFunctions:      false,
+			expectedStreaming:      false,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: false,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+		{
+			name: "Combined capabilities",
+			body: `{
+				"model": "gpt-4-turbo",
+				"messages": [{
+					"role": "system",
+					"content": "You are a programming assistant"
+				}, {
+					"role": "user",
+					"content": [{
+						"type": "text",
+						"text": "Debug this code in the image"
+					}, {
+						"type": "image_url",
+						"image_url": {"url": "https://example.com/code.png"}
+					}]
+				}],
+				"tools": [{"type": "function", "function": {"name": "run_code"}}],
+				"stream": false
+			}`,
+			expectedVision:         true,
+			expectedFunctions:      true,
+			expectedStreaming:      false,
+			expectedEmbeddings:     false,
+			expectedCodeGeneration: true,
+			expectedChatCompletion: true,
+			expectedTextGeneration: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inspector, err := NewBodyInspector(styledLog)
+			require.NoError(t, err)
+
+			req := &http.Request{
+				Body:          io.NopCloser(strings.NewReader(tt.body)),
+				Header:        make(http.Header),
+				ContentLength: int64(len(tt.body)),
+			}
+			req.Header.Set("Content-Type", "application/json")
+
+			profile := domain.NewRequestProfile("/v1/chat/completions")
+
+			err = inspector.Inspect(ctx, req, profile)
+			require.NoError(t, err)
+
+			// Check if capabilities should be set
+			hasSpecialCapabilities := tt.expectedVision || tt.expectedFunctions ||
+				tt.expectedEmbeddings || tt.expectedCodeGeneration
+
+			if hasSpecialCapabilities {
+				// If special capabilities are expected, ModelCapabilities should be set
+				require.NotNil(t, profile.ModelCapabilities, "ModelCapabilities should be set when special capabilities are detected")
+
+				assert.Equal(t, tt.expectedVision, profile.ModelCapabilities.VisionUnderstanding, "Vision capability mismatch")
+				assert.Equal(t, tt.expectedFunctions, profile.ModelCapabilities.FunctionCalling, "Function calling capability mismatch")
+				assert.Equal(t, tt.expectedStreaming, profile.ModelCapabilities.StreamingSupport, "Streaming capability mismatch")
+				assert.Equal(t, tt.expectedEmbeddings, profile.ModelCapabilities.Embeddings, "Embeddings capability mismatch")
+				assert.Equal(t, tt.expectedCodeGeneration, profile.ModelCapabilities.CodeGeneration, "Code generation capability mismatch")
+				assert.Equal(t, tt.expectedChatCompletion, profile.ModelCapabilities.ChatCompletion, "Chat completion capability mismatch")
+				assert.Equal(t, tt.expectedTextGeneration, profile.ModelCapabilities.TextGeneration, "Text generation capability mismatch")
+			} else {
+				// For simple requests without special capabilities, ModelCapabilities may be nil
+				if profile.ModelCapabilities != nil {
+					// If it is set, verify the values are as expected
+					assert.Equal(t, tt.expectedVision, profile.ModelCapabilities.VisionUnderstanding, "Vision capability mismatch")
+					assert.Equal(t, tt.expectedFunctions, profile.ModelCapabilities.FunctionCalling, "Function calling capability mismatch")
+					assert.Equal(t, tt.expectedStreaming, profile.ModelCapabilities.StreamingSupport, "Streaming capability mismatch")
+					assert.Equal(t, tt.expectedEmbeddings, profile.ModelCapabilities.Embeddings, "Embeddings capability mismatch")
+					assert.Equal(t, tt.expectedCodeGeneration, profile.ModelCapabilities.CodeGeneration, "Code generation capability mismatch")
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkBodyInspector_Inspect(b *testing.B) {
 	ctx := context.Background()
 	logCfg := &logger.Config{Level: "error", PrettyLogs: false}

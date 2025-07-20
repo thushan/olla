@@ -22,7 +22,9 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	requestLogger := a.logger.WithRequestID(stats.RequestID)
+	requestLogger.Debug("Proxy handler called", "path", r.URL.Path, "method", r.Method)
 
+	// Preserve the route prefix from the original context
 	ctx := context.WithValue(r.Context(), constants.RequestIDKey, stats.RequestID)
 	ctx = context.WithValue(ctx, constants.RequestTimeKey, stats.StartTime)
 	r = r.WithContext(ctx)
@@ -114,6 +116,7 @@ func (a *Application) stripRoutePrefix(ctx context.Context, path string) string 
 func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
 	var profileFiltered []*domain.Endpoint
 
+	// Stage 1: Filter by profile compatibility (endpoint type)
 	if profile == nil || len(profile.SupportedBy) == 0 {
 		logger.Debug("No profile filtering applied", "total_endpoints", len(endpoints))
 		profileFiltered = endpoints
@@ -141,6 +144,15 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		}
 	}
 
+	// Stage 2: Filter by capabilities if present
+	if profile != nil && profile.ModelCapabilities != nil && a.modelRegistry != nil {
+		capabilityFiltered := a.filterEndpointsByCapabilities(profileFiltered, profile, logger)
+		if len(capabilityFiltered) > 0 {
+			profileFiltered = capabilityFiltered
+		}
+	}
+
+	// Stage 3: Filter by specific model if present
 	if profile != nil && profile.ModelName != "" && a.modelRegistry != nil {
 		ctx := context.Background()
 		modelEndpoints, err := a.modelRegistry.GetEndpointsForModel(ctx, profile.ModelName)
@@ -188,4 +200,136 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	}
 
 	return profileFiltered
+}
+
+// filterEndpointsByCapabilities filters endpoints based on required capabilities
+func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
+	if profile.ModelCapabilities == nil {
+		return endpoints
+	}
+
+	requiredCapabilities := a.extractRequiredCapabilities(profile.ModelCapabilities)
+	if len(requiredCapabilities) == 0 {
+		return endpoints
+	}
+
+	capableModels := a.findCapableModels(requiredCapabilities, logger)
+	if len(capableModels) == 0 {
+		logger.Warn("No models found with required capabilities",
+			"capabilities", requiredCapabilities)
+		return endpoints
+	}
+
+	return a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger)
+}
+
+// extractRequiredCapabilities builds a list of required capability strings from ModelCapabilities
+func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities) []string {
+	requiredCapabilities := make([]string, 0)
+
+	if caps.VisionUnderstanding {
+		requiredCapabilities = append(requiredCapabilities, "vision")
+	}
+	if caps.FunctionCalling {
+		requiredCapabilities = append(requiredCapabilities, "function_calling", "tools")
+	}
+	if caps.Embeddings {
+		requiredCapabilities = append(requiredCapabilities, "embeddings")
+	}
+	if caps.CodeGeneration {
+		requiredCapabilities = append(requiredCapabilities, "code")
+	}
+
+	return requiredCapabilities
+}
+
+// findCapableModels returns endpoints that have models supporting all required capabilities
+func (a *Application) findCapableModels(requiredCapabilities []string, logger logger.StyledLogger) map[string]bool {
+	ctx := context.Background()
+	capableModels := make(map[string]bool)
+	hasCapabilitySupport := false
+
+	for i, capability := range requiredCapabilities {
+		models, err := a.modelRegistry.GetModelsByCapability(ctx, capability)
+		if err != nil {
+			logger.Warn("Failed to get models by capability",
+				"capability", capability,
+				"error", err)
+			continue
+		}
+
+		// Check if we have any models - empty result means registry doesn't support capabilities
+		if len(models) > 0 {
+			hasCapabilitySupport = true
+		}
+
+		if i == 0 {
+			// For first capability, add all models
+			a.addModelsToMap(models, capableModels)
+		} else {
+			// For subsequent capabilities, keep only models that have all capabilities
+			capableModels = a.intersectModels(models, capableModels)
+		}
+	}
+
+	// If registry doesn't support capability queries, return nil to skip filtering
+	if !hasCapabilitySupport {
+		return nil
+	}
+
+	return capableModels
+}
+
+// addModelsToMap adds all model endpoints to the map
+func (a *Application) addModelsToMap(models []*domain.UnifiedModel, capableModels map[string]bool) {
+	for _, model := range models {
+		for _, sourceEndpoint := range model.SourceEndpoints {
+			capableModels[sourceEndpoint.EndpointURL] = true
+		}
+	}
+}
+
+// intersectModels keeps only models that exist in both the new models and existing capable models
+func (a *Application) intersectModels(models []*domain.UnifiedModel, existingCapableModels map[string]bool) map[string]bool {
+	newCapableModels := make(map[string]bool)
+	for _, model := range models {
+		for _, sourceEndpoint := range model.SourceEndpoints {
+			if existingCapableModels[sourceEndpoint.EndpointURL] {
+				newCapableModels[sourceEndpoint.EndpointURL] = true
+			}
+		}
+	}
+	return newCapableModels
+}
+
+// filterEndpointsByCapableModels filters endpoints to only those with capable models
+func (a *Application) filterEndpointsByCapableModels(endpoints []*domain.Endpoint, capableModels map[string]bool, requiredCapabilities []string, logger logger.StyledLogger) []*domain.Endpoint {
+	// If capableModels is nil, it means the registry doesn't support capability queries
+	// Skip filtering in this case
+	if capableModels == nil {
+		logger.Debug("Registry doesn't support capability queries, skipping capability filtering",
+			"capabilities", requiredCapabilities)
+		return endpoints
+	}
+
+	capableEndpoints := make([]*domain.Endpoint, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		if capableModels[endpoint.URLString] {
+			capableEndpoints = append(capableEndpoints, endpoint)
+		}
+	}
+
+	if len(capableEndpoints) == 0 {
+		logger.Warn("No endpoints have models with required capabilities, using unfiltered",
+			"capabilities", requiredCapabilities,
+			"available_endpoints", len(endpoints))
+		return endpoints
+	}
+
+	logger.Debug("Filtered endpoints by capabilities",
+		"capabilities", requiredCapabilities,
+		"capable_count", len(capableEndpoints),
+		"total_count", len(endpoints))
+
+	return capableEndpoints
 }
