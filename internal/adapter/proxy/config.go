@@ -1,8 +1,9 @@
 package proxy
 
 import (
-	"github.com/thushan/olla/internal/core/constants"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/core/ports"
 )

@@ -6,106 +6,186 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/thushan/olla/internal/core/ports"
-
-	"github.com/thushan/olla/internal/logger"
-
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/util"
 )
 
+type proxyRequest struct {
+	stats         *ports.RequestStats
+	requestLogger logger.StyledLogger
+	clientIP      string
+	targetPath    string
+	profile       *domain.RequestProfile
+	model         string
+	contentType   string
+	method        string
+	path          string
+	query         string
+	contentLength int64
+}
+
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
-	stats := ports.RequestStats{
+	pr := a.initializeProxyRequest(r)
+
+	ctx, r := a.setupRequestContext(r, pr.stats)
+
+	a.analyzeRequest(ctx, r, pr)
+
+	endpoints, err := a.getCompatibleEndpoints(ctx, pr)
+	if err != nil {
+		a.handleEndpointError(w, pr, err)
+		return
+	}
+
+	a.logRequestStart(pr, len(endpoints))
+
+	err = a.executeProxyRequest(ctx, w, r, endpoints, pr)
+
+	a.logRequestResult(pr, err)
+
+	if err != nil {
+		a.handleProxyError(w, err)
+	}
+}
+
+func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
+	stats := &ports.RequestStats{
 		RequestID: util.GenerateRequestID(),
 		StartTime: time.Now(),
 	}
 
-	requestLogger := a.logger.WithRequestID(stats.RequestID)
-	requestLogger.Debug("Proxy handler called", "path", r.URL.Path, "method", r.Method)
+	return &proxyRequest{
+		stats:         stats,
+		requestLogger: a.logger.WithRequestID(stats.RequestID),
+		contentType:   r.Header.Get("Content-Type"),
+		method:        r.Method,
+		path:          r.URL.Path,
+		query:         r.URL.RawQuery,
+		contentLength: r.ContentLength,
+	}
+}
 
-	// Preserve the route prefix from the original context
+func (a *Application) setupRequestContext(r *http.Request, stats *ports.RequestStats) (context.Context, *http.Request) {
 	ctx := context.WithValue(r.Context(), constants.RequestIDKey, stats.RequestID)
 	ctx = context.WithValue(ctx, constants.RequestTimeKey, stats.StartTime)
-	r = r.WithContext(ctx)
+	return ctx, r.WithContext(ctx)
+}
+
+func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *proxyRequest) {
+	pr.requestLogger.Debug("Proxy handler called", "path", r.URL.Path, "method", r.Method)
 
 	rl := a.Config.Server.RateLimits
-	clientIP := util.GetClientIP(r, rl.TrustProxyHeaders, rl.TrustedProxyCIDRsParsed)
+	pr.clientIP = util.GetClientIP(r, rl.TrustProxyHeaders, rl.TrustedProxyCIDRsParsed)
 
 	pathResolutionStart := time.Now()
+	pr.targetPath = a.stripRoutePrefix(ctx, r.URL.Path)
 
-	targetPath := a.stripRoutePrefix(ctx, r.URL.Path)
-
-	profile, err := a.inspectorChain.Inspect(ctx, r, targetPath)
+	// inspector chain figures out which endpoints can handle this request (ollama vs openai)
+	// and extracts model requirements. failures here are non-fatal - we'll spray and pray
+	profile, err := a.inspectorChain.Inspect(ctx, r, pr.targetPath)
 	if err != nil {
-		requestLogger.Warn("Request inspection failed, continuing with all endpoints", "error", err)
+		pr.requestLogger.Warn("Request inspection failed, continuing with all endpoints", "error", err)
 	}
-
-	endpoints, err := a.discoveryService.GetHealthyEndpoints(ctx)
-	if err != nil {
-		requestLogger.Error("Failed to get healthy endpoints", "error", err)
-		http.Error(w, fmt.Sprintf("No healthy endpoints available: %v", err), http.StatusBadGateway)
-		return
-	}
-
-	compatibleEndpoints := a.filterEndpointsByProfile(endpoints, profile, requestLogger)
-
-	pathResolutionEnd := time.Now()
-	stats.PathResolutionMs = pathResolutionEnd.Sub(pathResolutionStart).Milliseconds()
-
-	logFields := []any{
-		"client_ip", clientIP,
-		"method", r.Method,
-		"path", r.URL.Path,
-		"target_path", targetPath,
-		"compatible_endpoints", len(compatibleEndpoints),
-		"path_resolution_ms", stats.PathResolutionMs,
-		"query", r.URL.RawQuery,
-		"content_type", r.Header.Get("Content-Type"),
-		"content_length", r.ContentLength,
-	}
+	pr.profile = profile
 
 	if profile != nil && profile.ModelName != "" {
-		logFields = append(logFields, "model", profile.ModelName)
-		ctx = context.WithValue(ctx, "model", profile.ModelName)
+		pr.model = profile.ModelName
+	}
+
+	pr.stats.PathResolutionMs = time.Since(pathResolutionStart).Milliseconds()
+}
+
+func (a *Application) getCompatibleEndpoints(ctx context.Context, pr *proxyRequest) ([]*domain.Endpoint, error) {
+	endpoints, err := a.discoveryService.GetHealthyEndpoints(ctx)
+	if err != nil {
+		pr.requestLogger.Error("Failed to get healthy endpoints", "error", err)
+		return nil, fmt.Errorf("no healthy endpoints available: %w", err)
+	}
+
+	compatibleEndpoints := a.filterEndpointsByProfile(endpoints, pr.profile, pr.requestLogger)
+
+	return compatibleEndpoints, nil
+}
+
+func (a *Application) executeProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, pr *proxyRequest) error {
+	if pr.model != "" {
+		ctx = context.WithValue(ctx, "model", pr.model)
 		r = r.WithContext(ctx)
 	}
 
-	requestLogger.Info("Request started", logFields...)
+	return a.proxyService.ProxyRequestToEndpoints(ctx, w, r, endpoints, pr.stats, pr.requestLogger)
+}
 
-	if err := a.proxyService.ProxyRequestToEndpoints(ctx, w, r, compatibleEndpoints, &stats, requestLogger); err != nil {
-		duration := time.Since(stats.StartTime)
+func (a *Application) logRequestStart(pr *proxyRequest, endpointCount int) {
+	logFields := []any{
+		"client_ip", pr.clientIP,
+		"method", pr.method,
+		"path", pr.path,
+		"target_path", pr.targetPath,
+		"compatible_endpoints", endpointCount,
+		"path_resolution_ms", pr.stats.PathResolutionMs,
+		"query", pr.query,
+		"content_type", pr.contentType,
+		"content_length", pr.contentLength,
+	}
 
-		requestLogger.Error("Request failed", "error", err,
-			"duration_ms", duration.Milliseconds(),
-			"latency_ms", stats.Latency,
-			"endpoint", stats.EndpointName,
-			"total_bytes", stats.TotalBytes,
-			"request_processing_ms", stats.RequestProcessingMs,
-			"backend_response_ms", stats.BackendResponseMs,
-			"first_data_ms", stats.FirstDataMs,
-			"streaming_ms", stats.StreamingMs,
-			"header_processing_ms", stats.HeaderProcessingMs,
-			"path_resolution_ms", stats.PathResolutionMs,
-			"selection_ms", stats.SelectionMs)
+	if pr.model != "" {
+		logFields = append(logFields, "model", pr.model)
+	}
 
-		if w.Header().Get("Content-Type") == "" {
-			http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
-		}
+	pr.requestLogger.Info("Request started", logFields...)
+}
+
+func (a *Application) logRequestResult(pr *proxyRequest, err error) {
+	duration := time.Since(pr.stats.StartTime)
+
+	logFields := a.buildLogFields(pr, duration)
+
+	if err != nil {
+		pr.requestLogger.Error("Request failed", append([]any{"error", err}, logFields...)...)
 	} else {
-		duration := time.Since(stats.StartTime)
-		requestLogger.Info("Request completed",
-			"endpoint", stats.EndpointName,
-			"total_bytes", stats.TotalBytes,
-			"duration_ms", duration.Milliseconds(),
-			"latency_ms", stats.Latency,
-			"request_processing_ms", stats.RequestProcessingMs,
-			"backend_response_ms", stats.BackendResponseMs,
-			"first_data_ms", stats.FirstDataMs,
-			"streaming_ms", stats.StreamingMs,
-			"header_processing_ms", stats.HeaderProcessingMs,
-			"path_resolution_ms", stats.PathResolutionMs,
-			"selection_ms", stats.SelectionMs)
+		pr.requestLogger.Info("Request completed", logFields...)
+	}
+}
+
+func (a *Application) buildLogFields(pr *proxyRequest, duration time.Duration) []any {
+	fields := []any{
+		"endpoint", pr.stats.EndpointName,
+		"model", pr.model,
+		"client_ip", pr.clientIP,
+		"total_bytes", pr.stats.TotalBytes,
+		"duration_ms", duration.Milliseconds(),
+		"latency_ms", pr.stats.Latency,
+		"request_processing_ms", pr.stats.RequestProcessingMs,
+		"backend_response_ms", pr.stats.BackendResponseMs,
+		"first_data_ms", pr.stats.FirstDataMs,
+		"streaming_ms", pr.stats.StreamingMs,
+		"header_processing_ms", pr.stats.HeaderProcessingMs,
+		"path_resolution_ms", pr.stats.PathResolutionMs,
+		"selection_ms", pr.stats.SelectionMs,
+	}
+
+	if pr.stats.EndpointName == "" {
+		fields = append(fields, "target_path", pr.targetPath)
+	}
+
+	return fields
+}
+
+func (a *Application) handleEndpointError(w http.ResponseWriter, pr *proxyRequest, err error) {
+	pr.requestLogger.Error("Failed to get endpoints", "error", err)
+	http.Error(w, fmt.Sprintf("Service unavailable: %v", err), http.StatusBadGateway)
+}
+
+// only send error response if we haven't started streaming yet.
+// content-type check prevents double-writing response after partial stream
+// (learned this the hard way when users got html error messages appended to their json)
+func (a *Application) handleProxyError(w http.ResponseWriter, err error) {
+	if w.Header().Get("Content-Type") == "" {
+		http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
 	}
 }
 
@@ -113,10 +193,13 @@ func (a *Application) stripRoutePrefix(ctx context.Context, path string) string 
 	return util.StripRoutePrefix(ctx, path, constants.ProxyPathPrefix)
 }
 
+// three-stage filtering pipeline that progressively narrows down endpoints.
+// starts broad (platform compatibility), then capabilities (vision, embeddings),
+// finally specific model availability. each stage falls back gracefully.
 func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
 	var profileFiltered []*domain.Endpoint
 
-	// Stage 1: Filter by profile compatibility (endpoint type)
+	// stage 1: platform compatibility (ollama can't handle openai requests etc)
 	if profile == nil || len(profile.SupportedBy) == 0 {
 		logger.Debug("No profile filtering applied", "total_endpoints", len(endpoints))
 		profileFiltered = endpoints
@@ -144,7 +227,7 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		}
 	}
 
-	// Stage 2: Filter by capabilities if present
+	// stage 2: capability filtering (vision requests need vision models)
 	if profile != nil && profile.ModelCapabilities != nil && a.modelRegistry != nil {
 		capabilityFiltered := a.filterEndpointsByCapabilities(profileFiltered, profile, logger)
 		if len(capabilityFiltered) > 0 {
@@ -152,7 +235,7 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		}
 	}
 
-	// Stage 3: Filter by specific model if present
+	// stage 3: specific model filtering eg. llama to llama
 	if profile != nil && profile.ModelName != "" && a.modelRegistry != nil {
 		ctx := context.Background()
 		modelEndpoints, err := a.modelRegistry.GetEndpointsForModel(ctx, profile.ModelName)
@@ -202,7 +285,6 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	return profileFiltered
 }
 
-// filterEndpointsByCapabilities filters endpoints based on required capabilities
 func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
 	if profile.ModelCapabilities == nil {
 		return endpoints
@@ -223,7 +305,6 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 	return a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger)
 }
 
-// extractRequiredCapabilities builds a list of required capability strings from ModelCapabilities
 func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities) []string {
 	requiredCapabilities := make([]string, 0)
 
@@ -243,7 +324,8 @@ func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities
 	return requiredCapabilities
 }
 
-// findCapableModels returns endpoints that have models supporting all required capabilities
+// intersects capability sets to find models that support ALL requested features.
+// uses nil return to signal "no capability support" vs empty map for "no matches"
 func (a *Application) findCapableModels(requiredCapabilities []string, logger logger.StyledLogger) map[string]bool {
 	ctx := context.Background()
 	capableModels := make(map[string]bool)
@@ -258,21 +340,19 @@ func (a *Application) findCapableModels(requiredCapabilities []string, logger lo
 			continue
 		}
 
-		// Check if we have any models - empty result means registry doesn't support capabilities
 		if len(models) > 0 {
 			hasCapabilitySupport = true
 		}
 
 		if i == 0 {
-			// For first capability, add all models
 			a.addModelsToMap(models, capableModels)
 		} else {
-			// For subsequent capabilities, keep only models that have all capabilities
+			// set intersection - only keep models that have all capabilities
 			capableModels = a.intersectModels(models, capableModels)
 		}
 	}
 
-	// If registry doesn't support capability queries, return nil to skip filtering
+	// nil means "don't filter", empty map means "no matches found"
 	if !hasCapabilitySupport {
 		return nil
 	}
@@ -280,7 +360,6 @@ func (a *Application) findCapableModels(requiredCapabilities []string, logger lo
 	return capableModels
 }
 
-// addModelsToMap adds all model endpoints to the map
 func (a *Application) addModelsToMap(models []*domain.UnifiedModel, capableModels map[string]bool) {
 	for _, model := range models {
 		for _, sourceEndpoint := range model.SourceEndpoints {
@@ -289,7 +368,6 @@ func (a *Application) addModelsToMap(models []*domain.UnifiedModel, capableModel
 	}
 }
 
-// intersectModels keeps only models that exist in both the new models and existing capable models
 func (a *Application) intersectModels(models []*domain.UnifiedModel, existingCapableModels map[string]bool) map[string]bool {
 	newCapableModels := make(map[string]bool)
 	for _, model := range models {
@@ -302,10 +380,8 @@ func (a *Application) intersectModels(models []*domain.UnifiedModel, existingCap
 	return newCapableModels
 }
 
-// filterEndpointsByCapableModels filters endpoints to only those with capable models
 func (a *Application) filterEndpointsByCapableModels(endpoints []*domain.Endpoint, capableModels map[string]bool, requiredCapabilities []string, logger logger.StyledLogger) []*domain.Endpoint {
-	// If capableModels is nil, it means the registry doesn't support capability queries
-	// Skip filtering in this case
+	// nil check differentiates "no capability support" from "no matches"
 	if capableModels == nil {
 		logger.Debug("Registry doesn't support capability queries, skipping capability filtering",
 			"capabilities", requiredCapabilities)
