@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -300,7 +299,7 @@ func TestEnhancedModelDiscoveryIntegration(t *testing.T) {
 			defer server.Close()
 
 			endpoint := createTestEndpoint(server.URL, tt.platformType)
-			client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 			ctx := context.Background()
 			models, err := client.DiscoverModels(ctx, endpoint)
@@ -359,7 +358,7 @@ func TestAutoDetectionWithRichMetadata(t *testing.T) {
 	defer server.Close()
 
 	endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
-	client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 	ctx := context.Background()
 	models, err := client.DiscoverModels(ctx, endpoint)
@@ -459,7 +458,7 @@ func TestLMStudioEnhancedMetadata(t *testing.T) {
 	defer server.Close()
 
 	endpoint := createTestEndpoint(server.URL, domain.ProfileLmStudio)
-	client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 	models, err := client.DiscoverModels(context.Background(), endpoint)
 	if err != nil {
@@ -575,7 +574,7 @@ func TestResilientModelParsing(t *testing.T) {
 			defer server.Close()
 
 			endpoint := createTestEndpoint(server.URL, tt.platformType)
-			client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 			models, err := client.DiscoverModels(context.Background(), endpoint)
 			if err != nil {

@@ -33,7 +33,7 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 	ctx := context.Background()
 
 	// Create unified registry
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log, nil)
 
 	// Test data - models from different endpoints
 	ollamaEndpoint := "http://localhost:11434"
@@ -182,7 +182,7 @@ func TestUnifierIntegrationEdgeCases(t *testing.T) {
 	ctx := context.Background()
 
 	// Create unified registry
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log, nil)
 
 	t.Run("empty model list", func(t *testing.T) {
 		err := unifiedRegistry.RegisterModels(ctx, "http://localhost:11434", []*domain.ModelInfo{})
@@ -266,7 +266,7 @@ func TestUnifierIntegrationEdgeCases(t *testing.T) {
 func TestUnifierWithRealWorldScenarios(t *testing.T) {
 	log := createTestLogger()
 	ctx := context.Background()
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log, nil)
 
 	// Scenario 1: Model migration between endpoints
 	t.Run("model migration", func(t *testing.T) {

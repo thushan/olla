@@ -6,10 +6,19 @@ logs/
 tmp/
 *.exe
 olla
-config.yaml
-config/
-config-dev/
+# Local config files (never ship these)
+config.local.yaml
+config/*.local.yaml
+config/**/*.local.yaml
+docker-compose.local.yaml
+docker-compose.override.yaml
+
+# Build directories
+build/
 dist/
+
+# Legacy directories (to be removed)
+config-dev/
 default.yml
 # Claude specific local files
 .claude/*.local.json

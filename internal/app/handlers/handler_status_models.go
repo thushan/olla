@@ -64,7 +64,7 @@ var (
 func (a *Application) modelsStatusHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	detailed := r.URL.Query().Get("detailed") == "true"
+	detailed := r.URL.Query().Get("detailed") == queryValueTrue
 	groupBy := r.URL.Query().Get("group")
 
 	modelMap, err := a.modelRegistry.GetEndpointModelMap(ctx)

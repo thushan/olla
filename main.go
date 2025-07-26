@@ -104,6 +104,8 @@ func main() {
 		logger.FatalWithLogger(logInstance, "Failed to load configuration", "error", err)
 	}
 
+	styledLogger.Info("Loaded configuration", "config", cfg.Filename)
+
 	// Create and start service manager
 	serviceManager, err := app.CreateAndStartServiceManager(ctx, cfg, styledLogger)
 	if err != nil {

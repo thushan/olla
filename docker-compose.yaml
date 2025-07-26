@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  olla:
+    image: ghcr.io/thushan/olla:latest
+    container_name: olla
+    ports:
+      - "40114:40114"
+    volumes:
+      # Mount your local config (comment out if using default)
+      - ./config/config.local.yaml:/config/config.yaml:ro
+    environment:
+      - OLLA_CONFIG_FILE=/config/config.yaml
+      - OLLA_LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:40114/internal/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - ollama-network
+
+# Example: Run Ollama alongside Olla
+#  ollama:
+#    image: ollama/ollama:latest
+#    container_name: ollama
+#    ports:
+#      - "11434:11434"
+#    volumes:
+#      - ollama_data:/root/.ollama
+#    restart: unless-stopped
+#    networks:
+#      - ollama-network
+
+networks:
+  ollama-network:
+    driver: bridge
+
+volumes:
+  ollama_data:

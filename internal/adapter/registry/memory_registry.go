@@ -434,6 +434,19 @@ func (r *MemoryModelRegistry) ModelsToString(models []*domain.ModelInfo) string 
 	return sb.String()
 }
 
+// GetModelsByCapability returns an empty list since the basic registry doesn't track capabilities
+func (r *MemoryModelRegistry) GetModelsByCapability(ctx context.Context, capability string) ([]*domain.UnifiedModel, error) {
+	select {
+	case <-ctx.Done():
+		return nil, domain.NewModelRegistryError("get_models_by_capability", "", "", ctx.Err())
+	default:
+	}
+
+	// The basic memory registry doesn't track unified models or capabilities
+	// Return empty list to allow graceful degradation
+	return []*domain.UnifiedModel{}, nil
+}
+
 func (r *MemoryModelRegistry) updateStats() {
 	modelSet := make(map[string]struct{})
 	modelsPerEndpoint := make(map[string]int)

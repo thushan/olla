@@ -223,26 +223,46 @@ func NewOllaService(
 
 	// setting up object pools to avoid memory allocations during request handling
 	// this is critical for high-throughput scenarios where gc pauses would cause jitter
-	service.bufferPool = pool.NewLitePool(func() *[]byte {
+	bufPool, err := pool.NewLitePool(func() *[]byte {
 		// we use the configured buffer size to balance memory usage vs syscall frequency
 		buf := make([]byte, configuration.StreamBufferSize)
 		return &buf
 	})
+	if err != nil {
+		logger.Error("Failed to create buffer pool", "error", err)
+		return nil
+	}
+	service.bufferPool = bufPool
 
-	service.requestPool = pool.NewLitePool(func() *requestContext {
+	reqPool, err := pool.NewLitePool(func() *requestContext {
 		// pre-allocate request context objects to avoid heap allocations in hot path
 		return &requestContext{}
 	})
+	if err != nil {
+		logger.Error("Failed to create request pool", "error", err)
+		return nil
+	}
+	service.requestPool = reqPool
 
-	service.responsePool = pool.NewLitePool(func() []byte {
+	respPool, err := pool.NewLitePool(func() []byte {
 		// 4kb is a good starting size for most response headers
 		return make([]byte, 4096)
 	})
+	if err != nil {
+		logger.Error("Failed to create response pool", "error", err)
+		return nil
+	}
+	service.responsePool = respPool
 
-	service.errorPool = pool.NewLitePool(func() *errorContext {
+	errPool, err := pool.NewLitePool(func() *errorContext {
 		// pooling error contexts helps maintain performance even during error cases
 		return &errorContext{}
 	})
+	if err != nil {
+		logger.Error("Failed to create error pool", "error", err)
+		return nil
+	}
+	service.errorPool = errPool
 
 	// initialise min latency to max possible value so first real measurement becomes the min
 	// this avoids having to handle special cases for the first request
@@ -390,12 +410,23 @@ func (s *OllaProxyService) updateStats(success bool, latency time.Duration) {
 }
 
 // recordFailure records a failure in stats collector
-func (s *OllaProxyService) recordFailure(endpoint *domain.Endpoint, duration time.Duration, bytes int64) {
+func (s *OllaProxyService) recordFailure(ctx context.Context, endpoint *domain.Endpoint, duration time.Duration, bytes int64) {
 	if endpoint == nil {
 		// if we have no endpoint, we can't record it
 		return
 	}
-	s.statsCollector.RecordRequest(endpoint, "failure", duration, bytes)
+
+	// Extract model name from context if available
+	modelName := ""
+	if model, ok := ctx.Value("model").(string); ok {
+		modelName = model
+	}
+
+	if modelName != "" {
+		s.statsCollector.RecordModelRequest(modelName, endpoint, "failure", duration, bytes)
+	} else {
+		s.statsCollector.RecordRequest(endpoint, "failure", duration, bytes)
+	}
 }
 
 // ProxyRequest handles incoming HTTP requests and proxies them to healthy endpoints (regardless of type)
@@ -422,7 +453,7 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 	defer func() {
 		if rec := recover(); rec != nil {
 			s.updateStats(false, time.Since(reqCtx.startTime))
-			s.recordFailure(nil, time.Since(stats.StartTime), 0)
+			s.recordFailure(ctx, nil, time.Since(stats.StartTime), 0)
 			err = fmt.Errorf("proxy panic recovered after %.1fs: %v (this is a bug, please report)", time.Since(reqCtx.startTime).Seconds(), rec)
 			rlog.Error("Proxy request panic recovered", "panic", rec, "method", r.Method, "path", r.URL.Path)
 
@@ -438,7 +469,7 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 		// No healthy endpoints available, log and return error
 		sinceStart := time.Since(stats.StartTime)
 		s.updateStats(false, sinceStart)
-		s.recordFailure(nil, sinceStart, 0)
+		s.recordFailure(ctx, nil, sinceStart, 0)
 
 		rlog.Error("no healthy endpoints available")
 		return domain.NewProxyError(stats.RequestID, "", r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
@@ -464,7 +495,7 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 		if err != nil {
 			sinceStart := time.Since(stats.StartTime)
 			s.updateStats(false, sinceStart)
-			s.recordFailure(endpoint, sinceStart, 0)
+			s.recordFailure(ctx, endpoint, sinceStart, 0)
 			rlog.Error("failed to select endpoint", "error", err)
 			return domain.NewProxyError(stats.RequestID, "", r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
 				makeUserFriendlyError(fmt.Errorf("failed to select endpoint: %w", err), sinceStart, "selection", s.configuration.ResponseTimeout))
@@ -503,7 +534,7 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 	if err != nil {
 		sinceStart := time.Since(stats.StartTime)
 		s.updateStats(false, sinceStart)
-		s.recordFailure(endpoint, sinceStart, 0)
+		s.recordFailure(ctx, endpoint, sinceStart, 0)
 		rlog.Error("failed to create proxy request", "error", err)
 		return domain.NewProxyError(stats.RequestID, reqCtx.targetURL, r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
 			fmt.Errorf("failed to create proxy request after %.1fs: %w", sinceStart.Seconds(), err))
@@ -533,7 +564,7 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 		cb.recordFailure()
 		sinceStart := time.Since(stats.StartTime)
 		s.updateStats(false, sinceStart)
-		s.recordFailure(endpoint, sinceStart, 0)
+		s.recordFailure(ctx, endpoint, sinceStart, 0)
 		rlog.Error("round-trip failed", "error", err)
 		return domain.NewProxyError(stats.RequestID, reqCtx.targetURL, r.Method, r.URL.Path, 0, sinceStart, stats.TotalBytes,
 			makeUserFriendlyError(err, sinceStart, "backend", s.configuration.ResponseTimeout))
@@ -549,12 +580,33 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 	s.selector.IncrementConnections(endpoint)
 	defer s.selector.DecrementConnections(endpoint)
 
+	// add our custom headers before copying upstream headers
+	// this prevents upstream from overriding our routing metadata
+	w.Header().Set("X-Olla-Endpoint", endpoint.Name)
+	w.Header().Set("X-Olla-Backend-Type", endpoint.Type)
+	w.Header().Set("X-Olla-Request-ID", stats.RequestID)
+
+	// add model info if available from context
+	if model, ok := ctx.Value("model").(string); ok && model != "" {
+		w.Header().Set("X-Olla-Model", model)
+	}
+
+	// add standard compatibility header
+	w.Header().Set("X-Served-By", fmt.Sprintf("olla/%s", endpoint.Name))
+
 	// Copy response headers with zero allocations where possible
 	for k, vals := range resp.Header {
 		for _, v := range vals {
 			w.Header().Add(k, v)
 		}
 	}
+
+	// We'll set response time header via trailer if client supports it
+	// otherwise it will be missing (can't modify headers after WriteHeader)
+	if _, ok := w.(http.Flusher); ok {
+		w.Header().Set("Trailer", "X-Olla-Response-Time")
+	}
+
 	w.WriteHeader(resp.StatusCode)
 
 	rlog.Debug("starting response stream")
@@ -567,7 +619,7 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 	if err != nil {
 		sinceStart := time.Since(stats.StartTime)
 		s.updateStats(false, sinceStart)
-		s.recordFailure(endpoint, sinceStart, int64(sumBytes))
+		s.recordFailure(ctx, endpoint, sinceStart, int64(sumBytes))
 		rlog.Error("streaming failed", "error", err)
 		stats.TotalBytes = sumBytes
 		return domain.NewProxyError(stats.RequestID, reqCtx.targetURL, r.Method, r.URL.Path, resp.StatusCode, sinceStart, sumBytes,
@@ -580,15 +632,38 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 	stats.Latency = stats.EndTime.Sub(stats.StartTime).Milliseconds()
 	stats.FirstDataMs = streamStart.Sub(stats.StartTime).Milliseconds()
 
+	// Send response time as trailer if supported
+	if flusher, ok := w.(http.Flusher); ok {
+		// Trailers can only be sent if we declared them earlier
+		w.Header().Set("X-Olla-Response-Time", fmt.Sprintf("%dms", stats.Latency))
+		flusher.Flush()
+	}
+
 	s.updateStats(true, time.Since(stats.StartTime))
 
 	// Record successful request in stats collector
-	s.statsCollector.RecordRequest(
-		endpoint,
-		"success",
-		time.Duration(stats.Latency)*time.Millisecond,
-		int64(stats.TotalBytes),
-	)
+	// Extract model name from context if available
+	modelName := ""
+	if model, ok := ctx.Value("model").(string); ok {
+		modelName = model
+	}
+
+	if modelName != "" {
+		s.statsCollector.RecordModelRequest(
+			modelName,
+			endpoint,
+			"success",
+			time.Duration(stats.Latency)*time.Millisecond,
+			int64(stats.TotalBytes),
+		)
+	} else {
+		s.statsCollector.RecordRequest(
+			endpoint,
+			"success",
+			time.Duration(stats.Latency)*time.Millisecond,
+			int64(stats.TotalBytes),
+		)
+	}
 
 	rlog.Debug("proxy request completed",
 		"latency_ms", stats.Latency,

@@ -8,6 +8,7 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
+	Filename      string              `yaml:"-"`
 	Logging       LoggingConfig       `yaml:"logging"`
 	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
 	Proxy         ProxyConfig         `yaml:"proxy"`
@@ -120,9 +121,11 @@ type ModelRegistryConfig struct {
 
 // UnificationConfig holds model unification configuration
 type UnificationConfig struct {
-	CustomRules []UnificationRuleConfig `yaml:"custom_rules"`
-	CacheTTL    time.Duration           `yaml:"cache_ttl"`
-	Enabled     bool                    `yaml:"enabled"`
+	CustomRules     []UnificationRuleConfig `yaml:"custom_rules"`
+	CacheTTL        time.Duration           `yaml:"cache_ttl"`
+	Enabled         bool                    `yaml:"enabled"`
+	StaleThreshold  time.Duration           `yaml:"stale_threshold"`
+	CleanupInterval time.Duration           `yaml:"cleanup_interval"`
 }
 
 // UnificationRuleConfig defines custom unification rules

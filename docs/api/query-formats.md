@@ -112,6 +112,29 @@ Filter by model loading state:
 - `/olla/models?available=true` - Only currently loaded/available models
 - `/olla/models?available=false` - Only not-loaded models
 
+### Include Unavailable Filter
+Control whether to show models from unhealthy endpoints:
+- `/olla/models` - Default: only shows models from healthy endpoints
+- `/olla/models?include_unavailable=true` - Shows all models with availability status
+
+When `include_unavailable=true` is used with `format=unified`, the response includes availability information:
+```json
+{
+  "olla": {
+    "availability": [
+      {
+        "endpoint": "ollama-local",
+        "state": "loaded"      // Model loaded on healthy endpoint
+      },
+      {
+        "endpoint": "ollama-backup", 
+        "state": "unhealthy"   // Endpoint is down
+      }
+    ]
+  }
+}
+```
+
 ### Family Filter
 Filter by model family:
 - `/olla/models?family=llama` - Only Llama family models

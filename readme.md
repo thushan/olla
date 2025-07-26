@@ -67,15 +67,21 @@ Single CLI application and config file is all you need to go Olla!
 
 ### Docker (Recommended)
 
-Olla comes with a pre-configured docker configuration which proxies your local Ollama or LM Studio instance.
+Olla comes with pre-configured Docker images for quick deployment:
 
 ```bash
-# Pull and run Olla in an interactive terminal
-docker run -d -it \
+# Run with default configuration
+docker run -d \
   --name olla \
   -p 40114:40114 \
-  -e OLLA_SERVER_HOST=0.0.0.0 \
-  -e OLLA_CONFIG_FILE=config/docker.yaml \
+  ghcr.io/thushan/olla:latest
+
+# Or with custom configuration
+docker run -d \
+  --name olla \
+  -p 40114:40114 \
+  -v "$(pwd)/config/config.local.yaml:/config/config.yaml:ro" \
+  -e OLLA_CONFIG_FILE=/config/config.yaml \
   ghcr.io/thushan/olla:latest
 ```
 
@@ -87,7 +93,19 @@ curl http://localhost:40114/internal/health
 
 ### Docker Compose
 
-Create a `docker-compose.yml`:
+A `docker-compose.yaml` is included in the repository:
+
+```bash
+# Run with the included docker-compose.yaml
+docker-compose up -d
+
+# Or create your own override for local development
+cp docker-compose.yaml docker-compose.local.yaml
+vim docker-compose.local.yaml
+docker-compose -f docker-compose.local.yaml up
+```
+
+The included `docker-compose.yaml` mounts your local config for easy customization:
 
 ```yaml
 services:
@@ -95,22 +113,12 @@ services:
     image: ghcr.io/thushan/olla:latest
     ports:
       - "40114:40114"
-    environment:
-      - OLLA_SERVER_HOST=0.0.0.0
-      - OLLA_LOGGING_LEVEL=info
-      - OLLA_CONFIG_FILE=config/docker.yaml
     volumes:
-      - ./config:/app/config
-      - ./logs:/app/logs
-    restart: unless-stopped
+      # Mount your local config (optional)
+      - ./config/config.local.yaml:/config/config.yaml:ro
+    environment:
+      - OLLA_CONFIG_FILE=/config/config.yaml
 ```
-
-Then run:
-```bash
-docker-compose up -d
-```
-
-You'll notice the pretty TUI isn't there and that's because it's running in production mode.
 
 ### Local Binary
 
@@ -125,8 +133,8 @@ It will download the latest version & extract it to its own folder for you.
 If you prefer running Olla directly on your machine, download a pre-built binary.
 
 1. Download the latest release from [Releases](https://github.com/thushan/olla/releases)
-2. Extract the archive and navigate to the directory 
-3. Verify the configuration in `config/config.yaml` and run:
+2. Extract the archive
+3. Navigate to the directory and run:
 
 ```bash
 ./olla
@@ -145,15 +153,17 @@ go install github.com/thushan/olla@latest
 git clone https://github.com/thushan/olla.git
 cd olla
 
-# Install dependencies
+# Install dependencies and build
 make deps
-
-# Run with default settings (connects to localhost:11434)
-make run
-
-# Or build and run
 make build
+
+# Run with default config
 ./bin/olla
+
+# Or run with your local config
+cp config/config.local.yaml.example config/config.local.yaml
+vim config/config.local.yaml
+OLLA_CONFIG_FILE=config/config.local.yaml ./bin/olla
 ```
 
 ## 📝 Configuration
@@ -162,7 +172,7 @@ Olla uses a layered configuration approach: defaults → YAML config → environ
 
 ### Basic Configuration
 
-Create `config/config.yaml`:
+The main configuration file is `config/config.yaml`. For local development, create a `config/config.local.yaml` (which is git-ignored):
 
 ```yaml
 server:
@@ -347,8 +357,6 @@ export OLLA_SERVER_MAX_HEADER_SIZE="1MB"
 # Logging
 export OLLA_LOGGING_LEVEL="info"  # debug, info, warn, error
 export OLLA_LOGGING_FORMAT="json" # json or text
-export OLLA_PRETTY_LOGS="true"    # pretty terminal logs, turn off in prod (default: true)
-export OLLA_FILE_OUTPUT="false"   # write logs to disk, if you're not monitoring stdout/stderror (default: false)
 ```
 
 ## ⚖️ Load Balancing Strategies
@@ -382,7 +390,7 @@ Routes to the endpoint with fewest active requests. Ideal for:
 - **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
 
 ```yaml
-load_balancer: "least_connections"
+load_balancer: "least_conn"
 ```
 
 ## 🔗 Usage
@@ -486,7 +494,38 @@ curl http://localhost:40114/internal/process | jq
 
 ## 🛠️ Development
 
-### Building
+### Local Development Setup
+
+#### Configuration
+
+Olla uses a clean configuration structure that separates shipped configs from local development:
+
+```
+config/
+├── config.yaml              # Main configuration (shipped)
+├── config.local.yaml        # Your local overrides (git-ignored)
+├── models.yaml             # Model mappings
+├── docker.yaml             # Docker-specific config
+└── profiles/               # Platform profiles
+    ├── ollama.yaml
+    ├── lmstudio.yaml
+    └── openai.yaml
+```
+
+**Setting up local development:**
+
+```bash
+# Copy the example local config
+cp config/config.local.yaml.example config/config.local.yaml
+
+# Edit with your endpoints
+vim config/config.local.yaml
+
+# Run with your local config
+OLLA_CONFIG_FILE=config/config.local.yaml go run main.go
+```
+
+#### Building
 
 ```bash
 # Install dependencies
@@ -498,8 +537,15 @@ make test
 # Run with race detection
 make test-race
 
-# Build optimised binary
+# Build optimised binary to ./bin/
 make build
+
+# Build just the binary to ./build/ (fast, for testing)
+make build-local
+./build/olla --version
+
+# Test with your local config
+OLLA_CONFIG_FILE=config/config.local.yaml ./build/olla
 
 # Run with debug logging
 make run-debug
@@ -508,9 +554,81 @@ make run-debug
 make help
 ```
 
+### Release Building
+
+#### Local Release Testing
+
+```bash
+# Build full release (binaries + archives) to ./dist/
+make build-snapshot
+
+# Check goreleaser configuration
+make goreleaser-check
+
+# What gets packaged:
+# - config/*.yaml (except *.local.yaml)
+# - config/profiles/*.yaml
+# - LICENSE, README.md
+# - Empty directories: logs/, tmp/, data/
+```
+
+#### Docker Testing
+
+```bash
+# Build Docker images locally
+make docker-build
+
+# Run Docker image with your local config
+make docker-run
+
+# Or use docker-compose
+docker-compose up
+
+# Create a local override (git-ignored)
+cp docker-compose.yaml docker-compose.local.yaml
+vim docker-compose.local.yaml
+docker-compose -f docker-compose.local.yaml up
+```
+
+#### Clean Build Directories
+
+```bash
+# Remove all build artifacts
+make clean
+# Removes: bin/, build/, dist/, logs/, coverage files
+```
+
+### Configuration Management
+
+**Important:** Local configuration files (`*.local.yaml`) are git-ignored and never shipped in releases. This prevents accidentally publishing your personal endpoints or development settings.
+
+```yaml
+# config/config.local.yaml (example)
+server:
+  host: "localhost"
+  port: 40114
+  
+logging:
+  level: "debug"
+  format: "pretty"
+
+discovery:
+  static:
+    endpoints:
+      # Your local development endpoints
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100
+```
+
 ### Project Structure
 
 ```
+├── config/                 # Configuration files
+│   ├── config.yaml        # Main configuration (shipped)
+│   ├── *.local.yaml       # Local overrides (git-ignored)
+│   └── profiles/          # Platform profiles
 ├── internal/               # Private application code (Go convention)
 │   ├── adapter/            # External integrations and infrastructure
 │   │   ├── balancer/       # Load balancing strategies (priority, round-robin, least-conn)

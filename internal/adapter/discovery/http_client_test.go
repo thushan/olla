@@ -224,7 +224,7 @@ func TestDiscoverModels(t *testing.T) {
 			defer server.Close()
 
 			endpoint := createTestEndpoint(server.URL, tt.endpointType)
-			client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 			ctx := context.Background()
 			models, err := client.DiscoverModels(ctx, endpoint)
@@ -453,7 +453,7 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 			endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
 			t.Logf("Created endpoint with URL: %s, Type: %s", endpoint.URLString, endpoint.Type)
 
-			client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 			ctx := context.Background()
 			models, err := client.DiscoverModels(ctx, endpoint)
@@ -496,7 +496,7 @@ func TestDiscoverModelsContextCancellation(t *testing.T) {
 	defer server.Close()
 
 	endpoint := createTestEndpoint(server.URL, domain.ProfileOllama)
-	client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -548,7 +548,7 @@ func TestHealthCheck(t *testing.T) {
 			defer server.Close()
 
 			endpoint := createTestEndpoint(server.URL, domain.ProfileOllama)
-			client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 			err := client.HealthCheck(context.Background(), endpoint)
 
@@ -563,7 +563,7 @@ func TestHealthCheck(t *testing.T) {
 }
 
 func TestGetMetrics(t *testing.T) {
-	client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 	// Make sure everything is zero before starting
 	metrics := client.GetMetrics()
@@ -614,7 +614,7 @@ func TestMaxResponseSizeLimit(t *testing.T) {
 	defer server.Close()
 
 	endpoint := createTestEndpoint(server.URL, domain.ProfileOllama)
-	client := NewHTTPModelDiscoveryClientWithDefaults(profile.NewFactory(), createTestLogger())
+	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 	_, err := client.DiscoverModels(context.Background(), endpoint)
 	if err == nil {
@@ -655,4 +655,16 @@ func createTestLogger() logger.StyledLogger {
 	}))
 
 	return logger.NewPlainStyledLogger(slogLogger)
+}
+
+// createTestProfileFactory creates a profile factory for testing with proper error handling
+func createTestProfileFactory(t *testing.T) *profile.Factory {
+	t.Helper()
+
+	factory, err := profile.NewFactoryWithDefaults()
+	if err != nil {
+		t.Fatalf("Failed to create profile factory: %v", err)
+	}
+
+	return factory
 }

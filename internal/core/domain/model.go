@@ -50,6 +50,7 @@ type ModelRegistry interface {
 	GetStats(ctx context.Context) (RegistryStats, error)
 	ModelsToString(models []*ModelInfo) string
 	ModelsToStrings(models []*ModelInfo) []string
+	GetModelsByCapability(ctx context.Context, capability string) ([]*UnifiedModel, error)
 }
 
 type RegistryStats struct {

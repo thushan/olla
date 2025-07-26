@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/thushan/olla/internal/adapter/stats"
 	"github.com/thushan/olla/internal/core/ports"
@@ -51,9 +52,9 @@ func (s *StatsService) Dependencies() []string {
 }
 
 // GetCollector returns the underlying stats collector
-func (s *StatsService) GetCollector() ports.StatsCollector {
+func (s *StatsService) GetCollector() (ports.StatsCollector, error) {
 	if s.collector == nil {
-		panic("stats collector not initialised")
+		return nil, fmt.Errorf("stats collector not initialised")
 	}
-	return s.collector
+	return s.collector, nil
 }

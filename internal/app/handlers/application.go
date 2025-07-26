@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -85,14 +86,29 @@ func NewApplication(
 	repository domain.EndpointRepository,
 	securityChain *ports.SecurityChain,
 	logger logger.StyledLogger,
-) *Application {
+) (*Application, error) {
 	// Create inspector chain
-	profileFactory := profile.NewFactory()
+	profileFactory, err := profile.NewFactoryWithDefaults()
+	if err != nil {
+		// Try to create factory with empty profile dir (uses built-in profiles)
+		profileFactory, err = profile.NewFactory("")
+		if err != nil {
+			logger.Error("Failed to create profile factory", "error", err)
+			return nil, fmt.Errorf("cannot initialize profile factory: %w", err)
+		}
+		logger.Warn("Failed to load profile configurations, using built-in profiles", "error", err)
+	}
 	inspectorFactory := inspector.NewFactory(profileFactory, logger)
 	inspectorChain := inspectorFactory.CreateChain()
 	// Add path inspector
 	pathInspector := inspectorFactory.CreatePathInspector()
 	inspectorChain.AddInspector(pathInspector)
+	// Add body inspector for model extraction
+	bodyInspector, err := inspectorFactory.CreateBodyInspector()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create body inspector: %w", err)
+	}
+	inspectorChain.AddInspector(bodyInspector)
 
 	// Create security adapters
 	securityAdapters := &SecurityAdapters{
@@ -125,7 +141,7 @@ func NewApplication(
 		server:           server,
 		errCh:            make(chan error, 1),
 		StartTime:        time.Now(),
-	}
+	}, nil
 }
 
 // GetRouteRegistry returns the route registry for wiring up routes

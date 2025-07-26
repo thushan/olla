@@ -10,7 +10,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ModelUnificationConfig represents the model unification configuration
+// ModelUnificationConfig represents the model unification configuration.
+// This reads from models.yaml and handles model name normalization across
+// different platforms (e.g., "llama-3.1-8b" vs "meta-llama-3.1-8b-instruct").
+// Not to be confused with profile configs which define platform behavior.
 type ModelUnificationConfig struct {
 	ModelExtraction struct {
 		ArchitectureMappings map[string]string `yaml:"architecture_mappings"`

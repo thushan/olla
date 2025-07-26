@@ -113,18 +113,21 @@ func Load() (*Config, error) {
 	config := DefaultConfig()
 
 	// Simple config file loading - check a few standard locations
-	configPaths := []string{"config/config.yaml", "config.yaml", "default.yaml"}
+	configPaths := []string{"config/config.local.yaml", "config/config.yaml", "config.yaml", "default.yaml"}
 	if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
 		configPaths = []string{configFile}
 	}
 
 	var configLoaded bool
+	var configFilename string
+
 	for _, path := range configPaths {
 		if data, err := os.ReadFile(path); err == nil {
 			if err := yaml.Unmarshal(data, config); err != nil {
 				return nil, fmt.Errorf("failed to parse %s: %w", path, err)
 			}
 			configLoaded = true
+			configFilename = path
 			// Cache any settings so we don't reparse etc
 			ApplyConfigCaches(config)
 			break
@@ -137,6 +140,7 @@ func Load() (*Config, error) {
 
 	// Apply essential environment overrides only
 	applyEnvOverrides(config)
+	config.Filename = configFilename
 	return config, nil
 }
 

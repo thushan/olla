@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -57,25 +58,51 @@ func (s *HTTPService) Start(ctx context.Context) error {
 
 	// Resolve service dependencies now that all services are started
 	if s.statsService != nil {
-		s.statsCollector = s.statsService.GetCollector()
+		collector, err := s.statsService.GetCollector()
+		if err != nil {
+			return fmt.Errorf("failed to get stats collector: %w", err)
+		}
+		s.statsCollector = collector
 	}
 	if s.proxySvc != nil {
-		s.proxyService = s.proxySvc.GetProxyService()
+		proxyService, err := s.proxySvc.GetProxyService()
+		if err != nil {
+			return fmt.Errorf("failed to get proxy service: %w", err)
+		}
+		s.proxyService = proxyService
 	}
 	if s.discoverySvc != nil {
-		s.modelRegistry = s.discoverySvc.GetRegistry()
-		s.discoveryService = s.discoverySvc.GetDiscoveryService()
-		s.repository = s.discoverySvc.GetEndpointRepository()
+		registry, err := s.discoverySvc.GetRegistry()
+		if err != nil {
+			return fmt.Errorf("failed to get model registry: %w", err)
+		}
+		s.modelRegistry = registry
+
+		discoveryService, err := s.discoverySvc.GetDiscoveryService()
+		if err != nil {
+			return fmt.Errorf("failed to get discovery service: %w", err)
+		}
+		s.discoveryService = discoveryService
+
+		repository, err := s.discoverySvc.GetEndpointRepository()
+		if err != nil {
+			return fmt.Errorf("failed to get endpoint repository: %w", err)
+		}
+		s.repository = repository
 	}
 	if s.securitySvc != nil {
-		s.securityChain = s.securitySvc.GetSecurityChain()
+		chain, err := s.securitySvc.GetSecurityChain()
+		if err != nil {
+			return fmt.Errorf("failed to get security chain: %w", err)
+		}
+		s.securityChain = chain
 	}
 
 	readTimeout := s.config.ReadTimeout
 	writeTimeout := s.config.WriteTimeout
 	idleTimeout := s.config.IdleTimeout
 
-	s.application = handlers.NewApplication(
+	app, err := handlers.NewApplication(
 		ctx,
 		s.fullConfig,
 		s.proxyService,
@@ -86,6 +113,10 @@ func (s *HTTPService) Start(ctx context.Context) error {
 		s.securityChain,
 		s.logger,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to create application handler: %w", err)
+	}
+	s.application = app
 
 	s.application.RegisterRoutes()
 

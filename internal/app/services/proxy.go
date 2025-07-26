@@ -51,11 +51,24 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 
 	// Get dependencies from services
 	if s.statsService != nil {
-		s.statsCollector = s.statsService.GetCollector()
+		collector, err := s.statsService.GetCollector()
+		if err != nil {
+			return fmt.Errorf("failed to get stats collector: %w", err)
+		}
+		s.statsCollector = collector
 	}
 	if s.discoverySvc != nil {
-		s.endpointRepo = s.discoverySvc.GetEndpointRepository()
-		s.discoveryService = s.discoverySvc.GetDiscoveryService()
+		repo, err := s.discoverySvc.GetEndpointRepository()
+		if err != nil {
+			return fmt.Errorf("failed to get endpoint repository: %w", err)
+		}
+		s.endpointRepo = repo
+
+		discService, err := s.discoverySvc.GetDiscoveryService()
+		if err != nil {
+			return fmt.Errorf("failed to get discovery service: %w", err)
+		}
+		s.discoveryService = discService
 	}
 
 	// Create load balancer
@@ -121,19 +134,19 @@ func (s *ProxyServiceWrapper) createProxyConfiguration() *proxy.Configuration {
 }
 
 // GetProxyService returns the underlying proxy service
-func (s *ProxyServiceWrapper) GetProxyService() ports.ProxyService {
+func (s *ProxyServiceWrapper) GetProxyService() (ports.ProxyService, error) {
 	if s.proxyService == nil {
-		panic("proxy service not initialised")
+		return nil, fmt.Errorf("proxy service not initialised")
 	}
-	return s.proxyService
+	return s.proxyService, nil
 }
 
 // GetLoadBalancer returns the load balancer
-func (s *ProxyServiceWrapper) GetLoadBalancer() domain.EndpointSelector {
+func (s *ProxyServiceWrapper) GetLoadBalancer() (domain.EndpointSelector, error) {
 	if s.loadBalancer == nil {
-		panic("load balancer not initialised")
+		return nil, fmt.Errorf("load balancer not initialised")
 	}
-	return s.loadBalancer
+	return s.loadBalancer, nil
 }
 
 // endpointRepositoryAdapter provides interface adaptation between the domain repository

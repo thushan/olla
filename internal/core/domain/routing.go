@@ -6,11 +6,31 @@ const (
 	InspectionMetaPathSupport = "path_support"
 )
 
+// RequestType identifies what kind of LLM request this is
+type RequestType int
+
+const (
+	RequestTypeUnknown RequestType = iota
+	RequestTypeChat
+	RequestTypeCompletion
+	RequestTypeEmbedding
+	RequestTypeImage
+)
+
 type RequestProfile struct {
 	InspectionMeta *xsync.Map[string, interface{}]
-	Path           string
-	ModelName      string
-	SupportedBy    []string
+
+	// Rich request metadata for intelligent routing
+	ModelCapabilities    *ModelCapabilities    // What the request needs
+	ResourceRequirements *ResourceRequirements // Resources needed
+	Path                 string
+	ModelName            string
+	SupportedBy          []string
+
+	RequestType          RequestType // Chat, completion, embedding, etc.
+	EstimatedTokens      int         // For capacity planning
+	RequiresFunctionCall bool
+	RequiresVision       bool
 }
 
 func NewRequestProfile(path string) *RequestProfile {

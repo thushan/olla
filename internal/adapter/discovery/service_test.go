@@ -535,6 +535,11 @@ func (r *mockModelRegistry) ModelsToString(models []*domain.ModelInfo) string {
 func (r *mockModelRegistry) GetEndpointModelMap(ctx context.Context) (map[string]*domain.EndpointModels, error) {
 	return nil, nil
 }
+
+func (r *mockModelRegistry) GetModelsByCapability(ctx context.Context, capability string) ([]*domain.UnifiedModel, error) {
+	// Mock doesn't support capabilities
+	return []*domain.UnifiedModel{}, nil
+}
 func createMockEndpoint(urlString, name string) *domain.Endpoint {
 	return &domain.Endpoint{
 		Name:      name,

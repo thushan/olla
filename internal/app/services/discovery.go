@@ -56,7 +56,11 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 	s.logger.Info("Initialising discovery service")
 
 	if s.statsService != nil {
-		s.statsCollector = s.statsService.GetCollector()
+		collector, err := s.statsService.GetCollector()
+		if err != nil {
+			return fmt.Errorf("failed to get stats collector: %w", err)
+		}
+		s.statsCollector = collector
 	}
 
 	// Create model registry using factory with configuration
@@ -65,8 +69,9 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		s.registry = registry.NewMemoryModelRegistry(s.logger)
 	} else {
 		registryConfig := registry.RegistryConfig{
-			Type:          s.registryConfig.Type,
-			EnableUnifier: s.registryConfig.EnableUnifier,
+			Type:            s.registryConfig.Type,
+			EnableUnifier:   s.registryConfig.EnableUnifier,
+			UnificationConf: &s.registryConfig.Unification,
 		}
 		var err error
 		s.registry, err = registry.NewModelRegistry(registryConfig, s.logger)
@@ -113,7 +118,10 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		httpClient := &http.Client{
 			Timeout: s.config.ModelDiscovery.Timeout,
 		}
-		profileFactory := profile.NewFactory()
+		profileFactory, err := profile.NewFactoryWithDefaults()
+		if err != nil {
+			return fmt.Errorf("failed to create profile factory: %w", err)
+		}
 		client := discovery.NewHTTPModelDiscoveryClient(profileFactory, s.logger, httpClient)
 		discoveryConfig := discovery.DiscoveryConfig{
 			Interval:          s.config.ModelDiscovery.Interval,
@@ -169,32 +177,35 @@ func (s *DiscoveryService) Dependencies() []string {
 }
 
 // GetRegistry returns the model registry
-func (s *DiscoveryService) GetRegistry() domain.ModelRegistry {
+func (s *DiscoveryService) GetRegistry() (domain.ModelRegistry, error) {
 	if s.registry == nil {
-		panic("model registry not initialised")
+		return nil, fmt.Errorf("model registry not initialised")
 	}
-	return s.registry
+	return s.registry, nil
 }
 
 // GetEndpointRepository returns the endpoint repository
-func (s *DiscoveryService) GetEndpointRepository() domain.EndpointRepository {
+func (s *DiscoveryService) GetEndpointRepository() (domain.EndpointRepository, error) {
 	if s.endpointRepo == nil {
-		panic("endpoint repository not initialised")
+		return nil, fmt.Errorf("endpoint repository not initialised")
 	}
-	return s.endpointRepo
+	return s.endpointRepo, nil
 }
 
 // GetHealthChecker returns the health checker
-func (s *DiscoveryService) GetHealthChecker() *health.HTTPHealthChecker {
+func (s *DiscoveryService) GetHealthChecker() (*health.HTTPHealthChecker, error) {
 	if s.healthChecker == nil {
-		panic("health checker not initialised")
+		return nil, fmt.Errorf("health checker not initialised")
 	}
-	return s.healthChecker
+	return s.healthChecker, nil
 }
 
 // GetDiscoveryService returns itself as a ports.DiscoveryService
-func (s *DiscoveryService) GetDiscoveryService() ports.DiscoveryService {
-	return s
+func (s *DiscoveryService) GetDiscoveryService() (ports.DiscoveryService, error) {
+	if s.registry == nil || s.endpointRepo == nil {
+		return nil, fmt.Errorf("discovery service not fully initialised")
+	}
+	return s, nil
 }
 
 // GetHealthyEndpoints implements ports.DiscoveryService
