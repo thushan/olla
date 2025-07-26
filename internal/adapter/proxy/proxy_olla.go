@@ -580,12 +580,33 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 	s.selector.IncrementConnections(endpoint)
 	defer s.selector.DecrementConnections(endpoint)
 
+	// add our custom headers before copying upstream headers
+	// this prevents upstream from overriding our routing metadata
+	w.Header().Set("X-Olla-Endpoint", endpoint.Name)
+	w.Header().Set("X-Olla-Backend-Type", endpoint.Type)
+	w.Header().Set("X-Olla-Request-ID", stats.RequestID)
+
+	// add model info if available from context
+	if model, ok := ctx.Value("model").(string); ok && model != "" {
+		w.Header().Set("X-Olla-Model", model)
+	}
+
+	// add standard compatibility header
+	w.Header().Set("X-Served-By", fmt.Sprintf("olla/%s", endpoint.Name))
+
 	// Copy response headers with zero allocations where possible
 	for k, vals := range resp.Header {
 		for _, v := range vals {
 			w.Header().Add(k, v)
 		}
 	}
+
+	// We'll set response time header via trailer if client supports it
+	// otherwise it will be missing (can't modify headers after WriteHeader)
+	if _, ok := w.(http.Flusher); ok {
+		w.Header().Set("Trailer", "X-Olla-Response-Time")
+	}
+
 	w.WriteHeader(resp.StatusCode)
 
 	rlog.Debug("starting response stream")
@@ -610,6 +631,13 @@ func (s *OllaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.R
 	stats.EndTime = time.Now()
 	stats.Latency = stats.EndTime.Sub(stats.StartTime).Milliseconds()
 	stats.FirstDataMs = streamStart.Sub(stats.StartTime).Milliseconds()
+
+	// Send response time as trailer if supported
+	if flusher, ok := w.(http.Flusher); ok {
+		// Trailers can only be sent if we declared them earlier
+		w.Header().Set("X-Olla-Response-Time", fmt.Sprintf("%dms", stats.Latency))
+		flusher.Flush()
+	}
 
 	s.updateStats(true, time.Since(stats.StartTime))
 

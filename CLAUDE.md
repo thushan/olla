@@ -153,6 +153,16 @@ Primary configuration is in `config.yaml`. Key sections:
 - Health endpoint: `GET /internal/health`
 - Status endpoint: `GET /internal/status`
 
+## Response Headers
+
+Olla adds the following headers to all proxied responses:
+
+- `X-Olla-Endpoint`: The name of the endpoint that handled the request (e.g., "ollama-local")
+- `X-Olla-Model`: The actual model used (only present if a specific model was requested)
+- `X-Served-By`: Standard compatibility header in format "olla/{endpoint-name}"
+
+These headers help with debugging routing decisions and are set before copying upstream headers to prevent override.
+
 ## Environment Variables
 
 Key environment variables override config values:

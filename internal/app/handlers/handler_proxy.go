@@ -298,6 +298,7 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 	capableModels := a.findCapableModels(requiredCapabilities, logger)
 	if len(capableModels) == 0 {
 		logger.Warn("No models found with required capabilities",
+			"model", profile.ModelName,
 			"capabilities", requiredCapabilities)
 		return endpoints
 	}

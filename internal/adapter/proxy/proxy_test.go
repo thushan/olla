@@ -143,9 +143,11 @@ func createTestLogger() logger.StyledLogger {
 func createTestEndpoint(name, urlStr string, status domain.EndpointStatus) *domain.Endpoint {
 	testURL, _ := url.Parse(urlStr)
 	return &domain.Endpoint{
-		Name:   name,
-		URL:    testURL,
-		Status: status,
+		Name:      name,
+		URL:       testURL,
+		URLString: urlStr,
+		Status:    status,
+		Type:      domain.ProfileOllama, // Default to ollama for tests
 	}
 }
 

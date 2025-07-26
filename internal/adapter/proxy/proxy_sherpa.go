@@ -289,12 +289,33 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	s.selector.IncrementConnections(endpoint)
 	defer s.selector.DecrementConnections(endpoint)
 
+	// Add our custom headers before copying upstream headers
+	// this way upstream can't override our routing info
+	w.Header().Set("X-Olla-Endpoint", endpoint.Name)
+	w.Header().Set("X-Olla-Backend-Type", endpoint.Type)
+	w.Header().Set("X-Olla-Request-ID", stats.RequestID)
+
+	// Add model info if available from context
+	if model, ok := ctx.Value("model").(string); ok && model != "" {
+		w.Header().Set("X-Olla-Model", model)
+	}
+
+	// Add standard compatibility header
+	w.Header().Set("X-Served-By", fmt.Sprintf("olla/%s", endpoint.Name))
+
 	// Copy response headers
 	for k, vals := range resp.Header {
 		for _, v := range vals {
 			w.Header().Add(k, v)
 		}
 	}
+
+	// We'll set response time header via trailer if client supports it
+	// otherwise it will be missing (can't modify headers after WriteHeader)
+	if _, ok := w.(http.Flusher); ok {
+		w.Header().Set("Trailer", "X-Olla-Response-Time")
+	}
+
 	w.WriteHeader(resp.StatusCode)
 
 	rlog.Debug("starting response stream")
@@ -318,6 +339,13 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 	stats.EndTime = time.Now()
 	stats.Latency = stats.EndTime.Sub(stats.StartTime).Milliseconds()
 	stats.FirstDataMs = streamStart.Sub(stats.StartTime).Milliseconds()
+
+	// Send response time as trailer if supported
+	if flusher, ok := w.(http.Flusher); ok {
+		// Trailers can only be sent if we declared them earlier
+		w.Header().Set("X-Olla-Response-Time", fmt.Sprintf("%dms", stats.Latency))
+		flusher.Flush()
+	}
 
 	atomic.AddInt64(&s.stats.successfulRequests, 1)
 	atomic.AddInt64(&s.stats.totalLatency, stats.Latency)

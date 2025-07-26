@@ -2,9 +2,18 @@
 
 # Olla Model Routing Test Script
 # Tests model routing with different models and capabilities
+# Now displays response headers showing which endpoint handled each request
 ####
 # Usage: ./test-model-routing.sh [additional_model1] [additional_model2] ...
 # Configuration: Set TARGET_URL environment variable if needed
+# 
+# Response headers displayed:
+#   X-Olla-Endpoint: The endpoint that handled the request
+#   X-Olla-Model: The model name if specified in the request
+#   X-Olla-Backend-Type: The backend type (ollama, openai, lmstudio)
+#   X-Olla-Request-ID: Unique request identifier for correlation
+#   X-Olla-Response-Time: Total response time including streaming
+#   X-Served-By: Server identification header
 
 set -euo pipefail
 
@@ -43,6 +52,9 @@ TOTAL_TESTS=0
 SUCCESSFUL_ROUTES=0
 FAILED_ROUTES=0
 
+# Track endpoint usage
+declare -A ENDPOINT_USAGE
+
 function banner() {
     echo -e "${PURPLE}╔═════════════════════════════════════════════════════════╗${RESET}"
     echo -e "${PURPLE}║${RESET}  ${CYAN}Olla Model Routing Test${RESET}                                ${PURPLE}║${RESET}"
@@ -61,6 +73,15 @@ usage() {
     echo -e "  This script automatically discovers available models from Olla"
     echo -e "  and tests routing for each model with appropriate capabilities."
     echo -e "  You can also specify additional models to test as arguments."
+    echo
+    echo -e "${YELLOW}Response Headers:${RESET}"
+    echo -e "  The script now displays routing information from response headers:"
+    echo -e "  • X-Olla-Endpoint - Which backend endpoint handled the request"
+    echo -e "  • X-Olla-Model - The model used (if specified in request)"
+    echo -e "  • X-Olla-Backend-Type - Backend platform (ollama, openai, lmstudio)"
+    echo -e "  • X-Olla-Request-ID - Unique request ID for correlation"
+    echo -e "  • X-Olla-Response-Time - Total time including streaming"
+    echo -e "  • X-Served-By - Server identification"
     echo
     echo -e "${YELLOW}Examples:${RESET}"
     echo -e "  $0                               # Test only discovered models"
@@ -125,12 +146,15 @@ test_model_routing() {
     
     # Make the request and capture all details
     local response_file="/tmp/olla_test_response_$$"
+    local headers_file="/tmp/olla_test_headers_$$"
     local http_code
     local response_time
     
-    # Use curl with more detailed output
+    # Use curl with more detailed output and capture headers
+    # Note: --trace-ascii shows trailers which -D doesn't capture
     local curl_output=$(curl -s -w "\n%{http_code}\n%{time_total}" \
         -o "$response_file" \
+        -D "$headers_file" \
         -X POST \
         -H "Content-Type: application/json" \
         -H "User-Agent: OllaRoutingTest/1.0" \
@@ -149,6 +173,23 @@ test_model_routing() {
         rm -f "$response_file"
     fi
     
+    # Parse response headers
+    local olla_endpoint=""
+    local olla_model=""
+    local olla_backend_type=""
+    local olla_request_id=""
+    local olla_response_time=""
+    local served_by=""
+    if [ -f "$headers_file" ]; then
+        olla_endpoint=$(grep -i "^X-Olla-Endpoint:" "$headers_file" | cut -d' ' -f2- | tr -d '\r' || true)
+        olla_model=$(grep -i "^X-Olla-Model:" "$headers_file" | cut -d' ' -f2- | tr -d '\r' || true)
+        olla_backend_type=$(grep -i "^X-Olla-Backend-Type:" "$headers_file" | cut -d' ' -f2- | tr -d '\r' || true)
+        olla_request_id=$(grep -i "^X-Olla-Request-ID:" "$headers_file" | cut -d' ' -f2- | tr -d '\r' || true)
+        olla_response_time=$(grep -i "^X-Olla-Response-Time:" "$headers_file" | cut -d' ' -f2- | tr -d '\r' || true)
+        served_by=$(grep -i "^X-Served-By:" "$headers_file" | cut -d' ' -f2- | tr -d '\r' || true)
+        rm -f "$headers_file"
+    fi
+    
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
     
     # Check response
@@ -156,11 +197,46 @@ test_model_routing() {
         echo -e "  ${GREEN}✓ Success${RESET} (HTTP $http_code) - ${GREY}${response_time}s${RESET}"
         SUCCESSFUL_ROUTES=$((SUCCESSFUL_ROUTES + 1))
         
-        # Try to extract endpoint info from response
-        if echo "$response" | grep -q '"endpoint"'; then
+        # Display routing headers
+        if [ -n "$olla_endpoint" ]; then
+            if [ -n "$olla_backend_type" ]; then
+                echo -e "  ${CYAN}→ Routed to:${RESET} ${WHITE}$olla_endpoint${RESET} (${GREY}$olla_backend_type${RESET})"
+            else
+                echo -e "  ${CYAN}→ Routed to:${RESET} ${WHITE}$olla_endpoint${RESET}"
+            fi
+            
+            # Track endpoint usage for summary
+            ENDPOINT_USAGE["$olla_endpoint"]=$((${ENDPOINT_USAGE["$olla_endpoint"]:-0} + 1))
+        fi
+        if [ -n "$olla_model" ]; then
+            echo -e "  ${CYAN}→ Model:${RESET} ${WHITE}$olla_model${RESET}"
+        fi
+        if [ -n "$olla_request_id" ]; then
+            echo -e "  ${CYAN}→ Request ID:${RESET} ${GREY}$olla_request_id${RESET}"
+        fi
+        if [ -n "$olla_response_time" ]; then
+            echo -e "  ${CYAN}→ Response Time:${RESET} ${YELLOW}$olla_response_time${RESET}"
+        elif [ -n "$response_time" ]; then
+            # Fallback to curl's measured time if header not available
+            echo -e "  ${CYAN}→ Response Time:${RESET} ${YELLOW}${response_time}s${RESET} (client-side)"
+        fi
+        if [ -n "$served_by" ]; then
+            echo -e "  ${CYAN}→ Served by:${RESET} ${GREY}$served_by${RESET}"
+        fi
+        
+        # Debug mode - show all Olla headers if verbose
+        if [ "$VERBOSE" = "true" ] && [ -f "$headers_file" ]; then
+            echo -e "  ${GREY}Headers received:${RESET}"
+            grep -i "^X-Olla-" "$headers_file" | while read -r header; do
+                echo -e "    ${GREY}$header${RESET}"
+            done
+        fi
+        
+        # Fallback to response body if headers not present
+        if [ -z "$olla_endpoint" ] && echo "$response" | grep -q '"endpoint"'; then
             endpoint_info=$(echo "$response" | grep -o '"endpoint":"[^"]*"' | cut -d'"' -f4 || true)
             if [ -n "$endpoint_info" ]; then
-                echo -e "  ${GREY}Routed to: $endpoint_info${RESET}"
+                echo -e "  ${GREY}Routed to (from body): $endpoint_info${RESET}"
             fi
         fi
     else
@@ -272,6 +348,15 @@ show_summary() {
     if [ $TOTAL_TESTS -gt 0 ]; then
         local success_rate=$((SUCCESSFUL_ROUTES * 100 / TOTAL_TESTS))
         echo -e "  Success Rate:       ${YELLOW}${success_rate}%${RESET}"
+        
+        # Show endpoint usage summary
+        if [ ${#ENDPOINT_USAGE[@]} -gt 0 ]; then
+            echo
+            echo -e "${WHITE}Endpoint Usage:${RESET}"
+            for endpoint in "${!ENDPOINT_USAGE[@]}"; do
+                echo -e "  ${CYAN}$endpoint${RESET}: ${WHITE}${ENDPOINT_USAGE[$endpoint]}${RESET} requests"
+            done | sort -t: -k2 -nr
+        fi
         
         echo
         if [ $success_rate -eq 100 ]; then
