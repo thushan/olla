@@ -75,14 +75,15 @@ path_indices:
   completions: 2
   embeddings: 3
 
-# Resource calculation patterns
+# Resource management
 resources:
+  # Model size patterns - LM Studio shows exact sizes
   model_sizes:
     - patterns: ["70b", "72b"]
       min_memory_gb: 42      # Base memory * 0.6 for quantization
       recommended_memory_gb: 52.5   # Base memory * 0.75
       min_gpu_memory_gb: 42
-      estimated_load_time_ms: 1000  # LM Studio keeps models loaded
+      estimated_load_time_ms: 1000  # LM Studio preloads
     - patterns: ["65b"]
       min_memory_gb: 39
       recommended_memory_gb: 48.75
@@ -109,6 +110,7 @@ resources:
       min_gpu_memory_gb: 1.8
       estimated_load_time_ms: 1000
   
+  # Default resource requirements
   defaults:
     min_memory_gb: 4.2      # 7B model * 0.6
     recommended_memory_gb: 5.25  # 7B model * 0.75

@@ -97,7 +97,7 @@ version-built: build
 
 # Clean build artifacts and logs
 clean:
-	@rm -rf bin/ logs/ coverage.out coverage.html
+	@rm -rf bin/ build/ dist/ logs/ coverage.out coverage.html
 
 # Download dependencies
 deps:
@@ -110,11 +110,49 @@ ready-tools: fmt lint align
 ready: test test-race fmt lint align
 	@echo -e "\033[32mCode is ready for commit!\033[0m"
 
-# run goreleaser to build local release
-ready-local:
-	@echo "Building local release with goreleaser..."
-	@goreleaser release --snapshot --clean || echo "goreleaser not installed, skipping..."
-	@echo -e "\033[32mCode is ready to pull!\033[0m"
+# Build binaries only (no archives) to ./build directory
+build-local:
+	@echo "Building local binaries to ./build/..."
+	@goreleaser build --snapshot --clean --single-target --output ./build/
+	@echo "Binary created: ./build/olla$(shell go env GOEXE)"
+
+# Build full snapshot release (with archives) to ./dist directory
+build-snapshot:
+	@echo "Building full snapshot release to ./dist/..."
+	@goreleaser release --snapshot --clean
+	@echo "Release artifacts in ./dist/"
+
+# Deprecated: use build-local or build-snapshot instead
+ready-local: build-snapshot
+
+# Build and test Docker image locally
+docker-build:
+	@echo "Building Docker image locally..."
+	@goreleaser release --snapshot --clean --skip=publish,announce,sign,sbom
+	@echo "Docker images:"
+	@docker images | grep olla | head -5
+
+# Run Docker image with local config
+docker-run:
+	@echo "Running Docker image with local config..."
+	@docker run --rm -it \
+		-p 40114:40114 \
+		-v "$(shell pwd)/config/config.local.yaml:/config/config.yaml:ro" \
+		-e OLLA_CONFIG_FILE=/config/config.yaml \
+		ghcr.io/thushan/olla:latest
+
+# Test full release locally (binaries + docker + archives)
+release-test:
+	@echo "Testing full release locally..."
+	@goreleaser release --snapshot --clean
+	@echo "Release artifacts in ./dist/"
+	@echo "Docker images:"
+	@docker images | grep olla | head -5
+
+# Test goreleaser configuration
+goreleaser-check:
+	@echo "Checking goreleaser configuration..."
+	@goreleaser check
 
 # Format code
 fmt:
@@ -143,6 +181,11 @@ dev:
 ci: deps fmt lint test-race test-cover build
 	@echo "CI pipeline completed successfully!"
 
+# Docker compose up with local config
+docker-compose:
+	@echo "Starting with docker-compose..."
+	@docker-compose up
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -166,7 +209,13 @@ help:
 	@echo "  deps            - Download and tidy dependencies"
 	@echo "  ready     		 - Make code ready for commit (test, fmt, lint, align)"
 	@echo "  ready-tools     - Check code is ready with tools (fmt, lint, align)"
-	@echo "  ready-local     - Builds local release with goreleaser"
+	@echo "  build-local     - Build binary only to ./build/ (fast, for testing)"
+	@echo "  build-snapshot  - Build full release to ./dist/ (archives, checksums, etc)"
+	@echo "  docker-build    - Build Docker images locally"
+	@echo "  docker-run      - Run Docker image with local config"
+	@echo "  docker-compose  - Run with docker-compose"
+	@echo "  release-test    - Test full release (binaries + docker + archives)"
+	@echo "  goreleaser-check- Check goreleaser configuration"
 	@echo "  fmt             - Format code"
 	@echo "  lint            - Run linter (requires golangci-lint)"
 	@echo "  align           - Run alignment checker (requires betteralign)"

@@ -96,8 +96,9 @@ path_indices:
   embeddings: 3
   models: 4
 
-# Resource calculation patterns
+# Resource management
 resources:
+  # Model size patterns with memory requirements
   model_sizes:
     - patterns: ["70b", "72b"]
       min_memory_gb: 40
@@ -135,6 +136,7 @@ resources:
       min_gpu_memory_gb: 2
       estimated_load_time_ms: 10000   # 10 seconds
   
+  # Quantization multipliers
   quantization:
     multipliers:
       q4: 0.5      # 4-bit quantization ~50% memory reduction
@@ -142,6 +144,7 @@ resources:
       q6: 0.75     # 6-bit quantization ~25% memory reduction
       q8: 0.875    # 8-bit quantization ~12.5% memory reduction
   
+  # Default resource requirements
   defaults:
     min_memory_gb: 4
     recommended_memory_gb: 8
