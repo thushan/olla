@@ -69,8 +69,9 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		s.registry = registry.NewMemoryModelRegistry(s.logger)
 	} else {
 		registryConfig := registry.RegistryConfig{
-			Type:          s.registryConfig.Type,
-			EnableUnifier: s.registryConfig.EnableUnifier,
+			Type:            s.registryConfig.Type,
+			EnableUnifier:   s.registryConfig.EnableUnifier,
+			UnificationConf: &s.registryConfig.Unification,
 		}
 		var err error
 		s.registry, err = registry.NewModelRegistry(registryConfig, s.logger)

@@ -8,6 +8,7 @@ import (
 
 	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/thushan/olla/internal/adapter/unifier"
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -24,10 +25,23 @@ type UnifiedMemoryModelRegistry struct {
 }
 
 // NewUnifiedMemoryModelRegistry creates a new registry with unification support
-func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger) *UnifiedMemoryModelRegistry {
-	// Create unifier
+func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig *config.UnificationConfig) *UnifiedMemoryModelRegistry {
+	// Create unifier with config
 	unifierFactory := unifier.NewFactory(logger)
-	modelUnifier, _ := unifierFactory.Create(unifier.DefaultUnifierType)
+	var modelUnifier ports.ModelUnifier
+
+	if unificationConfig != nil && unificationConfig.StaleThreshold > 0 {
+		// Create unifier with custom config
+		unifierConfig := unifier.DefaultConfig()
+		unifierConfig.ModelTTL = unificationConfig.StaleThreshold
+		if unificationConfig.CleanupInterval > 0 {
+			unifierConfig.CleanupInterval = unificationConfig.CleanupInterval
+		}
+		modelUnifier, _ = unifierFactory.CreateWithConfig(unifier.DefaultUnifierType, unifierConfig)
+	} else {
+		// Use default config
+		modelUnifier, _ = unifierFactory.Create(unifier.DefaultUnifierType)
+	}
 
 	return &UnifiedMemoryModelRegistry{
 		MemoryModelRegistry: NewMemoryModelRegistry(logger),

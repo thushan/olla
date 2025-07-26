@@ -66,6 +66,11 @@ discovery:
 
 model_registry:
   type: "memory"
+  enable_unifier: true
+  unification:
+    enabled: true
+    stale_threshold: 24h  # How long to keep models in memory after last seen
+    cleanup_interval: 10m  # How often to check for stale models
 
 logging:
   level: "info"  # debug, info, warn, error

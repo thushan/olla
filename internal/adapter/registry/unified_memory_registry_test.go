@@ -52,7 +52,7 @@ func (m *mockEndpointRepository) Exists(ctx context.Context, endpointURL *url.UR
 }
 
 func createTestUnifiedRegistry() *UnifiedMemoryModelRegistry {
-	return NewUnifiedMemoryModelRegistry(createTestLogger())
+	return NewUnifiedMemoryModelRegistry(createTestLogger(), nil)
 }
 
 func TestGetHealthyEndpointsForModel(t *testing.T) {
