@@ -43,6 +43,14 @@ type ProfileConfig struct {
 		OpenAICompatible   bool     `yaml:"openai_compatible"`
 	} `yaml:"api"`
 
+	Resources struct {
+		Quantization struct {
+			Multipliers map[string]float64 `yaml:"multipliers"`
+		} `yaml:"quantization"`
+		ModelSizes []ModelSizePattern   `yaml:"model_sizes"`
+		Defaults   ResourceRequirements `yaml:"defaults"`
+	} `yaml:"resources"`
+
 	// PathIndices allows configuring which paths serve specific purposes
 	PathIndices struct {
 		Health          int `yaml:"health"`
@@ -58,4 +66,13 @@ type ProfileConfig struct {
 		DefaultPriority       int           `yaml:"default_priority"`
 		StreamingSupport      bool          `yaml:"streaming_support"`
 	} `yaml:"characteristics"`
+}
+
+// ModelSizePattern defines resource requirements for models matching specific patterns
+type ModelSizePattern struct {
+	Patterns            []string `yaml:"patterns"`
+	MinMemoryGB         float64  `yaml:"min_memory_gb"`
+	RecommendedMemoryGB float64  `yaml:"recommended_memory_gb"`
+	MinGPUMemoryGB      float64  `yaml:"min_gpu_memory_gb"`
+	EstimatedLoadTimeMS int      `yaml:"estimated_load_time_ms"`
 }

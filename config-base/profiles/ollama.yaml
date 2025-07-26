@@ -77,3 +77,56 @@ path_indices:
   chat_completions: 2
   embeddings: 3
   models: 4
+
+# Resource calculation patterns
+resources:
+  model_sizes:
+    - patterns: ["70b", "72b"]
+      min_memory_gb: 40
+      recommended_memory_gb: 48
+      min_gpu_memory_gb: 40
+      estimated_load_time_ms: 300000  # 5 minutes
+    - patterns: ["65b"]
+      min_memory_gb: 35
+      recommended_memory_gb: 40
+      min_gpu_memory_gb: 35
+      estimated_load_time_ms: 240000  # 4 minutes
+    - patterns: ["34b", "33b", "30b"]
+      min_memory_gb: 20
+      recommended_memory_gb: 24
+      min_gpu_memory_gb: 20
+      estimated_load_time_ms: 120000  # 2 minutes
+    - patterns: ["13b", "14b"]
+      min_memory_gb: 10
+      recommended_memory_gb: 16
+      min_gpu_memory_gb: 10
+      estimated_load_time_ms: 60000   # 1 minute
+    - patterns: ["7b", "8b"]
+      min_memory_gb: 6
+      recommended_memory_gb: 8
+      min_gpu_memory_gb: 6
+      estimated_load_time_ms: 30000   # 30 seconds
+    - patterns: ["3b"]
+      min_memory_gb: 3
+      recommended_memory_gb: 4
+      min_gpu_memory_gb: 3
+      estimated_load_time_ms: 15000   # 15 seconds
+    - patterns: ["1b", "1.5b"]
+      min_memory_gb: 2
+      recommended_memory_gb: 3
+      min_gpu_memory_gb: 2
+      estimated_load_time_ms: 10000   # 10 seconds
+  
+  quantization:
+    multipliers:
+      q4: 0.5      # 4-bit quantization ~50% memory reduction
+      q5: 0.625    # 5-bit quantization ~37.5% memory reduction
+      q6: 0.75     # 6-bit quantization ~25% memory reduction
+      q8: 0.875    # 8-bit quantization ~12.5% memory reduction
+  
+  defaults:
+    min_memory_gb: 4
+    recommended_memory_gb: 8
+    min_gpu_memory_gb: 4
+    requires_gpu: false
+    estimated_load_time_ms: 5000

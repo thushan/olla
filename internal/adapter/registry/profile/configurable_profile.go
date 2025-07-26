@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -153,14 +154,58 @@ func (p *ConfigurableProfile) TransformModelName(fromName string, toFormat strin
 }
 
 func (p *ConfigurableProfile) GetResourceRequirements(modelName string, registry domain.ModelRegistry) domain.ResourceRequirements {
-	// Assume cloud/remote by default
-	return domain.ResourceRequirements{
-		MinMemoryGB:         0,
-		RecommendedMemoryGB: 0,
-		RequiresGPU:         false,
-		MinGPUMemoryGB:      0,
-		EstimatedLoadTimeMS: 0,
+	// Check if we have resource patterns configured
+	if p.config.Resources.ModelSizes == nil && p.config.Resources.Defaults.MinMemoryGB == 0 {
+		// No resource config, assume cloud/remote
+		return domain.ResourceRequirements{
+			MinMemoryGB:         0,
+			RecommendedMemoryGB: 0,
+			RequiresGPU:         false,
+			MinGPUMemoryGB:      0,
+			EstimatedLoadTimeMS: 0,
+		}
 	}
+
+	lowerName := strings.ToLower(modelName)
+
+	// Find matching model size pattern
+	var baseReqs *domain.ResourceRequirements
+	for _, pattern := range p.config.Resources.ModelSizes {
+		for _, pat := range pattern.Patterns {
+			if strings.Contains(lowerName, pat) {
+				baseReqs = &domain.ResourceRequirements{
+					MinMemoryGB:         pattern.MinMemoryGB,
+					RecommendedMemoryGB: pattern.RecommendedMemoryGB,
+					MinGPUMemoryGB:      pattern.MinGPUMemoryGB,
+					RequiresGPU:         p.config.Resources.Defaults.RequiresGPU,
+					EstimatedLoadTimeMS: int64(pattern.EstimatedLoadTimeMS),
+				}
+				break
+			}
+		}
+		if baseReqs != nil {
+			break
+		}
+	}
+
+	// Use defaults if no pattern matched
+	if baseReqs == nil {
+		baseReqs = &p.config.Resources.Defaults
+	}
+
+	// Apply quantization multipliers if configured
+	if p.config.Resources.Quantization.Multipliers != nil {
+		for quantType, multiplier := range p.config.Resources.Quantization.Multipliers {
+			if strings.Contains(lowerName, quantType) {
+				baseReqs.MinMemoryGB *= multiplier
+				baseReqs.RecommendedMemoryGB *= multiplier
+				baseReqs.MinGPUMemoryGB *= multiplier
+				break
+			}
+		}
+	}
+
+	return *baseReqs
 }
 
 func (p *ConfigurableProfile) GetOptimalConcurrency(modelName string) int {

@@ -148,6 +148,26 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 	ollamaConfig.PathIndices.ChatCompletions = 2
 	ollamaConfig.PathIndices.Embeddings = 3
 
+	// Resource patterns for built-in Ollama profile
+	ollamaConfig.Resources.ModelSizes = []domain.ModelSizePattern{
+		{Patterns: []string{"70b", "72b"}, MinMemoryGB: 40, RecommendedMemoryGB: 48, MinGPUMemoryGB: 40, EstimatedLoadTimeMS: 300000},
+		{Patterns: []string{"65b"}, MinMemoryGB: 35, RecommendedMemoryGB: 40, MinGPUMemoryGB: 35, EstimatedLoadTimeMS: 240000},
+		{Patterns: []string{"34b", "33b", "30b"}, MinMemoryGB: 20, RecommendedMemoryGB: 24, MinGPUMemoryGB: 20, EstimatedLoadTimeMS: 120000},
+		{Patterns: []string{"13b", "14b"}, MinMemoryGB: 10, RecommendedMemoryGB: 16, MinGPUMemoryGB: 10, EstimatedLoadTimeMS: 60000},
+		{Patterns: []string{"7b", "8b"}, MinMemoryGB: 6, RecommendedMemoryGB: 8, MinGPUMemoryGB: 6, EstimatedLoadTimeMS: 30000},
+		{Patterns: []string{"3b"}, MinMemoryGB: 3, RecommendedMemoryGB: 4, MinGPUMemoryGB: 3, EstimatedLoadTimeMS: 15000},
+		{Patterns: []string{"1b", "1.5b"}, MinMemoryGB: 2, RecommendedMemoryGB: 3, MinGPUMemoryGB: 2, EstimatedLoadTimeMS: 10000},
+	}
+	ollamaConfig.Resources.Quantization.Multipliers = map[string]float64{
+		"q4": 0.5,
+		"q5": 0.625,
+		"q6": 0.75,
+		"q8": 0.875,
+	}
+	ollamaConfig.Resources.Defaults = domain.ResourceRequirements{
+		MinMemoryGB: 4, RecommendedMemoryGB: 8, MinGPUMemoryGB: 4, RequiresGPU: false, EstimatedLoadTimeMS: 5000,
+	}
+
 	l.profiles[domain.ProfileOllama] = NewConfigurableProfile(ollamaConfig)
 
 	// LM Studio built-in profile
@@ -183,6 +203,19 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 	lmStudioConfig.PathIndices.ChatCompletions = 1
 	lmStudioConfig.PathIndices.Completions = 2
 	lmStudioConfig.PathIndices.Embeddings = 3
+
+	// Resource patterns for built-in LM Studio profile
+	lmStudioConfig.Resources.ModelSizes = []domain.ModelSizePattern{
+		{Patterns: []string{"70b", "72b"}, MinMemoryGB: 42, RecommendedMemoryGB: 52.5, MinGPUMemoryGB: 42, EstimatedLoadTimeMS: 1000},
+		{Patterns: []string{"65b"}, MinMemoryGB: 39, RecommendedMemoryGB: 48.75, MinGPUMemoryGB: 39, EstimatedLoadTimeMS: 1000},
+		{Patterns: []string{"34b", "33b"}, MinMemoryGB: 20.4, RecommendedMemoryGB: 25.5, MinGPUMemoryGB: 20.4, EstimatedLoadTimeMS: 1000},
+		{Patterns: []string{"13b", "14b"}, MinMemoryGB: 8.4, RecommendedMemoryGB: 10.5, MinGPUMemoryGB: 8.4, EstimatedLoadTimeMS: 1000},
+		{Patterns: []string{"7b", "8b"}, MinMemoryGB: 4.8, RecommendedMemoryGB: 6, MinGPUMemoryGB: 4.8, EstimatedLoadTimeMS: 1000},
+		{Patterns: []string{"3b"}, MinMemoryGB: 1.8, RecommendedMemoryGB: 2.25, MinGPUMemoryGB: 1.8, EstimatedLoadTimeMS: 1000},
+	}
+	lmStudioConfig.Resources.Defaults = domain.ResourceRequirements{
+		MinMemoryGB: 4.2, RecommendedMemoryGB: 5.25, MinGPUMemoryGB: 4.2, RequiresGPU: false, EstimatedLoadTimeMS: 1000,
+	}
 
 	l.profiles[domain.ProfileLmStudio] = NewConfigurableProfile(lmStudioConfig)
 

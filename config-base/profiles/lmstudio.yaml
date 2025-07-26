@@ -56,3 +56,44 @@ path_indices:
   chat_completions: 1
   completions: 2
   embeddings: 3
+
+# Resource calculation patterns
+resources:
+  model_sizes:
+    - patterns: ["70b", "72b"]
+      min_memory_gb: 42      # Base memory * 0.6 for quantization
+      recommended_memory_gb: 52.5   # Base memory * 0.75
+      min_gpu_memory_gb: 42
+      estimated_load_time_ms: 1000  # LM Studio keeps models loaded
+    - patterns: ["65b"]
+      min_memory_gb: 39
+      recommended_memory_gb: 48.75
+      min_gpu_memory_gb: 39
+      estimated_load_time_ms: 1000
+    - patterns: ["34b", "33b"]
+      min_memory_gb: 20.4
+      recommended_memory_gb: 25.5
+      min_gpu_memory_gb: 20.4
+      estimated_load_time_ms: 1000
+    - patterns: ["13b", "14b"]
+      min_memory_gb: 8.4
+      recommended_memory_gb: 10.5
+      min_gpu_memory_gb: 8.4
+      estimated_load_time_ms: 1000
+    - patterns: ["7b", "8b"]
+      min_memory_gb: 4.8
+      recommended_memory_gb: 6
+      min_gpu_memory_gb: 4.8
+      estimated_load_time_ms: 1000
+    - patterns: ["3b"]
+      min_memory_gb: 1.8
+      recommended_memory_gb: 2.25
+      min_gpu_memory_gb: 1.8
+      estimated_load_time_ms: 1000
+  
+  defaults:
+    min_memory_gb: 4.2      # 7B model * 0.6
+    recommended_memory_gb: 5.25  # 7B model * 0.75
+    min_gpu_memory_gb: 4.2
+    requires_gpu: false
+    estimated_load_time_ms: 1000
