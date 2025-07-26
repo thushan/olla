@@ -8,6 +8,7 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
+	Filename      string              `yaml:"-"`
 	Logging       LoggingConfig       `yaml:"logging"`
 	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
 	Proxy         ProxyConfig         `yaml:"proxy"`
