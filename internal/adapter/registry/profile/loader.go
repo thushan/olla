@@ -175,6 +175,32 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 		"code":       {"*code*", "codellama*", "deepseek-coder*", "qwen*coder*"},
 	}
 
+	// Context window patterns
+	ollamaConfig.Models.ContextPatterns = []domain.ContextPattern{
+		{Pattern: "*-32k*", Context: 32768},
+		{Pattern: "*-16k*", Context: 16384},
+		{Pattern: "*-8k*", Context: 8192},
+		{Pattern: "*:32k*", Context: 32768},
+		{Pattern: "*:16k*", Context: 16384},
+		{Pattern: "*:8k*", Context: 8192},
+		{Pattern: "llama3*", Context: 8192},
+		{Pattern: "llama-3*", Context: 8192},
+	}
+
+	// Concurrency limits based on model size
+	ollamaConfig.Resources.ConcurrencyLimits = []domain.ConcurrencyLimitPattern{
+		{MinMemoryGB: 30, MaxConcurrent: 1},
+		{MinMemoryGB: 15, MaxConcurrent: 2},
+		{MinMemoryGB: 8, MaxConcurrent: 4},
+		{MinMemoryGB: 0, MaxConcurrent: 8},
+	}
+
+	// Timeout scaling
+	ollamaConfig.Resources.TimeoutScaling = domain.TimeoutScaling{
+		BaseTimeoutSeconds: 30,
+		LoadTimeBuffer:     true,
+	}
+
 	l.profiles[domain.ProfileOllama] = NewConfigurableProfile(ollamaConfig)
 
 	// LM Studio built-in profile

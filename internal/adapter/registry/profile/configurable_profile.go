@@ -154,7 +154,6 @@ func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry do
 	}
 
 	// Check capability patterns from config
-	lowerName := strings.ToLower(modelName)
 
 	// Check for embeddings capability
 	if patterns, ok := p.config.Models.CapabilityPatterns["embeddings"]; ok {
@@ -192,10 +191,13 @@ func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry do
 	// but not by specialized models (vision, code, embeddings)
 	if !caps.Embeddings && !caps.VisionUnderstanding && !caps.CodeGeneration {
 		caps.FunctionCalling = true
+	}
 
-		// Modern chat models often have larger context windows
-		if strings.Contains(lowerName, "llama3") || strings.Contains(lowerName, "llama-3") {
-			caps.MaxContextLength = 8192
+	// Check context patterns from config
+	for _, pattern := range p.config.Models.ContextPatterns {
+		if matchesGlobPattern(modelName, pattern.Pattern) {
+			caps.MaxContextLength = pattern.Context
+			break
 		}
 	}
 
@@ -300,6 +302,23 @@ func (p *ConfigurableProfile) GetResourceRequirements(modelName string, registry
 }
 
 func (p *ConfigurableProfile) GetOptimalConcurrency(modelName string) int {
+	// Check if we have concurrency limits configured
+	if len(p.config.Resources.ConcurrencyLimits) == 0 {
+		return p.GetMaxConcurrentRequests()
+	}
+
+	// Get resource requirements for this model
+	reqs := p.GetResourceRequirements(modelName, nil)
+
+	// Find the appropriate concurrency limit based on memory requirements
+	// Iterate from most restrictive to least restrictive
+	for _, limit := range p.config.Resources.ConcurrencyLimits {
+		if reqs.MinMemoryGB >= limit.MinMemoryGB {
+			return limit.MaxConcurrent
+		}
+	}
+
+	// Default to max concurrent requests if no limits match
 	return p.GetMaxConcurrentRequests()
 }
 
@@ -317,5 +336,21 @@ func (p *ConfigurableProfile) ShouldBatchRequests() bool {
 }
 
 func (p *ConfigurableProfile) GetRequestTimeout(modelName string) time.Duration {
-	return p.GetTimeout()
+	baseTimeout := p.GetTimeout()
+
+	// Check if timeout scaling is configured
+	if p.config.Resources.TimeoutScaling.BaseTimeoutSeconds > 0 {
+		baseTimeout = time.Duration(p.config.Resources.TimeoutScaling.BaseTimeoutSeconds) * time.Second
+	}
+
+	// Add load time buffer if configured
+	if p.config.Resources.TimeoutScaling.LoadTimeBuffer {
+		reqs := p.GetResourceRequirements(modelName, nil)
+		if reqs.EstimatedLoadTimeMS > 0 {
+			loadBuffer := time.Duration(reqs.EstimatedLoadTimeMS) * time.Millisecond
+			baseTimeout += loadBuffer
+		}
+	}
+
+	return baseTimeout
 }

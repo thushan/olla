@@ -21,8 +21,10 @@ func TestConfigurableProfile_GetResourceRequirements(t *testing.T) {
 					Quantization struct {
 						Multipliers map[string]float64 `yaml:"multipliers"`
 					} `yaml:"quantization"`
-					ModelSizes []domain.ModelSizePattern   `yaml:"model_sizes"`
-					Defaults   domain.ResourceRequirements `yaml:"defaults"`
+					ModelSizes        []domain.ModelSizePattern        `yaml:"model_sizes"`
+					ConcurrencyLimits []domain.ConcurrencyLimitPattern `yaml:"concurrency_limits"`
+					Defaults          domain.ResourceRequirements      `yaml:"defaults"`
+					TimeoutScaling    domain.TimeoutScaling            `yaml:"timeout_scaling"`
 				}{
 					ModelSizes: []domain.ModelSizePattern{
 						{
@@ -66,8 +68,10 @@ func TestConfigurableProfile_GetResourceRequirements(t *testing.T) {
 					Quantization struct {
 						Multipliers map[string]float64 `yaml:"multipliers"`
 					} `yaml:"quantization"`
-					ModelSizes []domain.ModelSizePattern   `yaml:"model_sizes"`
-					Defaults   domain.ResourceRequirements `yaml:"defaults"`
+					ModelSizes        []domain.ModelSizePattern        `yaml:"model_sizes"`
+					ConcurrencyLimits []domain.ConcurrencyLimitPattern `yaml:"concurrency_limits"`
+					Defaults          domain.ResourceRequirements      `yaml:"defaults"`
+					TimeoutScaling    domain.TimeoutScaling            `yaml:"timeout_scaling"`
 				}{
 					ModelSizes: []domain.ModelSizePattern{
 						{
@@ -103,8 +107,10 @@ func TestConfigurableProfile_GetResourceRequirements(t *testing.T) {
 					Quantization struct {
 						Multipliers map[string]float64 `yaml:"multipliers"`
 					} `yaml:"quantization"`
-					ModelSizes []domain.ModelSizePattern   `yaml:"model_sizes"`
-					Defaults   domain.ResourceRequirements `yaml:"defaults"`
+					ModelSizes        []domain.ModelSizePattern        `yaml:"model_sizes"`
+					ConcurrencyLimits []domain.ConcurrencyLimitPattern `yaml:"concurrency_limits"`
+					Defaults          domain.ResourceRequirements      `yaml:"defaults"`
+					TimeoutScaling    domain.TimeoutScaling            `yaml:"timeout_scaling"`
 				}{
 					ModelSizes: []domain.ModelSizePattern{
 						{
@@ -154,8 +160,10 @@ func TestConfigurableProfile_GetResourceRequirements(t *testing.T) {
 					Quantization struct {
 						Multipliers map[string]float64 `yaml:"multipliers"`
 					} `yaml:"quantization"`
-					ModelSizes []domain.ModelSizePattern   `yaml:"model_sizes"`
-					Defaults   domain.ResourceRequirements `yaml:"defaults"`
+					ModelSizes        []domain.ModelSizePattern        `yaml:"model_sizes"`
+					ConcurrencyLimits []domain.ConcurrencyLimitPattern `yaml:"concurrency_limits"`
+					Defaults          domain.ResourceRequirements      `yaml:"defaults"`
+					TimeoutScaling    domain.TimeoutScaling            `yaml:"timeout_scaling"`
 				}{
 					ModelSizes: []domain.ModelSizePattern{
 						{
@@ -201,8 +209,10 @@ func TestConfigurableProfile_MultipleQuantizationTypes(t *testing.T) {
 			Quantization struct {
 				Multipliers map[string]float64 `yaml:"multipliers"`
 			} `yaml:"quantization"`
-			ModelSizes []domain.ModelSizePattern   `yaml:"model_sizes"`
-			Defaults   domain.ResourceRequirements `yaml:"defaults"`
+			ModelSizes        []domain.ModelSizePattern        `yaml:"model_sizes"`
+			ConcurrencyLimits []domain.ConcurrencyLimitPattern `yaml:"concurrency_limits"`
+			Defaults          domain.ResourceRequirements      `yaml:"defaults"`
+			TimeoutScaling    domain.TimeoutScaling            `yaml:"timeout_scaling"`
 		}{
 			ModelSizes: []domain.ModelSizePattern{
 				{

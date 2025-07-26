@@ -9,6 +9,7 @@ type ProfileConfig struct {
 	Models struct {
 		CapabilityPatterns map[string][]string `yaml:"capability_patterns"`
 		NameFormat         string              `yaml:"name_format"`
+		ContextPatterns    []ContextPattern    `yaml:"context_patterns"`
 	} `yaml:"models"`
 
 	Name        string `yaml:"name"`
@@ -47,8 +48,10 @@ type ProfileConfig struct {
 		Quantization struct {
 			Multipliers map[string]float64 `yaml:"multipliers"`
 		} `yaml:"quantization"`
-		ModelSizes []ModelSizePattern   `yaml:"model_sizes"`
-		Defaults   ResourceRequirements `yaml:"defaults"`
+		ModelSizes        []ModelSizePattern        `yaml:"model_sizes"`
+		ConcurrencyLimits []ConcurrencyLimitPattern `yaml:"concurrency_limits"`
+		Defaults          ResourceRequirements      `yaml:"defaults"`
+		TimeoutScaling    TimeoutScaling            `yaml:"timeout_scaling"`
 	} `yaml:"resources"`
 
 	// PathIndices allows configuring which paths serve specific purposes
@@ -75,4 +78,22 @@ type ModelSizePattern struct {
 	RecommendedMemoryGB float64  `yaml:"recommended_memory_gb"`
 	MinGPUMemoryGB      float64  `yaml:"min_gpu_memory_gb"`
 	EstimatedLoadTimeMS int      `yaml:"estimated_load_time_ms"`
+}
+
+// ConcurrencyLimitPattern defines how many concurrent requests a model can handle based on its memory requirements
+type ConcurrencyLimitPattern struct {
+	MinMemoryGB   float64 `yaml:"min_memory_gb"`
+	MaxConcurrent int     `yaml:"max_concurrent"`
+}
+
+// TimeoutScaling configures dynamic timeout adjustment based on model characteristics
+type TimeoutScaling struct {
+	BaseTimeoutSeconds int  `yaml:"base_timeout_seconds"`
+	LoadTimeBuffer     bool `yaml:"load_time_buffer"` // adds estimated_load_time_ms to timeout
+}
+
+// ContextPattern maps model name patterns to context window sizes
+type ContextPattern struct {
+	Pattern string `yaml:"pattern"`
+	Context int64  `yaml:"context"`
 }

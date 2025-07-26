@@ -57,6 +57,24 @@ models:
       - "codellama*"
       - "deepseek-coder*"
       - "qwen*coder*"
+  # Context window detection patterns
+  context_patterns:
+    - pattern: "*-32k*"
+      context: 32768
+    - pattern: "*-16k*"
+      context: 16384
+    - pattern: "*-8k*"
+      context: 8192
+    - pattern: "*:32k*"
+      context: 32768
+    - pattern: "*:16k*"
+      context: 16384
+    - pattern: "*:8k*"
+      context: 8192
+    - pattern: "llama3*"
+      context: 8192
+    - pattern: "llama-3*"
+      context: 8192
       
 # Request/response handling
 request:
@@ -130,3 +148,19 @@ resources:
     min_gpu_memory_gb: 4
     requires_gpu: false
     estimated_load_time_ms: 5000
+  
+  # Dynamic concurrency limits based on model size
+  concurrency_limits:
+    - min_memory_gb: 30   # 70B+ models
+      max_concurrent: 1
+    - min_memory_gb: 15   # 30B+ models
+      max_concurrent: 2
+    - min_memory_gb: 8    # 13B+ models
+      max_concurrent: 4
+    - min_memory_gb: 0    # smaller models
+      max_concurrent: 8
+  
+  # Dynamic timeout scaling
+  timeout_scaling:
+    base_timeout_seconds: 30
+    load_time_buffer: true  # adds estimated_load_time_ms to timeout

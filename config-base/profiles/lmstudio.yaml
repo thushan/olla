@@ -37,6 +37,24 @@ models:
   capability_patterns:
     chat:
       - "*"  # All models support chat in LM Studio
+  # Context window detection patterns
+  context_patterns:
+    - pattern: "*-32k*"
+      context: 32768
+    - pattern: "*-16k*"
+      context: 16384
+    - pattern: "*-8k*"
+      context: 8192
+    - pattern: "*:32k*"
+      context: 32768
+    - pattern: "*:16k*"
+      context: 16384
+    - pattern: "*:8k*"
+      context: 8192
+    - pattern: "llama3*"
+      context: 8192
+    - pattern: "llama-3*"
+      context: 8192
 
 # Request/response handling
 request:
@@ -97,3 +115,13 @@ resources:
     min_gpu_memory_gb: 4.2
     requires_gpu: false
     estimated_load_time_ms: 1000
+  
+  # LM Studio typically handles one model at a time
+  concurrency_limits:
+    - min_memory_gb: 0
+      max_concurrent: 1
+  
+  # No need for load time buffer - models are preloaded
+  timeout_scaling:
+    base_timeout_seconds: 180  # 3 minutes
+    load_time_buffer: false

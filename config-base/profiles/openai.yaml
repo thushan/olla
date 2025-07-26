@@ -40,6 +40,22 @@ models:
     vision:
       - "*vision*"
       - "gpt-4-turbo*"
+  # Context window patterns for cloud models
+  context_patterns:
+    - pattern: "gpt-4-turbo*"
+      context: 128000
+    - pattern: "gpt-4-32k*"
+      context: 32768
+    - pattern: "gpt-4*"
+      context: 8192
+    - pattern: "gpt-3.5-turbo-16k*"
+      context: 16384
+    - pattern: "gpt-3.5-turbo*"
+      context: 4096
+    - pattern: "claude-3*"
+      context: 200000
+    - pattern: "claude-2*"
+      context: 100000
 
 # Request/response handling
 request:
@@ -59,3 +75,23 @@ path_indices:
   chat_completions: 1
   completions: 2
   embeddings: 3
+
+# Resource management
+resources:
+  # Cloud-based models have no local resource requirements
+  defaults:
+    min_memory_gb: 0
+    recommended_memory_gb: 0
+    min_gpu_memory_gb: 0
+    requires_gpu: false
+    estimated_load_time_ms: 0
+  
+  # Cloud services handle their own concurrency
+  concurrency_limits:
+    - min_memory_gb: 0
+      max_concurrent: 20  # Reasonable default for cloud APIs
+  
+  # No load time buffer needed for cloud services
+  timeout_scaling:
+    base_timeout_seconds: 120  # 2 minutes
+    load_time_buffer: false
