@@ -130,6 +130,7 @@ func (p *lmStudioParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
+			Type:     model.Object, // "model" from the response
 			LastSeen: now,
 		}
 
@@ -155,6 +156,8 @@ func (p *lmStudioParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		if model.Arch != nil {
 			details.Family = model.Arch
+			// Also populate Families array for compatibility
+			details.Families = []string{*model.Arch}
 			hasDetails = true
 		}
 

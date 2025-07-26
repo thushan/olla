@@ -55,7 +55,7 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 	}
 
 	contentType := r.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "application/json") {
+	if !strings.Contains(strings.ToLower(contentType), "application/json") {
 		bi.logger.Debug("Skipping body inspection for non-JSON content", "content_type", contentType)
 		return nil
 	}

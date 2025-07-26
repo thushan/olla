@@ -9,8 +9,23 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+// Helper function to get profiles from factory for tests
+func getTestProfile(t *testing.T, profileType string) domain.PlatformProfile {
+	t.Helper()
+	factory := testFactory(t)
+	profile, err := factory.GetProfile(profileType)
+	if err != nil {
+		t.Fatalf("Failed to get %s profile: %v", profileType, err)
+	}
+	return profile
+}
+
 func TestOllamaProfile(t *testing.T) {
-	profile := NewOllamaProfile()
+	factory := testFactory(t)
+	profile, err := factory.GetProfile(domain.ProfileOllama)
+	if err != nil {
+		t.Fatalf("Failed to get ollama profile: %v", err)
+	}
 
 	if profile.GetName() != domain.ProfileOllama {
 		t.Errorf("Expected name %q, got %q", domain.ProfileOllama, profile.GetName())
@@ -49,7 +64,11 @@ func TestOllamaProfile(t *testing.T) {
 }
 
 func TestLMStudioProfile(t *testing.T) {
-	profile := NewLMStudioProfile()
+	factory := testFactory(t)
+	profile, err := factory.GetProfile(domain.ProfileLmStudio)
+	if err != nil {
+		t.Fatalf("Failed to get lmstudio profile: %v", err)
+	}
 
 	if profile.GetName() != domain.ProfileLmStudio {
 		t.Errorf("Expected name %q, got %q", domain.ProfileLmStudio, profile.GetName())
@@ -57,7 +76,7 @@ func TestLMStudioProfile(t *testing.T) {
 
 	baseUrl := "http://localhost:1234"
 	url := profile.GetModelDiscoveryURL(baseUrl)
-	expected := baseUrl + lmstudioPaths[LMStudioModelsPathIndex]
+	expected := baseUrl + "/api/v0/models"
 	if url != expected {
 		t.Errorf("Expected %q, got %q", expected, url)
 	}
@@ -81,7 +100,11 @@ func TestLMStudioProfile(t *testing.T) {
 }
 
 func TestOpenAICompatibleProfile(t *testing.T) {
-	profile := NewOpenAICompatibleProfile()
+	factory := testFactory(t)
+	profile, err := factory.GetProfile(domain.ProfileOpenAICompatible)
+	if err != nil {
+		t.Fatalf("Failed to get openai compatible profile: %v", err)
+	}
 
 	if profile.GetName() != domain.ProfileOpenAICompatible {
 		t.Errorf("Expected name %q, got %q", domain.ProfileOpenAICompatible, profile.GetName())
@@ -115,9 +138,9 @@ func TestOpenAICompatibleProfile(t *testing.T) {
 
 func TestProfileVersioning(t *testing.T) {
 	profiles := []domain.PlatformProfile{
-		NewOllamaProfile(),
-		NewLMStudioProfile(),
-		NewOpenAICompatibleProfile(),
+		getTestProfile(t, domain.ProfileOllama),
+		getTestProfile(t, domain.ProfileLmStudio),
+		getTestProfile(t, domain.ProfileOpenAICompatible),
 	}
 
 	for _, profile := range profiles {
@@ -129,7 +152,7 @@ func TestProfileVersioning(t *testing.T) {
 }
 
 func TestDetectionHints(t *testing.T) {
-	profile := NewOllamaProfile()
+	profile := getTestProfile(t, domain.ProfileOllama)
 	hints := profile.GetDetectionHints()
 
 	if len(hints.PathIndicators) == 0 {
@@ -161,7 +184,7 @@ func TestParseModelsResponse(t *testing.T) {
 	}{
 		{
 			name:    "Ollama response format with rich metadata",
-			profile: NewOllamaProfile(),
+			profile: getTestProfile(t, domain.ProfileOllama),
 			responseBody: []byte(`{
 				"models": [
 					{
@@ -216,7 +239,7 @@ func TestParseModelsResponse(t *testing.T) {
 		},
 		{
 			name:    "LM Studio response format with rich metadata",
-			profile: NewLMStudioProfile(),
+			profile: getTestProfile(t, domain.ProfileLmStudio),
 			responseBody: []byte(`{
 				"object": "list",
 				"data": [
@@ -267,7 +290,7 @@ func TestParseModelsResponse(t *testing.T) {
 		},
 		{
 			name:    "OpenAI compatible response format",
-			profile: NewOpenAICompatibleProfile(),
+			profile: getTestProfile(t, domain.ProfileOpenAICompatible),
 			responseBody: []byte(`{
 				"object": "list",
 				"data": [
@@ -304,7 +327,7 @@ func TestParseModelsResponse(t *testing.T) {
 		},
 		{
 			name:           "Empty response",
-			profile:        NewOllamaProfile(),
+			profile:        getTestProfile(t, domain.ProfileOllama),
 			responseBody:   []byte(`{"models": []}`),
 			expectedModels: 0,
 			expectedError:  false,
@@ -312,7 +335,7 @@ func TestParseModelsResponse(t *testing.T) {
 		},
 		{
 			name:           "Empty body",
-			profile:        NewOllamaProfile(),
+			profile:        getTestProfile(t, domain.ProfileOllama),
 			responseBody:   []byte{},
 			expectedModels: 0,
 			expectedError:  false,
@@ -320,20 +343,20 @@ func TestParseModelsResponse(t *testing.T) {
 		},
 		{
 			name:          "Invalid JSON",
-			profile:       NewOllamaProfile(),
+			profile:       getTestProfile(t, domain.ProfileOllama),
 			responseBody:  []byte(`{"models": [`),
 			expectedError: true,
 		},
 		{
 			name:           "Missing models field",
-			profile:        NewOllamaProfile(),
+			profile:        getTestProfile(t, domain.ProfileOllama),
 			responseBody:   []byte(`{"other": []}`),
 			expectedModels: 0,
 			expectedError:  false,
 		},
 		{
 			name:    "Models with missing names are skipped",
-			profile: NewOllamaProfile(),
+			profile: getTestProfile(t, domain.ProfileOllama),
 			responseBody: []byte(`{
 				"models": [
 					{"name": "valid-model", "size": 123},
@@ -402,7 +425,7 @@ func TestParseModelErrorHandling(t *testing.T) {
 	}{
 		{
 			name:    "Ollama with malformed model data",
-			profile: NewOllamaProfile(),
+			profile: getTestProfile(t, domain.ProfileOllama),
 			responseBody: []byte(`{
 				"models": [
 					{"name": "valid-model"},
@@ -414,7 +437,7 @@ func TestParseModelErrorHandling(t *testing.T) {
 		},
 		{
 			name:    "LM Studio with missing required fields",
-			profile: NewLMStudioProfile(),
+			profile: getTestProfile(t, domain.ProfileLmStudio),
 			responseBody: []byte(`{
 				"data": [
 					{"id": "valid-model"},
@@ -462,7 +485,7 @@ func TestParseModelErrorHandling(t *testing.T) {
 func TestPlatformSpecificMetadata(t *testing.T) {
 	// Test Ollama nested details parsing
 	t.Run("Ollama nested details", func(t *testing.T) {
-		profile := NewOllamaProfile()
+		profile := getTestProfile(t, domain.ProfileOllama)
 		responseBody := []byte(`{
 			"models": [{
 				"name": "test-model",
@@ -521,7 +544,7 @@ func TestPlatformSpecificMetadata(t *testing.T) {
 
 	// Test LM Studio flat structure parsing
 	t.Run("LM Studio flat structure", func(t *testing.T) {
-		profile := NewLMStudioProfile()
+		profile := getTestProfile(t, domain.ProfileLmStudio)
 		responseBody := []byte(`{
 			"data": [{
 				"id": "test-model",
@@ -574,7 +597,7 @@ func TestPlatformSpecificMetadata(t *testing.T) {
 
 	// Test specifically for LM Studio Families field population
 	t.Run("LM Studio Families field population", func(t *testing.T) {
-		profile := NewLMStudioProfile()
+		profile := getTestProfile(t, domain.ProfileLmStudio)
 
 		// Test with multiple models with different architectures
 		responseBody := []byte(`{
@@ -647,7 +670,7 @@ func TestPlatformSpecificMetadata(t *testing.T) {
 }
 
 func TestResponseParserConcurrency(t *testing.T) {
-	profile := NewOllamaProfile()
+	profile := getTestProfile(t, domain.ProfileOllama)
 
 	responseBody := []byte(`{
 		"models": [
@@ -692,7 +715,7 @@ func TestEnhancedMetadataConfiguration(t *testing.T) {
 	}{
 		{
 			name:                 "Ollama supports rich metadata",
-			profile:              NewOllamaProfile(),
+			profile:              getTestProfile(t, domain.ProfileOllama),
 			expectDetailsSupport: true,
 			testResponseBody: []byte(`{
 				"models": [{
@@ -712,7 +735,7 @@ func TestEnhancedMetadataConfiguration(t *testing.T) {
 		},
 		{
 			name:                 "LM Studio has rich metadata",
-			profile:              NewLMStudioProfile(),
+			profile:              getTestProfile(t, domain.ProfileLmStudio),
 			expectDetailsSupport: true,
 			testResponseBody: []byte(`{
 				"data": [{
@@ -730,7 +753,7 @@ func TestEnhancedMetadataConfiguration(t *testing.T) {
 		},
 		{
 			name:                 "OpenAI compatible has minimal metadata",
-			profile:              NewOpenAICompatibleProfile(),
+			profile:              getTestProfile(t, domain.ProfileOpenAICompatible),
 			expectDetailsSupport: false,
 			testResponseBody: []byte(`{
 				"data": [{

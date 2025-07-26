@@ -8,6 +8,12 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+const (
+	defaultModelsFieldPath = "data"
+	ollamaResponseFormat   = "ollama"
+	ollamaModelsFieldPath  = "models"
+)
+
 // ConfigurableProfile bridges YAML config to the PlatformProfile interface.
 // Much easier for users to write YAML than implement Go interfaces.
 type ConfigurableProfile struct {
@@ -71,9 +77,15 @@ func (p *ConfigurableProfile) GetRequestParsingRules() domain.RequestParsingRule
 }
 
 func (p *ConfigurableProfile) GetModelResponseFormat() domain.ModelResponseFormat {
+	// Determine the models field path based on response format
+	modelsFieldPath := defaultModelsFieldPath
+	if p.config.Request.ResponseFormat == ollamaResponseFormat {
+		modelsFieldPath = ollamaModelsFieldPath
+	}
+
 	return domain.ModelResponseFormat{
 		ResponseType:    "object",
-		ModelsFieldPath: "data", // openai convention that most follow
+		ModelsFieldPath: modelsFieldPath,
 	}
 }
 
@@ -133,14 +145,93 @@ func (p *ConfigurableProfile) ValidateEndpoint(endpoint *domain.Endpoint) error 
 // InferenceProfile implementation
 
 func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry domain.ModelRegistry) domain.ModelCapabilities {
-	// Default capabilities for configurable profiles
-	return domain.ModelCapabilities{
-		ChatCompletion:   true,
-		TextGeneration:   true,
+	caps := domain.ModelCapabilities{
+		ChatCompletion:   true, // Default for most models
+		TextGeneration:   true, // Default for most models
 		StreamingSupport: p.config.Request.ParsingRules.SupportsStreaming,
 		MaxContextLength: 4096,
 		MaxOutputTokens:  2048,
 	}
+
+	// Check capability patterns from config
+	lowerName := strings.ToLower(modelName)
+
+	// Check for embeddings capability
+	if patterns, ok := p.config.Models.CapabilityPatterns["embeddings"]; ok {
+		for _, pattern := range patterns {
+			if matchesGlobPattern(modelName, pattern) {
+				caps.Embeddings = true
+				caps.ChatCompletion = false
+				caps.TextGeneration = false
+				break
+			}
+		}
+	}
+
+	// Check for vision capability
+	if patterns, ok := p.config.Models.CapabilityPatterns["vision"]; ok {
+		for _, pattern := range patterns {
+			if matchesGlobPattern(modelName, pattern) {
+				caps.VisionUnderstanding = true
+				break
+			}
+		}
+	}
+
+	// Check for code capability
+	if patterns, ok := p.config.Models.CapabilityPatterns["code"]; ok {
+		for _, pattern := range patterns {
+			if matchesGlobPattern(modelName, pattern) {
+				caps.CodeGeneration = true
+				break
+			}
+		}
+	}
+
+	// Function calling is typically supported by standard chat models
+	// but not by specialized models (vision, code, embeddings)
+	if !caps.Embeddings && !caps.VisionUnderstanding && !caps.CodeGeneration {
+		caps.FunctionCalling = true
+
+		// Modern chat models often have larger context windows
+		if strings.Contains(lowerName, "llama3") || strings.Contains(lowerName, "llama-3") {
+			caps.MaxContextLength = 8192
+		}
+	}
+
+	return caps
+}
+
+// matchesGlobPattern checks if a string matches a glob pattern
+func matchesGlobPattern(s, pattern string) bool {
+	// Simple glob matching for * wildcard
+	pattern = strings.ToLower(pattern)
+	s = strings.ToLower(s)
+
+	if pattern == "*" {
+		return true
+	}
+
+	// Handle patterns like "*llava*" or "llava*" or "*llava"
+	if strings.Contains(pattern, "*") {
+		switch {
+		case strings.HasPrefix(pattern, "*") && strings.HasSuffix(pattern, "*"):
+			// *text* - contains
+			core := strings.Trim(pattern, "*")
+			return strings.Contains(s, core)
+		case strings.HasPrefix(pattern, "*"):
+			// *text - ends with
+			suffix := strings.TrimPrefix(pattern, "*")
+			return strings.HasSuffix(s, suffix)
+		case strings.HasSuffix(pattern, "*"):
+			// text* - starts with
+			prefix := strings.TrimSuffix(pattern, "*")
+			return strings.HasPrefix(s, prefix)
+		}
+	}
+
+	// Exact match
+	return s == pattern
 }
 
 func (p *ConfigurableProfile) IsModelSupported(modelName string, registry domain.ModelRegistry) bool {

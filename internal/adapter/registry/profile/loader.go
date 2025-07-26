@@ -168,6 +168,13 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 		MinMemoryGB: 4, RecommendedMemoryGB: 8, MinGPUMemoryGB: 4, RequiresGPU: false, EstimatedLoadTimeMS: 5000,
 	}
 
+	// Model capability patterns
+	ollamaConfig.Models.CapabilityPatterns = map[string][]string{
+		"vision":     {"*llava*", "*vision*", "*bakllava*"},
+		"embeddings": {"*embed*", "nomic-embed-text", "mxbai-embed-large"},
+		"code":       {"*code*", "codellama*", "deepseek-coder*", "qwen*coder*"},
+	}
+
 	l.profiles[domain.ProfileOllama] = NewConfigurableProfile(ollamaConfig)
 
 	// LM Studio built-in profile

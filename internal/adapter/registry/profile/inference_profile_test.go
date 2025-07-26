@@ -9,7 +9,11 @@ import (
 )
 
 func TestOllamaProfile_InferenceProfile(t *testing.T) {
-	profile := NewOllamaProfile()
+	factory := testFactory(t)
+	profile, err := factory.GetProfile(domain.ProfileOllama)
+	if err != nil {
+		t.Fatalf("Failed to get ollama profile: %v", err)
+	}
 
 	t.Run("GetTimeout", func(t *testing.T) {
 		timeout := profile.GetTimeout()
@@ -109,7 +113,11 @@ func TestOllamaProfile_InferenceProfile(t *testing.T) {
 }
 
 func TestLMStudioProfile_InferenceProfile(t *testing.T) {
-	profile := NewLMStudioProfile()
+	factory := testFactory(t)
+	profile, err := factory.GetProfile(domain.ProfileLmStudio)
+	if err != nil {
+		t.Fatalf("Failed to get lmstudio profile: %v", err)
+	}
 
 	t.Run("GetMaxConcurrentRequests", func(t *testing.T) {
 		max := profile.GetMaxConcurrentRequests()
@@ -122,14 +130,15 @@ func TestLMStudioProfile_InferenceProfile(t *testing.T) {
 	})
 
 	t.Run("TransformModelName", func(t *testing.T) {
+		// ConfigurableProfile doesn't transform model names
 		tests := []struct {
 			from     string
 			to       string
 			expected string
 		}{
-			{"llama3", "lm_studio", "meta-llama/llama3"},
-			{"mistral-7b", "lm_studio", "mistralai/mistral-7b"},
-			{"phi-2", "lm_studio", "microsoft/phi-2"},
+			{"llama3", "lm_studio", "llama3"},
+			{"mistral-7b", "lm_studio", "mistral-7b"},
+			{"phi-2", "lm_studio", "phi-2"},
 			{"already/formatted", "lm_studio", "already/formatted"},
 		}
 
@@ -143,31 +152,21 @@ func TestLMStudioProfile_InferenceProfile(t *testing.T) {
 }
 
 func TestOpenAICompatibleProfile_InferenceProfile(t *testing.T) {
-	profile := NewOpenAICompatibleProfile()
+	factory := testFactory(t)
+	profile, err := factory.GetProfile(domain.ProfileOpenAICompatible)
+	if err != nil {
+		t.Fatalf("Failed to get openai compatible profile: %v", err)
+	}
 
 	t.Run("GetModelCapabilities", func(t *testing.T) {
-		tests := []struct {
-			name      string
-			model     string
-			hasVision bool
-			hasFunc   bool
-			maxCtx    int64
-		}{
-			{"GPT-4", "gpt-4", false, true, 8192},
-			{"GPT-4 Turbo", "gpt-4-turbo", false, true, 128000},
-			{"GPT-4 Vision", "gpt-4-vision-preview", true, true, 8192},
-			{"Claude 3", "claude-3-opus", true, true, 200000},
-			{"Embeddings", "text-embedding-ada-002", false, false, 4096},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				caps := profile.GetModelCapabilities(tt.model, nil)
-				assert.Equal(t, tt.hasVision, caps.VisionUnderstanding)
-				assert.Equal(t, tt.hasFunc, caps.FunctionCalling)
-				assert.Equal(t, tt.maxCtx, caps.MaxContextLength)
-			})
-		}
+		// ConfigurableProfile returns default capabilities for OpenAI compatible
+		// It doesn't have model-specific logic
+		caps := profile.GetModelCapabilities("gpt-4", nil)
+		assert.True(t, caps.ChatCompletion)
+		assert.True(t, caps.TextGeneration)
+		assert.True(t, caps.FunctionCalling)
+		assert.True(t, caps.StreamingSupport)
+		assert.Equal(t, int64(4096), caps.MaxContextLength) // Default
 	})
 
 	t.Run("GetResourceRequirements", func(t *testing.T) {
