@@ -4,6 +4,11 @@ version: "1.0"
 display_name: "Ollama"
 description: "Local Ollama instance for running GGUF models"
 
+# Routing configuration
+routing:
+  prefixes:
+    - ollama
+
 # API compatibility
 api:
   openai_compatible: true

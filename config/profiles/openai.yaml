@@ -4,6 +4,12 @@ version: "1.0"
 display_name: "OpenAI Compatible"
 description: "Generic OpenAI-compatible API"
 
+# Routing configuration
+routing:
+  prefixes:
+    - openai
+    - openai-compatible
+
 # API compatibility
 api:
   openai_compatible: true

@@ -1,10 +1,42 @@
 package handlers
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thushan/olla/internal/core/domain"
 )
+
+// mockProfileFactory is a test implementation of ProfileFactory
+type mockProfileFactory struct {
+	validProfiles map[string]bool
+	profiles      map[string]domain.InferenceProfile
+}
+
+func (m *mockProfileFactory) GetProfile(profileType string) (domain.InferenceProfile, error) {
+	if profile, ok := m.profiles[profileType]; ok {
+		return profile, nil
+	}
+	return nil, fmt.Errorf("profile not found")
+}
+
+func (m *mockProfileFactory) GetAvailableProfiles() []string {
+	profiles := make([]string, 0, len(m.validProfiles))
+	for p := range m.validProfiles {
+		profiles = append(profiles, p)
+	}
+	return profiles
+}
+
+func (m *mockProfileFactory) ReloadProfiles() error {
+	return nil
+}
+
+func (m *mockProfileFactory) ValidateProfileType(platformType string) bool {
+	// For the mock, just check if it's in valid profiles directly
+	return m.validProfiles[platformType]
+}
 
 func TestNormalizeProviderType(t *testing.T) {
 	tests := []struct {
@@ -66,25 +98,57 @@ func TestExtractProviderFromPath(t *testing.T) {
 }
 
 func TestIsProviderSupported(t *testing.T) {
-	tests := []struct {
-		name      string
-		provider  string
-		supported bool
-	}{
-		{"ollama supported", "ollama", true},
-		{"lmstudio supported", "lmstudio", true},
-		{"lm-studio supported", "lm-studio", true},
-		{"lm_studio supported", "lm_studio", true},
-		{"openai supported", "openai", true},
-		{"vllm supported", "vllm", true},
-		{"unknown not supported", "unknown", false},
-		{"empty not supported", "", false},
-	}
+	t.Run("fallback without profile factory", func(t *testing.T) {
+		// Create a minimal Application with no profile factory to test fallback
+		app := &Application{}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isProviderSupported(tt.provider)
-			assert.Equal(t, tt.supported, result)
-		})
-	}
+		tests := []struct {
+			name      string
+			provider  string
+			supported bool
+		}{
+			{"ollama supported", "ollama", true},
+			{"lmstudio supported", "lmstudio", true},
+			{"lm-studio supported", "lm-studio", true},
+			{"lm_studio supported", "lm_studio", true},
+			{"openai supported", "openai", true},
+			{"vllm supported", "vllm", true},
+			{"unknown not supported", "unknown", false},
+			{"empty not supported", "", false},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := app.isProviderSupported(tt.provider)
+				assert.Equal(t, tt.supported, result)
+			})
+		}
+	})
+
+	t.Run("with profile factory", func(t *testing.T) {
+		// Create a mock profile factory
+		mockFactory := &mockProfileFactory{
+			validProfiles: map[string]bool{
+				"ollama":    true,
+				"lm-studio": true,
+				"openai":    true,
+				"vllm":      true,
+				"custom":    true, // this wouldn't be in the fallback
+			},
+		}
+
+		app := &Application{
+			profileFactory: mockFactory,
+		}
+
+		// Test that custom profile is supported via factory
+		assert.True(t, app.isProviderSupported("custom"))
+
+		// Test normalization still works
+		assert.True(t, app.isProviderSupported("lmstudio"))
+		assert.True(t, app.isProviderSupported("lm_studio"))
+
+		// Test unknown is not supported
+		assert.False(t, app.isProviderSupported("unknown"))
+	})
 }

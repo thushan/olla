@@ -69,20 +69,24 @@ func (a *Application) getOriginalPath(ctx context.Context) string {
 	return ""
 }
 
-// supportedProviders defines the valid provider types
-// TODO: This should be loaded from available profiles at startup
-var supportedProviders = map[string]bool{
-	"ollama":    true,
-	"lm-studio": true,
-	"openai":    true,
-	"vllm":      true,
-}
-
-// isProviderSupported checks if a provider type is valid
-func isProviderSupported(provider string) bool {
+// isProviderSupported checks if a provider type is valid using the profile factory
+func (a *Application) isProviderSupported(provider string) bool {
 	// normalize first to handle variations
 	normalized := NormaliseProviderType(provider)
-	return supportedProviders[normalized]
+
+	// use profile factory to validate if this is a known provider type
+	if a.profileFactory != nil {
+		return a.profileFactory.ValidateProfileType(normalized)
+	}
+
+	// fallback for tests or when profile factory is not available
+	// only support the most common providers
+	switch normalized {
+	case "ollama", "lm-studio", "openai", "vllm":
+		return true
+	default:
+		return false
+	}
 }
 
 // getProviderPrefix returns the URL prefix for a provider

@@ -16,8 +16,9 @@ type ProfileFactory interface {
 }
 
 type Factory struct {
-	loader *ProfileLoader
-	mu     sync.RWMutex
+	loader       *ProfileLoader
+	prefixLookup map[string]string // maps URL prefix to profile name
+	mu           sync.RWMutex
 }
 
 // NewFactory expects a profiles directory path. This breaks the old API
@@ -29,9 +30,15 @@ func NewFactory(profilesDir string) (*Factory, error) {
 		return nil, fmt.Errorf("failed to load profiles: %w", err)
 	}
 
-	return &Factory{
-		loader: loader,
-	}, nil
+	factory := &Factory{
+		loader:       loader,
+		prefixLookup: make(map[string]string),
+	}
+
+	// Build prefix lookup table
+	factory.buildPrefixLookup()
+
+	return factory, nil
 }
 
 func NewFactoryWithDefaults() (*Factory, error) {
@@ -85,7 +92,15 @@ func (f *Factory) ReloadProfiles() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return f.loader.LoadProfiles()
+	if err := f.loader.LoadProfiles(); err != nil {
+		return err
+	}
+
+	// Rebuild prefix lookup table
+	f.prefixLookup = make(map[string]string)
+	f.buildPrefixLookup()
+
+	return nil
 }
 
 func (f *Factory) ValidateProfileType(platformType string) bool {
@@ -95,6 +110,34 @@ func (f *Factory) ValidateProfileType(platformType string) bool {
 
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+
+	// First check if it's a known prefix
+	if profileName, ok := f.prefixLookup[platformType]; ok {
+		_, exists := f.loader.GetProfile(profileName)
+		return exists
+	}
+
+	// Then check if it's a direct profile name
 	_, exists := f.loader.GetProfile(platformType)
 	return exists
+}
+
+// buildPrefixLookup builds a map from URL prefixes to profile names
+func (f *Factory) buildPrefixLookup() {
+	profiles := f.loader.GetAllProfiles()
+
+	for profileName, profile := range profiles {
+		config := profile.GetConfig()
+		if config == nil {
+			continue
+		}
+
+		// Add each routing prefix to the lookup table
+		for _, prefix := range config.Routing.Prefixes {
+			f.prefixLookup[prefix] = profileName
+		}
+
+		// Also add the profile name itself as a valid prefix
+		f.prefixLookup[profileName] = profileName
+	}
 }

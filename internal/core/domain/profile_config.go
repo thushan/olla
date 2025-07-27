@@ -6,12 +6,6 @@ import "time"
 // new inference platforms without touching Go code. Much easier than
 // submitting PRs for every new LLM server that pops up.
 type ProfileConfig struct {
-	Models struct {
-		CapabilityPatterns map[string][]string `yaml:"capability_patterns"`
-		NameFormat         string              `yaml:"name_format"`
-		ContextPatterns    []ContextPattern    `yaml:"context_patterns"`
-	} `yaml:"models"`
-
 	Name        string `yaml:"name"`
 	Version     string `yaml:"version"`
 	DisplayName string `yaml:"display_name"`
@@ -36,6 +30,17 @@ type ProfileConfig struct {
 			SupportsStreaming   bool   `yaml:"supports_streaming"`
 		} `yaml:"parsing_rules"`
 	} `yaml:"request"`
+
+	Models struct {
+		CapabilityPatterns map[string][]string `yaml:"capability_patterns"`
+		NameFormat         string              `yaml:"name_format"`
+		ContextPatterns    []ContextPattern    `yaml:"context_patterns"`
+	} `yaml:"models"`
+
+	// Routing configuration for URL prefix mapping
+	Routing struct {
+		Prefixes []string `yaml:"prefixes"`
+	} `yaml:"routing"`
 
 	API struct {
 		ModelDiscoveryPath string   `yaml:"model_discovery_path"`

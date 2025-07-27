@@ -53,7 +53,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// validate provider type (extractProviderFromPath already normalizes)
-	if !isProviderSupported(providerType) {
+	if !a.isProviderSupported(providerType) {
 		http.Error(w, fmt.Sprintf("Unknown provider type: %s", providerType), http.StatusBadRequest)
 		return
 	}
