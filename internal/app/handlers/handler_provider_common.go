@@ -11,6 +11,36 @@ import (
 	"github.com/thushan/olla/internal/core/ports"
 )
 
+// createProviderProfile creates a RequestProfile configured for a specific provider type
+func createProviderProfile(providerType string) *domain.RequestProfile {
+	profile := domain.NewRequestProfile("")
+
+	// normalize provider type to handle variations
+	providerType = NormaliseProviderType(providerType)
+
+	switch providerType {
+	case "openai":
+		// openai provider accepts any OpenAI-compatible endpoint
+		// including ollama, lm-studio, and actual openai endpoints
+		profile.AddSupportedProfile(domain.ProfileOpenAICompatible)
+		// also add specific types that should work with openai
+		profile.AddSupportedProfile("openai")
+		profile.AddSupportedProfile("vllm")
+	case "ollama":
+		profile.AddSupportedProfile(domain.ProfileOllama)
+	case "lm-studio":
+		profile.AddSupportedProfile(domain.ProfileLmStudio)
+	case "vllm":
+		// vllm doesn't have a specific profile constant yet
+		profile.AddSupportedProfile("vllm")
+	default:
+		// for unknown providers, add as-is for exact matching
+		profile.AddSupportedProfile(providerType)
+	}
+
+	return profile
+}
+
 // providerProxyHandler routes requests to endpoints of a specific provider type.
 // this enables provider-specific load balancing and failover within a single
 // provider ecosystem (eg. multiple ollama instances)
@@ -22,7 +52,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// validate provider type
+	// validate provider type (extractProviderFromPath already normalizes)
 	if !isProviderSupported(providerType) {
 		http.Error(w, fmt.Sprintf("Unknown provider type: %s", providerType), http.StatusBadRequest)
 		return
@@ -73,15 +103,17 @@ func (a *Application) getProviderEndpoints(ctx context.Context, providerType str
 		return nil, fmt.Errorf("no healthy endpoints available: %w", err)
 	}
 
-	providerEndpoints := make([]*domain.Endpoint, 0)
-	for _, ep := range endpoints {
-		if ep.Type == providerType {
-			providerEndpoints = append(providerEndpoints, ep)
-		}
-	}
+	// create a synthetic profile for provider-based filtering
+	// this leverages the existing compatibility logic in RequestProfile
+	providerProfile := createProviderProfile(providerType)
+	providerProfile.Path = pr.targetPath
 
-	// apply additional filtering based on request profile
-	if pr.profile != nil {
+	// use the standard filtering logic
+	providerEndpoints := a.filterEndpointsByProfile(endpoints, providerProfile, pr.requestLogger)
+
+	// apply additional filtering based on request profile if available
+	if pr.profile != nil && len(pr.profile.SupportedBy) > 0 {
+		// further refine based on actual request requirements
 		providerEndpoints = a.filterEndpointsByProfile(providerEndpoints, pr.profile, pr.requestLogger)
 	}
 
@@ -95,6 +127,9 @@ func (a *Application) filterModelsByProvider(ctx context.Context, models []*doma
 		return nil, fmt.Errorf("failed to get endpoints: %w", err)
 	}
 
+	// create a profile for provider compatibility checking
+	providerProfile := createProviderProfile(providerType)
+
 	// build endpoint type lookup
 	endpointTypes := make(map[string]string)
 	for _, ep := range endpoints {
@@ -106,15 +141,21 @@ func (a *Application) filterModelsByProvider(ctx context.Context, models []*doma
 		// check source endpoints for provider match
 		hasProvider := false
 		for _, source := range model.SourceEndpoints {
-			if endpointType, ok := endpointTypes[source.EndpointURL]; ok && endpointType == providerType {
-				hasProvider = true
-				break
+			if endpointType, ok := endpointTypes[source.EndpointURL]; ok {
+				// normalize endpoint type to handle variations
+				normalizedType := NormaliseProviderType(endpointType)
+				if providerProfile.IsCompatibleWith(normalizedType) {
+					hasProvider = true
+					break
+				}
 			}
 		}
 		// fallback to alias checking for provider association
 		if !hasProvider {
 			for _, alias := range model.Aliases {
-				if alias.Source == providerType {
+				// normalize alias source type
+				normalizedSource := NormaliseProviderType(alias.Source)
+				if providerProfile.IsCompatibleWith(normalizedSource) {
 					hasProvider = true
 					break
 				}

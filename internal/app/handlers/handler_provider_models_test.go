@@ -43,7 +43,7 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 			URL:       lmstudioURL,
 			URLString: lmstudioURL.String(),
 			Status:    domain.StatusHealthy,
-			Type:      "lmstudio",
+			Type:      "lm-studio",
 		},
 		{
 			Name:      "openai-1",
@@ -168,8 +168,18 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 				var response converter.OpenAIModelResponse
 				require.NoError(t, json.Unmarshal(body, &response))
 				assert.Equal(t, "list", response.Object)
-				assert.Len(t, response.Data, 1)
-				assert.Equal(t, "gpt-3.5-turbo", response.Data[0].ID)
+				// openai provider accepts all OpenAI-compatible endpoints
+				// so we should get models from ollama, lmstudio, openai, and vllm
+				assert.Len(t, response.Data, 5)
+				// verify all expected models are present
+				modelIDs := make([]string, len(response.Data))
+				for i, model := range response.Data {
+					modelIDs[i] = model.ID
+				}
+				assert.Contains(t, modelIDs, "gpt-3.5-turbo")
+				assert.Contains(t, modelIDs, "llama3:latest")
+				assert.Contains(t, modelIDs, "TheBloke/Llama-2-7B-Chat-GGUF")
+				assert.Contains(t, modelIDs, "meta-llama/Llama-2-7b-hf")
 			},
 		},
 		{
@@ -237,7 +247,7 @@ func TestProviderModelFiltering(t *testing.T) {
 			URL:       lmstudioURL,
 			URLString: lmstudioURL.String(),
 			Status:    domain.StatusHealthy,
-			Type:      "lmstudio",
+			Type:      "lm-studio",
 		},
 	}
 
@@ -313,7 +323,7 @@ func TestUnifiedModelsFormatFiltering(t *testing.T) {
 			URL:       lmstudioURL,
 			URLString: lmstudioURL.String(),
 			Status:    domain.StatusHealthy,
-			Type:      "lmstudio",
+			Type:      "lm-studio",
 		},
 		{
 			Name:      "openai-1",

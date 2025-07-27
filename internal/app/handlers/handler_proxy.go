@@ -207,7 +207,9 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	} else {
 		compatible := make([]*domain.Endpoint, 0, len(endpoints))
 		for _, endpoint := range endpoints {
-			if profile.IsCompatibleWith(endpoint.Type) {
+			// normalize endpoint type to handle variations (e.g., lmstudio -> lm-studio)
+			normalizedType := NormaliseProviderType(endpoint.Type)
+			if profile.IsCompatibleWith(normalizedType) {
 				compatible = append(compatible, endpoint)
 			}
 		}

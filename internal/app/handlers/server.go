@@ -100,7 +100,7 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterWithMethod("/olla/models/", a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
 
 	// Sherpa / Scout Proxy behaviour
-	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Ollama API proxy endpoint (sherpa)", "POST")
+	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
 	a.routeRegistry.RegisterWithMethod("/olla/proxy/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
 
 	// Ollama endpoints (intercept specific ones, proxy the rest)
@@ -116,17 +116,32 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterProxyRoute("/olla/ollama/", a.providerProxyHandler, "Ollama proxy", "")
 
 	// LM Studio endpoints (both OpenAI-compatible and beta API)
+	// Support multiple URL variations: lmstudio, lm-studio, lm_studio
 	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (OpenAI format)", "GET")
 	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/api/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (OpenAI format alt path)", "GET")
 	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/api/v0/models", a.lmstudioEnhancedModelsHandler, "LM Studio enhanced models", "GET")
 	a.routeRegistry.RegisterProxyRoute("/olla/lmstudio/", a.providerProxyHandler, "LM Studio proxy", "")
 
+	// Register alternative URL patterns for lm-studio
+	a.routeRegistry.RegisterWithMethod("/olla/lm-studio/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (hyphenated)", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/lm-studio/api/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (hyphenated alt)", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/lm-studio/api/v0/models", a.lmstudioEnhancedModelsHandler, "LM Studio enhanced (hyphenated)", "GET")
+	a.routeRegistry.RegisterProxyRoute("/olla/lm-studio/", a.providerProxyHandler, "LM Studio proxy (hyphenated)", "")
+
+	// Register underscore variant
+	a.routeRegistry.RegisterWithMethod("/olla/lm_studio/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (underscore)", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/lm_studio/api/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (underscore alt)", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/lm_studio/api/v0/models", a.lmstudioEnhancedModelsHandler, "LM Studio enhanced (underscore)", "GET")
+	a.routeRegistry.RegisterProxyRoute("/olla/lm_studio/", a.providerProxyHandler, "LM Studio proxy (underscore)", "")
+
 	// OpenAI-compatible endpoints (LocalAI, text-generation-webui, etc)
 	a.routeRegistry.RegisterWithMethod("/olla/openai/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
 	a.routeRegistry.RegisterProxyRoute("/olla/openai/", a.providerProxyHandler, "OpenAI-compatible proxy", "")
 
-	// vLLM endpoints
-	a.routeRegistry.RegisterWithMethod("/olla/vllm/v1/models", a.vllmModelsHandler, "vLLM models", "GET")
-	a.routeRegistry.RegisterProxyRoute("/olla/vllm/", a.providerProxyHandler, "vLLM proxy", "")
+	/*
+		// vLLM endpoints
+		a.routeRegistry.RegisterWithMethod("/olla/vllm/v1/models", a.vllmModelsHandler, "vLLM models", "GET")
+		a.routeRegistry.RegisterProxyRoute("/olla/vllm/", a.providerProxyHandler, "vLLM proxy", "")
+	*/
 
 }

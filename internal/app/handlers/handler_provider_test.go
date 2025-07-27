@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"github.com/thushan/olla/internal/core/constants"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -120,7 +121,7 @@ func TestProviderPathStripping(t *testing.T) {
 		},
 		{
 			name:         "Path with trailing slash",
-			inputPath:    "/olla/ollama/",
+			inputPath:    constants.DefaultOllaProxyPathPrefix + "ollama/",
 			provider:     "ollama",
 			expectedPath: "/",
 		},
@@ -130,7 +131,7 @@ func TestProviderPathStripping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test the path stripping logic
 			originalPath := tt.inputPath
-			providerPrefix := "/olla/" + tt.provider
+			providerPrefix := constants.DefaultOllaProxyPathPrefix + tt.provider
 
 			resultPath := originalPath
 			if strings.HasPrefix(originalPath, providerPrefix) {

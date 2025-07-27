@@ -154,7 +154,16 @@ test_proxy_routing() {
             echo -e "  ${CYAN}→ Routed to: $olla_endpoint${RESET}"
             
             # Verify it's the correct provider type
-            if [ -n "$olla_backend_type" ] && [ "$olla_backend_type" = "$provider" ]; then
+            # normalize provider names for comparison
+            normalized_backend="$olla_backend_type"
+            normalized_provider="$provider"
+            
+            # handle lm-studio variations
+            if [[ "$olla_backend_type" == "lm-studio" ]] && [[ "$provider" == "lmstudio" ]]; then
+                normalized_provider="lm-studio"
+            fi
+            
+            if [ -n "$olla_backend_type" ] && [ "$normalized_backend" = "$normalized_provider" ]; then
                 echo -e "  ${GREEN}✓ Correct provider type: $olla_backend_type${RESET}"
                 PASSED_TESTS=$((PASSED_TESTS + 1))
             else

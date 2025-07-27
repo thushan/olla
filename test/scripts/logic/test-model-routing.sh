@@ -31,7 +31,7 @@ RESET='\033[0m'
 # Configuration
 TARGET_URL="${TARGET_URL:-http://localhost:40114}"
 # Default to Ollama provider - users can override with environment variable
-PROVIDER="${PROVIDER:-ollama}"
+PROVIDER="${PROVIDER:-openai}"
 PROXY_ENDPOINT="/olla/${PROVIDER}/"
 CURL_TIMEOUT=180
 VERBOSE="${VERBOSE:-false}"
