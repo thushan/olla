@@ -100,4 +100,25 @@ func (a *Application) registerRoutes() {
 	// Unified models endpoints
 	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")
 	a.routeRegistry.RegisterWithMethod("/olla/models/", a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
+
+	// Provider-specific model endpoints
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/tags", a.ollamaModelsHandler, "Ollama models in native format", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/show", a.ollamaModelShowHandler, "Ollama model details", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/api/v1/tags", a.lmstudioModelsHandler, "LM Studio models in Ollama format", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models in OpenAI format", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/api/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models in OpenAI format", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/openai/v1/models", a.openaiModelsHandler, "OpenAI models", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/vllm/v1/models", a.vllmModelsHandler, "vLLM models", "GET")
+
+	// Model management endpoints - we don't actually manage models across instances
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/pull", a.unsupportedModelManagementHandler, "Model pull (unsupported)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/push", a.unsupportedModelManagementHandler, "Model push (unsupported)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
+
+	// Provider-specific proxy routes
+	a.routeRegistry.RegisterProxyRoute("/olla/ollama/", a.providerProxyHandler, "Ollama-specific proxy", "POST")
+	a.routeRegistry.RegisterProxyRoute("/olla/lmstudio/", a.providerProxyHandler, "LM Studio-specific proxy", "POST")
+	a.routeRegistry.RegisterProxyRoute("/olla/openai/", a.providerProxyHandler, "OpenAI-specific proxy", "POST")
+	a.routeRegistry.RegisterProxyRoute("/olla/vllm/", a.providerProxyHandler, "vLLM-specific proxy", "POST")
 }
