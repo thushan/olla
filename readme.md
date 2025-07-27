@@ -183,7 +183,7 @@ server:
 
 proxy:
   engine: "olla"            # or "sherpa" for simpler deployments
-  load_balancer: "priority"  # or "round_robin", "least_connections"
+  load_balancer: "priority"  # or "round-robin", "least-connections"
   response_timeout: 900s     # 15 minutes for long LLM responses
   stream_buffer_size: 65536  # 64KB for Olla, 8KB for Sherpa
   
@@ -363,48 +363,64 @@ export OLLA_LOGGING_FORMAT="json" # json or text
 
 Choose the right strategy for your setup:
 
-### 🎯 Priority (`priority`) - **Recommended**
+### 📊 Least Connections (`least-connections`) - **Recommended**
+Routes to the endpoint with least active requests. Ideal for:
+- **Mixed workloads**: Different request types with varying processing times
+- **Dynamic balancing**: Automatically adapts to endpoint performance
+- **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
+
+```yaml
+load_balancer: "least-connections"
+```
+
+### 🎯 Priority (`priority`)
 Routes requests to the highest priority healthy endpoint. Perfect for:
 - **Home setups**: Workstation (priority 100) → Laptop (priority 50)
 - **Tiered infrastructure**: GPU servers → CPU servers → Cloud endpoints
-- **Cost optimization**: Local hardware → Expensive cloud APIs
+- **Cost optimisation**: Local hardware → Expensive cloud APIs
 
 ```yaml
 load_balancer: "priority"
 ```
 
-### 🔄 Round Robin (`round_robin`)
+### 🔄 Round Robin (`round-robin`)
 Distributes requests evenly across all healthy endpoints. Good for:
 - **Equal hardware**: Multiple identical servers
 - **Even load distribution**: When all endpoints have similar capacity
 - **Simple load spreading**: No complex routing logic needed
 
 ```yaml
-load_balancer: "round_robin"
-```
-
-### 📊 Least Connections (`least_connections`)
-Routes to the endpoint with fewest active requests. Ideal for:
-- **Mixed workloads**: Different request types with varying processing times
-- **Dynamic balancing**: Automatically adapts to endpoint performance
-- **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
-
-```yaml
-load_balancer: "least_conn"
+load_balancer: "round-robin"
 ```
 
 ## 🔗 Usage
 
-Once Olla is running, point your LLM clients to it instead of directly to Ollama:
+Once Olla is running, use provider-specific endpoints to route your requests:
+
+### Provider-Specific Routing
+
+Olla uses provider namespaces to ensure requests go to the right backend type:
+
+- `/olla/ollama/*` - Routes to Ollama backends only
+- `/olla/lmstudio/*` - Routes to LM Studio backends only  
+- `/olla/openai/*` - Routes to OpenAI-compatible backends
+- `/olla/vllm/*` - Routes to vLLM backends
 
 ### OpenAI-compatible Clients
 
 ```python
 import openai
 
+# For Ollama backends
 client = openai.OpenAI(
-    base_url="http://localhost:40114/olla/v1",  # Point to Olla
-    api_key="dummy"  # Ollama doesn't need auth
+    base_url="http://localhost:40114/olla/ollama/v1",
+    api_key="dummy"
+)
+
+# For LM Studio backends
+client = openai.OpenAI(
+    base_url="http://localhost:40114/olla/lmstudio/v1",
+    api_key="dummy"
 )
 
 response = client.chat.completions.create(
@@ -413,33 +429,39 @@ response = client.chat.completions.create(
 )
 ```
 
-### Curl
+### Curl Examples
 
 ```bash
-# Chat completions
-curl -X POST http://localhost:40114/olla/v1/chat/completions \
+# Chat completions via Ollama
+curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
-# Ollama generate API
-curl -X POST http://localhost:40114/olla/api/generate \
+# Ollama native generate API
+curl -X POST http://localhost:40114/olla/ollama/api/generate \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
     "prompt": "Hello!"
   }'
+
+# List models from all providers
+curl http://localhost:40114/olla/models
+
+# List models from Ollama only
+curl http://localhost:40114/olla/models?format=ollama
 ```
 
 ### Direct Model Switching
 
-Olla automatically routes requests to endpoints that have the requested model:
+Within a provider namespace, Olla automatically routes to endpoints with the requested model:
 
 ```bash
-# This will route to whichever endpoint has 'codellama'
-curl -X POST http://localhost:40114/olla/v1/chat/completions \
+# Routes to any Ollama endpoint that has 'codellama'
+curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -d '{"model": "codellama", "messages": [...]}'
 ```
 

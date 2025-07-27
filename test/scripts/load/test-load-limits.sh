@@ -33,7 +33,8 @@ STATS_DIR=""
 WORKER_PIDS=""
 
 # Configuration defaults
-PROXY_ENDPOINT="/olla/"
+PROVIDER="${PROVIDER:-ollama}"
+PROXY_ENDPOINT="/olla/${PROVIDER}/"
 TARGET_URL=""
 RATE_LIMIT_DELAY=0
 MODEL_NAME="phi4:latest"
@@ -83,6 +84,9 @@ usage() {
     echo -e "  TARGET_URL      Olla proxy URL (e.g., http://localhost:40114)"
     echo -e "  RATE_LIMIT      Delay between requests in seconds (default: 0)"
     echo -e "  MODEL_NAME      Model to test with (default: phi4:latest)"
+    echo
+    echo -e "${YELLOW}Environment Variables:${RESET}"
+    echo -e "  PROVIDER        Provider to test (default: ollama) - ollama, lmstudio, openai, vllm"
     echo
     echo -e "${YELLOW}Example:${RESET}"
     echo -e "  $0 300 10   # Run for 5 minutes with 10 concurrent workers"

@@ -30,7 +30,9 @@ RESET='\033[0m'
 
 # Configuration
 TARGET_URL="${TARGET_URL:-http://localhost:40114}"
-PROXY_ENDPOINT="/olla/"
+# Default to Ollama provider - users can override with environment variable
+PROVIDER="${PROVIDER:-openai}"
+PROXY_ENDPOINT="/olla/${PROVIDER}/"
 CURL_TIMEOUT=180
 VERBOSE="${VERBOSE:-false}"
 
@@ -72,6 +74,7 @@ usage() {
     echo
     echo -e "${YELLOW}Environment Variables:${RESET}"
     echo -e "  TARGET_URL      Olla proxy URL (default: http://localhost:40114)"
+    echo -e "  PROVIDER        Provider to test (default: ollama) - ollama, lmstudio, openai, vllm"
     echo -e "  VERBOSE         Show detailed request/response info (default: false)"
     echo
     echo -e "${YELLOW}Description:${RESET}"
@@ -89,7 +92,9 @@ usage() {
     echo -e "  • X-Served-By - Server identification"
     echo
     echo -e "${YELLOW}Examples:${RESET}"
-    echo -e "  $0                               # Test only discovered models"
+    echo -e "  $0                               # Test only discovered models (Ollama)"
+    echo -e "  PROVIDER=lmstudio $0             # Test LM Studio endpoints"
+    echo -e "  PROVIDER=openai $0               # Test OpenAI-compatible endpoints"
     echo -e "  $0 gpt-4-turbo claude-3-sonnet   # Test discovered + additional models"
     echo -e "  VERBOSE=true $0                  # Show detailed debug information"
     echo

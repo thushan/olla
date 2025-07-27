@@ -74,6 +74,48 @@ func TestValidateProfileType(t *testing.T) {
 	}
 }
 
+func TestValidateProfileType_WithRoutingPrefixes(t *testing.T) {
+	// Create factory with default profiles
+	factory := testFactory(t)
+
+	tests := []struct {
+		name     string
+		provider string
+		expected bool
+	}{
+		// Direct profile names
+		{"ollama profile name", "ollama", true},
+		{"lm-studio profile name", "lm-studio", true},
+		{"openai-compatible profile name", "openai-compatible", true},
+
+		// Routing prefixes for lm-studio
+		{"lmstudio prefix", "lmstudio", true},
+		{"lm_studio prefix", "lm_studio", true},
+
+		// Routing prefix for openai
+		{"openai prefix", "openai", true},
+
+		// Auto profile
+		{"auto profile", "auto", true},
+
+		// Unknown providers
+		{"unknown provider", "unknown", false},
+		{"empty provider", "", false},
+
+		// vLLM if profile exists - not in built-in profiles
+		{"vllm provider", "vllm", false}, // vllm is not a built-in profile
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := factory.ValidateProfileType(tt.provider)
+			if result != tt.expected {
+				t.Errorf("ValidateProfileType(%q) = %v, want %v", tt.provider, result, tt.expected)
+			}
+		})
+	}
+}
+
 /*
 	func TestProfileFactoryRegistration(t *testing.T) {
 		factory := &Factory{

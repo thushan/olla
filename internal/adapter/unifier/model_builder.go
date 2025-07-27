@@ -216,8 +216,8 @@ func (e *ModelExtractor) ExtractPublisher(modelName string, metadata map[string]
 	return extractPublisher(modelName, metadata)
 }
 
-// DetectPlatform detects the platform from model metadata
-func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]interface{}) string {
+// DetectPlatform detects the platform from model metadata and endpoint info
+func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]interface{}, endpointType string) string {
 	// Check metadata for platform hints
 	if metadata != nil {
 		if platform, ok := metadata["platform"].(string); ok {
@@ -229,6 +229,15 @@ func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]inter
 		if _, ok := metadata["lmstudio.version"]; ok {
 			return "lmstudio"
 		}
+	}
+
+	// Use endpoint type if available
+	if endpointType != "" {
+		// Normalize endpoint type (e.g., "lm-studio" -> "lmstudio")
+		normalized := strings.ToLower(endpointType)
+		normalized = strings.ReplaceAll(normalized, "-", "")
+		normalized = strings.ReplaceAll(normalized, "_", "")
+		return normalized
 	}
 
 	// Check format

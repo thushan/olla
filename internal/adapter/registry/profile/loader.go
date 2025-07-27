@@ -113,6 +113,7 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 		DisplayName: "Ollama",
 		Description: "Local Ollama instance for running GGUF models",
 	}
+	ollamaConfig.Routing.Prefixes = []string{"ollama"}
 	ollamaConfig.API.OpenAICompatible = true
 	ollamaConfig.API.Paths = []string{
 		"/", // health check
@@ -210,6 +211,7 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 		DisplayName: "LM Studio",
 		Description: "LM Studio local inference server",
 	}
+	lmStudioConfig.Routing.Prefixes = []string{"lmstudio", "lm-studio", "lm_studio"}
 	lmStudioConfig.API.OpenAICompatible = true
 	lmStudioConfig.API.Paths = []string{
 		DefaultModelsUri, // both health check and models
@@ -259,6 +261,7 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 		DisplayName: "OpenAI Compatible",
 		Description: "Generic OpenAI-compatible API",
 	}
+	openAIConfig.Routing.Prefixes = []string{"openai", "openai-compatible"}
 	openAIConfig.API.OpenAICompatible = true
 	openAIConfig.API.Paths = []string{
 		DefaultModelsUri,

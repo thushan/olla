@@ -4,6 +4,13 @@ version: "1.0"
 display_name: "LM Studio"
 description: "LM Studio local inference server"
 
+# Routing configuration - support all variations
+routing:
+  prefixes:
+    - lmstudio
+    - lm-studio
+    - lm_studio
+
 # API compatibility
 api:
   openai_compatible: true

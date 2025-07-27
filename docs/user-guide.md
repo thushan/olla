@@ -154,10 +154,16 @@ logging:
 ```python
 from openai import OpenAI
 
-# Configure client to use Olla
+# For Ollama backends
 client = OpenAI(
-    base_url="http://localhost:40114/olla/v1",
+    base_url="http://localhost:40114/olla/ollama/v1",
     api_key="not-needed"  # Olla doesn't require auth
+)
+
+# For LM Studio backends
+client = OpenAI(
+    base_url="http://localhost:40114/olla/lmstudio/v1",
+    api_key="not-needed"
 )
 
 # Chat completion
@@ -180,8 +186,15 @@ print(f"Handled by: {response.headers.get('X-Olla-Endpoint')}")
 ```javascript
 import OpenAI from 'openai';
 
+// For Ollama backends
 const openai = new OpenAI({
-  baseURL: 'http://localhost:40114/olla/v1',
+  baseURL: 'http://localhost:40114/olla/ollama/v1',
+  apiKey: 'not-needed',
+});
+
+// For OpenAI-compatible backends (vLLM, etc.)
+const openai = new OpenAI({
+  baseURL: 'http://localhost:40114/olla/openai/v1',
   apiKey: 'not-needed',
 });
 
@@ -198,26 +211,45 @@ async function chat() {
 ### cURL
 
 ```bash
-# Chat completion
-curl -X POST http://localhost:40114/olla/v1/chat/completions \
+# Chat completion via Ollama
+curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
+# Chat completion via LM Studio
+curl -X POST http://localhost:40114/olla/lmstudio/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "TheBloke/Llama-2-7B-Chat-GGUF",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+
 # List available models
 curl http://localhost:40114/olla/models | jq
+
+# List models from Ollama only
+curl http://localhost:40114/olla/models?format=ollama | jq
 
 # Check system status
 curl http://localhost:40114/internal/status | jq
 ```
 
-### Ollama Compatibility
+### Ollama Native API
 
 ```bash
-# Olla works as a drop-in replacement
-ollama run llama3.2 --server http://localhost:40114/olla
+# Use Ollama's native generate API
+curl -X POST http://localhost:40114/olla/ollama/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama3.2",
+    "prompt": "Why is the sky blue?"
+  }'
+
+# List models in Ollama format
+curl http://localhost:40114/olla/ollama/api/tags | jq
 ```
 
 ## Model Management
@@ -337,11 +369,11 @@ export OLLA_LOG_LEVEL=debug
 
 # Test specific endpoint
 curl -H "X-Olla-Endpoint: gaming-pc" \
-  http://localhost:40114/olla/v1/chat/completions \
+  http://localhost:40114/olla/ollama/v1/chat/completions \
   -d '{"model": "llama3.2", "messages": [...]}'
 
 # Check rate limit headers
-curl -i http://localhost:40114/olla/v1/models | grep X-RateLimit
+curl -i http://localhost:40114/olla/models | grep X-RateLimit
 ```
 
 ## Troubleshooting

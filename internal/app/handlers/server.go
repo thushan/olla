@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/docker/go-units"
-	"github.com/thushan/olla/internal/core/constants"
 )
 
 const (
@@ -80,24 +79,4 @@ func (a *Application) loggingMiddleware(next http.Handler) http.Handler {
 			"user_agent", r.UserAgent())
 		next.ServeHTTP(w, r)
 	})
-}
-func (a *Application) registerRoutes() {
-	/*
-	 /olla/proxy => Standard load balancing
-	 /olla/model => Model-aware routing
-	 /olla/route => Direct endpoint routing
-	*/
-	a.routeRegistry.RegisterProxyRoute("/olla/", a.proxyHandler, "Ollama API proxy endpoint (default)", "POST")
-	a.routeRegistry.RegisterProxyRoute("/proxy/", a.proxyHandler, "Ollama API proxy endpoint (mirror)", "POST") // Sherpa compatibility
-	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/status/endpoints", a.endpointsStatusHandler, "Endpoints status", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/status/models", a.modelsStatusHandler, "Models status", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/stats/models", a.modelStatsHandler, "Model statistics", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
-	a.routeRegistry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
-
-	// Unified models endpoints
-	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/models/", a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
 }

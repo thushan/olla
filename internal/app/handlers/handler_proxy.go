@@ -93,6 +93,7 @@ func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *p
 
 	if profile != nil && profile.ModelName != "" {
 		pr.model = profile.ModelName
+		pr.stats.Model = pr.model
 	}
 
 	pr.stats.PathResolutionMs = time.Since(pathResolutionStart).Milliseconds()
@@ -206,7 +207,9 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	} else {
 		compatible := make([]*domain.Endpoint, 0, len(endpoints))
 		for _, endpoint := range endpoints {
-			if profile.IsCompatibleWith(endpoint.Type) {
+			// Normalise endpoint type to handle variations (e.g., lmstudio -> lm-studio)
+			normalizedType := NormaliseProviderType(endpoint.Type)
+			if profile.IsCompatibleWith(normalizedType) {
 				compatible = append(compatible, endpoint)
 			}
 		}

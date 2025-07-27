@@ -70,6 +70,7 @@ type Application struct {
 	securityAdapters *SecurityAdapters
 	routeRegistry    *router.RouteRegistry
 	converterFactory *converter.ConverterFactory
+	profileFactory   profile.ProfileFactory
 	server           *http.Server
 	errCh            chan error
 	StartTime        time.Time
@@ -137,6 +138,7 @@ func NewApplication(
 		inspectorChain:   inspectorChain,
 		securityAdapters: securityAdapters,
 		routeRegistry:    routeRegistry,
+		profileFactory:   profileFactory,
 		converterFactory: converter.NewConverterFactory(),
 		server:           server,
 		errCh:            make(chan error, 1),

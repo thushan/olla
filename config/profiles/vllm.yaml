@@ -1,0 +1,63 @@
+# vLLM inference platform profile
+name: vllm
+version: "1.0"
+display_name: "vLLM"
+description: "vLLM high-performance inference server"
+
+# Routing configuration
+routing:
+  prefixes:
+    - vllm
+
+# API compatibility
+api:
+  openai_compatible: true
+  paths:
+    - /v1/models
+    - /v1/chat/completions
+    - /v1/completions
+    - /v1/embeddings
+  model_discovery_path: /v1/models
+  health_check_path: /v1/models
+
+# Platform characteristics
+characteristics:
+  timeout: 2m
+  max_concurrent_requests: 100
+  default_priority: 80
+  streaming_support: true
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/v1/models"
+  default_ports:
+    - 8000
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "openai"
+  parsing_rules:
+    chat_completions_path: "/v1/chat/completions"
+    completions_path: "/v1/completions"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions
+path_indices:
+  health: 0
+  models: 0
+  chat_completions: 1
+  completions: 2
+  embeddings: 3
+
+# Resource management - vLLM is optimized for high throughput
+resources:
+  defaults:
+    min_memory_gb: 8
+    recommended_memory_gb: 16
+    min_gpu_memory_gb: 8
+    requires_gpu: true
+    estimated_load_time_ms: 30000

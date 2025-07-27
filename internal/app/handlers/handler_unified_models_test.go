@@ -106,7 +106,7 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait a bit for async unification
-	// TODO: This is a hack, should use proper synchronization
+	// TODO: This is a hack, should use proper synchronisation
 	<-time.After(100 * time.Millisecond)
 
 	// Verify models were registered
