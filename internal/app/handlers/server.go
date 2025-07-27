@@ -99,6 +99,10 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")
 	a.routeRegistry.RegisterWithMethod("/olla/models/", a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
 
+	// Sherpa / Scout Proxy behaviour
+	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Ollama API proxy endpoint (sherpa)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/proxy/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
+
 	// Ollama endpoints (intercept specific ones, proxy the rest)
 	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/tags", a.ollamaModelsHandler, "Ollama models listing", "GET")
 	a.routeRegistry.RegisterWithMethod("/olla/ollama/v1/models", a.ollamaOpenAIModelsHandler, "Ollama models (OpenAI format)", "GET")

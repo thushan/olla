@@ -32,7 +32,7 @@ proxy:
   read_timeout: 300s
   max_retries: 3
   retry_backoff: 500ms
-  load_balancer: "least_conn"  # Available: round_robin, least_conn, priority
+  load_balancer: "least-connections" # Available: round-robin, least-connections, priority
   stream_buffer_size: 8192
 
 discovery:

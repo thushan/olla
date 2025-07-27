@@ -183,7 +183,7 @@ server:
 
 proxy:
   engine: "olla"            # or "sherpa" for simpler deployments
-  load_balancer: "priority"  # or "round_robin", "least_connections"
+  load_balancer: "priority"  # or "round-robin", "least-connections"
   response_timeout: 900s     # 15 minutes for long LLM responses
   stream_buffer_size: 65536  # 64KB for Olla, 8KB for Sherpa
   
@@ -363,34 +363,34 @@ export OLLA_LOGGING_FORMAT="json" # json or text
 
 Choose the right strategy for your setup:
 
-### 🎯 Priority (`priority`) - **Recommended**
+### 📊 Least Connections (`least-connections`) - **Recommended**
+Routes to the endpoint with least active requests. Ideal for:
+- **Mixed workloads**: Different request types with varying processing times
+- **Dynamic balancing**: Automatically adapts to endpoint performance
+- **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
+
+```yaml
+load_balancer: "least-connections"
+```
+
+### 🎯 Priority (`priority`)
 Routes requests to the highest priority healthy endpoint. Perfect for:
 - **Home setups**: Workstation (priority 100) → Laptop (priority 50)
 - **Tiered infrastructure**: GPU servers → CPU servers → Cloud endpoints
-- **Cost optimization**: Local hardware → Expensive cloud APIs
+- **Cost optimisation**: Local hardware → Expensive cloud APIs
 
 ```yaml
 load_balancer: "priority"
 ```
 
-### 🔄 Round Robin (`round_robin`)
+### 🔄 Round Robin (`round-robin`)
 Distributes requests evenly across all healthy endpoints. Good for:
 - **Equal hardware**: Multiple identical servers
 - **Even load distribution**: When all endpoints have similar capacity
 - **Simple load spreading**: No complex routing logic needed
 
 ```yaml
-load_balancer: "round_robin"
-```
-
-### 📊 Least Connections (`least_connections`)
-Routes to the endpoint with fewest active requests. Ideal for:
-- **Mixed workloads**: Different request types with varying processing times
-- **Dynamic balancing**: Automatically adapts to endpoint performance
-- **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
-
-```yaml
-load_balancer: "least_conn"
+load_balancer: "round-robin"
 ```
 
 ## 🔗 Usage
