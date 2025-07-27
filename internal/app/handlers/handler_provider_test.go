@@ -1,14 +1,67 @@
 package handlers
 
 import (
+	"context"
+	"github.com/thushan/olla/internal/adapter/inspector"
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/core/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
-// TestProviderRouting tests basic provider routing functionality
+// mockDiscoveryService for testing
+type mockDiscoveryService struct{}
+
+func (m *mockDiscoveryService) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return nil, nil
+}
+
+func (m *mockDiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return nil, nil
+}
+
+func (m *mockDiscoveryService) RefreshEndpoints(ctx context.Context) error {
+	return nil
+}
+
+// createTestApplication creates a minimal Application for testing
+func createTestApplication(t *testing.T) *Application {
+	logger := &mockStyledLogger{}
+	profileFactory := &mockProfileFactory{
+		validProfiles: map[string]bool{
+			"ollama":    true,
+			"lmstudio":  true,
+			"lm-studio": true,
+			"openai":    true,
+			"vllm":      true,
+		},
+	}
+
+	// Create minimal config
+	cfg := &config.Config{
+		Server: config.ServerConfig{
+			RateLimits: config.ServerRateLimits{},
+		},
+	}
+
+	// Create empty inspector chain
+	inspectorChain := inspector.NewChain(logger)
+
+	return &Application{
+		Config:           cfg,
+		logger:           logger,
+		discoveryService: &mockDiscoveryService{},
+		profileFactory:   profileFactory,
+		inspectorChain:   inspectorChain,
+		StartTime:        time.Now(),
+	}
+}
+
+// TestProviderRouting tests basic provider routing functionality by calling the actual handler
 func TestProviderRouting(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -22,7 +75,7 @@ func TestProviderRouting(t *testing.T) {
 			url:                "/olla",
 			method:             "POST",
 			expectedStatusCode: http.StatusBadRequest,
-			expectedError:      "Invalid path",
+			expectedError:      "Invalid path format",
 		},
 		{
 			name:               "Unknown provider type",
@@ -35,48 +88,40 @@ func TestProviderRouting(t *testing.T) {
 			name:               "Valid Ollama provider",
 			url:                "/olla/ollama/api/generate",
 			method:             "POST",
-			expectedStatusCode: http.StatusInternalServerError, // Will fail due to no app setup
+			expectedStatusCode: http.StatusNotFound,
+			expectedError:      "No ollama endpoints available",
 		},
 		{
 			name:               "Valid LM Studio provider",
 			url:                "/olla/lmstudio/v1/chat/completions",
 			method:             "POST",
-			expectedStatusCode: http.StatusInternalServerError, // Will fail due to no app setup
+			expectedStatusCode: http.StatusNotFound,
+			expectedError:      "No lm-studio endpoints available",
 		},
 		{
 			name:               "Valid OpenAI provider",
 			url:                "/olla/openai/v1/models",
 			method:             "POST",
-			expectedStatusCode: http.StatusInternalServerError, // Will fail due to no app setup
+			expectedStatusCode: http.StatusNotFound,
+			expectedError:      "No openai endpoints available",
 		},
 		{
 			name:               "Valid vLLM provider",
 			url:                "/olla/vllm/generate",
 			method:             "POST",
-			expectedStatusCode: http.StatusInternalServerError, // Will fail due to no app setup
+			expectedStatusCode: http.StatusNotFound,
+			expectedError:      "No vllm endpoints available",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			app := createTestApplication(t)
 			req := httptest.NewRequest(tt.method, tt.url, nil)
 			w := httptest.NewRecorder()
 
-			// We only test the initial validation logic, not the full proxy flow
-			// Directly test the validation part
-			pathParts := strings.Split(req.URL.Path, "/")
-			if len(pathParts) < 3 {
-				http.Error(w, "Invalid path", http.StatusBadRequest)
-			} else {
-				providerType := pathParts[2]
-				switch providerType {
-				case "ollama", "lmstudio", "openai", "vllm":
-					// For valid providers, we'd normally continue but we can't without full setup
-					http.Error(w, "Test setup incomplete", http.StatusInternalServerError)
-				default:
-					http.Error(w, "Unknown provider type: "+providerType, http.StatusBadRequest)
-				}
-			}
+			// Call the actual handler method
+			app.providerProxyHandler(w, req)
 
 			resp := w.Result()
 			if resp.StatusCode != tt.expectedStatusCode {
