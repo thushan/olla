@@ -145,7 +145,7 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpo
 		baseID = generateUniqueID(baseID, model.Digest, existingDigest)
 	}
 
-	platform := u.extractor.DetectPlatform(model.Format, model.Metadata)
+	platform := u.extractor.DetectPlatform(model.Format, model.Metadata, endpoint.Type)
 	paramSize, paramCount := u.extractor.ExtractParameterInfo(model.Metadata, model.Size)
 	quantization := u.extractor.ExtractQuantization(model.Metadata)
 	family, variant := u.extractor.ExtractFamilyAndVariant(model.Name, model.Family, model.Metadata)
@@ -218,7 +218,7 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 	}
 
 	if !updated {
-		platform := u.extractor.DetectPlatform(model.Format, model.Metadata)
+		platform := u.extractor.DetectPlatform(model.Format, model.Metadata, endpoint.Type)
 		state := u.extractor.MapModelState(model.Metadata, model.Size)
 
 		sourceEndpoint := NewSourceEndpointBuilder().
