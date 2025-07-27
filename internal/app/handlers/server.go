@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/docker/go-units"
 	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 const (
@@ -81,12 +83,170 @@ func (a *Application) loggingMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// registerProviderRoutes dynamically registers routes based on loaded profiles
+func (a *Application) registerProviderRoutes() {
+	if a.profileFactory == nil {
+		a.logger.Warn("Profile factory not available, using static route registration")
+		a.registerStaticProviderRoutes()
+		return
+	}
+
+	// Get all available profiles including openai-compatible
+	profiles := a.profileFactory.GetAvailableProfiles()
+
+	// GetAvailableProfiles filters out "openai-compatible", but we need it for routing
+	// So we'll add it manually
+	profiles = append(profiles, "openai-compatible")
+
+	a.logger.Info("Registering provider routes from profiles", "count", len(profiles))
+
+	for _, profileName := range profiles {
+		profile, err := a.profileFactory.GetProfile(profileName)
+		if err != nil {
+			// It's OK if openai-compatible doesn't exist in some test scenarios
+			if profileName != "openai-compatible" {
+				a.logger.Warn("Failed to get profile", "profile", profileName, "error", err)
+			}
+			continue
+		}
+
+		config := profile.GetConfig()
+		if config == nil || len(config.Routing.Prefixes) == 0 {
+			a.logger.Debug("Profile has no routing prefixes", "profile", profileName)
+			continue
+		}
+
+		// Register routes for each prefix
+		a.logger.Debug("Profile has routing prefixes", "profile", profileName, "prefixes", config.Routing.Prefixes)
+		for _, prefix := range config.Routing.Prefixes {
+			a.registerProviderPrefixRoutes(prefix, profileName, config)
+		}
+	}
+}
+
+// registerProviderPrefixRoutes registers routes for a specific provider prefix
+func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, config *domain.ProfileConfig) {
+	basePath := constants.DefaultOllaProxyPathPrefix + prefix + constants.DefaultPathPrefix
+
+	a.logger.Debug("Registering routes for provider", "prefix", prefix, "profile", profileName)
+
+	// Register model discovery endpoints if configured
+	if config.API.ModelDiscoveryPath != "" {
+		// Native format endpoint
+		nativePath := basePath + strings.TrimPrefix(config.API.ModelDiscoveryPath, constants.DefaultPathPrefix)
+
+		// Special handling for ollama
+		if profileName == "ollama" {
+			a.routeRegistry.RegisterWithMethod(nativePath,
+				a.ollamaModelsHandler,
+				prefix+" models listing", "GET")
+
+			// Special Ollama endpoints
+			a.routeRegistry.RegisterWithMethod(basePath+"api/list",
+				a.ollamaRunningModelsHandler,
+				prefix+" running models", "GET")
+			a.routeRegistry.RegisterWithMethod(basePath+"api/show",
+				a.ollamaModelShowHandler,
+				prefix+" model details", "POST")
+
+			// Unsupported model management
+			a.routeRegistry.RegisterWithMethod(basePath+"api/pull", a.unsupportedModelManagementHandler, "Model pull (unsupported)", "POST")
+			a.routeRegistry.RegisterWithMethod(basePath+"api/push", a.unsupportedModelManagementHandler, "Model push (unsupported)", "POST")
+			a.routeRegistry.RegisterWithMethod(basePath+"api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", "POST")
+			a.routeRegistry.RegisterWithMethod(basePath+"api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
+			a.routeRegistry.RegisterWithMethod(basePath+"api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
+		} else {
+			// For other providers, just register the discovery path
+			a.routeRegistry.RegisterWithMethod(nativePath,
+				a.genericProviderModelsHandler(prefix, "native"),
+				prefix+" models", "GET")
+		}
+	}
+
+	// Register OpenAI-compatible endpoints if supported
+	if config.API.OpenAICompatible {
+		openAIPath := basePath + "v1/models"
+
+		// Use specific handlers for known providers
+		switch profileName {
+		case "ollama":
+			a.routeRegistry.RegisterWithMethod(openAIPath,
+				a.ollamaOpenAIModelsHandler,
+				prefix+" models (OpenAI format)", "GET")
+		case "lm-studio":
+			a.routeRegistry.RegisterWithMethod(openAIPath,
+				a.lmstudioOpenAIModelsHandler,
+				prefix+" models (OpenAI format)", "GET")
+			// Alternative OpenAI path
+			a.routeRegistry.RegisterWithMethod(basePath+"api/v1/models",
+				a.lmstudioOpenAIModelsHandler,
+				prefix+" models (OpenAI format alt path)", "GET")
+			// Enhanced models endpoint
+			a.routeRegistry.RegisterWithMethod(basePath+"api/v0/models",
+				a.lmstudioEnhancedModelsHandler,
+				prefix+" enhanced models", "GET")
+		case "openai-compatible":
+			// Special case for openai prefix - use the dedicated handler
+			if prefix == "openai" {
+				a.routeRegistry.RegisterWithMethod(openAIPath,
+					a.openaiModelsHandler,
+					"OpenAI-compatible models", "GET")
+			} else {
+				a.routeRegistry.RegisterWithMethod(openAIPath,
+					a.genericProviderModelsHandler(prefix, "openai"),
+					prefix+" models (OpenAI format)", "GET")
+			}
+		default:
+			// Generic OpenAI-compatible endpoint
+			a.routeRegistry.RegisterWithMethod(openAIPath,
+				a.genericProviderModelsHandler(prefix, "openai"),
+				prefix+" models (OpenAI format)", "GET")
+		}
+	}
+
+	// Register catch-all proxy route
+	a.routeRegistry.RegisterProxyRoute(basePath, a.providerProxyHandler, prefix+" proxy", "")
+}
+
+// registerStaticProviderRoutes is a fallback for when profile factory is not available
+func (a *Application) registerStaticProviderRoutes() {
+	// Ollama endpoints
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/tags", a.ollamaModelsHandler, "Ollama models listing", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/v1/models", a.ollamaOpenAIModelsHandler, "Ollama models (OpenAI format)", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/list", a.ollamaRunningModelsHandler, "Ollama running models", "GET")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/show", a.ollamaModelShowHandler, "Ollama model details", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/pull", a.unsupportedModelManagementHandler, "Model pull (unsupported)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/push", a.unsupportedModelManagementHandler, "Model push (unsupported)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
+	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
+	a.routeRegistry.RegisterProxyRoute("/olla/ollama/", a.providerProxyHandler, "Ollama proxy", "")
+
+	// LM Studio endpoints (all variations)
+	prefixes := []string{"lmstudio", "lm-studio", "lm_studio"}
+	for _, prefix := range prefixes {
+		desc := "LM Studio"
+		if prefix != "lmstudio" {
+			desc += fmt.Sprintf(" (%s)", prefix)
+		}
+		a.routeRegistry.RegisterWithMethod(fmt.Sprintf("/olla/%s/v1/models", prefix), a.lmstudioOpenAIModelsHandler, desc+" models (OpenAI format)", "GET")
+		a.routeRegistry.RegisterWithMethod(fmt.Sprintf("/olla/%s/api/v1/models", prefix), a.lmstudioOpenAIModelsHandler, desc+" models (OpenAI format alt path)", "GET")
+		a.routeRegistry.RegisterWithMethod(fmt.Sprintf("/olla/%s/api/v0/models", prefix), a.lmstudioEnhancedModelsHandler, desc+" enhanced models", "GET")
+		a.routeRegistry.RegisterProxyRoute(fmt.Sprintf("/olla/%s/", prefix), a.providerProxyHandler, desc+" proxy", "")
+	}
+
+	// OpenAI endpoints
+	a.routeRegistry.RegisterWithMethod("/olla/openai/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
+	a.routeRegistry.RegisterProxyRoute("/olla/openai/", a.providerProxyHandler, "OpenAI-compatible proxy", "")
+}
 func (a *Application) registerRoutes() {
 	/*
 	 /olla/proxy => Standard load balancing
 	 /olla/model => Model-aware routing
 	 /olla/route => Direct endpoint routing
 	*/
+	// Register internal routes
 	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/status/endpoints", a.endpointsStatusHandler, "Endpoints status", "GET")
@@ -103,45 +263,7 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
 	a.routeRegistry.RegisterWithMethod("/olla/proxy/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
 
-	// Ollama endpoints (intercept specific ones, proxy the rest)
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/tags", a.ollamaModelsHandler, "Ollama models listing", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/v1/models", a.ollamaOpenAIModelsHandler, "Ollama models (OpenAI format)", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/list", a.ollamaRunningModelsHandler, "Ollama running models", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/show", a.ollamaModelShowHandler, "Ollama model details", "POST")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/pull", a.unsupportedModelManagementHandler, "Model pull (unsupported)", "POST")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/push", a.unsupportedModelManagementHandler, "Model push (unsupported)", "POST")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", "POST")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
-	a.routeRegistry.RegisterWithMethod("/olla/ollama/api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
-	a.routeRegistry.RegisterProxyRoute("/olla/ollama/", a.providerProxyHandler, "Ollama proxy", "")
-
-	// LM Studio endpoints (both OpenAI-compatible and beta API)
-	// Support multiple URL variations: lmstudio, lm-studio, lm_studio
-	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (OpenAI format)", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/api/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (OpenAI format alt path)", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/lmstudio/api/v0/models", a.lmstudioEnhancedModelsHandler, "LM Studio enhanced models", "GET")
-	a.routeRegistry.RegisterProxyRoute("/olla/lmstudio/", a.providerProxyHandler, "LM Studio proxy", "")
-
-	// Register alternative URL patterns for lm-studio
-	a.routeRegistry.RegisterWithMethod("/olla/lm-studio/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (hyphenated)", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/lm-studio/api/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (hyphenated alt)", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/lm-studio/api/v0/models", a.lmstudioEnhancedModelsHandler, "LM Studio enhanced (hyphenated)", "GET")
-	a.routeRegistry.RegisterProxyRoute("/olla/lm-studio/", a.providerProxyHandler, "LM Studio proxy (hyphenated)", "")
-
-	// Register underscore variant
-	a.routeRegistry.RegisterWithMethod("/olla/lm_studio/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (underscore)", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/lm_studio/api/v1/models", a.lmstudioOpenAIModelsHandler, "LM Studio models (underscore alt)", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/lm_studio/api/v0/models", a.lmstudioEnhancedModelsHandler, "LM Studio enhanced (underscore)", "GET")
-	a.routeRegistry.RegisterProxyRoute("/olla/lm_studio/", a.providerProxyHandler, "LM Studio proxy (underscore)", "")
-
-	// OpenAI-compatible endpoints (LocalAI, text-generation-webui, etc)
-	a.routeRegistry.RegisterWithMethod("/olla/openai/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
-	a.routeRegistry.RegisterProxyRoute("/olla/openai/", a.providerProxyHandler, "OpenAI-compatible proxy", "")
-
-	/*
-		// vLLM endpoints
-		a.routeRegistry.RegisterWithMethod("/olla/vllm/v1/models", a.vllmModelsHandler, "vLLM models", "GET")
-		a.routeRegistry.RegisterProxyRoute("/olla/vllm/", a.providerProxyHandler, "vLLM proxy", "")
-	*/
+	// Register provider-specific routes dynamically
+	a.registerProviderRoutes()
 
 }

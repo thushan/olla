@@ -185,7 +185,7 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 		{
 			name:           "vllm_format",
 			endpoint:       "/olla/vllm/v1/models",
-			handler:        app.vllmModelsHandler,
+			handler:        app.genericProviderModelsHandler("vllm", "openai"),
 			expectedFormat: "openai",
 			checkResponse: func(t *testing.T, body []byte) {
 				var response converter.OpenAIModelResponse

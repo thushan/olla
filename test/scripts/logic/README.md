@@ -9,6 +9,7 @@ This directory contains scripts for testing Olla's routing logic, model discover
 | `test-model-routing.sh` | Tests model routing and capability detection | Auto-discovery, capability-based routing |
 | `test-provider-routing.sh` | Tests provider-specific routing namespaces | Provider isolation, header validation |
 | `test-provider-models.sh` | Tests provider-specific model listing endpoints | Format validation, provider filtering |
+| `test-model-routing-provider.py` | Tests provider-specific model routing with smart filtering | Provider-aware testing, endpoint health monitoring |
 
 ## test-model-routing.sh
 
@@ -112,6 +113,88 @@ VERBOSE=true ./test-provider-models.sh
 - `/olla/models?format=ollama` - Ollama format (Ollama models only)
 - `/olla/models?format=lmstudio` - LM Studio format (LM Studio models only)
 
+## test-model-routing-provider.py
+
+Advanced Python script for testing provider-specific model routing with intelligent filtering to reduce noise from incompatible model/provider combinations.
+
+### Features
+- **Endpoint Health Monitoring** - Shows health status, model count, and success rate for each endpoint
+- **Provider-Specific Model Discovery** - Fetches models available for each provider format
+- **Smart Testing** - Only tests valid model/provider combinations
+- **Detailed Statistics** - Tracks success/failure per endpoint with color-coded results
+- **Flexible Testing** - Test specific providers or all providers
+- **Configurable Scope** - Test subset or all models with `--all` flag
+
+### Requirements
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+```
+
+### Usage
+```bash
+# Test all providers (default: 3 models per provider)
+python test-model-routing-provider.py
+
+# Test specific provider
+python test-model-routing-provider.py --openai
+python test-model-routing-provider.py --ollama
+python test-model-routing-provider.py --lmstudio
+
+# Test multiple providers
+python test-model-routing-provider.py --openai --ollama
+
+# Test all models (no limit)
+python test-model-routing-provider.py --all
+
+# With custom Olla URL
+python test-model-routing-provider.py --url http://localhost:8080
+```
+
+### What it tests
+1. **Endpoint Discovery** - Fetches all available endpoints from `/internal/status/endpoints`
+2. **Model Discovery** - Fetches total models and provider-specific models using format parameter
+3. **Models Endpoints** - Tests provider-specific model listing endpoints
+4. **Model Routing** - Tests each model with appropriate provider API format:
+   - **OpenAI**: `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`
+   - **Ollama**: `/api/generate`, `/api/chat`, `/api/embeddings`
+   - **LM Studio**: `/v1/chat/completions`, `/api/v1/chat/completions`
+
+### Output includes
+- Endpoint health status with model counts and success rates
+- Total models available across all providers
+- Provider-specific model counts
+- Per-model test results with response times
+- Endpoint usage statistics with success/failure breakdown
+- Overall success rate
+
+### Example Output
+```
+Available endpoints:
+  - local-ollama [HEALTHY] - 15 models, 90.9% success
+  - neo-lm-studio [HEALTHY] - 4 models, 100% success
+
+Model Summary:
+Total models available: 31
+
+OPENAI models (31):
+  - qwen/qwen3-32b
+  - llama3:latest
+  ... and 29 more
+
+Test Summary:
+  Total Tests:        23
+  Successful Tests:   23
+  Failed Tests:       0
+  Success Rate:       100%
+
+Endpoint Usage:
+  Endpoint             Total    Success  Failed  
+  -------------------- -------- -------- --------
+  local-ollama         4        4        0
+  neo-lm-studio        4        4        0
+```
+
 ## Common Environment Variables
 
 All scripts support these environment variables:
@@ -136,7 +219,14 @@ The scripts provide detailed error information:
 
 ## Requirements
 
+### Shell Scripts
 - `curl` command-line tool
+- Olla running and accessible
+- At least one configured endpoint
+
+### Python Script
+- Python 3.6+
+- `requests` library (install with `pip install -r requirements.txt`)
 - Olla running and accessible
 - At least one configured endpoint
 
@@ -145,12 +235,19 @@ The scripts provide detailed error information:
 To run all logic tests in sequence:
 
 ```bash
-# Run all tests
+# Install Python dependencies first
+pip install -r requirements.txt
+
+# Run all shell script tests
 for script in test-*.sh; do
     echo "Running $script..."
     ./$script || echo "Failed: $script"
     echo
 done
+
+# Run Python test
+echo "Running test-model-routing-provider.py..."
+python test-model-routing-provider.py || echo "Failed: test-model-routing-provider.py"
 ```
 
 ## Exit Codes

@@ -78,6 +78,7 @@ func (f *Factory) GetAvailableProfiles() []string {
 	profiles := f.loader.GetAllProfiles()
 	names := make([]string, 0, len(profiles))
 	for name := range profiles {
+		// Filter out openai-compatible as it's a fallback profile
 		if name != domain.ProfileOpenAICompatible {
 			names = append(names, name)
 		}
