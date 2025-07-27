@@ -13,6 +13,7 @@ type ProfileFactory interface {
 	GetAvailableProfiles() []string
 	ReloadProfiles() error
 	ValidateProfileType(platformType string) bool
+	NormalizeProviderName(providerName string) string
 }
 
 type Factory struct {
@@ -21,8 +22,8 @@ type Factory struct {
 	mu           sync.RWMutex
 }
 
-// NewFactory expects a profiles directory path. This breaks the old API
-// but makes configuration explicit and testable.
+// NewFactory loads provider profiles from the specified directory.
+// The explicit path requirement enables better testing and deployment flexibility.
 func NewFactory(profilesDir string) (*Factory, error) {
 	loader := NewProfileLoader(profilesDir)
 
@@ -35,7 +36,7 @@ func NewFactory(profilesDir string) (*Factory, error) {
 		prefixLookup: make(map[string]string),
 	}
 
-	// Build prefix lookup table
+	// Pre-compute prefix mappings for O(1) provider resolution
 	factory.buildPrefixLookup()
 
 	return factory, nil
@@ -51,7 +52,7 @@ func (f *Factory) GetProfile(platformType string) (domain.InferenceProfile, erro
 
 	profile, exists := f.loader.GetProfile(platformType)
 	if !exists {
-		// openai profile works as a decent fallback for unknowns
+		// Unknown providers might still speak OpenAI's protocol
 		if openai, hasOpenAI := f.loader.GetProfile(domain.ProfileOpenAICompatible); hasOpenAI {
 			return openai, nil
 		}
@@ -61,13 +62,13 @@ func (f *Factory) GetProfile(platformType string) (domain.InferenceProfile, erro
 	return profile, nil
 }
 
-// GetPlatformProfile provides backward compatibility for code expecting PlatformProfile
+// GetPlatformProfile maintains API compatibility during the profile system migration
 func (f *Factory) GetPlatformProfile(platformType string) (domain.PlatformProfile, error) {
 	profile, err := f.GetProfile(platformType)
 	if err != nil {
 		return nil, err
 	}
-	// InferenceProfile embeds PlatformProfile, so this cast is safe
+	// Safe downcast - InferenceProfile extends PlatformProfile
 	return profile, nil
 }
 
@@ -78,7 +79,7 @@ func (f *Factory) GetAvailableProfiles() []string {
 	profiles := f.loader.GetAllProfiles()
 	names := make([]string, 0, len(profiles))
 	for name := range profiles {
-		// Filter out openai-compatible as it's a fallback profile
+		// openai-compatible isn't a real provider - it's a protocol specification
 		if name != domain.ProfileOpenAICompatible {
 			names = append(names, name)
 		}
@@ -88,7 +89,8 @@ func (f *Factory) GetAvailableProfiles() []string {
 	return names
 }
 
-// ReloadProfiles allows hot-reloading of profile configurations
+// ReloadProfiles refreshes provider configs without restarting.
+// Useful for testing and dynamic provider updates.
 func (f *Factory) ReloadProfiles() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -97,7 +99,7 @@ func (f *Factory) ReloadProfiles() error {
 		return err
 	}
 
-	// Rebuild prefix lookup table
+	// Invalidate and rebuild the prefix cache
 	f.prefixLookup = make(map[string]string)
 	f.buildPrefixLookup()
 
@@ -112,18 +114,34 @@ func (f *Factory) ValidateProfileType(platformType string) bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 
-	// First check if it's a known prefix
+	// Try prefix lookup first - handles lmstudio/lm-studio/lm_studio variations
 	if profileName, ok := f.prefixLookup[platformType]; ok {
 		_, exists := f.loader.GetProfile(profileName)
 		return exists
 	}
 
-	// Then check if it's a direct profile name
+	// Fall back to exact profile name match
 	_, exists := f.loader.GetProfile(platformType)
 	return exists
 }
 
-// buildPrefixLookup builds a map from URL prefixes to profile names
+// NormalizeProviderName resolves provider aliases to canonical names.
+// Essential for handling user-provided variations like lmstudio vs lm-studio.
+func (f *Factory) NormalizeProviderName(providerName string) string {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	// Prefix lookup handles all the variant spellings
+	if profileName, ok := f.prefixLookup[providerName]; ok {
+		return profileName
+	}
+
+	// Unknown names pass through - might be valid profile names
+	return providerName
+}
+
+// buildPrefixLookup creates the routing table from YAML configurations.
+// Called on factory creation and after profile reloads.
 func (f *Factory) buildPrefixLookup() {
 	profiles := f.loader.GetAllProfiles()
 
@@ -133,12 +151,12 @@ func (f *Factory) buildPrefixLookup() {
 			continue
 		}
 
-		// Add each routing prefix to the lookup table
+		// Each prefix in the YAML becomes a valid route
 		for _, prefix := range config.Routing.Prefixes {
 			f.prefixLookup[prefix] = profileName
 		}
 
-		// Also add the profile name itself as a valid prefix
+		// Profile names are implicit prefixes for convenience
 		f.prefixLookup[profileName] = profileName
 	}
 }

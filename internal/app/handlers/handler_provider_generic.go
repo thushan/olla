@@ -10,7 +10,7 @@ func (a *Application) genericProviderModelsHandler(providerType, format string) 
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Normalize provider type
+		// Normalise provider type
 		normalizedProvider := NormaliseProviderType(providerType)
 
 		// Get models from provider

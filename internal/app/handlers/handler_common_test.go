@@ -38,6 +38,16 @@ func (m *mockProfileFactory) ValidateProfileType(platformType string) bool {
 	return m.validProfiles[platformType]
 }
 
+func (m *mockProfileFactory) NormalizeProviderName(providerName string) string {
+	// Simple normalization for tests
+	switch providerName {
+	case "lmstudio", "lm-studio", "lm_studio":
+		return "lm-studio"
+	default:
+		return providerName
+	}
+}
+
 func TestNormalizeProviderType(t *testing.T) {
 	tests := []struct {
 		name     string

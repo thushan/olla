@@ -8,6 +8,9 @@ import (
 
 // TestProviderCompatibility tests the provider compatibility logic using RequestProfile
 func TestProviderCompatibility(t *testing.T) {
+	// Create a minimal Application for testing
+	app := &Application{}
+
 	tests := []struct {
 		name         string
 		endpointType string
@@ -120,9 +123,9 @@ func TestProviderCompatibility(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// create a profile for the provider type
-			profile := createProviderProfile(tt.providerType)
+			profile := app.createProviderProfile(tt.providerType)
 
-			// normalize endpoint type to match what would be in the system
+			// Normalise endpoint type to match what would be in the system
 			normalizedEndpoint := NormaliseProviderType(tt.endpointType)
 
 			result := profile.IsCompatibleWith(normalizedEndpoint)

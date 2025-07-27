@@ -8,21 +8,25 @@ import (
 	"github.com/thushan/olla/internal/core/constants"
 )
 
-// NormaliseProviderType converts various provider name formats to canonical form
-// Exported for use in other handler files
+// NormaliseProviderType handles the various ways users might specify a provider
+// (e.g., lmstudio, lm-studio, lm_studio all map to "lm-studio").
+// This ensures consistent internal representation regardless of user input.
 func NormaliseProviderType(provider string) string {
-	switch strings.ToLower(strings.ReplaceAll(provider, "_", "-")) {
-	case "lmstudio", "lm-studio":
-		return "lm-studio"
+	normalised := strings.ToLower(strings.ReplaceAll(provider, "_", "-"))
+
+	// LM Studio is special - it has multiple common variations that all need
+	// to map to the canonical form for profile lookups to work correctly
+	switch normalised {
+	case constants.ProviderPrefixLMStudio1, constants.ProviderPrefixLMStudio2:
+		return constants.ProviderTypeLMStudio
 	default:
-		return strings.ToLower(provider)
+		return normalised
 	}
 }
 
-// extractProviderFromPath extracts provider type from paths like /olla/{provider}/*
-// returns provider type and remaining path after provider
+// extractProviderFromPath parses URLs like /olla/ollama/api/chat to extract
+// the provider type and remaining path for backend routing.
 func extractProviderFromPath(path string) (provider string, remainingPath string, ok bool) {
-	// expected format: /olla/{provider}/...
 	if !strings.HasPrefix(path, constants.DefaultOllaProxyPathPrefix) {
 		return "", "", false
 	}
@@ -61,32 +65,26 @@ func (a *Application) modifyRequestPath(r *http.Request, newPath string) *http.R
 	return r.WithContext(ctx)
 }
 
-// getOriginalPath retrieves the original request path before modification
-func (a *Application) getOriginalPath(ctx context.Context) string {
-	if originalPath, ok := ctx.Value(constants.OriginalPathKey).(string); ok {
-		return originalPath
-	}
-	return ""
-}
-
 // isProviderSupported checks if a provider type is valid using the profile factory
 func (a *Application) isProviderSupported(provider string) bool {
-	// normalize first to handle variations
-	normalized := NormaliseProviderType(provider)
+	// normalise first to handle variations
+	normalised := NormaliseProviderType(provider)
 
 	// use profile factory to validate if this is a known provider type
 	if a.profileFactory != nil {
-		return a.profileFactory.ValidateProfileType(normalized)
+		return a.profileFactory.ValidateProfileType(normalised)
 	}
 
-	// fallback for tests or when profile factory is not available
-	// only support the most common providers
-	switch normalized {
-	case "ollama", "lm-studio", "openai", "vllm":
-		return true
-	default:
-		return false
+	// fallback for tests when profile factory is not available
+	// check against the static provider list used in registerStaticProviderRoutes
+	// this ensures consistency between validation and route registration
+	staticProviders := map[string]bool{
+		constants.ProviderTypeOllama:   true,
+		constants.ProviderTypeLMStudio: true,
+		constants.ProviderTypeOpenAI:   true,
+		constants.ProviderTypeVLLM:     true,
 	}
+	return staticProviders[normalised]
 }
 
 // getProviderPrefix returns the URL prefix for a provider
