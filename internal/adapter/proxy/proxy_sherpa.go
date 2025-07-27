@@ -235,8 +235,7 @@ func (s *SherpaProxyService) ProxyRequestToEndpoints(ctx context.Context, w http
 
 	stats.TargetUrl = targetURL.String()
 
-	rlog.Debug("built target URL", "target", stats.TargetUrl)
-	rlog.Info("Request dispatching to endpoint", "endpoint", endpoint.Name, "target", stats.TargetUrl)
+	rlog.Info("Request dispatching to endpoint", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
 
 	// Create upstream context with response timeout
 	upstreamCtx := ctx

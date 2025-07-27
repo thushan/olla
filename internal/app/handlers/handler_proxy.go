@@ -93,6 +93,7 @@ func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *p
 
 	if profile != nil && profile.ModelName != "" {
 		pr.model = profile.ModelName
+		pr.stats.Model = pr.model
 	}
 
 	pr.stats.PathResolutionMs = time.Since(pathResolutionStart).Milliseconds()

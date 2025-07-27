@@ -45,6 +45,7 @@ type ProxyFactory interface {
 
 type RequestStats struct {
 	RequestID    string
+	Model        string
 	StartTime    time.Time
 	EndTime      time.Time
 	EndpointName string

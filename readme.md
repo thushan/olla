@@ -395,16 +395,32 @@ load_balancer: "least_conn"
 
 ## 🔗 Usage
 
-Once Olla is running, point your LLM clients to it instead of directly to Ollama:
+Once Olla is running, use provider-specific endpoints to route your requests:
+
+### Provider-Specific Routing
+
+Olla uses provider namespaces to ensure requests go to the right backend type:
+
+- `/olla/ollama/*` - Routes to Ollama backends only
+- `/olla/lmstudio/*` - Routes to LM Studio backends only  
+- `/olla/openai/*` - Routes to OpenAI-compatible backends
+- `/olla/vllm/*` - Routes to vLLM backends
 
 ### OpenAI-compatible Clients
 
 ```python
 import openai
 
+# For Ollama backends
 client = openai.OpenAI(
-    base_url="http://localhost:40114/olla/v1",  # Point to Olla
-    api_key="dummy"  # Ollama doesn't need auth
+    base_url="http://localhost:40114/olla/ollama/v1",
+    api_key="dummy"
+)
+
+# For LM Studio backends
+client = openai.OpenAI(
+    base_url="http://localhost:40114/olla/lmstudio/v1",
+    api_key="dummy"
 )
 
 response = client.chat.completions.create(
@@ -413,33 +429,39 @@ response = client.chat.completions.create(
 )
 ```
 
-### Curl
+### Curl Examples
 
 ```bash
-# Chat completions
-curl -X POST http://localhost:40114/olla/v1/chat/completions \
+# Chat completions via Ollama
+curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
-# Ollama generate API
-curl -X POST http://localhost:40114/olla/api/generate \
+# Ollama native generate API
+curl -X POST http://localhost:40114/olla/ollama/api/generate \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
     "prompt": "Hello!"
   }'
+
+# List models from all providers
+curl http://localhost:40114/olla/models
+
+# List models from Ollama only
+curl http://localhost:40114/olla/models?format=ollama
 ```
 
 ### Direct Model Switching
 
-Olla automatically routes requests to endpoints that have the requested model:
+Within a provider namespace, Olla automatically routes to endpoints with the requested model:
 
 ```bash
-# This will route to whichever endpoint has 'codellama'
-curl -X POST http://localhost:40114/olla/v1/chat/completions \
+# Routes to any Ollama endpoint that has 'codellama'
+curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -d '{"model": "codellama", "messages": [...]}'
 ```
 

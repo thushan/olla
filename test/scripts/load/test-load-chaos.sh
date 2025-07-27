@@ -47,7 +47,8 @@ fi
 
 READ_BYTES=${READ_BYTES:-4096}  # Default read limit
 MODEL_NAME=${MODEL_NAME:-phi4:latest}
-PROXY_PATH="${PROXY_ENDPOINT:-/olla/}v1/chat/completions"
+PROVIDER="${PROVIDER:-ollama}"
+PROXY_PATH="/olla/${PROVIDER}/v1/chat/completions"
 TARGET=${TARGET_URL}${PROXY_PATH}
 
 start_time=$(date +%s)

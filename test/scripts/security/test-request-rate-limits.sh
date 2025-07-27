@@ -14,7 +14,8 @@
 # 14-05-2025  [GW]  - Initial version built with Claude[AI] and Copilot
 
 OLLA_URL="http://localhost:40114"
-PROXY_ENDPOINT="/proxy/api/generate"
+PROVIDER="${PROVIDER:-ollama}"
+PROXY_ENDPOINT="/olla/${PROVIDER}/api/generate"
 HEALTH_ENDPOINT="/internal/health"
 MODEL_NAME="phi4:latest"
 # NOTE about model choice, choose a lighter model for testing request limits so it returns quickly.
