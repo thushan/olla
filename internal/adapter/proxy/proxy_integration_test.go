@@ -155,7 +155,7 @@ func TestProxyImplementationParity(t *testing.T) {
 	testCases := []struct {
 		name        string
 		setupServer func() *httptest.Server
-		setupConfig func() (sherpaConfig *Configuration, ollaConfig *OllaConfiguration)
+		setupConfig func() (sherpaConfig *Configuration, ollaConfig *Configuration)
 		testRequest func(proxy ports.ProxyService, endpoint *domain.Endpoint) error
 		expectError bool
 		errorCheck  func(err error) bool
@@ -168,13 +168,13 @@ func TestProxyImplementationParity(t *testing.T) {
 					w.Write([]byte(`{"status": "ok"}`))
 				}))
 			},
-			setupConfig: func() (*Configuration, *OllaConfiguration) {
+			setupConfig: func() (*Configuration, *Configuration) {
 				sherpa := &Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 8192,
 				}
-				olla := &OllaConfiguration{
+				olla := &Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 8192,
@@ -196,13 +196,13 @@ func TestProxyImplementationParity(t *testing.T) {
 			setupServer: func() *httptest.Server {
 				return nil // Will use unreachable endpoint
 			},
-			setupConfig: func() (*Configuration, *OllaConfiguration) {
+			setupConfig: func() (*Configuration, *Configuration) {
 				sherpa := &Configuration{
 					ResponseTimeout:  5 * time.Second,
 					ReadTimeout:      2 * time.Second,
 					StreamBufferSize: 8192,
 				}
-				olla := &OllaConfiguration{
+				olla := &Configuration{
 					ResponseTimeout:  5 * time.Second,
 					ReadTimeout:      2 * time.Second,
 					StreamBufferSize: 8192,
@@ -238,13 +238,13 @@ func TestProxyImplementationParity(t *testing.T) {
 					}
 				}))
 			},
-			setupConfig: func() (*Configuration, *OllaConfiguration) {
+			setupConfig: func() (*Configuration, *Configuration) {
 				sherpa := &Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 1024,
 				}
-				olla := &OllaConfiguration{
+				olla := &Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 1024,
@@ -415,7 +415,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 
 	t.Run("Olla_CircuitBreaker", func(t *testing.T) {
 		endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-		config := &OllaConfiguration{
+		config := &Configuration{
 			ResponseTimeout:  2 * time.Second,
 			ReadTimeout:      1 * time.Second,
 			StreamBufferSize: 8192,
@@ -587,7 +587,7 @@ func TestConfigurationCompatibility(t *testing.T) {
 						StreamBufferSize: i * 1024,
 					}
 				} else {
-					config = &OllaConfiguration{
+					config = &Configuration{
 						ResponseTimeout:  time.Duration(i*10) * time.Second,
 						ReadTimeout:      time.Duration(i*5) * time.Second,
 						StreamBufferSize: i * 1024,

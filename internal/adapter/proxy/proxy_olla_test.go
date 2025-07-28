@@ -18,7 +18,7 @@ func createTestOllaProxy(endpoints []*domain.Endpoint) (*OllaProxyService, *mock
 	collector := createTestStatsCollector()
 	discovery := &mockDiscoveryService{endpoints: endpoints}
 	selector := newMockEndpointSelector(collector)
-	config := &OllaConfiguration{
+	config := &Configuration{
 		ResponseTimeout:  30 * time.Second,
 		ReadTimeout:      10 * time.Second,
 		StreamBufferSize: 1024,
@@ -30,7 +30,7 @@ func createTestOllaProxy(endpoints []*domain.Endpoint) (*OllaProxyService, *mock
 	return proxy, selector, collector
 }
 
-func createTestOllaProxyWithConfig(endpoints []*domain.Endpoint, config *OllaConfiguration) (*OllaProxyService, *mockEndpointSelector, ports.StatsCollector) {
+func createTestOllaProxyWithConfig(endpoints []*domain.Endpoint, config *Configuration) (*OllaProxyService, *mockEndpointSelector, ports.StatsCollector) {
 	collector := createTestStatsCollector()
 	discovery := &mockDiscoveryService{endpoints: endpoints}
 	selector := newMockEndpointSelector(collector)
@@ -40,7 +40,7 @@ func createTestOllaProxyWithConfig(endpoints []*domain.Endpoint, config *OllaCon
 
 // TestOllaProxyService_CircuitBreaker tests the circuit breaker functionality
 func TestOllaProxyService_CircuitBreaker(t *testing.T) {
-	config := &OllaConfiguration{
+	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      2 * time.Second,
 		StreamBufferSize: 8192,
@@ -110,7 +110,7 @@ func TestOllaProxyService_CircuitBreaker_Integration(t *testing.T) {
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
 	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &OllaConfiguration{
+	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      2 * time.Second,
 		StreamBufferSize: 8192,
@@ -149,7 +149,7 @@ func TestOllaProxyService_CircuitBreaker_Integration(t *testing.T) {
 
 // TestOllaProxyService_ConnectionPools tests per-endpoint connection pooling
 func TestOllaProxyService_ConnectionPools(t *testing.T) {
-	config := &OllaConfiguration{
+	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      2 * time.Second,
 		StreamBufferSize: 8192,
@@ -195,7 +195,7 @@ func TestOllaProxyService_ConnectionPools(t *testing.T) {
 
 // TestOllaProxyService_ObjectPools tests memory optimization object pools
 func TestOllaProxyService_ObjectPools(t *testing.T) {
-	config := &OllaConfiguration{
+	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      2 * time.Second,
 		StreamBufferSize: 4096,
@@ -253,7 +253,7 @@ func TestOllaProxyService_ObjectPools(t *testing.T) {
 
 // TestOllaProxyService_AtomicStats tests lock-free statistics tracking
 func TestOllaProxyService_AtomicStats(t *testing.T) {
-	config := &OllaConfiguration{
+	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      2 * time.Second,
 		StreamBufferSize: 8192,
@@ -443,7 +443,7 @@ func TestOllaProxyService_ProxyRequest_BackwardCompatibility(t *testing.T) {
 
 // TestOllaProxyService_ConfigDefaults tests that defaults are applied correctly
 func TestOllaProxyService_ConfigDefaults(t *testing.T) {
-	config := &OllaConfiguration{} // Empty config
+	config := &Configuration{} // Empty config
 
 	proxy := NewOllaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
 
@@ -481,7 +481,7 @@ func TestOllaProxyService_ConfigDefaults(t *testing.T) {
 
 // TestOllaProxyService_UpdateConfig tests configuration updates
 func TestOllaProxyService_UpdateConfig(t *testing.T) {
-	initialConfig := &OllaConfiguration{
+	initialConfig := &Configuration{
 		ResponseTimeout:  10 * time.Second,
 		ReadTimeout:      5 * time.Second,
 		StreamBufferSize: 4096,
@@ -526,7 +526,7 @@ func TestOllaProxyService_UpdateConfig(t *testing.T) {
 
 // TestOllaProxyService_Cleanup tests graceful cleanup
 func TestOllaProxyService_Cleanup(t *testing.T) {
-	config := &OllaConfiguration{
+	config := &Configuration{
 		ResponseTimeout:  5 * time.Second,
 		ReadTimeout:      2 * time.Second,
 		StreamBufferSize: 8192,

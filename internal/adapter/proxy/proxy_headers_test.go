@@ -42,7 +42,7 @@ func TestProxyResponseHeaders(t *testing.T) {
 				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
-				config := &OllaConfiguration{}
+				config := &Configuration{}
 				return NewOllaService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
 			},
 		},

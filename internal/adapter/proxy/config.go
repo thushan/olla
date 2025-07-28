@@ -15,6 +15,11 @@ type Configuration struct {
 	ResponseTimeout     time.Duration
 	ReadTimeout         time.Duration
 	StreamBufferSize    int
+
+	// Olla-specific fields for advanced connection pooling
+	IdleConnTimeout time.Duration
+	MaxIdleConns    int
+	MaxConnsPerHost int
 }
 
 func (c *Configuration) GetProxyPrefix() string {
@@ -57,6 +62,27 @@ func (c *Configuration) GetStreamBufferSize() int {
 		return DefaultStreamBufferSize
 	}
 	return c.StreamBufferSize
+}
+
+func (c *Configuration) GetIdleConnTimeout() time.Duration {
+	if c.IdleConnTimeout == 0 {
+		return OllaDefaultIdleConnTimeout
+	}
+	return c.IdleConnTimeout
+}
+
+func (c *Configuration) GetMaxIdleConns() int {
+	if c.MaxIdleConns == 0 {
+		return OllaDefaultMaxIdleConns
+	}
+	return c.MaxIdleConns
+}
+
+func (c *Configuration) GetMaxConnsPerHost() int {
+	if c.MaxConnsPerHost == 0 {
+		return OllaDefaultMaxConnsPerHost
+	}
+	return c.MaxConnsPerHost
 }
 
 // Compile-time check to ensure both configurations implement the interface

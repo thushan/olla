@@ -53,11 +53,11 @@ func (o OllaTestSuite) Name() string {
 }
 
 func (o OllaTestSuite) CreateProxy(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector) ports.ProxyService {
-	return NewOllaService(discovery, selector, config.(*OllaConfiguration), collector, createTestLogger())
+	return NewOllaService(discovery, selector, config.(*Configuration), collector, createTestLogger())
 }
 
 func (o OllaTestSuite) CreateConfig() ports.ProxyConfiguration {
-	return &OllaConfiguration{
+	return &Configuration{
 		ResponseTimeout:  30 * time.Second,
 		ReadTimeout:      10 * time.Second,
 		StreamBufferSize: 8192,
@@ -913,7 +913,7 @@ func testUpdateConfig(t *testing.T, suite ProxyTestSuite) {
 			StreamBufferSize: 16384,
 		}
 	} else {
-		newConfig = &OllaConfiguration{
+		newConfig = &Configuration{
 			ResponseTimeout:  60 * time.Second,
 			ReadTimeout:      30 * time.Second,
 			StreamBufferSize: 16384,

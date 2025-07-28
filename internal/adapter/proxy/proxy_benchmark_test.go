@@ -341,7 +341,7 @@ func benchmarkConfigUpdates(b *testing.B, suite ProxyTestSuite) {
 		}
 	} else {
 		for i := 0; i < 10; i++ {
-			configs = append(configs, &OllaConfiguration{
+			configs = append(configs, &Configuration{
 				ResponseTimeout:  time.Duration(i+1) * time.Second,
 				ReadTimeout:      time.Duration(i+1) * time.Second,
 				StreamBufferSize: (i + 1) * 1024,
@@ -554,7 +554,7 @@ func BenchmarkConnectionPooling(b *testing.B) {
 // BenchmarkCircuitBreaker tests circuit breaker performance (Olla specific)
 func BenchmarkCircuitBreaker(b *testing.B) {
 	b.Run("Olla_CircuitBreakerCheck", func(b *testing.B) {
-		config := &OllaConfiguration{
+		config := &Configuration{
 			ResponseTimeout:  5 * time.Second,
 			ReadTimeout:      2 * time.Second,
 			StreamBufferSize: 8192,
@@ -587,7 +587,7 @@ func BenchmarkCircuitBreaker(b *testing.B) {
 // BenchmarkObjectPools tests object pool performance (Olla specific)
 func BenchmarkObjectPools(b *testing.B) {
 	b.Run("Olla_BufferPool", func(b *testing.B) {
-		config := &OllaConfiguration{
+		config := &Configuration{
 			StreamBufferSize: 8192,
 			MaxIdleConns:     200,
 			IdleConnTimeout:  90 * time.Second,
@@ -606,7 +606,7 @@ func BenchmarkObjectPools(b *testing.B) {
 	})
 
 	b.Run("Olla_RequestContextPool", func(b *testing.B) {
-		config := &OllaConfiguration{
+		config := &Configuration{
 			StreamBufferSize: 8192,
 			MaxIdleConns:     200,
 			IdleConnTimeout:  90 * time.Second,

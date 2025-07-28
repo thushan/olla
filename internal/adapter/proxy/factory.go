@@ -42,7 +42,7 @@ func NewFactory(statsCollector ports.StatsCollector, theLogger logger.StyledLogg
 	})
 
 	factory.Register(DefaultProxyOlla, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, logger logger.StyledLogger) ports.ProxyService {
-		ollaConfig := &OllaConfiguration{
+		ollaConfig := &Configuration{
 			ProxyPrefix:         config.GetProxyPrefix(),
 			ConnectionTimeout:   config.GetConnectionTimeout(),
 			ConnectionKeepAlive: config.GetConnectionKeepAlive(),

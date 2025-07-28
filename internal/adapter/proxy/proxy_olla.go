@@ -63,7 +63,7 @@ type OllaProxyService struct {
 	logger           logger.StyledLogger
 
 	transport     *http.Transport
-	configuration *OllaConfiguration
+	configuration *Configuration
 
 	// we maintain separate connection pools per endpoint to maximise tcp connection reuse
 	// this avoids the overhead of establishing new connections for each request
@@ -159,7 +159,7 @@ const (
 func NewOllaService(
 	discoveryService ports.DiscoveryService,
 	selector domain.EndpointSelector,
-	configuration *OllaConfiguration,
+	configuration *Configuration,
 	statsCollector ports.StatsCollector,
 	logger logger.StyledLogger,
 ) *OllaProxyService {
@@ -1007,7 +1007,7 @@ func (s *OllaProxyService) GetStats(ctx context.Context) (ports.ProxyStats, erro
 }
 
 func (s *OllaProxyService) UpdateConfig(config ports.ProxyConfiguration) {
-	newConfig := &OllaConfiguration{
+	newConfig := &Configuration{
 		ProxyPrefix:         config.GetProxyPrefix(),
 		ConnectionTimeout:   config.GetConnectionTimeout(),
 		ConnectionKeepAlive: config.GetConnectionKeepAlive(),
