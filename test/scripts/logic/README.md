@@ -10,6 +10,7 @@ This directory contains scripts for testing Olla's routing logic, model discover
 | `test-provider-routing.sh` | Tests provider-specific routing namespaces | Provider isolation, header validation |
 | `test-provider-models.sh` | Tests provider-specific model listing endpoints | Format validation, provider filtering |
 | `test-model-routing-provider.py` | Tests provider-specific model routing with smart filtering | Provider-aware testing, endpoint health monitoring |
+| `test-streaming-responses.py` | Tests actual LLM streaming responses | Validates incremental data delivery, measures TTFT and tokens/sec |
 
 ## test-model-routing.sh
 
@@ -230,6 +231,94 @@ The scripts provide detailed error information:
 - Olla running and accessible
 - At least one configured endpoint
 
+## test-streaming-responses.py
+
+Tests that LLM responses actually stream data incrementally rather than returning all at once. This script validates true streaming behavior and measures streaming performance.
+
+### Features
+- **Streaming Validation** - Verifies data arrives in multiple chunks over time
+- **Multi-Provider Support** - Tests OpenAI, Ollama, and LM Studio streaming formats
+- **Performance Metrics** - Measures time to first token (TTFT) and tokens per second
+- **Chunk Pattern Analysis** - Detects batched vs true streaming responses
+- **Visual Progress** - Shows streaming progress with dots during tests
+- **Configurable Timeouts** - Control maximum streaming time per test
+
+### Requirements
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+```
+
+### Usage
+```bash
+# Test all models (up to 30s per test)
+python test-streaming-responses.py
+
+# Quick sample test (3 models per provider)
+python test-streaming-responses.py --sample
+
+# Test specific models
+python test-streaming-responses.py --models llama3.2 mistral
+
+# Test with shorter timeout
+python test-streaming-responses.py --max-time 10
+
+# Show detailed streaming analysis
+python test-streaming-responses.py --sample --analyze
+
+# Test only specific providers
+python test-streaming-responses.py --providers openai ollama
+
+# With custom Olla URL
+python test-streaming-responses.py --url http://localhost:8080
+```
+
+### What it tests
+1. **OpenAI Format** - SSE (Server-Sent Events) streaming at `/v1/chat/completions`
+2. **Ollama Format** - Newline-delimited JSON streaming at `/api/generate`
+3. **LM Studio Format** - SSE streaming at `/v1/chat/completions`
+
+### Metrics Collected
+- **Time to First Token (TTFT)** - How quickly the first response chunk arrives
+- **Chunks Received** - Number of streaming chunks (validates true streaming)
+- **Tokens per Second** - Estimated generation speed
+- **Total Time** - Complete streaming duration
+- **Chunk Intervals** - Time gaps between chunks (detects batching)
+
+### Output includes
+- Per-model streaming test results with endpoint routing
+- Streaming quality indicators (warnings for low chunk counts or slow TTFT)
+- Provider-specific success rates
+- Average performance metrics across all successful tests
+- Optional detailed chunk arrival pattern analysis
+
+### Example Output
+```
+Testing model: llama3.2
+  Testing ollama streaming: ............. [OK]
+    → Endpoint: local-ollama
+    → Chunks: 42
+    → Time to first token: 0.523s
+    → Total time: 5.12s
+    → Tokens/sec: ~19.5
+
+Streaming Pattern Analysis:
+llama3.2 (ollama):
+  Average chunk interval: 0.122s
+  Min/Max interval: 0.015s / 0.245s
+  ✓ Good streaming pattern
+
+Test Summary:
+  Total Tests:        6
+  Successful Tests:   6
+  Failed Tests:       0
+  Success Rate:       100%
+
+Performance Summary:
+  Avg time to first token: 0.612s
+  Avg tokens per second:   18.3
+```
+
 ## Running All Tests
 
 To run all logic tests in sequence:
@@ -245,9 +334,12 @@ for script in test-*.sh; do
     echo
 done
 
-# Run Python test
+# Run Python tests
 echo "Running test-model-routing-provider.py..."
 python test-model-routing-provider.py || echo "Failed: test-model-routing-provider.py"
+
+echo "Running test-streaming-responses.py..."
+python test-streaming-responses.py --sample || echo "Failed: test-streaming-responses.py"
 ```
 
 ## Exit Codes

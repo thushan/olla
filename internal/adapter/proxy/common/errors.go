@@ -1,4 +1,4 @@
-package proxy
+package common
 
 import (
 	"context"
@@ -16,17 +16,12 @@ var (
 	ErrNoHealthyEndpoints = errors.New("no healthy endpoints available")
 )
 
-// MakeUserFriendlyError is the exported version for external packages
-func MakeUserFriendlyError(err error, duration time.Duration, errorContext string, responseTimeout time.Duration) error {
-	return makeUserFriendlyError(err, duration, errorContext, responseTimeout)
-}
-
-// makeUserFriendlyError converts technical errors into user-friendly messages with actionable guidance
+// MakeUserFriendlyError converts technical errors into user-friendly messages with actionable guidance
 // all implementations should use this function to ensure consistent error handling with detailed context
 // for TUI output and logging.
 //
 //nolint:gocognit // intentionally complex; we could break it down further, but this is already quite readable
-func makeUserFriendlyError(err error, duration time.Duration, errorContext string, responseTimeout time.Duration) error {
+func MakeUserFriendlyError(err error, duration time.Duration, errorContext string, responseTimeout time.Duration) error {
 	if err == nil {
 		return nil
 	}

@@ -95,6 +95,9 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	// Update request path to the target path (strip provider prefix)
+	r.URL.Path = pr.targetPath
+
 	a.logRequestStart(pr, len(endpoints))
 	err = a.executeProxyRequest(ctx, w, r, endpoints, pr)
 	a.logRequestResult(pr, err)
