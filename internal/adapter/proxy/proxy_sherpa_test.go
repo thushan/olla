@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/thushan/olla/internal/adapter/proxy/olla"
 	"github.com/thushan/olla/internal/adapter/proxy/sherpa"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
@@ -110,47 +112,108 @@ func assertStatsPopulated(t *testing.T, stats *ports.RequestStats, expectedEndpo
 	}
 }
 
-// TestSherpaProxyService_ClientDisconnectLogic tests the specific logic for handling client disconnections
-func TestSherpaProxyService_ClientDisconnectLogic(t *testing.T) {
-	// Skip this test as it tests internal implementation details that are now encapsulated
-	t.Skip("Test needs refactoring for new proxy structure")
+// TestProxyService_ClientDisconnectHandling tests client disconnect behavior during streaming
+// This test verifies that both proxy implementations handle client disconnections gracefully
+func TestProxyService_ClientDisconnectHandling(t *testing.T) {
+	// Create a slow upstream that simulates streaming
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+
+		// Stream data slowly
+		for i := 0; i < 10; i++ {
+			_, err := w.Write([]byte(fmt.Sprintf("chunk %d\n", i)))
+			if err != nil {
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}))
+	defer upstream.Close()
+
+	testCases := []struct {
+		name       string
+		createFunc func() ports.ProxyService
+	}{
+		{
+			name: "Sherpa",
+			createFunc: func() ports.ProxyService {
+				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
+				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+				selector := &mockEndpointSelector{endpoint: endpoint}
+				config := &sherpa.Configuration{
+					ReadTimeout: 200 * time.Millisecond,
+				}
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
+			},
+		},
+		{
+			name: "Olla",
+			createFunc: func() ports.ProxyService {
+				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
+				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+				selector := &mockEndpointSelector{endpoint: endpoint}
+				config := &olla.Configuration{
+					ReadTimeout: 200 * time.Millisecond,
+				}
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			proxy := tc.createFunc()
+
+			// Create a context that we'll cancel to simulate client disconnect
+			ctx, cancel := context.WithCancel(context.Background())
+
+			req := httptest.NewRequest("GET", "/test", nil).WithContext(ctx)
+			w := httptest.NewRecorder()
+
+			// Start the proxy request in a goroutine
+			done := make(chan error)
+			go func() {
+				stats := &ports.RequestStats{
+					StartTime: time.Now(),
+					RequestID: "test-123",
+				}
+				err := proxy.ProxyRequest(ctx, w, req, stats, createTestLogger())
+				done <- err
+			}()
+
+			// Wait a bit then cancel the context to simulate client disconnect
+			time.Sleep(250 * time.Millisecond)
+			cancel()
+
+			// Wait for the proxy to finish
+			err := <-done
+
+			// Should get an error about client disconnection
+			if err != nil {
+				assert.Contains(t, err.Error(), "client disconnected")
+			}
+
+			// Should have received some data before disconnect
+			response := w.Body.String()
+			assert.Contains(t, response, "chunk")
+			assert.NotContains(t, response, "chunk 9") // Should not have all chunks
+		})
+	}
 }
 
-// TestSherpaProxyService_StripRoutePrefix tests the route prefix stripping functionality
-func TestSherpaProxyService_StripRoutePrefix(t *testing.T) {
-	// Skip this test as route prefix stripping is now handled by the handler
-	t.Skip("Route prefix stripping is now handled by the handler, not the proxy")
-}
+// DEPRECATED: Route prefix stripping tests have been removed
+// This functionality is now tested comprehensively in proxy_path_stripping_test.go
+// which covers both Sherpa and Olla implementations
 
-// TestSherpaProxyService_StripRoutePrefix_NoContext tests behaviour when context doesn't contain prefix
-func TestSherpaProxyService_StripRoutePrefix_NoContext(t *testing.T) {
-	// Skip this test as route prefix stripping is now handled by the handler
-	t.Skip("Route prefix stripping is now handled by the handler, not the proxy")
-}
-
-// TestSherpaProxyService_CopyHeaders tests header copying functionality
-func TestSherpaProxyService_CopyHeaders(t *testing.T) {
-	// Skip this test as header copying is now in the core package
-	t.Skip("Header copying is now tested in core package tests")
-}
-
-// TestSherpaProxyService_CopyHeaders_HTTPS tests HTTPS protocol detection
-func TestSherpaProxyService_CopyHeaders_HTTPS(t *testing.T) {
-	// Skip this test as header copying is now in the core package
-	t.Skip("Header copying is now tested in core package tests")
-}
-
-// TestSherpaProxyService_CopyHeaders_MalformedRemoteAddr tests handling of malformed remote addresses
-func TestSherpaProxyService_CopyHeaders_MalformedRemoteAddr(t *testing.T) {
-	// Skip this test as header copying is now in the core package
-	t.Skip("Header copying is now tested in core package tests")
-}
-
-// TestSherpaProxyService_CopyHeaders_EmptyHeaders tests behaviour with no headers
-func TestSherpaProxyService_CopyHeaders_EmptyHeaders(t *testing.T) {
-	// Skip this test as header copying is now in the core package
-	t.Skip("Header copying is now tested in core package tests")
-}
+// DEPRECATED: Header copying tests have been removed
+// This functionality is now tested comprehensively in core/common_test.go
+// which tests the shared CopyHeaders function used by both implementations
 
 // TestSherpaProxyService_StreamResponse_ReadTimeout tests read timeout behaviour
 func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
@@ -598,18 +661,133 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_ContextCancellation(t *testi
 	}
 }
 
-func TestCopyHeaders_SecurityFiltering(t *testing.T) {
-	// Skip this test as it tests internal implementation details
-	t.Skip("Test needs refactoring for new proxy structure")
+// TestProxyService_SecurityHeaderFiltering tests that security headers are properly filtered
+func TestProxyService_SecurityHeaderFiltering(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify security headers were NOT forwarded
+		assert.Empty(t, r.Header.Get("Authorization"))
+		assert.Empty(t, r.Header.Get("Cookie"))
+		assert.Empty(t, r.Header.Get("X-Api-Key"))
+
+		// Regular headers should be forwarded
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	testCases := []struct {
+		name       string
+		createFunc func() ports.ProxyService
+	}{
+		{
+			name: "Sherpa",
+			createFunc: func() ports.ProxyService {
+				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
+				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+				selector := &mockEndpointSelector{endpoint: endpoint}
+				config := &sherpa.Configuration{}
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
+			},
+		},
+		{
+			name: "Olla",
+			createFunc: func() ports.ProxyService {
+				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
+				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+				selector := &mockEndpointSelector{endpoint: endpoint}
+				config := &olla.Configuration{}
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			proxy := tc.createFunc()
+
+			req := httptest.NewRequest("POST", "/test", nil)
+			req.Header.Set("Authorization", "Bearer secret-token")
+			req.Header.Set("Cookie", "session=secret")
+			req.Header.Set("X-Api-Key", "secret-key")
+			req.Header.Set("Content-Type", "application/json")
+
+			w := httptest.NewRecorder()
+			stats := &ports.RequestStats{
+				StartTime: time.Now(),
+				RequestID: "test-123",
+			}
+
+			err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, w.Code)
+		})
+	}
 }
 
-// The rest of this test has been removed as it tests internal implementation details
-// that are no longer accessible after refactoring.
-// Security header filtering is now tested in the core package.
+// TestProxyService_ProxyHeaderAddition tests that proxy headers are properly added
+func TestProxyService_ProxyHeaderAddition(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify proxy headers were added
+		assert.NotEmpty(t, r.Header.Get("X-Proxied-By"))
+		assert.NotEmpty(t, r.Header.Get("Via"))
+		assert.NotEmpty(t, r.Header.Get("X-Forwarded-For"))
+		assert.NotEmpty(t, r.Header.Get("X-Forwarded-Proto"))
+		assert.NotEmpty(t, r.Header.Get("X-Forwarded-Host"))
 
-func TestCopyHeaders_ProxyHeaders(t *testing.T) {
-	// Skip this test as it tests internal implementation details
-	t.Skip("Test needs refactoring for new proxy structure")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer upstream.Close()
+
+	testCases := []struct {
+		name       string
+		createFunc func() ports.ProxyService
+	}{
+		{
+			name: "Sherpa",
+			createFunc: func() ports.ProxyService {
+				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
+				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+				selector := &mockEndpointSelector{endpoint: endpoint}
+				config := &sherpa.Configuration{}
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
+			},
+		},
+		{
+			name: "Olla",
+			createFunc: func() ports.ProxyService {
+				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
+				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
+				selector := &mockEndpointSelector{endpoint: endpoint}
+				config := &olla.Configuration{}
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			proxy := tc.createFunc()
+
+			req := httptest.NewRequest("GET", "/test", nil)
+			req.Host = "example.com"
+			req.RemoteAddr = "192.168.1.100:12345"
+
+			w := httptest.NewRecorder()
+			stats := &ports.RequestStats{
+				StartTime: time.Now(),
+				RequestID: "test-123",
+			}
+
+			err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, w.Code)
+		})
+	}
 }
 
 // The rest of this test has been removed as it tests internal implementation details

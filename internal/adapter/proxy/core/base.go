@@ -2,9 +2,10 @@ package core
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/core/constants"
 	"sync/atomic"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"

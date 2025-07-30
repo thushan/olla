@@ -3,8 +3,9 @@ package logger
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
 	"log/slog"
+
+	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/pterm/pterm"
 

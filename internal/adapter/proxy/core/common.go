@@ -1,14 +1,15 @@
 package core
 
 import (
-	"github.com/thushan/olla/internal/core/constants"
-	"github.com/thushan/olla/internal/core/domain"
-	"github.com/thushan/olla/internal/core/ports"
-	"github.com/thushan/olla/internal/version"
 	"net"
 	"net/http"
 	"slices"
 	"strings"
+
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/version"
 )
 
 const (
@@ -109,9 +110,9 @@ func updateForwardedHeaders(proxyReq, originalReq *http.Request) {
 	// X-Forwarded-Proto
 	if proto := originalReq.Header.Get("X-Forwarded-Proto"); proto == "" {
 		if originalReq.TLS != nil {
-			proxyReq.Header.Set("X-Forwarded-Proto", constants.ProtocolHTTP)
-		} else {
 			proxyReq.Header.Set("X-Forwarded-Proto", constants.ProtocolHTTPS)
+		} else {
+			proxyReq.Header.Set("X-Forwarded-Proto", constants.ProtocolHTTP)
 		}
 	}
 
@@ -172,8 +173,10 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 	h.Set("Via", GetViaHeader())
 
 	// Set request tracking headers
-	if stats.RequestID != "" {
-		h.Set(HeaderRequestID, stats.RequestID)
+	if stats != nil {
+		if stats.RequestID != "" {
+			h.Set(HeaderRequestID, stats.RequestID)
+		}
 	}
 
 	// Set endpoint information
@@ -182,7 +185,7 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 		h.Set(HeaderBackendType, endpoint.Type)
 
 		// Set model header if available
-		if stats.Model != "" {
+		if stats != nil && stats.Model != "" {
 			h.Set(HeaderModel, stats.Model)
 		}
 	}

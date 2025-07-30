@@ -32,11 +32,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
 	"net"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"

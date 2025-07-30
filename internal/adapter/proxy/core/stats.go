@@ -1,8 +1,9 @@
 package core
 
 import (
-	"github.com/thushan/olla/internal/core/ports"
 	"sync/atomic"
+
+	"github.com/thushan/olla/internal/core/ports"
 )
 
 // ProxyStats contains common proxy statistics

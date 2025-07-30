@@ -25,7 +25,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
 	"io"
 	"net"
 	"net/http"
@@ -34,6 +33,8 @@ import (
 	"runtime/debug"
 	"sync/atomic"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/puzpuzpuz/xsync/v4"
 
@@ -741,6 +742,6 @@ func (s *Service) Cleanup() {
 
 	// force GC to clean up
 	runtime.GC()
-	
+
 	s.Logger.Debug("Olla proxy service cleaned up")
 }

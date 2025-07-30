@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -551,22 +552,11 @@ func BenchmarkConnectionPooling(b *testing.B) {
 	}
 }
 
-// BenchmarkCircuitBreaker tests circuit breaker performance (Olla specific)
+// BenchmarkCircuitBreaker tests circuit breaker performance
 func BenchmarkCircuitBreaker(b *testing.B) {
-	b.Run("Olla_CircuitBreakerCheck", func(b *testing.B) {
-		config := &Configuration{
-			ResponseTimeout:  5 * time.Second,
-			ReadTimeout:      2 * time.Second,
-			StreamBufferSize: 8192,
-			MaxIdleConns:     200,
-			IdleConnTimeout:  90 * time.Second,
-			MaxConnsPerHost:  50,
-		}
-
-		proxy := NewOllaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
-
-		// Get circuit breaker for testing
-		cb := proxy.getCircuitBreaker("test-endpoint")
+	b.Run("CircuitBreakerCheck", func(b *testing.B) {
+		cb := health.NewCircuitBreaker()
+		endpoint := "http://test-endpoint:8080"
 
 		b.ResetTimer()
 		b.ReportAllocs()
@@ -574,53 +564,77 @@ func BenchmarkCircuitBreaker(b *testing.B) {
 		for i := 0; i < b.N; i++ {
 			// Alternate between checking state and recording success/failure
 			if i%3 == 0 {
-				cb.isOpen()
+				cb.IsOpen(endpoint)
 			} else if i%3 == 1 {
-				cb.recordSuccess()
+				cb.RecordSuccess(endpoint)
 			} else {
-				cb.recordFailure()
+				cb.RecordFailure(endpoint)
 			}
 		}
 	})
-}
 
-// BenchmarkObjectPools tests object pool performance (Olla specific)
-func BenchmarkObjectPools(b *testing.B) {
-	b.Run("Olla_BufferPool", func(b *testing.B) {
-		config := &Configuration{
-			StreamBufferSize: 8192,
-			MaxIdleConns:     200,
-			IdleConnTimeout:  90 * time.Second,
-			MaxConnsPerHost:  50,
-		}
-
-		proxy := NewOllaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
+	b.Run("CircuitBreakerFailureThreshold", func(b *testing.B) {
+		cb := health.NewCircuitBreaker()
+		endpoint := "http://test-endpoint:8080"
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			buf := proxy.bufferPool.Get()
-			proxy.bufferPool.Put(buf)
+			// Simulate failure scenarios
+			for j := 0; j < 5; j++ {
+				cb.RecordFailure(endpoint)
+			}
+			cb.IsOpen(endpoint)
+			// Reset by recording success
+			cb.RecordSuccess(endpoint)
 		}
+	})
+
+	b.Run("CircuitBreakerConcurrent", func(b *testing.B) {
+		cb := health.NewCircuitBreaker()
+		endpoints := []string{
+			"http://endpoint1:8080",
+			"http://endpoint2:8080",
+			"http://endpoint3:8080",
+		}
+
+		b.ResetTimer()
+		b.ReportAllocs()
+
+		b.RunParallel(func(pb *testing.PB) {
+			i := 0
+			for pb.Next() {
+				endpoint := endpoints[i%len(endpoints)]
+				if i%4 == 0 {
+					cb.IsOpen(endpoint)
+				} else if i%4 == 1 {
+					cb.RecordSuccess(endpoint)
+				} else if i%4 == 2 {
+					cb.RecordFailure(endpoint)
+				} else {
+					// Check if should try (inverse of IsOpen)
+					_ = !cb.IsOpen(endpoint)
+				}
+				i++
+			}
+		})
+	})
+}
+
+// BenchmarkObjectPools tests object pool performance
+// NOTE: Object pools are internal implementation details in the refactored code.
+// This benchmark is commented out as the pools are no longer directly accessible.
+/*
+func BenchmarkObjectPools(b *testing.B) {
+	b.Run("Olla_BufferPool", func(b *testing.B) {
+		// Buffer pools are now internal to the refactored implementation
+		b.Skip("Buffer pools are now internal to the refactored implementation")
 	})
 
 	b.Run("Olla_RequestContextPool", func(b *testing.B) {
-		config := &Configuration{
-			StreamBufferSize: 8192,
-			MaxIdleConns:     200,
-			IdleConnTimeout:  90 * time.Second,
-			MaxConnsPerHost:  50,
-		}
-
-		proxy := NewOllaService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
-
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			ctx := proxy.requestPool.Get()
-			proxy.requestPool.Put(ctx)
-		}
+		// Request context pool is now internal to the refactored implementation
+		b.Skip("Request context pool is now internal to the refactored implementation")
 	})
 }
+*/
