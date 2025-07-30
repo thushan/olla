@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"github.com/thushan/olla/internal/core/constants"
 	"sync/atomic"
 	"time"
 
@@ -108,8 +109,8 @@ func (b *BaseProxyComponents) RecordFailure(ctx context.Context, endpoint *domai
 			event.Endpoint = endpoint.Name
 		}
 
-		// Extract request ID from context if available
-		if reqID, ok := ctx.Value("request_id").(string); ok {
+		// check if we have a request ID in the context
+		if reqID, ok := ctx.Value(constants.ContextRequestIdKey).(string); ok {
 			event.RequestID = reqID
 		}
 

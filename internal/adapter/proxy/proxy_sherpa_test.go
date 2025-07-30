@@ -46,8 +46,8 @@ func createTestSherpaProxyWithConfig(endpoints []*domain.Endpoint, config *sherp
 }
 
 func createTestRequestWithStats(method, path, body string) (*http.Request, *ports.RequestStats, logger.StyledLogger) {
-	ctx := context.WithValue(context.Background(), constants.RequestIDKey, "test-request-id")
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, time.Now())
+	ctx := context.WithValue(context.Background(), constants.ContextRequestIdKey, "test-request-id")
+	ctx = context.WithValue(ctx, constants.ContextRequestTimeKey, time.Now())
 
 	var bodyReader io.Reader
 	if body != "" {

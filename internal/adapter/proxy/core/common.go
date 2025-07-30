@@ -1,24 +1,17 @@
 package core
 
 import (
-	"context"
-	"fmt"
-	"io"
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/version"
 	"net"
 	"net/http"
 	"slices"
 	"strings"
-	"sync/atomic"
-	"time"
-
-	"github.com/thushan/olla/internal/core/domain"
-	"github.com/thushan/olla/internal/core/ports"
-	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/internal/version"
 )
 
 const (
-	// Header constants
 	HeaderRequestID   = "X-Olla-Request-ID"
 	HeaderEndpoint    = "X-Olla-Endpoint"
 	HeaderBackendType = "X-Olla-Backend-Type"
@@ -56,7 +49,7 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 		}
 
 		// SECURITY: Filter sensitive headers to prevent credential leakage
-		// This is CRITICAL for edge deployments on Cloudflare/Akamai
+		// TODO: we should consider a more copmrehensive security policy / technique here
 		normalisedHeader := http.CanonicalHeaderKey(header)
 		if normalisedHeader == "Authorization" ||
 			normalisedHeader == "Cookie" ||
@@ -69,6 +62,7 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 		proxyReq.Header[header] = values
 	}
 
+	// SCOUT-581: Host header missing for some requests
 	// preserve the original host header which is critical for virtual hosting
 	// many backend services rely on this to route requests correctly
 	if originalReq.Host != "" {
@@ -86,6 +80,7 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 		proxyReq.Header.Set("Via", GetViaHeader())
 	}
 
+	// SHERPA-44: Ensure X-Real-IP header is set
 	// Add real IP tracking headers
 	if realIP := originalReq.Header.Get("X-Real-IP"); realIP == "" {
 		if ip := extractClientIP(originalReq); ip != "" {
@@ -97,6 +92,7 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 	updateForwardedHeaders(proxyReq, originalReq)
 }
 
+// SHERPA-81: Update X-Forwarded-* headers in request
 // updateForwardedHeaders updates X-Forwarded-* headers
 func updateForwardedHeaders(proxyReq, originalReq *http.Request) {
 	// X-Forwarded-For
@@ -113,9 +109,9 @@ func updateForwardedHeaders(proxyReq, originalReq *http.Request) {
 	// X-Forwarded-Proto
 	if proto := originalReq.Header.Get("X-Forwarded-Proto"); proto == "" {
 		if originalReq.TLS != nil {
-			proxyReq.Header.Set("X-Forwarded-Proto", "https")
+			proxyReq.Header.Set("X-Forwarded-Proto", constants.ProtocolHTTP)
 		} else {
-			proxyReq.Header.Set("X-Forwarded-Proto", "http")
+			proxyReq.Header.Set("X-Forwarded-Proto", constants.ProtocolHTTPS)
 		}
 	}
 
@@ -153,6 +149,7 @@ func extractClientIP(r *http.Request) string {
 		return strings.TrimSpace(xff)
 	}
 
+	// SHERPA-89: Check X-Forwarded-Host header is set
 	// Check X-Real-IP header
 	if xri := r.Header.Get("X-Real-IP"); xri != "" {
 		return strings.TrimSpace(xri)
@@ -189,135 +186,4 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 			h.Set(HeaderModel, stats.Model)
 		}
 	}
-}
-
-// WriteErrorResponse writes a standard error response
-func WriteErrorResponse(w http.ResponseWriter, statusCode int, err error, stats *ports.RequestStats) {
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-
-	if stats != nil && stats.RequestID != "" {
-		w.Header().Set(HeaderRequestID, stats.RequestID)
-	}
-
-	w.WriteHeader(statusCode)
-	fmt.Fprintln(w, err.Error())
-}
-
-// ProxyStats contains common proxy statistics
-type ProxyStats struct {
-	TotalRequests      int64
-	SuccessfulRequests int64
-	FailedRequests     int64
-	TotalLatency       int64
-	MinLatency         int64
-	MaxLatency         int64
-}
-
-// RecordSuccess records a successful proxy request
-func (s *ProxyStats) RecordSuccess(latency int64) {
-	atomic.AddInt64(&s.SuccessfulRequests, 1)
-	atomic.AddInt64(&s.TotalLatency, latency)
-
-	// Update min latency
-	for {
-		oldMin := atomic.LoadInt64(&s.MinLatency)
-		if oldMin != 0 && oldMin <= latency {
-			break
-		}
-		if atomic.CompareAndSwapInt64(&s.MinLatency, oldMin, latency) {
-			break
-		}
-	}
-
-	// Update max latency
-	for {
-		oldMax := atomic.LoadInt64(&s.MaxLatency)
-		if oldMax >= latency {
-			break
-		}
-		if atomic.CompareAndSwapInt64(&s.MaxLatency, oldMax, latency) {
-			break
-		}
-	}
-}
-
-// RecordFailure records a failed proxy request
-func (s *ProxyStats) RecordFailure() {
-	atomic.AddInt64(&s.FailedRequests, 1)
-}
-
-// GetStats returns current statistics
-func (s *ProxyStats) GetStats() ports.ProxyStats {
-	total := atomic.LoadInt64(&s.TotalRequests)
-	successful := atomic.LoadInt64(&s.SuccessfulRequests)
-	failed := atomic.LoadInt64(&s.FailedRequests)
-	totalLatency := atomic.LoadInt64(&s.TotalLatency)
-
-	avgLatency := int64(0)
-	if successful > 0 {
-		avgLatency = totalLatency / successful
-	}
-
-	return ports.ProxyStats{
-		TotalRequests:      total,
-		SuccessfulRequests: successful,
-		FailedRequests:     failed,
-		AverageLatency:     avgLatency,
-		MinLatency:         atomic.LoadInt64(&s.MinLatency),
-		MaxLatency:         atomic.LoadInt64(&s.MaxLatency),
-	}
-}
-
-// StreamResponse performs buffered streaming with proper error handling
-func StreamResponse(ctx context.Context, w http.ResponseWriter, body io.Reader, bufferSize int, rlog logger.StyledLogger) (int, error) {
-	buffer := make([]byte, bufferSize)
-	totalBytes := 0
-	flusher, canFlush := w.(http.Flusher)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return totalBytes, ctx.Err()
-		default:
-			n, err := body.Read(buffer)
-			if n > 0 {
-				written, writeErr := w.Write(buffer[:n])
-				totalBytes += written
-
-				if writeErr != nil {
-					rlog.Debug("write error during streaming", "error", writeErr, "bytes_written", totalBytes)
-					return totalBytes, writeErr
-				}
-
-				if canFlush {
-					flusher.Flush()
-				}
-			}
-
-			if err != nil {
-				if err == io.EOF {
-					return totalBytes, nil
-				}
-				rlog.Debug("read error during streaming", "error", err, "bytes_read", totalBytes)
-				return totalBytes, err
-			}
-		}
-	}
-}
-
-// RecordRequestMetrics records common request metrics
-func RecordRequestMetrics(ctx context.Context, statsCollector ports.StatsCollector, endpoint *domain.Endpoint,
-	duration time.Duration, bytesTransferred int64, success bool) {
-
-	if statsCollector == nil || endpoint == nil {
-		return
-	}
-
-	status := "success"
-	if !success {
-		status = "error"
-	}
-
-	statsCollector.RecordRequest(endpoint, status, duration, bytesTransferred)
 }

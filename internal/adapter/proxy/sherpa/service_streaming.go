@@ -28,7 +28,7 @@ type readResult struct {
 }
 
 // streamResponseWithTimeout performs buffered streaming with read timeout protection
-// This is CRITICAL for edge servers to prevent hanging on unresponsive backends
+// This is CRITICAL for edge servers to prevent hanging on unresponsive backends (SHERPA-105)
 func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, buffer []byte, rlog logger.StyledLogger) (int, error) {
 	state := &streamState{
 		lastReadTime: time.Now(),
@@ -75,7 +75,6 @@ func (s *Service) getReadTimeout() time.Duration {
 func (s *Service) createCombinedContext(clientCtx, upstreamCtx context.Context) (context.Context, context.CancelFunc) {
 	combinedCtx, cancel := context.WithCancel(context.Background())
 
-	// Monitor both contexts
 	go func() {
 		select {
 		case <-clientCtx.Done():
@@ -93,7 +92,7 @@ func (s *Service) performTimedRead(combinedCtx context.Context, body io.Reader, 
 	readCh := make(chan readResult, 1)
 	readStart := time.Now()
 
-	// Spawn goroutine for read operation
+	// spawn goroutine for read operation
 	go func() {
 		n, err := body.Read(buffer)
 		readCh <- readResult{n: n, err: err}
@@ -115,7 +114,7 @@ func (s *Service) performTimedRead(combinedCtx context.Context, body io.Reader, 
 		case <-time.After(1 * time.Second):
 			// Give up on pending read
 		}
-		return nil, nil // Signal context cancellation
+		return nil, nil // Signals context cancellation
 
 	case <-readTimer.C:
 		// Read timeout - critical for detecting stalled backends

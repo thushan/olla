@@ -1,9 +1,38 @@
 package sherpa
 
+//                                       Sherpa Proxy Implementation
+//
+// The Sherpa proxy implementation is a clean and pragmatic reverse proxy designed for handling AI inference workloads
+// such as LLM and embedding requests. It prioritises readability, simplicity and reliability while providing essential
+// support for streaming, timeout handling and observability. It was the foundation of the Sherpa AI Tooling which was
+// originally based on Scout.
+//
+// Key design features:
+// - **Connection reuse**: Uses a single shared `http.Transport` with reasonable TCP settings
+//   (e.g. keep-alive, SetNoDelay) to reduce connection churn.
+// - **Streaming support**: Optimised for long-lived HTTP responses via buffered reads and flushing,
+//   with graceful handling of timeouts and client disconnects.
+// - **Basic buffer pooling**: Reuses read buffers via `sync.Pool` to reduce heap churn during streaming.
+// - **Request metadata tracking**: Records request lifecycle timings including header processing,
+//   backend latency, and streaming duration.
+// - **Stat collection**: Uses atomic counters and a pluggable `StatsCollector` to track success/failure rates and latency.
+//
+// Sherpa is suitable for:
+// - Moderate-throughput inference services with stable upstreams
+// - Environments prioritising maintainability and clarity over extreme performance (that's for Olla Proxy)
+//
+// Sherpa is *not* intended for:
+// - High-throughput or low-latency scenarios where custom transports or advanced connection pooling are required
+// - Complex routing or load balancing needs beyond basic endpoint selection
+// - Environments where maximum performance is critical (use Olla Proxy for that)
+// - Scenarios requiring advanced features like circuit breaking, rate limiting, etc.
+// - Environments where the proxy itself must be highly resilient to failures (use Olla Proxy for that)
+
 import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/thushan/olla/internal/core/constants"
 	"net"
 	"net/http"
 	"net/url"
@@ -58,7 +87,7 @@ type Configuration struct {
 
 func (c *Configuration) GetProxyPrefix() string {
 	if c.ProxyPrefix == "" {
-		return "/olla"
+		return constants.DefaultOllaProxyPathPrefix
 	}
 	return c.ProxyPrefix
 }
@@ -103,10 +132,9 @@ func NewService(
 	statsCollector ports.StatsCollector,
 	logger logger.StyledLogger,
 ) (*Service, error) {
-	// Create base components
+
 	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, logger)
 
-	// Create buffer pool using LitePool
 	bufferPool, err := pool.NewLitePool(func() *[]byte {
 		buf := make([]byte, configuration.GetStreamBufferSize())
 		return &buf
@@ -131,7 +159,8 @@ func NewService(
 			if err != nil {
 				return nil, err
 			}
-			// Disable Nagle's algorithm for token streaming
+
+			// we disable Nagle's algorithm for token streaming
 			if tcpConn, ok := conn.(*net.TCPConn); ok {
 				if terr := tcpConn.SetNoDelay(DefaultSetNoDelay); terr != nil {
 					logger.Warn("failed to set NoDelay", "err", terr)
@@ -204,10 +233,8 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 
 	stats.EndpointName = endpoint.Name
 
-	// Log dispatch
 	rlog.Info("Request dispatching to endpoint", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
 
-	// Track connections
 	s.Selector.IncrementConnections(endpoint)
 	defer s.Selector.DecrementConnections(endpoint)
 
@@ -220,7 +247,6 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 
 	stats.TargetUrl = targetURL.String()
 
-	// Create proxy request
 	proxyReq, err := http.NewRequestWithContext(ctx, r.Method, targetURL.String(), r.Body)
 	if err != nil {
 		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), err)
@@ -229,7 +255,6 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 
 	rlog.Debug("created proxy request")
 
-	// Copy headers
 	headerStart := time.Now()
 	core.CopyHeaders(proxyReq, r)
 	stats.HeaderProcessingMs = time.Since(headerStart).Milliseconds()
@@ -240,10 +265,9 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 		stats.Model = model
 	}
 
-	// Mark request processing complete
+	// we mark the request processing as complete here
 	stats.RequestProcessingMs = time.Since(stats.StartTime).Milliseconds()
 
-	// Execute request
 	rlog.Debug("making round-trip request", "target", targetURL.String())
 	backendStart := time.Now()
 	resp, err := s.transport.RoundTrip(proxyReq)
@@ -259,7 +283,6 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 
 	rlog.Debug("round-trip success", "status", resp.StatusCode)
 
-	// Set response headers
 	core.SetResponseHeaders(w, stats, endpoint)
 
 	// Copy response headers
@@ -269,10 +292,9 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 		}
 	}
 
-	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Stream response
+	// stream the response through
 	rlog.Debug("starting response stream")
 	streamStart := time.Now()
 	stats.FirstDataMs = time.Since(stats.StartTime).Milliseconds()
@@ -291,11 +313,10 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", s.configuration.GetResponseTimeout())
 	}
 
-	// Record success
+	// we've successfully written the response
 	duration := time.Since(stats.StartTime)
 	s.RecordSuccess(endpoint, duration.Milliseconds(), int64(bytesWritten))
 
-	// Publish success event
 	s.PublishEvent(core.ProxyEvent{
 		Type:      core.EventTypeProxySuccess,
 		RequestID: stats.RequestID,
@@ -308,7 +329,7 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 		},
 	})
 
-	// Update final stats
+	// stats update
 	stats.EndTime = time.Now()
 	stats.Latency = stats.EndTime.Sub(stats.StartTime).Milliseconds()
 	stats.TotalBytes = bytesWritten
@@ -328,8 +349,6 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 
 	return nil
 }
-
-// streamResponse is now implemented in service_streaming.go with timeout support
 
 // GetStats returns current proxy statistics
 func (s *Service) GetStats(ctx context.Context) (ports.ProxyStats, error) {

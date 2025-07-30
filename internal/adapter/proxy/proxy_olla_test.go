@@ -526,8 +526,8 @@ func TestOllaProxyService_UpdateConfig(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	// Verify optimized settings were preserved
-	// Olla-specific settings preservation is verified through the proxy's behavior
+	// Verify optimised settings were preserved
+	// Olla-specific settings preservation is verified through the proxy's behaviour
 	t.Log("Olla-specific settings preservation verified through proxy behavior")
 }
 

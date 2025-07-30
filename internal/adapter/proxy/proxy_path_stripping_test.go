@@ -271,7 +271,7 @@ func TestProxyPathStrippingWithProviderContext(t *testing.T) {
 	}{
 		{
 			name:              "handler_and_proxy_same_prefix",
-			handlerPrefix:     constants.ProxyPathPrefix, // "/olla"
+			handlerPrefix:     constants.ContextRoutePrefixKey, // "/olla"
 			proxyConfigPrefix: "/olla",
 			requestPath:       "/olla/api/chat",
 			expectedPath:      "/api/chat",

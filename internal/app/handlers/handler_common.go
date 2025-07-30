@@ -54,7 +54,7 @@ func extractProviderFromPath(path string) (provider string, remainingPath string
 // preserves the original path in context for logging/debugging
 func (a *Application) modifyRequestPath(r *http.Request, newPath string) *http.Request {
 	// store original path for reference
-	ctx := context.WithValue(r.Context(), constants.OriginalPathKey, r.URL.Path)
+	ctx := context.WithValue(r.Context(), constants.ContextOriginalPathKey, r.URL.Path)
 
 	// update path
 	r.URL.Path = newPath

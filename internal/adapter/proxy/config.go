@@ -24,7 +24,7 @@ type Configuration struct {
 
 func (c *Configuration) GetProxyPrefix() string {
 	if c.ProxyPrefix == "" {
-		return constants.ProxyPathPrefix
+		return constants.ContextRoutePrefixKey
 	}
 	return c.ProxyPrefix
 }

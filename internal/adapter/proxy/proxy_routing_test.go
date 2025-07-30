@@ -123,7 +123,7 @@ func TestProxyRoutingRegression(t *testing.T) {
 			// Create test request with context prefix set (simulating what the handler does)
 			req := httptest.NewRequest(http.MethodPost, tt.requestPath, nil)
 			if tt.contextPrefix != "" {
-				ctx := context.WithValue(req.Context(), constants.ProxyPathPrefix, tt.contextPrefix)
+				ctx := context.WithValue(req.Context(), constants.ContextRoutePrefixKey, tt.contextPrefix)
 				req = req.WithContext(ctx)
 			}
 

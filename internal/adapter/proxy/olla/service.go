@@ -1,9 +1,31 @@
 package olla
 
+// 											Olla Proxy Implementation
+//
+// The Olla proxy implementation is a high-performance, resilient reverse proxy purpose-built for AI inference traffic
+// (eg. LLMs, embedding APIs). It improves on Sherpa's implementation with additional safeguards, tuning and zero-GC
+// optimisations. Most of the code is inspired by Sherpa, but Olla introduces several enhancements.
+//
+// Compared to Sherpa, Olla introduces:
+// - **Per-endpoint connection pools**: Enables isolated TCP connection reuse, avoiding cross-endpoint interference.
+// - **Circuit breakers**: Automatically trips on failure patterns to prevent cascading errors and allow graceful recovery.
+// - **Aggressive object pooling**: Reuses request contexts, buffers and error objects to minimise heap allocations and GC pauses.
+// - **Atomic stats correction**: Tracks min/max/total latencies lock-free under high concurrency.
+// - **TCP optimisations**: Fine-grained tuning (eg. `SetNoDelay`, long keep-alive) designed for streaming workloads.
+// - **Backpressure safe streaming**: Handles partial reads, client disconnects and stalled upstreams with resilient fallbacks.
+//
+// Suitable for workloads with:
+// - Long-lived, token-streaming HTTP responses
+// - Intermittently unreliable clients (eg. mobile devices, mini-PCs)
+// - Multiple backend replicas (with health-state divergence)
+//
+// Olla is designed for edge/gateway use cases requiring robustness, high availability and minimal jitter under load.
+
 import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/thushan/olla/internal/core/constants"
 	"io"
 	"net"
 	"net/http"
@@ -79,7 +101,7 @@ type Configuration struct {
 
 func (c *Configuration) GetProxyPrefix() string {
 	if c.ProxyPrefix == "" {
-		return "/olla"
+		return constants.DefaultOllaProxyPathPrefix
 	}
 	return c.ProxyPrefix
 }
@@ -171,7 +193,7 @@ func NewService(
 	statsCollector ports.StatsCollector,
 	logger logger.StyledLogger,
 ) (*Service, error) {
-	// Apply defaults
+
 	if configuration.StreamBufferSize == 0 {
 		configuration.StreamBufferSize = DefaultStreamBufferSize
 	}
@@ -188,10 +210,8 @@ func NewService(
 		configuration.ReadTimeout = DefaultReadTimeout
 	}
 
-	// Create base components
 	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, logger)
 
-	// Create object pools
 	bufferPool, err := pool.NewLitePool(func() *[]byte {
 		buf := make([]byte, configuration.StreamBufferSize)
 		return &buf
@@ -221,8 +241,7 @@ func NewService(
 		return nil, fmt.Errorf("failed to create error pool: %w", err)
 	}
 
-	// Create default transport
-	transport := createOptimizedTransport(configuration)
+	transport := createOptimisedTransport(configuration)
 
 	return &Service{
 		BaseProxyComponents: base,
@@ -237,8 +256,8 @@ func NewService(
 	}, nil
 }
 
-// createOptimizedTransport creates an HTTP transport optimized for AI workloads
-func createOptimizedTransport(config *Configuration) *http.Transport {
+// createOptimisedTransport creates an HTTP transport optimised for AI workloads
+func createOptimisedTransport(config *Configuration) *http.Transport {
 	return &http.Transport{
 		MaxIdleConns:        config.MaxIdleConns,
 		MaxIdleConnsPerHost: config.MaxConnsPerHost,
@@ -256,9 +275,10 @@ func createOptimizedTransport(config *Configuration) *http.Transport {
 				return nil, err
 			}
 			if tcpConn, ok := conn.(*net.TCPConn); ok {
-				tcpConn.SetNoDelay(DefaultSetNoDelay)
-				tcpConn.SetKeepAlive(true)
-				tcpConn.SetKeepAlivePeriod(config.GetConnectionKeepAlive())
+				// We ignore errors for these settings on purpose
+				_ = tcpConn.SetNoDelay(DefaultSetNoDelay)
+				_ = tcpConn.SetKeepAlive(true)
+				_ = tcpConn.SetKeepAlivePeriod(config.GetConnectionKeepAlive())
 			}
 			return conn, nil
 		},
@@ -275,9 +295,8 @@ func (s *Service) getOrCreateEndpointPool(endpoint string) *connectionPool {
 		return pool
 	}
 
-	// Create new pool
 	newPool := &connectionPool{
-		transport: createOptimizedTransport(s.configuration),
+		transport: createOptimisedTransport(s.configuration),
 		lastUsed:  time.Now().UnixNano(),
 		healthy:   1,
 	}
@@ -422,8 +441,7 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 func (s *Service) handlePanic(ctx context.Context, w http.ResponseWriter, r *http.Request, stats *ports.RequestStats, rlog logger.StyledLogger, rec interface{}, err *error) {
 	s.RecordFailure(ctx, nil, time.Since(stats.StartTime), fmt.Errorf("panic: %v", rec))
 
-	*err = fmt.Errorf("proxy panic recovered after %.1fs: %v",
-		time.Since(stats.StartTime).Seconds(), rec)
+	*err = fmt.Errorf("proxy panic recovered after %.1fs: %v", time.Since(stats.StartTime).Seconds(), rec)
 	rlog.Error("proxy request panic recovered",
 		"panic", rec,
 		"method", r.Method,
@@ -555,7 +573,6 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 
 	rlog.Debug("round-trip success", "status", resp.StatusCode)
 
-	// Set response headers
 	core.SetResponseHeaders(w, stats, endpoint)
 
 	// Copy response headers
@@ -565,10 +582,9 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 		}
 	}
 
-	// Write status code
 	w.WriteHeader(resp.StatusCode)
 
-	// Stream response
+	// start streaming the response body
 	rlog.Debug("starting response stream")
 	streamStart := time.Now()
 	stats.FirstDataMs = time.Since(stats.StartTime).Milliseconds()
@@ -586,11 +602,10 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", s.configuration.GetResponseTimeout())
 	}
 
-	// Record success
+	// stats update
 	duration := time.Since(stats.StartTime)
 	s.RecordSuccess(endpoint, duration.Milliseconds(), int64(bytesWritten))
 
-	// Update final stats
 	stats.EndTime = time.Now()
 	stats.Latency = duration.Milliseconds()
 
@@ -712,19 +727,20 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 
 // Cleanup cleans up resources
 func (s *Service) Cleanup() {
+
 	// Close all endpoint pools
 	s.endpointPools.Range(func(key string, pool *connectionPool) bool {
 		pool.transport.CloseIdleConnections()
 		return true
 	})
 
-	// Clear maps
 	s.endpointPools.Clear()
 	s.circuitBreakers.Clear()
 
-	// Shutdown base components
 	s.BaseProxyComponents.Shutdown()
 
-	// Force GC to clean up
+	// force GC to clean up
 	runtime.GC()
+	
+	s.Logger.Debug("Olla proxy service cleaned up")
 }

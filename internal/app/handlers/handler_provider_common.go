@@ -78,7 +78,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	// The proxy needs to know which prefix to strip before forwarding.
 	// This mimics the behaviour of the main router for consistency.
 	providerPrefix := getProviderPrefix(providerType)
-	ctx = context.WithValue(ctx, constants.ProxyPathPrefix, providerPrefix)
+	ctx = context.WithValue(ctx, constants.ContextRoutePrefixKey, providerPrefix)
 	r = r.WithContext(ctx)
 
 	ctx, r = a.setupRequestContext(r, pr.stats)

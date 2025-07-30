@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"fmt"
+	"github.com/thushan/olla/internal/core/constants"
 	"log/slog"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -107,7 +108,7 @@ func (sl *PlainStyledLogger) GetUnderlying() *slog.Logger {
 }
 
 func (sl *PlainStyledLogger) WithRequestID(requestID string) StyledLogger {
-	return sl.With("request_id", requestID)
+	return sl.With(constants.ContextRequestIdKey, requestID)
 }
 
 func (sl *PlainStyledLogger) InfoConfigChange(oldName, newName string) {
