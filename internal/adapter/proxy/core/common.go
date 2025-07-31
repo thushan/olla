@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
@@ -13,10 +14,11 @@ import (
 )
 
 const (
-	HeaderRequestID   = "X-Olla-Request-ID"
-	HeaderEndpoint    = "X-Olla-Endpoint"
-	HeaderBackendType = "X-Olla-Backend-Type"
-	HeaderModel       = "X-Olla-Model"
+	HeaderRequestID    = "X-Olla-Request-ID"
+	HeaderEndpoint     = "X-Olla-Endpoint"
+	HeaderBackendType  = "X-Olla-Backend-Type"
+	HeaderModel        = "X-Olla-Model"
+	HeaderResponseTime = "X-Olla-Response-Time"
 )
 
 var (
@@ -176,6 +178,12 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 	if stats != nil {
 		if stats.RequestID != "" {
 			h.Set(HeaderRequestID, stats.RequestID)
+		}
+
+		// Calculate and set response time if we have timing information
+		if !stats.StartTime.IsZero() {
+			responseTime := time.Since(stats.StartTime)
+			h.Set(HeaderResponseTime, responseTime.String())
 		}
 	}
 
