@@ -50,6 +50,13 @@ func (a *Application) startWebServer() {
 	a.registerRoutes()
 	a.routeRegistry.WireUpWithSecurityChain(mux, a.securityAdapters)
 
+	// Set handler before starting server
+	if configServer.RequestLogging {
+		a.server.Handler = a.loggingMiddleware(mux)
+	} else {
+		a.server.Handler = mux
+	}
+
 	// Start WebSocket hub
 	if a.wsHub != nil {
 		ctx := context.Background()
@@ -63,12 +70,6 @@ func (a *Application) startWebServer() {
 			a.errCh <- err
 		}
 	}()
-
-	if configServer.RequestLogging {
-		a.server.Handler = a.loggingMiddleware(mux)
-	} else {
-		a.server.Handler = mux
-	}
 
 	a.logger.Info("Started Olla Server", "bind", a.server.Addr)
 }

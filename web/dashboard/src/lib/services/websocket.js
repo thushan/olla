@@ -12,7 +12,9 @@ export class WebSocketService {
   connect() {
     // Use the same host but with ws:// protocol
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/internal/ws`;
+    // If running on the dashboard path, we need to use the base host
+    const host = window.location.host;
+    const wsUrl = `${protocol}//${host}/internal/ws`;
     
     console.log('Connecting to WebSocket:', wsUrl);
     
@@ -24,6 +26,9 @@ export class WebSocketService {
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
         dashboardStore.setWebSocketConnected(true);
+        
+        // Send a ping to test connection
+        this.send({ type: 'ping' });
         
         // Request initial data
         this.send({ type: 'subscribe', topics: ['stats', 'events', 'health'] });
@@ -62,6 +67,8 @@ export class WebSocketService {
   }
   
   handleMessage(data) {
+    console.log('WebSocket message received:', data.type, data);
+    
     switch (data.type) {
       case 'stats':
         dashboardStore.updateStats(data.payload);
@@ -77,6 +84,17 @@ export class WebSocketService {
         
       case 'system_metrics':
         dashboardStore.updateSystemMetrics(data.payload);
+        break;
+        
+      case 'status':
+        // Handle initial status update
+        if (data.payload) {
+          dashboardStore.updateStatus(data.payload);
+        }
+        break;
+        
+      case 'pong':
+        console.log('Received pong from server');
         break;
         
       default:

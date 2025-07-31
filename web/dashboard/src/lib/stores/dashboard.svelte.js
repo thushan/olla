@@ -50,8 +50,8 @@ class DashboardStore {
   }
   
   get overallHealth() {
-    if (!this.endpoints || this.endpoints.length === 0) return 'UNKNOWN';
-    const healthyCount = this.endpoints.filter(e => e.status === 'online').length;
+    if (!this.endpoints || !Array.isArray(this.endpoints) || this.endpoints.length === 0) return 'UNKNOWN';
+    const healthyCount = this.endpoints.filter(e => e.status === 'online' || e.status === 'healthy').length;
     const totalCount = this.endpoints.length;
     
     if (healthyCount === totalCount) return 'HEALTHY';
@@ -60,7 +60,7 @@ class DashboardStore {
   }
   
   get endpointsUp() {
-    if (!this.status?.endpoints) return { up: 0, total: 0 };
+    if (!this.status?.endpoints || !Array.isArray(this.status.endpoints)) return { up: 0, total: 0 };
     const up = this.status.endpoints.filter(e => e.status === 'healthy').length;
     return { up, total: this.status.endpoints.length };
   }
@@ -240,7 +240,9 @@ class DashboardStore {
         
         // Get available models and endpoints
         const models = Object.keys(this.modelStats?.models || {});
-        const endpoints = this.endpoints.filter(e => e.status === 'online' || e.status === 'healthy');
+        const endpoints = Array.isArray(this.endpoints) 
+          ? this.endpoints.filter(e => e.status === 'online' || e.status === 'healthy')
+          : [];
         
         for (let i = 0; i < Math.min(requestDiff, 5); i++) {
           // Create a synthetic event from the stats change
@@ -294,6 +296,14 @@ class DashboardStore {
   
   updateSystemMetrics(metrics) {
     this.processStats = metrics;
+  }
+  
+  updateStatus(status) {
+    this.status = status;
+    // If status contains endpoints, update them too
+    if (status.endpoints && Array.isArray(status.endpoints)) {
+      this.endpoints = status.endpoints;
+    }
   }
   
   setWebSocketConnected(connected) {

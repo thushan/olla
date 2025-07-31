@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/converter"
@@ -26,6 +27,12 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if s.securityChain != nil {
+				// Skip security for internal endpoints including WebSocket
+				if strings.HasPrefix(r.URL.Path, "/internal/") {
+					next.ServeHTTP(w, r)
+					return
+				}
+				
 				// Create security request from HTTP request
 				secReq := ports.SecurityRequest{
 					ClientID:      r.RemoteAddr, // This would normally be extracted better

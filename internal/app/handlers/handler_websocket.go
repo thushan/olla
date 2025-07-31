@@ -21,6 +21,8 @@ var upgrader = websocket.Upgrader{
 	},
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
+	// Enable compression
+	EnableCompression: true,
 }
 
 // WebSocketHub manages all WebSocket connections
@@ -48,6 +50,8 @@ func NewWebSocketHub(app *Application) *WebSocketHub {
 
 // Run starts the WebSocket hub
 func (h *WebSocketHub) Run(ctx context.Context) {
+	h.logger.Info("WebSocket hub started and listening")
+	
 	// TODO: Subscribe to proxy events when available
 	// For now, proxy events are not forwarded
 
@@ -253,11 +257,22 @@ func (c *WebSocketClient) handleMessage(msg map[string]interface{}) {
 // WebSocketHandler handles WebSocket upgrade requests
 func WebSocketHandler(hub *WebSocketHub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		hub.logger.Info("WebSocket upgrade request", 
+			"method", r.Method,
+			"headers", r.Header,
+			"remote", r.RemoteAddr,
+		)
+		
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
-			hub.logger.Error("Failed to upgrade connection", "error", err)
+			hub.logger.Error("Failed to upgrade connection", 
+				"error", err,
+				"headers", r.Header,
+			)
 			return
 		}
+
+		hub.logger.Info("WebSocket upgraded successfully", "remote", r.RemoteAddr)
 
 		client := &WebSocketClient{
 			hub:  hub,
@@ -267,6 +282,7 @@ func WebSocketHandler(hub *WebSocketHub) http.HandlerFunc {
 
 		client.hub.register <- client
 
+		hub.logger.Info("Starting WebSocket pumps", "remote", r.RemoteAddr)
 		go client.writePump()
 		go client.readPump()
 	}
