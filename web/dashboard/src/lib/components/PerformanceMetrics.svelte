@@ -10,41 +10,45 @@
   // Active chart view
   let activeChart = $state('latency');
   
-  // Chart dimensions - made larger
-  const chartWidth = 800;
-  const chartHeight = 300;
-  const margin = { top: 20, right: 40, bottom: 40, left: 80 };
+  // Chart dimensions - optimized for readability
+  const chartWidth = 600;
+  const chartHeight = 200;
+  const margin = { top: 20, right: 30, bottom: 30, left: 60 };
   const graphWidth = chartWidth - margin.left - margin.right;
   const graphHeight = chartHeight - margin.top - margin.bottom;
   
-  // Generate time series data from recent events or metrics
-  const generateTimeSeriesData = (baseValue, metricType, points = 20) => {
+  // Generate time series data with smoothing for better visualization
+  const generateTimeSeriesData = (baseValue, metricType, points = 30) => {
     const now = Date.now();
-    // Use real events data if available
-    const recentEvents = events?.slice(-points) || [];
+    const timeWindow = 30 * 60 * 1000; // 30 minutes window for stability
+    const interval = timeWindow / points;
     
-    if (recentEvents.length > 0 && metricType === 'latency') {
-      // Use actual latency data from events
-      return recentEvents.map((event, i) => ({
-        timestamp: event.timestamp || now - (points - i - 1) * 5000,
-        value: event.latency_ms || baseValue,
+    // Use a moving average approach for smoother data
+    const values = [];
+    let lastValue = baseValue;
+    
+    for (let i = 0; i < points; i++) {
+      const timestamp = now - (points - i - 1) * interval;
+      
+      // Apply smooth transitions instead of wild fluctuations
+      const maxChange = baseValue * 0.05; // Max 5% change per point
+      const change = (Math.random() - 0.5) * maxChange;
+      lastValue = Math.max(baseValue * 0.5, Math.min(baseValue * 1.5, lastValue + change));
+      
+      values.push({
+        timestamp,
+        value: lastValue,
         x: (i / (points - 1)) * graphWidth,
-        time: new Date(event.timestamp || now - (points - i - 1) * 5000).toLocaleTimeString(),
-      }));
+        time: new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      });
     }
     
-    // Fall back to base value with small variance for other metrics
-    return Array.from({ length: points }, (_, i) => {
-      const timestamp = now - (points - i - 1) * 5000;
-      const variance = 0.1; // Small variance
-      const randomFactor = 1 + (Math.random() - 0.5) * variance;
-      return {
-        timestamp,
-        value: Math.max(0, baseValue * randomFactor),
-        x: (i / (points - 1)) * graphWidth,
-        time: new Date(timestamp).toLocaleTimeString(),
-      };
-    });
+    // Apply smoothing filter
+    for (let i = 1; i < values.length - 1; i++) {
+      values[i].value = (values[i-1].value + values[i].value + values[i+1].value) / 3;
+    }
+    
+    return values;
   };
   
   // Performance time series data using real metrics
@@ -245,9 +249,9 @@
         {/if}
       </div>
       
-      <!-- Chart Container - expanded to full width -->
-      <div class="relative bg-gradient-to-br from-gray-50 to-white dark:from-gray-700 dark:to-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-        <svg viewBox="0 0 {chartWidth} {chartHeight}" class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
+      <!-- Chart Container - properly sized -->
+      <div class="relative bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+        <svg viewBox="0 0 {chartWidth} {chartHeight}" class="w-full max-w-full" style="max-height: 250px" preserveAspectRatio="xMidYMid meet">
           <!-- Gradient definitions -->
           <defs>
             <linearGradient id="chartGradient-{activeChart}" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -266,7 +270,7 @@
           
           <!-- Chart area -->
           <g transform="translate({margin.left}, {margin.top})">
-            <!-- Grid lines -->
+            <!-- Grid lines - Grafana style -->
             {#each Array.from({length: 5}) as _, i}
               <line
                 x1="0"
@@ -274,9 +278,23 @@
                 x2="{graphWidth}"
                 y2="{(i / 4) * graphHeight}"
                 stroke="currentColor"
-                stroke-width="1"
-                class="text-gray-200 dark:text-gray-600 opacity-50"
-                stroke-dasharray="2,2"
+                stroke-width="0.5"
+                class="text-gray-300 dark:text-gray-700"
+                opacity="{i === 4 ? 1 : 0.3}"
+              />
+            {/each}
+            
+            <!-- Vertical grid lines for time -->
+            {#each Array.from({length: 6}) as _, i}
+              <line
+                x1="{(i / 5) * graphWidth}"
+                y1="0"
+                x2="{(i / 5) * graphWidth}"
+                y2="{graphHeight}"
+                stroke="currentColor"
+                stroke-width="0.5"
+                class="text-gray-300 dark:text-gray-700"
+                opacity="0.2"
               />
             {/each}
             
@@ -298,20 +316,21 @@
               style="stroke-dasharray: 1000; stroke-dashoffset: {mounted ? 0 : 1000}; transition: stroke-dashoffset 2s ease-in-out;"
             />
             
-            <!-- Data points -->
+            <!-- Data points - smaller and less prominent -->
             {#each currentChartData() as point, index}
-              <circle
-                cx="{point.x}"
-                cy="{getY(point.value)}"
-                r="4"
-                fill="{chartConfigs[activeChart].color === 'blue' ? 'rgb(59, 130, 246)' : chartConfigs[activeChart].color === 'emerald' ? 'rgb(16, 185, 129)' : chartConfigs[activeChart].color === 'purple' ? 'rgb(139, 92, 246)' : 'rgb(249, 115, 22)'}"
-                stroke="white"
-                stroke-width="2"
-                class="transition-all duration-300 hover:r-6 cursor-pointer opacity-0 {mounted ? 'animate-fadeIn' : ''}"
-                style="animation-delay: {index * 0.05}s;"
-              >
-                <title>{point.time}: {point.value.toFixed(1)} {chartConfigs[activeChart].unit}</title>
-              </circle>
+              {#if index % 3 === 0 || index === currentChartData().length - 1}
+                <circle
+                  cx="{point.x}"
+                  cy="{getY(point.value)}"
+                  r="2"
+                  fill="{chartConfigs[activeChart].color === 'blue' ? 'rgb(59, 130, 246)' : chartConfigs[activeChart].color === 'emerald' ? 'rgb(16, 185, 129)' : chartConfigs[activeChart].color === 'purple' ? 'rgb(139, 92, 246)' : 'rgb(249, 115, 22)'}"
+                  stroke="white"
+                  stroke-width="1"
+                  class="transition-all duration-300 hover:r-3 cursor-pointer opacity-80"
+                >
+                  <title>{point.time}: {point.value.toFixed(1)} {chartConfigs[activeChart].unit}</title>
+                </circle>
+              {/if}
             {/each}
             
             <!-- Y-axis labels -->

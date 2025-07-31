@@ -10,9 +10,19 @@
   
   // Simulate request flow based on stats changes
   $effect(() => {
-    const currentRequests = stats.total_requests || 0;
-    if (currentRequests > lastRequestCount && animatingRequests.length < 8) {
-      const diff = Math.min(currentRequests - lastRequestCount, 5);
+    // Try different field names that might contain total requests
+    const currentRequests = stats?.total_requests || stats?.TotalRequests || stats?.requests || 0;
+    
+    // Also check the dashboardStore.stats directly
+    const altStats = dashboardStore.stats || {};
+    const altRequests = altStats?.total_requests || altStats?.TotalRequests || 0;
+    const finalRequests = Math.max(currentRequests, altRequests);
+    
+    // Always show some animation if we have active connections
+    const activeConnections = stats?.active_connections || stats?.ActiveConnections || 0;
+    
+    if ((finalRequests > lastRequestCount || (activeConnections > 0 && Math.random() < 0.3)) && animatingRequests.length < 8) {
+      const diff = finalRequests > lastRequestCount ? Math.min(finalRequests - lastRequestCount, 5) : 1;
       
       for (let i = 0; i < diff; i++) {
         setTimeout(() => {
@@ -29,14 +39,32 @@
         }, i * 200);
       }
     }
-    lastRequestCount = currentRequests;
+    lastRequestCount = finalRequests;
   });
   
   // Also add periodic animations if there are active connections
   onMount(() => {
+    // Initial animation to show the flow is working
+    setTimeout(() => {
+      if (animatingRequests.length === 0) {
+        const reqId = `initial-${Date.now()}`;
+        animatingRequests = [...animatingRequests, {
+          id: reqId,
+          startTime: Date.now()
+        }];
+        
+        setTimeout(() => {
+          animatingRequests = animatingRequests.filter(r => r.id !== reqId);
+        }, 2000);
+      }
+    }, 500);
+    
     animationInterval = setInterval(() => {
-      const activeConnections = stats.active_connections || 0;
-      if (activeConnections > 0 && animatingRequests.length < 3) {
+      const activeConnections = stats?.active_connections || stats?.ActiveConnections || 0;
+      const hasEndpoints = (dashboardStore.endpoints || []).length > 0;
+      
+      // Show periodic animations if we have endpoints or active connections
+      if ((activeConnections > 0 || hasEndpoints) && animatingRequests.length < 3) {
         const reqId = `periodic-${Date.now()}`;
         animatingRequests = [...animatingRequests, {
           id: reqId,
