@@ -74,6 +74,7 @@ type Application struct {
 	server           *http.Server
 	errCh            chan error
 	StartTime        time.Time
+	wsHub            *WebSocketHub
 }
 
 // NewApplication creates a new Application instance with all required dependencies
@@ -127,7 +128,7 @@ func NewApplication(
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	return &Application{
+	app := &Application{
 		Config:           cfg,
 		logger:           logger,
 		proxyService:     proxyService,
@@ -143,7 +144,12 @@ func NewApplication(
 		server:           server,
 		errCh:            make(chan error, 1),
 		StartTime:        time.Now(),
-	}, nil
+	}
+	
+	// Initialize WebSocket hub
+	app.wsHub = NewWebSocketHub(app)
+	
+	return app, nil
 }
 
 // GetRouteRegistry returns the route registry for wiring up routes

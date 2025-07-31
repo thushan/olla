@@ -26,6 +26,9 @@ type staticProvider struct {
 
 // registerRoutes sets up the complete HTTP routing table
 func (a *Application) registerRoutes() {
+	// Dashboard routes - serve the embedded UI
+	a.registerDashboardRoutes()
+	
 	// Internal health and monitoring endpoints come first - they're critical
 	// for operations and shouldn't depend on any provider configuration
 	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
@@ -35,6 +38,11 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterWithMethod("/internal/stats/models", a.modelStatsHandler, "Model statistics", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
 	a.routeRegistry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
+	
+	// WebSocket endpoint for real-time dashboard updates
+	if a.wsHub != nil {
+		a.routeRegistry.RegisterWithMethod("/internal/ws", WebSocketHandler(a.wsHub), "WebSocket endpoint for real-time updates", "GET")
+	}
 
 	// Unified model views aggregate across all providers
 	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")

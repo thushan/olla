@@ -465,6 +465,32 @@ curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -d '{"model": "codellama", "messages": [...]}'
 ```
 
+## 📊 Dashboard
+
+Olla includes a beautiful, real-time monitoring dashboard built with Svelte 5 and TailwindCSS. Simply navigate to `http://localhost:40114/` (or `/dashboard`) to access:
+
+### Features
+
+- **System Overview**: Real-time health status, request rates, and performance metrics
+- **Endpoint Health Grid**: Visual status of all endpoints with latency and health indicators
+- **Live Request Stream**: Real-time WebSocket-powered event stream showing proxy activity
+- **Model Universe**: Interactive visualization of all available models across endpoints
+- **Security Command Center**: Monitor rate limits, security violations, and threat levels
+- **Performance Analytics**: Detailed metrics for system, memory, and model performance
+- **Configuration Status**: Live configuration overview with quick actions
+- **Dark/Light Theme**: Beautiful Night Owl theme with smooth transitions
+- **Responsive Design**: Adaptive layout for desktop, tablet, and mobile devices
+
+### Real-time Updates
+
+The dashboard uses WebSocket connections for real-time updates:
+- Statistics refresh every 2 seconds
+- Live proxy events stream as they happen
+- Automatic reconnection with exponential backoff
+- Visual connection status indicator
+
+The dashboard is embedded in the binary - no external dependencies required!
+
 ## 📊 Monitoring
 
 ### Health and Status
@@ -788,13 +814,13 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 - [x] **Circuit breakers**: Advanced fault tolerance (Olla engine)
 - [x] **Connection pooling**: Per-endpoint connection management (Olla engine)
 - [x] **Object pooling**: Reduced GC pressure for high throughput (Olla engine)
+- [x] **Olla Admin Panel**: Beautiful real-time dashboard with WebSocket updates
 - [ ] **Auto endpoint discovery**: Add endpoints, let Olla determine the type
 - [ ] **Model routing**: Route based on model requested (infrastructure ready)
 - [ ] **Model benchmarking**: Benchmark models across multiple endpoints easily
 - [ ] **Metrics export**: Prometheus/OpenTelemetry integration
 - [ ] **Dynamic configuration**: API-driven endpoint management
 - [ ] **TLS termination**: Built-in SSL support
-- [ ] **Olla Admin Panel**: View Olla metrics easily within the browser
 - [ ] **Model caching**: Intelligent model preloading
 - [ ] **Advanced Connection Management**: Authenticated endpoints (via SSH tunnels, OAuth, Tokens)
 - [ ] **OpenRouter Support**: Support OpenRouter calls within Olla (divert to free models on OpenRouter etc)

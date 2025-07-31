@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -48,6 +49,13 @@ func (a *Application) startWebServer() {
 
 	a.registerRoutes()
 	a.routeRegistry.WireUpWithSecurityChain(mux, a.securityAdapters)
+
+	// Start WebSocket hub
+	if a.wsHub != nil {
+		ctx := context.Background()
+		go a.wsHub.Run(ctx)
+		a.logger.Info("Started WebSocket hub for real-time updates")
+	}
 
 	go func() {
 		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

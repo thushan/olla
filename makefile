@@ -14,15 +14,26 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version dashboard build-with-dashboard
+
+# Build the dashboard UI
+dashboard:
+	@echo "Building dashboard UI..."
+	@cd web/dashboard && bun install && bun run build
+	@rm -rf internal/app/handlers/dashboard/dist
+	@cp -r web/dashboard/dist internal/app/handlers/dashboard/
+	@echo "Dashboard build complete!"
+
+# Build the application with dashboard
+build-with-dashboard: dashboard build
 
 # Build the application with version info
 build:
 	@echo "Building olla $(VERSION)..."
 	@go build $(LDFLAGS) -o bin/olla .
 
-# Build release version (optimised)
-build-release:
+# Build release version (optimised) with dashboard
+build-release: dashboard
 	@echo "Building olla $(VERSION) for release..."
 	@CGO_ENABLED=0 go build $(LDFLAGS) -a -installsuffix cgo -o bin/olla .
 

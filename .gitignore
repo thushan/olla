@@ -17,6 +17,9 @@ docker-compose.override.yaml
 build/
 dist/
 
+# Dashboard embedded files (built from web/dashboard)
+internal/app/handlers/dashboard/dist/
+
 # Legacy directories (to be removed)
 config-dev/
 default.yml
