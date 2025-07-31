@@ -86,11 +86,12 @@ function worker() {
       fi
     fi
 
-    curl -s -X POST "$TARGET" \
+    # Use timeout to ensure curl is killed after head exits
+    timeout 10s curl -s -X POST "$TARGET" \
       -H "Content-Type: application/json" \
       -H "User-Agent: OllaChaosMonkey/1.0" \
       -d "$payload" \
-      --no-buffer | head -c "$chaos_bytes" > /dev/null &
+      --no-buffer | head -c "$chaos_bytes" > /dev/null 2>&1 || true
 
     jitter_sleep 0.2 1.0
   done

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thushan/olla/internal/adapter/proxy/olla"
+	"github.com/thushan/olla/internal/adapter/proxy/sherpa"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -32,8 +34,9 @@ func TestProxyResponseHeaders(t *testing.T) {
 				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
-				config := &Configuration{}
-				return NewSherpaService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				config := &sherpa.Configuration{}
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
 			},
 		},
 		{
@@ -42,8 +45,9 @@ func TestProxyResponseHeaders(t *testing.T) {
 				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
-				config := &OllaConfiguration{}
-				return NewOllaService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				config := &olla.Configuration{}
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				return proxy
 			},
 		},
 	}
@@ -64,7 +68,8 @@ func TestProxyResponseHeaders(t *testing.T) {
 
 				// Check our custom headers
 				assert.Equal(t, "test-endpoint", w.Header().Get("X-Olla-Endpoint"))
-				assert.Equal(t, "olla/test-endpoint", w.Header().Get("X-Served-By"))
+				assert.NotEmpty(t, w.Header().Get("X-Served-By")) // Contains version info
+				assert.Contains(t, w.Header().Get("X-Served-By"), "Olla/")
 				assert.Empty(t, w.Header().Get("X-Olla-Model"))
 				assert.NotEmpty(t, w.Header().Get("X-Olla-Request-ID"))
 				assert.NotEmpty(t, w.Header().Get("X-Olla-Backend-Type"))
@@ -89,7 +94,8 @@ func TestProxyResponseHeaders(t *testing.T) {
 
 				// Check our custom headers
 				assert.Equal(t, "test-endpoint", w.Header().Get("X-Olla-Endpoint"))
-				assert.Equal(t, "olla/test-endpoint", w.Header().Get("X-Served-By"))
+				assert.NotEmpty(t, w.Header().Get("X-Served-By")) // Contains version info
+				assert.Contains(t, w.Header().Get("X-Served-By"), "Olla/")
 				assert.Equal(t, "llama3.2:3b", w.Header().Get("X-Olla-Model"))
 				assert.NotEmpty(t, w.Header().Get("X-Olla-Request-ID"))
 				assert.NotEmpty(t, w.Header().Get("X-Olla-Backend-Type"))
@@ -116,8 +122,8 @@ func TestProxyResponseHeaders_NoOverride(t *testing.T) {
 	endpoint := createTestEndpoint("real-endpoint", upstream.URL, domain.StatusHealthy)
 	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &Configuration{}
-	proxy := NewSherpaService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+	config := &sherpa.Configuration{}
+	proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	ctx := context.WithValue(req.Context(), "model", "real-model")
@@ -133,5 +139,6 @@ func TestProxyResponseHeaders_NoOverride(t *testing.T) {
 	// Our headers should NOT be overridden
 	assert.Equal(t, "real-endpoint", w.Header().Get("X-Olla-Endpoint"))
 	assert.Equal(t, "real-model", w.Header().Get("X-Olla-Model"))
-	assert.Equal(t, "olla/real-endpoint", w.Header().Get("X-Served-By"))
+	assert.NotEmpty(t, w.Header().Get("X-Served-By"))
+	assert.Contains(t, w.Header().Get("X-Served-By"), "Olla/")
 }

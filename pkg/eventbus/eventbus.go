@@ -21,6 +21,7 @@ type EventBus[T any] struct {
 	subscribers   *xsync.Map[string, *subscriber[T]]
 	cleanupTicker *time.Ticker
 	stopCleanup   chan struct{}
+	workerPool    *WorkerPool[T]
 	subscriberSeq atomic.Uint64
 	bufferSize    int
 	cleanupPeriod time.Duration
@@ -61,6 +62,9 @@ func NewWithConfig[T any](config EventBusConfig) *EventBus[T] {
 		cleanupPeriod: config.CleanupPeriod,
 		stopCleanup:   make(chan struct{}),
 	}
+
+	// Create worker pool for async publishing (4 workers, 1000 buffer)
+	eb.workerPool = NewWorkerPool(eb, 4, 1000)
 
 	if config.CleanupPeriod > 0 {
 		eb.cleanupTicker = time.NewTicker(config.CleanupPeriod)
@@ -117,12 +121,15 @@ func (eb *EventBus[T]) Publish(event T) int {
 			return true
 		}
 
-		select {
-		case sub.ch <- event:
-			sub.lastActive.Store(now)
-			delivered++
-		default:
-			sub.dropped.Add(1)
+		// Double-check active status before sending to avoid race
+		if sub.isActive.Load() {
+			select {
+			case sub.ch <- event:
+				sub.lastActive.Store(now)
+				delivered++
+			default:
+				sub.dropped.Add(1)
+			}
 		}
 		return true
 	})
@@ -135,7 +142,9 @@ func (eb *EventBus[T]) PublishAsync(event T) {
 	if eb.isShutdown.Load() {
 		return
 	}
-	go eb.Publish(event)
+	if eb.workerPool != nil {
+		eb.workerPool.PublishAsync(event)
+	}
 }
 
 // Shutdown gracefully stops the event bus
@@ -144,16 +153,24 @@ func (eb *EventBus[T]) Shutdown() {
 		return
 	}
 
+	// Shutdown worker pool first
+	if eb.workerPool != nil {
+		eb.workerPool.Shutdown()
+	}
+
 	if eb.cleanupTicker != nil {
 		eb.cleanupTicker.Stop()
 		close(eb.stopCleanup)
 	}
 
+	// Mark all subscribers as inactive first
 	eb.subscribers.Range(func(id string, sub *subscriber[T]) bool {
-		close(sub.ch)
+		sub.isActive.Store(false)
 		return true
 	})
 
+	// Clear subscribers map - channels will be GC'd when no longer referenced
+	// We don't close channels to avoid send-on-closed-channel panics
 	eb.subscribers.Clear()
 }
 
@@ -194,9 +211,13 @@ func (eb *EventBus[T]) generateSubscriberID() string {
 
 // unsubscribe removes a subscriber safely
 func (eb *EventBus[T]) unsubscribe(id string) {
-	if sub, exists := eb.subscribers.LoadAndDelete(id); exists {
+	if sub, exists := eb.subscribers.Load(id); exists {
+		// Mark as inactive first to prevent new sends
 		sub.isActive.Store(false)
-		close(sub.ch)
+		// Remove from map so no new operations can find it
+		eb.subscribers.Delete(id)
+		// Don't close the channel - let GC handle it when no references remain
+		// This prevents panic from concurrent sends
 	}
 }
 

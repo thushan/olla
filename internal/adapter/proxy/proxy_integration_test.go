@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/proxy/olla"
+	"github.com/thushan/olla/internal/adapter/proxy/sherpa"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -98,7 +100,7 @@ func TestMakeUserFriendlyError(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := makeUserFriendlyError(tc.inputError, tc.duration, tc.context, timeout)
+			result := MakeUserFriendlyError(tc.inputError, tc.duration, tc.context, timeout)
 
 			for _, expected := range tc.expectedContains {
 				if !strings.Contains(result.Error(), expected) {
@@ -155,7 +157,7 @@ func TestProxyImplementationParity(t *testing.T) {
 	testCases := []struct {
 		name        string
 		setupServer func() *httptest.Server
-		setupConfig func() (sherpaConfig *Configuration, ollaConfig *OllaConfiguration)
+		setupConfig func() (sherpaConfig *sherpa.Configuration, ollaConfig *olla.Configuration)
 		testRequest func(proxy ports.ProxyService, endpoint *domain.Endpoint) error
 		expectError bool
 		errorCheck  func(err error) bool
@@ -168,13 +170,13 @@ func TestProxyImplementationParity(t *testing.T) {
 					w.Write([]byte(`{"status": "ok"}`))
 				}))
 			},
-			setupConfig: func() (*Configuration, *OllaConfiguration) {
-				sherpa := &Configuration{
+			setupConfig: func() (*sherpa.Configuration, *olla.Configuration) {
+				sherpaConfig := &sherpa.Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 8192,
 				}
-				olla := &OllaConfiguration{
+				ollaConfig := &olla.Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 8192,
@@ -182,7 +184,7 @@ func TestProxyImplementationParity(t *testing.T) {
 					IdleConnTimeout:  90 * time.Second,
 					MaxConnsPerHost:  50,
 				}
-				return sherpa, olla
+				return sherpaConfig, ollaConfig
 			},
 			testRequest: func(proxy ports.ProxyService, endpoint *domain.Endpoint) error {
 				req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
@@ -196,13 +198,13 @@ func TestProxyImplementationParity(t *testing.T) {
 			setupServer: func() *httptest.Server {
 				return nil // Will use unreachable endpoint
 			},
-			setupConfig: func() (*Configuration, *OllaConfiguration) {
-				sherpa := &Configuration{
+			setupConfig: func() (*sherpa.Configuration, *olla.Configuration) {
+				sherpaConfig := &sherpa.Configuration{
 					ResponseTimeout:  5 * time.Second,
 					ReadTimeout:      2 * time.Second,
 					StreamBufferSize: 8192,
 				}
-				olla := &OllaConfiguration{
+				ollaConfig := &olla.Configuration{
 					ResponseTimeout:  5 * time.Second,
 					ReadTimeout:      2 * time.Second,
 					StreamBufferSize: 8192,
@@ -210,7 +212,7 @@ func TestProxyImplementationParity(t *testing.T) {
 					IdleConnTimeout:  90 * time.Second,
 					MaxConnsPerHost:  50,
 				}
-				return sherpa, olla
+				return sherpaConfig, ollaConfig
 			},
 			testRequest: func(proxy ports.ProxyService, endpoint *domain.Endpoint) error {
 				req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
@@ -238,13 +240,13 @@ func TestProxyImplementationParity(t *testing.T) {
 					}
 				}))
 			},
-			setupConfig: func() (*Configuration, *OllaConfiguration) {
-				sherpa := &Configuration{
+			setupConfig: func() (*sherpa.Configuration, *olla.Configuration) {
+				sherpaConfig := &sherpa.Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 1024,
 				}
-				olla := &OllaConfiguration{
+				ollaConfig := &olla.Configuration{
 					ResponseTimeout:  30 * time.Second,
 					ReadTimeout:      10 * time.Second,
 					StreamBufferSize: 1024,
@@ -252,7 +254,7 @@ func TestProxyImplementationParity(t *testing.T) {
 					IdleConnTimeout:  90 * time.Second,
 					MaxConnsPerHost:  50,
 				}
-				return sherpa, olla
+				return sherpaConfig, ollaConfig
 			},
 			testRequest: func(proxy ports.ProxyService, endpoint *domain.Endpoint) error {
 				req, stats, rlog := createTestRequestWithBody("GET", "/api/stream", "")
@@ -415,7 +417,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 
 	t.Run("Olla_CircuitBreaker", func(t *testing.T) {
 		endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-		config := &OllaConfiguration{
+		config := &olla.Configuration{
 			ResponseTimeout:  2 * time.Second,
 			ReadTimeout:      1 * time.Second,
 			StreamBufferSize: 8192,
@@ -424,19 +426,22 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 			MaxConnsPerHost:  50,
 		}
 
-		proxy := NewOllaService(
+		proxy, err := olla.NewService(
 			&mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}},
 			&mockEndpointSelector{endpoint: endpoint},
 			config,
 			createTestStatsCollector(),
 			createTestLogger(),
 		)
+		if err != nil {
+			t.Fatalf("Failed to create Olla proxy: %v", err)
+		}
 
 		// Test circuit breaker behavior
-		cb := proxy.getCircuitBreaker(endpoint.Name)
+		cb := proxy.GetCircuitBreaker(endpoint.Name)
 
 		// Initially should be closed
-		if cb.isOpen() {
+		if cb.IsOpen() {
 			t.Error("Circuit breaker should start closed")
 		}
 
@@ -456,19 +461,22 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 
 	t.Run("Sherpa_Traditional", func(t *testing.T) {
 		endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-		config := &Configuration{
+		config := &sherpa.Configuration{
 			ResponseTimeout:  2 * time.Second,
 			ReadTimeout:      1 * time.Second,
 			StreamBufferSize: 8192,
 		}
 
-		proxy := NewSherpaService(
+		proxy, err := sherpa.NewService(
 			&mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}},
 			&mockEndpointSelector{endpoint: endpoint},
 			config,
 			createTestStatsCollector(),
 			createTestLogger(),
 		)
+		if err != nil {
+			t.Fatalf("Failed to create Sherpa proxy: %v", err)
+		}
 
 		// Sherpa doesn't have circuit breakers, just traditional error handling
 		for i := 0; i < 6; i++ {
@@ -581,13 +589,13 @@ func TestConfigurationCompatibility(t *testing.T) {
 			for i := 1; i <= 5; i++ {
 				var config ports.ProxyConfiguration
 				if suite.Name() == "Sherpa" {
-					config = &Configuration{
+					config = &sherpa.Configuration{
 						ResponseTimeout:  time.Duration(i*10) * time.Second,
 						ReadTimeout:      time.Duration(i*5) * time.Second,
 						StreamBufferSize: i * 1024,
 					}
 				} else {
-					config = &OllaConfiguration{
+					config = &olla.Configuration{
 						ResponseTimeout:  time.Duration(i*10) * time.Second,
 						ReadTimeout:      time.Duration(i*5) * time.Second,
 						StreamBufferSize: i * 1024,

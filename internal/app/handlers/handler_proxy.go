@@ -69,8 +69,8 @@ func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
 }
 
 func (a *Application) setupRequestContext(r *http.Request, stats *ports.RequestStats) (context.Context, *http.Request) {
-	ctx := context.WithValue(r.Context(), constants.RequestIDKey, stats.RequestID)
-	ctx = context.WithValue(ctx, constants.RequestTimeKey, stats.StartTime)
+	ctx := context.WithValue(r.Context(), constants.ContextRequestIdKey, stats.RequestID)
+	ctx = context.WithValue(ctx, constants.ContextRequestTimeKey, stats.StartTime)
 	return ctx, r.WithContext(ctx)
 }
 
@@ -191,7 +191,7 @@ func (a *Application) handleProxyError(w http.ResponseWriter, err error) {
 }
 
 func (a *Application) stripRoutePrefix(ctx context.Context, path string) string {
-	return util.StripRoutePrefix(ctx, path, constants.ProxyPathPrefix)
+	return util.StripRoutePrefix(ctx, path, constants.ContextRoutePrefixKey)
 }
 
 // three-stage filtering pipeline that progressively narrows down endpoints.

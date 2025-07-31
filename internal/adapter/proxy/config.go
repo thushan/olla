@@ -8,6 +8,23 @@ import (
 	"github.com/thushan/olla/internal/core/ports"
 )
 
+const (
+	// these are default values for proxy settings that should eventually be configurable
+	// they're tuned for typical llm workloads but might need adjustment for specific use cases
+	DefaultReadTimeout      = 60 * time.Second
+	DefaultStreamBufferSize = 8 * 1024
+
+	DefaultTimeout   = 60 * time.Second
+	DefaultKeepAlive = 60 * time.Second
+
+	// tcp connection tuning specifically optimised for ai streaming workloads
+	// we need more connections than typical web apps because llm requests are long-lived
+	// and we want to avoid connection exhaustion during traffic spikes
+	OllaDefaultMaxIdleConns    = 100
+	OllaDefaultMaxConnsPerHost = 50
+	OllaDefaultIdleConnTimeout = 90 * time.Second
+)
+
 type Configuration struct {
 	ProxyPrefix         string
 	ConnectionTimeout   time.Duration
@@ -15,11 +32,16 @@ type Configuration struct {
 	ResponseTimeout     time.Duration
 	ReadTimeout         time.Duration
 	StreamBufferSize    int
+
+	// Olla-specific fields for advanced connection pooling
+	IdleConnTimeout time.Duration
+	MaxIdleConns    int
+	MaxConnsPerHost int
 }
 
 func (c *Configuration) GetProxyPrefix() string {
 	if c.ProxyPrefix == "" {
-		return constants.ProxyPathPrefix
+		return constants.ContextRoutePrefixKey
 	}
 	return c.ProxyPrefix
 }
@@ -57,6 +79,27 @@ func (c *Configuration) GetStreamBufferSize() int {
 		return DefaultStreamBufferSize
 	}
 	return c.StreamBufferSize
+}
+
+func (c *Configuration) GetIdleConnTimeout() time.Duration {
+	if c.IdleConnTimeout == 0 {
+		return OllaDefaultIdleConnTimeout
+	}
+	return c.IdleConnTimeout
+}
+
+func (c *Configuration) GetMaxIdleConns() int {
+	if c.MaxIdleConns == 0 {
+		return OllaDefaultMaxIdleConns
+	}
+	return c.MaxIdleConns
+}
+
+func (c *Configuration) GetMaxConnsPerHost() int {
+	if c.MaxConnsPerHost == 0 {
+		return OllaDefaultMaxConnsPerHost
+	}
+	return c.MaxConnsPerHost
 }
 
 // Compile-time check to ensure both configurations implement the interface

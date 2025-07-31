@@ -23,7 +23,7 @@ func updateProxyConfiguration(config *config.Config) *proxy.Configuration {
 		ConnectionKeepAlive: DefaultConnectionKeepAlive,
 		ResponseTimeout:     config.Proxy.ResponseTimeout,
 		ReadTimeout:         config.Proxy.ReadTimeout,
-		ProxyPrefix:         constants.ProxyPathPrefix,
+		ProxyPrefix:         constants.ContextRoutePrefixKey,
 		StreamBufferSize:    getStreamBufferSize(config),
 	}
 }
