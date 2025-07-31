@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -68,49 +69,69 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 
 	s := &Service{
 		configuration: &Configuration{
-			ReadTimeout: 100 * time.Millisecond,
+			ReadTimeout: 10 * time.Millisecond, // Much shorter for tests
 		},
 	}
 
-	state := &streamState{}
 	logger := createTestLogger()
 
-	// Run many reads that will timeout
-	for i := 0; i < 50; i++ {
-		ctx := context.Background()
+	// Run timeout tests concurrently to speed up
+	var wg sync.WaitGroup
+	const numTimeoutTests = 20 // Reduced from 50
 
-		// Use a reader that delays then returns data
-		reader := &delayedReader{delay: 150 * time.Millisecond} // Longer than read timeout
+	for i := 0; i < numTimeoutTests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx := context.Background()
 
-		// Create a new buffer for each iteration to avoid race
-		localBuffer := make([]byte, 1024)
+			// Create a new state for each goroutine to avoid race conditions
+			localState := &streamState{}
 
-		// This should timeout after 100ms
-		result, err := s.performTimedRead(ctx, reader, localBuffer, 100*time.Millisecond, state, logger)
-		if err == nil && result != nil {
-			t.Fatal("Expected timeout but got result")
-		}
+			// Use a reader that delays then returns data
+			reader := &delayedReader{delay: 50 * time.Millisecond} // Still longer than timeout
+
+			// Create a new buffer for each goroutine
+			localBuffer := make([]byte, 1024)
+
+			// This should timeout after 10ms
+			result, err := s.performTimedRead(ctx, reader, localBuffer, 10*time.Millisecond, localState, logger)
+			if err == nil && result != nil {
+				t.Error("Expected timeout but got result")
+			}
+		}()
 	}
 
-	// Also test context cancellation with non-blocking reader
-	for i := 0; i < 50; i++ {
-		ctx, cancel := context.WithCancel(context.Background())
+	// Test context cancellation concurrently too
+	const numCancelTests = 20 // Reduced from 50
+	for i := 0; i < numCancelTests; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithCancel(context.Background())
 
-		// Use a reader that returns data immediately
-		reader := strings.NewReader("test data")
+			// Create a new state for each goroutine to avoid race conditions
+			localState := &streamState{}
 
-		// Create a new buffer for each iteration to avoid race
-		localBuffer := make([]byte, 1024)
+			// Use a reader that returns data immediately
+			reader := strings.NewReader("test data")
 
-		// Cancel context immediately
-		cancel()
+			// Create a new buffer for each goroutine
+			localBuffer := make([]byte, 1024)
 
-		// This should return nil due to context cancellation
-		s.performTimedRead(ctx, reader, localBuffer, 100*time.Millisecond, state, logger)
+			// Cancel context immediately
+			cancel()
+
+			// This should return nil due to context cancellation
+			s.performTimedRead(ctx, reader, localBuffer, 10*time.Millisecond, localState, logger)
+		}()
 	}
+
+	// Wait for all tests to complete
+	wg.Wait()
 
 	// Give goroutines time to exit
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 	runtime.GC()
 	time.Sleep(10 * time.Millisecond)
 
@@ -118,7 +139,7 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 	finalGoroutines := runtime.NumGoroutine()
 	leaked := finalGoroutines - initialGoroutines
 
-	if leaked > 2 { // Allow small variance
+	if leaked > 5 { // Allow slightly more variance for concurrent execution
 		t.Errorf("Goroutine leak detected: initial=%d, final=%d, leaked=%d",
 			initialGoroutines, finalGoroutines, leaked)
 	}

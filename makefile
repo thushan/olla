@@ -52,12 +52,17 @@ test-short:
 # Run tests with race detection
 test-race:
 	@echo "Running tests with race detection..."
-	@go test -race ./...
+	@go test -race -short ./...
 
 # Run tests with coverage
 test-cover:
 	@echo "Running tests with coverage..."
 	@go test -cover ./...
+
+# Run stress tests (comprehensive testing)
+test-stress:
+	@echo "Running comprehensive stress tests..."
+	@go test -v ./... -run "Stress"
 
 # Run tests with coverage profile and generate HTML report
 test-cover-html:
@@ -107,7 +112,7 @@ ready-tools: fmt lint align
 	@echo -e "\033[32mCode is clean for tests!\033[0m"
 
 # Make code ready for commit (test, test-race, fmt, lint, align)
-ready: test test-race fmt lint align
+ready: test-short test-race fmt lint align
 	@echo -e "\033[32mCode is ready for commit!\033[0m"
 
 # Build binaries only (no archives) to ./build directory
@@ -198,6 +203,7 @@ help:
 	@echo "  test-short      - Run short tests only"
 	@echo "  test-race       - Run tests with race detection"
 	@echo "  test-cover      - Run tests with coverage"
+	@echo "  test-stress     - Run comprehensive stress tests (may take 30+ seconds)"
 	@echo "  test-cover-html - Run tests with coverage and generate HTML report"
 	@echo "  bench           - Run all benchmarks"
 	@echo "  bench-repo      - Run repository benchmarks"

@@ -133,11 +133,11 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	// Track published vs received
 	var published atomic.Int64
 	var receivedCount atomic.Int64
-	
+
 	// Use smaller numbers for more reliable test
 	const numPublishers = 5
 	const eventsPerPublisher = 20
-	
+
 	// Start receiver first
 	done := make(chan struct{})
 	go func() {
@@ -172,16 +172,16 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 
 	// Wait for all publishers to finish
 	wg.Wait()
-	
+
 	// Give time for events to be processed
 	time.Sleep(200 * time.Millisecond)
-	
+
 	// Stop receiver
 	close(done)
 
 	publishedTotal := published.Load()
 	receivedTotal := receivedCount.Load()
-	
+
 	t.Logf("Published: %d", publishedTotal)
 	t.Logf("Received: %d events", receivedTotal)
 
@@ -191,7 +191,7 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	if receivedTotal < minExpected {
 		t.Errorf("Expected at least %d events, got %d", minExpected, receivedTotal)
 	}
-	
+
 	// Ensure we actually published what we expected
 	if publishedTotal != int64(numPublishers*eventsPerPublisher) {
 		t.Errorf("Expected to publish %d events, but published %d", numPublishers*eventsPerPublisher, publishedTotal)
