@@ -1,30 +1,57 @@
 <script>
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   
   const events = $derived(dashboardStore.events.slice(0, 10));
+  const stats = $derived(dashboardStore.status?.system || {});
   let animatingRequests = $state([]);
+  let lastRequestCount = $state(0);
+  let animationInterval;
   
-  // Add animation when new events arrive
+  // Simulate request flow based on stats changes
   $effect(() => {
-    // Trigger animation for each new event
-    if (events.length > 0 && animatingRequests.length < 8) {
-      const latestEvent = events[0];
-      const reqId = `${latestEvent.timestamp}-${Math.random()}`;
+    const currentRequests = stats.total_requests || 0;
+    if (currentRequests > lastRequestCount && animatingRequests.length < 8) {
+      const diff = Math.min(currentRequests - lastRequestCount, 5);
       
-      // Check if we already animated this event
-      if (!animatingRequests.some(r => r.id.startsWith(latestEvent.timestamp))) {
+      for (let i = 0; i < diff; i++) {
+        setTimeout(() => {
+          const reqId = `req-${Date.now()}-${Math.random()}`;
+          animatingRequests = [...animatingRequests, {
+            id: reqId,
+            startTime: Date.now()
+          }];
+          
+          // Remove after animation
+          setTimeout(() => {
+            animatingRequests = animatingRequests.filter(r => r.id !== reqId);
+          }, 2000);
+        }, i * 200);
+      }
+    }
+    lastRequestCount = currentRequests;
+  });
+  
+  // Also add periodic animations if there are active connections
+  onMount(() => {
+    animationInterval = setInterval(() => {
+      const activeConnections = stats.active_connections || 0;
+      if (activeConnections > 0 && animatingRequests.length < 3) {
+        const reqId = `periodic-${Date.now()}`;
         animatingRequests = [...animatingRequests, {
           id: reqId,
           startTime: Date.now()
         }];
         
-        // Remove after animation
         setTimeout(() => {
           animatingRequests = animatingRequests.filter(r => r.id !== reqId);
         }, 2000);
       }
-    }
+    }, 3000);
+  });
+  
+  onDestroy(() => {
+    if (animationInterval) clearInterval(animationInterval);
   });
   
   // Format timestamp

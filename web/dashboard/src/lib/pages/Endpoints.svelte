@@ -5,6 +5,66 @@
   const endpoints = $derived(dashboardStore.endpoints || []);
   const status = $derived(dashboardStore.status);
   
+  // Sorting state
+  let sortField = $state('name');
+  let sortDirection = $state('asc');
+  
+  // Cache for endpoint data to prevent flickering
+  let endpointCache = $state({});
+  
+  // Update cache when new data arrives
+  $effect(() => {
+    endpoints.forEach(ep => {
+      if (!endpointCache[ep.name]) {
+        endpointCache[ep.name] = {};
+      }
+      // Only update non-null values to preserve data
+      Object.keys(ep).forEach(key => {
+        if (ep[key] !== null && ep[key] !== undefined) {
+          endpointCache[ep.name][key] = ep[key];
+        }
+      });
+    });
+  });
+  
+  // Get cached endpoint data
+  function getCachedEndpoint(endpoint) {
+    return { ...endpoint, ...(endpointCache[endpoint.name] || {}) };
+  }
+  
+  // Sort endpoints
+  const sortedEndpoints = $derived.by(() => {
+    const sorted = [...endpoints].map(getCachedEndpoint).sort((a, b) => {
+      let aVal = a[sortField];
+      let bVal = b[sortField];
+      
+      // Handle numeric fields
+      if (['priority', 'model_count', 'request_count'].includes(sortField)) {
+        aVal = Number(aVal) || 0;
+        bVal = Number(bVal) || 0;
+      }
+      
+      // Handle string fields
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+      
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  });
+  
+  // Toggle sort
+  function toggleSort(field) {
+    if (sortField === field) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortField = field;
+      sortDirection = 'asc';
+    }
+  }
+  
   // Group endpoints by status
   const endpointsByStatus = $derived((() => {
     const groups = {
@@ -118,18 +178,30 @@
       <table class="w-full">
         <thead>
           <tr class="border-b border-gray-200 dark:border-gray-700">
-            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
-            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">URL</th>
-            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Priority</th>
+            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('name')}>
+              Name {sortField === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
+            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('url')}>
+              URL {sortField === 'url' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
+            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('status')}>
+              Status {sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
+            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('priority')}>
+              Priority {sortField === 'priority' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
             <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Latency</th>
             <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Success Rate</th>
-            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Models</th>
-            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Connections</th>
+            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('model_count')}>
+              Models {sortField === 'model_count' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
+            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('request_count')}>
+              Connections {sortField === 'request_count' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
+            </th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
-          {#each endpoints as endpoint}
+          {#each sortedEndpoints as endpoint}
             <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="font-medium text-gray-900 dark:text-white">{endpoint.name}</div>
@@ -152,10 +224,10 @@
                 <span class="text-sm text-gray-900 dark:text-white">{endpoint.success_rate || 'N/A'}</span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right">
-                <span class="text-sm text-gray-900 dark:text-white">{endpoint.models?.count || 0}</span>
+                <span class="text-sm text-gray-900 dark:text-white">{endpoint.model_count || endpoint.models?.count || 0}</span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-right">
-                <span class="text-sm text-gray-900 dark:text-white">{endpoint.connections || 0}</span>
+                <span class="text-sm text-gray-900 dark:text-white">{endpoint.request_count || endpoint.connections || 0}</span>
               </td>
             </tr>
           {/each}

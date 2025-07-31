@@ -6,18 +6,21 @@
   const stats = $derived(dashboardStore.stats);
   const modelStats = $derived(dashboardStore.modelStats);
   
-  // Calculate performance metrics
+  // Calculate performance metrics from real data
   const requestsPerSecond = $derived((() => {
-    // This would need real time-series data, for now estimate from total
-    const totalRequests = stats.totalRequests || 0;
-    if (totalRequests === 0) return 0;
-    // Rough estimate assuming system has been running for some time
-    return Math.round(totalRequests / 3600); // per hour to per second
+    // Use real request rate if available
+    if (stats?.requests_per_second) return stats.requests_per_second;
+    
+    // Otherwise calculate from total requests
+    const totalRequests = stats?.total_requests || 0;
+    const uptime = status?.system?.uptime_seconds || 3600;
+    if (totalRequests === 0 || uptime === 0) return 0;
+    return (totalRequests / uptime).toFixed(2);
   })());
   
   const errorRate = $derived((() => {
-    const total = stats.totalRequests || 0;
-    const errors = stats.totalErrors || 0;
+    const total = stats?.total_requests || 0;
+    const errors = stats?.total_errors || 0;
     if (total === 0) return 0;
     return ((errors / total) * 100).toFixed(2);
   })());
@@ -60,7 +63,7 @@
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm text-gray-600 dark:text-gray-400">Avg Response</p>
-          <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.avgResponseTime || 0}ms</p>
+          <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats?.avg_response_time || stats?.avg_latency || 0}ms</p>
         </div>
         <div class="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
           <span class="text-xl">⚡</span>
@@ -72,7 +75,7 @@
       <div class="flex items-center justify-between">
         <div>
           <p class="text-sm text-gray-600 dark:text-gray-400">Active Connections</p>
-          <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats.activeConnections || 0}</p>
+          <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{stats?.active_connections || 0}</p>
         </div>
         <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
           <span class="text-xl">🔗</span>
@@ -82,7 +85,7 @@
   </div>
   
   <!-- Main Performance Chart -->
-  <div>
+  <div class="col-span-full">
     <PerformanceMetrics />
   </div>
   

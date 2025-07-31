@@ -1,20 +1,35 @@
 <script>
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   
-  const endpoints = $derived(dashboardStore.endpoints);
+  const endpoints = $derived(dashboardStore.endpoints || []);
   let selectedEndpoint = $state(null);
   let hoveredEndpoint = $state(null);
+  let connectionPulse = $state(false);
+  let pulseInterval;
   
-  // Group endpoints by type
-  const endpointGroups = $derived(() => {
+  // Group endpoints by type with stability
+  const endpointGroups = $derived.by(() => {
     const groups = {};
+    if (!endpoints || endpoints.length === 0) return groups;
+    
     endpoints.forEach(ep => {
-      const type = ep.backend_type || 'unknown';
+      const type = ep.type || ep.backend_type || 'unknown';
       if (!groups[type]) groups[type] = [];
       groups[type].push(ep);
     });
     return groups;
+  });
+  
+  // Pulse animation for active connections
+  onMount(() => {
+    pulseInterval = setInterval(() => {
+      connectionPulse = !connectionPulse;
+    }, 2000);
+  });
+  
+  onDestroy(() => {
+    if (pulseInterval) clearInterval(pulseInterval);
   });
   
   // Get status color

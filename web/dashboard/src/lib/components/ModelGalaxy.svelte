@@ -32,9 +32,18 @@
     'default': { color: '#6B7280', icon: '🌟', label: 'Other' },
   };
   
-  // Determine model category
-  function getModelCategory(modelName) {
-    const name = modelName.toLowerCase();
+  // Determine model category from model name or family
+  function getModelCategory(model) {
+    // Try to use family from olla metadata first
+    if (model.olla?.family) {
+      const family = model.olla.family.toLowerCase();
+      for (const [category, _] of Object.entries(modelCategories)) {
+        if (family.includes(category)) return category;
+      }
+    }
+    
+    // Fall back to name matching
+    const name = (model.id || model.name || '').toLowerCase();
     for (const [category, _] of Object.entries(modelCategories)) {
       if (name.includes(category)) return category;
     }
@@ -48,8 +57,9 @@
     // Add unified models as major nodes
     if (unifiedModels && unifiedModels.length > 0) {
       unifiedModels.forEach((model, index) => {
-        const category = getModelCategory(model.name);
-        const stats = modelStats[model.name] || {};
+        const category = getModelCategory(model);
+        const modelId = model.id || model.name;
+        const stats = modelStats[modelId] || {};
         const requestCount = stats.request_count || 0;
         const avgLatency = stats.avg_latency_ms || 0;
         
@@ -61,9 +71,12 @@
         const radiusBase = 60 + (index % 3) * 80;
         const radius = radiusBase + Math.sin(rotationAngle * 0.02 + index) * 20;
         
+        // Extract available endpoints from model
+        const modelEndpoints = model.olla?.availability?.map(a => a.endpoint) || [];
+        
         nodes.push({
-          id: `model-${model.name}`,
-          name: model.name,
+          id: `model-${modelId}`,
+          name: modelId,
           type: 'model',
           category,
           x: center + Math.cos(angle) * radius,
@@ -73,7 +86,8 @@
           avgLatency,
           color: modelCategories[category].color,
           icon: modelCategories[category].icon,
-          endpoints: model.endpoints || [],
+          endpoints: modelEndpoints,
+          model: model, // Keep full model data for details
         });
       });
     }

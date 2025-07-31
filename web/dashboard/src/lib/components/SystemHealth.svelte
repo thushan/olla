@@ -7,10 +7,20 @@
   const healthyEndpoints = $derived(endpoints.filter(e => e.status === 'online' || e.status === 'healthy').length);
   const healthPercentage = $derived(totalEndpoints > 0 ? (healthyEndpoints / totalEndpoints) * 100 : 0);
   
-  // Get system metrics
-  const cpuUsage = $derived(dashboardStore.processStats?.cpu_percent || 0);
-  const memoryUsage = $derived(dashboardStore.processStats?.memory_percent || 0);
-  const goroutines = $derived(dashboardStore.processStats?.num_goroutines || 0);
+  // Get system metrics from process stats
+  const processStats = $derived(dashboardStore.processStats || {});
+  const cpuUsage = $derived(Math.round((processStats.garbage_collection?.gc_cpu_fraction || 0) * 100));
+  const memoryUsage = $derived((() => {
+    // Calculate memory usage percentage
+    if (!processStats.memory) return 0;
+    // For now, use memory pressure as a simple indicator
+    const pressure = processStats.memory.memory_pressure?.toLowerCase();
+    if (pressure === 'low') return 20;
+    if (pressure === 'medium') return 50;
+    if (pressure === 'high') return 80;
+    return 0;
+  })());
+  const goroutines = $derived(processStats.goroutines?.count || 0);
   
   // Health status config
   const statusConfig = $derived({
