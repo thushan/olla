@@ -4,13 +4,13 @@
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
   import { websocketService } from '$lib/services/websocket.js';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import HeroStatus from '$lib/components/HeroStatus.svelte';
-  import EndpointHealthGrid from '$lib/components/EndpointHealthGrid.svelte';
-  import LiveRequestStream from '$lib/components/LiveRequestStream.svelte';
-  import ModelUniverse from '$lib/components/ModelUniverse.svelte';
-  import SecurityCommandCenter from '$lib/components/SecurityCommandCenter.svelte';
-  import PerformanceAnalytics from '$lib/components/PerformanceAnalytics.svelte';
-  import ConfigurationStatus from '$lib/components/ConfigurationStatus.svelte';
+  import HeroMetrics from '$lib/components/HeroMetrics.svelte';
+  import EndpointMap from '$lib/components/EndpointMap.svelte';
+  import RequestFlow from '$lib/components/RequestFlow.svelte';
+  import ModelGalaxy from '$lib/components/ModelGalaxy.svelte';
+  import PerformanceMetrics from '$lib/components/PerformanceMetrics.svelte';
+  import SecurityRadar from '$lib/components/SecurityRadar.svelte';
+  import SystemHealth from '$lib/components/SystemHealth.svelte';
   import './app.css';
   
   // Initialize theme store
@@ -26,105 +26,125 @@
     dashboardStore.destroy();
     websocketService.disconnect();
   });
+  
+  // Get current time for greeting
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 </script>
 
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-  <!-- Header -->
-  <header class="sticky top-0 z-50 w-full border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-gray-200 dark:border-gray-800">
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex h-16 items-center justify-between">
-        <!-- Brand -->
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <span class="text-white font-bold text-sm">O</span>
+<div class="min-h-screen bg-gradient-to-br from-gray-50 via-gray-50 to-blue-50 dark:from-gray-900 dark:via-gray-900 dark:to-blue-950 transition-all duration-500">
+  <!-- Animated background patterns -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none">
+    <div class="absolute -top-40 -right-40 w-80 h-80 bg-purple-300 dark:bg-purple-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-20 animate-blob"></div>
+    <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-300 dark:bg-blue-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
+    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-pink-300 dark:bg-pink-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+  </div>
+
+  <!-- Main Layout -->
+  <div class="relative z-10">
+    <!-- Header -->
+    <header class="border-b border-gray-200/50 dark:border-gray-800/50 backdrop-blur-xl bg-white/30 dark:bg-gray-900/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          <!-- Logo & Title -->
+          <div class="flex items-center gap-4">
+            <div class="relative">
+              <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-lg shadow-purple-500/30">
+                <span class="text-white font-bold text-lg">O</span>
+              </div>
+              <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-900 animate-pulse"></div>
             </div>
-            <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
-              Olla Dashboard
-            </h1>
+            <div>
+              <h1 class="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 dark:from-white dark:to-gray-300 bg-clip-text text-transparent">
+                Olla Dashboard
+              </h1>
+              <p class="text-xs text-gray-600 dark:text-gray-400">{greeting} • Real-time AI Infrastructure Monitor</p>
+            </div>
           </div>
-          <span class="hidden sm:inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-900/20 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-300">
-            AI Infrastructure Monitor
-          </span>
-        </div>
-        
-        <!-- Actions -->
-        <div class="flex items-center gap-4">
-          <ThemeToggle />
+          
+          <!-- Actions -->
+          <div class="flex items-center gap-4">
+            <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-100/50 dark:bg-gray-800/50 backdrop-blur-sm">
+              <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span class="text-xs font-medium text-gray-700 dark:text-gray-300">Live</span>
+            </div>
+            <ThemeToggle />
+          </div>
         </div>
       </div>
-    </div>
-  </header>
-  
-  <!-- Main Content -->
-  <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-    <!-- Hero Status -->
-    <div class="mb-6">
-      <HeroStatus />
-    </div>
-    
-    <!-- Primary Grid -->
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-      <!-- Main Column (2/3 width) -->
-      <div class="xl:col-span-2 space-y-6">
-        <!-- Endpoint Health Grid -->
-        <EndpointHealthGrid />
-        
-        <!-- Performance Analytics -->
-        <PerformanceAnalytics />
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <!-- Hero Metrics -->
+      <div class="mb-8">
+        <HeroMetrics />
       </div>
       
-      <!-- Side Column (1/3 width) -->
-      <div class="space-y-6">
-        <!-- Live Request Stream -->
-        <LiveRequestStream />
+      <!-- Primary Dashboard Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+        <!-- System Health Overview (spans 4 columns) -->
+        <div class="lg:col-span-4">
+          <SystemHealth />
+        </div>
         
-        <!-- Security Command Center -->
-        <SecurityCommandCenter />
-      </div>
-    </div>
-    
-    <!-- Secondary Grid -->
-    <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
-      <!-- Model Universe (3/4 width) -->
-      <div class="xl:col-span-3">
-        <ModelUniverse />
+        <!-- Endpoint Map (spans 8 columns) -->
+        <div class="lg:col-span-8">
+          <EndpointMap />
+        </div>
       </div>
       
-      <!-- Configuration Status (1/4 width) -->
+      <!-- Secondary Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+        <!-- Request Flow (spans 7 columns) -->
+        <div class="lg:col-span-7">
+          <RequestFlow />
+        </div>
+        
+        <!-- Security Radar (spans 5 columns) -->
+        <div class="lg:col-span-5">
+          <SecurityRadar />
+        </div>
+      </div>
+      
+      <!-- Performance Section -->
+      <div class="mb-8">
+        <PerformanceMetrics />
+      </div>
+      
+      <!-- Model Galaxy -->
       <div>
-        <ConfigurationStatus />
+        <ModelGalaxy />
       </div>
-    </div>
-  </main>
-  
-  <!-- Footer -->
-  <footer class="mt-12 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-          <span>Olla Dashboard</span>
-          <span class="text-gray-400 dark:text-gray-600">•</span>
-          <span>Built with Svelte 5 & TailwindCSS</span>
-        </div>
-        
-        <div class="flex items-center gap-6 text-sm">
-          <a 
-            href="https://github.com/thushan/olla" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            class="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-          >
-            GitHub
-          </a>
-          <a 
-            href="/api/docs" 
-            class="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-          >
-            API Docs
-          </a>
-        </div>
-      </div>
-    </div>
-  </footer>
+    </main>
+  </div>
 </div>
+
+<style>
+  @keyframes blob {
+    0% {
+      transform: translate(0px, 0px) scale(1);
+    }
+    33% {
+      transform: translate(30px, -50px) scale(1.1);
+    }
+    66% {
+      transform: translate(-20px, 20px) scale(0.9);
+    }
+    100% {
+      transform: translate(0px, 0px) scale(1);
+    }
+  }
+  
+  .animate-blob {
+    animation: blob 7s infinite;
+  }
+  
+  .animation-delay-2000 {
+    animation-delay: 2s;
+  }
+  
+  .animation-delay-4000 {
+    animation-delay: 4s;
+  }
+</style>
