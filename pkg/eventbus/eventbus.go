@@ -169,12 +169,8 @@ func (eb *EventBus[T]) Shutdown() {
 		return true
 	})
 
-	// Then close channels
-	eb.subscribers.Range(func(id string, sub *subscriber[T]) bool {
-		close(sub.ch)
-		return true
-	})
-
+	// Clear subscribers map - channels will be GC'd when no longer referenced
+	// We don't close channels to avoid send-on-closed-channel panics
 	eb.subscribers.Clear()
 }
 
@@ -220,8 +216,8 @@ func (eb *EventBus[T]) unsubscribe(id string) {
 		sub.isActive.Store(false)
 		// Remove from map so no new operations can find it
 		eb.subscribers.Delete(id)
-		// Now safe to close the channel
-		close(sub.ch)
+		// Don't close the channel - let GC handle it when no references remain
+		// This prevents panic from concurrent sends
 	}
 }
 

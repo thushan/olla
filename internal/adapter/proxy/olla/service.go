@@ -363,9 +363,6 @@ func (cb *circuitBreaker) RecordFailure() {
 
 	if failures >= cb.threshold {
 		atomic.StoreInt64(&cb.state, 1) // open
-
-		// Publish circuit breaker event
-		// This will be handled by the base components
 	}
 }
 

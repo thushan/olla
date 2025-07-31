@@ -74,8 +74,8 @@ func (wp *WorkerPool[T]) worker() {
 func (wp *WorkerPool[T]) Shutdown() {
 	// Cancel context to signal workers to stop
 	wp.cancel()
-	// Close the channel to prevent new events
-	close(wp.eventChan)
-	// Wait for all workers to finish
+	// Wait for all workers to finish processing
 	wp.wg.Wait()
+	// Now safe to close the channel after all workers have stopped
+	close(wp.eventChan)
 }
