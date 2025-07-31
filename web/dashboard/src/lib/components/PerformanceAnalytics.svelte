@@ -68,29 +68,26 @@
   });
 </script>
 
-<div class="performance-analytics">
-  <div class="analytics-header">
-    <h3 class="text-lg font-semibold text-primary">Performance Analytics</h3>
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+  <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Performance Analytics</h3>
     
     <!-- Tab Navigation -->
-    <div class="tab-nav">
+    <div class="flex gap-2">
       <button 
-        class="tab-button"
-        class:active={activeTab === 'system'}
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 {activeTab === 'system' ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400' : ''}"
         onclick={() => activeTab = 'system'}
       >
         System
       </button>
       <button 
-        class="tab-button"
-        class:active={activeTab === 'memory'}
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 {activeTab === 'memory' ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400' : ''}"
         onclick={() => activeTab = 'memory'}
       >
         Memory
       </button>
       <button 
-        class="tab-button"
-        class:active={activeTab === 'models'}
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 {activeTab === 'models' ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400' : ''}"
         onclick={() => activeTab = 'models'}
       >
         Models
@@ -98,78 +95,78 @@
     </div>
   </div>
   
-  <div class="analytics-content">
+  <div class="p-6">
     <!-- System Performance Tab -->
     {#if activeTab === 'system'}
-      <div class="tab-content">
+      <div class="space-y-6">
         <!-- Key Metrics -->
-        <div class="metrics-row">
-          <div class="metric-box">
-            <div class="metric-header">
-              <span class="metric-icon">⚡</span>
-              <span class="metric-title">Avg Latency</span>
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-lg">⚡</span>
+              <span class="text-sm text-gray-600 dark:text-gray-400">Avg Latency</span>
             </div>
-            <div class="metric-value">{performanceMetrics().avgLatency}ms</div>
-            <div class="metric-trend">
-              <span class="trend-icon">📊</span>
-              <span class="trend-text">Real-time</span>
-            </div>
-          </div>
-          
-          <div class="metric-box">
-            <div class="metric-header">
-              <span class="metric-icon">✅</span>
-              <span class="metric-title">Success Rate</span>
-            </div>
-            <div class="metric-value">{performanceMetrics().successRate}%</div>
-            <div class="metric-trend success">
-              <span class="trend-icon">📈</span>
-              <span class="trend-text">Healthy</span>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().avgLatency}ms</div>
+            <div class="flex items-center gap-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <span>📊</span>
+              <span>Real-time</span>
             </div>
           </div>
           
-          <div class="metric-box">
-            <div class="metric-header">
-              <span class="metric-icon">📊</span>
-              <span class="metric-title">Throughput</span>
+          <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-lg">✅</span>
+              <span class="text-sm text-gray-600 dark:text-gray-400">Success Rate</span>
             </div>
-            <div class="metric-value">{performanceMetrics().throughput}</div>
-            <div class="metric-subtitle">requests/min</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().successRate}%</div>
+            <div class="flex items-center gap-1 mt-2 text-xs text-green-600 dark:text-green-400">
+              <span>📈</span>
+              <span>Healthy</span>
+            </div>
           </div>
           
-          <div class="metric-box">
-            <div class="metric-header">
-              <span class="metric-icon">❌</span>
-              <span class="metric-title">Error Rate</span>
+          <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-lg">📊</span>
+              <span class="text-sm text-gray-600 dark:text-gray-400">Throughput</span>
             </div>
-            <div class="metric-value">{performanceMetrics().errorRate}%</div>
-            <div class="metric-trend" class:error={performanceMetrics().errorRate > 5}>
-              <span class="trend-icon">{performanceMetrics().errorRate > 5 ? '📉' : '✅'}</span>
-              <span class="trend-text">{performanceMetrics().errorRate > 5 ? 'High' : 'Low'}</span>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().throughput}</div>
+            <div class="text-sm text-gray-600 dark:text-gray-400">requests/min</div>
+          </div>
+          
+          <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-lg">❌</span>
+              <span class="text-sm text-gray-600 dark:text-gray-400">Error Rate</span>
+            </div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().errorRate}%</div>
+            <div class="flex items-center gap-1 mt-2 text-xs {performanceMetrics().errorRate > 5 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}">
+              <span>{performanceMetrics().errorRate > 5 ? '📉' : '✅'}</span>
+              <span>{performanceMetrics().errorRate > 5 ? 'High' : 'Low'}</span>
             </div>
           </div>
         </div>
         
         <!-- Runtime Stats -->
         {#if processStats?.runtime}
-          <div class="runtime-stats">
-            <h4 class="stats-title">Runtime Information</h4>
-            <div class="stats-grid">
-              <div class="stat-item">
-                <span class="stat-label">Uptime</span>
-                <span class="stat-value">{formatUptime(processStats.runtime.uptime)}</span>
+          <div>
+            <h4 class="font-semibold text-gray-900 dark:text-white mb-3">Runtime Information</h4>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Uptime</span>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{formatUptime(processStats.runtime.uptime)}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-label">Go Version</span>
-                <span class="stat-value">{processStats.runtime.go_version}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Go Version</span>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{processStats.runtime.go_version}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-label">CPU Cores</span>
-                <span class="stat-value">{processStats.runtime.num_cpu}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">CPU Cores</span>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{processStats.runtime.num_cpu}</span>
               </div>
-              <div class="stat-item">
-                <span class="stat-label">GOMAXPROCS</span>
-                <span class="stat-value">{processStats.runtime.gomaxprocs}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">GOMAXPROCS</span>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{processStats.runtime.gomaxprocs}</span>
               </div>
             </div>
           </div>
@@ -179,66 +176,66 @@
     
     <!-- Memory Performance Tab -->
     {#if activeTab === 'memory'}
-      <div class="tab-content">
-        <div class="memory-overview">
-          <div class="memory-pressure-indicator pressure-{memoryPressure().color}">
-            <span class="pressure-icon">{memoryPressure().icon}</span>
-            <div class="pressure-details">
-              <span class="pressure-label">Memory Pressure</span>
-              <span class="pressure-status">{memoryPressure().status}</span>
+      <div class="space-y-6">
+        <div>
+          <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3 bg-white dark:bg-gray-800 {memoryPressure().color === 'green' ? 'border-green-500' : memoryPressure().color === 'yellow' ? 'border-yellow-500' : 'border-red-500'}">
+            <span class="text-2xl">{memoryPressure().icon}</span>
+            <div class="flex-1">
+              <span class="block text-sm text-gray-600 dark:text-gray-400">Memory Pressure</span>
+              <span class="text-lg font-semibold text-gray-900 dark:text-white capitalize">{memoryPressure().status}</span>
             </div>
           </div>
         </div>
         
         {#if processStats?.memory}
-          <div class="memory-stats">
-            <div class="memory-grid">
-              <div class="memory-item">
-                <span class="memory-label">Heap Allocated</span>
-                <span class="memory-value">{processStats.memory.heap_alloc}</span>
+          <div>
+            <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Heap Allocated</span>
+                <span class="text-sm font-mono font-medium text-gray-900 dark:text-white">{processStats.memory.heap_alloc}</span>
               </div>
-              <div class="memory-item">
-                <span class="memory-label">Heap System</span>
-                <span class="memory-value">{processStats.memory.heap_sys}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Heap System</span>
+                <span class="text-sm font-mono font-medium text-gray-900 dark:text-white">{processStats.memory.heap_sys}</span>
               </div>
-              <div class="memory-item">
-                <span class="memory-label">Heap In Use</span>
-                <span class="memory-value">{processStats.memory.heap_inuse}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Heap In Use</span>
+                <span class="text-sm font-mono font-medium text-gray-900 dark:text-white">{processStats.memory.heap_inuse}</span>
               </div>
-              <div class="memory-item">
-                <span class="memory-label">Stack In Use</span>
-                <span class="memory-value">{processStats.memory.stack_inuse}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Stack In Use</span>
+                <span class="text-sm font-mono font-medium text-gray-900 dark:text-white">{processStats.memory.stack_inuse}</span>
               </div>
-              <div class="memory-item">
-                <span class="memory-label">Total Allocated</span>
-                <span class="memory-value">{processStats.memory.total_alloc}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total Allocated</span>
+                <span class="text-sm font-mono font-medium text-gray-900 dark:text-white">{processStats.memory.total_alloc}</span>
               </div>
-              <div class="memory-item">
-                <span class="memory-label">Heap Released</span>
-                <span class="memory-value">{processStats.memory.heap_released}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Heap Released</span>
+                <span class="text-sm font-mono font-medium text-gray-900 dark:text-white">{processStats.memory.heap_released}</span>
               </div>
             </div>
             
             <!-- GC Stats -->
             {#if processStats.garbage_collection}
-              <div class="gc-stats">
-                <h4 class="stats-title">Garbage Collection</h4>
-                <div class="stats-grid">
-                  <div class="stat-item">
-                    <span class="stat-label">Last GC</span>
-                    <span class="stat-value">{new Date(processStats.garbage_collection.last_gc).toLocaleTimeString()}</span>
+              <div class="mt-6">
+                <h4 class="font-semibold text-gray-900 dark:text-white mb-3">Garbage Collection</h4>
+                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Last GC</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{new Date(processStats.garbage_collection.last_gc).toLocaleTimeString()}</span>
                   </div>
-                  <div class="stat-item">
-                    <span class="stat-label">GC Cycles</span>
-                    <span class="stat-value">{processStats.garbage_collection.num_gc_cycles}</span>
+                  <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">GC Cycles</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{processStats.garbage_collection.num_gc_cycles}</span>
                   </div>
-                  <div class="stat-item">
-                    <span class="stat-label">Total GC Time</span>
-                    <span class="stat-value">{processStats.garbage_collection.total_gc_time}</span>
+                  <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total GC Time</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{processStats.garbage_collection.total_gc_time}</span>
                   </div>
-                  <div class="stat-item">
-                    <span class="stat-label">GC CPU %</span>
-                    <span class="stat-value">{(processStats.garbage_collection.gc_cpu_fraction * 100).toFixed(2)}%</span>
+                  <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                    <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">GC CPU %</span>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{(processStats.garbage_collection.gc_cpu_fraction * 100).toFixed(2)}%</span>
                   </div>
                 </div>
               </div>
@@ -250,28 +247,28 @@
     
     <!-- Model Performance Tab -->
     {#if activeTab === 'models'}
-      <div class="tab-content">
+      <div class="space-y-6">
         {#if topModels().length === 0}
-          <div class="empty-models">
-            <span class="empty-icon">📊</span>
-            <p class="empty-text">No model statistics available yet</p>
+          <div class="text-center py-12">
+            <span class="text-6xl block mb-2">📊</span>
+            <p class="text-gray-600 dark:text-gray-400">No model statistics available yet</p>
           </div>
         {:else}
-          <div class="models-performance">
-            <h4 class="stats-title">Top Models by Request Count</h4>
-            <div class="models-table">
-              <div class="table-header">
-                <span class="col-model">Model</span>
-                <span class="col-requests">Requests</span>
-                <span class="col-latency">Avg Latency</span>
-                <span class="col-errors">Errors</span>
+          <div>
+            <h4 class="font-semibold text-gray-900 dark:text-white mb-3">Top Models by Request Count</h4>
+            <div class="space-y-2">
+              <div class="grid grid-cols-4 gap-4 px-4 py-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                <span>Model</span>
+                <span class="text-right">Requests</span>
+                <span class="text-right">Avg Latency</span>
+                <span class="text-right">Errors</span>
               </div>
               {#each topModels() as model}
-                <div class="table-row">
-                  <span class="col-model">{model.name}</span>
-                  <span class="col-requests">{model.requests.toLocaleString()}</span>
-                  <span class="col-latency">{model.avgLatency}ms</span>
-                  <span class="col-errors" class:has-errors={model.errors > 0}>
+                <div class="grid grid-cols-4 gap-4 px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <span class="truncate text-gray-900 dark:text-white">{model.name}</span>
+                  <span class="text-right text-gray-900 dark:text-white">{model.requests.toLocaleString()}</span>
+                  <span class="text-right text-gray-900 dark:text-white">{model.avgLatency}ms</span>
+                  <span class="text-right {model.errors > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-white'}">
                     {model.errors}
                   </span>
                 </div>
@@ -284,296 +281,3 @@
   </div>
 </div>
 
-<style>
-  .performance-analytics {
-    background-color: var(--bg-secondary);
-    border-radius: 0.75rem;
-    border: 1px solid var(--bg-tertiary);
-    overflow: hidden;
-    border-color: var(--bg-tertiary);
-  }
-  
-  .analytics-header {
-    padding-left: 1.5rem; padding-right: 1.5rem;
-    padding-top: 1rem; padding-bottom: 1rem;
-    border-bottom: 1px solid var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-color: var(--bg-tertiary);
-  }
-  
-  .tab-nav {
-    display: flex;
-    gap: 0.5rem;
-  }
-  
-  .tab-button {
-    padding-left: 1rem; padding-right: 1rem;
-    padding-top: 0.5rem; padding-bottom: 0.5rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem; line-height: 1.25rem;
-    font-weight: 500;
-    transition: all;
-    transition-duration: 200ms;
-    color: var(--text-secondary);
-  }
-  
-  .tab-button:hover {
-    background-color: var(--bg-tertiary);
-  }
-  
-  .tab-button.active {
-    background-color: var(--bg-tertiary);
-    color: var(--color-blue);
-  }
-  
-  .analytics-content {
-    padding: 1.5rem;
-  }
-  
-  .tab-content {
-    > * + * { margin-top: 1.5rem; }
-  }
-  
-  .metrics-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-  }
-  
-  @media (min-width: 1024px) {
-    .metrics-row {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-  
-  .metric-box {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .metric-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .metric-icon {
-    font-size: 1.125rem; line-height: 1.75rem;
-  }
-  
-  .metric-title {
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .metric-value {
-    font-size: 1.5rem; line-height: 2rem;
-    font-weight: 700;
-    color: var(--text-primary);
-  }
-  
-  .metric-subtitle {
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .metric-trend {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    margin-top: 0.5rem;
-    font-size: 0.75rem; line-height: 1rem;
-    color: var(--text-muted);
-  }
-  
-  .metric-trend.success {
-    color: var(--color-green);
-  }
-  
-  .metric-trend.error {
-    color: var(--color-red);
-  }
-  
-  .runtime-stats, .gc-stats { /* placeholder */ }
-  
-  .stats-title {
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.75rem;
-  }
-  
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-  }
-  
-  @media (min-width: 1024px) {
-    .stats-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-  
-  .stat-item {
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .stat-label {
-    display: block;
-    font-size: 0.75rem; line-height: 1rem;
-    color: var(--text-muted);
-    margin-bottom: 0.25rem;
-  }
-  
-  .stat-value {
-    font-size: 0.875rem; line-height: 1.25rem;
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-  
-  .memory-overview {
-    margin-bottom: 1.5rem;
-  }
-  
-  .memory-pressure-indicator {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .pressure-green {
-    border-color: var(--color-green);
-  }
-  
-  .pressure-yellow {
-    border-color: var(--color-yellow);
-  }
-  
-  .pressure-red {
-    border-color: var(--color-red);
-  }
-  
-  .pressure-icon {
-    font-size: 1.5rem; line-height: 2rem;
-  }
-  
-  .pressure-details {
-    flex: 1 1 0%;
-  }
-  
-  .pressure-label {
-    display: block;
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .pressure-status {
-    font-size: 1.125rem; line-height: 1.75rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    text-transform: capitalize;
-  }
-  
-  .memory-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-  }
-  
-  @media (min-width: 1024px) {
-    .memory-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-  
-  .memory-item {
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .memory-label {
-    display: block;
-    font-size: 0.75rem; line-height: 1rem;
-    color: var(--text-muted);
-    margin-bottom: 0.25rem;
-  }
-  
-  .memory-value {
-    font-size: 0.875rem; line-height: 1.25rem;
-    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-  
-  .empty-models {
-    text-align: center;
-    padding-top: 3rem; padding-bottom: 3rem;
-  }
-  
-  .empty-icon {
-    font-size: 1.875rem; line-height: 2.25rem;
-    display: block;
-    margin-bottom: 0.5rem;
-  }
-  
-  .empty-text {
-    color: var(--text-secondary);
-  }
-  
-  .models-table {
-    > * + * { margin-top: 0.5rem; }
-  }
-  
-  .table-header {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
-    padding-left: 1rem; padding-right: 1rem;
-    padding-top: 0.5rem; padding-bottom: 0.5rem;
-    font-size: 0.875rem; line-height: 1.25rem;
-    font-weight: 500;
-    color: var(--text-muted);
-  }
-  
-  .table-row {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
-    padding-left: 1rem; padding-right: 1rem;
-    padding-top: 0.75rem; padding-bottom: 0.75rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .col-model {
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  
-  .col-requests, .col-latency, .col-errors {
-    text-align: right;
-  }
-  
-  .col-errors.has-errors {
-    color: var(--color-red);
-  }
-</style>

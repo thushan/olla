@@ -41,27 +41,26 @@
   });
 </script>
 
-<div class="request-stream">
-  <div class="stream-header">
-    <div class="stream-title">
-      <h3 class="text-lg font-semibold text-primary">Live Request Stream</h3>
-      <span class="connection-indicator" class:connected={wsConnected}>
-        <span class="indicator-dot"></span>
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+  <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+    <div class="flex items-center gap-3">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Live Request Stream</h3>
+      <span class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+        <span class="w-2 h-2 rounded-full {wsConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}"></span>
         {wsConnected ? 'Connected' : 'Disconnected'}
       </span>
     </div>
     
-    <div class="stream-controls">
+    <div class="flex items-center gap-2">
       <button 
-        class="control-button"
-        class:active={autoScroll}
+        class="px-3 py-1 text-sm rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 {autoScroll ? 'bg-gray-100 dark:bg-gray-700 text-blue-600 dark:text-blue-400' : ''}"
         onclick={() => autoScroll = !autoScroll}
       >
         {autoScroll ? '⏸️ Pause' : '▶️ Resume'} Auto-scroll
       </button>
       
       <button 
-        class="control-button"
+        class="px-3 py-1 text-sm rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
         onclick={() => dashboardStore.clearEvents()}
       >
         🗑️ Clear
@@ -69,45 +68,45 @@
     </div>
   </div>
   
-  <div class="stream-container" bind:this={streamContainer}>
+  <div class="h-96 overflow-y-auto" bind:this={streamContainer}>
     {#if events.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">📡</div>
-        <p class="empty-text">Waiting for requests...</p>
-        <p class="empty-subtext">
+      <div class="h-full flex flex-col items-center justify-center">
+        <div class="text-4xl mb-3">📡</div>
+        <p class="text-gray-900 dark:text-white font-medium">Waiting for requests...</p>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
           {wsConnected ? 'Real-time updates enabled' : 'Connecting to server...'}
         </p>
       </div>
     {:else}
-      <div class="event-list">
+      <div class="p-4 space-y-2">
         {#each events as event}
           {@const eventType = formatEventType(event.type)}
-          <div class="event-item {eventType.class}">
-            <div class="event-header">
-              <span class="event-time">{formatTime(event.timestamp)}</span>
-              <span class="event-type">{eventType.label}</span>
+          <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 transition-all duration-200 hover:shadow-sm hover:border-blue-300 dark:hover:border-blue-600 {eventType.class === 'event-success' ? 'border-l-4 border-l-green-500' : eventType.class === 'event-error' ? 'border-l-4 border-l-red-500' : eventType.class === 'event-warning' ? 'border-l-4 border-l-yellow-500' : eventType.class === 'event-info' ? 'border-l-4 border-l-blue-500' : ''}">
+            <div class="flex items-center gap-3 mb-2">
+              <span class="text-xs text-gray-500 dark:text-gray-400">{formatTime(event.timestamp)}</span>
+              <span class="text-xs font-medium px-2 py-1 rounded-full {eventType.class === 'event-success' ? 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400' : eventType.class === 'event-error' ? 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400' : eventType.class === 'event-warning' ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400' : eventType.class === 'event-info' ? 'bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}">{eventType.label}</span>
               {#if event.duration}
-                <span class="event-duration">{formatDuration(event.duration)}</span>
+                <span class="text-xs text-gray-600 dark:text-gray-400 font-mono">{formatDuration(event.duration)}</span>
               {/if}
             </div>
             
-            <div class="event-details">
+            <div class="flex flex-wrap gap-3 text-sm">
               {#if event.endpoint}
-                <span class="event-endpoint">📍 {event.endpoint}</span>
+                <span class="text-gray-600 dark:text-gray-400">📍 {event.endpoint}</span>
               {/if}
               
               {#if event.metadata?.model}
-                <span class="event-model">🤖 {event.metadata.model}</span>
+                <span class="text-gray-600 dark:text-gray-400">🤖 {event.metadata.model}</span>
               {/if}
               
               {#if event.error}
-                <span class="event-error">❌ {event.error}</span>
+                <span class="text-red-600 dark:text-red-400 text-xs">❌ {event.error}</span>
               {/if}
             </div>
             
             {#if event.request_id}
-              <div class="event-footer">
-                <span class="event-request-id">ID: {event.request_id}</span>
+              <div class="mt-2">
+                <span class="text-xs text-gray-500 dark:text-gray-400 font-mono">ID: {event.request_id}</span>
               </div>
             {/if}
           </div>
@@ -117,222 +116,3 @@
   </div>
 </div>
 
-<style>
-  .request-stream {
-    background-color: var(--bg-secondary);
-    border-radius: 0.75rem;
-    border-width: 1px;
-    border-style: solid;
-    border-color: var(--bg-tertiary);
-    overflow: hidden;
-  }
-  
-  .stream-header {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-    border-bottom-width: 1px;
-    border-bottom-style: solid;
-    border-bottom-color: var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  
-  .stream-title {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  
-  .connection-indicator {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .indicator-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 9999px;
-    background-color: var(--color-red);
-  }
-  
-  .connection-indicator.connected .indicator-dot {
-    background-color: var(--color-green);
-    animation: pulse 2s infinite;
-  }
-  
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-  
-  .stream-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .control-button {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    border-radius: 0.5rem;
-    transition-property: all;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 200ms;
-    color: var(--text-secondary);
-  }
-  
-  .control-button:hover {
-    background-color: var(--bg-tertiary);
-  }
-  
-  .control-button.active {
-    background-color: var(--bg-tertiary);
-    color: var(--color-blue);
-  }
-  
-  .stream-container {
-    height: 24rem;
-    overflow-y: auto;
-  }
-  
-  .empty-state {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .empty-icon {
-    font-size: 2.25rem;
-    line-height: 2.5rem;
-    margin-bottom: 0.75rem;
-  }
-  
-  .empty-text {
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-  
-  .empty-subtext {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .event-list {
-    padding: 1rem;
-  }
-  
-  .event-list > * + * {
-    margin-top: 0.5rem;
-  }
-  
-  .event-item {
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    border-width: 1px;
-    border-style: solid;
-    border-color: var(--bg-tertiary);
-    background-color: var(--bg-primary);
-    transition-property: all;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 200ms;
-  }
-  
-  .event-item:hover {
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    border-color: var(--color-blue);
-  }
-  
-  .event-header {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .event-time {
-    font-size: 0.75rem;
-    line-height: 1rem;
-    color: var(--text-muted);
-  }
-  
-  .event-type {
-    font-size: 0.75rem;
-    line-height: 1rem;
-    font-weight: 500;
-    padding-left: 0.5rem;
-    padding-right: 0.5rem;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
-    border-radius: 9999px;
-  }
-  
-  .event-success .event-type {
-    background-color: rgba(var(--color-green-rgb, 8, 145, 106), 0.1);
-    color: var(--color-green);
-  }
-  
-  .event-error .event-type {
-    background-color: rgba(var(--color-red-rgb, 230, 65, 0), 0.1);
-    color: var(--color-red);
-  }
-  
-  .event-warning .event-type {
-    background-color: rgba(var(--color-orange-rgb, 170, 93, 0), 0.1);
-    color: var(--color-orange);
-  }
-  
-  .event-info .event-type {
-    background-color: rgba(var(--color-blue-rgb, 0, 119, 170), 0.1);
-    color: var(--color-blue);
-  }
-  
-  .event-duration {
-    font-size: 0.75rem;
-    line-height: 1rem;
-    color: var(--text-secondary);
-    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
-  }
-  
-  .event-details {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-  
-  .event-endpoint, .event-model {
-    color: var(--text-secondary);
-  }
-  
-  .event-error {
-    color: #ef4444;
-    font-size: 0.75rem;
-    line-height: 1rem;
-  }
-  
-  .event-footer {
-    margin-top: 0.5rem;
-    font-size: 0.75rem;
-    line-height: 1rem;
-    color: var(--text-muted);
-  }
-  
-  .event-request-id {
-    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
-  }
-</style>

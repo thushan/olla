@@ -112,125 +112,125 @@
   }
 </script>
 
-<div class="security-center">
-  <div class="center-header">
-    <div class="header-content">
-      <h3 class="text-lg font-semibold text-primary">Security Command Center</h3>
-      <div class="threat-indicator threat-{threatLevel().level}">
-        <span class="threat-icon">🛡️</span>
-        <span class="threat-label">Threat Level: {threatLevel().label}</span>
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+  <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+    <div class="flex items-center justify-between">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Security Command Center</h3>
+      <div class="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium {threatLevel().level === 'low' ? 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400' : threatLevel().level === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400' : threatLevel().level === 'high' ? 'bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'}">
+        <span>🛡️</span>
+        <span>Threat Level: {threatLevel().label}</span>
       </div>
     </div>
   </div>
   
-  <div class="security-content">
+  <div class="p-6 space-y-6">
     <!-- Metrics Grid -->
-    <div class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-icon">🚨</div>
-        <div class="metric-details">
-          <div class="metric-value">{securityMetrics().violations}</div>
-          <div class="metric-label">Security Violations</div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
+        <div class="text-2xl">🚨</div>
+        <div class="flex-1">
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().violations}</div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Security Violations</div>
         </div>
       </div>
       
-      <div class="metric-card">
-        <div class="metric-icon">🚫</div>
-        <div class="metric-details">
-          <div class="metric-value">{securityMetrics().blockedRequests}</div>
-          <div class="metric-label">Blocked Requests</div>
+      <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
+        <div class="text-2xl">🚫</div>
+        <div class="flex-1">
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().blockedRequests}</div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Blocked Requests</div>
         </div>
       </div>
       
-      <div class="metric-card">
-        <div class="metric-icon">⏱️</div>
-        <div class="metric-details">
-          <div class="metric-value">{securityMetrics().rateLimitHits}</div>
-          <div class="metric-label">Rate Limit Hits</div>
+      <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
+        <div class="text-2xl">⏱️</div>
+        <div class="flex-1">
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().rateLimitHits}</div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Rate Limit Hits</div>
         </div>
       </div>
       
-      <div class="metric-card">
-        <div class="metric-icon">👁️</div>
-        <div class="metric-details">
-          <div class="metric-value">{securityMetrics().suspiciousPatterns}</div>
-          <div class="metric-label">Suspicious Patterns</div>
+      <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
+        <div class="text-2xl">👁️</div>
+        <div class="flex-1">
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().suspiciousPatterns}</div>
+          <div class="text-sm text-gray-600 dark:text-gray-400">Suspicious Patterns</div>
         </div>
       </div>
     </div>
     
     <!-- Rate Limits Status -->
-    <div class="rate-limits-section">
-      <h4 class="section-title">Rate Limit Status</h4>
-      <div class="rate-limits-grid">
-        <div class="rate-limit-item">
-          <div class="limit-header">
-            <span class="limit-name">Global Limit</span>
-            <span class="limit-config">{rateLimitConfig.global.limit}/{rateLimitConfig.global.window}</span>
+    <div>
+      <h4 class="font-semibold text-gray-900 dark:text-white mb-3">Rate Limit Status</h4>
+      <div class="space-y-4">
+        <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-medium text-gray-900 dark:text-white">Global Limit</span>
+            <span class="text-sm text-gray-600 dark:text-gray-400 font-mono">{rateLimitConfig.global.limit}/{rateLimitConfig.global.window}</span>
           </div>
-          <div class="limit-progress">
-            <div class="progress-bar">
+          <div class="space-y-1">
+            <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div 
-                class="progress-fill"
+                class="h-full bg-blue-500 rounded-full transition-all duration-500"
                 style="width: {(rateLimitConfig.global.current / rateLimitConfig.global.limit) * 100}%"
               ></div>
             </div>
-            <span class="limit-usage">{rateLimitConfig.global.current} / {rateLimitConfig.global.limit}</span>
+            <span class="text-xs text-gray-600 dark:text-gray-400">{rateLimitConfig.global.current} / {rateLimitConfig.global.limit}</span>
           </div>
         </div>
         
-        <div class="rate-limit-item">
-          <div class="limit-header">
-            <span class="limit-name">Per IP Limit</span>
-            <span class="limit-config">{rateLimitConfig.perIP.limit}/{rateLimitConfig.perIP.window}</span>
+        <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-medium text-gray-900 dark:text-white">Per IP Limit</span>
+            <span class="text-sm text-gray-600 dark:text-gray-400 font-mono">{rateLimitConfig.perIP.limit}/{rateLimitConfig.perIP.window}</span>
           </div>
-          <div class="limit-progress">
-            <div class="progress-bar">
+          <div class="space-y-1">
+            <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div 
-                class="progress-fill"
+                class="h-full bg-blue-500 rounded-full transition-all duration-500"
                 style="width: {(rateLimitConfig.perIP.current / rateLimitConfig.perIP.limit) * 100}%"
               ></div>
             </div>
-            <span class="limit-usage">{rateLimitConfig.perIP.current} / {rateLimitConfig.perIP.limit}</span>
+            <span class="text-xs text-gray-600 dark:text-gray-400">{rateLimitConfig.perIP.current} / {rateLimitConfig.perIP.limit}</span>
           </div>
         </div>
         
-        <div class="rate-limit-item">
-          <div class="limit-header">
-            <span class="limit-name">Health Check Limit</span>
-            <span class="limit-config">{rateLimitConfig.health.limit}/{rateLimitConfig.health.window}</span>
+        <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div class="flex items-center justify-between mb-2">
+            <span class="font-medium text-gray-900 dark:text-white">Health Check Limit</span>
+            <span class="text-sm text-gray-600 dark:text-gray-400 font-mono">{rateLimitConfig.health.limit}/{rateLimitConfig.health.window}</span>
           </div>
-          <div class="limit-progress">
-            <div class="progress-bar">
+          <div class="space-y-1">
+            <div class="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
               <div 
-                class="progress-fill"
+                class="h-full bg-blue-500 rounded-full transition-all duration-500"
                 style="width: {(rateLimitConfig.health.current / rateLimitConfig.health.limit) * 100}%"
               ></div>
             </div>
-            <span class="limit-usage">{rateLimitConfig.health.current} / {rateLimitConfig.health.limit}</span>
+            <span class="text-xs text-gray-600 dark:text-gray-400">{rateLimitConfig.health.current} / {rateLimitConfig.health.limit}</span>
           </div>
         </div>
       </div>
     </div>
     
     <!-- Security Events -->
-    <div class="events-section">
-      <h4 class="section-title">Recent Security Events</h4>
+    <div>
+      <h4 class="font-semibold text-gray-900 dark:text-white mb-3">Recent Security Events</h4>
       {#if securityEvents().length === 0}
-        <div class="no-events">
-          <span class="no-events-icon">✅</span>
-          <p class="no-events-text">No security events in the last 5 minutes</p>
+        <div class="text-center py-8">
+          <span class="text-2xl block mb-2">✅</span>
+          <p class="text-gray-600 dark:text-gray-400">No security events in the last 5 minutes</p>
         </div>
       {:else}
-        <div class="security-events-list">
+        <div class="space-y-3">
           {#each securityEvents() as event}
             {@const formatted = formatSecurityEvent(event)}
             {#if formatted}
-              <div class="security-event severity-{formatted.severity}">
-                <span class="event-icon">{formatted.icon}</span>
-                <div class="event-content">
-                  <p class="event-message">{formatted.message}</p>
-                  <span class="event-time">{formatted.time}</span>
+              <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-start gap-3 bg-white dark:bg-gray-800 {formatted.severity === 'low' ? 'border-l-4 border-l-blue-500' : formatted.severity === 'medium' ? 'border-l-4 border-l-yellow-500' : 'border-l-4 border-l-red-500'}">
+                <span class="text-lg">{formatted.icon}</span>
+                <div class="flex-1">
+                  <p class="text-sm text-gray-900 dark:text-white">{formatted.message}</p>
+                  <span class="text-xs text-gray-500 dark:text-gray-400">{formatted.time}</span>
                 </div>
               </div>
             {/if}
@@ -241,235 +241,3 @@
   </div>
 </div>
 
-<style>
-  .security-center {
-    background-color: var(--bg-secondary);
-    border-radius: 0.75rem;
-    border: 1px solid var(--bg-tertiary);
-    overflow: hidden;
-    border-color: var(--bg-tertiary);
-  }
-  
-  .center-header {
-    padding-left: 1.5rem; padding-right: 1.5rem;
-    padding-top: 1rem; padding-bottom: 1rem;
-    border-bottom: 1px solid var(--bg-tertiary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .header-content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  
-  .threat-indicator {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding-left: 0.75rem; padding-right: 0.75rem;
-    padding-top: 0.25rem; padding-bottom: 0.25rem;
-    border-radius: 9999px;
-    font-size: 0.875rem; line-height: 1.25rem;
-    font-weight: 500;
-  }
-  
-  .threat-low {
-    background-color: rgba(var(--color-green-rgb, 8, 145, 106), 0.1);
-    color: var(--color-green);
-  }
-  
-  .threat-medium {
-    background-color: rgba(var(--color-yellow-rgb, 201, 103, 101), 0.1);
-    color: var(--color-yellow);
-  }
-  
-  .threat-high {
-    background-color: rgba(var(--color-orange-rgb, 170, 93, 0), 0.1);
-    color: var(--color-orange);
-  }
-  
-  .threat-critical {
-    background-color: rgba(var(--color-red-rgb, 230, 65, 0), 0.1);
-    color: var(--color-red);
-  }
-  
-  .security-content {
-    padding: 1.5rem;
-    /* Child spacing handled by gap */
-  }
-  
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
-  }
-  
-  @media (min-width: 1024px) {
-    .metrics-grid {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-  
-  .metric-card {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .metric-icon {
-    font-size: 1.5rem; line-height: 2rem;
-  }
-  
-  .metric-details {
-    flex: 1 1 0%;
-  }
-  
-  .metric-value {
-    font-size: 1.5rem; line-height: 2rem;
-    font-weight: 700;
-    color: var(--text-primary);
-  }
-  
-  .metric-label {
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .rate-limits-section {
-    /* Child spacing handled by gap */
-  }
-  
-  .section-title {
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.75rem;
-  }
-  
-  .rate-limits-grid {
-    /* Child spacing handled by gap */
-  }
-  
-  .rate-limit-item {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .limit-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.5rem;
-  }
-  
-  .limit-name {
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-  
-  .limit-config {
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
-  }
-  
-  .limit-progress {
-    /* Child spacing handled by gap */
-  }
-  
-  .progress-bar {
-    width: 100%;
-    height: 0.5rem;
-    border-radius: 9999px;
-    overflow: hidden;
-    background-color: var(--bg-tertiary);
-  }
-  
-  .progress-fill {
-    height: 100%;
-    border-radius: 9999px;
-    transition: all;
-    transition-duration: 500ms;
-    background-color: var(--color-blue);
-  }
-  
-  .limit-usage {
-    font-size: 0.75rem; line-height: 1rem;
-    color: var(--text-secondary);
-  }
-  
-  .events-section {
-    /* Child spacing handled by gap */
-  }
-  
-  .no-events {
-    text-align: center;
-    padding-top: 2rem; padding-bottom: 2rem;
-  }
-  
-  .no-events-icon {
-    font-size: 1.5rem; line-height: 2rem;
-    display: block;
-    margin-bottom: 0.5rem;
-  }
-  
-  .no-events-text {
-    color: var(--text-secondary);
-  }
-  
-  .security-events-list {
-    /* Child spacing handled by gap */
-  }
-  
-  .security-event {
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .severity-low {
-    border-left-width: 3px;
-    border-left-color: var(--color-blue);
-  }
-  
-  .severity-medium {
-    border-left-width: 3px;
-    border-left-color: var(--color-yellow);
-  }
-  
-  .severity-high {
-    border-left-width: 3px;
-    border-left-color: var(--color-red);
-  }
-  
-  .event-icon {
-    font-size: 1.125rem; line-height: 1.75rem;
-  }
-  
-  .event-content {
-    flex: 1 1 0%;
-  }
-  
-  .event-message {
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-primary);
-  }
-  
-  .event-time {
-    font-size: 0.75rem; line-height: 1rem;
-    color: var(--text-muted);
-  }
-</style>

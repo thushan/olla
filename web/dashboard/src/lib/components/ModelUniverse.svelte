@@ -68,64 +68,63 @@
   });
 </script>
 
-<div class="model-universe">
-  <div class="universe-header">
-    <h3 class="text-lg font-semibold text-primary">Model Universe</h3>
-    <div class="header-stats">
-      <span class="stat-badge">
-        <span class="stat-icon">🌌</span>
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+  <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Model Universe</h3>
+    <div class="flex items-center gap-3">
+      <span class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+        <span class="text-base">🌌</span>
         {modelFamilies().length} Families
       </span>
-      <span class="stat-badge">
-        <span class="stat-icon">🤖</span>
+      <span class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+        <span class="text-base">🤖</span>
         {unifiedModels.length} Models
       </span>
     </div>
   </div>
   
   {#if loading}
-    <div class="loading-state">
-      <div class="loading-spinner"></div>
-      <p class="loading-text">Discovering models across endpoints...</p>
+    <div class="py-16 text-center">
+      <div class="w-8 h-8 mx-auto mb-4 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin"></div>
+      <p class="text-gray-600 dark:text-gray-400">Discovering models across endpoints...</p>
     </div>
   {:else if modelFamilies().length === 0}
-    <div class="empty-state">
-      <div class="empty-icon">🔭</div>
-      <p class="empty-text">No models discovered yet</p>
-      <p class="empty-subtext">Models will appear here as endpoints come online</p>
+    <div class="py-16 text-center">
+      <div class="text-4xl mb-3">🔭</div>
+      <p class="text-gray-900 dark:text-white font-medium mb-1">No models discovered yet</p>
+      <p class="text-sm text-gray-600 dark:text-gray-400">Models will appear here as endpoints come online</p>
     </div>
   {:else}
-    <div class="universe-content">
+    <div class="p-6">
       <!-- Family Grid -->
-      <div class="family-grid">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
         {#each modelFamilies() as family}
           <button 
-            class="family-card"
-            class:selected={selectedFamily === family}
+            class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-left transition-all duration-200 bg-white dark:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-600 {selectedFamily === family ? 'ring-2 ring-blue-500 border-blue-500' : ''}"
             onclick={() => selectedFamily = selectedFamily === family ? null : family}
           >
-            <div class="family-header">
-              <h4 class="family-name">{family.name}</h4>
-              <span class="family-count">{family.models.length}</span>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-semibold text-gray-900 dark:text-white">{family.name}</h4>
+              <span class="text-sm px-2 py-1 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400">{family.models.length}</span>
             </div>
             
-            <div class="family-stats">
-              <div class="family-stat">
-                <span class="stat-label">Total Size</span>
-                <span class="stat-value">{formatSize(family.totalSize)}</span>
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div class="text-sm">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total Size</span>
+                <span class="font-medium text-gray-600 dark:text-gray-300">{formatSize(family.totalSize)}</span>
               </div>
-              <div class="family-stat">
-                <span class="stat-label">Endpoints</span>
-                <span class="stat-value">{family.endpointCount.size}</span>
+              <div class="text-sm">
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Endpoints</span>
+                <span class="font-medium text-gray-600 dark:text-gray-300">{family.endpointCount.size}</span>
               </div>
             </div>
             
-            <div class="family-models-preview">
+            <div class="flex gap-2">
               {#each family.models.slice(0, 3) as model}
-                <span class="model-preview">{model.name}</span>
+                <span class="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{model.name}</span>
               {/each}
               {#if family.models.length > 3}
-                <span class="model-more">+{family.models.length - 3} more</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">+{family.models.length - 3} more</span>
               {/if}
             </div>
           </button>
@@ -134,53 +133,53 @@
       
       <!-- Selected Family Details -->
       {#if selectedFamily}
-        <div class="family-details">
-          <div class="details-header">
-            <h4 class="details-title">{selectedFamily.name} Models</h4>
+        <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          <div class="flex items-center justify-between mb-4">
+            <h4 class="text-lg font-semibold text-gray-900 dark:text-white">{selectedFamily.name} Models</h4>
             <button 
-              class="close-button"
+              class="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
               onclick={() => selectedFamily = null}
             >
               ✕
             </button>
           </div>
           
-          <div class="models-list">
+          <div class="space-y-4">
             {#each selectedFamily.models as model}
               {@const badge = getModelTypeBadge(model)}
-              <div class="model-item">
-                <div class="model-header">
-                  <div class="model-name-row">
-                    <span class="model-type-icon" title={badge.label}>
+              <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <div class="flex items-start justify-between mb-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-lg" title={badge.label}>
                       {badge.icon}
                     </span>
-                    <h5 class="model-name">{model.name}</h5>
+                    <h5 class="font-medium text-gray-900 dark:text-white">{model.name}</h5>
                   </div>
-                  <span class="model-size">{formatSize(model.size)}</span>
+                  <span class="text-sm font-mono text-gray-600 dark:text-gray-400">{formatSize(model.size)}</span>
                 </div>
                 
                 {#if model.description}
-                  <p class="model-description">{model.description}</p>
+                  <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">{model.description}</p>
                 {/if}
                 
-                <div class="model-metadata">
+                <div class="flex gap-2 mb-3">
                   {#if model.parameter_size}
-                    <span class="metadata-tag">📊 {model.parameter_size}</span>
+                    <span class="text-xs px-2 py-1 rounded bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300">📊 {model.parameter_size}</span>
                   {/if}
                   {#if model.quantization}
-                    <span class="metadata-tag">🔢 {model.quantization}</span>
+                    <span class="text-xs px-2 py-1 rounded bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300">🔢 {model.quantization}</span>
                   {/if}
                   {#if model.max_context_length}
-                    <span class="metadata-tag">📏 {model.max_context_length} tokens</span>
+                    <span class="text-xs px-2 py-1 rounded bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300">📏 {model.max_context_length} tokens</span>
                   {/if}
                 </div>
                 
                 {#if model.available_at && model.available_at.length > 0}
-                  <div class="model-endpoints">
-                    <span class="endpoints-label">Available at:</span>
-                    <div class="endpoints-list">
+                  <div class="text-sm">
+                    <span class="block text-gray-500 dark:text-gray-400 mb-1">Available at:</span>
+                    <div class="flex gap-2">
                       {#each model.available_at as endpoint}
-                        <span class="endpoint-tag">
+                        <span class="text-xs px-2 py-1 rounded bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400">
                           📍 {getEndpointName(endpoint)}
                         </span>
                       {/each}
@@ -196,302 +195,3 @@
   {/if}
 </div>
 
-<style>
-  .model-universe {
-    background-color: var(--bg-secondary);
-    border-radius: 0.75rem;
-    border: 1px solid var(--bg-tertiary);
-    overflow: hidden;
-    border-color: var(--bg-tertiary);
-  }
-  
-  .universe-header {
-    padding-left: 1.5rem; padding-right: 1.5rem;
-    padding-top: 1rem; padding-bottom: 1rem;
-    border-bottom: 1px solid var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-color: var(--bg-tertiary);
-  }
-  
-  .header-stats {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  
-  .stat-badge {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .stat-icon {
-    font-size: 1rem; line-height: 1.5rem;
-  }
-  
-  .loading-state, .empty-state {
-    padding-top: 4rem; padding-bottom: 4rem;
-    text-align: center;
-  }
-  
-  .loading-spinner {
-    width: 2rem;
-    height: 2rem;
-    margin-left: auto; margin-right: auto;
-    margin-bottom: 1rem;
-    border: 2px solid var(--bg-tertiary);
-    border-radius: 9999px;
-    animation: spin 1s linear infinite;
-    border-color: var(--color-blue);
-    border-top-color: transparent;
-  }
-  
-  .loading-text {
-    color: var(--text-secondary);
-  }
-  
-  .empty-icon {
-    font-size: 2.25rem; line-height: 2.5rem;
-    margin-bottom: 0.75rem;
-  }
-  
-  .empty-text {
-    color: var(--text-primary);
-    font-weight: 500;
-    margin-bottom: 0.25rem;
-  }
-  
-  .empty-subtext {
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .universe-content {
-    padding: 1.5rem;
-  }
-  
-  .family-grid {
-    display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-    gap: 1rem;
-  }
-  
-  @media (min-width: 768px) {
-    .family-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  
-  @media (min-width: 1024px) {
-    .family-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-  
-  .family-card {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    text-align: left;
-    transition: all;
-    transition-duration: 200ms;
-
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .family-card:hover {
-    border-color: var(--color-blue);
-  }
-  
-  .family-card.selected {
-
-    ring-color: var(--color-blue);
-    border-color: var(--color-blue);
-  }
-  
-  .family-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.75rem;
-  }
-  
-  .family-name {
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  
-  .family-count {
-    font-size: 0.875rem; line-height: 1.25rem;
-    padding-left: 0.5rem; padding-right: 0.5rem;
-    padding-top: 0.25rem; padding-bottom: 0.25rem;
-    border-radius: 9999px;
-    background-color: var(--bg-tertiary);
-    color: var(--text-secondary);
-  }
-  
-  .family-stats {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
-  }
-  
-  .family-stat {
-    font-size: 0.875rem; line-height: 1.25rem;
-  }
-  
-  .stat-label {
-    display: block;
-    font-size: 0.75rem; line-height: 1rem;
-    color: var(--text-muted);
-    margin-bottom: 0.25rem;
-  }
-  
-  .stat-value {
-    font-weight: 500;
-    color: var(--text-secondary);
-  }
-  
-  .family-models-preview {
-    display: flex;
-    gap: 0.5rem;
-  }
-  
-  .model-preview {
-    font-size: 0.75rem; line-height: 1rem;
-    padding-left: 0.5rem; padding-right: 0.5rem;
-    padding-top: 0.25rem; padding-bottom: 0.25rem;
-    border-radius: 0.25rem;
-    background-color: var(--bg-secondary);
-    color: var(--text-secondary);
-  }
-  
-  .model-more {
-    font-size: 0.75rem; line-height: 1rem;
-    color: var(--text-muted);
-  }
-  
-  .family-details {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    background-color: var(--bg-primary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .details-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-  }
-  
-  .details-title {
-    font-size: 1.125rem; line-height: 1.75rem;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  
-  .close-button {
-    width: 2rem;
-    height: 2rem;
-    border-radius: 0.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition-property: background-color, border-color, color, fill, stroke;
-    transition-duration: 200ms;
-    color: var(--text-secondary);
-  }
-  
-  .models-list {
-    > * + * { margin-top: 1rem; }
-  }
-  
-  .model-item {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    border: 1px solid var(--bg-tertiary);
-    background-color: var(--bg-secondary);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .model-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    margin-bottom: 0.5rem;
-  }
-  
-  .model-name-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .model-type-icon {
-    font-size: 1.125rem; line-height: 1.75rem;
-  }
-  
-  .model-name {
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-  
-  .model-size {
-    font-size: 0.875rem; line-height: 1.25rem;
-    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
-    color: var(--text-secondary);
-  }
-  
-  .model-description {
-    font-size: 0.875rem; line-height: 1.25rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.75rem;
-  }
-  
-  .model-metadata {
-    display: flex;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-  }
-  
-  .metadata-tag {
-    font-size: 0.75rem; line-height: 1rem;
-    padding-left: 0.5rem; padding-right: 0.5rem;
-    padding-top: 0.25rem; padding-bottom: 0.25rem;
-    border-radius: 0.25rem;
-    background-color: var(--bg-primary);
-    color: var(--text-secondary);
-  }
-  
-  .model-endpoints {
-    font-size: 0.875rem; line-height: 1.25rem;
-  }
-  
-  .endpoints-label {
-    color: var(--text-muted);
-    margin-bottom: 0.25rem;
-    display: block;
-  }
-  
-  .endpoints-list {
-    display: flex;
-    gap: 0.5rem;
-  }
-  
-  .endpoint-tag {
-    font-size: 0.75rem; line-height: 1rem;
-    padding-left: 0.5rem; padding-right: 0.5rem;
-    padding-top: 0.25rem; padding-bottom: 0.25rem;
-    border-radius: 0.25rem;
-    background-color: var(--bg-primary);
-    color: var(--color-blue);
-  }
-</style>

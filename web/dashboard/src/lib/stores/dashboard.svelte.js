@@ -49,6 +49,16 @@ class DashboardStore {
     return this.status.system.status;
   }
   
+  get overallHealth() {
+    if (!this.endpoints || this.endpoints.length === 0) return 'UNKNOWN';
+    const healthyCount = this.endpoints.filter(e => e.status === 'online').length;
+    const totalCount = this.endpoints.length;
+    
+    if (healthyCount === totalCount) return 'HEALTHY';
+    if (healthyCount === 0) return 'CRITICAL';
+    return 'DEGRADED';
+  }
+  
   get endpointsUp() {
     if (!this.status?.endpoints) return { up: 0, total: 0 };
     const up = this.status.endpoints.filter(e => e.status === 'healthy').length;
@@ -69,6 +79,16 @@ class DashboardStore {
   
   get securityViolations() {
     return this.status?.system?.security_violations || 0;
+  }
+  
+  // Computed stats object for backward compatibility
+  get stats() {
+    return {
+      totalRequests: this.totalRequests,
+      totalErrors: this.status?.system?.total_errors || 0,
+      avgResponseTime: this.status?.system?.avg_response_time || 0,
+      activeConnections: this.activeConnections,
+    };
   }
   
   // Methods

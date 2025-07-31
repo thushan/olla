@@ -13,6 +13,7 @@
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
     "svelte": "^5.35.5",
+    "tailwindcss": "^3",
     "vite": "^7.0.4"
   }
 }

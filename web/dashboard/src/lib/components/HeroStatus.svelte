@@ -1,316 +1,153 @@
 <script>
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
-  import { onMount } from 'svelte';
   
-  let healthPercentage = $derived(
-    dashboardStore.endpointsUp.total > 0 
-      ? (dashboardStore.endpointsUp.up / dashboardStore.endpointsUp.total) * 100 
-      : 0
-  );
+  // Get reactive references
+  const overallHealth = $derived(dashboardStore.overallHealth);
+  const totalEndpoints = $derived(dashboardStore.endpoints.length);
+  const healthyEndpoints = $derived(dashboardStore.endpoints.filter(e => e.status === 'online').length);
+  const totalRequests = $derived(dashboardStore.status?.system?.total_requests || 0);
+  const totalErrors = $derived(dashboardStore.status?.system?.total_errors || 0);
+  const avgResponseTime = $derived(dashboardStore.status?.system?.avg_response_time || 0);
+  const activeConnections = $derived(dashboardStore.status?.system?.active_connections || 0);
   
-  let healthStatus = $derived(
-    healthPercentage >= 90 ? 'healthy' : 
-    healthPercentage >= 50 ? 'degraded' : 
-    'critical'
-  );
+  // Calculate health percentage
+  const healthPercentage = $derived(totalEndpoints > 0 ? (healthyEndpoints / totalEndpoints) * 100 : 0);
   
-  let healthColor = $derived(
-    healthStatus === 'healthy' ? 'text-success' :
-    healthStatus === 'degraded' ? 'text-warning' :
-    'text-error'
-  );
+  // Get health color
+  const healthColor = $derived(() => {
+    if (overallHealth === 'HEALTHY') return 'text-green-600 dark:text-green-400';
+    if (overallHealth === 'DEGRADED') return 'text-yellow-600 dark:text-yellow-400';
+    return 'text-red-600 dark:text-red-400';
+  });
   
-  // Animated counter for metrics
-  function animateValue(start, end, duration) {
-    let startTimestamp = null;
-    const step = (timestamp) => {
-      if (!startTimestamp) startTimestamp = timestamp;
-      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-      const current = Math.floor(progress * (end - start) + start);
-      return current;
-    };
-    return step;
-  }
+  // Get ring color
+  const ringColor = $derived(() => {
+    if (overallHealth === 'HEALTHY') return '#10b981';
+    if (overallHealth === 'DEGRADED') return '#f59e0b';
+    return '#ef4444';
+  });
   
-  // Format large numbers
+  // Format numbers
   function formatNumber(num) {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
     return num.toString();
   }
   
-  onMount(() => {
-    dashboardStore.init();
-    return () => dashboardStore.destroy();
-  });
+  // Format response time
+  function formatResponseTime(ms) {
+    if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
+    return `${Math.round(ms)}ms`;
+  }
+  
+  // Calculate success rate
+  const successRate = $derived(
+    totalRequests > 0 ? ((totalRequests - totalErrors) / totalRequests * 100).toFixed(1) : '100.0'
+  );
 </script>
 
-<div class="hero-status">
-  <!-- Main health indicator -->
-  <div class="health-ring-container">
-    <div class="health-ring">
-      <svg class="health-svg" viewBox="0 0 200 200">
-        <!-- Background circle -->
-        <circle
-          cx="100"
-          cy="100"
-          r="90"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="12"
-          class="text-tertiary opacity-20"
-        />
-        <!-- Progress circle -->
-        <circle
-          cx="100"
-          cy="100"
-          r="90"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="12"
-          stroke-linecap="round"
-          class={healthColor}
-          stroke-dasharray={`${healthPercentage * 5.65} 565`}
-          stroke-dashoffset="0"
-          transform="rotate(-90 100 100)"
-          style="transition: stroke-dasharray 1s ease-in-out"
-        />
-      </svg>
-      <div class="health-content">
-        <div class="health-percentage metric-value text-5xl font-bold {healthColor}">
-          {Math.round(healthPercentage)}%
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <!-- Health Overview Card -->
+  <div class="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">System Health</h2>
+    
+    <div class="flex items-center justify-center mb-6">
+      <div class="relative w-40 h-40">
+        <svg class="w-full h-full -rotate-90">
+          <circle
+            cx="80"
+            cy="80"
+            r="70"
+            stroke="currentColor"
+            stroke-width="12"
+            fill="none"
+            class="text-gray-200 dark:text-gray-700"
+          />
+          <circle
+            cx="80"
+            cy="80"
+            r="70"
+            stroke={ringColor}
+            stroke-width="12"
+            fill="none"
+            stroke-dasharray={`${healthPercentage * 4.4} 440`}
+            stroke-linecap="round"
+            class="transition-all duration-500"
+          />
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span class="text-3xl font-bold {healthColor()}">{healthPercentage.toFixed(0)}%</span>
+          <span class="text-sm text-gray-600 dark:text-gray-400">{overallHealth}</span>
         </div>
-        <div class="health-label text-secondary">
-          System Health
-        </div>
-        <div class="health-status text-sm font-medium {healthColor}">
-          {healthStatus.toUpperCase()}
-        </div>
+      </div>
+    </div>
+    
+    <div class="space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-sm text-gray-600 dark:text-gray-400">Active Endpoints</span>
+        <span class="text-sm font-medium text-gray-900 dark:text-white">{healthyEndpoints}/{totalEndpoints}</span>
+      </div>
+      <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+        <div 
+          class="h-2 rounded-full transition-all duration-500"
+          style="width: {healthPercentage}%; background-color: {ringColor}"
+        ></div>
       </div>
     </div>
   </div>
   
-  <!-- Metric cards -->
-  <div class="metrics-grid">
-    <!-- Requests/sec -->
-    <div class="metric-card gradient-primary">
-      <div class="metric-icon">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-        </svg>
-      </div>
-      <div class="metric-content">
-        <div class="metric-value text-2xl font-bold text-white">
-          {formatNumber(dashboardStore.totalRequests || 0)}
+  <!-- Stats Grid -->
+  <div class="lg:col-span-2 grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <!-- Total Requests -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center">
+          <span class="text-blue-600 dark:text-blue-400">📊</span>
         </div>
-        <div class="metric-label text-white/80">Total Requests</div>
-        <div class="metric-sparkline">
-          <!-- Placeholder for sparkline -->
-          <svg class="w-full h-8" viewBox="0 0 100 32">
-            <path
-              d="M0,16 L10,12 L20,18 L30,8 L40,14 L50,10 L60,20 L70,15 L80,12 L90,18 L100,14"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              class="text-white/50"
-            />
-          </svg>
+        <div class="flex-1">
+          <p class="text-2xl font-bold text-gray-900 dark:text-white">{formatNumber(totalRequests)}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Total Requests</p>
         </div>
       </div>
     </div>
     
     <!-- Success Rate -->
-    <div class="metric-card gradient-success">
-      <div class="metric-icon">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-      </div>
-      <div class="metric-content">
-        <div class="metric-value text-2xl font-bold text-white">
-          {dashboardStore.successRate || '0%'}
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/20 flex items-center justify-center">
+          <span class="text-green-600 dark:text-green-400">✓</span>
         </div>
-        <div class="metric-label text-white/80">Success Rate</div>
-        <div class="metric-trend text-sm text-white/60">
-          <span class="text-white">↑ 2.3%</span> from last hour
+        <div class="flex-1">
+          <p class="text-2xl font-bold text-gray-900 dark:text-white">{successRate}%</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Success Rate</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Response Time -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center">
+          <span class="text-purple-600 dark:text-purple-400">⚡</span>
+        </div>
+        <div class="flex-1">
+          <p class="text-2xl font-bold text-gray-900 dark:text-white">{formatResponseTime(avgResponseTime)}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Avg Response</p>
         </div>
       </div>
     </div>
     
     <!-- Active Connections -->
-    <div class="metric-card bg-secondary">
-      <div class="metric-icon">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"></path>
-        </svg>
-      </div>
-      <div class="metric-content">
-        <div class="metric-value text-2xl font-bold">
-          {formatNumber(dashboardStore.activeConnections || 0)}
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+      <div class="flex items-center gap-3 mb-2">
+        <div class="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center">
+          <span class="text-orange-600 dark:text-orange-400">🔗</span>
         </div>
-        <div class="metric-label text-secondary">
-          Active Connections
-        </div>
-        <div class="connection-bar">
-          <div class="connection-fill" style="width: {Math.min(dashboardStore.activeConnections / 100 * 100, 100)}%"></div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Security Status -->
-    <div class="metric-card {dashboardStore.securityViolations > 0 ? 'gradient-warning' : 'bg-secondary'}">
-      <div class="metric-icon">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
-        </svg>
-      </div>
-      <div class="metric-content">
-        <div class="metric-value text-2xl font-bold {dashboardStore.securityViolations > 0 ? 'text-white' : ''}">
-          {formatNumber(dashboardStore.securityViolations || 0)}
-        </div>
-        <div class="metric-label {dashboardStore.securityViolations > 0 ? 'text-white/80' : 'text-secondary'}">
-          Security Violations
-        </div>
-        <div class="metric-status text-sm {dashboardStore.securityViolations > 0 ? 'text-white' : 'text-success'}">
-          {dashboardStore.securityViolations > 0 ? 'ACTIVE THREATS' : 'SECURE'}
+        <div class="flex-1">
+          <p class="text-2xl font-bold text-gray-900 dark:text-white">{formatNumber(activeConnections)}</p>
+          <p class="text-xs text-gray-600 dark:text-gray-400">Connections</p>
         </div>
       </div>
     </div>
   </div>
 </div>
-
-<style>
-  .hero-status {
-    display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-  }
-  
-  @media (min-width: 1024px) {
-    .hero-status {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  
-  .health-ring-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  
-  .health-ring {
-    position: relative;
-    width: 12rem;
-    height: 12rem;
-  }
-  
-  @media (min-width: 1024px) {
-    .health-ring {
-      width: 14rem;
-      height: 14rem;
-    }
-  }
-  
-  .health-svg {
-    width: 100%;
-    height: 100%;
-  }
-  
-  .health-content {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-  }
-  
-  .metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-    gap: 1rem;
-  }
-  
-  @media (min-width: 640px) {
-    .metrics-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  
-  .metric-card {
-    border-radius: 0.75rem;
-    padding: 1.5rem;
-    transition-property: all;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 300ms;
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .metric-card:hover {
-    transform: scale(1.05);
-  }
-  
-  .metric-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    opacity: 0;
-    transition-property: opacity;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 300ms;
-    background: radial-gradient(circle at center, rgba(255,255,255,0.1) 0%, transparent 70%);
-  }
-  
-  .metric-card:hover::before {
-    opacity: 1;
-  }
-  
-  .metric-icon {
-    margin-bottom: 0.75rem;
-    color: rgba(255, 255, 255, 0.8);
-  }
-  
-  .metric-content {
-    position: relative;
-    z-index: 10;
-  }
-  
-  .connection-bar {
-    margin-top: 0.5rem;
-    height: 0.5rem;
-    border-radius: 9999px;
-    overflow: hidden;
-    background-color: rgba(0, 0, 0, 0.2);
-  }
-  
-  .dark .connection-bar {
-    background-color: rgba(255, 255, 255, 0.2);
-  }
-  
-  .connection-fill {
-    height: 100%;
-    transition-property: all;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 500ms;
-    background-color: var(--color-blue);
-  }
-  
-  /* Pulse animation for critical status */
-  @keyframes pulse-critical {
-    0%, 100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.5;
-    }
-  }
-</style>

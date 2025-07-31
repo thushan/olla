@@ -28,297 +28,103 @@
   });
 </script>
 
-<div class="app-container">
-  <!-- Background pattern -->
-  <div class="fixed inset-0 grid-pattern opacity-50"></div>
-  
-  <!-- Main content -->
-  <div class="relative z-10">
-    <!-- Header -->
-    <header class="app-header">
-      <div class="header-content">
-        <div class="header-brand">
-          <h1 class="app-title gradient-text">
-            Olla Dashboard
-          </h1>
-          <span class="app-subtitle">
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+  <!-- Header -->
+  <header class="sticky top-0 z-50 w-full border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-gray-200 dark:border-gray-800">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex h-16 items-center justify-between">
+        <!-- Brand -->
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+              <span class="text-white font-bold text-sm">O</span>
+            </div>
+            <h1 class="text-xl font-semibold text-gray-900 dark:text-white">
+              Olla Dashboard
+            </h1>
+          </div>
+          <span class="hidden sm:inline-flex items-center rounded-full bg-blue-50 dark:bg-blue-900/20 px-3 py-1 text-xs font-medium text-blue-700 dark:text-blue-300">
             AI Infrastructure Monitor
           </span>
         </div>
         
-        <div class="header-actions">
+        <!-- Actions -->
+        <div class="flex items-center gap-4">
           <ThemeToggle />
         </div>
       </div>
-    </header>
+    </div>
+  </header>
+  
+  <!-- Main Content -->
+  <main class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <!-- Hero Status -->
+    <div class="mb-6">
+      <HeroStatus />
+    </div>
     
-    <!-- Main dashboard content -->
-    <main class="dashboard-main">
-      <div class="dashboard-layout">
-        <!-- Main Content Area -->
-        <div class="main-content">
-          <!-- Hero Status Panel -->
-          <section class="dashboard-section">
-            <HeroStatus />
-          </section>
-          
-          <!-- Two Column Grid -->
-          <div class="grid-container">
-            <!-- Left Column -->
-            <div class="grid-column">
-              <!-- Endpoint Health Grid -->
-              <section class="dashboard-section">
-                <EndpointHealthGrid />
-              </section>
-              
-              <!-- Security Command Center -->
-              <section class="dashboard-section">
-                <SecurityCommandCenter />
-              </section>
-            </div>
-            
-            <!-- Right Column -->
-            <div class="grid-column">
-              <!-- Live Request Stream -->
-              <section class="dashboard-section">
-                <LiveRequestStream />
-              </section>
-              
-              <!-- Performance Analytics -->
-              <section class="dashboard-section">
-                <PerformanceAnalytics />
-              </section>
-            </div>
-          </div>
-          
-          <!-- Model Universe -->
-          <section class="dashboard-section">
-            <ModelUniverse />
-          </section>
-        </div>
+    <!-- Primary Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+      <!-- Main Column (2/3 width) -->
+      <div class="xl:col-span-2 space-y-6">
+        <!-- Endpoint Health Grid -->
+        <EndpointHealthGrid />
         
-        <!-- Sidebar -->
-        <aside class="dashboard-sidebar">
-          <ConfigurationStatus />
-        </aside>
+        <!-- Performance Analytics -->
+        <PerformanceAnalytics />
       </div>
-    </main>
+      
+      <!-- Side Column (1/3 width) -->
+      <div class="space-y-6">
+        <!-- Live Request Stream -->
+        <LiveRequestStream />
+        
+        <!-- Security Command Center -->
+        <SecurityCommandCenter />
+      </div>
+    </div>
     
-    <!-- Footer -->
-    <footer class="app-footer">
-      <div class="footer-content">
-        <div class="footer-info">
-          <span class="footer-text">Olla Dashboard</span>
-          <span class="footer-separator">•</span>
-          <span class="footer-text">Built with Svelte 5 & TailwindCSS</span>
+    <!-- Secondary Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-4 gap-6">
+      <!-- Model Universe (3/4 width) -->
+      <div class="xl:col-span-3">
+        <ModelUniverse />
+      </div>
+      
+      <!-- Configuration Status (1/4 width) -->
+      <div>
+        <ConfigurationStatus />
+      </div>
+    </div>
+  </main>
+  
+  <!-- Footer -->
+  <footer class="mt-12 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
+          <span>Olla Dashboard</span>
+          <span class="text-gray-400 dark:text-gray-600">•</span>
+          <span>Built with Svelte 5 & TailwindCSS</span>
         </div>
         
-        <div class="footer-links">
-          <a href="https://github.com/thushan/olla" target="_blank" rel="noopener" class="footer-link">
+        <div class="flex items-center gap-6 text-sm">
+          <a 
+            href="https://github.com/thushan/olla" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            class="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+          >
             GitHub
           </a>
-          <span class="footer-separator">•</span>
-          <a href="/api/docs" class="footer-link">
+          <a 
+            href="/api/docs" 
+            class="text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+          >
             API Docs
           </a>
         </div>
       </div>
-    </footer>
-  </div>
+    </div>
+  </footer>
 </div>
-
-<style>
-  .app-container {
-    min-height: 100vh;
-  }
-  
-  .app-header {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid;
-    background-color: rgba(var(--bg-primary-rgb, 251, 251, 251), 0.8);
-    border-color: var(--bg-tertiary);
-  }
-  
-  .dark .app-header {
-    background-color: rgba(var(--bg-primary-rgb, 1, 22, 39), 0.8);
-  }
-  
-  .header-content {
-    width: 100%;
-    max-width: 1536px;
-    margin: 0 auto;
-    padding: 1rem 1.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  
-  .header-brand {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-  }
-  
-  .app-title {
-    font-size: 1.5rem;
-    line-height: 2rem;
-    font-weight: 700;
-  }
-  
-  .gradient-text {
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-    background-image: linear-gradient(to right, var(--color-blue), var(--color-purple), var(--color-cyan));
-  }
-  
-  .app-subtitle {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-  }
-  
-  .dashboard-main {
-    flex: 1 1 0%;
-  }
-  
-  .dashboard-layout {
-    display: flex;
-    gap: 1.5rem;
-    max-width: 1536px;
-    margin: 0 auto;
-    padding: 2rem 1.5rem;
-  }
-  
-  .main-content {
-    flex: 1 1 0%;
-    min-width: 0;
-  }
-  
-  .dashboard-sidebar {
-    width: 20rem;
-    flex-shrink: 0;
-  }
-  
-  @media (max-width: 1280px) {
-    .dashboard-layout {
-      flex-direction: column;
-    }
-    
-    .dashboard-sidebar {
-      width: 100%;
-    }
-  }
-  
-  .dashboard-section {
-    margin-bottom: 1.5rem;
-  }
-  
-  .grid-container {
-    display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-    gap: 1.5rem;
-  }
-  
-  @media (min-width: 1280px) {
-    .grid-container {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  
-  .grid-column {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-  }
-  
-  .coming-soon-card {
-    background-color: var(--bg-secondary);
-    border-radius: 0.75rem;
-    padding: 2rem;
-    text-align: center;
-    border: 2px dashed;
-    opacity: 0.6;
-    border-color: var(--bg-tertiary);
-  }
-  
-  .coming-soon-icon {
-    font-size: 2.25rem;
-    line-height: 2.5rem;
-    margin-bottom: 1rem;
-  }
-  
-  .coming-soon-title {
-    font-size: 1.125rem;
-    line-height: 1.75rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-  }
-  
-  .coming-soon-text {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .app-footer {
-    margin-top: auto;
-    border-top: 1px solid;
-    border-color: var(--bg-tertiary);
-  }
-  
-  .footer-content {
-    width: 100%;
-    max-width: 1536px;
-    margin: 0 auto;
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-  
-  @media (min-width: 768px) {
-    .footer-content {
-      flex-direction: row;
-    }
-  }
-  
-  .footer-info, .footer-links {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-  
-  .footer-text {
-    color: var(--text-secondary);
-  }
-  
-  .footer-separator {
-    color: var(--text-muted);
-  }
-  
-  .footer-link {
-    text-decoration: none;
-    transition: all 200ms;
-    color: var(--color-blue);
-  }
-  
-  .footer-link:hover {
-    text-decoration: underline;
-  }
-</style>

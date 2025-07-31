@@ -78,23 +78,23 @@
   });
 </script>
 
-<div class="configuration-status">
-  <div class="config-header">
-    <h3 class="text-lg font-semibold text-primary">Configuration Status</h3>
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+  <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Configuration Status</h3>
   </div>
   
   <!-- Version Info -->
   {#if version}
-    <div class="version-info">
-      <div class="version-label">Olla Version</div>
-      <div class="version-value">{version.version}</div>
-      <div class="version-meta">
-        <span class="meta-item">
-          <span class="meta-icon">🛠️</span>
+    <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+      <div class="text-sm text-gray-500 dark:text-gray-400 mb-1">Olla Version</div>
+      <div class="text-xl font-bold text-gray-900 dark:text-white mb-2">{version.version}</div>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+          <span class="text-sm">🛠️</span>
           {version.commit?.slice(0, 7) || 'unknown'}
         </span>
-        <span class="meta-item">
-          <span class="meta-icon">📅</span>
+        <span class="flex items-center gap-1 text-gray-600 dark:text-gray-400">
+          <span class="text-sm">📅</span>
           {new Date(version.date).toLocaleDateString()}
         </span>
       </div>
@@ -102,33 +102,33 @@
   {/if}
   
   <!-- Configuration Sections -->
-  <div class="config-sections">
+  <div>
     <!-- Server Configuration -->
-    <div class="config-section">
+    <div class="overflow-hidden">
       <button 
-        class="section-header"
+        class="w-full px-6 py-4 flex items-center justify-between transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700"
         onclick={() => toggleSection('server')}
       >
-        <div class="header-content">
-          <span class="section-icon">🌐</span>
-          <span class="section-title">Server</span>
+        <div class="flex items-center gap-3">
+          <span class="text-lg">🌐</span>
+          <span class="font-medium text-gray-900 dark:text-white">Server</span>
         </div>
-        <span class="expand-icon" class:expanded={expandedSections.server}>
+        <span class="text-sm text-gray-600 dark:text-gray-400 transition-transform duration-200 {expandedSections.server ? 'rotate-90' : ''}">
           ▶
         </span>
       </button>
       
       {#if expandedSections.server}
-        <div class="section-content">
+        <div class="px-6 pb-4 space-y-3">
           {#each Object.entries(configuration.server) as [key, value]}
             {@const status = getStatusIndicator(key, value)}
-            <div class="config-item">
-              <span class="config-key">{key}</span>
-              <div class="config-value-row">
-                <span class="config-value">{value}</span>
+            <div class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">{key}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-mono text-gray-900 dark:text-white">{value}</span>
                 {#if status}
                   <span 
-                    class="status-indicator status-{status.color}"
+                    class="text-sm {status.color === 'green' ? 'text-green-600 dark:text-green-400' : status.color === 'blue' ? 'text-blue-600 dark:text-blue-400' : status.color === 'yellow' ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-600 dark:text-gray-400'}"
                     title={status.hint}
                   >
                     {status.icon}
@@ -142,31 +142,31 @@
     </div>
     
     <!-- Proxy Configuration -->
-    <div class="config-section">
+    <div class="overflow-hidden">
       <button 
-        class="section-header"
+        class="w-full px-6 py-4 flex items-center justify-between transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700"
         onclick={() => toggleSection('proxy')}
       >
-        <div class="header-content">
-          <span class="section-icon">🔄</span>
-          <span class="section-title">Proxy</span>
+        <div class="flex items-center gap-3">
+          <span class="text-lg">🔄</span>
+          <span class="font-medium text-gray-900 dark:text-white">Proxy</span>
         </div>
-        <span class="expand-icon" class:expanded={expandedSections.proxy}>
+        <span class="text-sm text-gray-600 dark:text-gray-400 transition-transform duration-200 {expandedSections.proxy ? 'rotate-90' : ''}">
           ▶
         </span>
       </button>
       
       {#if expandedSections.proxy}
-        <div class="section-content">
+        <div class="px-6 pb-4 space-y-3">
           {#each Object.entries(configuration.proxy) as [key, value]}
             {@const status = getStatusIndicator(key, value)}
-            <div class="config-item">
-              <span class="config-key">{key}</span>
-              <div class="config-value-row">
-                <span class="config-value">{value}</span>
+            <div class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">{key}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-mono text-gray-900 dark:text-white">{value}</span>
                 {#if status}
                   <span 
-                    class="status-indicator status-{status.color}"
+                    class="text-sm {status.color === 'green' ? 'text-green-600 dark:text-green-400' : status.color === 'blue' ? 'text-blue-600 dark:text-blue-400' : status.color === 'yellow' ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-600 dark:text-gray-400'}"
                     title={status.hint}
                   >
                     {status.icon}
@@ -180,31 +180,31 @@
     </div>
     
     <!-- Security Configuration -->
-    <div class="config-section">
+    <div class="overflow-hidden">
       <button 
-        class="section-header"
+        class="w-full px-6 py-4 flex items-center justify-between transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700"
         onclick={() => toggleSection('security')}
       >
-        <div class="header-content">
-          <span class="section-icon">🛡️</span>
-          <span class="section-title">Security</span>
+        <div class="flex items-center gap-3">
+          <span class="text-lg">🛡️</span>
+          <span class="font-medium text-gray-900 dark:text-white">Security</span>
         </div>
-        <span class="expand-icon" class:expanded={expandedSections.security}>
+        <span class="text-sm text-gray-600 dark:text-gray-400 transition-transform duration-200 {expandedSections.security ? 'rotate-90' : ''}">
           ▶
         </span>
       </button>
       
       {#if expandedSections.security}
-        <div class="section-content">
+        <div class="px-6 pb-4 space-y-3">
           {#each Object.entries(configuration.security) as [key, value]}
             {@const status = getStatusIndicator(key, value)}
-            <div class="config-item">
-              <span class="config-key">{key}</span>
-              <div class="config-value-row">
-                <span class="config-value">{value}</span>
+            <div class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">{key}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-mono text-gray-900 dark:text-white">{value}</span>
                 {#if status}
                   <span 
-                    class="status-indicator status-{status.color}"
+                    class="text-sm {status.color === 'green' ? 'text-green-600 dark:text-green-400' : status.color === 'blue' ? 'text-blue-600 dark:text-blue-400' : status.color === 'yellow' ? 'text-yellow-600 dark:text-yellow-400' : 'text-gray-600 dark:text-gray-400'}"
                     title={status.hint}
                   >
                     {status.icon}
@@ -218,26 +218,26 @@
     </div>
     
     <!-- Discovery Configuration -->
-    <div class="config-section">
+    <div class="overflow-hidden">
       <button 
-        class="section-header"
+        class="w-full px-6 py-4 flex items-center justify-between transition-colors duration-200 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-700"
         onclick={() => toggleSection('discovery')}
       >
-        <div class="header-content">
-          <span class="section-icon">🔍</span>
-          <span class="section-title">Discovery</span>
+        <div class="flex items-center gap-3">
+          <span class="text-lg">🔍</span>
+          <span class="font-medium text-gray-900 dark:text-white">Discovery</span>
         </div>
-        <span class="expand-icon" class:expanded={expandedSections.discovery}>
+        <span class="text-sm text-gray-600 dark:text-gray-400 transition-transform duration-200 {expandedSections.discovery ? 'rotate-90' : ''}">
           ▶
         </span>
       </button>
       
       {#if expandedSections.discovery}
-        <div class="section-content">
+        <div class="px-6 pb-4 space-y-3">
           {#each Object.entries(configuration.discovery) as [key, value]}
-            <div class="config-item">
-              <span class="config-key">{key}</span>
-              <span class="config-value">{value}</span>
+            <div class="flex items-center justify-between py-2">
+              <span class="text-sm text-gray-600 dark:text-gray-400">{key}</span>
+              <span class="text-sm font-mono text-gray-900 dark:text-white">{value}</span>
             </div>
           {/each}
         </div>
@@ -246,250 +246,26 @@
   </div>
   
   <!-- Quick Actions -->
-  <div class="quick-actions">
-    <h4 class="actions-title">Quick Actions</h4>
-    <div class="actions-grid">
-      <a href="/internal/status" target="_blank" class="action-button">
-        <span class="action-icon">📊</span>
-        <span class="action-text">View Full Status</span>
+  <div class="p-6">
+    <h4 class="font-medium text-gray-900 dark:text-white mb-3">Quick Actions</h4>
+    <div class="grid grid-cols-2 gap-3">
+      <a href="/internal/status" target="_blank" class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2 bg-white dark:bg-gray-800 text-decoration-none transition-all duration-200 hover:shadow-sm hover:border-blue-300 dark:hover:border-blue-600">
+        <span class="text-lg">📊</span>
+        <span class="text-sm text-gray-900 dark:text-white">View Full Status</span>
       </a>
-      <a href="/internal/health" target="_blank" class="action-button">
-        <span class="action-icon">💚</span>
-        <span class="action-text">Health Check</span>
+      <a href="/internal/health" target="_blank" class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2 bg-white dark:bg-gray-800 text-decoration-none transition-all duration-200 hover:shadow-sm hover:border-blue-300 dark:hover:border-blue-600">
+        <span class="text-lg">💚</span>
+        <span class="text-sm text-gray-900 dark:text-white">Health Check</span>
       </a>
-      <a href="/olla/models" target="_blank" class="action-button">
-        <span class="action-icon">🤖</span>
-        <span class="action-text">Model List</span>
+      <a href="/olla/models" target="_blank" class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2 bg-white dark:bg-gray-800 text-decoration-none transition-all duration-200 hover:shadow-sm hover:border-blue-300 dark:hover:border-blue-600">
+        <span class="text-lg">🤖</span>
+        <span class="text-sm text-gray-900 dark:text-white">Model List</span>
       </a>
-      <a href="https://github.com/thushan/olla" target="_blank" rel="noopener" class="action-button">
-        <span class="action-icon">📚</span>
-        <span class="action-text">Documentation</span>
+      <a href="https://github.com/thushan/olla" target="_blank" rel="noopener" class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-2 bg-white dark:bg-gray-800 text-decoration-none transition-all duration-200 hover:shadow-sm hover:border-blue-300 dark:hover:border-blue-600">
+        <span class="text-lg">📚</span>
+        <span class="text-sm text-gray-900 dark:text-white">Documentation</span>
       </a>
     </div>
   </div>
 </div>
 
-<style>
-  .configuration-status {
-    background-color: var(--bg-secondary);
-    border-radius: 0.75rem;
-    border-width: 1px;
-    border-style: solid;
-    border-color: var(--bg-tertiary);
-    overflow: hidden;
-  }
-  
-  .config-header {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-    border-bottom-width: 1px;
-    border-bottom-style: solid;
-    border-bottom-color: var(--bg-tertiary);
-  }
-  
-  .version-info {
-    padding: 1.5rem;
-    border-bottom-width: 1px;
-    border-bottom-style: solid;
-    border-bottom-color: var(--bg-tertiary);
-  }
-  
-  .version-label {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: var(--text-muted);
-    margin-bottom: 0.25rem;
-  }
-  
-  .version-value {
-    font-size: 1.25rem;
-    line-height: 1.75rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-  }
-  
-  .version-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    font-size: 0.75rem;
-    line-height: 1rem;
-  }
-  
-  .meta-item {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .meta-icon {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-  
-  .config-sections > * + * {
-    border-top-width: 1px;
-    border-top-style: solid;
-    border-top-color: var(--bg-tertiary);
-  }
-  
-  .config-section {
-    overflow: hidden;
-  }
-  
-  .section-header {
-    width: 100%;
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    transition-property: background-color, border-color, color, fill, stroke;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 200ms;
-  }
-  
-  .section-header:hover {
-    background-color: var(--bg-tertiary);
-  }
-  
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  
-  .section-icon {
-    font-size: 1.125rem;
-    line-height: 1.75rem;
-  }
-  
-  .section-title {
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-  
-  .expand-icon {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    transition-property: transform;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 200ms;
-    color: var(--text-secondary);
-  }
-  
-  .expand-icon.expanded {
-    transform: rotate(90deg);
-  }
-  
-  .section-content {
-    padding-left: 1.5rem;
-    padding-right: 1.5rem;
-    padding-bottom: 1rem;
-  }
-  
-  .section-content > * + * {
-    margin-top: 0.75rem;
-  }
-  
-  .config-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem;
-  }
-  
-  .config-key {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: var(--text-secondary);
-  }
-  
-  .config-value-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  
-  .config-value {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    font-family: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
-    color: var(--text-primary);
-  }
-  
-  .status-indicator {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-  
-  .status-green {
-    color: var(--color-green);
-  }
-  
-  .status-blue {
-    color: var(--color-blue);
-  }
-  
-  .status-yellow {
-    color: var(--color-yellow);
-  }
-  
-  .quick-actions {
-    padding: 1.5rem;
-  }
-  
-  .actions-title {
-    font-weight: 500;
-    color: var(--text-primary);
-    margin-bottom: 0.75rem;
-  }
-  
-  .actions-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.75rem;
-  }
-  
-  .action-button {
-    padding: 0.75rem;
-    border-radius: 0.5rem;
-    border-width: 1px;
-    border-style: solid;
-    border-color: var(--bg-tertiary);
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    background-color: var(--bg-primary);
-    text-decoration: none;
-    transition-property: all;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 200ms;
-  }
-  
-  .action-button:hover {
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  }
-  
-  .action-button:hover {
-    border-color: var(--color-blue);
-  }
-  
-  .action-icon {
-    font-size: 1.125rem;
-    line-height: 1.75rem;
-  }
-  
-  .action-text {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-    color: var(--text-primary);
-  }
-</style>

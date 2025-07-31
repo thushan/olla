@@ -67,3 +67,4 @@ export function getThemeStore() {
 
 // Export a singleton instance for non-component usage
 export const themeStore = new ThemeStore();
+export const theme = themeStore;
