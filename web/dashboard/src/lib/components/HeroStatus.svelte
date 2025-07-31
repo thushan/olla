@@ -1,10 +1,12 @@
 <script>
+  console.log('[HeroStatus] Component initializing');
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
   
   // Get reactive references
   const overallHealth = $derived(dashboardStore.overallHealth);
-  const totalEndpoints = $derived(dashboardStore.endpoints.length);
-  const healthyEndpoints = $derived(dashboardStore.endpoints.filter(e => e.status === 'online').length);
+  const endpoints = $derived(dashboardStore.endpoints || []);
+  const totalEndpoints = $derived(endpoints.length);
+  const healthyEndpoints = $derived(endpoints.filter(e => e.status === 'online' || e.status === 'healthy').length);
   const totalRequests = $derived(dashboardStore.status?.system?.total_requests || 0);
   const totalErrors = $derived(dashboardStore.status?.system?.total_errors || 0);
   const avgResponseTime = $derived(dashboardStore.status?.system?.avg_response_time || 0);

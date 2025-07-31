@@ -65,7 +65,7 @@
       Endpoint Health
     </h2>
     <div class="text-sm text-gray-600 dark:text-gray-400">
-      {endpoints.filter(e => e.status === 'healthy').length} / {endpoints.length} healthy
+      {endpoints.filter(e => e.status === 'healthy' || e.status === 'online').length} / {endpoints.length} healthy
     </div>
   </div>
   

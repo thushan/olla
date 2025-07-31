@@ -2,8 +2,9 @@
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
   
   const overallHealth = $derived(dashboardStore.overallHealth);
-  const totalEndpoints = $derived(dashboardStore.endpoints.length);
-  const healthyEndpoints = $derived(dashboardStore.endpoints.filter(e => e.status === 'online').length);
+  const endpoints = $derived(dashboardStore.endpoints || []);
+  const totalEndpoints = $derived(endpoints.length);
+  const healthyEndpoints = $derived(endpoints.filter(e => e.status === 'online' || e.status === 'healthy').length);
   const healthPercentage = $derived(totalEndpoints > 0 ? (healthyEndpoints / totalEndpoints) * 100 : 0);
   
   // Get system metrics

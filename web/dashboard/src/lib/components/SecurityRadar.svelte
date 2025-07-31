@@ -26,7 +26,7 @@
     }
     
     // Calculate security scores (0-100)
-    const recentEvents = events.filter(e => {
+    const recentEvents = (events || []).filter(e => {
       const eventTime = new Date(e.timestamp);
       const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
       return eventTime > tenMinutesAgo;

@@ -18,7 +18,7 @@
     }
     
     // Calculate from events
-    const recentEvents = events.filter(e => {
+    const recentEvents = (events || []).filter(e => {
       const eventTime = new Date(e.timestamp);
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
       return eventTime > fiveMinutesAgo;
@@ -49,7 +49,7 @@
   
   // Recent security events
   const securityEvents = $derived(() => {
-    return events
+    return (events || [])
       .filter(e => 
         e.type?.includes('security') || 
         e.type?.includes('rate_limit') ||

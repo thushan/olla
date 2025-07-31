@@ -75,7 +75,7 @@
       </div>
       <div class="text-xs text-gray-600 dark:text-gray-400 text-center">
         <div>{new Date().toLocaleTimeString()}</div>
-        <div class="opacity-50 mt-1">Dashboard v1.0.3</div>
+        <div class="opacity-50 mt-1">Dashboard v1.2.0</div>
       </div>
     </div>
   </nav>

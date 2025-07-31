@@ -1,16 +1,17 @@
 <script>
+  console.log('[Overview] Component initializing');
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
   import HeroMetrics from '$lib/components/HeroMetrics.svelte';
   import SystemHealth from '$lib/components/SystemHealth.svelte';
   import RequestFlow from '$lib/components/RequestFlow.svelte';
   
   const status = $derived(dashboardStore.status);
-  const endpoints = $derived(dashboardStore.endpoints);
+  const endpoints = $derived(dashboardStore.endpoints || []);
   const stats = $derived(dashboardStore.stats);
   
   // Calculate key metrics
-  const totalEndpoints = $derived(endpoints?.length || 0);
-  const healthyEndpoints = $derived(endpoints?.filter(e => e.status === 'healthy' || e.status === 'online').length || 0);
+  const totalEndpoints = $derived(endpoints.length);
+  const healthyEndpoints = $derived(endpoints.filter(e => e.status === 'healthy' || e.status === 'online').length);
   const successRate = $derived((() => {
     if (!status?.system) return 0;
     const total = status.system.total_requests || 0;

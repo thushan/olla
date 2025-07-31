@@ -1,4 +1,5 @@
 <script>
+  console.log('[App] Component initializing');
   import { onMount, onDestroy } from 'svelte';
   import { setThemeStore } from '$lib/stores/theme.svelte.js';
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';

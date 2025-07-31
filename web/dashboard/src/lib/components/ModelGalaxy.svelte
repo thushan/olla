@@ -42,7 +42,7 @@
   }
   
   // Galaxy nodes - combination of models and endpoints
-  const galaxyNodes = $derived(() => {
+  const galaxyNodes = $derived.by(() => {
     const nodes = [];
     
     // Add unified models as major nodes
@@ -104,10 +104,11 @@
   });
   
   // Connection lines between related nodes
-  const galaxyConnections = $derived(() => {
+  const galaxyConnections = $derived.by(() => {
     const connections = [];
-    const modelNodes = galaxyNodes().filter(n => n.type === 'model');
-    const endpointNodes = galaxyNodes().filter(n => n.type === 'endpoint');
+    const nodes = galaxyNodes || [];
+    const modelNodes = nodes.filter(n => n.type === 'model');
+    const endpointNodes = nodes.filter(n => n.type === 'endpoint');
     
     // Connect models to their endpoints
     modelNodes.forEach(model => {
@@ -129,7 +130,7 @@
   });
   
   // Get model details for selected model
-  const modelDetails = $derived(() => {
+  const modelDetails = $derived.by(() => {
     if (!selectedModel) return null;
     
     const stats = modelStats[selectedModel.name] || {};
@@ -253,7 +254,7 @@
             {/each}
             
             <!-- Connection lines -->
-            {#each galaxyConnections() as connection}
+            {#each galaxyConnections as connection}
               <line
                 x1="{connection.from.x}"
                 y1="{connection.from.y}"
@@ -267,7 +268,7 @@
             {/each}
             
             <!-- Nodes -->
-            {#each galaxyNodes() as node, index}
+            {#each galaxyNodes as node, index}
               <g 
                 class="cursor-pointer transition-all duration-300 {node.type === 'model' ? 'hover:scale-110' : 'hover:scale-125'}"
                 style="animation: float {3 + (index % 3)}s ease-in-out infinite alternate; animation-delay: {index * 0.2}s;"
@@ -369,15 +370,15 @@
       
       <!-- Model Details Panel -->
       <div class="w-full lg:w-80 space-y-4">
-        {#if selectedModel && modelDetails()}
+        {#if selectedModel && modelDetails}
           <div class="p-4 rounded-lg bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-600">
             <div class="flex items-start justify-between mb-4">
               <div>
                 <h4 class="text-lg font-semibold text-white flex items-center gap-2">
                   <span>{selectedModel.icon}</span>
-                  {modelDetails().name}
+                  {modelDetails.name}
                 </h4>
-                <p class="text-sm text-gray-400">{modelDetails().category}</p>
+                <p class="text-sm text-gray-400">{modelDetails.category}</p>
               </div>
               <button
                 class="text-gray-400 hover:text-white transition-colors"
@@ -391,33 +392,33 @@
             <div class="space-y-3">
               <div class="grid grid-cols-2 gap-3">
                 <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-                  <div class="text-lg font-bold text-white">{formatNumber(modelDetails().requestCount)}</div>
+                  <div class="text-lg font-bold text-white">{formatNumber(modelDetails.requestCount)}</div>
                   <div class="text-xs text-gray-400">Requests</div>
                 </div>
                 <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-                  <div class="text-lg font-bold text-white">{modelDetails().avgLatency}ms</div>
+                  <div class="text-lg font-bold text-white">{modelDetails.avgLatency}ms</div>
                   <div class="text-xs text-gray-400">Avg Latency</div>
                 </div>
               </div>
               
               <div class="grid grid-cols-2 gap-3">
                 <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-                  <div class="text-lg font-bold text-white">{modelDetails().successRate}%</div>
+                  <div class="text-lg font-bold text-white">{modelDetails.successRate}%</div>
                   <div class="text-xs text-gray-400">Success Rate</div>
                 </div>
                 <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-                  <div class="text-lg font-bold text-white">{modelDetails().errorCount}</div>
+                  <div class="text-lg font-bold text-white">{modelDetails.errorCount}</div>
                   <div class="text-xs text-gray-400">Errors</div>
                 </div>
               </div>
             </div>
             
             <!-- Endpoints -->
-            {#if modelDetails().endpoints.length > 0}
+            {#if modelDetails.endpoints.length > 0}
               <div class="mt-4">
                 <h5 class="text-sm font-medium text-gray-400 mb-2">Connected Endpoints</h5>
                 <div class="space-y-1">
-                  {#each modelDetails().endpoints as endpoint}
+                  {#each modelDetails.endpoints as endpoint}
                     <div class="text-xs px-2 py-1 bg-gray-700 rounded text-gray-300">
                       {endpoint}
                     </div>
@@ -438,11 +439,11 @@
               <!-- Quick Stats -->
               <div class="grid grid-cols-2 gap-3">
                 <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-                  <div class="text-lg font-bold text-white">{galaxyNodes().filter(n => n.type === 'model').length}</div>
+                  <div class="text-lg font-bold text-white">{(galaxyNodes || []).filter(n => n.type === 'model').length}</div>
                   <div class="text-xs text-gray-400">Models</div>
                 </div>
                 <div class="p-3 rounded-lg bg-gray-800/50 border border-gray-700">
-                  <div class="text-lg font-bold text-white">{galaxyNodes().filter(n => n.type === 'endpoint').length}</div>
+                  <div class="text-lg font-bold text-white">{(galaxyNodes || []).filter(n => n.type === 'endpoint').length}</div>
                   <div class="text-xs text-gray-400">Endpoints</div>
                 </div>
               </div>
@@ -452,7 +453,7 @@
                 <h5 class="text-sm font-medium text-gray-400 mb-2">Model Categories</h5>
                 <div class="space-y-2">
                   {#each Object.entries(modelCategories) as [key, category]}
-                    {@const count = galaxyNodes().filter(n => n.category === key).length}
+                    {@const count = (galaxyNodes || []).filter(n => n.category === key).length}
                     {#if count > 0}
                       <div class="flex items-center justify-between text-xs">
                         <div class="flex items-center gap-2">

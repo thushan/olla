@@ -2,6 +2,10 @@ import { api } from '$lib/services/api.js';
 
 // Dashboard store using Svelte 5 runes
 class DashboardStore {
+  constructor() {
+    console.log('[DashboardStore] Initializing store');
+  }
+  
   // State
   status = $state(null);
   endpoints = $state([]);
@@ -50,19 +54,26 @@ class DashboardStore {
   }
   
   get overallHealth() {
-    if (!this.endpoints || !Array.isArray(this.endpoints) || this.endpoints.length === 0) return 'UNKNOWN';
-    const healthyCount = this.endpoints.filter(e => e.status === 'online' || e.status === 'healthy').length;
-    const totalCount = this.endpoints.length;
-    
-    if (healthyCount === totalCount) return 'HEALTHY';
-    if (healthyCount === 0) return 'CRITICAL';
-    return 'DEGRADED';
+    try {
+      console.log('[DashboardStore.overallHealth] endpoints:', this.endpoints);
+      if (!this.endpoints || !Array.isArray(this.endpoints) || this.endpoints.length === 0) return 'UNKNOWN';
+      const healthyCount = (this.endpoints || []).filter(e => e.status === 'online' || e.status === 'healthy').length;
+      const totalCount = this.endpoints.length;
+      
+      if (healthyCount === totalCount) return 'HEALTHY';
+      if (healthyCount === 0) return 'CRITICAL';
+      return 'DEGRADED';
+    } catch (error) {
+      console.error('[DashboardStore.overallHealth] Error:', error);
+      return 'UNKNOWN';
+    }
   }
   
   get endpointsUp() {
     if (!this.status?.endpoints || !Array.isArray(this.status.endpoints)) return { up: 0, total: 0 };
-    const up = this.status.endpoints.filter(e => e.status === 'healthy').length;
-    return { up, total: this.status.endpoints.length };
+    const endpoints = this.status.endpoints || [];
+    const up = endpoints.filter(e => e.status === 'healthy').length;
+    return { up, total: endpoints.length };
   }
   
   get totalRequests() {
@@ -97,7 +108,13 @@ class DashboardStore {
     this.errors.status = null;
     
     try {
-      this.status = await api.getStatus();
+      const response = await api.getStatus();
+      console.log('[DashboardStore.fetchStatus] Response:', response);
+      this.status = response;
+      // Also update endpoints from status if available
+      if (response.endpoints && Array.isArray(response.endpoints)) {
+        this.endpoints = response.endpoints;
+      }
     } catch (error) {
       this.errors.status = error.message;
       console.error('Failed to fetch status:', error);
@@ -111,7 +128,10 @@ class DashboardStore {
     this.errors.endpoints = null;
     
     try {
-      this.endpoints = await api.getEndpoints();
+      const response = await api.getEndpoints();
+      console.log('[DashboardStore.fetchEndpoints] Response:', response);
+      // Extract the endpoints array from the response object
+      this.endpoints = response.endpoints || [];
     } catch (error) {
       this.errors.endpoints = error.message;
       console.error('Failed to fetch endpoints:', error);
@@ -241,7 +261,7 @@ class DashboardStore {
         // Get available models and endpoints
         const models = Object.keys(this.modelStats?.models || {});
         const endpoints = Array.isArray(this.endpoints) 
-          ? this.endpoints.filter(e => e.status === 'online' || e.status === 'healthy')
+          ? (this.endpoints || []).filter(e => e.status === 'online' || e.status === 'healthy')
           : [];
         
         for (let i = 0; i < Math.min(requestDiff, 5); i++) {
@@ -299,6 +319,7 @@ class DashboardStore {
   }
   
   updateStatus(status) {
+    console.log('[DashboardStore.updateStatus] Status:', status);
     this.status = status;
     // If status contains endpoints, update them too
     if (status.endpoints && Array.isArray(status.endpoints)) {
