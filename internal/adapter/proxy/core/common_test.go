@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/thushan/olla/internal/core/constants"
@@ -267,6 +268,7 @@ func TestSetResponseHeaders(t *testing.T) {
 			stats: &ports.RequestStats{
 				RequestID: "test-request-123",
 				Model:     "gpt-4",
+				StartTime: time.Now().Add(-100 * time.Millisecond),
 			},
 			endpoint: &domain.Endpoint{
 				Name: "backend-1",
@@ -277,6 +279,7 @@ func TestSetResponseHeaders(t *testing.T) {
 				"X-Olla-Endpoint":     "backend-1",
 				"X-Olla-Backend-Type": "openai",
 				"X-Olla-Model":        "gpt-4",
+				// X-Olla-Response-Time will be checked separately as it's dynamic
 			},
 			checkTrailer: true,
 		},
@@ -335,6 +338,18 @@ func TestSetResponseHeaders(t *testing.T) {
 			// Check expected headers
 			for k, v := range tt.expectedHeaders {
 				assert.Equal(t, v, w.Header().Get(k), "Header %s should be set correctly", k)
+			}
+
+			// Check X-Olla-Response-Time header when StartTime is set
+			if tt.stats != nil && !tt.stats.StartTime.IsZero() {
+				responseTimeHeader := w.Header().Get("X-Olla-Response-Time")
+				assert.NotEmpty(t, responseTimeHeader, "X-Olla-Response-Time should be set when StartTime is present")
+				// Verify it's a valid duration string
+				_, err := time.ParseDuration(responseTimeHeader)
+				assert.NoError(t, err, "X-Olla-Response-Time should be a valid duration")
+			} else {
+				// When StartTime is not set, the header should not be present
+				assert.Empty(t, w.Header().Get("X-Olla-Response-Time"), "X-Olla-Response-Time should not be set when StartTime is zero")
 			}
 
 			// Note: Trailer header is set by the proxy implementation, not SetResponseHeaders
@@ -454,4 +469,5 @@ func TestHeaderConstants(t *testing.T) {
 	assert.Equal(t, "X-Olla-Endpoint", HeaderEndpoint)
 	assert.Equal(t, "X-Olla-Backend-Type", HeaderBackendType)
 	assert.Equal(t, "X-Olla-Model", HeaderModel)
+	assert.Equal(t, "X-Olla-Response-Time", HeaderResponseTime)
 }
