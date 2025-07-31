@@ -81,6 +81,8 @@ func (s *Service) createCombinedContext(clientCtx, upstreamCtx context.Context) 
 			cancel()
 		case <-upstreamCtx.Done():
 			cancel()
+		case <-combinedCtx.Done():
+			return // Exit when combined context is cancelled
 		}
 	}()
 
@@ -95,7 +97,12 @@ func (s *Service) performTimedRead(combinedCtx context.Context, body io.Reader, 
 	// spawn goroutine for read operation
 	go func() {
 		n, err := body.Read(buffer)
-		readCh <- readResult{n: n, err: err}
+		select {
+		case readCh <- readResult{n: n, err: err}:
+			// Successfully sent result
+		case <-combinedCtx.Done():
+			// Context cancelled, exit without blocking
+		}
 	}()
 
 	// Set timer to detect stalled reads
@@ -105,13 +112,16 @@ func (s *Service) performTimedRead(combinedCtx context.Context, body io.Reader, 
 	select {
 	case <-combinedCtx.Done():
 		// Context cancelled - try to complete current read
+		gracePeriod := time.NewTimer(1 * time.Second)
+		defer gracePeriod.Stop()
+
 		select {
 		case result := <-readCh:
 			if result.n > 0 && !state.clientDisconnected {
 				// Return result to be processed
 				return &result, nil
 			}
-		case <-time.After(1 * time.Second):
+		case <-gracePeriod.C:
 			// Give up on pending read
 		}
 		return nil, nil // Signals context cancellation

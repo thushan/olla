@@ -80,6 +80,10 @@ type Service struct {
 	transport     *http.Transport
 	configuration *Configuration
 
+	// Cleanup management
+	cleanupTicker *time.Ticker
+	cleanupStop   chan struct{}
+
 	// Per-endpoint connection pools and circuit breakers
 	endpointPools   xsync.Map[string, *connectionPool]
 	circuitBreakers xsync.Map[string, *circuitBreaker]
@@ -244,7 +248,7 @@ func NewService(
 
 	transport := createOptimisedTransport(configuration)
 
-	return &Service{
+	service := &Service{
 		BaseProxyComponents: base,
 		bufferPool:          bufferPool,
 		requestPool:         requestPool,
@@ -254,7 +258,14 @@ func NewService(
 		configuration:       configuration,
 		circuitBreakers:     *xsync.NewMap[string, *circuitBreaker](),
 		endpointPools:       *xsync.NewMap[string, *connectionPool](),
-	}, nil
+		cleanupTicker:       time.NewTicker(5 * time.Minute),
+		cleanupStop:         make(chan struct{}),
+	}
+
+	// Start cleanup goroutine
+	go service.cleanupLoop()
+
+	return service, nil
 }
 
 // createOptimisedTransport creates an HTTP transport optimised for AI workloads
@@ -726,8 +737,78 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 	s.configuration = newConfig
 }
 
+// cleanupLoop periodically cleans up unused endpoint pools and circuit breakers
+func (s *Service) cleanupLoop() {
+	defer func() {
+		if r := recover(); r != nil {
+			s.Logger.Error("cleanupLoop panic recovered", "panic", r)
+		}
+	}()
+
+	for {
+		select {
+		case <-s.cleanupStop:
+			return
+		case <-s.cleanupTicker.C:
+			s.cleanupUnusedResources()
+		}
+	}
+}
+
+// cleanupUnusedResources removes stale endpoint pools and circuit breakers
+func (s *Service) cleanupUnusedResources() {
+	now := time.Now().UnixNano()
+	staleThreshold := int64(5 * time.Minute)
+
+	// Cleanup unused endpoint pools
+	var poolsRemoved int
+	s.endpointPools.Range(func(endpoint string, pool *connectionPool) bool {
+		lastUsed := atomic.LoadInt64(&pool.lastUsed)
+		if now-lastUsed > staleThreshold {
+			s.endpointPools.Delete(endpoint)
+			pool.transport.CloseIdleConnections()
+			poolsRemoved++
+		}
+		return true
+	})
+
+	// Cleanup circuit breakers for non-existent endpoints
+	var cbRemoved int
+	endpointExists := make(map[string]bool)
+	s.endpointPools.Range(func(endpoint string, _ *connectionPool) bool {
+		endpointExists[endpoint] = true
+		return true
+	})
+
+	s.circuitBreakers.Range(func(endpoint string, cb *circuitBreaker) bool {
+		if !endpointExists[endpoint] {
+			// Also check if circuit breaker is closed and hasn't failed recently
+			state := atomic.LoadInt64(&cb.state)
+			lastFailure := atomic.LoadInt64(&cb.lastFailure)
+			if state == 0 && (lastFailure == 0 || now-lastFailure > staleThreshold) {
+				s.circuitBreakers.Delete(endpoint)
+				cbRemoved++
+			}
+		}
+		return true
+	})
+
+	if poolsRemoved > 0 || cbRemoved > 0 {
+		s.Logger.Debug("cleaned up unused resources",
+			"pools_removed", poolsRemoved,
+			"circuit_breakers_removed", cbRemoved)
+	}
+}
+
 // Cleanup cleans up resources
 func (s *Service) Cleanup() {
+	// Stop cleanup goroutine
+	if s.cleanupStop != nil {
+		close(s.cleanupStop)
+	}
+	if s.cleanupTicker != nil {
+		s.cleanupTicker.Stop()
+	}
 
 	// Close all endpoint pools
 	s.endpointPools.Range(func(key string, pool *connectionPool) bool {
