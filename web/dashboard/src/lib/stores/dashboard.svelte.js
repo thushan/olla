@@ -94,11 +94,26 @@ class DashboardStore {
   
   // Computed stats object for backward compatibility
   get stats() {
+    // Extract latency value from string (e.g., "2.0s" -> 2000)
+    const latencyStr = this.status?.system?.avg_latency || '0ms';
+    let avgResponseTime = 0;
+    if (latencyStr.endsWith('ms')) {
+      avgResponseTime = parseFloat(latencyStr);
+    } else if (latencyStr.endsWith('s')) {
+      avgResponseTime = parseFloat(latencyStr) * 1000;
+    }
+    
     return {
       totalRequests: this.totalRequests,
-      totalErrors: this.status?.system?.total_errors || 0,
-      avgResponseTime: this.status?.system?.avg_response_time || 0,
+      totalErrors: this.status?.system?.total_failures || 0,
+      avgResponseTime: avgResponseTime,
       activeConnections: this.activeConnections,
+      // Additional fields for compatibility
+      TotalRequests: this.totalRequests,
+      avg_latency: avgResponseTime,
+      avg_response_time: avgResponseTime,
+      active_connections: this.activeConnections,
+      ActiveConnections: this.activeConnections,
     };
   }
   
@@ -189,8 +204,8 @@ class DashboardStore {
     try {
       const response = await api.getUnifiedModels(params);
       console.log('[DashboardStore.fetchUnifiedModels] Response:', response);
-      // Try different possible response structures
-      this.unifiedModels = response.unified_models || response.models || response || [];
+      // The API returns data array
+      this.unifiedModels = response.data || response.unified_models || response.models || [];
       console.log('[DashboardStore.fetchUnifiedModels] Set models:', this.unifiedModels);
     } catch (error) {
       this.errors.unifiedModels = error.message;
