@@ -1,7 +1,7 @@
 // API service for fetching data from Olla backend
 
 // Use relative URLs when embedded in Olla, absolute URLs for standalone dev
-const API_BASE = import.meta.env.VITE_API_BASE || '';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:40114';
 
 class OllaAPI {
   constructor(baseURL = API_BASE) {

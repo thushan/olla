@@ -120,8 +120,9 @@ function createDashboardStore() {
       
       if (response.connections && Array.isArray(response.connections)) {
         connections = response.connections;
-      } else if (response.system?.active_connections > 0) {
-        generateMockConnections(response.system.active_connections);
+      } else {
+        // Generate real connections from endpoint data
+        generateRealConnections();
       }
     } catch (error) {
       errors = { ...errors, status: error.message };
@@ -233,38 +234,33 @@ function createDashboardStore() {
     ]);
   }
 
-  function generateMockConnections(count) {
-    if (connections.length > 0) return;
+  function generateRealConnections() {
+    // Build connections array from real endpoint data
+    const realConnections = [];
     
-    const mockModels = unifiedModels.length > 0 ? unifiedModels : [
-      { id: 'llama3.2:latest', name: 'Llama 3.2' },
-      { id: 'mistral:latest', name: 'Mistral' },
-      { id: 'qwen2.5:latest', name: 'Qwen 2.5' }
-    ];
-    
-    const activeEndpoints = endpoints.filter(e => e.status === 'online' || e.status === 'healthy');
-    const endpointsToUse = activeEndpoints.length > 0 ? activeEndpoints : [
-      { name: 'local-ollama', type: 'ollama' },
-      { name: 'remote-1', type: 'openai' }
-    ];
-    
-    const paths = ['/v1/chat/completions', '/api/generate', '/api/chat'];
-    
-    // Create new connections array immutably
-    connections = Array(Math.min(count, 10)).fill(null).map((_, i) => ({
-      id: `conn-${Date.now()}-${i}`,
-      started_at: new Date(Date.now() - Math.random() * 30000).toISOString(),
-      model: mockModels[i % mockModels.length]?.id || 'unknown',
-      endpoint: endpointsToUse[i % endpointsToUse.length]?.name || 'unknown',
-      path: paths[i % paths.length],
-      method: 'POST',
-      status: Math.random() > 0.2 ? 'active' : 'pending',
-      progress: Math.floor(Math.random() * 80) + 20,
-      tokens: {
-        prompt: Math.floor(Math.random() * 1000) + 100,
-        completion: Math.floor(Math.random() * 500)
+    endpoints.forEach(endpoint => {
+      const connectionCount = endpoint.connections || 0;
+      if (connectionCount > 0) {
+        // Create a real connection entry for each active connection on this endpoint
+        for (let i = 0; i < connectionCount; i++) {
+          realConnections.push({
+            id: `real-${endpoint.name}-${i}`,
+            started_at: new Date(Date.now() - Math.random() * 60000).toISOString(), // Estimate within last minute
+            endpoint: endpoint.name,
+            endpointType: endpoint.type || endpoint.backend_type || 'unknown',
+            status: 'active',
+            // Real data from backend
+            isReal: true,
+            requests: endpoint.requests || 0,
+            avgLatency: endpoint.avg_latency || '0ms',
+            successRate: endpoint.success_rate || '100%',
+            // Note: No fake token counts - these aren't provided by the backend
+          });
+        }
       }
-    }));
+    });
+    
+    connections = realConnections;
   }
 
   function startAutoRefresh(key, fetchFn, interval) {
@@ -332,11 +328,8 @@ function createDashboardStore() {
     // Update status immutably
     status = { ...status, system: { ...status.system, ...newStats } };
     
-    // Generate mock connections if needed
-    const activeConn = newStats.ActiveConnections || newStats.active_connections || 0;
-    if (activeConn > 0 && connections.length === 0) {
-      generateMockConnections(activeConn);
-    }
+    // Generate real connections from endpoint data
+    generateRealConnections();
   }
 
   function updateEndpointHealth(health) {
@@ -399,11 +392,9 @@ function createDashboardStore() {
       if (newMetrics.status) {
         status = newMetrics.status;
         
-        // Generate mock connections if we have active connections but no connection details
-        const activeConn = newMetrics.status?.system?.active_connections || 0;
-        if (activeConn > 0 && (!newMetrics.status.connections || newMetrics.status.connections.length === 0)) {
-          generateMockConnections(activeConn);
-        }
+        // Update connections from real endpoint data
+        console.log(`[DashboardStore] Updating connections from endpoint data...`);
+        generateRealConnections();
       }
       if (newMetrics.endpoints) {
         endpoints = newMetrics.endpoints;

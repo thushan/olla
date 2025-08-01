@@ -142,7 +142,7 @@
       <div class="space-y-3 overflow-y-auto" style="max-height: {maxHeight}px;">
         {#each connections as connection (connection.id)}
           {@const endpointInfo = getEndpointInfo(connection.endpoint)}
-          {@const modelInfo = getModelInfo(connection.model)}
+          {@const modelInfo = getModelInfo(connection.model || 'unknown')}
           {@const animState = animationStates[connection.id]}
           <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 
                       transition-all duration-300 hover:shadow-md
@@ -150,7 +150,7 @@
             <div class="flex items-start justify-between mb-2">
               <div class="flex items-center gap-3">
                 <div class="flex items-center gap-1">
-                  <span class="text-lg">{endpointInfo.icon}</span>
+                  <span class="text-lg">{getEndpointIcon(connection.endpointType)}</span>
                   <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
                     {connection.endpoint}
                   </span>
@@ -181,14 +181,11 @@
                 </div>
               {/if}
               
-              {#if connection.tokens}
+              {#if connection.isReal}
                 <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  {#if connection.tokens.prompt}
-                    <span>Prompt: {connection.tokens.prompt} tokens</span>
-                  {/if}
-                  {#if connection.tokens.completion}
-                    <span>Response: {connection.tokens.completion} tokens</span>
-                  {/if}
+                  <span>Requests: {connection.requests}</span>
+                  <span>Success Rate: {connection.successRate}</span>
+                  <span>Latency: {connection.avgLatency}</span>
                 </div>
               {/if}
               
@@ -199,17 +196,14 @@
               {/if}
             </div>
             
-            {#if connection.status === 'active'}
+            {#if connection.status === 'active' && connection.isReal}
               <div class="mt-3">
                 <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                  <span>Processing</span>
-                  <span>{connection.progress || 0}%</span>
+                  <span>Active Connection</span>
+                  <span>Live</span>
                 </div>
                 <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1 overflow-hidden">
-                  <div 
-                    class="bg-blue-500 h-full rounded-full transition-all duration-300 animate-pulse"
-                    style="width: {connection.progress || 0}%"
-                  ></div>
+                  <div class="bg-green-500 h-full rounded-full animate-pulse" style="width: 100%"></div>
                 </div>
               </div>
             {/if}
