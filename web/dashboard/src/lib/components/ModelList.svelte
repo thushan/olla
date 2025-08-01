@@ -6,6 +6,7 @@
   const modelStats = $derived(dashboardStore.modelStats || {});
   const endpoints = $derived(dashboardStore.endpoints || []);
   const models = $derived(dashboardStore.models || []);
+  const totalModelCount = $derived(unifiedModels.length);
   
   // Debug logging
   $effect(() => {
@@ -52,13 +53,16 @@
 
 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
   <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-    <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Available Models</h3>
+    <div class="flex items-center justify-between">
+      <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Available Models</h3>
+      <span class="text-sm text-gray-600 dark:text-gray-400">{totalModelCount} model{totalModelCount !== 1 ? 's' : ''} available</span>
+    </div>
   </div>
   
   <div class="flex">
     <!-- Model List -->
     <div class="w-full lg:w-1/2 border-r border-gray-200 dark:border-gray-700">
-      <div class="divide-y divide-gray-200 dark:divide-gray-700">
+      <div class="divide-y divide-gray-200 dark:divide-gray-700 max-h-[600px] overflow-y-auto">
         {#each sortedModels as model}
           {@const stats = getModelStats(model)}
           {@const endpoint = getModelEndpoint(model)}
@@ -202,13 +206,13 @@
           {/if}
           
           <!-- Capabilities -->
-          {#if selectedModel.olla?.capabilities}
+          {#if selectedModel.olla?.capabilities && Array.isArray(selectedModel.olla.capabilities)}
             <div>
               <h5 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Capabilities</h5>
               <div class="flex flex-wrap gap-2">
-                {#each Object.keys(selectedModel.olla.capabilities) as capability}
+                {#each selectedModel.olla.capabilities as capability}
                   <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300 rounded">
-                    {capability}
+                    {capability.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                   </span>
                 {/each}
               </div>

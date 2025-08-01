@@ -1,4 +1,5 @@
 import { api } from '$lib/services/api.js';
+import { globalCache } from '$lib/utils/dataCache.js';
 
 // Dashboard store using Svelte 5 runes
 class DashboardStore {
@@ -125,6 +126,20 @@ class DashboardStore {
     try {
       const response = await api.getStatus();
       console.log('[DashboardStore.fetchStatus] Response:', response);
+      
+      // Apply noise filtering to prevent flickering
+      if (response?.system) {
+        const system = response.system;
+        
+        // Cache numeric values with noise filtering
+        system.total_requests = globalCache.update('system:total_requests', system.total_requests || 0);
+        system.total_failures = globalCache.update('system:total_failures', system.total_failures || 0);
+        system.active_connections = globalCache.update('system:active_connections', system.active_connections || 0);
+        system.security_violations = globalCache.update('system:security_violations', system.security_violations || 0);
+        
+        // Don't filter string values like latency, traffic, etc.
+      }
+      
       this.status = response;
       // Also update endpoints from status if available
       if (response.endpoints && Array.isArray(response.endpoints)) {
@@ -146,7 +161,16 @@ class DashboardStore {
       const response = await api.getEndpoints();
       console.log('[DashboardStore.fetchEndpoints] Response:', response);
       // Extract the endpoints array from the response object
-      this.endpoints = response.endpoints || [];
+      const newEndpoints = response.endpoints || [];
+      
+      // Only update if we got valid data
+      if (newEndpoints.length > 0) {
+        this.endpoints = newEndpoints;
+      } else if (this.endpoints.length === 0) {
+        // Only set empty array if we don't have any cached endpoints
+        this.endpoints = [];
+      }
+      // Otherwise keep existing endpoints to prevent UI jumping
     } catch (error) {
       this.errors.endpoints = error.message;
       console.error('Failed to fetch endpoints:', error);
@@ -361,6 +385,11 @@ class DashboardStore {
     this.startAutoRefresh('modelStats', this.fetchModelStats, 3000); // 3 seconds for model stats
     this.startAutoRefresh('processStats', this.fetchProcessStats, 2000); // 2 seconds for system metrics
     this.startAutoRefresh('unifiedModels', this.fetchUnifiedModels, 5000); // 5 seconds for unified models
+    
+    // Periodically clear stale cache entries
+    this.intervals.set('cache-cleanup', setInterval(() => {
+      globalCache.clearStale();
+    }, 60000)); // Every minute
     
     // Initial fetch of all data
     this.fetchAll();
