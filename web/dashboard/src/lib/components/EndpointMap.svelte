@@ -14,7 +14,7 @@
       if (!endpointCache[ep.name]) {
         endpointCache[ep.name] = {
           name: ep.name,
-          backend_type: ep.backend_type || ep.type,
+          backend_type: ep.type || ep.backend_type,
           status: ep.status,
           priority: ep.priority,
           last_latency_ms: ep.last_latency_ms,
@@ -23,6 +23,7 @@
         };
       } else {
         // Update only if values are meaningful
+        if (ep.type || ep.backend_type) endpointCache[ep.name].backend_type = ep.type || ep.backend_type;
         if (ep.status) endpointCache[ep.name].status = ep.status;
         if (ep.priority !== undefined) endpointCache[ep.name].priority = ep.priority;
         if (ep.last_latency_ms) endpointCache[ep.name].last_latency_ms = ep.last_latency_ms;
