@@ -47,3 +47,13 @@ func NormaliseBaseURL(baseURL string) string {
 	}
 	return baseURL
 }
+
+// IsPortAvailable checks if a port is available by attempting to bind to it
+func IsPortAvailable(host string, port int) bool {
+	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, port))
+	if err != nil {
+		return false
+	}
+	defer listener.Close()
+	return true
+}
