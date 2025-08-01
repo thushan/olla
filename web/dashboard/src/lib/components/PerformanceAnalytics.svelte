@@ -11,7 +11,7 @@
   let activeTab = $state('system');
   
   // Calculate performance metrics
-  const performanceMetrics = $derived(() => {
+  const performanceMetrics = $derived.by(() => {
     if (!status?.system) {
       return {
         avgLatency: 0,
@@ -35,7 +35,7 @@
   });
   
   // Memory pressure indicator
-  const memoryPressure = $derived(() => {
+  const memoryPressure = $derived.by(() => {
     if (!processStats?.memory?.memory_pressure) return 'unknown';
     const pressure = processStats.memory.memory_pressure.toLowerCase();
     
@@ -53,7 +53,7 @@
   }
   
   // Get top models by request count
-  const topModels = $derived(() => {
+  const topModels = $derived.by(() => {
     if (!modelStats || Object.keys(modelStats).length === 0) return [];
     
     return Object.entries(modelStats)
@@ -106,7 +106,7 @@
               <span class="text-lg">⚡</span>
               <span class="text-sm text-gray-600 dark:text-gray-400">Avg Latency</span>
             </div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().avgLatency}ms</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics.avgLatency}ms</div>
             <div class="flex items-center gap-1 mt-2 text-xs text-gray-500 dark:text-gray-400">
               <span>📊</span>
               <span>Real-time</span>
@@ -118,7 +118,7 @@
               <span class="text-lg">✅</span>
               <span class="text-sm text-gray-600 dark:text-gray-400">Success Rate</span>
             </div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().successRate}%</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics.successRate}%</div>
             <div class="flex items-center gap-1 mt-2 text-xs text-green-600 dark:text-green-400">
               <span>📈</span>
               <span>Healthy</span>
@@ -130,7 +130,7 @@
               <span class="text-lg">📊</span>
               <span class="text-sm text-gray-600 dark:text-gray-400">Throughput</span>
             </div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().throughput}</div>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics.throughput}</div>
             <div class="text-sm text-gray-600 dark:text-gray-400">requests/min</div>
           </div>
           
@@ -139,10 +139,10 @@
               <span class="text-lg">❌</span>
               <span class="text-sm text-gray-600 dark:text-gray-400">Error Rate</span>
             </div>
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics().errorRate}%</div>
-            <div class="flex items-center gap-1 mt-2 text-xs {performanceMetrics().errorRate > 5 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}">
-              <span>{performanceMetrics().errorRate > 5 ? '📉' : '✅'}</span>
-              <span>{performanceMetrics().errorRate > 5 ? 'High' : 'Low'}</span>
+            <div class="text-2xl font-bold text-gray-900 dark:text-white">{performanceMetrics.errorRate}%</div>
+            <div class="flex items-center gap-1 mt-2 text-xs {performanceMetrics.errorRate > 5 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}">
+              <span>{performanceMetrics.errorRate > 5 ? '📉' : '✅'}</span>
+              <span>{performanceMetrics.errorRate > 5 ? 'High' : 'Low'}</span>
             </div>
           </div>
         </div>
@@ -178,11 +178,11 @@
     {#if activeTab === 'memory'}
       <div class="space-y-6">
         <div>
-          <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3 bg-white dark:bg-gray-800 {memoryPressure().color === 'green' ? 'border-green-500' : memoryPressure().color === 'yellow' ? 'border-yellow-500' : 'border-red-500'}">
-            <span class="text-2xl">{memoryPressure().icon}</span>
+          <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-3 bg-white dark:bg-gray-800 {memoryPressure.color === 'green' ? 'border-green-500' : memoryPressure.color === 'yellow' ? 'border-yellow-500' : 'border-red-500'}">
+            <span class="text-2xl">{memoryPressure.icon}</span>
             <div class="flex-1">
               <span class="block text-sm text-gray-600 dark:text-gray-400">Memory Pressure</span>
-              <span class="text-lg font-semibold text-gray-900 dark:text-white capitalize">{memoryPressure().status}</span>
+              <span class="text-lg font-semibold text-gray-900 dark:text-white capitalize">{memoryPressure.status}</span>
             </div>
           </div>
         </div>
@@ -248,7 +248,7 @@
     <!-- Model Performance Tab -->
     {#if activeTab === 'models'}
       <div class="space-y-6">
-        {#if topModels().length === 0}
+        {#if topModels.length === 0}
           <div class="text-center py-12">
             <span class="text-6xl block mb-2">📊</span>
             <p class="text-gray-600 dark:text-gray-400">No model statistics available yet</p>
@@ -263,7 +263,7 @@
                 <span class="text-right">Avg Latency</span>
                 <span class="text-right">Errors</span>
               </div>
-              {#each topModels() as model}
+              {#each topModels as model}
                 <div class="grid grid-cols-4 gap-4 px-4 py-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                   <span class="truncate text-gray-900 dark:text-white">{model.name}</span>
                   <span class="text-right text-gray-900 dark:text-white">{model.requests.toLocaleString()}</span>

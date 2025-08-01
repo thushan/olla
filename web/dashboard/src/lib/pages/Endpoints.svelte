@@ -179,24 +179,24 @@
       <table class="w-full">
         <thead>
           <tr class="border-b border-gray-200 dark:border-gray-700">
-            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('name')}>
+            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick={() => toggleSort('name')}>
               Name {sortField === 'name' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
             </th>
-            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('url')}>
+            <th class="text-left px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick={() => toggleSort('url')}>
               URL {sortField === 'url' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
             </th>
-            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('status')}>
+            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick={() => toggleSort('status')}>
               Status {sortField === 'status' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
             </th>
-            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('priority')}>
+            <th class="text-center px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick={() => toggleSort('priority')}>
               Priority {sortField === 'priority' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
             </th>
             <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Latency</th>
             <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Success Rate</th>
-            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('model_count')}>
+            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick={() => toggleSort('model_count')}>
               Models {sortField === 'model_count' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
             </th>
-            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" on:click={() => toggleSort('request_count')}>
+            <th class="text-right px-6 py-3 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-200" onclick={() => toggleSort('request_count')}>
               Connections {sortField === 'request_count' ? (sortDirection === 'asc' ? '↑' : '↓') : ''}
             </th>
           </tr>

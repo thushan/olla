@@ -3,7 +3,7 @@
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
   import HeroMetrics from '$lib/components/HeroMetrics.svelte';
   import SystemHealth from '$lib/components/SystemHealth.svelte';
-  import RecentActivity from '$lib/components/RecentActivity.svelte';
+  import ActiveQueries from '$lib/components/ActiveQueries.svelte';
   
   const status = $derived(dashboardStore.status);
   const endpoints = $derived(dashboardStore.endpoints || []);
@@ -90,9 +90,9 @@
       <SystemHealth />
     </div>
     
-    <!-- Recent Activity -->
+    <!-- Active Queries -->
     <div class="lg:col-span-2">
-      <RecentActivity />
+      <ActiveQueries />
     </div>
   </div>
   

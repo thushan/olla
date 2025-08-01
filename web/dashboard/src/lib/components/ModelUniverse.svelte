@@ -8,7 +8,7 @@
   const loading = $derived(dashboardStore.loading.unifiedModels);
   
   // Group models by family
-  const modelFamilies = $derived(() => {
+  const modelFamilies = $derived.by(() => {
     const families = new Map();
     
     for (const model of unifiedModels) {
@@ -74,7 +74,7 @@
     <div class="flex items-center gap-3">
       <span class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
         <span class="text-base">🌌</span>
-        {modelFamilies().length} Families
+        {modelFamilies.length} Families
       </span>
       <span class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
         <span class="text-base">🤖</span>
@@ -88,7 +88,7 @@
       <div class="w-8 h-8 mx-auto mb-4 border-2 border-gray-300 dark:border-gray-600 border-t-blue-500 rounded-full animate-spin"></div>
       <p class="text-gray-600 dark:text-gray-400">Discovering models across endpoints...</p>
     </div>
-  {:else if modelFamilies().length === 0}
+  {:else if modelFamilies.length === 0}
     <div class="py-16 text-center">
       <div class="text-4xl mb-3">🔭</div>
       <p class="text-gray-900 dark:text-white font-medium mb-1">No models discovered yet</p>
@@ -98,7 +98,7 @@
     <div class="p-6">
       <!-- Family Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        {#each modelFamilies() as family}
+        {#each modelFamilies as family}
           <button 
             class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 text-left transition-all duration-200 bg-white dark:bg-gray-800 hover:border-blue-300 dark:hover:border-blue-600 {selectedFamily === family ? 'ring-2 ring-blue-500 border-blue-500' : ''}"
             onclick={() => selectedFamily = selectedFamily === family ? null : family}

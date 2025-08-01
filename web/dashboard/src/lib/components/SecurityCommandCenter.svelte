@@ -7,7 +7,7 @@
   const events = $derived(dashboardStore.events);
   
   // Security metrics
-  const securityMetrics = $derived(() => {
+  const securityMetrics = $derived.by(() => {
     if (!status || !status.system) {
       return {
         violations: 0,
@@ -33,8 +33,8 @@
   });
   
   // Threat level calculation
-  const threatLevel = $derived(() => {
-    const metrics = securityMetrics();
+  const threatLevel = $derived.by(() => {
+    const metrics = securityMetrics;
     const score = 
       metrics.violations * 10 +
       metrics.blockedRequests * 5 +
@@ -48,7 +48,7 @@
   });
   
   // Recent security events
-  const securityEvents = $derived(() => {
+  const securityEvents = $derived.by(() => {
     return (events || [])
       .filter(e => 
         e.type?.includes('security') || 
@@ -116,9 +116,9 @@
   <div class="p-6 border-b border-gray-200 dark:border-gray-700">
     <div class="flex items-center justify-between">
       <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Security Command Center</h3>
-      <div class="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium {threatLevel().level === 'low' ? 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400' : threatLevel().level === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400' : threatLevel().level === 'high' ? 'bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'}">
+      <div class="flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium {threatLevel.level === 'low' ? 'bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400' : threatLevel.level === 'medium' ? 'bg-yellow-100 dark:bg-yellow-900/20 text-yellow-600 dark:text-yellow-400' : threatLevel.level === 'high' ? 'bg-orange-100 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400' : 'bg-red-100 dark:bg-red-900/20 text-red-600 dark:text-red-400'}">
         <span>🛡️</span>
-        <span>Threat Level: {threatLevel().label}</span>
+        <span>Threat Level: {threatLevel.label}</span>
       </div>
     </div>
   </div>
@@ -129,7 +129,7 @@
       <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
         <div class="text-2xl">🚨</div>
         <div class="flex-1">
-          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().violations}</div>
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics.violations}</div>
           <div class="text-sm text-gray-600 dark:text-gray-400">Security Violations</div>
         </div>
       </div>
@@ -137,7 +137,7 @@
       <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
         <div class="text-2xl">🚫</div>
         <div class="flex-1">
-          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().blockedRequests}</div>
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics.blockedRequests}</div>
           <div class="text-sm text-gray-600 dark:text-gray-400">Blocked Requests</div>
         </div>
       </div>
@@ -145,7 +145,7 @@
       <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
         <div class="text-2xl">⏱️</div>
         <div class="flex-1">
-          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().rateLimitHits}</div>
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics.rateLimitHits}</div>
           <div class="text-sm text-gray-600 dark:text-gray-400">Rate Limit Hits</div>
         </div>
       </div>
@@ -153,7 +153,7 @@
       <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center gap-4 bg-white dark:bg-gray-800">
         <div class="text-2xl">👁️</div>
         <div class="flex-1">
-          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics().suspiciousPatterns}</div>
+          <div class="text-2xl font-bold text-gray-900 dark:text-white">{securityMetrics.suspiciousPatterns}</div>
           <div class="text-sm text-gray-600 dark:text-gray-400">Suspicious Patterns</div>
         </div>
       </div>
@@ -216,14 +216,14 @@
     <!-- Security Events -->
     <div>
       <h4 class="font-semibold text-gray-900 dark:text-white mb-3">Recent Security Events</h4>
-      {#if securityEvents().length === 0}
+      {#if securityEvents.length === 0}
         <div class="text-center py-8">
           <span class="text-2xl block mb-2">✅</span>
           <p class="text-gray-600 dark:text-gray-400">No security events in the last 5 minutes</p>
         </div>
       {:else}
         <div class="space-y-3">
-          {#each securityEvents() as event}
+          {#each securityEvents as event}
             {@const formatted = formatSecurityEvent(event)}
             {#if formatted}
               <div class="p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex items-start gap-3 bg-white dark:bg-gray-800 {formatted.severity === 'low' ? 'border-l-4 border-l-blue-500' : formatted.severity === 'medium' ? 'border-l-4 border-l-yellow-500' : 'border-l-4 border-l-red-500'}">

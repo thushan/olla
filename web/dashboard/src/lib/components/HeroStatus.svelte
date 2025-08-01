@@ -16,18 +16,18 @@
   const healthPercentage = $derived(totalEndpoints > 0 ? (healthyEndpoints / totalEndpoints) * 100 : 0);
   
   // Get health color
-  const healthColor = $derived(() => {
-    if (overallHealth === 'HEALTHY') return 'text-green-600 dark:text-green-400';
-    if (overallHealth === 'DEGRADED') return 'text-yellow-600 dark:text-yellow-400';
-    return 'text-red-600 dark:text-red-400';
-  });
+  const healthColor = $derived(
+    overallHealth === 'HEALTHY' ? 'text-green-600 dark:text-green-400' :
+    overallHealth === 'DEGRADED' ? 'text-yellow-600 dark:text-yellow-400' :
+    'text-red-600 dark:text-red-400'
+  );
   
   // Get ring color
-  const ringColor = $derived(() => {
-    if (overallHealth === 'HEALTHY') return '#10b981';
-    if (overallHealth === 'DEGRADED') return '#f59e0b';
-    return '#ef4444';
-  });
+  const ringColor = $derived(
+    overallHealth === 'HEALTHY' ? '#10b981' :
+    overallHealth === 'DEGRADED' ? '#f59e0b' :
+    '#ef4444'
+  );
   
   // Format numbers
   function formatNumber(num) {
@@ -78,7 +78,7 @@
           />
         </svg>
         <div class="absolute inset-0 flex flex-col items-center justify-center">
-          <span class="text-3xl font-bold {healthColor()}">{healthPercentage.toFixed(0)}%</span>
+          <span class="text-3xl font-bold {healthColor}">{healthPercentage.toFixed(0)}%</span>
           <span class="text-sm text-gray-600 dark:text-gray-400">{overallHealth}</span>
         </div>
       </div>

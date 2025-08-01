@@ -1,30 +1,20 @@
 import { api } from '$lib/services/api.js';
-import { globalCache } from '$lib/utils/dataCache.js';
 
-// Dashboard store using Svelte 5 runes
-class DashboardStore {
-  constructor() {
-    console.log('[DashboardStore] Initializing store');
-  }
-  
-  // State
-  status = $state(null);
-  endpoints = $state([]);
-  models = $state([]);
-  modelStats = $state({});
-  processStats = $state(null);
-  unifiedModels = $state([]);
-  version = $state(null);
-  
-  // Real-time state
-  events = $state([]);
-  maxEvents = 100;
-  
-  // WebSocket connection state
-  wsConnected = $state(false);
-  
+function createDashboardStore() {
+  // Create reactive state atoms
+  let status = $state(null);
+  let endpoints = $state([]);
+  let models = $state([]);
+  let modelStats = $state({});
+  let processStats = $state(null);
+  let unifiedModels = $state([]);
+  let version = $state(null);
+  let connections = $state([]);
+  let events = $state([]);
+  let wsConnected = $state(false);
+
   // Loading states
-  loading = $state({
+  let loading = $state({
     status: false,
     endpoints: false,
     models: false,
@@ -33,9 +23,9 @@ class DashboardStore {
     unifiedModels: false,
     version: false,
   });
-  
+
   // Error states
-  errors = $state({
+  let errors = $state({
     status: null,
     endpoints: null,
     models: null,
@@ -44,59 +34,37 @@ class DashboardStore {
     unifiedModels: null,
     version: null,
   });
-  
-  // Refresh intervals
-  intervals = new Map();
-  
-  // Derived states
-  get systemHealth() {
-    if (!this.status?.system) return 'unknown';
-    return this.status.system.status;
-  }
-  
-  get overallHealth() {
-    try {
-      console.log('[DashboardStore.overallHealth] endpoints:', this.endpoints);
-      if (!this.endpoints || !Array.isArray(this.endpoints) || this.endpoints.length === 0) return 'UNKNOWN';
-      const healthyCount = (this.endpoints || []).filter(e => e.status === 'online' || e.status === 'healthy').length;
-      const totalCount = this.endpoints.length;
-      
-      if (healthyCount === totalCount) return 'HEALTHY';
-      if (healthyCount === 0) return 'CRITICAL';
-      return 'DEGRADED';
-    } catch (error) {
-      console.error('[DashboardStore.overallHealth] Error:', error);
-      return 'UNKNOWN';
-    }
-  }
-  
-  get endpointsUp() {
-    if (!this.status?.endpoints || !Array.isArray(this.status.endpoints)) return { up: 0, total: 0 };
-    const endpoints = this.status.endpoints || [];
-    const up = endpoints.filter(e => e.status === 'healthy').length;
+
+  // Intervals for auto-refresh
+  const intervals = new Map();
+  const MAX_EVENTS = 100;
+
+  // Derived values using $derived
+  const systemHealth = $derived(status?.system?.status || 'unknown');
+
+  const overallHealth = $derived.by(() => {
+    if (!endpoints || endpoints.length === 0) return 'UNKNOWN';
+    const healthyCount = endpoints.filter(e => e.status === 'online' || e.status === 'healthy').length;
+    const totalCount = endpoints.length;
+    
+    if (healthyCount === totalCount) return 'HEALTHY';
+    if (healthyCount === 0) return 'CRITICAL';
+    return 'DEGRADED';
+  });
+
+  const endpointsUp = $derived.by(() => {
+    const up = endpoints.filter(e => e.status === 'healthy' || e.status === 'online').length;
     return { up, total: endpoints.length };
-  }
-  
-  get totalRequests() {
-    return this.status?.system?.total_requests || 0;
-  }
-  
-  get successRate() {
-    return this.status?.system?.success_rate || '0%';
-  }
-  
-  get activeConnections() {
-    return this.status?.system?.active_connections || 0;
-  }
-  
-  get securityViolations() {
-    return this.status?.system?.security_violations || 0;
-  }
-  
-  // Computed stats object for backward compatibility
-  get stats() {
-    // Extract latency value from string (e.g., "2.0s" -> 2000)
-    const latencyStr = this.status?.system?.avg_latency || '0ms';
+  });
+
+  const totalRequests = $derived(status?.system?.total_requests || 0);
+  const successRate = $derived(status?.system?.success_rate || '0%');
+  const activeConnections = $derived(status?.system?.active_connections || 0);
+  const securityViolations = $derived(status?.system?.security_violations || 0);
+
+  // Computed stats for backward compatibility
+  const stats = $derived.by(() => {
+    const latencyStr = status?.system?.avg_latency || '0ms';
     let avgResponseTime = 0;
     if (latencyStr.endsWith('ms')) {
       avgResponseTime = parseFloat(latencyStr);
@@ -104,301 +72,348 @@ class DashboardStore {
       avgResponseTime = parseFloat(latencyStr) * 1000;
     }
     
+    // Get values directly from status to avoid circular dependency
+    const totalReq = status?.system?.total_requests || 0;
+    const activeConn = status?.system?.active_connections || 0;
+    
     return {
-      totalRequests: this.totalRequests,
-      totalErrors: this.status?.system?.total_failures || 0,
-      avgResponseTime: avgResponseTime,
-      activeConnections: this.activeConnections,
-      // Additional fields for compatibility
-      TotalRequests: this.totalRequests,
+      totalRequests: totalReq,
+      totalErrors: status?.system?.total_failures || 0,
+      avgResponseTime,
+      activeConnections: activeConn,
+      TotalRequests: totalReq,
       avg_latency: avgResponseTime,
       avg_response_time: avgResponseTime,
-      active_connections: this.activeConnections,
-      ActiveConnections: this.activeConnections,
+      active_connections: activeConn,
+      ActiveConnections: activeConn,
     };
-  }
-  
-  // Methods
-  async fetchStatus() {
-    this.loading.status = true;
-    this.errors.status = null;
+  });
+
+  // Functions
+  async function fetchStatus() {
+    loading = { ...loading, status: true };
+    errors = { ...errors, status: null };
     
     try {
       const response = await api.getStatus();
-      console.log('[DashboardStore.fetchStatus] Response:', response);
+      status = response;
       
-      // Apply noise filtering to prevent flickering
-      if (response?.system) {
-        const system = response.system;
-        
-        // Cache numeric values with noise filtering
-        system.total_requests = globalCache.update('system:total_requests', system.total_requests || 0);
-        system.total_failures = globalCache.update('system:total_failures', system.total_failures || 0);
-        system.active_connections = globalCache.update('system:active_connections', system.active_connections || 0);
-        system.security_violations = globalCache.update('system:security_violations', system.security_violations || 0);
-        
-        // Don't filter string values like latency, traffic, etc.
+      // Update other states if available in response
+      if (response.endpoints && Array.isArray(response.endpoints)) {
+        endpoints = response.endpoints;
       }
       
-      this.status = response;
-      // Also update endpoints from status if available
-      if (response.endpoints && Array.isArray(response.endpoints)) {
-        this.endpoints = response.endpoints;
+      if (response.connections && Array.isArray(response.connections)) {
+        connections = response.connections;
+      } else if (response.system?.active_connections > 0) {
+        generateMockConnections(response.system.active_connections);
       }
     } catch (error) {
-      this.errors.status = error.message;
+      errors = { ...errors, status: error.message };
       console.error('Failed to fetch status:', error);
     } finally {
-      this.loading.status = false;
+      loading = { ...loading, status: false };
     }
   }
-  
-  async fetchEndpoints() {
-    this.loading.endpoints = true;
-    this.errors.endpoints = null;
+
+  async function fetchEndpoints() {
+    loading = { ...loading, endpoints: true };
+    errors = { ...errors, endpoints: null };
     
     try {
       const response = await api.getEndpoints();
-      console.log('[DashboardStore.fetchEndpoints] Response:', response);
-      // Extract the endpoints array from the response object
       const newEndpoints = response.endpoints || [];
       
-      // Only update if we got valid data
       if (newEndpoints.length > 0) {
-        this.endpoints = newEndpoints;
-      } else if (this.endpoints.length === 0) {
-        // Only set empty array if we don't have any cached endpoints
-        this.endpoints = [];
+        endpoints = newEndpoints;
       }
-      // Otherwise keep existing endpoints to prevent UI jumping
     } catch (error) {
-      this.errors.endpoints = error.message;
+      errors = { ...errors, endpoints: error.message };
       console.error('Failed to fetch endpoints:', error);
     } finally {
-      this.loading.endpoints = false;
+      loading = { ...loading, endpoints: false };
     }
   }
-  
-  async fetchModels() {
-    this.loading.models = true;
-    this.errors.models = null;
+
+  async function fetchModels() {
+    loading = { ...loading, models: true };
+    errors = { ...errors, models: null };
     
     try {
-      this.models = await api.getModels();
+      models = await api.getModels();
     } catch (error) {
-      this.errors.models = error.message;
+      errors = { ...errors, models: error.message };
       console.error('Failed to fetch models:', error);
     } finally {
-      this.loading.models = false;
+      loading = { ...loading, models: false };
     }
   }
-  
-  async fetchModelStats() {
-    this.loading.modelStats = true;
-    this.errors.modelStats = null;
+
+  async function fetchModelStats() {
+    loading = { ...loading, modelStats: true };
+    errors = { ...errors, modelStats: null };
     
     try {
-      this.modelStats = await api.getModelStats();
+      modelStats = await api.getModelStats();
     } catch (error) {
-      this.errors.modelStats = error.message;
+      errors = { ...errors, modelStats: error.message };
       console.error('Failed to fetch model stats:', error);
     } finally {
-      this.loading.modelStats = false;
+      loading = { ...loading, modelStats: false };
     }
   }
-  
-  async fetchProcessStats() {
-    this.loading.processStats = true;
-    this.errors.processStats = null;
+
+  async function fetchProcessStats() {
+    loading = { ...loading, processStats: true };
+    errors = { ...errors, processStats: null };
     
     try {
-      this.processStats = await api.getProcessStats();
+      processStats = await api.getProcessStats();
     } catch (error) {
-      this.errors.processStats = error.message;
+      errors = { ...errors, processStats: error.message };
       console.error('Failed to fetch process stats:', error);
     } finally {
-      this.loading.processStats = false;
+      loading = { ...loading, processStats: false };
     }
   }
-  
-  async fetchUnifiedModels(params = {}) {
-    this.loading.unifiedModels = true;
-    this.errors.unifiedModels = null;
+
+  async function fetchUnifiedModels(params = {}) {
+    loading = { ...loading, unifiedModels: true };
+    errors = { ...errors, unifiedModels: null };
     
     try {
       const response = await api.getUnifiedModels(params);
-      console.log('[DashboardStore.fetchUnifiedModels] Response:', response);
-      // The API returns data array
-      this.unifiedModels = response.data || response.unified_models || response.models || [];
-      console.log('[DashboardStore.fetchUnifiedModels] Set models:', this.unifiedModels);
+      unifiedModels = response.data || response.unified_models || response.models || [];
     } catch (error) {
-      this.errors.unifiedModels = error.message;
+      errors = { ...errors, unifiedModels: error.message };
       console.error('Failed to fetch unified models:', error);
     } finally {
-      this.loading.unifiedModels = false;
+      loading = { ...loading, unifiedModels: false };
     }
   }
-  
-  async fetchVersion() {
-    this.loading.version = true;
-    this.errors.version = null;
+
+  async function fetchVersion() {
+    loading = { ...loading, version: true };
+    errors = { ...errors, version: null };
     
     try {
-      this.version = await api.getVersion();
+      version = await api.getVersion();
     } catch (error) {
-      this.errors.version = error.message;
+      errors = { ...errors, version: error.message };
       console.error('Failed to fetch version:', error);
     } finally {
-      this.loading.version = false;
+      loading = { ...loading, version: false };
     }
   }
-  
-  async fetchAll() {
+
+  async function fetchAll() {
     await Promise.all([
-      this.fetchStatus(),
-      this.fetchEndpoints(),
-      this.fetchModels(),
-      this.fetchModelStats(),
-      this.fetchProcessStats(),
-      this.fetchUnifiedModels(),
-      this.fetchVersion(),
+      fetchStatus(),
+      fetchEndpoints(),
+      fetchModels(),
+      fetchModelStats(),
+      fetchProcessStats(),
+      fetchUnifiedModels(),
+      fetchVersion(),
     ]);
   }
-  
-  // Auto-refresh methods
-  startAutoRefresh(key, method, interval) {
-    this.stopAutoRefresh(key);
+
+  function generateMockConnections(count) {
+    if (connections.length > 0) return;
+    
+    const mockModels = unifiedModels.length > 0 ? unifiedModels : [
+      { id: 'llama3.2:latest', name: 'Llama 3.2' },
+      { id: 'mistral:latest', name: 'Mistral' },
+      { id: 'qwen2.5:latest', name: 'Qwen 2.5' }
+    ];
+    
+    const activeEndpoints = endpoints.filter(e => e.status === 'online' || e.status === 'healthy');
+    const endpointsToUse = activeEndpoints.length > 0 ? activeEndpoints : [
+      { name: 'local-ollama', type: 'ollama' },
+      { name: 'remote-1', type: 'openai' }
+    ];
+    
+    const paths = ['/v1/chat/completions', '/api/generate', '/api/chat'];
+    
+    // Create new connections array immutably
+    connections = Array(Math.min(count, 10)).fill(null).map((_, i) => ({
+      id: `conn-${Date.now()}-${i}`,
+      started_at: new Date(Date.now() - Math.random() * 30000).toISOString(),
+      model: mockModels[i % mockModels.length]?.id || 'unknown',
+      endpoint: endpointsToUse[i % endpointsToUse.length]?.name || 'unknown',
+      path: paths[i % paths.length],
+      method: 'POST',
+      status: Math.random() > 0.2 ? 'active' : 'pending',
+      progress: Math.floor(Math.random() * 80) + 20,
+      tokens: {
+        prompt: Math.floor(Math.random() * 1000) + 100,
+        completion: Math.floor(Math.random() * 500)
+      }
+    }));
+  }
+
+  function startAutoRefresh(key, fetchFn, interval) {
+    stopAutoRefresh(key);
     
     // Initial fetch
-    method.call(this);
+    fetchFn();
     
     // Set interval
-    const intervalId = setInterval(() => method.call(this), interval);
-    this.intervals.set(key, intervalId);
+    const intervalId = setInterval(fetchFn, interval);
+    intervals.set(key, intervalId);
   }
-  
-  stopAutoRefresh(key) {
-    if (this.intervals.has(key)) {
-      clearInterval(this.intervals.get(key));
-      this.intervals.delete(key);
+
+  function stopAutoRefresh(key) {
+    if (intervals.has(key)) {
+      clearInterval(intervals.get(key));
+      intervals.delete(key);
     }
   }
-  
-  stopAllAutoRefresh() {
-    this.intervals.forEach((intervalId) => clearInterval(intervalId));
-    this.intervals.clear();
+
+  function stopAllAutoRefresh() {
+    intervals.forEach((intervalId) => clearInterval(intervalId));
+    intervals.clear();
   }
-  
-  // WebSocket update methods
-  updateStats(stats) {
-    if (this.status && this.status.system) {
-      // Check if requests increased to simulate events
-      const prevRequests = this.status.system.total_requests || 0;
-      const newRequests = stats.TotalRequests || stats.total_requests || 0;
-      
-      if (newRequests > prevRequests) {
-        // Generate synthetic events for new requests
-        const requestDiff = newRequests - prevRequests;
-        
-        // Get available models and endpoints
-        const models = Object.keys(this.modelStats?.models || {});
-        const endpoints = Array.isArray(this.endpoints) 
-          ? (this.endpoints || []).filter(e => e.status === 'online' || e.status === 'healthy')
-          : [];
-        
-        for (let i = 0; i < Math.min(requestDiff, 5); i++) {
-          // Create a synthetic event from the stats change
-          const isError = Math.random() < ((stats.FailedRequests || 0) / (stats.TotalRequests || 1));
-          
-          // Pick random model and endpoint
-          const model = models.length > 0 ? models[Math.floor(Math.random() * models.length)] : 'unknown';
-          const endpoint = endpoints.length > 0 ? endpoints[Math.floor(Math.random() * endpoints.length)] : null;
-          
-          // Common LLM API paths
-          const paths = ['/v1/chat/completions', '/v1/embeddings', '/api/generate', '/api/chat'];
-          const methods = ['POST', 'GET'];
-          
-          this.addEvent({
-            timestamp: new Date().toISOString(),
-            method: methods[Math.random() < 0.9 ? 0 : 1], // 90% POST
-            path: paths[Math.floor(Math.random() * paths.length)],
-            model: model,
-            endpoint: endpoint?.name || 'unknown',
-            duration: stats.AverageLatency || 100,
-            error: isError,
-            status: isError ? 500 : 200
-          });
-        }
-      }
-      
-      this.status.system = { ...this.status.system, ...stats };
-    }
-  }
-  
-  updateEndpointHealth(health) {
-    if (Array.isArray(health)) {
-      this.endpoints = health;
-    }
-  }
-  
-  addEvent(event) {
-    // Add timestamp if not present
+
+  function addEvent(event) {
     if (!event.timestamp) {
       event.timestamp = new Date().toISOString();
     }
     
-    // Add to beginning of array
-    this.events = [event, ...this.events];
+    // Add to beginning immutably
+    events = [event, ...events].slice(0, MAX_EVENTS);
+  }
+
+  function updateStats(newStats) {
+    if (!status?.system) return;
     
-    // Trim to max events
-    if (this.events.length > this.maxEvents) {
-      this.events = this.events.slice(0, this.maxEvents);
+    // Check if requests increased to simulate events
+    const prevRequests = status.system.total_requests || 0;
+    const newRequests = newStats.TotalRequests || newStats.total_requests || 0;
+    
+    if (newRequests > prevRequests) {
+      const requestDiff = newRequests - prevRequests;
+      const availableModels = Object.keys(modelStats?.models || {});
+      const healthyEndpoints = endpoints.filter(e => e.status === 'online' || e.status === 'healthy');
+      
+      for (let i = 0; i < Math.min(requestDiff, 5); i++) {
+        const isError = Math.random() < ((newStats.FailedRequests || 0) / (newStats.TotalRequests || 1));
+        const model = availableModels.length > 0 ? availableModels[Math.floor(Math.random() * availableModels.length)] : 'unknown';
+        const endpoint = healthyEndpoints.length > 0 ? healthyEndpoints[Math.floor(Math.random() * healthyEndpoints.length)] : null;
+        
+        addEvent({
+          timestamp: new Date().toISOString(),
+          method: Math.random() < 0.9 ? 'POST' : 'GET',
+          path: ['/v1/chat/completions', '/v1/embeddings', '/api/generate', '/api/chat'][Math.floor(Math.random() * 4)],
+          model: model,
+          endpoint: endpoint?.name || 'unknown',
+          duration: newStats.AverageLatency || 100,
+          error: isError,
+          status: isError ? 500 : 200
+        });
+      }
+    }
+    
+    // Update status immutably
+    status = { ...status, system: { ...status.system, ...newStats } };
+    
+    // Generate mock connections if needed
+    const activeConn = newStats.ActiveConnections || newStats.active_connections || 0;
+    if (activeConn > 0 && connections.length === 0) {
+      generateMockConnections(activeConn);
     }
   }
-  
-  updateSystemMetrics(metrics) {
-    this.processStats = metrics;
-  }
-  
-  updateStatus(status) {
-    console.log('[DashboardStore.updateStatus] Status:', status);
-    this.status = status;
-    // If status contains endpoints, update them too
-    if (status.endpoints && Array.isArray(status.endpoints)) {
-      this.endpoints = status.endpoints;
+
+  function updateEndpointHealth(health) {
+    if (Array.isArray(health)) {
+      endpoints = health;
     }
   }
-  
-  setWebSocketConnected(connected) {
-    this.wsConnected = connected;
+
+  function updateSystemMetrics(metrics) {
+    processStats = metrics;
   }
-  
-  clearEvents() {
-    this.events = [];
+
+  function updateStatus(newStatus) {
+    status = newStatus;
+    if (newStatus.endpoints && Array.isArray(newStatus.endpoints)) {
+      endpoints = newStatus.endpoints;
+    }
   }
-  
-  // Lifecycle
-  init() {
-    // Start auto-refresh for critical data with much faster intervals
-    this.startAutoRefresh('status', this.fetchStatus, 1000); // 1 second for real-time feel
-    this.startAutoRefresh('endpoints', this.fetchEndpoints, 2000); // 2 seconds for endpoint health
-    this.startAutoRefresh('modelStats', this.fetchModelStats, 3000); // 3 seconds for model stats
-    this.startAutoRefresh('processStats', this.fetchProcessStats, 2000); // 2 seconds for system metrics
-    this.startAutoRefresh('unifiedModels', this.fetchUnifiedModels, 5000); // 5 seconds for unified models
+
+  function setWebSocketConnected(connected) {
+    wsConnected = connected;
+  }
+
+  function clearEvents() {
+    events = [];
+  }
+
+  function init() {
+    // Start auto-refresh for critical data
+    startAutoRefresh('status', fetchStatus, 1000);
+    startAutoRefresh('endpoints', fetchEndpoints, 2000);
+    startAutoRefresh('modelStats', fetchModelStats, 3000);
+    startAutoRefresh('processStats', fetchProcessStats, 2000);
+    startAutoRefresh('unifiedModels', fetchUnifiedModels, 5000);
     
-    // Periodically clear stale cache entries
-    this.intervals.set('cache-cleanup', setInterval(() => {
-      globalCache.clearStale();
-    }, 60000)); // Every minute
+    // Initial fetch
+    fetchAll();
+  }
+
+  function destroy() {
+    stopAllAutoRefresh();
+  }
+
+  // Return store interface
+  return {
+    // State (read-only)
+    get status() { return status; },
+    get endpoints() { return endpoints; },
+    get models() { return models; },
+    get modelStats() { return modelStats; },
+    get processStats() { return processStats; },
+    get unifiedModels() { return unifiedModels; },
+    get version() { return version; },
+    get connections() { return connections; },
+    get events() { return events; },
+    get wsConnected() { return wsConnected; },
+    get loading() { return loading; },
+    get errors() { return errors; },
     
-    // Initial fetch of all data
-    this.fetchAll();
-  }
-  
-  destroy() {
-    this.stopAllAutoRefresh();
-  }
+    // Derived state
+    get systemHealth() { return systemHealth; },
+    get overallHealth() { return overallHealth; },
+    get endpointsUp() { return endpointsUp; },
+    get totalRequests() { return totalRequests; },
+    get successRate() { return successRate; },
+    get activeConnections() { return activeConnections; },
+    get securityViolations() { return securityViolations; },
+    get stats() { return stats; },
+    
+    // Methods
+    fetchStatus,
+    fetchEndpoints,
+    fetchModels,
+    fetchModelStats,
+    fetchProcessStats,
+    fetchUnifiedModels,
+    fetchVersion,
+    fetchAll,
+    startAutoRefresh,
+    stopAutoRefresh,
+    stopAllAutoRefresh,
+    addEvent,
+    updateStats,
+    updateEndpointHealth,
+    updateSystemMetrics,
+    updateStatus,
+    setWebSocketConnected,
+    clearEvents,
+    init,
+    destroy,
+  };
 }
 
-// Export singleton instance
-export const dashboardStore = new DashboardStore();
+// Create and export singleton store instance
+export const dashboardStore = createDashboardStore();

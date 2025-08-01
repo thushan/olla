@@ -1,110 +1,182 @@
-// Data caching utilities to prevent UI flickering and maintain stability
-
-export class StableDataCache {
+// Non-reactive cache for utilities
+class ReactiveCache {
   constructor(options = {}) {
-    this.cache = new Map();
-    this.lastUpdate = new Map();
     this.noiseThreshold = options.noiseThreshold || 0.2; // 20% change threshold
-    this.staleTimeout = options.staleTimeout || 30000; // 30 seconds
     this.ignoreZeroTimeout = options.ignoreZeroTimeout || 5000; // 5 seconds
+    this.cache = new Map();
+    this.zeroTimestamps = new Map();
   }
-
+  
   // Get cached value or default
   get(key, defaultValue = null) {
-    const cached = this.cache.get(key);
-    if (!cached) return defaultValue;
-    
-    // Check if data is stale
-    const lastUpdate = this.lastUpdate.get(key) || 0;
-    if (Date.now() - lastUpdate > this.staleTimeout) {
-      return defaultValue;
-    }
-    
-    return cached.value;
+    const entry = this.cache.get(key);
+    return entry ? entry.value : defaultValue;
   }
-
-  // Update cache with noise filtering
-  update(key, newValue, options = {}) {
-    const cached = this.cache.get(key);
+  
+  // Update value with noise filtering
+  update(key, newValue) {
     const now = Date.now();
+    const entry = this.cache.get(key);
     
-    // If no cached value, accept the new value
-    if (!cached) {
-      this.cache.set(key, { value: newValue, zeroCount: 0 });
-      this.lastUpdate.set(key, now);
+    // First time seeing this key
+    if (!entry) {
+      this.cache.set(key, { value: newValue, lastUpdate: now });
       return newValue;
     }
     
-    // Handle zero values specially
-    if (this.isEffectivelyZero(newValue)) {
-      const timeSinceUpdate = now - (this.lastUpdate.get(key) || 0);
+    const oldValue = entry.value;
+    
+    // Handle zero values with timeout
+    if (newValue === 0 && oldValue !== 0) {
+      const zeroTime = this.zeroTimestamps.get(key);
       
-      // If we recently had a non-zero value, ignore the zero
-      if (!this.isEffectivelyZero(cached.value) && timeSinceUpdate < this.ignoreZeroTimeout) {
-        cached.zeroCount = (cached.zeroCount || 0) + 1;
-        
-        // Only accept zero after multiple consecutive zeros
-        if (cached.zeroCount < 3) {
-          return cached.value; // Return old value
-        }
+      if (!zeroTime) {
+        // First zero, start timeout
+        this.zeroTimestamps.set(key, now);
+        return oldValue; // Keep old value
+      } else if (now - zeroTime < this.ignoreZeroTimeout) {
+        // Within timeout, ignore zero
+        return oldValue;
+      } else {
+        // Timeout expired, accept zero
+        this.zeroTimestamps.delete(key);
       }
-    } else {
-      // Reset zero count on non-zero value
-      cached.zeroCount = 0;
+    } else if (newValue !== 0) {
+      // Clear zero timestamp if value is non-zero
+      this.zeroTimestamps.delete(key);
     }
     
-    // Check if change is significant (for numeric values)
-    if (typeof newValue === 'number' && typeof cached.value === 'number') {
-      const changeRatio = Math.abs(newValue - cached.value) / (cached.value || 1);
-      
-      // Ignore small fluctuations
-      if (changeRatio < this.noiseThreshold && !options.forceUpdate) {
-        return cached.value;
+    // Check noise threshold for numeric values
+    if (typeof oldValue === 'number' && typeof newValue === 'number' && oldValue !== 0) {
+      const change = Math.abs((newValue - oldValue) / oldValue);
+      if (change < this.noiseThreshold) {
+        return oldValue; // Keep old value if change is within noise threshold
       }
     }
     
     // Update cache
-    this.cache.set(key, { value: newValue, zeroCount: 0 });
-    this.lastUpdate.set(key, now);
+    this.cache.set(key, { value: newValue, lastUpdate: now });
+    
     return newValue;
   }
-
-  // Check if value is effectively zero
-  isEffectivelyZero(value) {
-    if (value === 0 || value === null || value === undefined) return true;
-    if (value === '0' || value === 'N/A' || value === '') return true;
-    if (typeof value === 'object' && Object.keys(value).length === 0) return true;
-    if (Array.isArray(value) && value.length === 0) return true;
-    return false;
-  }
-
+  
   // Clear stale entries
-  clearStale() {
+  clearStale(maxAge = 300000) { // 5 minutes default
     const now = Date.now();
-    for (const [key, timestamp] of this.lastUpdate.entries()) {
-      if (now - timestamp > this.staleTimeout) {
-        this.cache.delete(key);
-        this.lastUpdate.delete(key);
+    const newCache = new Map();
+    
+    for (const [key, entry] of this.cache) {
+      if (now - entry.lastUpdate < maxAge) {
+        newCache.set(key, entry);
       }
     }
+    
+    this.cache = newCache;
   }
-
-  // Clear all cache
+  
+  // Clear all entries
   clear() {
-    this.cache.clear();
-    this.lastUpdate.clear();
+    this.cache = new Map();
+    this.zeroTimestamps.clear();
   }
 }
 
-// Singleton instance for global use
-export const globalCache = new StableDataCache();
+// Create state for endpoint details
+let endpointDetailsCache = {};
 
-// Helper to create endpoint-specific cache key
+// Helper to get endpoint cache key
 export function endpointCacheKey(endpoint, field) {
   return `endpoint:${endpoint.name}:${field}`;
 }
 
-// Helper to create model-specific cache key
-export function modelCacheKey(model, field) {
-  return `model:${model.id || model.name}:${field}`;
+// Update endpoint detail
+export function updateEndpointDetail(endpointName, field, value) {
+  endpointDetailsCache[`${endpointName}:${field}`] = value;
+}
+
+// Get endpoint detail
+export function getEndpointDetail(endpointName, field, defaultValue = null) {
+  return endpointDetailsCache[`${endpointName}:${field}`] || defaultValue;
+}
+
+// Create and export singleton cache instance
+export const globalCache = new ReactiveCache({
+  noiseThreshold: 0.2,
+  ignoreZeroTimeout: 5000
+});
+
+// State for metrics with noise filtering
+let metricsCache = {
+  totalRequests: 0,
+  activeConnections: 0,
+  requestRate: 0,
+  avgLatency: 0,
+  successRate: 100
+};
+
+// Get metrics with caching
+export function getCachedMetric(key) {
+  return metricsCache[key] || 0;
+}
+
+// Update metric with noise filtering
+export function updateMetric(key, value) {
+  const oldValue = metricsCache[key] || 0;
+  
+  // Apply noise filtering for numeric values
+  if (typeof value === 'number' && typeof oldValue === 'number') {
+    // Ignore single zero values
+    if (value === 0 && oldValue !== 0) {
+      return oldValue; // Keep old value
+    }
+    
+    // Check threshold for non-zero changes
+    if (oldValue !== 0) {
+      const change = Math.abs((value - oldValue) / oldValue);
+      if (change < 0.2) { // 20% threshold
+        return oldValue;
+      }
+    }
+  }
+  
+  // Update
+  metricsCache[key] = value;
+  
+  return value;
+}
+
+// Batch update metrics
+export function updateMetrics(updates) {
+  const newMetrics = { ...metricsCache };
+  
+  Object.entries(updates).forEach(([key, value]) => {
+    const oldValue = newMetrics[key] || 0;
+    
+    // Apply same filtering logic
+    if (typeof value === 'number' && typeof oldValue === 'number') {
+      if (value === 0 && oldValue !== 0) {
+        // Keep old value
+      } else if (oldValue !== 0) {
+        const change = Math.abs((value - oldValue) / oldValue);
+        if (change >= 0.2) {
+          newMetrics[key] = value;
+        }
+      } else {
+        newMetrics[key] = value;
+      }
+    } else {
+      newMetrics[key] = value;
+    }
+  });
+  
+  metricsCache = newMetrics;
+}
+
+// Set up periodic cleanup (this should be called from a component if needed)
+export function startCacheCleanup() {
+  const interval = setInterval(() => {
+    globalCache.clearStale();
+  }, 60000); // Every minute
+  
+  return () => clearInterval(interval);
 }

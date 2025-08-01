@@ -13,7 +13,7 @@
   const levels = 5;
   
   // Security metrics for radar chart
-  const radarMetrics = $derived(() => {
+  const radarMetrics = $derived.by(() => {
     if (!status?.system) {
       return {
         threatDetection: 0,
@@ -56,8 +56,8 @@
   });
   
   // Convert metrics to radar points
-  const radarPoints = $derived(() => {
-    const metrics = radarMetrics();
+  const radarPoints = $derived.by(() => {
+    const metrics = radarMetrics;
     const categories = Object.keys(metrics);
     const angleStep = (2 * Math.PI) / categories.length;
     
@@ -81,7 +81,7 @@
   // Generate grid levels
   const gridLevels = Array.from({ length: levels }, (_, i) => {
     const levelRadius = ((i + 1) / levels) * radius;
-    const categories = Object.keys(radarMetrics());
+    const categories = Object.keys(radarMetrics);
     const angleStep = (2 * Math.PI) / categories.length;
     
     return categories.map((_, index) => {
@@ -94,8 +94,8 @@
   });
   
   // Create path for filled area
-  const radarPath = $derived(() => {
-    const points = radarPoints();
+  const radarPath = $derived.by(() => {
+    const points = radarPoints;
     if (points.length === 0) return '';
     
     const pathData = points.map((point, index) => 
@@ -106,16 +106,16 @@
   });
   
   // Overall security score
-  const securityScore = $derived(() => {
-    const metrics = radarMetrics();
+  const securityScore = $derived.by(() => {
+    const metrics = radarMetrics;
     const values = Object.values(metrics);
     const average = values.reduce((sum, val) => sum + val, 0) / values.length;
     return Math.round(average);
   });
   
   // Security status
-  const securityStatus = $derived(() => {
-    const score = securityScore();
+  const securityStatus = $derived.by(() => {
+    const score = securityScore;
     if (score >= 90) return { label: 'Excellent', color: 'emerald', icon: '🛡️' };
     if (score >= 75) return { label: 'Good', color: 'green', icon: '✅' };
     if (score >= 60) return { label: 'Fair', color: 'yellow', icon: '⚠️' };
@@ -143,12 +143,12 @@
     <div class="flex items-center justify-between">
       <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Security Radar</h3>
       <div class="flex items-center gap-3">
-        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-gradient-to-r {securityStatus().color === 'emerald' ? 'from-emerald-100 to-emerald-200 dark:from-emerald-900/30 dark:to-emerald-800/30 text-emerald-700 dark:text-emerald-300' : securityStatus().color === 'green' ? 'from-green-100 to-green-200 dark:from-green-900/30 dark:to-green-800/30 text-green-700 dark:text-green-300' : securityStatus().color === 'yellow' ? 'from-yellow-100 to-yellow-200 dark:from-yellow-900/30 dark:to-yellow-800/30 text-yellow-700 dark:text-yellow-300' : securityStatus().color === 'orange' ? 'from-orange-100 to-orange-200 dark:from-orange-900/30 dark:to-orange-800/30 text-orange-700 dark:text-orange-300' : 'from-red-100 to-red-200 dark:from-red-900/30 dark:to-red-800/30 text-red-700 dark:text-red-300'}">
-          <span>{securityStatus().icon}</span>
-          <span>{securityStatus().label}</span>
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-gradient-to-r {securityStatus.color === 'emerald' ? 'from-emerald-100 to-emerald-200 dark:from-emerald-900/30 dark:to-emerald-800/30 text-emerald-700 dark:text-emerald-300' : securityStatus.color === 'green' ? 'from-green-100 to-green-200 dark:from-green-900/30 dark:to-green-800/30 text-green-700 dark:text-green-300' : securityStatus.color === 'yellow' ? 'from-yellow-100 to-yellow-200 dark:from-yellow-900/30 dark:to-yellow-800/30 text-yellow-700 dark:text-yellow-300' : securityStatus.color === 'orange' ? 'from-orange-100 to-orange-200 dark:from-orange-900/30 dark:to-orange-800/30 text-orange-700 dark:text-orange-300' : 'from-red-100 to-red-200 dark:from-red-900/30 dark:to-red-800/30 text-red-700 dark:text-red-300'}">
+          <span>{securityStatus.icon}</span>
+          <span>{securityStatus.label}</span>
         </div>
         <div class="text-2xl font-bold text-gray-900 dark:text-white">
-          {securityScore()}%
+          {securityScore}%
         </div>
       </div>
     </div>
@@ -174,7 +174,7 @@
             {/each}
             
             <!-- Grid axes -->
-            {#each radarPoints() as point}
+            {#each radarPoints as point}
               <line
                 x1="{center}"
                 y1="{center}"
@@ -204,7 +204,7 @@
             
             <!-- Animated path -->
             <path
-              d="{radarPath()}"
+              d="{radarPath}"
               fill="url(#radarGradient)"
               stroke="rgb(59, 130, 246)"
               stroke-width="2"
@@ -214,7 +214,7 @@
             />
             
             <!-- Data points -->
-            {#each radarPoints() as point, index}
+            {#each radarPoints as point, index}
               <circle
                 cx="{point.x}"
                 cy="{point.y}"
@@ -228,7 +228,7 @@
             {/each}
             
             <!-- Category labels -->
-            {#each radarPoints() as point}
+            {#each radarPoints as point}
               <text
                 x="{point.labelX}"
                 y="{point.labelY}"
@@ -246,7 +246,7 @@
       <!-- Metrics Breakdown -->
       <div class="flex-1 space-y-4">
         <h4 class="text-md font-semibold text-gray-900 dark:text-white mb-4">Security Metrics</h4>
-        {#each radarPoints() as point, index}
+        {#each radarPoints as point, index}
           <div class="group p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-gradient-to-r from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 transition-all duration-300 hover:shadow-md hover:scale-105">
             <div class="flex items-center justify-between mb-2">
               <span class="text-sm font-medium text-gray-900 dark:text-white">

@@ -296,9 +296,9 @@
               <g 
                 class="cursor-pointer transition-all duration-300 {node.type === 'model' ? 'hover:scale-110' : 'hover:scale-125'}"
                 style="animation: float {3 + (index % 3)}s ease-in-out infinite alternate; animation-delay: {index * 0.2}s;"
-                on:click={() => handleNodeClick(node)}
-                on:mouseenter={() => hoveredModel = node}
-                on:mouseleave={() => hoveredModel = null}
+                onclick={() => handleNodeClick(node)}
+                onmouseenter={() => hoveredModel = node}
+                onmouseleave={() => hoveredModel = null}
               >
                 <!-- Node glow -->
                 <circle
@@ -407,7 +407,7 @@
               </div>
               <button
                 class="text-gray-400 hover:text-white transition-colors"
-                on:click={() => selectedModel = null}
+                onclick={() => selectedModel = null}
               >
                 ✕
               </button>

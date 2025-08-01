@@ -68,7 +68,7 @@
           {@const endpoint = getModelEndpoint(model)}
           <button
             class="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 {selectedModel?.id === model.id ? 'bg-gray-50 dark:bg-gray-700/50' : ''}"
-            on:click={() => selectedModel = model}
+            onclick={() => selectedModel = model}
           >
             <div class="flex items-start justify-between">
               <div class="flex-1">

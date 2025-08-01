@@ -123,7 +123,7 @@
             {#each group.endpoints as endpoint}
               <button
                 class="w-full text-left p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 {selectedEndpoint?.name === endpoint.name ? 'bg-gray-100 dark:bg-gray-800' : ''}"
-                on:click={() => selectedEndpoint = selectedEndpoint?.name === endpoint.name ? null : endpoint}
+                onclick={() => selectedEndpoint = selectedEndpoint?.name === endpoint.name ? null : endpoint}
               >
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
