@@ -18,94 +18,46 @@
   const graphHeight = chartHeight - margin.top - margin.bottom;
   
   
-  // Get current metric values from store  
+  // Get current metric values from the new real-time metrics system
   const currentMetrics = $derived.by(() => {
-    const system = dashboardStore.status?.system || {};
+    const realMetrics = dashboardStore.currentMetrics;
     const stats = dashboardStore.stats || {};
     
-    // Get actual metrics with proper fallbacks
-    const avgLatency = system.avg_latency_ms || stats.avg_latency || stats.avg_response_time || 0;
-    const totalRequests = system.total_requests || stats.total_requests || stats.TotalRequests || 0;
-    const activeConnections = system.active_connections || stats.active_connections || stats.ActiveConnections || 0;
-    const memoryUsageMB = processStats?.memory?.heap_alloc ? 
-      parseInt(processStats.memory.heap_alloc.replace(/[^\d]/g, '')) / 1024 / 1024 : 0;
-      
-    // Calculate requests per minute
-    const uptime = system.uptime_seconds || 60;
-    const requestsPerMinute = uptime > 0 && totalRequests > 0 ? (totalRequests / uptime) * 60 : 0;
-    
+    // Use real metrics when available, with proper fallbacks
     return {
-      latency: Math.max(1, avgLatency || 15), // 1-500ms typical range
-      throughput: Math.max(0.1, requestsPerMinute || 2.5), // 0.1-100 req/min typical
-      connections: Math.max(1, activeConnections || 3), // 1-50 connections typical  
-      memory: Math.max(1, memoryUsageMB || 12), // 1-500MB typical
+      latency: realMetrics.hasRealData ? realMetrics.latency : Math.max(1, stats.avg_response_time || 15),
+      throughput: realMetrics.hasRealData ? realMetrics.throughput : Math.max(0.1, stats.throughput || 2.5),
+      connections: realMetrics.hasRealData ? realMetrics.connections : Math.max(1, stats.active_connections || 3),
+      memory: realMetrics.hasRealData ? realMetrics.memory : Math.max(1, stats.memoryUsage || 12),
+      hasRealData: realMetrics.hasRealData,
+      lastUpdate: realMetrics.lastUpdate
     };
   });
   
-  // Generate time series data with proper smoothing - only for active chart
-  function generateTimeSeriesData(currentValue, metricType, points = 20) {
-    const now = Date.now();
-    const interval = (5 * 60 * 1000) / points; // 5 minute window
+  // Get real time series data from the metrics service
+  const currentChartData = $derived.by(() => {
+    // Try to get real time series data first
+    const realTimeSeriesData = dashboardStore.getTimeSeriesData(activeChart, 20);
     
-    const values = [];
-    const baseValue = currentValue;
-    
-    for (let i = 0; i < points; i++) {
-      const targetTime = now - (points - i - 1) * interval;
-      const progress = i / (points - 1); // 0 to 1
-      
-      let value = baseValue;
-      
-      // Add realistic historical variation with smoothing
-      if (i < points - 1) {
-        const timeAgo = (points - i - 1) / points; // 1 to 0
-        
-        switch(metricType) {
-          case 'latency':
-            // Latency: occasional spikes, generally stable
-            const spike = Math.sin(i * 0.3) * 0.2 + (Math.random() - 0.5) * 0.1;
-            const randomSpike = Math.random() < 0.05 ? 1.5 : 1;
-            value = Math.max(1, baseValue * (0.9 + spike * randomSpike));
-            break;
-            
-          case 'throughput':
-            // Throughput: gentle waves with some variation
-            const wave = Math.sin(i * 0.4) * 0.15;
-            const variation = (Math.random() - 0.5) * 0.1;
-            value = Math.max(0.1, baseValue * (1 + wave + variation));
-            break;
-            
-          case 'connections':
-            // Connections: stepped changes, more stable
-            const step = Math.floor(i / 5) % 3;
-            const stepVariation = step * 0.1 + (Math.random() - 0.5) * 0.05;
-            value = Math.max(1, Math.round(baseValue * (0.95 + stepVariation)));
-            break;
-            
-          case 'memory':
-            // Memory: gradual changes, trending
-            const trend = timeAgo * 0.1; // slightly higher in the past
-            const noise = (Math.random() - 0.5) * 0.05;
-            value = Math.max(1, baseValue * (1 + trend + noise));
-            break;
-        }
-      }
-      
-      values.push({
-        timestamp: targetTime,
-        value: value,
-        x: (i / (points - 1)) * graphWidth,
-        time: new Date(targetTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      });
+    if (realTimeSeriesData && realTimeSeriesData.length > 0) {
+      // Use real data - already formatted with x, timestamp, value, time
+      return realTimeSeriesData;
     }
     
-    return values;
-  }
-  
-  // Only generate data for the active chart to improve performance  
-  const currentChartData = $derived.by(() => {
-    const currentValue = currentMetrics[activeChart];
-    return generateTimeSeriesData(currentValue, activeChart);
+    // Fallback: generate minimal fake data if no real data is available
+    const currentValue = currentMetrics[activeChart] || 0;
+    const now = Date.now();
+    const interval = (5 * 60 * 1000) / 20; // 5 minute window
+    
+    return Array.from({ length: 20 }, (_, i) => ({
+      timestamp: now - (20 - i - 1) * interval,
+      value: currentValue,
+      x: (i / 19) * graphWidth,
+      time: new Date(now - (20 - i - 1) * interval).toLocaleTimeString([], { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      })
+    }));
   });
   
   // Smart Y-axis scaling with reasonable ranges for each metric
@@ -319,12 +271,19 @@
           {chartConfigs[activeChart].title}
         </h4>
         
-        <!-- Current value -->
+        <!-- Current value with data quality indicator -->
         {#if currentChartData.length > 0}
           <div class="text-right">
             <div class="text-lg font-semibold text-gray-900 dark:text-white">
               {currentChartData[currentChartData.length - 1].value.toFixed(1)}
               <span class="text-xs text-gray-600 dark:text-gray-400">{chartConfigs[activeChart].unit}</span>
+            </div>
+            <!-- Real-time data indicator -->
+            <div class="flex items-center justify-end gap-1 mt-1">
+              <div class="w-2 h-2 rounded-full {currentMetrics.hasRealData ? 'bg-green-500' : 'bg-gray-400'}"></div>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                {currentMetrics.hasRealData ? 'Live Data' : 'No Activity'}
+              </span>
             </div>
           </div>
         {/if}

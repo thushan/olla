@@ -1,7 +1,8 @@
+import { metricsService } from '$lib/services/metricsService.js';
 import { api } from '$lib/services/api.js';
 
 function createDashboardStore() {
-  // Create reactive state atoms
+  // Create reactive state atoms - now powered by real metrics
   let status = $state(null);
   let endpoints = $state([]);
   let models = $state([]);
@@ -12,6 +13,20 @@ function createDashboardStore() {
   let connections = $state([]);
   let events = $state([]);
   let wsConnected = $state(false);
+
+  // Real-time metrics from the new system
+  let currentMetrics = $state({
+    latency: 0,
+    throughput: 0,
+    connections: 0,
+    memory: 0,
+    requests: 0,
+    errors: 0,
+    errorRate: 0,
+    successRate: 100,
+    hasRealData: false,
+    lastUpdate: 0
+  });
 
   // Loading states
   let loading = $state({
@@ -35,50 +50,43 @@ function createDashboardStore() {
     version: null,
   });
 
-  // Intervals for auto-refresh
+  // Legacy intervals (will be phased out)
   const intervals = new Map();
   const MAX_EVENTS = 100;
 
-  // Derived values using $derived
-  const systemHealth = $derived(status?.system?.status || 'unknown');
+  // Derived values using $derived - now enhanced with real metrics
+  const systemHealth = $derived(currentMetrics.systemHealth || status?.system?.status || 'unknown');
 
-  const overallHealth = $derived.by(() => {
-    if (!endpoints || endpoints.length === 0) return 'UNKNOWN';
-    const healthyCount = endpoints.filter(e => e.status === 'online' || e.status === 'healthy').length;
-    const totalCount = endpoints.length;
-    
-    if (healthyCount === totalCount) return 'HEALTHY';
-    if (healthyCount === 0) return 'CRITICAL';
-    return 'DEGRADED';
-  });
+  const overallHealth = $derived(currentMetrics.overallHealth || 'UNKNOWN');
 
   const endpointsUp = $derived.by(() => {
     const up = endpoints.filter(e => e.status === 'healthy' || e.status === 'online').length;
     return { up, total: endpoints.length };
   });
 
-  const totalRequests = $derived(status?.system?.total_requests || 0);
-  const successRate = $derived(status?.system?.success_rate || '0%');
-  const activeConnections = $derived(status?.system?.active_connections || 0);
+  // Real metrics with fallbacks
+  const totalRequests = $derived(currentMetrics.requests || status?.system?.total_requests || 0);
+  const successRate = $derived(`${currentMetrics.successRate.toFixed(1)}%`);
+  const activeConnections = $derived(currentMetrics.connections || status?.system?.active_connections || 0);
   const securityViolations = $derived(status?.system?.security_violations || 0);
 
-  // Computed stats for backward compatibility
+  // Enhanced stats with real metrics
   const stats = $derived.by(() => {
-    const latencyStr = status?.system?.avg_latency || '0ms';
-    let avgResponseTime = 0;
-    if (latencyStr.endsWith('ms')) {
-      avgResponseTime = parseFloat(latencyStr);
-    } else if (latencyStr.endsWith('s')) {
-      avgResponseTime = parseFloat(latencyStr) * 1000;
-    }
+    // Use real metrics when available, fall back to API data
+    const avgResponseTime = currentMetrics.hasRealData ? currentMetrics.latency : (() => {
+      const latencyStr = status?.system?.avg_latency || '0ms';
+      if (latencyStr.endsWith('ms')) return parseFloat(latencyStr);
+      if (latencyStr.endsWith('s')) return parseFloat(latencyStr) * 1000;
+      return parseFloat(latencyStr) || 0;
+    })();
     
-    // Get values directly from status to avoid circular dependency
-    const totalReq = status?.system?.total_requests || 0;
-    const activeConn = status?.system?.active_connections || 0;
+    const totalReq = currentMetrics.hasRealData ? currentMetrics.requests : (status?.system?.total_requests || 0);
+    const activeConn = currentMetrics.hasRealData ? currentMetrics.connections : (status?.system?.active_connections || 0);
+    const totalErr = currentMetrics.hasRealData ? currentMetrics.errors : (status?.system?.total_failures || 0);
     
     return {
       totalRequests: totalReq,
-      totalErrors: status?.system?.total_failures || 0,
+      totalErrors: totalErr,
       avgResponseTime,
       activeConnections: activeConn,
       TotalRequests: totalReq,
@@ -86,6 +94,13 @@ function createDashboardStore() {
       avg_response_time: avgResponseTime,
       active_connections: activeConn,
       ActiveConnections: activeConn,
+      // Additional real-time metrics
+      errorRate: currentMetrics.errorRate,
+      successRate: currentMetrics.successRate,
+      throughput: currentMetrics.throughput,
+      memoryUsage: currentMetrics.memory,
+      hasRealData: currentMetrics.hasRealData,
+      lastUpdate: currentMetrics.lastUpdate
     };
   });
 
@@ -350,19 +365,84 @@ function createDashboardStore() {
   }
 
   function init() {
-    // Start auto-refresh for critical data
-    startAutoRefresh('status', fetchStatus, 1000);
-    startAutoRefresh('endpoints', fetchEndpoints, 2000);
-    startAutoRefresh('modelStats', fetchModelStats, 3000);
-    startAutoRefresh('processStats', fetchProcessStats, 2000);
-    startAutoRefresh('unifiedModels', fetchUnifiedModels, 5000);
+    console.log('[DashboardStore] Initializing with new metrics system...');
     
-    // Initial fetch
-    fetchAll();
+    // Setup metrics service listeners
+    setupMetricsListeners();
+    
+    // Start the unified metrics system
+    metricsService.start().catch(error => {
+      console.error('[DashboardStore] Failed to start metrics service:', error);
+      // Fallback to legacy polling if metrics service fails
+      fallbackToLegacyPolling();
+    });
+    
+    // Fetch version and other one-time data
+    fetchVersion();
   }
 
   function destroy() {
+    console.log('[DashboardStore] Destroying dashboard store...');
+    metricsService.stop();
     stopAllAutoRefresh();
+  }
+
+  function setupMetricsListeners() {
+    // Listen for processed metrics updates
+    metricsService.on('metrics-processed', (data) => {
+      const { currentMetrics: newMetrics } = data;
+      
+      // Update our reactive state
+      currentMetrics = newMetrics;
+      
+      // Update legacy state for backward compatibility
+      if (newMetrics.status) {
+        status = newMetrics.status;
+        
+        // Generate mock connections if we have active connections but no connection details
+        const activeConn = newMetrics.status?.system?.active_connections || 0;
+        if (activeConn > 0 && (!newMetrics.status.connections || newMetrics.status.connections.length === 0)) {
+          generateMockConnections(activeConn);
+        }
+      }
+      if (newMetrics.endpoints) {
+        endpoints = newMetrics.endpoints;
+      }
+      if (newMetrics.processStats) {
+        processStats = newMetrics.processStats;
+      }
+      if (newMetrics.modelStats) {
+        modelStats = newMetrics.modelStats;
+      }
+      if (newMetrics.unifiedModels) {
+        unifiedModels = newMetrics.unifiedModels;
+      }
+    });
+
+    // Listen for events
+    metricsService.on('event-added', (data) => {
+      const { event } = data;
+      events = [event, ...events].slice(0, MAX_EVENTS);
+    });
+
+    // Listen for connection status changes
+    metricsService.on('connection-status', (data) => {
+      wsConnected = data.websocket;
+    });
+  }
+
+  function fallbackToLegacyPolling() {
+    console.warn('[DashboardStore] Falling back to legacy polling system...');
+    
+    // Start legacy auto-refresh as fallback
+    startAutoRefresh('status', fetchStatus, 2000);
+    startAutoRefresh('endpoints', fetchEndpoints, 3000);
+    startAutoRefresh('modelStats', fetchModelStats, 5000);
+    startAutoRefresh('processStats', fetchProcessStats, 2000);
+    startAutoRefresh('unifiedModels', fetchUnifiedModels, 10000);
+    
+    // Initial fetch
+    fetchAll();
   }
 
   // Return store interface
@@ -380,6 +460,9 @@ function createDashboardStore() {
     get wsConnected() { return wsConnected; },
     get loading() { return loading; },
     get errors() { return errors; },
+    
+    // Real-time metrics (NEW)
+    get currentMetrics() { return currentMetrics; },
     
     // Derived state
     get systemHealth() { return systemHealth; },
@@ -412,6 +495,14 @@ function createDashboardStore() {
     clearEvents,
     init,
     destroy,
+    
+    // New real-time metrics methods
+    getTimeSeriesData: (metric, maxPoints) => metricsService.getTimeSeriesData(metric, maxPoints),
+    getRecentEvents: (limit) => metricsService.getRecentEvents(limit),
+    getConnectionStatus: () => metricsService.getConnectionStatus(),
+    forceRefresh: () => metricsService.forceRefresh(),
+    resetMetrics: () => metricsService.reset(),
+    getDebugInfo: () => metricsService.getDebugInfo(),
   };
 }
 
