@@ -109,12 +109,16 @@ func DefaultConfig() *Config {
 	}
 }
 
-func Load() (*Config, error) {
+func Load(flagConfigFile ...string) (*Config, error) {
 	config := DefaultConfig()
 
 	// Simple config file loading - check a few standard locations
 	configPaths := []string{"config/config.local.yaml", "config/config.yaml", "config.yaml", "default.yaml"}
-	if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
+
+	// Priority: flag > environment variable > default paths
+	if len(flagConfigFile) > 0 && flagConfigFile[0] != "" {
+		configPaths = []string{flagConfigFile[0]}
+	} else if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
 		configPaths = []string{configFile}
 	}
 
@@ -134,8 +138,12 @@ func Load() (*Config, error) {
 		}
 	}
 
-	if !configLoaded && os.Getenv("OLLA_CONFIG_FILE") != "" {
-		return nil, fmt.Errorf("specified config file not found: %s", os.Getenv("OLLA_CONFIG_FILE"))
+	if !configLoaded {
+		if len(flagConfigFile) > 0 && flagConfigFile[0] != "" {
+			return nil, fmt.Errorf("specified config file not found: %s", flagConfigFile[0])
+		} else if configFile := os.Getenv("OLLA_CONFIG_FILE"); configFile != "" {
+			return nil, fmt.Errorf("specified config file not found: %s", configFile)
+		}
 	}
 
 	// Apply essential environment overrides only
