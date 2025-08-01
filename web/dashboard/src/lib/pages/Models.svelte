@@ -260,24 +260,36 @@
                 </div>
               </td>
               <td class="px-6 py-4">
-                <div class="flex flex-wrap gap-1">
-                  {#if model.olla?.availability}
+                <div class="flex flex-wrap gap-1.5">
+                  {#if model.olla?.availability && model.olla.availability.length > 0}
                     {#each model.olla.availability as avail}
                       {@const endpoint = endpoints.find(ep => ep.name === avail.endpoint)}
                       {@const isLoaded = avail.state === 'available' || avail.state === 'loaded'}
-                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {isLoaded ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300'}">
-                        {avail.endpoint}
-                        <span class="ml-1 text-xs">
-                          {#if isLoaded}
-                            ✅ loaded
-                          {:else}
-                            ⏸️ not-loaded
+                      {@const endpointType = endpoint?.type || endpoint?.backend_type || 'unknown'}
+                      <div class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border {isLoaded ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800' : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'}">
+                        <span class="text-sm">
+                          {#if endpointType === 'ollama'}🦙
+                          {:else if endpointType === 'lm-studio'}🎨
+                          {:else if endpointType === 'openai'}🤖
+                          {:else if endpointType === 'vllm'}⚡
+                          {:else}🔌
                           {/if}
                         </span>
-                      </span>
+                        <span class="font-medium">{avail.endpoint}</span>
+                        <span class="ml-1 px-1.5 py-0.5 rounded text-xs {isLoaded ? 'bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-200' : 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}">
+                          {#if isLoaded}
+                            Ready
+                          {:else}
+                            Not Loaded
+                          {/if}
+                        </span>
+                        {#if endpoint?.status === 'offline' || endpoint?.status === 'unhealthy'}
+                          <span class="ml-1 text-red-500" title="Endpoint is offline">⚠️</span>
+                        {/if}
+                      </div>
                     {/each}
                   {:else}
-                    <span class="text-sm text-gray-500 dark:text-gray-400">No availability info</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400 italic">No availability information</span>
                   {/if}
                 </div>
               </td>
