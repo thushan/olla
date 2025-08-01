@@ -1,35 +1,25 @@
 <script>
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
-  import { onMount, onDestroy } from 'svelte';
   
   const endpoints = $derived(dashboardStore.endpoints || []);
   let selectedEndpoint = $state(null);
-  let hoveredEndpoint = $state(null);
-  let connectionPulse = $state(false);
-  let pulseInterval;
   
-  // Group endpoints by type with stability
+  // Group endpoints by type
   const endpointGroups = $derived.by(() => {
-    const groups = {};
-    if (!endpoints || endpoints.length === 0) return groups;
+    const groups = {
+      ollama: [],
+      'lm-studio': [],
+      openai: [],
+      other: []
+    };
     
     endpoints.forEach(ep => {
-      const type = ep.type || ep.backend_type || 'unknown';
-      if (!groups[type]) groups[type] = [];
-      groups[type].push(ep);
+      const type = ep.backend_type || ep.type || 'other';
+      const groupKey = groups[type] ? type : 'other';
+      groups[groupKey].push(ep);
     });
+    
     return groups;
-  });
-  
-  // Pulse animation for active connections
-  onMount(() => {
-    pulseInterval = setInterval(() => {
-      connectionPulse = !connectionPulse;
-    }, 2000);
-  });
-  
-  onDestroy(() => {
-    if (pulseInterval) clearInterval(pulseInterval);
   });
   
   // Get status color
@@ -61,99 +51,46 @@
 </script>
 
 <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 h-full">
-  <div class="flex items-center justify-between mb-6">
-    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Endpoint Network</h2>
-    <div class="flex items-center gap-4">
-      <div class="flex items-center gap-2">
-        <div class="w-3 h-3 rounded-full bg-green-500"></div>
-        <span class="text-xs text-gray-600 dark:text-gray-400">Online</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-        <span class="text-xs text-gray-600 dark:text-gray-400">Degraded</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <div class="w-3 h-3 rounded-full bg-red-500"></div>
-        <span class="text-xs text-gray-600 dark:text-gray-400">Offline</span>
-      </div>
-    </div>
+  <div class="mb-4">
+    <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Endpoint Status</h2>
   </div>
   
-  <!-- Endpoint Visualization -->
-  <div class="relative h-96 bg-gray-50 dark:bg-gray-900/50 rounded-xl overflow-hidden">
-    <!-- Grid background -->
-    <div class="absolute inset-0 bg-grid-pattern opacity-5"></div>
-    
-    <!-- Central Hub -->
-    <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-      <div class="relative">
-        <div class="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-2xl animate-pulse">
-          <span class="text-white font-bold text-2xl">OLLA</span>
-        </div>
-        <div class="absolute inset-0 rounded-full bg-blue-500 animate-ping opacity-20"></div>
-      </div>
-    </div>
-    
-    <!-- Endpoints -->
-    {#each Object.entries(endpointGroups) as [type, typeEndpoints], groupIndex}
-      {#each typeEndpoints as endpoint, index}
-        {@const angle = (360 / endpoints.length) * (groupIndex * typeEndpoints.length + index)}
-        {@const radius = 140}
-        {@const x = Math.cos((angle - 90) * Math.PI / 180) * radius}
-        {@const y = Math.sin((angle - 90) * Math.PI / 180) * radius}
-        
-        <!-- Connection Line -->
-        <svg class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-          <line
-            x1="0"
-            y1="0"
-            x2={x}
-            y2={y}
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-dasharray="5,5"
-            class="{endpoint.status === 'online' ? 'text-green-500' : 'text-gray-300 dark:text-gray-600'} opacity-50"
-          >
-            {#if endpoint.status === 'online'}
-              <animate
-                attributeName="stroke-dashoffset"
-                values="0;10"
-                dur="1s"
-                repeatCount="indefinite"
-              />
-            {/if}
-          </line>
-        </svg>
-        
-        <!-- Endpoint Node -->
-        <button
-          class="absolute transform -translate-x-1/2 -translate-y-1/2 group"
-          style="top: 50%; left: 50%; transform: translate({x}px, {y}px) translate(-50%, -50%);"
-          on:click={() => selectedEndpoint = selectedEndpoint?.name === endpoint.name ? null : endpoint}
-          on:mouseenter={() => hoveredEndpoint = endpoint}
-          on:mouseleave={() => hoveredEndpoint = null}
-        >
-          <div class="relative">
-            <div class="w-16 h-16 rounded-xl bg-gradient-to-br {getStatusColor(endpoint.status)} flex items-center justify-center shadow-lg {getStatusGlow(endpoint.status)} group-hover:scale-110 transition-all duration-300">
-              <span class="text-2xl font-semibold text-white">
-                {type === 'ollama' ? '🦙' : type === 'lm-studio' ? '🎨' : type === 'openai' ? '🤖' : '🔌'}
-              </span>
-            </div>
-            {#if endpoint.status === 'online'}
-              <div class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-            {/if}
+  <!-- Endpoint Groups -->
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    {#each Object.entries(endpointGroups) as [type, typeEndpoints]}
+      {#if typeEndpoints.length > 0}
+        <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-lg">
+              {type === 'ollama' ? '🦙' : type === 'lm-studio' ? '🎨' : type === 'openai' ? '🤖' : '🔌'}
+            </span>
+            <h3 class="font-medium text-gray-900 dark:text-white capitalize">{type}</h3>
           </div>
-          
-          <!-- Tooltip -->
-          {#if hoveredEndpoint === endpoint}
-            <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-10">
-              <div class="font-semibold">{endpoint.name}</div>
-              <div class="text-gray-300">{endpoint.url}</div>
-              <div class="text-gray-400">Latency: {formatLatency(endpoint.last_latency_ms)}</div>
-            </div>
-          {/if}
-        </button>
-      {/each}
+          <div class="space-y-2">
+            {#each typeEndpoints as endpoint}
+              <button
+                class="w-full text-left p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-800 {selectedEndpoint?.name === endpoint.name ? 'bg-gray-100 dark:bg-gray-800' : ''}"
+                on:click={() => selectedEndpoint = selectedEndpoint?.name === endpoint.name ? null : endpoint}
+              >
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full {endpoint.status === 'online' ? 'bg-green-500' : 'bg-red-500'}"></div>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">{endpoint.name}</span>
+                  </div>
+                  {#if endpoint.priority >= 100}
+                    <span class="text-xs text-purple-600 dark:text-purple-400">⚡</span>
+                  {/if}
+                </div>
+                {#if endpoint.last_latency_ms}
+                  <div class="text-xs text-gray-600 dark:text-gray-400 ml-4">
+                    {formatLatency(endpoint.last_latency_ms)}
+                  </div>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
     {/each}
   </div>
   
@@ -188,17 +125,3 @@
   {/if}
 </div>
 
-<style>
-  .bg-grid-pattern {
-    background-image: 
-      linear-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(0, 0, 0, 0.1) 1px, transparent 1px);
-    background-size: 20px 20px;
-  }
-  
-  .dark .bg-grid-pattern {
-    background-image: 
-      linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-  }
-</style>

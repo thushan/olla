@@ -10,15 +10,15 @@
   // Active chart view
   let activeChart = $state('latency');
   
-  // Chart dimensions - optimized for readability
-  const chartWidth = 600;
-  const chartHeight = 200;
-  const margin = { top: 20, right: 30, bottom: 30, left: 60 };
+  // Chart dimensions - full panel width for readability
+  const chartWidth = 800;
+  const chartHeight = 300;
+  const margin = { top: 15, right: 20, bottom: 25, left: 40 };
   const graphWidth = chartWidth - margin.left - margin.right;
   const graphHeight = chartHeight - margin.top - margin.bottom;
   
   // Generate time series data with smoothing for better visualization
-  const generateTimeSeriesData = (baseValue, metricType, points = 30) => {
+  const generateTimeSeriesData = (baseValue, metricType, points = 10) => {
     const now = Date.now();
     const timeWindow = 30 * 60 * 1000; // 30 minutes window for stability
     const interval = timeWindow / points;
@@ -52,7 +52,7 @@
   };
   
   // Performance time series data using real metrics
-  const performanceData = $derived(() => {
+  const performanceData = $derived.by(() => {
     // Use real stats data
     const stats = dashboardStore.stats || {};
     const avgLatency = stats.avg_latency || stats.avg_response_time || 50;
@@ -74,33 +74,32 @@
   });
   
   // Get current chart data
-  const currentChartData = $derived(() => performanceData()[activeChart]);
+  const currentChartData = $derived.by(() => performanceData[activeChart] || []);
   
   // Calculate Y scale
-  const yScale = $derived(() => {
-    const data = currentChartData();
+  const yScale = $derived.by(() => {
+    const data = currentChartData;
     if (!data || data.length === 0) return { min: 0, max: 100 };
     
     const values = data.map(d => d.value);
-    const min = Math.min(...values);
     const max = Math.max(...values);
-    const padding = (max - min) * 0.1 || 10;
+    const padding = max * 0.1 || 10;
     
     return {
-      min: Math.max(0, min - padding),
+      min: 0,  // Always start at 0
       max: max + padding,
     };
   });
   
   // Convert data point to SVG coordinates
   const getY = (value) => {
-    const scale = yScale();
+    const scale = yScale;
     return graphHeight - ((value - scale.min) / (scale.max - scale.min)) * graphHeight;
   };
   
   // Generate SVG path for line chart
-  const chartPath = $derived(() => {
-    const data = currentChartData();
+  const chartPath = $derived.by(() => {
+    const data = currentChartData;
     if (!data || data.length === 0) return '';
     
     return data.map((point, index) => 
@@ -109,11 +108,11 @@
   });
   
   // Generate area path for gradient fill
-  const areaPath = $derived(() => {
-    const data = currentChartData();
+  const areaPath = $derived.by(() => {
+    const data = currentChartData;
     if (!data || data.length === 0) return '';
     
-    const linePath = chartPath();
+    const linePath = chartPath;
     const firstPoint = data[0];
     const lastPoint = data[data.length - 1];
     
@@ -153,7 +152,7 @@
   };
   
   // Performance insights
-  const performanceInsights = $derived(() => {
+  const performanceInsights = $derived.by(() => {
     if (!status?.system) return [];
     
     const insights = [];
@@ -200,10 +199,10 @@
     return insights;
   });
   
-  // Animated mount
+  // Simple mount state
   let mounted = $state(false);
   onMount(() => {
-    setTimeout(() => mounted = true, 200);
+    mounted = true;
   });
 </script>
 
@@ -217,7 +216,7 @@
         {#each Object.entries(chartConfigs) as [key, config]}
           <button
             class="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 {activeChart === key ? `bg-${config.color}-500 text-white shadow-sm` : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'}"
-            onclick={() => activeChart = key}
+            on:click={() => activeChart = key}
           >
             <span>{config.icon}</span>
             <span class="hidden sm:inline">{config.title}</span>
@@ -237,21 +236,19 @@
         </h4>
         
         <!-- Current value -->
-        {#if currentChartData().length > 0}
+        {#if currentChartData.length > 0}
           <div class="text-right">
-            <div class="text-2xl font-bold text-gray-900 dark:text-white">
-              {currentChartData()[currentChartData().length - 1].value.toFixed(1)}
-            </div>
-            <div class="text-sm text-gray-600 dark:text-gray-400">
-              {chartConfigs[activeChart].unit}
+            <div class="text-lg font-semibold text-gray-900 dark:text-white">
+              {currentChartData[currentChartData.length - 1].value.toFixed(1)}
+              <span class="text-xs text-gray-600 dark:text-gray-400">{chartConfigs[activeChart].unit}</span>
             </div>
           </div>
         {/if}
       </div>
       
-      <!-- Chart Container - properly sized -->
+      <!-- Chart Container - full panel width -->
       <div class="relative bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-        <svg viewBox="0 0 {chartWidth} {chartHeight}" class="w-full max-w-full" style="max-height: 250px" preserveAspectRatio="xMidYMid meet">
+        <svg viewBox="0 0 {chartWidth} {chartHeight}" class="w-full h-auto" preserveAspectRatio="xMidYMid meet">
           <!-- Gradient definitions -->
           <defs>
             <linearGradient id="chartGradient-{activeChart}" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -259,13 +256,7 @@
               <stop offset="100%" stop-color="{chartConfigs[activeChart].color === 'blue' ? 'rgb(59, 130, 246)' : chartConfigs[activeChart].color === 'emerald' ? 'rgb(16, 185, 129)' : chartConfigs[activeChart].color === 'purple' ? 'rgb(139, 92, 246)' : 'rgb(249, 115, 22)'}" stop-opacity="0.05"/>
             </linearGradient>
             
-            <filter id="glow-{activeChart}">
-              <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
-              <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-              </feMerge>
-            </filter>
+            <!-- Removed glow filter to reduce CPU usage -->
           </defs>
           
           <!-- Chart area -->
@@ -300,33 +291,31 @@
             
             <!-- Area fill -->
             <path
-              d="{areaPath()}"
+              d="{areaPath}"
               fill="url(#chartGradient-{activeChart})"
-              class="transition-all duration-1000 {mounted ? 'opacity-100' : 'opacity-0'}"
+              class="{mounted ? 'opacity-100' : 'opacity-0'}"
             />
             
             <!-- Line -->
             <path
-              d="{chartPath()}"
+              d="{chartPath}"
               fill="none"
               stroke="{chartConfigs[activeChart].color === 'blue' ? 'rgb(59, 130, 246)' : chartConfigs[activeChart].color === 'emerald' ? 'rgb(16, 185, 129)' : chartConfigs[activeChart].color === 'purple' ? 'rgb(139, 92, 246)' : 'rgb(249, 115, 22)'}"
-              stroke-width="3"
-              filter="url(#glow-{activeChart})"
-              class="transition-all duration-1000 {mounted ? 'opacity-100' : 'opacity-0'}"
-              style="stroke-dasharray: 1000; stroke-dashoffset: {mounted ? 0 : 1000}; transition: stroke-dashoffset 2s ease-in-out;"
+              stroke-width="1.5"
+              class="{mounted ? 'opacity-100' : 'opacity-0'}"
             />
             
             <!-- Data points - smaller and less prominent -->
-            {#each currentChartData() as point, index}
-              {#if index % 3 === 0 || index === currentChartData().length - 1}
+            {#each currentChartData as point, index}
+              {#if index % 3 === 0 || index === currentChartData.length - 1}
                 <circle
                   cx="{point.x}"
                   cy="{getY(point.value)}"
-                  r="2"
+                  r="1.5"
                   fill="{chartConfigs[activeChart].color === 'blue' ? 'rgb(59, 130, 246)' : chartConfigs[activeChart].color === 'emerald' ? 'rgb(16, 185, 129)' : chartConfigs[activeChart].color === 'purple' ? 'rgb(139, 92, 246)' : 'rgb(249, 115, 22)'}"
                   stroke="white"
                   stroke-width="1"
-                  class="transition-all duration-300 hover:r-3 cursor-pointer opacity-80"
+                  class="opacity-80"
                 >
                   <title>{point.time}: {point.value.toFixed(1)} {chartConfigs[activeChart].unit}</title>
                 </circle>
@@ -337,12 +326,28 @@
             {#each Array.from({length: 5}) as _, i}
               <text
                 x="-10"
-                y="{(i / 4) * graphHeight + 5}"
+                y="{(i / 4) * graphHeight + 3}"
                 text-anchor="end"
-                class="text-xs fill-gray-600 dark:fill-gray-400"
+                class="fill-gray-600 dark:fill-gray-400"
+                style="font-size: 9px;"
               >
-                {(yScale().max - (i / 4) * (yScale().max - yScale().min)).toFixed(0)}
+                {(yScale.max - (i / 4) * (yScale.max - yScale.min)).toFixed(0)}
               </text>
+            {/each}
+            
+            <!-- X-axis time labels -->
+            {#each currentChartData as point, index}
+              {#if index % 6 === 0 || index === currentChartData.length - 1}
+                <text
+                  x="{point.x}"
+                  y="{graphHeight + 20}"
+                  text-anchor="middle"
+                  class="fill-gray-600 dark:fill-gray-400"
+                  style="font-size: 9px;"
+                >
+                  {point.time}
+                </text>
+              {/if}
             {/each}
           </g>
           
@@ -353,7 +358,8 @@
             x2="{chartWidth - margin.right}"
             y2="{chartHeight - margin.bottom}"
             stroke="currentColor"
-            class="text-gray-300 dark:text-gray-600"
+            stroke-width="1"
+            class="text-gray-400 dark:text-gray-600"
           />
           
           <!-- Y-axis -->
@@ -363,8 +369,31 @@
             x2="{margin.left}"
             y2="{chartHeight - margin.bottom}"
             stroke="currentColor"
-            class="text-gray-300 dark:text-gray-600"
+            stroke-width="1"
+            class="text-gray-400 dark:text-gray-600"
           />
+          
+          <!-- Axis labels -->
+          <text
+            x="{chartWidth / 2}"
+            y="{chartHeight - 10}"
+            text-anchor="middle"
+            class="fill-gray-700 dark:fill-gray-300"
+            style="font-size: 10px; font-weight: 400;"
+          >
+            Time (30 min window)
+          </text>
+          
+          <text
+            x="{-chartHeight / 2}"
+            y="15"
+            text-anchor="middle"
+            transform="rotate(-90 15 {chartHeight / 2})"
+            class="fill-gray-700 dark:fill-gray-300"
+            style="font-size: 10px; font-weight: 400;"
+          >
+            {chartConfigs[activeChart].title} ({chartConfigs[activeChart].unit})
+          </text>
         </svg>
       </div>
     </div>
@@ -373,7 +402,7 @@
     <div>
       <h4 class="text-md font-semibold text-gray-900 dark:text-white mb-4">Performance Insights</h4>
       <div class="space-y-3">
-        {#each performanceInsights() as insight}
+        {#each performanceInsights as insight}
           <div class="flex items-start gap-3 p-4 rounded-lg border {insight.type === 'success' ? 'border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20' : insight.type === 'warning' ? 'border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20' : insight.type === 'error' ? 'border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20' : 'border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20'}">
             <span class="text-lg">{insight.icon}</span>
             <div class="flex-1">
@@ -388,12 +417,12 @@
     <!-- Quick Stats -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {#each Object.entries(chartConfigs) as [key, config]}
-        {@const data = performanceData()[key]}
+        {@const data = performanceData[key]}
         {@const currentValue = data[data.length - 1]?.value || 0}
-        <div class="group p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 transition-all duration-300 hover:shadow-md hover:scale-105 cursor-pointer"
-             onclick={() => activeChart = key}>
+        <div class="p-4 rounded-lg border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 cursor-pointer"
+             on:click={() => activeChart = key}>
           <div class="flex items-center gap-3 mb-2">
-            <div class="text-xl group-hover:scale-110 transition-transform duration-200">
+            <div class="text-xl">
               {config.icon}
             </div>
             <div class="flex-1">

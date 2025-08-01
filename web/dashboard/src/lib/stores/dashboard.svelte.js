@@ -188,7 +188,10 @@ class DashboardStore {
     
     try {
       const response = await api.getUnifiedModels(params);
-      this.unifiedModels = response.unified_models || [];
+      console.log('[DashboardStore.fetchUnifiedModels] Response:', response);
+      // Try different possible response structures
+      this.unifiedModels = response.unified_models || response.models || response || [];
+      console.log('[DashboardStore.fetchUnifiedModels] Set models:', this.unifiedModels);
     } catch (error) {
       this.errors.unifiedModels = error.message;
       console.error('Failed to fetch unified models:', error);
@@ -342,6 +345,7 @@ class DashboardStore {
     this.startAutoRefresh('endpoints', this.fetchEndpoints, 2000); // 2 seconds for endpoint health
     this.startAutoRefresh('modelStats', this.fetchModelStats, 3000); // 3 seconds for model stats
     this.startAutoRefresh('processStats', this.fetchProcessStats, 2000); // 2 seconds for system metrics
+    this.startAutoRefresh('unifiedModels', this.fetchUnifiedModels, 5000); // 5 seconds for unified models
     
     // Initial fetch of all data
     this.fetchAll();

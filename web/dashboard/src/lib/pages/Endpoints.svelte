@@ -34,6 +34,7 @@
   
   // Sort endpoints
   const sortedEndpoints = $derived.by(() => {
+    if (!endpoints || !Array.isArray(endpoints)) return [];
     const sorted = [...endpoints].map(getCachedEndpoint).sort((a, b) => {
       let aVal = a[sortField];
       let bVal = b[sortField];

@@ -5,8 +5,14 @@
   // Get reactive references
   const models = $derived(dashboardStore.models);
   const modelStats = $derived(dashboardStore.modelStats);
-  const unifiedModels = $derived(dashboardStore.unifiedModels);
-  const endpoints = $derived(dashboardStore.endpoints);
+  const unifiedModels = $derived(dashboardStore.unifiedModels || []);
+  const endpoints = $derived(dashboardStore.endpoints || []);
+  
+  // Debug logging
+  $effect(() => {
+    console.log('[ModelGalaxy] UnifiedModels:', unifiedModels);
+    console.log('[ModelGalaxy] ModelStats:', modelStats);
+  });
   
   // Galaxy dimensions
   const galaxySize = 400;
@@ -59,12 +65,12 @@
       unifiedModels.forEach((model, index) => {
         const category = getModelCategory(model);
         const modelId = model.id || model.name;
-        const stats = modelStats[modelId] || {};
-        const requestCount = stats.request_count || 0;
-        const avgLatency = stats.avg_latency_ms || 0;
+        const stats = modelStats?.models?.[modelId] || {};
+        const requestCount = stats.requests || stats.request_count || 0;
+        const avgLatency = stats.avg_latency || stats.avg_latency_ms || 0;
         
-        // Size based on request count (min: 8, max: 24)
-        const size = Math.min(24, Math.max(8, 8 + (requestCount / 100) * 16));
+        // Size based on request count (min: 20, max: 40)
+        const size = Math.min(40, Math.max(20, 20 + (requestCount / 100) * 20));
         
         // Position in spiral pattern
         const angle = (index / unifiedModels.length) * 2 * Math.PI + rotationAngle * 0.01;
@@ -147,19 +153,23 @@
   const modelDetails = $derived.by(() => {
     if (!selectedModel) return null;
     
-    const stats = modelStats[selectedModel.name] || {};
+    const stats = modelStats?.models?.[selectedModel.name] || {};
     const endpoints = selectedModel.endpoints || [];
+    const model = selectedModel.model || {};
     
     return {
       name: selectedModel.name,
       category: modelCategories[selectedModel.category].label,
-      requestCount: stats.request_count || 0,
-      avgLatency: stats.avg_latency_ms || 0,
-      errorCount: stats.error_count || 0,
-      successRate: stats.request_count ? 
-        ((stats.request_count - (stats.error_count || 0)) / stats.request_count * 100).toFixed(1) : '100',
+      requestCount: stats.requests || stats.request_count || 0,
+      avgLatency: stats.avg_latency || stats.avg_latency_ms || 0,
+      errorCount: stats.errors || stats.error_count || 0,
+      successRate: stats.success_rate || (stats.requests ? 
+        ((stats.requests - (stats.errors || 0)) / stats.requests * 100).toFixed(1) : '100'),
       endpoints,
       lastUsed: stats.last_request_time || 'Never',
+      parameterSize: model.olla?.parameter_size || model.parameters,
+      contextLength: model.context_length,
+      capabilities: model.olla?.capabilities,
     };
   });
   
@@ -286,9 +296,9 @@
               <g 
                 class="cursor-pointer transition-all duration-300 {node.type === 'model' ? 'hover:scale-110' : 'hover:scale-125'}"
                 style="animation: float {3 + (index % 3)}s ease-in-out infinite alternate; animation-delay: {index * 0.2}s;"
-                onclick={() => handleNodeClick(node)}
-                onmouseenter={() => hoveredModel = node}
-                onmouseleave={() => hoveredModel = null}
+                on:click={() => handleNodeClick(node)}
+                on:mouseenter={() => hoveredModel = node}
+                on:mouseleave={() => hoveredModel = null}
               >
                 <!-- Node glow -->
                 <circle
@@ -316,10 +326,11 @@
                 {#if node.type === 'model'}
                   <text
                     x="{node.x}"
-                    y="{node.y + 2}"
+                    y="{node.y}"
                     text-anchor="middle"
                     dominant-baseline="middle"
-                    class="text-xs pointer-events-none"
+                    class="pointer-events-none"
+                    style="font-size: {node.size * 0.7}px;"
                   >
                     {node.icon}
                   </text>
@@ -396,7 +407,7 @@
               </div>
               <button
                 class="text-gray-400 hover:text-white transition-colors"
-                onclick={() => selectedModel = null}
+                on:click={() => selectedModel = null}
               >
                 ✕
               </button>

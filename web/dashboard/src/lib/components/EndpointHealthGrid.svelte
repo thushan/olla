@@ -7,7 +7,7 @@
   
   // Sort endpoints by priority and status
   let sortedEndpoints = $derived(
-    [...endpoints].sort((a, b) => {
+    (endpoints && Array.isArray(endpoints) ? [...endpoints] : []).sort((a, b) => {
       // First by priority (higher first)
       if (a.priority !== b.priority) return b.priority - a.priority;
       // Then by status (healthy first)

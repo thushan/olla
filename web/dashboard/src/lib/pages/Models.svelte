@@ -1,6 +1,6 @@
 <script>
   import { dashboardStore } from '$lib/stores/dashboard.svelte.js';
-  import ModelGalaxy from '$lib/components/ModelGalaxy.svelte';
+  import ModelList from '$lib/components/ModelList.svelte';
   
   const modelStats = $derived(dashboardStore.modelStats);
   const unifiedModels = $derived(dashboardStore.unifiedModels || []);
@@ -11,10 +11,19 @@
   const modelFamilies = $derived((() => {
     const families = new Set();
     unifiedModels.forEach(model => {
-      if (model.family) families.add(model.family);
+      // Check both olla.family and family fields
+      const family = model.olla?.family || model.family;
+      if (family) families.add(family);
     });
     return Array.from(families);
   })());
+  
+  // Debug logging
+  $effect(() => {
+    console.log('[Models] UnifiedModels:', unifiedModels);
+    console.log('[Models] ModelStats:', modelStats);
+    console.log('[Models] Endpoints:', endpoints);
+  });
   
   // Create a map of models to their endpoints
   const modelEndpointMap = $derived((() => {
@@ -130,9 +139,9 @@
     </div>
   </div>
   
-  <!-- Model Galaxy Visualization -->
+  <!-- Model List -->
   <div>
-    <ModelGalaxy />
+    <ModelList />
   </div>
   
   <!-- Two Column Layout -->
