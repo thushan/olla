@@ -23,13 +23,41 @@
   const avgLatency = $derived(status?.system?.avg_latency || '0ms');
   const activeConnections = $derived(status?.system?.active_connections || 0);
   const securityViolations = $derived(status?.system?.security_violations || 0);
+  
+  // Debug info
+  const lastUpdate = $derived(status?.timestamp || null);
+  const isLoading = $derived(dashboardStore.loading.status);
+  
+  // Add debug logging
+  $effect(() => {
+    console.log('[Overview] Status updated:', status?.timestamp);
+    console.log('[Overview] Loading:', isLoading);
+    console.log('[Overview] Endpoints:', endpoints.length);
+  });
 </script>
 
 <div class="space-y-6">
   <!-- Page Header -->
-  <div>
-    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">System Overview</h2>
-    <p class="text-gray-600 dark:text-gray-400 mt-1">Real-time monitoring of your Olla proxy infrastructure</p>
+  <div class="flex items-center justify-between">
+    <div>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white">System Overview</h2>
+      <p class="text-gray-600 dark:text-gray-400 mt-1">Real-time monitoring of your Olla proxy infrastructure</p>
+    </div>
+    <div class="text-right">
+      <div class="flex items-center gap-2">
+        <div class={`w-2 h-2 rounded-full ${isLoading ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`}></div>
+        <span class="text-sm text-gray-600 dark:text-gray-400">
+          {#if lastUpdate}
+            Last updated: {new Date(lastUpdate).toLocaleTimeString()}
+          {:else}
+            No data yet
+          {/if}
+        </span>
+      </div>
+      <div class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+        {endpoints.length} endpoints, {activeConnections} active connections
+      </div>
+    </div>
   </div>
   
   <!-- Key Metrics Grid -->

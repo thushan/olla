@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Test</title>
+</head>
+<body>
+    <h1>API Connection Test</h1>
+    <div id="results"></div>
+    
+    <script>
+        async function testAPI() {
+            const results = document.getElementById('results');
+            
+            try {
+                console.log('Testing API connection...');
+                
+                // Test status endpoint
+                const statusResponse = await fetch('http://localhost:40114/internal/status');
+                const statusData = await statusResponse.json();
+                
+                results.innerHTML += `<h2>Status API (${statusResponse.status})</h2>`;
+                results.innerHTML += `<pre>${JSON.stringify(statusData, null, 2)}</pre>`;
+                
+                // Test models endpoint  
+                const modelsResponse = await fetch('http://localhost:40114/olla/models');
+                const modelsData = await modelsResponse.json();
+                
+                results.innerHTML += `<h2>Models API (${modelsResponse.status})</h2>`;
+                results.innerHTML += `<p>Found ${modelsData.data?.length || 0} models</p>`;
+                results.innerHTML += `<pre>${JSON.stringify(modelsData.data?.slice(0,2) || [], null, 2)}</pre>`;
+                
+            } catch (error) {
+                results.innerHTML += `<h2>Error</h2><pre>${error.message}</pre>`;
+                console.error('API test failed:', error);
+            }
+        }
+        
+        testAPI();
+    </script>
+</body>
+</html>

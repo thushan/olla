@@ -58,7 +58,12 @@
   })());
   
   // Calculate totals
-  const totalModels = $derived(Object.keys(models).length);
+  const totalModels = $derived(unifiedModels.length);
+  const loadedModels = $derived((() => {
+    return unifiedModels.filter(model => {
+      return model.olla?.availability?.some(avail => avail.state === 'available' || avail.state === 'loaded');
+    }).length;
+  })());
   const totalRequests = $derived(Object.values(models).reduce((sum, m) => sum + (m.requests || 0), 0));
   const avgLatency = $derived((() => {
     const latencies = Object.values(models).map(m => m.avg_latency || 0).filter(l => l > 0);
@@ -105,11 +110,11 @@
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm text-gray-600 dark:text-gray-400">Model Families</p>
-          <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{modelFamilies.length}</p>
+          <p class="text-sm text-gray-600 dark:text-gray-400">Loaded Models</p>
+          <p class="text-2xl font-bold text-gray-900 dark:text-white mt-1">{loadedModels}</p>
         </div>
-        <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-          <span class="text-xl">🏷️</span>
+        <div class="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-lg flex items-center justify-center">
+          <span class="text-xl">🚀</span>
         </div>
       </div>
     </div>
@@ -256,20 +261,23 @@
               </td>
               <td class="px-6 py-4">
                 <div class="flex flex-wrap gap-1">
-                  {#if model.endpoint}
-                    {@const endpoint = endpoints.find(ep => ep.name === model.endpoint)}
-                    {#if endpoint}
-                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {endpoint.status === 'online' ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300'}">
-                        {endpoint.name}
-                        {#if endpoint.priority >= 100}
-                          <span class="ml-1 text-purple-600 dark:text-purple-400">⚡</span>
-                        {/if}
+                  {#if model.olla?.availability}
+                    {#each model.olla.availability as avail}
+                      {@const endpoint = endpoints.find(ep => ep.name === avail.endpoint)}
+                      {@const isLoaded = avail.state === 'available' || avail.state === 'loaded'}
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {isLoaded ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300'}">
+                        {avail.endpoint}
+                        <span class="ml-1 text-xs">
+                          {#if isLoaded}
+                            ✅ loaded
+                          {:else}
+                            ⏸️ not-loaded
+                          {/if}
+                        </span>
                       </span>
-                    {:else}
-                      <span class="text-sm text-gray-500 dark:text-gray-400">{model.endpoint}</span>
-                    {/if}
+                    {/each}
                   {:else}
-                    <span class="text-sm text-gray-500 dark:text-gray-400">Unknown</span>
+                    <span class="text-sm text-gray-500 dark:text-gray-400">No availability info</span>
                   {/if}
                 </div>
               </td>

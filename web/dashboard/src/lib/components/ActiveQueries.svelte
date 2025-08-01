@@ -152,11 +152,15 @@
                 <div class="flex items-center gap-1">
                   <span class="text-lg">{getEndpointIcon(connection.endpointType)}</span>
                   <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {connection.endpoint}
+                    {connection.displayName || connection.endpoint}
                   </span>
                 </div>
                 <span class={`text-xs font-medium ${getStatusColor(connection)}`}>
-                  {connection.status || 'active'}
+                  {#if connection.connectionCount && connection.connectionCount > 1}
+                    {connection.connectionCount} active
+                  {:else}
+                    {connection.status || 'active'}
+                  {/if}
                 </span>
               </div>
               <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -165,28 +169,53 @@
             </div>
             
             <div class="space-y-1">
-              <div class="flex items-center gap-2 text-sm">
-                <span class="text-gray-600 dark:text-gray-400">Model:</span>
-                <span class="font-medium text-gray-900 dark:text-white truncate">
-                  {modelInfo.name || modelInfo.id}
-                </span>
-              </div>
-              
-              {#if connection.method || connection.path}
+              {#if connection.isEndpointSummary}
                 <div class="flex items-center gap-2 text-sm">
-                  <span class="text-gray-600 dark:text-gray-400">Request:</span>
-                  <code class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
-                    {connection.method || 'POST'} {connection.path || '/api/chat'}
-                  </code>
+                  <span class="text-gray-600 dark:text-gray-400">Endpoint Status:</span>
+                  <span class="font-medium text-gray-900 dark:text-white truncate">
+                    {connection.connectionCount} active connection{connection.connectionCount > 1 ? 's' : ''}
+                  </span>
                 </div>
-              {/if}
-              
-              {#if connection.isReal}
+                
                 <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
-                  <span>Requests: {connection.requests}</span>
+                  <span>Total Requests: {connection.requests}</span>
                   <span>Success Rate: {connection.successRate}</span>
-                  <span>Latency: {connection.avgLatency}</span>
+                  <span>Avg Latency: {connection.avgLatency}</span>
                 </div>
+                
+                {#if connection.traffic && connection.traffic !== '0 B'}
+                  <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Traffic: {connection.traffic}</span>
+                  </div>
+                {/if}
+                
+                <div class="text-xs text-gray-400 dark:text-gray-500 italic">
+                  Note: Individual request details (model names, tokens) are only available when requests complete.
+                </div>
+              {:else}
+                <div class="flex items-center gap-2 text-sm">
+                  <span class="text-gray-600 dark:text-gray-400">Model:</span>
+                  <span class="font-medium text-gray-900 dark:text-white truncate">
+                    {modelInfo.name || modelInfo.id || 'Unknown'}
+                  </span>
+                </div>
+                
+                {#if connection.method || connection.path}
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="text-gray-600 dark:text-gray-400">Request:</span>
+                    <code class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
+                      {connection.method || 'POST'} {connection.path || '/api/chat'}
+                    </code>
+                  </div>
+                {/if}
+                
+                {#if connection.isReal}
+                  <div class="flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+                    <span>Requests: {connection.requests}</span>
+                    <span>Success Rate: {connection.successRate}</span>
+                    <span>Latency: {connection.avgLatency}</span>
+                  </div>
+                {/if}
               {/if}
               
               {#if connection.error}

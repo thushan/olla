@@ -106,15 +106,18 @@ function createDashboardStore() {
 
   // Functions
   async function fetchStatus() {
+    console.log('[DashboardStore] fetchStatus() called');
     loading = { ...loading, status: true };
     errors = { ...errors, status: null };
     
     try {
       const response = await api.getStatus();
+      console.log('[DashboardStore] Status response:', response);
       status = response;
       
       // Update other states if available in response
       if (response.endpoints && Array.isArray(response.endpoints)) {
+        console.log('[DashboardStore] Updating endpoints:', response.endpoints.length, 'endpoints');
         endpoints = response.endpoints;
       }
       
@@ -122,11 +125,12 @@ function createDashboardStore() {
         connections = response.connections;
       } else {
         // Generate real connections from endpoint data
+        console.log('[DashboardStore] Generating real connections from endpoint data...');
         generateRealConnections();
       }
     } catch (error) {
       errors = { ...errors, status: error.message };
-      console.error('Failed to fetch status:', error);
+      console.error('[DashboardStore] Failed to fetch status:', error);
     } finally {
       loading = { ...loading, status: false };
     }
@@ -194,15 +198,19 @@ function createDashboardStore() {
   }
 
   async function fetchUnifiedModels(params = {}) {
+    console.log('[DashboardStore] fetchUnifiedModels() called');
     loading = { ...loading, unifiedModels: true };
     errors = { ...errors, unifiedModels: null };
     
     try {
       const response = await api.getUnifiedModels(params);
-      unifiedModels = response.data || response.unified_models || response.models || [];
+      console.log('[DashboardStore] Unified models response:', response);
+      const models = response.data || response.unified_models || response.models || [];
+      console.log('[DashboardStore] Processed models count:', models.length);
+      unifiedModels = models;
     } catch (error) {
       errors = { ...errors, unifiedModels: error.message };
-      console.error('Failed to fetch unified models:', error);
+      console.error('[DashboardStore] Failed to fetch unified models:', error);
     } finally {
       loading = { ...loading, unifiedModels: false };
     }
@@ -223,6 +231,7 @@ function createDashboardStore() {
   }
 
   async function fetchAll() {
+    console.log('[DashboardStore] fetchAll() starting...');
     await Promise.all([
       fetchStatus(),
       fetchEndpoints(),
@@ -232,6 +241,7 @@ function createDashboardStore() {
       fetchUnifiedModels(),
       fetchVersion(),
     ]);
+    console.log('[DashboardStore] fetchAll() completed.');
   }
 
   function generateRealConnections() {
@@ -241,22 +251,25 @@ function createDashboardStore() {
     endpoints.forEach(endpoint => {
       const connectionCount = endpoint.connections || 0;
       if (connectionCount > 0) {
-        // Create a real connection entry for each active connection on this endpoint
-        for (let i = 0; i < connectionCount; i++) {
-          realConnections.push({
-            id: `real-${endpoint.name}-${i}`,
-            started_at: new Date(Date.now() - Math.random() * 60000).toISOString(), // Estimate within last minute
-            endpoint: endpoint.name,
-            endpointType: endpoint.type || endpoint.backend_type || 'unknown',
-            status: 'active',
-            // Real data from backend
-            isReal: true,
-            requests: endpoint.requests || 0,
-            avgLatency: endpoint.avg_latency || '0ms',
-            successRate: endpoint.success_rate || '100%',
-            // Note: No fake token counts - these aren't provided by the backend
-          });
-        }
+        // Show endpoint-level connection summary instead of fake individual connections
+        realConnections.push({
+          id: `endpoint-${endpoint.name}`,
+          started_at: new Date(Date.now() - 30000).toISOString(), // Estimate started 30s ago
+          endpoint: endpoint.name,
+          endpointType: endpoint.type || endpoint.backend_type || 'unknown',
+          status: 'active',
+          // Real endpoint-level data
+          isReal: true,
+          isEndpointSummary: true,
+          connectionCount: connectionCount,
+          requests: endpoint.requests || 0,
+          avgLatency: endpoint.avg_latency || '0ms',
+          successRate: endpoint.success_rate || '0%',
+          traffic: endpoint.traffic || '0 B',
+          // Indicate this represents multiple connections if > 1
+          displayName: connectionCount > 1 ? `${endpoint.name} (${connectionCount} connections)` : endpoint.name,
+          // Note: Model info not available at connection level - this is normal
+        });
       }
     });
     
@@ -358,17 +371,11 @@ function createDashboardStore() {
   }
 
   function init() {
-    console.log('[DashboardStore] Initializing with new metrics system...');
+    console.log('[DashboardStore] Initializing with simplified polling system...');
     
-    // Setup metrics service listeners
-    setupMetricsListeners();
-    
-    // Start the unified metrics system
-    metricsService.start().catch(error => {
-      console.error('[DashboardStore] Failed to start metrics service:', error);
-      // Fallback to legacy polling if metrics service fails
-      fallbackToLegacyPolling();
-    });
+    // For now, skip the complex metrics system and use simple polling
+    console.log('[DashboardStore] Using direct polling approach for debugging...');
+    fallbackToLegacyPolling();
     
     // Fetch version and other one-time data
     fetchVersion();
@@ -425,14 +432,15 @@ function createDashboardStore() {
   function fallbackToLegacyPolling() {
     console.warn('[DashboardStore] Falling back to legacy polling system...');
     
-    // Start legacy auto-refresh as fallback
-    startAutoRefresh('status', fetchStatus, 2000);
-    startAutoRefresh('endpoints', fetchEndpoints, 3000);
-    startAutoRefresh('modelStats', fetchModelStats, 5000);
-    startAutoRefresh('processStats', fetchProcessStats, 2000);
-    startAutoRefresh('unifiedModels', fetchUnifiedModels, 10000);
+    // Start legacy auto-refresh as fallback with more frequent updates for debugging
+    startAutoRefresh('status', fetchStatus, 3000);       // Every 3 seconds
+    startAutoRefresh('endpoints', fetchEndpoints, 5000); // Every 5 seconds  
+    startAutoRefresh('modelStats', fetchModelStats, 7000); // Every 7 seconds
+    startAutoRefresh('processStats', fetchProcessStats, 4000); // Every 4 seconds
+    startAutoRefresh('unifiedModels', fetchUnifiedModels, 6000); // Every 6 seconds
     
     // Initial fetch
+    console.log('[DashboardStore] Starting initial fetch...');
     fetchAll();
   }
 
