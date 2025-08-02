@@ -39,11 +39,14 @@ const (
 var (
 	enableProfiling bool
 	showVersion     bool
+	configFile      string
 )
 
 func init() {
 	flag.BoolVar(&enableProfiling, "profile", false, "Enable pprof profiling server")
 	flag.BoolVar(&showVersion, "version", false, "Show version information")
+	flag.StringVar(&configFile, "c", "", "Config file path")
+	flag.StringVar(&configFile, "config", "", "Config file path")
 
 	flag.Parse()
 
@@ -99,7 +102,7 @@ func main() {
 	}()
 
 	// Load configuration
-	cfg, err := config.Load()
+	cfg, err := config.Load(configFile)
 	if err != nil {
 		logger.FatalWithLogger(logInstance, "Failed to load configuration", "error", err)
 	}

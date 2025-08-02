@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/util"
+
 	"github.com/thushan/olla/internal/app/handlers"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
@@ -55,6 +57,10 @@ func (s *HTTPService) Name() string {
 // Start initialises and starts the HTTP server
 func (s *HTTPService) Start(ctx context.Context) error {
 	s.logger.Info("Initialising HTTP service")
+
+	if !util.IsPortAvailable(s.config.Host, s.config.Port) {
+		return fmt.Errorf("port %d is already in use on host %s", s.config.Port, s.config.Host)
+	}
 
 	// Resolve service dependencies now that all services are started
 	if s.statsService != nil {

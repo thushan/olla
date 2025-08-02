@@ -84,8 +84,8 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		assert.Equal(t, "list", response.Object)
 		assert.Len(t, response.Data, 2)
 
-		// Check first model
-		assert.Equal(t, "llama/3:70b-q4km", response.Data[0].ID)
+		// Check first model - ID should be first alias for routing compatibility
+		assert.Equal(t, "llama3:latest", response.Data[0].ID)
 		assert.Equal(t, "model", response.Data[0].Object)
 		assert.Equal(t, "olla", response.Data[0].OwnedBy)
 		assert.NotNil(t, response.Data[0].Olla)
@@ -112,7 +112,7 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		response, ok := result.(UnifiedModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 1)
-		assert.Equal(t, "phi/4:14.7b-q4km", response.Data[0].ID)
+		assert.Equal(t, "phi4:latest", response.Data[0].ID)
 	})
 
 	t.Run("filter by availability", func(t *testing.T) {
@@ -140,7 +140,7 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		response, ok := result.(UnifiedModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 1)
-		assert.Equal(t, "phi/4:14.7b-q4km", response.Data[0].ID)
+		assert.Equal(t, "phi4:latest", response.Data[0].ID)
 	})
 
 	t.Run("filter by type", func(t *testing.T) {
