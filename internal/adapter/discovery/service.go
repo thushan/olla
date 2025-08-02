@@ -96,10 +96,18 @@ func (s *ModelDiscoveryService) discoveryLoop(ctx context.Context) {
 			return
 		case <-s.ticker.C:
 			if err := s.DiscoverAll(ctx); err != nil {
-				s.logger.Warn("Regular discovery failed", "error", err)
+				s.LogErrorsWithContext(err)
 			}
 		}
 	}
+}
+func (s *ModelDiscoveryService) LogErrorsWithContext(err error) {
+	userMsg := GetUserFriendlyMessage(err)
+	logCtx := logger.LogContext{
+		UserArgs:     []interface{}{},
+		DetailedArgs: []interface{}{"detailed_error", err},
+	}
+	s.logger.WarnWithContext(fmt.Sprintf("Regular discovery failed (%s)", userMsg), "", logCtx)
 }
 
 // DiscoverAll discovers models from all healthy endpoints
@@ -191,7 +199,15 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 
 // handleDiscoveryError processes discovery errors and manages endpoint disabling
 func (s *ModelDiscoveryService) handleDiscoveryError(endpoint *domain.Endpoint, err error) {
-	s.logger.ErrorWithEndpoint("Model discovery failed", endpoint.Name, "error", err)
+	// Create user-friendly message for console output and detailed error for logs
+	userMsg := GetUserFriendlyMessage(err)
+
+	logCtx := logger.LogContext{
+		UserArgs:     []interface{}{},
+		DetailedArgs: []interface{}{"detailed_error", err},
+	}
+
+	s.logger.ErrorWithContext(fmt.Sprintf("Model discovery failed (%s)", userMsg), endpoint.Name, logCtx)
 
 	if !IsRecoverable(err) {
 		s.logger.WarnWithEndpoint("Disabling discovery for endpoint due to non-recoverable error", endpoint.Name)
