@@ -40,6 +40,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
+	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -394,15 +395,32 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 
 	s.IncrementRequests()
 
-	rlog.Debug("proxy request started", "method", r.Method, "url", r.URL.String())
+	// Use context logger if available, fallback to provided logger
+	ctxLogger := middleware.GetLogger(ctx)
+	if ctxLogger != nil {
+		ctxLogger.Debug("Olla proxy request started",
+			"method", r.Method,
+			"url", r.URL.String(),
+			"endpoint_count", len(endpoints))
+	} else {
+		rlog.Debug("proxy request started", "method", r.Method, "url", r.URL.String())
+	}
 
 	if len(endpoints) == 0 {
-		rlog.Error("no healthy endpoints available")
+		if ctxLogger != nil {
+			ctxLogger.Error("No healthy endpoints available for request")
+		} else {
+			rlog.Error("no healthy endpoints available")
+		}
 		s.RecordFailure(ctx, nil, time.Since(stats.StartTime), common.ErrNoHealthyEndpoints)
 		return common.ErrNoHealthyEndpoints
 	}
 
-	rlog.Debug("using provided endpoints", "count", len(endpoints))
+	if ctxLogger != nil {
+		ctxLogger.Debug("Using provided endpoints", "count", len(endpoints))
+	} else {
+		rlog.Debug("using provided endpoints", "count", len(endpoints))
+	}
 
 	// Select endpoint with circuit breaker check
 	endpoint, cb := s.selectEndpointWithCircuitBreaker(endpoints, rlog)
@@ -423,7 +441,15 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 	stats.TargetUrl = targetURL.String()
 	reqCtx.targetURL = targetURL.String()
 
-	rlog.Info("Request dispatching to endpoint", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
+	if ctxLogger != nil {
+		ctxLogger.Info("Request dispatching to endpoint",
+			"endpoint", endpoint.Name,
+			"target", stats.TargetUrl,
+			"model", stats.Model,
+			"request_id", middleware.GetRequestID(ctx))
+	} else {
+		rlog.Info("Request dispatching to endpoint", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
+	}
 
 	// Create and prepare proxy request
 	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, stats)
@@ -568,6 +594,8 @@ func (s *Service) executeBackendRequest(ctx context.Context, endpoint *domain.En
 
 // handleSuccessfulResponse handles the successful response from the backend
 func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseWriter, resp *http.Response, endpoint *domain.Endpoint, cb *circuitBreaker, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+	// Get context logger for this function scope
+	ctxLogger := middleware.GetLogger(ctx)
 	// Circuit breaker success
 	stateBefore := atomic.LoadInt64(&cb.state)
 	cb.RecordSuccess()
@@ -619,17 +647,33 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	stats.Latency = duration.Milliseconds()
 
 	// Log detailed completion metrics
-	rlog.Debug("proxy request completed",
-		"endpoint", endpoint.Name,
-		"latency_ms", stats.Latency,
-		"processing_ms", stats.RequestProcessingMs,
-		"backend_ms", stats.BackendResponseMs,
-		"first_data_ms", stats.FirstDataMs,
-		"streaming_ms", stats.StreamingMs,
-		"selection_ms", stats.SelectionMs,
-		"header_ms", stats.HeaderProcessingMs,
-		"total_bytes", stats.TotalBytes,
-		"status", resp.StatusCode)
+	if ctxLogger != nil {
+		ctxLogger.Info("Olla proxy request completed",
+			"endpoint", endpoint.Name,
+			"latency_ms", stats.Latency,
+			"processing_ms", stats.RequestProcessingMs,
+			"backend_ms", stats.BackendResponseMs,
+			"first_data_ms", stats.FirstDataMs,
+			"streaming_ms", stats.StreamingMs,
+			"selection_ms", stats.SelectionMs,
+			"header_ms", stats.HeaderProcessingMs,
+			"total_bytes", stats.TotalBytes,
+			"bytes_formatted", middleware.FormatBytes(int64(stats.TotalBytes)),
+			"status", resp.StatusCode,
+			"request_id", middleware.GetRequestID(ctx))
+	} else {
+		rlog.Debug("proxy request completed",
+			"endpoint", endpoint.Name,
+			"latency_ms", stats.Latency,
+			"processing_ms", stats.RequestProcessingMs,
+			"backend_ms", stats.BackendResponseMs,
+			"first_data_ms", stats.FirstDataMs,
+			"streaming_ms", stats.StreamingMs,
+			"selection_ms", stats.SelectionMs,
+			"header_ms", stats.HeaderProcessingMs,
+			"total_bytes", stats.TotalBytes,
+			"status", resp.StatusCode)
+	}
 
 	return nil
 }
