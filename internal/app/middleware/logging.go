@@ -2,12 +2,12 @@ package middleware
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/logger"
 )
@@ -38,13 +38,6 @@ func (rw *responseWriter) WriteHeader(s int) {
 	rw.ResponseWriter.WriteHeader(s)
 }
 
-// generateRequestID creates a unique request ID
-func generateRequestID() string {
-	bytes := make([]byte, 8)
-	rand.Read(bytes)
-	return hex.EncodeToString(bytes)
-}
-
 // GetLogger retrieves a logger with request ID from context
 func GetLogger(ctx context.Context) *slog.Logger {
 	if logger, ok := ctx.Value(LoggerKey).(*slog.Logger); ok {
@@ -70,7 +63,7 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			// Get or create request ID
 			requestID := r.Header.Get("X-Request-ID")
 			if requestID == "" {
-				requestID = generateRequestID()
+				requestID = util.GenerateRequestID()
 			}
 
 			// Calculate request size
@@ -128,7 +121,7 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 			// Use existing request ID from context or create one
 			requestID := GetRequestID(r.Context())
 			if requestID == "" {
-				requestID = generateRequestID()
+				requestID = util.GenerateRequestID()
 				ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
 				r = r.WithContext(ctx)
 			}
