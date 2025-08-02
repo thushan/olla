@@ -225,7 +225,7 @@ func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.End
 Round-robin works well for:
 
 1. **Homogeneous Clusters**: Identical endpoints with same capacity
-2. **Development Environments**: Predictable behavior for testing
+2. **Development Environments**: Predictable behaviour for testing
 3. **Even Load Distribution**: When all endpoints should share load equally
 4. **Simple Requirements**: When sophisticated routing isn't needed
 
@@ -325,10 +325,10 @@ Least connections excels when:
 
 | Scenario | Recommended Strategy | Reasoning |
 |----------|---------------------|-----------|
-| Mixed local/cloud endpoints | Priority | Cost and latency optimization |
+| Mixed local/cloud endpoints | Priority | Cost and latency optimisation |
 | Identical GPU servers | Round Robin | Simple and fair |
 | Variable model sizes | Least Connections | Adapts to request duration |
-| Development/testing | Round Robin | Predictable behavior |
+| Development/testing | Round Robin | Predictable behaviour |
 | High availability production | Priority | Controlled failover |
 | Heterogeneous hardware | Least Connections | Accounts for capacity |
 
@@ -502,15 +502,5 @@ logging:
 - Verify endpoint health status
 - Review connection limits
 - Consider round-robin for fair distribution
-
-## Future Enhancements
-
-We're exploring several advanced features:
-
-1. **Adaptive Strategies**: Automatically switch strategies based on traffic patterns
-2. **ML-Based Routing**: Use model performance data for intelligent routing
-3. **Geographic Awareness**: Route based on client location
-4. **Cost-Aware Routing**: Real-time cost optimization
-5. **SLA-Based Selection**: Route based on response time requirements
 
 The load balancer is a critical component that directly impacts your LLM infrastructure's performance, reliability, and cost. Choose wisely based on your specific requirements, and don't hesitate to switch strategies as your needs evolve.

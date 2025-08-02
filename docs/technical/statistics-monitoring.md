@@ -349,11 +349,3 @@ proxyStats := statsCollector.GetProxyStats()
 endpointStats := statsCollector.GetEndpointStats()
 ```
 
-## Future Considerations
-
-While not currently implemented, potential enhancements could include:
-- Prometheus export endpoint
-- Configurable retention periods
-- Persistent storage option
-- Time-series data with roll-ups
-- Custom metrics registration

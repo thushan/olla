@@ -620,12 +620,4 @@ func (c *CachedDiscovery) GetEndpoints() ([]domain.Endpoint, error) {
 }
 ```
 
-## Future Enhancements
-
-1. **Consul/etcd Integration**: Dynamic service discovery
-2. **Model Performance Tracking**: Route based on model performance per endpoint
-3. **Automatic Model Migration**: Move models between endpoints based on demand
-4. **Federation Support**: Discover endpoints across multiple Olla instances
-5. **Smart Caching**: Predictive model loading based on usage patterns
-
 Service discovery and model unification form the foundation of Olla's multi-platform support. By abstracting platform differences and providing a unified view of available resources, these systems enable seamless routing across heterogeneous LLM infrastructure.

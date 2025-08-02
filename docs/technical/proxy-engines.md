@@ -425,20 +425,6 @@ Switching between engines is straightforward:
 
 4. **Gradual Rollout**: Use canary deployments if possible
 
-## Future Enhancements
-
-### Sherpa Roadmap
-- HTTP/3 support for improved latency
-- Basic request coalescing
-- Simplified circuit breaker
-
-### Olla Roadmap
-- Adaptive circuit breakers
-- Request priority queues
-- Dynamic pool sizing
-- HTTP/3 with 0-RTT
-- GPU-aware routing
-
 ## Conclusion
 
 The dual-engine approach gives you flexibility to choose the right tool for your deployment. Start with Sherpa for simplicity, and upgrade to Olla when performance demands it. Both engines are production-tested and actively maintained, ensuring your LLM infrastructure remains robust and performant.

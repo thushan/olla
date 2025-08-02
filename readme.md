@@ -11,421 +11,123 @@
 > [!IMPORTANT]  
 > Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
 
-Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
+Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Model unification and routing is built into Olla, so all your models from each Ollama or LM Studio or OpenAI compatible backend, can be routed to.
+
+You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
 ![Olla Usecase](assets/diagrams/usecases.excalidraw.png)
 
-Whether you're running workloads on laptops, workstations or clustered servers, Olla dynamically selects the best endpoint using configurable priorities, health checks and load-aware strategies. With built-in failover, adaptive routing, and continuous monitoring, it ensures resilience, performance and minimal operational complexity. 
-
 Single CLI application and config file is all you need to go Olla!
 
-## ✨ Features
+## Key Features
 
-### 🎯 **Smart Load Balancing**
-- **Priority-based routing**: Configure node priorities (workstation first, laptop second) with automatic failover
-- **Multiple strategies**: Round-robin, least connections, and priority-aware load balancing
-- **Health-aware routing**: Only routes to healthy endpoints, with automatic recovery detection
-- **Circuit breakers**: Automatic failure isolation prevents cascade failures (Olla engine)
-- **Model-aware routing**: 🚧 Coming soon - route to endpoints with specific models
+- **🔄 Smart Load Balancing**: [Priority-based routing](docs/user/best-practices.md#load-balancing) with automatic failover
+- **🔍 Model Unification**: [Cross-platform model discovery](docs/user/getting-started.md#working-with-models) and normalisation
+- **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](docs/user/configuration.md#proxy-engines)
+- **💊 Health Monitoring**: [Continuous endpoint health checks](docs/user/troubleshooting.md#health-monitoring) with circuit breakers
+- **📊 Request Tracking**: Detailed response headers and [statistics](docs/user/api-usage.md#response-headers)
+- **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
+- **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
+- **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
 
-### 🛡️ **In-built Security**
-- **Rate limiting**: Per-IP and global request limits with burst handling
-- **Request size limits**: Protect against oversized requests and headers
-- **Trusted proxy support**: Works seamlessly behind reverse proxies and CDNs
+### Supported Backends
 
-### 🔍 **Comprehensive Monitoring**
-- **Health checking**: Continuous endpoint monitoring with configurable intervals
-- **Model discovery**: Automatic detection of available models across endpoints
-- **Detailed metrics**: Request stats, response times, and performance insights
+* [Ollama](https://github.com/ollama/ollama) - full support for Ollama, including model unification. \
+  Use: `/olla/ollama/`
+* [LM Studio](https://lmstudio.ai/) - full support for Ollama, including model unification. \
+  Use: `/olla/lmstudio/`
 
-### ⚙️ **Easy Configuration**
-- **Single YAML file**: All settings in one place with sensible defaults
-- **Environment variables**: Override any setting for different deployments
-- **Container-ready**: Pre-configured Docker images with example configurations
+Coming soon (native support, but you can use OpenAI for now):
 
-### 🔌 **Universal Compatibility**
-- **Ollama**: Full support for Ollama endpoints
-- **LM Studio**: Seamless integration with LM Studio
-- **OpenAI-compatible**: Works with any OpenAI-compatible API
+* [vLLM](https://github.com/vllm-project/vllm)
+* [Lemonade](https://github.com/lemonade-sdk/lemonade)
 
-## ⚡ **High Performance**
-- **Dual proxy engines**: Choose Sherpa for simplicity or Olla for maximum performance
-- **Connection pooling**: Per-endpoint connection pools reduce latency (Olla engine)
-- **Object pooling**: Reduced GC pressure with pooled buffers and contexts (Olla engine)
-- **Low latency**: Sub-millisecond endpoint selection with lock-free atomic stats
-- **Memory optimised**: Efficient buffer pooling with 64KB default buffers for streaming
-- **Concurrent**: Handles thousands of simultaneous streaming connections
-- **Resource efficient**: Stable memory usage with automatic cleanup of stale data
+## Quick Start
 
-## 🔧 **Optimised for LLMs**
-- **Streaming-first**: Immediate response streaming without buffering delays
-- **Long-running requests**: Optimised timeouts for extended LLM inference times
-- **Connection pooling**: Persistent connections to backend endpoints reduce latency
-- **Circuit breakers**: Automatic failover prevents cascade delays
-
-## 🚀 Quick Start
-
-### Docker (Recommended)
-
-Olla comes with pre-configured Docker images for quick deployment:
+### Installation
 
 ```bash
-# Run with default configuration
-docker run -d \
-  --name olla \
-  -p 40114:40114 \
-  ghcr.io/thushan/olla:latest
-
-# Or with custom configuration
-docker run -d \
-  --name olla \
-  -p 40114:40114 \
-  -v "$(pwd)/config/config.local.yaml:/config/config.yaml:ro" \
-  -e OLLA_CONFIG_FILE=/config/config.yaml \
-  ghcr.io/thushan/olla:latest
-```
-
-You can then check it's running with:
-
-```bash
-curl http://localhost:40114/internal/health
-```
-
-### Docker Compose
-
-A `docker-compose.yaml` is included in the repository:
-
-```bash
-# Run with the included docker-compose.yaml
-docker-compose up -d
-
-# Or create your own override for local development
-cp docker-compose.yaml docker-compose.local.yaml
-vim docker-compose.local.yaml
-docker-compose -f docker-compose.local.yaml up
-```
-
-The included `docker-compose.yaml` mounts your local config for easy customization:
-
-```yaml
-services:
-  olla:
-    image: ghcr.io/thushan/olla:latest
-    ports:
-      - "40114:40114"
-    volumes:
-      # Mount your local config (optional)
-      - ./config/config.local.yaml:/config/config.yaml:ro
-    environment:
-      - OLLA_CONFIG_FILE=/config/config.yaml
-```
-
-### Local Binary
-
-You can also run Olla directly on your machine without Docker. 
-
-```bash
+# Download latest release
 bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
-```
 
-It will download the latest version & extract it to its own folder for you.
+# Container based
+docker run -t \
+  --name olla \
+  -p 40114:40114 \
+  ghcr.io/thushan/olla:latest
 
-If you prefer running Olla directly on your machine, download a pre-built binary.
-
-1. Download the latest release from [Releases](https://github.com/thushan/olla/releases)
-2. Extract the archive
-3. Navigate to the directory and run:
-
-```bash
-./olla
-```
-
-Alternatively, you can install it via go:
-
-```bash
+# Install via Go
 go install github.com/thushan/olla@latest
+
+# Build from source
+git clone https://github.com/thushan/olla.git && cd olla && make build
+
 ```
 
-### Build from Source
+When you have things running you can check everything's good with:
 
 ```bash
-# Clone the repository
-git clone https://github.com/thushan/olla.git
-cd olla
+# Check health of Olla
+curl http://localhost:40114/internal/health
 
-# Install dependencies and build
-make deps
-make build
+# Check endpoints
+curl http://localhost:40114/internal/status/endpoints
 
-# Run with default config
-./bin/olla
-
-# Or run with your local config
-cp config/config.local.yaml.example config/config.local.yaml
-vim config/config.local.yaml
-OLLA_CONFIG_FILE=config/config.local.yaml ./bin/olla
+# Check models available
+curl http://localhost:40114/internal/status/models
 ```
-
-## 📝 Configuration
-
-Olla uses a layered configuration approach: defaults → YAML config → environment variables (highest priority).
 
 ### Basic Configuration
 
-The main configuration file is `config/config.yaml`. For local development, create a `config/config.local.yaml` (which is git-ignored):
+Modify the existing `config.yaml` or create a copy:
 
 ```yaml
 server:
-  host: "0.0.0.0"
+  host: 0.0.0.0
   port: 40114
-  read_timeout: 30s
-  write_timeout: 0s  # Important: Leave as 0s for streaming LLM responses
 
 proxy:
-  engine: "olla"            # or "sherpa" for simpler deployments
-  load_balancer: "priority"  # or "round-robin", "least-connections"
-  response_timeout: 900s     # 15 minutes for long LLM responses
-  stream_buffer_size: 65536  # 64KB for Olla, 8KB for Sherpa
-  
-  # Olla engine specific (connection pooling)
-  max_idle_conns: 100        # Maximum idle connections
-  max_conns_per_host: 50     # Maximum connections per host
-  idle_conn_timeout: 90s     # Idle connection timeout
+  engine: "sherpa"        # or "olla" for high performance
+  load_balancer: "priority" # or round-robin, least-connections
 
 discovery:
-  static:
-    endpoints:
-      - url: "http://192.168.1.100:11434"
-        name: "workstation-ollama"
-        type: "ollama"
-        priority: 100          # Higher number = higher priority
-        health_check_url: "/"
-        model_url: "/api/tags"
-        check_interval: 5s
-        check_timeout: 2s
-      
-      - url: "http://192.168.1.101:1234"
-        name: "laptop-lmstudio"
-        type: "lm-studio"
-        priority: 50           # Lower priority fallback
-        health_check_url: "/"
-        model_url: "/v1/models"
-        check_interval: 10s
-        check_timeout: 3s
+  endpoints:
+    - name: "local-ollama"
+      url: "http://localhost:11434"
+      platform: "ollama"
+      priority: 100         # Higher = preferred
+
+    - name: "work-ollama"
+      url: "https://ollama-42.acmecorp.com/"
+      platform: "ollama"
+      priority: 50          # Lower priority fallback
 ```
 
-### Endpoint Configuration Guide
-
-Each endpoint in your configuration supports the following options:
-
-```yaml
-endpoints:
-  - url: "http://192.168.1.100:11434"    # Required: Base URL of the LLM service
-    name: "workstation-ollama"            # Required: Unique name for this endpoint
-    type: "ollama"                        # Required: ollama, lm-studio, or openai-compatible
-    priority: 100                         # Optional: Higher = preferred (default: 50)
-    health_check_url: "/"                 # Optional: Health check path (default: "/")
-    model_url: "/api/tags"                # Optional: Model discovery endpoint
-    check_interval: 5s                    # Optional: Health check frequency (default: 30s)
-    check_timeout: 2s                     # Optional: Health check timeout (default: 5s)
-    enabled: true                         # Optional: Enable/disable endpoint (default: true)
-```
-
-#### Endpoint Types
-
-**Ollama Endpoints**
-```yaml
-- url: "http://localhost:11434"
-  name: "local-ollama"
-  type: "ollama"
-  priority: 100
-  health_check_url: "/"
-  model_url: "/api/tags"          # Ollama's model list endpoint
-```
-
-**LM Studio Endpoints**
-```yaml
-- url: "http://localhost:1234"
-  name: "local-lmstudio"
-  type: "lm-studio"
-  priority: 90
-  health_check_url: "/v1/models"  # LM Studio health endpoint
-  model_url: "/v1/models"         # OpenAI-compatible model list
-```
-
-**OpenAI-Compatible Endpoints** (vLLM, LocalAI, etc.)
-```yaml
-- url: "http://gpu-server:8000"
-  name: "vllm-server"
-  type: "openai-compatible"
-  priority: 80
-  health_check_url: "/health"
-  model_url: "/v1/models"
-```
-
-**Cloud Provider Endpoints**
-```yaml
-- url: "https://api.openai.com"
-  name: "openai-cloud"
-  type: "openai-compatible"
-  priority: 10                    # Low priority due to cost
-  enabled: false                  # Disabled by default
-  check_interval: 60s             # Less frequent checks for cloud
-```
-
-#### Priority Strategy Examples
-
-**Home Lab Setup** - Local hardware preferred over cloud:
-```yaml
-endpoints:
-  - url: "http://desktop:11434"
-    name: "desktop-gpu"
-    type: "ollama"
-    priority: 100                 # Always use desktop GPU first
-  
-  - url: "http://laptop:11434"
-    name: "laptop-cpu"
-    type: "ollama"
-    priority: 50                  # Fallback to laptop
-  
-  - url: "https://api.together.ai"
-    name: "together-ai"
-    type: "openai-compatible"
-    priority: 10                  # Only use cloud if local unavailable
-```
-
-**Enterprise Setup** - Tiered by capability:
-```yaml
-endpoints:
-  - url: "http://gpu-cluster:8000"
-    name: "a100-cluster"
-    type: "openai-compatible"
-    priority: 100                 # High-end GPU cluster
-  
-  - url: "http://gpu-pool:8000"
-    name: "rtx4090-pool"
-    type: "openai-compatible"
-    priority: 75                  # Mid-tier GPUs
-  
-  - url: "http://cpu-farm:8000"
-    name: "cpu-inference"
-    type: "openai-compatible"
-    priority: 25                  # CPU-only as last resort
-```
-
-#### Health Check Configuration
-
-Fine-tune health checks based on your infrastructure:
-
-```yaml
-# Fast local network - aggressive health checks
-- url: "http://localhost:11434"
-  check_interval: 2s              # Check every 2 seconds
-  check_timeout: 1s               # 1 second timeout
-  
-# Remote/cloud endpoints - conservative checks  
-- url: "https://api.example.com"
-  check_interval: 30s             # Check every 30 seconds
-  check_timeout: 10s              # 10 second timeout
-```
-
-### Environment Variables
-
-Common settings you'll want to override:
+### Start Olla
 
 ```bash
-# Server settings
-export OLLA_SERVER_HOST="0.0.0.0"
-export OLLA_SERVER_PORT="40114"
-
-# Proxy settings
-export OLLA_PROXY_ENGINE="olla"              # or "sherpa"
-export OLLA_PROXY_LOAD_BALANCER="priority"
-export OLLA_PROXY_RESPONSE_TIMEOUT="15m"
-export OLLA_PROXY_MAX_IDLE_CONNS="100"       # Olla engine only
-export OLLA_PROXY_MAX_CONNS_PER_HOST="50"    # Olla engine only
-
-# Rate limiting (optional but recommended)
-export OLLA_SERVER_GLOBAL_RATE_LIMIT="1000"    # requests per minute
-export OLLA_SERVER_PER_IP_RATE_LIMIT="100"     # requests per minute per IP
-export OLLA_SERVER_TRUST_PROXY_HEADERS="true"  # if behind reverse proxy
-
-# Security (optional)
-export OLLA_SERVER_MAX_BODY_SIZE="50MB"
-export OLLA_SERVER_MAX_HEADER_SIZE="1MB"
-
-# Logging
-export OLLA_LOGGING_LEVEL="info"  # debug, info, warn, error
-export OLLA_LOGGING_FORMAT="json" # json or text
+./olla                    # Uses config.yaml
+# or
+./olla -c custom.yaml     # Custom config
 ```
 
-## ⚖️ Load Balancing Strategies
+## Usage
 
-Choose the right strategy for your setup:
+### API Compatibility
 
-### 📊 Least Connections (`least-connections`) - **Recommended**
-Routes to the endpoint with least active requests. Ideal for:
-- **Mixed workloads**: Different request types with varying processing times
-- **Dynamic balancing**: Automatically adapts to endpoint performance
-- **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
-
-```yaml
-load_balancer: "least-connections"
-```
-
-### 🎯 Priority (`priority`)
-Routes requests to the highest priority healthy endpoint. Perfect for:
-- **Home setups**: Workstation (priority 100) → Laptop (priority 50)
-- **Tiered infrastructure**: GPU servers → CPU servers → Cloud endpoints
-- **Cost optimisation**: Local hardware → Expensive cloud APIs
-
-```yaml
-load_balancer: "priority"
-```
-
-### 🔄 Round Robin (`round-robin`)
-Distributes requests evenly across all healthy endpoints. Good for:
-- **Equal hardware**: Multiple identical servers
-- **Even load distribution**: When all endpoints have similar capacity
-- **Simple load spreading**: No complex routing logic needed
-
-```yaml
-load_balancer: "round-robin"
-```
-
-## 🔗 Usage
-
-Once Olla is running, use provider-specific endpoints to route your requests:
-
-### Provider-Specific Routing
-
-Olla uses provider namespaces to ensure requests go to the right backend type:
-
-- `/olla/ollama/*` - Routes to Ollama backends only
-- `/olla/lmstudio/*` - Routes to LM Studio backends only  
-- `/olla/openai/*` - Routes to OpenAI-compatible backends
-- `/olla/vllm/*` - Routes to vLLM backends
-
-### OpenAI-compatible Clients
+Olla is **OpenAI, LM Studio and Ollama compatible**. Point existing clients to Olla instead:
 
 ```python
+# Instead of: http://localhost:11434
+# Use:        http://localhost:40110/olla/openai
+
 import openai
+client = openai.OpenAI(base_url="http://localhost:40110/olla/openai")
 
-# For Ollama backends
-client = openai.OpenAI(
-    base_url="http://localhost:40114/olla/ollama/v1",
-    api_key="dummy"
-)
-
-# For LM Studio backends
-client = openai.OpenAI(
-    base_url="http://localhost:40114/olla/lmstudio/v1",
-    api_key="dummy"
-)
-
+# Works with any model across all your endpoints
 response = client.chat.completions.create(
-    model="llama3.2",
-    messages=[{"role": "user", "content": "Hello from Olla!"}]
+    model="llama4",
+    messages=[{"role": "user", "content": "Hello!"}]
 )
 ```
 
@@ -455,279 +157,129 @@ curl http://localhost:40114/olla/models
 curl http://localhost:40114/olla/models?format=ollama
 ```
 
-### Direct Model Switching
+### Supported Endpoints
 
-Within a provider namespace, Olla automatically routes to endpoints with the requested model:
+| Endpoint | Description | Documentation |
+|----------|-------------|---------------|
+| `POST /api/generate` | Ollama-style generation | [API Usage](docs/user/api-usage.md) |
+| `POST /v1/chat/completions` | OpenAI-style chat | [API Usage](docs/user/api-usage.md#openai-compatibility) |
+| `GET /api/tags` | List available models | [Getting Started](docs/user/getting-started.md#checking-available-models) |
+| `GET /internal/health` | Health check | [Best Practices](docs/user/best-practices.md#monitoring) |
+| `GET /internal/status` | Detailed status | [Troubleshooting](docs/user/troubleshooting.md#status-endpoints) |
 
-```bash
-# Routes to any Ollama endpoint that has 'codellama'
-curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
-  -d '{"model": "codellama", "messages": [...]}'
-```
+### Response Headers
 
-## 📊 Monitoring
-
-### Health and Status
-
-```bash
-# Quick health check
-curl http://localhost:40114/internal/health
-
-# Detailed status including endpoint health
-curl http://localhost:40114/internal/status | jq
-
-# Application version and build info
-curl http://localhost:40114/version | jq
-```
-
-### Process Statistics
-
-```bash
-# Runtime stats (memory, GC, goroutines)
-curl http://localhost:40114/internal/process | jq
-```
-
-### Example Status Response
-
-```json
-{
-  "endpoints": [
-    {
-      "name": "workstation-ollama",
-      "url": "http://192.168.1.100:11434",
-      "status": "healthy",
-      "priority": 100,
-      "last_latency": "45ms",
-      "consecutive_failures": 0
-    }
-  ],
-  "proxy": {
-    "load_balancer": "priority",
-    "total_requests": 1247,
-    "successful_requests": 1245,
-    "failed_requests": 2,
-    "avg_latency_ms": 156
-  },
-  "total_endpoints": 2,
-  "healthy_endpoints": 1,
-  "routable_endpoints": 1
-}
-```
-
-## 🛠️ Development
-
-### Local Development Setup
-
-#### Configuration
-
-Olla uses a clean configuration structure that separates shipped configs from local development:
+Every request includes tracking information:
 
 ```
-config/
-├── config.yaml              # Main configuration (shipped)
-├── config.local.yaml        # Your local overrides (git-ignored)
-├── models.yaml             # Model mappings
-├── docker.yaml             # Docker-specific config
-└── profiles/               # Platform profiles
-    ├── ollama.yaml
-    ├── lmstudio.yaml
-    └── openai.yaml
+X-Olla-Endpoint: local-ollama     # Which backend handled it
+X-Olla-Model: llama4              # Model used
+X-Olla-Backend-Type: ollama       # Platform type
+X-Olla-Request-ID: req_abc123     # For debugging
+X-Olla-Response-Time: 1.234s      # Total time (trailer)
 ```
 
-**Setting up local development:**
+## Configuration
 
-```bash
-# Copy the example local config
-cp config/config.local.yaml.example config/config.local.yaml
+### ⚖️ Load Balancing Strategies
 
-# Edit with your endpoints
-vim config/config.local.yaml
+- **Least Connections**: Routes to endpoint with fewest active connections (recommended for businesses)
+- **Priority**: Routes to highest priority healthy endpoint (recommended for home)
+- **Round Robin**: Even distribution across all endpoints
 
-# Run with your local config
-OLLA_CONFIG_FILE=config/config.local.yaml go run main.go
-```
-
-#### Building
-
-```bash
-# Install dependencies
-make deps
-
-# Run tests
-make test
-
-# Run with race detection
-make test-race
-
-# Build optimised binary to ./bin/
-make build
-
-# Build just the binary to ./build/ (fast, for testing)
-make build-local
-./build/olla --version
-
-# Test with your local config
-OLLA_CONFIG_FILE=config/config.local.yaml ./build/olla
-
-# Run with debug logging
-make run-debug
-
-# See all available targets
-make help
-```
-
-### Release Building
-
-#### Local Release Testing
-
-```bash
-# Build full release (binaries + archives) to ./dist/
-make build-snapshot
-
-# Check goreleaser configuration
-make goreleaser-check
-
-# What gets packaged:
-# - config/*.yaml (except *.local.yaml)
-# - config/profiles/*.yaml
-# - LICENSE, README.md
-# - Empty directories: logs/, tmp/, data/
-```
-
-#### Docker Testing
-
-```bash
-# Build Docker images locally
-make docker-build
-
-# Run Docker image with your local config
-make docker-run
-
-# Or use docker-compose
-docker-compose up
-
-# Create a local override (git-ignored)
-cp docker-compose.yaml docker-compose.local.yaml
-vim docker-compose.local.yaml
-docker-compose -f docker-compose.local.yaml up
-```
-
-#### Clean Build Directories
-
-```bash
-# Remove all build artifacts
-make clean
-# Removes: bin/, build/, dist/, logs/, coverage files
-```
-
-### Configuration Management
-
-**Important:** Local configuration files (`*.local.yaml`) are git-ignored and never shipped in releases. This prevents accidentally publishing your personal endpoints or development settings.
+#### 📊 Least Connections (`least-connections`)
+Routes to the endpoint with least active requests. Ideal for:
+- **Mixed workloads**: Different request types with varying processing times
+- **Dynamic balancing**: Automatically adapts to endpoint performance
+- **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
 
 ```yaml
-# config/config.local.yaml (example)
-server:
-  host: "localhost"
-  port: 40114
-  
-logging:
-  level: "debug"
-  format: "pretty"
-
-discovery:
-  static:
-    endpoints:
-      # Your local development endpoints
-      - url: "http://localhost:11434"
-        name: "local-ollama"
-        type: "ollama"
-        priority: 100
+load_balancer: "least-connections"
 ```
 
-### Project Structure
-
-```
-├── config/                 # Configuration files
-│   ├── config.yaml        # Main configuration (shipped)
-│   ├── *.local.yaml       # Local overrides (git-ignored)
-│   └── profiles/          # Platform profiles
-├── internal/               # Private application code (Go convention)
-│   ├── adapter/            # External integrations and infrastructure
-│   │   ├── balancer/       # Load balancing strategies (priority, round-robin, least-conn)
-│   │   ├── discovery/      # Service discovery and endpoint management
-│   │   ├── health/         # Health checking with circuit breakers
-│   │   ├── proxy/          # Dual proxy engines (Sherpa: simple, Olla: high-performance)
-│   │   ├── registry/       # Model registry and platform profiles
-│   │   ├── security/       # Rate limiting and request validation
-│   │   └── stats/          # Atomic statistics collection
-│   ├── app/                # Application assembly and HTTP handlers
-│   ├── config/             # Configuration management
-│   ├── core/               # Business logic and domain models
-│   │   ├── constants/      # Application constants
-│   │   ├── domain/         # Domain entities and interfaces
-│   │   └── ports/          # Interface definitions (ports & adapters pattern)
-│   ├── env/                # Environment variable utilities
-│   ├── integration/        # Integration test helpers
-│   ├── logger/             # Structured logging with themes
-│   ├── router/             # HTTP route registry and middleware
-│   ├── util/               # Common utilities (networking, terminal detection)
-│   └── version/            # Version information and build metadata
-├── pkg/                    # Public packages (reusable components)
-│   ├── format/             # Formatting utilities (bytes, duration)
-│   ├── nerdstats/          # Runtime statistics and performance metrics
-│   └── pool/               # Generic connection pooling (lite_pool)
-├── test/                   # Test suites and testing utilities
-│   └── scripts/            # Test automation scripts
-│       ├── load/           # Load testing scripts
-│       └── security/       # Security validation tests
-└── theme/                  # Terminal theming and color schemes
-```
-
-## 🔧 Advanced Configuration
-
-### Rate Limiting
-
-Protect your endpoints from abuse:
+#### 🎯 Priority (`priority`)
+Routes requests to the highest priority healthy endpoint. Perfect for:
+- **Home setups**: Workstation (priority 100) → Laptop (priority 50)
+- **Tiered infrastructure**: GPU servers → CPU servers → Cloud endpoints
+- **Cost optimisation**: Local hardware → Expensive cloud APIs
 
 ```yaml
-server:
-  rate_limits:
-    global_requests_per_minute: 1000      # Total requests across all IPs
-    per_ip_requests_per_minute: 100       # Per-IP limit
-    burst_size: 50                        # Allow bursts up to this size
-    health_requests_per_minute: 1000      # Separate limit for health checks
-    trust_proxy_headers: true             # For X-Forwarded-For support
-    trusted_proxy_cidrs:                  # Which proxies to trust
-      - "127.0.0.0/8"
-      - "10.0.0.0/8"
-      - "172.16.0.0/12"
-      - "192.168.0.0/16"
+load_balancer: "priority"
 ```
 
-### Request Size Limits
-
-Prevent resource exhaustion:
+#### 🔄 Round Robin (`round-robin`)
+Distributes requests evenly across all healthy endpoints. Good for:
+- **Equal hardware**: Multiple identical servers
+- **Even load distribution**: When all endpoints have similar capacity
+- **Simple load spreading**: No complex routing logic needed
 
 ```yaml
-server:
-  request_limits:
-    max_body_size: 50MB      # Maximum request body size
-    max_header_size: 1MB     # Maximum total header size
+load_balancer: "round-robin"
 ```
 
-### Model Discovery
+### Proxy Engines
 
-Automatically discover available models:
+- **Sherpa**: Simple, maintainable (8KB buffers, shared transport)
+- **Olla**: High-performance (64KB buffers, per-endpoint pools, circuit breakers)
+
+### Why Olla for LLMs?
+
+Unlike generic proxies, Olla is purpose-built for LLM workloads:
+
+- **Streaming-First**: Immediate response streaming without buffering delays
+- **Long-Running Requests**: Optimised timeouts for extended LLM inference times  
+- **Memory Efficient**: 64KB buffers optimised for token streaming (Olla engine)
+- **Connection Pooling**: Persistent connections to backend endpoints reduce latency
+- **Circuit Breakers**: Automatic failover prevents cascade delays during model loading
+
+For detailed configuration options including Docker deployment and environment variables, see the [Configuration Reference](docs/user/configuration.md) and [Deployment Guide](docs/user/deployment.md).
+
+## Example: Multi-Platform Setup
 
 ```yaml
 discovery:
-  model_discovery:
-    enabled: true
-    interval: 5m              # How often to check for new models
-    timeout: 30s              # Timeout for discovery requests
-    concurrent_workers: 5     # Parallel discovery workers
-    retry_attempts: 3
-    retry_backoff: 1s
+  endpoints:
+    # Local Ollama (highest priority)
+    - name: "workstation"
+      url: "http://localhost:11434"
+      platform: "ollama"
+      priority: 100
+      
+    # LM Studio backup
+    - name: "laptop"
+      url: "http://192.168.1.100:1234"
+      platform: "lmstudio"
+      priority: 80
+      
+    # Cloud fallback (coming soon!)
+    - name: "groq"
+      url: "https://api.groq.com/openai/v1"
+      platform: "openai"
+      priority: 10
+      headers:
+        Authorization: "Bearer ${GROQ_API_KEY}"
+```
+
+With this setup:
+1. Requests go to your workstation first
+2. If workstation fails, tries laptop
+3. If both local options fail, uses Groq as backup
+4. All models across all platforms are available as one unified catalogue
+
+## Documentation
+
+- **[User Guide](docs/user/getting-started.md)** - Installation, configuration, deployment
+- **[API Reference](docs/api/README.md)** - Complete API documentation
+- **[Technical Docs](docs/technical/)** - Architecture, load balancing, proxy engines
+- **[Best Practices](docs/user/best-practices.md)** - Production deployment guidance
+
+## Development
+
+```bash
+make build        # Build binary
+make test         # Run tests
+make ready        # Test + lint + format (run before commit)
+make dev          # Development mode with auto-reload
 ```
 
 ## 🚨 Security Considerations
@@ -754,7 +306,7 @@ A: Olla focuses on load balancing and lets your reverse proxy handle authenticat
 A: Use **Sherpa** for simple deployments with moderate traffic. Choose **Olla** for high-throughput production workloads that need connection pooling, circuit breakers, and maximum performance.
 
 **Q: How does priority routing work with model availability?** \
-A: Model routing infrastructure is in place but not yet active. When implemented, Olla will filter endpoints by model availability before applying your load balancing strategy.
+A: Olla automatically discovers models across all endpoints and routes requests to endpoints that have the requested model available. If multiple endpoints have the model, your load balancing strategy determines which one gets the request.
 
 **Q: Can I run Olla in Kubernetes?** \
 A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!
@@ -777,7 +329,7 @@ We've utilised GitHub Copilot, Anthropic Claude, and OpenAI ChatGPT for document
 * [@pterm/pterm](https://github.com/pterm/pterm) - Terminal UI framework
 * [@puzpuzpuz/xsync](https://github.com/puzpuzpuz/xsync/) - High-performance concurrent maps
 * [@golangci/golangci-lint](https://github.com/golangci/golangci-lint) - Go linting
-* [@dkorunic/betteralign](https://github.com/dkorunic/betteralign) - Struct alignment optimization
+* [@dkorunic/betteralign](https://github.com/dkorunic/betteralign) - Struct alignment optimisation
 
 ## 📄 License
 
@@ -788,8 +340,9 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 - [x] **Circuit breakers**: Advanced fault tolerance (Olla engine)
 - [x] **Connection pooling**: Per-endpoint connection management (Olla engine)
 - [x] **Object pooling**: Reduced GC pressure for high throughput (Olla engine)
+- [X] **Model routing**: Route based on model requested
+- [ ] **Authenticated Endpoints**: Support calling authenticated endpoints (bearer) like OpenAI/Groq/OpenRouter as endpoints
 - [ ] **Auto endpoint discovery**: Add endpoints, let Olla determine the type
-- [ ] **Model routing**: Route based on model requested (infrastructure ready)
 - [ ] **Model benchmarking**: Benchmark models across multiple endpoints easily
 - [ ] **Metrics export**: Prometheus/OpenTelemetry integration
 - [ ] **Dynamic configuration**: API-driven endpoint management

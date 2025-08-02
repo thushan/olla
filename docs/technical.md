@@ -52,7 +52,7 @@ Olla follows Hexagonal Architecture (Ports & Adapters) for clean separation of c
    ↓
 2. Security middleware (rate limiting, size checks)
    ↓
-3. Inspector chain analyzes request
+3. Inspector chain analyses request
    - Extract model name
    - Determine compatible platforms
    - Identify required capabilities
@@ -128,7 +128,7 @@ Llama-3.2-3B-Q4 → llama/3.2:3b-q4 → llama/3.2
 Features:
 - Automatic model discovery
 - Capability detection (vision, embeddings, code)
-- Cross-platform normalization
+- Cross-platform normalisation
 
 ### Statistics Collection
 
@@ -145,7 +145,7 @@ Tracks:
 - Active connections
 - Model usage
 
-## Performance Optimizations
+## Performance Optimisations
 
 ### Connection Pooling (Olla)
 - Per-endpoint pools reduce connection overhead
@@ -153,11 +153,11 @@ Tracks:
 - Automatic cleanup of stale connections
 
 ### Object Pooling (Olla)
-- Reusable buffers minimize GC pressure
+- Reusable buffers minimise GC pressure
 - Pooled contexts and error objects
-- 64KB buffers optimized for streaming
+- 64KB buffers optimised for streaming
 
-### Streaming Optimization
+### Streaming Optimisation
 - Large buffers for LLM token streams
 - Immediate flushing for low latency
 - Graceful handling of slow consumers

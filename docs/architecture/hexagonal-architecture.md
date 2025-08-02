@@ -62,7 +62,7 @@ type UnifiedModel struct {
 
 UnifiedModel provides a platform-agnostic representation of models. It tracks where each model is available across endpoints, maintains all naming aliases, and stores metadata from different platforms. This enables correct routing regardless of platform-specific naming conventions.
 
-The domain layer also includes interfaces for platform-specific behavior profiles and model capabilities, which are implemented by adapters to handle different LLM platforms' unique requirements.
+The domain layer also includes interfaces for platform-specific behaviour profiles and model capabilities, which are implemented by adapters to handle different LLM platforms' unique requirements.
 
 ## Ports (`/internal/core/ports/`)
 
