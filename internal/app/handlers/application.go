@@ -9,6 +9,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
+	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -19,11 +20,16 @@ import (
 // SecurityAdapters provides middleware for security chain
 type SecurityAdapters struct {
 	securityChain *ports.SecurityChain
+	logger        logger.StyledLogger
 }
 
-// CreateChainMiddleware creates middleware that applies the full security chain
+// CreateChainMiddleware creates middleware that applies the full security chain with enhanced logging
 func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
+		// Chain the middleware: logging -> access logging -> security -> handler
+		withLogging := middleware.EnhancedLoggingMiddleware(s.logger)(next)
+		withAccessLogging := middleware.AccessLoggingMiddleware(s.logger)(withLogging)
+
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if s.securityChain != nil {
 				// Create security request from HTTP request
@@ -44,16 +50,18 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 					return
 				}
 			}
-			next.ServeHTTP(w, r)
+			withAccessLogging.ServeHTTP(w, r)
 		})
 	}
 }
 
-// CreateRateLimitMiddleware creates middleware that only applies rate limiting
+// CreateRateLimitMiddleware creates middleware that only applies rate limiting with enhanced logging
 func (s *SecurityAdapters) CreateRateLimitMiddleware() func(http.Handler) http.Handler {
-	// For now, just pass through - rate limiting is part of the security chain
 	return func(next http.Handler) http.Handler {
-		return next
+		// Apply enhanced logging for non-proxy routes as well
+		withLogging := middleware.EnhancedLoggingMiddleware(s.logger)(next)
+		withAccessLogging := middleware.AccessLoggingMiddleware(s.logger)(withLogging)
+		return withAccessLogging
 	}
 }
 
@@ -114,6 +122,7 @@ func NewApplication(
 	// Create security adapters
 	securityAdapters := &SecurityAdapters{
 		securityChain: securityChain,
+		logger:        logger,
 	}
 
 	// Create route registry

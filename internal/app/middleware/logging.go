@@ -1,0 +1,189 @@
+package middleware
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/thushan/olla/internal/logger"
+)
+
+// Context keys for request ID and logger
+type contextKey string
+
+const (
+	RequestIDKey contextKey = "request_id"
+	LoggerKey    contextKey = "logger"
+)
+
+// responseWriter wraps http.ResponseWriter to capture response size and status
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+	size   int64
+}
+
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	size, err := rw.ResponseWriter.Write(b)
+	rw.size += int64(size)
+	return size, err
+}
+
+func (rw *responseWriter) WriteHeader(s int) {
+	rw.status = s
+	rw.ResponseWriter.WriteHeader(s)
+}
+
+// generateRequestID creates a unique request ID
+func generateRequestID() string {
+	bytes := make([]byte, 8)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
+// GetLogger retrieves a logger with request ID from context
+func GetLogger(ctx context.Context) *slog.Logger {
+	if logger, ok := ctx.Value(LoggerKey).(*slog.Logger); ok {
+		return logger
+	}
+	return slog.Default()
+}
+
+// GetRequestID retrieves the request ID from context
+func GetRequestID(ctx context.Context) string {
+	if requestID, ok := ctx.Value(RequestIDKey).(string); ok {
+		return requestID
+	}
+	return ""
+}
+
+// EnhancedLoggingMiddleware adds request ID to logger context and logs request/response details
+func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			// Get or create request ID
+			requestID := r.Header.Get("X-Request-ID")
+			if requestID == "" {
+				requestID = generateRequestID()
+			}
+
+			// Calculate request size
+			requestSize := r.ContentLength
+			if requestSize < 0 {
+				requestSize = 0
+			}
+
+			// Add to context for propagation
+			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
+
+			// Create a base logger with request ID
+			baseLogger := slog.Default().With("request_id", requestID)
+			ctx = context.WithValue(ctx, LoggerKey, baseLogger)
+
+			// Add to response header for client tracking
+			w.Header().Set("X-Olla-Request-ID", requestID)
+
+			// Wrap response writer to capture metrics
+			wrapped := &responseWriter{ResponseWriter: w, status: 200}
+
+			// Log request start
+			baseLogger.Info("Request started",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote_addr", r.RemoteAddr,
+				"user_agent", r.UserAgent(),
+				"request_bytes", requestSize,
+				"request_size_formatted", formatBytes(requestSize))
+
+			next.ServeHTTP(wrapped, r.WithContext(ctx))
+
+			duration := time.Since(start)
+
+			// Log request completion
+			baseLogger.Info("Request completed",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", wrapped.status,
+				"duration_ms", duration.Milliseconds(),
+				"duration_formatted", duration.String(),
+				"request_bytes", requestSize,
+				"response_bytes", wrapped.size,
+				"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)))
+		})
+	}
+}
+
+// AccessLoggingMiddleware provides structured access logging for detailed analysis
+func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			// Use existing request ID from context or create one
+			requestID := GetRequestID(r.Context())
+			if requestID == "" {
+				requestID = generateRequestID()
+				ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
+				r = r.WithContext(ctx)
+			}
+
+			// Calculate request size
+			requestSize := r.ContentLength
+			if requestSize < 0 {
+				requestSize = 0
+			}
+
+			wrapped := &responseWriter{ResponseWriter: w, status: 200}
+
+			next.ServeHTTP(wrapped, r)
+
+			duration := time.Since(start)
+
+			// Create detailed context for file logging only
+			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
+
+			// Log detailed access information (file only)
+			baseLogger := slog.Default()
+			baseLogger.InfoContext(detailedCtx, "Access log",
+				"timestamp", start.Format(time.RFC3339),
+				"request_id", requestID,
+				"remote_addr", r.RemoteAddr,
+				"method", r.Method,
+				"path", r.URL.Path,
+				"query", r.URL.RawQuery,
+				"status", wrapped.status,
+				"request_bytes", requestSize,
+				"response_bytes", wrapped.size,
+				"duration_ms", duration.Milliseconds(),
+				"user_agent", r.UserAgent(),
+				"referer", r.Referer(),
+				"content_type", r.Header.Get("Content-Type"),
+				"accept", r.Header.Get("Accept"))
+		})
+	}
+}
+
+// formatBytes converts byte count to human-readable format
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%dB", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f%cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// FormatBytes is the exported version for external use
+func FormatBytes(bytes int64) string {
+	return formatBytes(bytes)
+}
