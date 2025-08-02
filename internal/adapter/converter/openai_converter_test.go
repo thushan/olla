@@ -89,6 +89,6 @@ func TestOpenAIConverter_ConvertToFormat(t *testing.T) {
 		response, ok := result.(OpenAIModelResponse)
 		require.True(t, ok)
 		assert.Len(t, response.Data, 1)
-		assert.Equal(t, "phi/4:14.7b-q4km", response.Data[0].ID)
+		assert.Equal(t, "phi4:latest", response.Data[0].ID)
 	})
 }

@@ -3,9 +3,10 @@ package services
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/util"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/app/handlers"
 	"github.com/thushan/olla/internal/config"

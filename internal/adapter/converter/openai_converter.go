@@ -48,8 +48,16 @@ func (c *OpenAIConverter) ConvertToFormat(models []*domain.UnifiedModel, filters
 }
 
 func (c *OpenAIConverter) convertModel(model *domain.UnifiedModel) OpenAIModelData {
+	// OLLA-85: [Unification] Models with different digests fail to unify correctly.
+	// we need to use first alas as ID for routing compatibility
+	// to make sure the returned model ID can be used for requests
+	modelID := model.ID
+	if len(model.Aliases) > 0 {
+		modelID = model.Aliases[0].Name
+	}
+
 	return OpenAIModelData{
-		ID:      model.ID,
+		ID:      modelID,
 		Object:  "model",
 		Created: time.Now().Unix(),
 		OwnedBy: "olla",
