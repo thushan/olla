@@ -281,12 +281,6 @@ response = client.chat.completions.create(
     messages=[...]
 )
 
-# Request by capability (coming soon)
-response = client.chat.completions.create(
-    model="any",
-    model_capabilities={"vision": True},  # Routes to vision-capable model
-    messages=[...]
-)
 ```
 
 ## Monitoring

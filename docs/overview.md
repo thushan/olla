@@ -75,7 +75,7 @@ Every request through Olla includes headers showing:
 - How long it took (`X-Olla-Response-Time`)
 - Request ID for debugging (`X-Olla-Request-ID`)
 
-This transparency helps you understand and optimize your AI infrastructure.
+This transparency helps you understand and optimise your AI infrastructure.
 
 ## Next Steps
 
