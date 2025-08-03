@@ -17,26 +17,80 @@ Olla solves these problems by providing intelligent routing, automatic failover,
 
 ### Installation
 
-#### Download Binary
-
-Download the latest release for your platform:
+### Quick Install Script
 
 ```bash
-# Linux/macOS
-curl -L https://github.com/sammcj/olla/releases/latest/download/olla-$(uname -s)-$(uname -m) -o olla
+# Download and install automatically
+bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
+```
+
+### Manual Installation
+
+#### Download Binary
+
+```bash
+# Download latest release
+VERSION="v0.1.0"
+ARCH="amd64" # or arm64
+OS="linux" # or darwin, windows
+curl -L "https://github.com/thushan/olla/releases/download/${VERSION}/olla-${OS}-${ARCH}" -o olla
 chmod +x olla
 
-# Windows
-# Download from https://github.com/sammcj/olla/releases
+# Verify installation
+./olla --version
 ```
 
 #### Build from Source
 
 ```bash
-git clone https://github.com/sammcj/olla.git
+# Clone repository
+git clone https://github.com/thushan/olla.git
 cd olla
+
+# Build standard version
 make build
+
+# Build optimised release version
+make build-release
+
+# Install to system (optional)
+sudo make install
 ```
+
+#### Container Installation
+
+```bash
+# Use pre-built container
+docker run -t \
+  --name olla \
+  -p 40114:40114 \
+  ghcr.io/thushan/olla:latest
+
+# Or build from source
+docker build -t olla:latest .
+docker run -d \
+  --name olla \
+  -p 40114:40114 \
+  -v $(pwd)/config.yaml:/config.yaml \
+  olla:latest
+```
+
+#### Go Install
+
+```bash
+go install github.com/thushan/olla@latest
+```
+
+### System Requirements
+
+| Deployment | CPU | RAM | Notes |
+|-----------|-----|-----|-------|
+| Development | 2 cores | 2GB | Light traffic |
+| Small Production | 4 cores | 8GB | Moderate traffic |
+| Large Production | 8+ cores | 16GB+ | High traffic |
+
+**Operating Systems:** Linux, macOS, Windows  
+**Go Version:** 1.24+ (for building from source)
 
 ### Basic Configuration
 
@@ -333,7 +387,206 @@ discovery:
         timeout: 30s  # Longer health check timeout
 ```
 
+## Deployment Options
+
+### Development Deployment
+
+For local development, run Olla directly:
+
+```bash
+# Run with default config
+./olla
+
+# Run with custom config
+./olla -c my-config.yaml
+
+# Run with environment overrides
+OLLA_SERVER_PORT=8080 OLLA_LOG_LEVEL=debug ./olla
+```
+
+### Production Deployment
+
+#### Running as a Service
+
+**Linux (systemd):**
+
+```bash
+# Create user and directories
+sudo useradd -r -s /bin/false olla
+sudo mkdir -p /opt/olla
+sudo cp olla config.yaml /opt/olla/
+sudo chown -R olla:olla /opt/olla
+
+# Create service file
+sudo tee /etc/systemd/system/olla.service > /dev/null <<EOF
+[Unit]
+Description=Olla LLM Proxy
+After=network.target
+Documentation=https://github.com/thushan/olla
+
+[Service]
+Type=simple
+User=olla
+Group=olla
+WorkingDirectory=/opt/olla
+ExecStart=/opt/olla/olla
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable olla
+sudo systemctl start olla
+```
+
+**Docker Deployment:**
+
+```bash
+# Production container with custom config
+docker run -d \
+  --name olla-prod \
+  --restart unless-stopped \
+  -p 40114:40114 \
+  -v /etc/olla/config.yaml:/config.yaml \
+  -e OLLA_CONFIG_FILE=/config.yaml \
+  -e OLLA_LOG_LEVEL=info \
+  -e OLLA_LOG_FORMAT=json \
+  ghcr.io/thushan/olla:latest
+
+# Or use Docker Compose
+tee docker-compose.yml > /dev/null <<EOF
+version: '3.8'
+services:
+  olla:
+    image: ghcr.io/thushan/olla:latest
+    container_name: olla
+    restart: unless-stopped
+    ports:
+      - "40114:40114"
+    volumes:
+      - ./config.yaml:/config.yaml
+    environment:
+      - OLLA_CONFIG_FILE=/config.yaml
+      - OLLA_LOG_LEVEL=info
+      - OLLA_LOG_FORMAT=json
+EOF
+
+docker-compose up -d
+```
+
+#### Reverse Proxy Setup
+
+Deploy behind a reverse proxy for TLS and load balancing:
+
+**Nginx:**
+
+```nginx
+upstream olla_backend {
+    server 127.0.0.1:40114;
+    keepalive 32;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+    
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+    
+    location / {
+        proxy_pass http://olla_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        
+        # LLM-optimised timeouts
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 600s;
+        proxy_read_timeout 600s;
+        proxy_buffering off;
+    }
+}
+```
+
+**Caddy:**
+
+```
+api.example.com {
+    reverse_proxy localhost:40114 {
+        health_uri /internal/health
+        health_interval 10s
+        flush_interval -1
+    }
+}
+```
+
+#### High Availability
+
+Run multiple Olla instances for redundancy:
+
+```bash
+# Multiple instances on different ports
+OLLA_SERVER_PORT=40114 ./olla &
+OLLA_SERVER_PORT=40115 ./olla &
+OLLA_SERVER_PORT=40116 ./olla &
+
+# Configure load balancer to distribute across instances
+```
+
+### Environment Configuration
+
+Use environment variables for deployment-specific settings:
+
+```bash
+# Server settings
+export OLLA_SERVER_HOST=0.0.0.0
+export OLLA_SERVER_PORT=40114
+export OLLA_CONFIG_FILE=/etc/olla/config.yaml
+
+# Logging
+export OLLA_LOG_LEVEL=info
+export OLLA_LOG_FORMAT=json
+
+# Proxy settings  
+export OLLA_PROXY_ENGINE=olla
+export OLLA_PROXY_LOAD_BALANCER=priority
+
+# Rate limiting
+export OLLA_SERVER_GLOBAL_RATE_LIMIT=10000
+export OLLA_SERVER_PER_IP_RATE_LIMIT=1000
+```
+
 ## Security Considerations
+
+### Network Security
+
+```yaml
+server:
+  # Bind to localhost only if behind reverse proxy
+  host: "127.0.0.1"
+  
+  # Configure rate limiting
+  rate_limits:
+    global_requests_per_minute: 10000
+    per_ip_requests_per_minute: 100
+    burst_size: 50
+    trust_proxy_headers: true  # When behind reverse proxy
+  
+  # Request size limits
+  request_limits:
+    max_body_size: 104857600  # 100MB
+    max_header_size: 1048576  # 1MB
+```
 
 ### API Key Management
 
@@ -347,6 +600,13 @@ discovery:
       headers:
         Authorization: "Bearer ${OPENAI_API_KEY}"
 ```
+
+### TLS/SSL
+
+Olla doesn't handle TLS directly - use a reverse proxy:
+- nginx, Caddy, HAProxy for self-managed TLS
+- Cloud load balancers (AWS ALB, GCP LB) for managed TLS
+- Service mesh (Istio, Linkerd) for zero-config TLS
 
 ```bash
 # Set environment variable
@@ -446,7 +706,7 @@ response = llm.invoke("What is the meaning of life?")
 ## Next Steps
 
 1. **Explore Advanced Configuration**: See the [Configuration Reference](configuration.md) for all options
-2. **Deploy to Production**: Check the [Deployment Guide](deployment.md) for production best practices
+2. **Deploy to Production**: See the deployment sections above for production best practices
 3. **Monitor Performance**: Learn about [Monitoring and Observability](monitoring.md)
 4. **Troubleshoot Issues**: Refer to the [Troubleshooting Guide](troubleshooting.md)
 

@@ -11,7 +11,7 @@
 > [!IMPORTANT]  
 > Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
 
-Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Model unification and routing is built into Olla, so all your models from each Ollama or LM Studio or OpenAI compatible backend, can be routed to.
+Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
 You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
@@ -21,11 +21,11 @@ Single CLI application and config file is all you need to go Olla!
 
 ## Key Features
 
-- **🔄 Smart Load Balancing**: [Priority-based routing](docs/user/best-practices.md#load-balancing) with automatic failover
-- **🔍 Model Unification**: [Cross-platform model discovery](docs/user/getting-started.md#working-with-models) and normalisation
-- **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](docs/user/configuration.md#proxy-engines)
+- **🔄 Smart Load Balancing**: [Priority-based routing](docs/user/load-balancers.md) with automatic failover
+- **🔍 Model Discovery**: [Per-provider model catalogues](docs/user/getting-started.md#working-with-models) and normalisation
+- **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](docs/user/proxies.md)
 - **💊 Health Monitoring**: [Continuous endpoint health checks](docs/user/troubleshooting.md#health-monitoring) with circuit breakers
-- **📊 Request Tracking**: Detailed response headers and [statistics](docs/user/api-usage.md#response-headers)
+- **📊 Request Tracking**: Detailed response headers and [statistics](docs/user/endpoints.md#response-headers)
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
@@ -61,10 +61,9 @@ go install github.com/thushan/olla@latest
 
 # Build from source
 git clone https://github.com/thushan/olla.git && cd olla && make build
-
 ```
 
-When you have things running you can check everything's good with:
+When you have things running you can check everything's working with:
 
 ```bash
 # Check health of Olla
@@ -77,6 +76,8 @@ curl http://localhost:40114/internal/status/endpoints
 curl http://localhost:40114/internal/status/models
 ```
 
+For detailed installation and deployment options, see [Getting Started Guide](docs/user/getting-started.md).
+
 ### Basic Configuration
 
 Modify the existing `config.yaml` or create a copy:
@@ -87,7 +88,7 @@ server:
   port: 40114
 
 proxy:
-  engine: "sherpa"        # or "olla" for high performance
+  engine: "sherpa"          # or "olla" for high performance
   load_balancer: "priority" # or round-robin, least-connections
 
 discovery:
@@ -102,6 +103,8 @@ discovery:
       platform: "ollama"
       priority: 50          # Lower priority fallback
 ```
+
+For comprehensive configuration options, see [Configuration Reference](docs/user/configuration.md).
 
 ### Start Olla
 
@@ -131,10 +134,11 @@ response = client.chat.completions.create(
 )
 ```
 
-### Curl Examples
+### Provider Examples
 
+**Ollama Provider**
 ```bash
-# Chat completions via Ollama
+# Chat via Ollama (OpenAI-compatible)
 curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -142,7 +146,7 @@ curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
-# Ollama native generate API
+# Ollama native API
 curl -X POST http://localhost:40114/olla/ollama/api/generate \
   -H "Content-Type: application/json" \
   -d '{
@@ -150,22 +154,56 @@ curl -X POST http://localhost:40114/olla/ollama/api/generate \
     "prompt": "Hello!"
   }'
 
-# List models from all providers
-curl http://localhost:40114/olla/models
-
-# List models from Ollama only
-curl http://localhost:40114/olla/models?format=ollama
+# List Ollama models (native format)
+curl http://localhost:40114/olla/ollama/api/tags
 ```
 
-### Supported Endpoints
+**LM Studio Provider**
+```bash
+# Chat via LM Studio
+curl -X POST http://localhost:40114/olla/lmstudio/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "local-model",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
 
-| Endpoint | Description | Documentation |
-|----------|-------------|---------------|
-| `POST /api/generate` | Ollama-style generation | [API Usage](docs/user/api-usage.md) |
-| `POST /v1/chat/completions` | OpenAI-style chat | [API Usage](docs/user/api-usage.md#openai-compatibility) |
-| `GET /api/tags` | List available models | [Getting Started](docs/user/getting-started.md#checking-available-models) |
-| `GET /internal/health` | Health check | [Best Practices](docs/user/best-practices.md#monitoring) |
-| `GET /internal/status` | Detailed status | [Troubleshooting](docs/user/troubleshooting.md#status-endpoints) |
+# List LM Studio models
+curl http://localhost:40114/olla/lmstudio/v1/models
+```
+
+### Model Discovery Examples
+
+Olla supports unification (and intelligent routing) of provider models. For example, if there are 3x Ollama servers with llama3, llama3.2 and llama4 available on each, the unified view of `/olla/ollama/api/tags` will show all three, when a request comes for `llama3` it will route to only those endpoints that have `llama3`.
+
+Olla also tracks a unified model catalog across all providers, you can retrieve thosoe via the `/olla/models` endpoint.
+
+```bash
+# All models from all providers (unified)
+curl http://localhost:40114/olla/models
+
+# Only Ollama models (unified format)
+curl http://localhost:40114/olla/models?format=ollama
+
+# Only LM Studio models (unified format)  
+curl http://localhost:40114/olla/models?format=lmstudio
+
+# Only OpenAI-compatible models (unified format)
+curl http://localhost:40114/olla/models?format=openai
+```
+
+### Key Endpoints
+
+| Type | Example | Description |
+|------|---------|-------------|
+| **Ollama Routes** | `/olla/ollama/v1/chat/completions` | Chat with Ollama endpoints |
+| **LM Studio Routes** | `/olla/lmstudio/v1/chat/completions` | Chat with LM Studio endpoints |
+| **OpenAI Routes** | `/olla/openai/v1/chat/completions` | Chat with OpenAI-compatible endpoints |
+| **Unified Models** | `/olla/models` | All models across all providers |
+| **Provider Models** | `/olla/models?format=ollama` | Filter models by provider type |
+| **Health & Status** | `/internal/health` | Monitor system health |
+
+For complete endpoint documentation, see [API Endpoints](docs/user/endpoints.md).
 
 ### Response Headers
 
@@ -179,6 +217,8 @@ X-Olla-Request-ID: req_abc123     # For debugging
 X-Olla-Response-Time: 1.234s      # Total time (trailer)
 ```
 
+For API usage patterns and examples, see [API Endpoints Reference](docs/user/endpoints.md).
+
 ## Configuration
 
 ### ⚖️ Load Balancing Strategies
@@ -186,6 +226,8 @@ X-Olla-Response-Time: 1.234s      # Total time (trailer)
 - **Least Connections**: Routes to endpoint with fewest active connections (recommended for businesses)
 - **Priority**: Routes to highest priority healthy endpoint (recommended for home)
 - **Round Robin**: Even distribution across all endpoints
+
+For detailed strategy selection and configuration, see [Load Balancing Guide](docs/user/load-balancers.md).
 
 #### 📊 Least Connections (`least-connections`)
 Routes to the endpoint with least active requests. Ideal for:
@@ -222,6 +264,8 @@ load_balancer: "round-robin"
 - **Sherpa**: Simple, maintainable (8KB buffers, shared transport)
 - **Olla**: High-performance (64KB buffers, per-endpoint pools, circuit breakers)
 
+For engine selection and performance tuning, see [Proxy Engine Guide](docs/user/proxies.md).
+
 ### Why Olla for LLMs?
 
 Unlike generic proxies, Olla is purpose-built for LLM workloads:
@@ -232,7 +276,7 @@ Unlike generic proxies, Olla is purpose-built for LLM workloads:
 - **Connection Pooling**: Persistent connections to backend endpoints reduce latency
 - **Circuit Breakers**: Automatic failover prevents cascade delays during model loading
 
-For detailed configuration options including Docker deployment and environment variables, see the [Configuration Reference](docs/user/configuration.md) and [Deployment Guide](docs/user/deployment.md).
+For detailed configuration options including Docker deployment and environment variables, see the [Configuration Reference](docs/user/configuration.md), [Load Balancing Guide](docs/user/load-balancers.md), [Proxy Engine Guide](docs/user/proxies.md), and [Getting Started Guide](docs/user/getting-started.md).
 
 ## Example: Multi-Platform Setup
 
@@ -264,7 +308,7 @@ With this setup:
 1. Requests go to your workstation first
 2. If workstation fails, tries laptop
 3. If both local options fail, uses Groq as backup
-4. All models across all platforms are available as one unified catalogue
+4. Models from each provider are discoverable and available for routing
 
 ## Documentation
 
@@ -306,7 +350,7 @@ A: Olla focuses on load balancing and lets your reverse proxy handle authenticat
 A: Use **Sherpa** for simple deployments with moderate traffic. Choose **Olla** for high-throughput production workloads that need connection pooling, circuit breakers, and maximum performance.
 
 **Q: How does priority routing work with model availability?** \
-A: Olla automatically discovers models across all endpoints and routes requests to endpoints that have the requested model available. If multiple endpoints have the model, your load balancing strategy determines which one gets the request.
+A: Olla discovers models within each provider type and routes requests to compatible endpoints. For Ollama endpoints, it routes to Ollama endpoints that have the model. For OpenAI-compatible endpoints, it can route across any OpenAI-compatible provider.
 
 **Q: Can I run Olla in Kubernetes?** \
 A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!
