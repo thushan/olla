@@ -46,16 +46,16 @@ discovery:
         priority: 100
         model_url: "/api/tags"
         health_check_url: "/"
-        check_interval: 5s
-        check_timeout: 2s
-      - url: "http://192.168.0.1:11434"
-        name: "neo-llama"
-        type: "ollama"
+        check_interval: 2s
+        check_timeout: 1s
+      - url: "http://localhost:11234"
+        name: "local-lm-studio"
+        type: "lm-studio"
         priority: 100
-        model_url: "/api/tags"
+        model_url: "/v1/models"
         health_check_url: "/"
-        check_interval: 5s
-        check_timeout: 2s
+        check_interval: 2s
+        check_timeout: 1s
   model_discovery:
     enabled: true
     interval: 5m
