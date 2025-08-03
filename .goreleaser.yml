@@ -16,6 +16,8 @@ before:
     - touch data/.gitkeep
     - touch logs/.gitkeep
     - touch tmp/.gitkeep
+    # we generate container-specific config from main config - only transform endpoint URLs
+    - bash -c 'sed "s|- url: \"http://localhost:|- url: \"http://host.docker.internal:|g; s|- url: \"http://127\.0\.0\.1:|- url: \"http://host.docker.internal:|g" config/config.yaml > config/config.container.yaml'
 
 release:
   name_template: "{{.ProjectName}}-v{{.Version}}"
@@ -76,9 +78,9 @@ dockers:
       - "--label=org.opencontainers.image.description=High-performance LLM front-end load balancer and proxy"
       - "--label=org.opencontainers.image.licenses=Apache-2.0"
     extra_files:
-      # For Docker, explicitly list config files
-      - config/config.yaml
-      - config/docker.yaml
+      # For containers, use generated container-specific config
+      - src: config/config.container.yaml
+        dst: config.yaml
       - config/models.yaml
       - config/profiles/
       - logs/.gitkeep
@@ -95,8 +97,6 @@ archives:
         dst: config/config.yaml
       - src: config/models.yaml
         dst: config/models.yaml
-      - src: config/docker.yaml
-        dst: config/docker.yaml
       - src: config/profiles/*.yaml
         dst: config/profiles/
       # Explicitly exclude any local config files
