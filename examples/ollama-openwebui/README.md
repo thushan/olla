@@ -64,24 +64,6 @@ This Docker Compose stack runs:
 
 The `olla.yaml` file gets mounted to `/app/config.yaml` inside the Olla container.
 
-### Adding More Ollama Servers
-
-Edit `olla.yaml` to add more endpoints:
-```yaml
-discovery:
-  type: "static"
-  static:
-    endpoints:
-      - url: "http://server1:11434"
-        name: "server1"
-        type: "ollama"
-        priority: 100
-      - url: "http://server2:11434"
-        name: "server2"
-        type: "ollama"
-        priority: 50
-```
-
 ## Adding Ollama Instances
 
 To add more Ollama instances, edit the `olla.yaml` file:
@@ -121,20 +103,6 @@ discovery:
         check_interval: 2s
         check_timeout: 1s
 ```
-
-## Load Balancing Strategies
-
-You can change the load balancing strategy in `olla.yaml`:
-
-```yaml
-proxy:
-  load_balancer: "priority"  # Options: priority, round-robin, least-connections
-```
-
-- **Priority**: Routes to highest priority healthy endpoint (recommended for mixed hardware)
-- **Round-robin**: Even distribution across all healthy endpoints
-- **Least-connections**: Routes to endpoint with fewest active requests
-
 ## Monitoring
 
 ### Check Olla Health
@@ -147,14 +115,14 @@ curl http://localhost:40114/internal/health
 curl http://localhost:40114/internal/status/endpoints
 ```
 
-### Check Available Models
+### Check Available All Available Models
 ```bash
-curl http://localhost:40114/internal/status/models
+curl http://localhost:40114/olla/models
 ```
 
 ### View Unified Models (What OpenWebUI Sees)
 ```bash
-curl http://localhost:40114/olla/models
+curl http://localhost:40114/olla/ollama/api/tags
 ```
 
 ## Troubleshooting

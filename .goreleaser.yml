@@ -101,6 +101,13 @@ archives:
         dst: config/docker.yaml
       - src: config/profiles/*.yaml
         dst: config/profiles/
+      # include examples
+      - src: examples/ollama-openwebui/compose.yaml
+        dst: examples/ollama-openwebui/compose.yaml
+      - src: examples/ollama-openwebui/README.md
+        dst: examples/ollama-openwebui/README.md
+      - src: examples/ollama-openwebui/olla.yaml
+        dst: examples/ollama-openwebui/olla.yaml
       # Explicitly exclude any local config files
       - "!config/*.local.yaml"
       - "!config/**/*.local.yaml"

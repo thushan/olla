@@ -16,13 +16,15 @@
 > [!IMPORTANT]  
 > Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
 
-Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes—including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
+Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
 You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
+Single CLI application and config file is all you need to go Olla!
+
 ![Olla Usecase](assets/diagrams/usecases.excalidraw.png)
 
-Single CLI application and config file is all you need to go Olla!
+In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/junie/) to use Olla for its Ollama and LMStudio endpoints for local-ai inference with Junie.
 
 ## Key Features
 
@@ -34,18 +36,18 @@ Single CLI application and config file is all you need to go Olla!
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
-- **⚙️ High Performace**: Designed to be very lightweight - memory and cpu utilisation, on averge consuming ~30Mb and 50Mb peak for high traffic loads. See [best practices](./docs/user/best-practices.md)
+- **⚙️ High Performace**: Designed to be very lightweight & efficient, runs on less than 50Mb RAM. See [best practices](./docs/user/best-practices.md)
 
 ### Supported Backends
 
 * [Ollama](https://github.com/ollama/ollama) - full support for Ollama, including model unification. \
   Use: `/olla/ollama/`
 * [LM Studio](https://lmstudio.ai/) - full support for Ollama, including model unification. \
-  Use: `/olla/lm_studio/`
+  Use: `/olla/lmstudio/` || `/olla/lm-studio/` || `/olla/lm_studio/`
 * [OpenAI](https://platform.openai.com/docs/overview) - You can use OpenAI API that provides a unified query API across all providers. \
   Use: `/olla/openai/`
 
-Coming soon - but you can use the OpenAI compatibility later in the interim:
+Coming soon - but you can use the OpenAI compatibility in the interim:
 
 * [vLLM](https://github.com/vllm-project/vllm)
 * [LMDeploy](https://github.com/InternLM/lmdeploy)
@@ -58,16 +60,19 @@ Coming soon - but you can use the OpenAI compatibility later in the interim:
 ```bash
 # Download latest release
 bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
-
+```
+```bash
 # Container based
 docker run -t \
   --name olla \
   -p 40114:40114 \
   ghcr.io/thushan/olla:latest
-
+```
+```bash
 # Install via Go
 go install github.com/thushan/olla@latest
-
+```
+```bash
 # Build from source
 git clone https://github.com/thushan/olla.git && cd olla && make build
 ```
@@ -89,11 +94,13 @@ For detailed installation and deployment options, see [Getting Started Guide](do
 
 ## Examples
 
-Ready-to-use Docker Compose setups for common scenarios:
+We've also got ready-to-use Docker Compose setups for common scenarios:
 
 ### 🌐 **OpenWebUI Integration**
+
 Complete setup with OpenWebUI + Olla load balancing multiple Ollama instances.
-- **Path**: [`examples/ollama-openwebui/`](examples/ollama-openwebui/)
+
+- **See**: [`examples/ollama-openwebui/`](examples/ollama-openwebui/)
 - **Services**: OpenWebUI (web UI) + Olla (proxy/load balancer)  
 - **Use Case**: Web interface with intelligent load balancing across multiple Ollama servers with Olla
 - **Quick Start**: 
@@ -362,8 +369,7 @@ discovery:
 With this setup:
 1. Requests go to your workstation first
 2. If workstation fails, tries laptop
-3. If both local options fail, uses Groq as backup
-4. Models from each provider are discoverable and available for routing
+3. Models from each provider are discoverable and available for routing
 
 ## Documentation
 
@@ -383,8 +389,9 @@ make dev          # Development mode with auto-reload
 
 ## 🚨 Security Considerations
 
-Olla is designed to sit behind a reverse proxy (nginx, Cloudflare, etc.) in production. The built-in security features are optimised for this deployment pattern:
+Olla is designed to sit behind a reverse proxy (nginx, Cloudflare, etc.) in production. 
 
+The built-in security features are optimised for this deployment pattern:
 - **Rate limiting**: Protects against request flooding
 - **Request size limits**: Prevents resource exhaustion
 - **Trusted proxy support**: Correctly handles client IPs behind load balancers
@@ -421,7 +428,7 @@ We welcome contributions! Please open an issue first to discuss major changes.
 
 This project has been built with the assistance of AI tools for documentation, test refinement, and code reviews.
 
-We've utilised GitHub Copilot, Anthropic Claude, and OpenAI ChatGPT for documentation, code reviews, test refinement, and troubleshooting.
+We've utilised GitHub Copilot, Anthropic Claude, Jetbrains Junie and OpenAI ChatGPT for documentation, code reviews, test refinement and troubleshooting.
 
 ## 🙏 Acknowledgements
 
