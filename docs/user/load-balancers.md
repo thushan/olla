@@ -25,21 +25,26 @@ proxy:
   load_balancer: "priority"
 
 discovery:
-  endpoints:
-    - name: "local-gpu"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      priority: 100        # Highest priority - always tried first
-      
-    - name: "backup-cpu"
-      url: "http://192.168.1.10:11434" 
-      platform: "ollama"
-      priority: 50         # Fallback option
-      
-    - name: "cloud-api"
-      url: "https://api.openai.com"
-      platform: "openai"
-      priority: 10         # Last resort (expensive)
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-gpu"
+        type: "ollama"
+        priority: 100        # Highest priority - always tried first
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://192.168.1.10:11434" 
+        name: "backup-cpu"
+        type: "ollama"
+        priority: 50         # Fallback option
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 ### Use Cases
@@ -171,13 +176,23 @@ proxy:
   load_balancer: "round_robin"
 
 discovery:
-  endpoints:
-    - name: "local-1"
-      url: "http://localhost:11434"
-      platform: "ollama"
-    - name: "local-2"
-      url: "http://localhost:11435" 
-      platform: "ollama"
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-1"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+      - url: "http://localhost:11435" 
+        name: "local-2"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 ### Production High-Availability
@@ -187,20 +202,37 @@ proxy:
   load_balancer: "priority"
 
 discovery:
-  endpoints:
-    # Primary datacenter
-    - name: "dc1-primary"
-      priority: 100
-      url: "http://10.1.1.10:11434"
-      
-    - name: "dc1-secondary"
-      priority: 100          # Same priority as primary
-      url: "http://10.1.1.11:11434"
-      
-    # Backup datacenter  
-    - name: "dc2-backup"
-      priority: 50
-      url: "http://10.2.1.10:11434"
+  type: "static"
+  static:
+    endpoints:
+      # Primary datacenter
+      - url: "http://10.1.1.10:11434"
+        name: "dc1-primary"
+        type: "ollama"
+        priority: 100
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://10.1.1.11:11434"
+        name: "dc1-secondary"
+        type: "ollama"
+        priority: 100          # Same priority as primary
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      # Backup datacenter  
+      - url: "http://10.2.1.10:11434"
+        name: "dc2-backup"
+        type: "ollama"
+        priority: 50
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 ### Mixed Performance Cluster
@@ -210,18 +242,32 @@ proxy:
   load_balancer: "least_connections"
 
 discovery:
-  endpoints:
-    - name: "high-end-gpu"
-      url: "http://a100-server:11434"
-      platform: "ollama"
-      
-    - name: "mid-range-gpu"  
-      url: "http://rtx4090-server:11434"
-      platform: "ollama"
-      
-    - name: "cpu-only"
-      url: "http://cpu-server:11434"
-      platform: "ollama"
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://a100-server:11434"
+        name: "high-end-gpu"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://rtx4090-server:11434"
+        name: "mid-range-gpu"  
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://cpu-server:11434"
+        name: "cpu-only"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 ## Monitoring and Debugging

@@ -24,18 +24,32 @@ Within Ollama endpoints, Olla unifies models with identical names and tags:
 **Example: Multiple Ollama Endpoints**
 ```yaml
 discovery:
-  endpoints:
-    - name: "local-ollama"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      
-    - name: "neo-ollama" 
-      url: "http://192.168.0.1:11434"
-      platform: "ollama"
-      
-    - name: "beehive-ollama"
-      url: "http://192.168.0.113:11434"
-      platform: "ollama"
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://192.168.0.1:11434"
+        name: "neo-ollama" 
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://192.168.0.113:11434"
+        name: "beehive-ollama"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 In this real setup, the local Ollama endpoint has models like `llama3.2:latest` and `phi4:latest`. When these same models exist on multiple Ollama endpoints, Olla will:
@@ -72,14 +86,24 @@ Within LM Studio endpoints, Olla unifies models based on their metadata and file
 **Example: Multiple LM Studio Endpoints**
 ```yaml
 discovery:
-  endpoints:
-    - name: "local-lm-studio"
-      url: "http://localhost:11234"
-      platform: "lmstudio"
-      
-    - name: "neo-lm-studio"
-      url: "http://192.168.0.1:11234" 
-      platform: "lmstudio"
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11234"
+        name: "local-lm-studio"
+        type: "lm-studio"
+        model_url: "/v1/models"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://192.168.0.1:11234" 
+        name: "neo-lm-studio"
+        type: "lm-studio"
+        model_url: "/v1/models"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 In this real setup, LM Studio endpoints have models like `mistralai/devstral-small-2505` and `microsoft/phi-4-mini-reasoning`. When the same models exist on multiple LM Studio endpoints, Olla will:
@@ -116,14 +140,24 @@ For OpenAI-compatible endpoints (vLLM, OpenRouter, etc.), Olla unifies based on 
 **Example: Multiple vLLM Endpoints**
 ```yaml
 discovery:
-  endpoints:
-    - name: "vllm-cluster-1"
-      url: "http://vllm-1.local:8000"
-      platform: "openai"
-      
-    - name: "vllm-cluster-2"
-      url: "http://vllm-2.local:8000"
-      platform: "openai"
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://vllm-1.local:8000"
+        name: "vllm-cluster-1"
+        type: "openai-compatible"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://vllm-2.local:8000"
+        name: "vllm-cluster-2"
+        type: "openai-compatible"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 Models with identical IDs like `meta-llama/Llama-3.2-8B-Instruct` are unified within the OpenAI-compatible provider group.
@@ -138,16 +172,26 @@ Consider this real setup from the running Olla instance:
 
 ```yaml
 discovery:
-  endpoints:
-    - name: "local-ollama"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      # Has: phi4:latest (14.7b, q4km)
-      
-    - name: "local-lm-studio"
-      url: "http://localhost:11234"
-      platform: "lmstudio" 
-      # Has: microsoft/phi-4-mini-reasoning (phi3 family, q4km)
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        # Has: phi4:latest (14.7b, q4km)
+        
+      - url: "http://localhost:11234"
+        name: "local-lm-studio"
+        type: "lm-studio"
+        model_url: "/v1/models"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        # Has: microsoft/phi-4-mini-reasoning (phi3 family, q4km)
 ```
 
 Even though both are Phi-4 models from Microsoft:
@@ -308,7 +352,7 @@ curl http://localhost:40114/internal/status/models
   "models": [
     {
       "name": "llama3.2:latest",
-      "platform": "ollama",
+      "type": "ollama",
       "endpoints": [
         {
           "name": "local-ollama", 
@@ -319,7 +363,7 @@ curl http://localhost:40114/internal/status/models
     },
     {
       "name": "microsoft/phi-4-mini-reasoning",
-      "platform": "lmstudio", 
+      "type": "lmstudio", 
       "endpoints": [
         {
           "name": "local-lm-studio",
@@ -360,13 +404,13 @@ model_registry:
     
     # Custom unification rules per provider
     custom_rules:
-      - platform: "ollama"
+      - type: "ollama"
         family_overrides:
           "phi4:*": "phi"  # Map phi4 models to phi family
         name_patterns:
           "llama-*": "llama3.2"  # Pattern-based name mapping
           
-      - platform: "lmstudio"
+      - type: "lmstudio"
         name_patterns:
           "Meta-Llama-*": "llama"
 ```
@@ -442,21 +486,35 @@ Distribute popular models across multiple endpoints for better availability:
 ```yaml
 # Good: Popular model on multiple endpoints
 discovery:
-  endpoints:
-    - name: "ollama-primary"
-      url: "http://gpu-1:11434" 
-      platform: "ollama"
-      # Should have: llama3.2, mistral, phi
-      
-    - name: "ollama-secondary"
-      url: "http://gpu-2:11434"
-      platform: "ollama" 
-      # Should have: llama3.2, codellama, gemma
-      
-    - name: "ollama-backup"
-      url: "http://cpu-server:11434"
-      platform: "ollama"
-      # Should have: llama3.2 (smaller quantization)
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://gpu-1:11434" 
+        name: "ollama-primary"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        # Should have: llama3.2, mistral, phi
+        
+      - url: "http://gpu-2:11434"
+        name: "ollama-secondary"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        # Should have: llama3.2, codellama, gemma
+        
+      - url: "http://cpu-server:11434"
+        name: "ollama-backup"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        # Should have: llama3.2 (smaller quantization)
 ```
 
 ## Troubleshooting

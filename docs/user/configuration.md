@@ -185,7 +185,7 @@ model_registry:
     
     # Custom unification rules
     custom_rules:
-      - platform: "ollama"
+      - type: "ollama"
         family_overrides:
           "phi4:*": "phi"  # Map phi4 models to phi family
         name_patterns:

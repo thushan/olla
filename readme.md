@@ -87,7 +87,29 @@ curl http://localhost:40114/internal/status/models
 
 For detailed installation and deployment options, see [Getting Started Guide](docs/user/getting-started.md).
 
-### Basic Configuration
+## Examples
+
+Ready-to-use Docker Compose setups for common scenarios:
+
+### 🌐 **OpenWebUI Integration**
+Complete setup with OpenWebUI + Olla load balancing multiple Ollama instances.
+- **Path**: [`examples/ollama-openwebui/`](examples/ollama-openwebui/)
+- **Services**: OpenWebUI (web UI) + Olla (proxy/load balancer)  
+- **Use Case**: Web interface with intelligent load balancing across multiple Ollama servers with Olla
+- **Quick Start**: 
+  ```bash
+  cd examples/ollama-openwebui
+  # Edit olla.yaml to configure your Ollama endpoints
+  docker compose up -d
+  # Access OpenWebUI at http://localhost:3000
+  ```
+
+More examples coming soon:
+- **Multi-Provider Setup**: Ollama + LM Studio + OpenAI-compatible endpoints
+- **High-Availability**: Production deployment with failover
+- **Kubernetes**: K8s manifests for container orchestration
+
+## Basic Configuration
 
 Modify the existing `config.yaml` or create a copy:
 
@@ -101,16 +123,26 @@ proxy:
   load_balancer: "priority" # or round-robin, least-connections
 
 discovery:
-  endpoints:
-    - name: "local-ollama"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      priority: 100         # Higher = preferred
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100         # Higher = preferred
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 
-    - name: "work-ollama"
-      url: "https://ollama-42.acmecorp.com/"
-      platform: "ollama"
-      priority: 50          # Lower priority fallback
+      - url: "https://ollama-42.acmecorp.com/"
+        name: "work-ollama"
+        type: "ollama"
+        priority: 50          # Lower priority fallback
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 For comprehensive configuration options, see [Configuration Reference](docs/user/configuration.md).
@@ -303,26 +335,28 @@ For detailed configuration options including Docker deployment and environment v
 
 ```yaml
 discovery:
-  endpoints:
-    # Local Ollama (highest priority)
-    - name: "workstation"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      priority: 100
-      
-    # LM Studio backup
-    - name: "laptop"
-      url: "http://192.168.1.100:1234"
-      platform: "lmstudio"
-      priority: 80
-      
-    # Cloud fallback (coming soon!)
-    - name: "groq"
-      url: "https://api.groq.com/openai/v1"
-      platform: "openai"
-      priority: 10
-      headers:
-        Authorization: "Bearer ${GROQ_API_KEY}"
+  type: "static"
+  static:
+    endpoints:
+      # Local Ollama (highest priority)
+      - url: "http://localhost:11434"
+        name: "workstation"
+        type: "ollama"
+        priority: 100
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      # LM Studio backup
+      - url: "http://192.168.1.100:1234"
+        name: "laptop"
+        type: "lm-studio"
+        priority: 80
+        model_url: "/v1/models"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 With this setup:
