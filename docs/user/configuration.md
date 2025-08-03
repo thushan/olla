@@ -5,10 +5,20 @@ Olla supports configuration through YAML files and environment variables. This g
 ## Configuration File
 
 Olla looks for configuration files in these locations (in order):
+0. `config/config.local.yaml` (use for development only)
 1. `config/config.yaml`
 2. `config.yaml`
 3. `default.yaml`
-4. Path specified in `OLLA_CONFIG_FILE` environment variable
+4. Path specified in `OLLA_CONFIG_FILE` environment variable.
+
+You can also forgo all that and pass in the config file at the CLI:
+
+```bash
+./olla -c my.config.yaml
+
+## Or...
+./olla --config my.config.yaml
+```
 
 ## Configuration Structure
 

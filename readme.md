@@ -22,7 +22,7 @@ Single CLI application and config file is all you need to go Olla!
 ## Key Features
 
 - **🔄 Smart Load Balancing**: [Priority-based routing](docs/user/load-balancers.md) with automatic failover
-- **🔍 Model Discovery**: [Per-provider model catalogues](docs/user/getting-started.md#working-with-models) and normalisation
+- **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](docs/user/models.md)
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](docs/user/proxies.md)
 - **💊 Health Monitoring**: [Continuous endpoint health checks](docs/user/troubleshooting.md#health-monitoring) with circuit breakers
 - **📊 Request Tracking**: Detailed response headers and [statistics](docs/user/endpoints.md#response-headers)
@@ -116,22 +116,29 @@ For comprehensive configuration options, see [Configuration Reference](docs/user
 
 ## Usage
 
-### API Compatibility
+### API Compatibility & Smart Routing
 
-Olla is **OpenAI, LM Studio and Ollama compatible**. Point existing clients to Olla instead:
+Olla is **OpenAI, LM Studio and Ollama compatible**. The magic is in the unified OpenAI-compatible endpoint:
 
 ```python
-# Instead of: http://localhost:11434
-# Use:        http://localhost:40110/olla/openai
-
 import openai
-client = openai.OpenAI(base_url="http://localhost:40110/olla/openai")
 
-# Works with any model across all your endpoints
+# One client, multiple providers seamlessly
+client = openai.OpenAI(base_url="http://localhost:40114/olla/openai")
+
+# This routes to Ollama automatically  
 response = client.chat.completions.create(
-    model="llama4",
+    model="llama3.2:latest",
     messages=[{"role": "user", "content": "Hello!"}]
 )
+
+# This routes to LM Studio automatically
+response = client.chat.completions.create(
+    model="microsoft/phi-4-mini-reasoning", 
+    messages=[{"role": "user", "content": "Hello!"}]
+)
+
+# Your code doesn't need to know or care where models are hosted!
 ```
 
 ### Provider Examples
@@ -172,35 +179,38 @@ curl -X POST http://localhost:40114/olla/lmstudio/v1/chat/completions \
 curl http://localhost:40114/olla/lmstudio/v1/models
 ```
 
-### Model Discovery Examples
+### Model Discovery & Smart Unification
 
-Olla supports unification (and intelligent routing) of provider models. For example, if there are 3x Ollama servers with llama3, llama3.2 and llama4 available on each, the unified view of `/olla/ollama/api/tags` will show all three, when a request comes for `llama3` it will route to only those endpoints that have `llama3`.
-
-Olla also tracks a unified model catalog across all providers, you can retrieve thosoe via the `/olla/models` endpoint.
+Olla's magic lies in its intelligent model discovery and routing. It unifies models within each provider type while providing seamless cross-provider access via OpenAI-compatible APIs.
 
 ```bash
-# All models from all providers (unified)
+# Discover all models (per-provider unification)
 curl http://localhost:40114/olla/models
+# Example: 15 Ollama + 6 LM Studio = 21 total models
 
-# Only Ollama models (unified format)
-curl http://localhost:40114/olla/models?format=ollama
+# The beauty: One API, multiple backends
+curl -X POST http://localhost:40114/olla/openai/v1/chat/completions \
+  -d '{"model": "llama3.2:latest", "messages": [...]}'
+# ↳ Routes to Ollama automatically
 
-# Only LM Studio models (unified format)  
-curl http://localhost:40114/olla/models?format=lmstudio
-
-# Only OpenAI-compatible models (unified format)
-curl http://localhost:40114/olla/models?format=openai
+curl -X POST http://localhost:40114/olla/openai/v1/chat/completions \
+  -d '{"model": "microsoft/phi-4-mini-reasoning", "messages": [...]}'
+# ↳ Routes to LM Studio automatically
 ```
+
+**The Power:** Use one OpenAI client to seamlessly access models from Ollama, LM Studio, and other providers without knowing where they're hosted.
+
+For detailed information about model discovery and unification, see [Model Discovery Guide](docs/user/models.md).
 
 ### Key Endpoints
 
 | Type | Example | Description |
 |------|---------|-------------|
-| **Ollama Routes** | `/olla/ollama/v1/chat/completions` | Chat with Ollama endpoints |
-| **LM Studio Routes** | `/olla/lmstudio/v1/chat/completions` | Chat with LM Studio endpoints |
-| **OpenAI Routes** | `/olla/openai/v1/chat/completions` | Chat with OpenAI-compatible endpoints |
-| **Unified Models** | `/olla/models` | All models across all providers |
-| **Provider Models** | `/olla/models?format=ollama` | Filter models by provider type |
+| **🎯 Smart Routing** | `/olla/openai/v1/chat/completions` | OpenAI Compatible API, auto-routes to any provider based on model |
+| **Ollama Routes** | `/olla/ollama/v1/chat/completions` | Explicit routing to Ollama endpoints only |
+| **LM Studio Routes** | `/olla/lmstudio/v1/chat/completions` | Explicit routing to LM Studio endpoints only |
+| **Unified Discovery** | `/olla/models` | All models across all providers (21 total) |
+| **Provider Discovery** | `/olla/ollama/v1/models` <br/> `/olla/lmstudio/v1/models` | Models from specific provider type |
 | **Health & Status** | `/internal/health` | Monitor system health |
 
 For complete endpoint documentation, see [API Endpoints](docs/user/endpoints.md).
@@ -270,6 +280,8 @@ For engine selection and performance tuning, see [Proxy Engine Guide](docs/user/
 
 Unlike generic proxies, Olla is purpose-built for LLM workloads:
 
+- **Smart Model Routing**: One API endpoint, automatic routing to the right provider
+- **Unified Client Experience**: Use OpenAI clients to access Ollama, LM Studio, and cloud APIs
 - **Streaming-First**: Immediate response streaming without buffering delays
 - **Long-Running Requests**: Optimised timeouts for extended LLM inference times  
 - **Memory Efficient**: 64KB buffers optimised for token streaming (Olla engine)
@@ -350,7 +362,7 @@ A: Olla focuses on load balancing and lets your reverse proxy handle authenticat
 A: Use **Sherpa** for simple deployments with moderate traffic. Choose **Olla** for high-throughput production workloads that need connection pooling, circuit breakers, and maximum performance.
 
 **Q: How does priority routing work with model availability?** \
-A: Olla discovers models within each provider type and routes requests to compatible endpoints. For Ollama endpoints, it routes to Ollama endpoints that have the model. For OpenAI-compatible endpoints, it can route across any OpenAI-compatible provider.
+A: Olla discovers models within each provider type and routes requests to compatible endpoints. Per-provider unification means Ollama requests only route to Ollama endpoints, LM Studio requests only route to LM Studio endpoints, etc. See the [Model Discovery Guide](docs/user/models.md) for details.
 
 **Q: Can I run Olla in Kubernetes?** \
 A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!

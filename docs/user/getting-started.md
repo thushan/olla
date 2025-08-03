@@ -22,23 +22,22 @@ Olla solves these problems by providing intelligent routing, automatic failover,
 ```bash
 # Download and install automatically
 bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
-```
-
-### Manual Installation
-
-#### Download Binary
-
-```bash
-# Download latest release
-VERSION="v0.1.0"
-ARCH="amd64" # or arm64
-OS="linux" # or darwin, windows
-curl -L "https://github.com/thushan/olla/releases/download/${VERSION}/olla-${OS}-${ARCH}" -o olla
-chmod +x olla
 
 # Verify installation
 ./olla --version
 ```
+
+### Container based
+
+```bash
+# Use pre-built container
+docker run -t \
+  --name olla \
+  -p 40114:40114 \
+  ghcr.io/thushan/olla:latest
+```
+
+### Manual Installation
 
 #### Build from Source
 
@@ -57,16 +56,9 @@ make build-release
 sudo make install
 ```
 
-#### Container Installation
+#### Container from source
 
 ```bash
-# Use pre-built container
-docker run -t \
-  --name olla \
-  -p 40114:40114 \
-  ghcr.io/thushan/olla:latest
-
-# Or build from source
 docker build -t olla:latest .
 docker run -d \
   --name olla \
@@ -85,12 +77,16 @@ go install github.com/thushan/olla@latest
 
 | Deployment | CPU | RAM | Notes |
 |-----------|-----|-----|-------|
-| Development | 2 cores | 2GB | Light traffic |
-| Small Production | 4 cores | 8GB | Moderate traffic |
-| Large Production | 8+ cores | 16GB+ | High traffic |
+| Development | 2 cores | 1GB | Light traffic |
+| Small Production | 4 cores | 4GB | Moderate traffic |
+| Large Production | 8+ cores | 8GB+ | High traffic |
 
 **Operating Systems:** Linux, macOS, Windows  
 **Go Version:** 1.24+ (for building from source)
+
+Olla is fairly light on resource usage, but can balloon when load increases (1K-5k+ requests/min).
+
+Some home users have Olla running on a RaspberryPi 3 / 4, or a very lightweight Proxmox container.
 
 ### Basic Configuration
 
@@ -99,7 +95,7 @@ Create a `config.yaml` file:
 ```yaml
 server:
   host: 0.0.0.0
-  port: 8080
+  port: 40114
 
 proxy:
   engine: "sherpa"  # Start with the simple engine
@@ -129,13 +125,13 @@ discovery:
 
 ```bash
 # Check health
-curl http://localhost:8080/internal/health
+curl http://localhost:40114/internal/health
 
 # List available models
-curl http://localhost:8080/api/tags
+curl http://localhost:40114/api/tags
 
 # Make an inference request
-curl http://localhost:8080/api/generate \
+curl http://localhost:40114/api/generate \
   -d '{
     "model": "llama3.2",
     "prompt": "Why is the sky blue?"
@@ -160,6 +156,8 @@ Olla offers two proxy engines:
 - Optimised for streaming LLM responses
 - Better for 10+ endpoints or high traffic
 
+Learn more about them in [Olla Proxy Guide](./proxies.md).
+
 ### Load Balancing Strategies
 
 **Round Robin**
@@ -176,6 +174,8 @@ Olla offers two proxy engines:
 - Routes to the endpoint with fewest active connections
 - Prevents overloading busy endpoints
 - Best for heterogeneous hardware
+
+Learn more about them in [Load Balancer Guide](./load-balancers.md).
 
 ## Common Use Cases
 
@@ -194,9 +194,9 @@ discovery:
       url: "http://localhost:11435"
       platform: "ollama"
       
-    - name: "lm-studio"
-      url: "http://localhost:1234"
-      platform: "lmstudio"
+    - name: "ollama-3"
+      url: "http://localhost:11436"
+      platform: "ollama"
 
 proxy:
   load_balancer: "round_robin"
@@ -263,14 +263,9 @@ discovery:
 
 ## Working with Models
 
-### Model Unification
+Olla provides intelligent model discovery and per-provider unification. Models are unified within each provider type (e.g., Ollama models unify with other Ollama models) but not across different providers. This ensures API compatibility while enabling intelligent routing.
 
-Olla automatically unifies models across platforms. For example:
-- Ollama: `llama3.2:3b-instruct-q4_K_M`
-- LM Studio: `Meta-Llama-3.2-3B-Instruct-Q4_K_M.gguf`
-- OpenAI: `meta-llama-3.2-3b-instruct`
-
-All resolve to the same model, and Olla routes to any available endpoint.
+For comprehensive information about model discovery, unification, and routing, see the [Model Discovery Guide](./models.md).
 
 ### Model Aliases
 
@@ -287,7 +282,7 @@ model_aliases:
 
 ```bash
 # List all models across all endpoints
-curl http://localhost:8080/internal/status/models
+curl http://localhost:40114/internal/status/models
 
 # Response shows unified view:
 {
@@ -310,10 +305,10 @@ Olla continuously monitors endpoint health:
 
 ```bash
 # Check overall health
-curl http://localhost:8080/internal/health
+curl http://localhost:40114/internal/health
 
 # Get detailed endpoint status
-curl http://localhost:8080/internal/status/endpoints
+curl http://localhost:40114/internal/status/endpoints
 ```
 
 ### Metrics
@@ -321,7 +316,7 @@ curl http://localhost:8080/internal/status/endpoints
 Access Prometheus metrics:
 
 ```bash
-curl http://localhost:8080/metrics
+curl http://localhost:40114/metrics
 
 # Key metrics to watch:
 # - olla_requests_total
@@ -401,7 +396,7 @@ For local development, run Olla directly:
 ./olla -c my-config.yaml
 
 # Run with environment overrides
-OLLA_SERVER_PORT=8080 OLLA_LOG_LEVEL=debug ./olla
+OLLA_SERVER_PORT=40114 OLLA_LOG_LEVEL=debug ./olla
 ```
 
 ### Production Deployment
@@ -643,7 +638,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
     
     location / {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:40114;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
         proxy_buffering off;
@@ -659,7 +654,7 @@ server {
 import requests
 
 # Olla works with any Ollama-compatible client
-response = requests.post('http://localhost:8080/api/generate', json={
+response = requests.post('http://localhost:40114/api/generate', json={
     'model': 'llama3.2',
     'prompt': 'Explain quantum computing',
     'stream': False
@@ -674,7 +669,7 @@ print(response.json()['response'])
 import requests
 import json
 
-response = requests.post('http://localhost:8080/api/generate', 
+response = requests.post('http://localhost:40114/api/generate', 
     json={
         'model': 'llama3.2',
         'prompt': 'Write a story about a robot',
@@ -696,7 +691,7 @@ from langchain_ollama import Ollama
 
 # Point to Olla instead of Ollama directly
 llm = Ollama(
-    base_url="http://localhost:8080",
+    base_url="http://localhost:40114",
     model="llama3.2"
 )
 

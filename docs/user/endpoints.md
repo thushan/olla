@@ -1,6 +1,6 @@
 # API Endpoints Reference
 
-Olla provides multiple types of endpoints: provider-specific endpoints for routing to specific LLM backends, unified endpoints for cross-provider access, and internal monitoring endpoints.
+Olla provides multiple types of endpoints: provider-specific endpoints for routing to specific LLM backends, unified model discovery endpoints, and internal monitoring endpoints.
 
 ## Base URL
 
@@ -8,7 +8,7 @@ Olla provides multiple types of endpoints: provider-specific endpoints for routi
 http://localhost:40114
 ```
 
-All API endpoints are relative to this base URL.
+All API endpoints are relative to this base URL, Olla by default uses port `40114` (4 OLLA) but some examples use `8080`.
 
 ## Provider Endpoints
 
@@ -106,9 +106,11 @@ Access vLLM endpoints through `/olla/vllm/`:
 | `/olla/vllm/v1/chat/completions` | POST | Chat completions |
 | `/olla/vllm/*` | ANY | Proxy to vLLM backend |
 
-## Unified Endpoints
+## Model Discovery Endpoints
 
-Unified endpoints aggregate information across all configured providers.
+Model discovery endpoints aggregate information across all configured providers. Models are unified within each provider type but not across different providers.
+
+For detailed information about model discovery and unification, see [Model Discovery Guide](./models.md).
 
 ### List All Models
 
@@ -116,7 +118,7 @@ Unified endpoints aggregate information across all configured providers.
 GET /olla/models
 ```
 
-Returns all models across all endpoints with unification:
+Returns all models across all endpoints with per-provider unification:
 
 ```json
 {
