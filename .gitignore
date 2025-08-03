@@ -10,6 +10,7 @@ olla
 config.local.yaml
 config/*.local.yaml
 config/**/*.local.yaml
+config/docker.yaml
 docker-compose.local.yaml
 docker-compose.override.yaml
 
