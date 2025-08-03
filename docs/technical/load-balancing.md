@@ -150,24 +150,38 @@ proxy:
   load_balancer: "priority"
   
 discovery:
-  endpoints:
-    # Local development
-    - name: "local"
-      url: "http://localhost:11434"
-      priority: 1
-      platform: "ollama"
-      
-    # Primary production
-    - name: "prod-primary"
-      url: "http://gpu-cluster.internal:11434"
-      priority: 2
-      platform: "ollama"
-      
-    # Failover
-    - name: "prod-secondary"
-      url: "http://gpu-cluster-2.internal:11434"
-      priority: 3
-      platform: "ollama"
+  type: "static"
+  static:
+    endpoints:
+      # Local development
+      - url: "http://localhost:11434"
+        name: "local"
+        type: "ollama"
+        priority: 1
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      # Primary production
+      - url: "http://gpu-cluster.internal:11434"
+        name: "prod-primary"
+        type: "ollama"
+        priority: 2
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      # Failover
+      - url: "http://gpu-cluster-2.internal:11434"
+        name: "prod-secondary"
+        type: "ollama"
+        priority: 3
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
       
     # Cloud backup (expensive)
     - name: "openai-backup"

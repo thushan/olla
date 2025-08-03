@@ -30,23 +30,26 @@ Configuration supports multiple formats:
 
 ```yaml
 discovery:
-  endpoints:
-    - name: "local-ollama"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      priority: 1
-      tags:
-        location: "local"
-        gpu: "rtx4090"
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 1
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
         
-    - name: "gpu-cluster-1"
-      url: "http://10.0.1.10:11434"
-      platform: "ollama"
-      priority: 2
-      tags:
-        location: "datacenter"
-        gpu: "a100"
-        capacity: "high"
+      - url: "http://10.0.1.10:11434"
+        name: "gpu-cluster-1"
+        type: "ollama"
+        priority: 2
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 ### Dynamic Endpoint Management
@@ -467,18 +470,28 @@ func (d *DNSDiscovery) DiscoverEndpoints() ([]domain.Endpoint, error) {
 
 ```yaml
 discovery:
-  endpoints:
-    # Local Ollama
-    - name: "local-ollama"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      priority: 1
-      
-    # LM Studio
-    - name: "lm-studio-workstation"
-      url: "http://192.168.1.100:1234"
-      platform: "lmstudio"
-      priority: 2
+  type: "static"
+  static:
+    endpoints:
+      # Local Ollama
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 1
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      # LM Studio
+      - url: "http://192.168.1.100:1234"
+        name: "lm-studio-workstation"
+        type: "lm-studio"
+        priority: 2
+        model_url: "/v1/models"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
       headers:
         Authorization: "Bearer ${LMSTUDIO_API_KEY}"
         

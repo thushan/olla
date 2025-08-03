@@ -1,0 +1,46 @@
+services:
+  # Olla proxy/load balancer - connects to external Ollama instances
+  olla:
+    image: ghcr.io/thushan/olla:latest
+    container_name: olla
+    restart: unless-stopped
+    ports:
+      - "40114:40114"
+    volumes:
+      # Overide the default with our custom configuration
+      - ./olla.yaml:/app/config.yaml:ro
+      - ./.container/olla/logs:/app/logs:ro
+    healthcheck:
+        test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:40114/internal/health"]
+        timeout: 5s
+        interval: 30s
+        retries: 3
+        start_period: 10s
+
+  # OpenWebUI - the web interface
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: openwebui
+    restart: unless-stopped
+    ports:
+      - "3000:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    environment:
+      # Point OpenWebUI to Olla instead of directly to Ollama
+      - OLLAMA_BASE_URL=http://olla:40114/olla/ollama
+      # Optional: Set other OpenWebUI configuration
+      - WEBUI_NAME=Olla + OpenWebUI
+      - WEBUI_URL=http://localhost:3000
+      - WEBUI_SECRET_KEY=your-secret-key-change-this
+    depends_on:
+      olla:
+        condition: service_healthy
+
+volumes:
+  openwebui_data:
+    driver: local
+
+networks:
+  default:
+    name: olla-network

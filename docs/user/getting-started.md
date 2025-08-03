@@ -208,25 +208,27 @@ Use local GPUs with cloud backup:
 
 ```yaml
 discovery:
-  endpoints:
-    # Primary: Local GPU cluster
-    - name: "gpu-cluster-1"
-      url: "http://10.0.1.10:11434"
-      platform: "ollama"
-      priority: 1
-      
-    - name: "gpu-cluster-2"
-      url: "http://10.0.1.11:11434"
-      platform: "ollama"
-      priority: 1
-      
-    # Fallback: Cloud API
-    - name: "openai-backup"
-      url: "https://api.openai.com"
-      platform: "openai"
-      priority: 10
-      headers:
-        Authorization: "Bearer ${OPENAI_API_KEY}"
+  type: "static"
+  static:
+    endpoints:
+      # Primary: Local GPU cluster
+      - url: "http://10.0.1.10:11434"
+        name: "gpu-cluster-1"
+        type: "ollama"
+        priority: 1
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+        
+      - url: "http://10.0.1.11:11434"
+        name: "gpu-cluster-2"
+        type: "ollama"
+        priority: 1
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 
 proxy:
   engine: "olla"  # High-performance engine
@@ -239,26 +241,24 @@ Mix different LLM platforms seamlessly:
 
 ```yaml
 discovery:
-  endpoints:
-    - name: "ollama-llama"
-      url: "http://localhost:11434"
-      platform: "ollama"
-      tags:
-        models: "llama,mistral"
-        
-    - name: "lmstudio-code"
-      url: "http://localhost:1234"
-      platform: "lmstudio"
-      tags:
-        models: "codellama,starcoder"
-        
-    - name: "groq-fast"
-      url: "https://api.groq.com/openai/v1"
-      platform: "openai"
-      headers:
-        Authorization: "Bearer ${GROQ_API_KEY}"
-      tags:
-        models: "mixtral,llama3-70b"
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "ollama-llama"
+        type: "ollama"
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+          
+      - url: "http://localhost:1234"
+        name: "lmstudio-code"
+        type: "lm-studio"
+        model_url: "/v1/models"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
 ```
 
 ## Working with Models

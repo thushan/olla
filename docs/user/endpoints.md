@@ -137,7 +137,7 @@ Returns all models across all endpoints with per-provider unification:
         {
           "name": "local-ollama",
           "url": "http://localhost:11434",
-          "platform": "ollama"
+          "type": "ollama"
         }
       ]
     }
@@ -197,7 +197,7 @@ Returns details for a specific model by ID or alias:
     {
       "name": "local-ollama",
       "url": "http://localhost:11434",
-      "platform": "ollama",
+      "type": "ollama",
       "status": "available"
     }
   ]
