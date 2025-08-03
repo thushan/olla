@@ -16,6 +16,9 @@ before:
     - touch data/.gitkeep
     - touch logs/.gitkeep
     - touch tmp/.gitkeep
+    - bash ./scripts/generate-container-config.sh
+    # Copy docker.yaml as config.yaml for Docker containers
+    - cp config/docker.yaml config.yaml
 
 release:
   name_template: "{{.ProjectName}}-v{{.Version}}"
@@ -76,9 +79,8 @@ dockers:
       - "--label=org.opencontainers.image.description=High-performance LLM front-end load balancer and proxy"
       - "--label=org.opencontainers.image.licenses=Apache-2.0"
     extra_files:
-      # For Docker, explicitly list config files
-      - config/config.yaml
-      - config/docker.yaml
+      # For Docker, use the copied config.yaml (which is docker.yaml)
+      - config.yaml
       - config/models.yaml
       - config/profiles/
       - logs/.gitkeep

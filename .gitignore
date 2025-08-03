@@ -21,6 +21,7 @@ dist/
 # Legacy directories (to be removed)
 config-dev/
 default.yml
+config.yaml
 # Claude specific local files
 .claude/*.local.json
 # just in case
