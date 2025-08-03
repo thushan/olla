@@ -29,15 +29,18 @@ Single CLI application and config file is all you need to go Olla!
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
+- **⚙️ High Performace**: Designed to be very lightweight - memory and cpu utilisation, on averge consuming ~30Mb and 50Mb peak for high traffic loads. See [best practices](./docs/user/best-practices.md)
 
 ### Supported Backends
 
 * [Ollama](https://github.com/ollama/ollama) - full support for Ollama, including model unification. \
   Use: `/olla/ollama/`
 * [LM Studio](https://lmstudio.ai/) - full support for Ollama, including model unification. \
-  Use: `/olla/lmstudio/`
+  Use: `/olla/lm_studio/`
+* [OpenAI](https://platform.openai.com/docs/overview) - You can use OpenAI API that provides a unified query API across all providers. \
+  Use: `/olla/openai/`
 
-Coming soon (native support, but you can use OpenAI for now):
+Coming soon - but you can use the OpenAI compatibility later in the interim:
 
 * [vLLM](https://github.com/vllm-project/vllm)
 * [Lemonade](https://github.com/lemonade-sdk/lemonade)
