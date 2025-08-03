@@ -4,8 +4,13 @@
     <a href="https://github.com/thushan/olla/blob/master/LICENSE"><img src="https://img.shields.io/github/license/thushan/olla" alt="License"></a>
     <a href="https://github.com/thushan/olla/actions/workflows/ci.yml"><img src="https://github.com/thushan/olla/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://goreportcard.com/report/github.com/thushan/olla"><img src="https://goreportcard.com/badge/github.com/thushan/olla" alt="Go Report Card"></a>
-    <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a>
-  </p>
+    <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a> <br />
+    <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a> 
+    <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a> 
+    <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-openai-lightblue.svg" alt="vLLM: OpenAI Compatible"></a> 
+    <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
+    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
+  </P>
 </div>
 
 > [!IMPORTANT]  
@@ -43,6 +48,7 @@ Single CLI application and config file is all you need to go Olla!
 Coming soon - but you can use the OpenAI compatibility later in the interim:
 
 * [vLLM](https://github.com/vllm-project/vllm)
+* [LMDeploy](https://github.com/InternLM/lmdeploy)
 * [Lemonade](https://github.com/lemonade-sdk/lemonade)
 
 ## Quick Start
