@@ -1,5 +1,13 @@
-/* Night Owl Theme for Code Highlighting */
-/* Based on Sarah Drasner's Night Owl theme */
+/* Night Owl Theme Modified */
+/* 
+  Based on Sarah Drasner's Night Owl theme
+  customised for mkdocs by Thushan Fernando
+
+  Full credits to Sarah Drasner for the original theme.
+
+  Copyright (c) 2018 Sarah Drasner
+  Licensed under the MIT License
+*/
 
 /* Light theme (Night Owl Light) */
 [data-md-color-scheme="default"] .highlight {
