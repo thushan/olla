@@ -431,7 +431,7 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 
 	// Build table
 	tableData := make([][]string, 0, len(entries)+1)
-	tableData = append(tableData, []string{"PRIORITY", "NAME", "TYPE", "URL", "HEALTH", "CHECK", "TIMEOUT"})
+	tableData = append(tableData, []string{"PRI", "NAME", "TYPE", "URL", "HEALTH", "CHECK", "TIMEOUT"})
 
 	for _, entry := range entries {
 		tableData = append(tableData, []string{
