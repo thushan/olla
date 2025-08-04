@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/thushan/olla/pkg/container"
+
 	"github.com/thushan/olla/pkg/profiler"
 	"github.com/thushan/olla/theme"
 
@@ -87,6 +89,7 @@ func main() {
 	slog.SetDefault(logInstance)
 
 	styledLogger.Info("Initialising", "version", version.Version, "pid", os.Getpid())
+	styledLogger.Info("System Configuration", "isContainerised", container.IsContainerised(), "numCPU", runtime.NumCPU(), "goVersion", runtime.Version())
 
 	// Setup graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -94,10 +97,12 @@ func main() {
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	var shutdownTime time.Time
 
 	go func() {
 		sig := <-sigCh
 		styledLogger.Info("Shutdown signal received", "signal", sig.String())
+		shutdownTime = time.Now()
 		cancel()
 	}()
 
@@ -130,7 +135,8 @@ func main() {
 		reportProcessStats(styledLogger, startTime)
 	}
 
-	styledLogger.Info("Olla has shutdown")
+	styledLogger.Info("Cleaned up", "duration", time.Since(shutdownTime))
+	styledLogger.Info("Olla has shutdown", "uptime", format.Duration(time.Since(startTime)))
 }
 
 func reportProcessStats(logger logger.StyledLogger, startTime time.Time) {
