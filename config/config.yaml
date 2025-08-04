@@ -1,11 +1,11 @@
 # Olla Configuration (default)
 server:
-  host: "localhost"
-  port: 40114
+  host: "localhost" # Use 0.0.0.0 to bind to all interfaces (so it's accessible externally)
+  port: 40114 # default port for Olla - 4-OLLA
   read_timeout: 20s
   write_timeout: 0s # for LLMs streaming, leave this as 0s
-  shutdown_timeout: 10s
-  request_logging: true
+  shutdown_timeout: 10s # Graceful shutdown timeout, increase this for heavy sites that have long-running requests or lots of endpoints (30s is a good)
+  request_logging: true # logs Http Requests, may be useful for debugging, noise for other use cases
   request_limits:
     max_body_size: 52428800  # 50MB
     max_header_size: 524288  # 512KB
@@ -27,9 +27,9 @@ server:
 
 proxy:
   engine: "sherpa" # Available: sherpa, olla
-  connection_timeout: 40s
+  connection_timeout: 60s
   response_timeout: 900s
-  read_timeout: 300s
+  read_timeout: 600s
   max_retries: 3
   retry_backoff: 500ms
   load_balancer: "least-connections" # Available: round-robin, least-connections, priority

@@ -9,7 +9,7 @@ services:
     volumes:
       # Overide the default with our custom configuration
       - ./olla.yaml:/app/config.yaml:ro
-      - ./.container/olla/logs:/app/logs:ro
+      - ./.container/olla/logs:/app/logs
     healthcheck:
         test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:40114/internal/health"]
         timeout: 5s
