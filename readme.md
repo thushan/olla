@@ -122,7 +122,7 @@ Modify the existing `config.yaml` or create a copy:
 
 ```yaml
 server:
-  host: 0.0.0.0
+  host: "0.0.0.0"
   port: 40114
 
 proxy:
@@ -467,5 +467,6 @@ Let us know what you want to see!
 **Made with ❤️ for the LLM community**
 
 [🏠 Homepage](https://github.com/thushan/olla) • [📖 Documentation](https://github.com/thushan/olla#readme) • [🐛 Issues](https://github.com/thushan/olla/issues) • [🚀 Releases](https://github.com/thushan/olla/releases)
+
 
 </div>
