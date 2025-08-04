@@ -2,6 +2,7 @@
 out/
 bin/
 report/
+debug/
 logs/
 tmp/
 *.exe
@@ -26,3 +27,4 @@ config.yaml
 .claude/*.local.json
 # just in case
 *.local.json
+*.log

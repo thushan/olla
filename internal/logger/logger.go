@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/pterm/pterm"
@@ -37,6 +38,10 @@ const (
 	LogLevelFatal   = "fatal"
 	LogLevelPanic   = "panic"
 )
+
+// regex for stripping ANSI escape codes from log messages
+// Matches all ANSI escape sequences: \x1b[...m, \x1b[...K, \x1b[...A, etc.
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
 func New(cfg *Config) (*slog.Logger, func(), error) {
 	level := parseLevel(cfg.Level)
@@ -122,6 +127,7 @@ func createJSONHandler(level slog.Level, writer *os.File) slog.Handler {
 }
 
 // createFileHandler creates a file-based JSON handler with rotation
+// wraps with ansiStripHandler to ensure clean JSON output without ANSI codes
 func createFileHandler(cfg *Config, level slog.Level) (slog.Handler, func(), error) {
 	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
 		return nil, nil, err
@@ -135,11 +141,14 @@ func createFileHandler(cfg *Config, level slog.Level) (slog.Handler, func(), err
 		Compress:   true,
 	}
 
-	handler := slog.NewJSONHandler(rotator, &slog.HandlerOptions{
+	jsonHandler := slog.NewJSONHandler(rotator, &slog.HandlerOptions{
 		Level:       level,
 		AddSource:   false,
 		ReplaceAttr: replaceTimeAttr,
 	})
+
+	// wrap with ANSI stripping handler to ensure lean JSON output
+	handler := &ansiStripHandler{handler: jsonHandler}
 
 	cleanup := func() {
 		_ = rotator.Close()
@@ -235,6 +244,31 @@ func isDetailedLog(ctx context.Context) bool {
 		}
 	}
 	return false
+}
+
+// ansiStripHandler wraps a handler to strip ANSI escape codes from log messages
+// to ensure JSON file output is clean and parseable
+type ansiStripHandler struct {
+	handler slog.Handler
+}
+
+func (h *ansiStripHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	return h.handler.Enabled(ctx, level)
+}
+
+func (h *ansiStripHandler) Handle(ctx context.Context, record slog.Record) error {
+	// we strip ANSI codes from the message for clean JSON output
+	// this cleans most of the pterm styles and other ANSI codes
+	record.Message = ansiRegex.ReplaceAllString(record.Message, "")
+	return h.handler.Handle(ctx, record)
+}
+
+func (h *ansiStripHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &ansiStripHandler{handler: h.handler.WithAttrs(attrs)}
+}
+
+func (h *ansiStripHandler) WithGroup(name string) slog.Handler {
+	return &ansiStripHandler{handler: h.handler.WithGroup(name)}
 }
 
 // parseLevel converts string log level to slog.Level
