@@ -1,0 +1,135 @@
+/* Olla Brand Colors */
+:root {
+  --olla-primary: #67E9BE;
+  --olla-accent: #67B7E9;
+  --olla-outline: #2C3C47;
+  --olla-white: #F9FAFB;
+  --olla-slate: #94A3B8;
+}
+
+/* Light theme overrides */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: var(--olla-primary);
+  --md-primary-fg-color--light: #85edc9;
+  --md-primary-fg-color--dark: #4de4b3;
+  --md-accent-fg-color: var(--olla-accent);
+  --md-accent-fg-color--transparent: rgba(103, 183, 233, 0.1);
+}
+
+/* Dark theme overrides */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: var(--olla-primary);
+  --md-primary-fg-color--light: #85edc9;
+  --md-primary-fg-color--dark: #4de4b3;
+  --md-accent-fg-color: var(--olla-accent);
+  --md-accent-fg-color--transparent: rgba(103, 183, 233, 0.1);
+}
+
+/* Custom styling for brand consistency */
+.md-header {
+  background: var(--olla-accent); /* Solid blue header */
+}
+
+/* Code blocks with brand accent */
+.md-typeset .highlight .gp {
+  color: var(--olla-accent);
+}
+
+/* Links with brand colors */
+.md-typeset a {
+  color: var(--olla-accent);
+}
+
+.md-typeset a:hover {
+  color: var(--olla-primary);
+}
+
+/* Navigation active states */
+.md-nav__link--active {
+  color: var(--olla-primary);
+}
+
+.md-nav__link:hover {
+  color: var(--olla-accent);
+}
+
+/* Button styling */
+.md-button {
+  background: linear-gradient(135deg, var(--olla-primary) 0%, var(--olla-accent) 100%);
+  color: white;
+  border: none;
+}
+
+.md-button:hover {
+  background: linear-gradient(135deg, var(--olla-accent) 0%, var(--olla-primary) 100%);
+}
+
+/* Custom admonition colors */
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: var(--olla-primary);
+}
+
+.md-typeset .tip > .admonition-title,
+.md-typeset .tip > summary {
+  background-color: rgba(103, 233, 190, 0.1);
+  border-color: var(--olla-primary);
+}
+
+.md-typeset .admonition.info,
+.md-typeset details.info {
+  border-color: var(--olla-accent);
+}
+
+.md-typeset .info > .admonition-title,
+.md-typeset .info > summary {
+  background-color: rgba(103, 183, 233, 0.1);
+  border-color: var(--olla-accent);
+}
+
+/* Search highlighting */
+.md-search-result__article--document .md-search-result__title {
+  color: var(--olla-primary);
+}
+
+/* Logo and branding area */
+.md-header__title {
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Header navigation text */
+.md-header__button {
+  color: white;
+}
+
+.md-search__input {
+  background-color: rgba(255, 255, 255, 0.9);
+  color: var(--olla-outline);
+}
+
+.md-search__input::placeholder {
+  color: var(--olla-slate);
+}
+
+/* Navigation tabs - dark text for green background */
+.md-tabs {
+  background: var(--olla-primary); /* Green background for tabs */
+}
+
+.md-tabs__link--active {
+  color: var(--olla-outline);
+  opacity: 1;
+  font-weight: 600;
+}
+
+.md-tabs__link {
+  color: var(--olla-outline);
+  opacity: 0.8;
+}
+
+.md-tabs__link:hover {
+  color: var(--olla-outline);
+  opacity: 1;
+}
