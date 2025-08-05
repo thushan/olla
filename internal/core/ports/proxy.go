@@ -36,6 +36,7 @@ type ProxyConfiguration interface {
 	GetResponseTimeout() time.Duration
 	GetReadTimeout() time.Duration
 	GetStreamBufferSize() int
+	GetProxyProfile() string
 }
 
 type ProxyFactory interface {

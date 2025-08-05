@@ -57,6 +57,7 @@ type ServerRateLimits struct {
 type ProxyConfig struct {
 	Engine            string        `yaml:"engine"`
 	LoadBalancer      string        `yaml:"load_balancer"`
+	Profile           string        `yaml:"profile"`
 	ConnectionTimeout time.Duration `yaml:"connection_timeout"`
 	ResponseTimeout   time.Duration `yaml:"response_timeout"`
 	ReadTimeout       time.Duration `yaml:"read_timeout"`

@@ -95,7 +95,8 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 
 	s.logger.Info("Proxy service initialised",
 		"engine", s.config.Engine,
-		"loadBalancer", s.config.LoadBalancer)
+		"profile", s.config.Profile,
+		"balancer", s.config.LoadBalancer)
 
 	return nil
 }

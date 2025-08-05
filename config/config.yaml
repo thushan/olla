@@ -27,13 +27,18 @@ server:
 
 proxy:
   engine: "sherpa" # Available: sherpa, olla
+  # Profile controls HTTP transport buffer behaviour
+  # - "auto": Automatically selects based on request size, type and other factors
+  # - "streaming" (or empty): No buffering, tokens stream immediately (default)
+  # - "buffered": 64KB buffers for bulk transfers
+  profile: "auto" # auto, streaming, buffered
+  stream_buffer_size: 8192
+  load_balancer: "least-connections" # Available: round-robin, least-connections, priority
   connection_timeout: 60s
   response_timeout: 900s
   read_timeout: 600s
   max_retries: 3
   retry_backoff: 500ms
-  load_balancer: "least-connections" # Available: round-robin, least-connections, priority
-  stream_buffer_size: 8192
 
 discovery:
   type: "static"
