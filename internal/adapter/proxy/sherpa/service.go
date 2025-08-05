@@ -37,8 +37,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/thushan/olla/internal/core/constants"
-
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
@@ -75,55 +73,6 @@ type Service struct {
 	transport     *http.Transport
 	configuration *Configuration
 	bufferPool    *pool.Pool[*[]byte]
-}
-
-// Configuration holds proxy settings
-type Configuration struct {
-	ProxyPrefix         string
-	ConnectionTimeout   time.Duration
-	ConnectionKeepAlive time.Duration
-	ResponseTimeout     time.Duration
-	ReadTimeout         time.Duration
-	StreamBufferSize    int
-}
-
-func (c *Configuration) GetProxyPrefix() string {
-	if c.ProxyPrefix == "" {
-		return constants.DefaultOllaProxyPathPrefix
-	}
-	return c.ProxyPrefix
-}
-
-func (c *Configuration) GetConnectionTimeout() time.Duration {
-	if c.ConnectionTimeout == 0 {
-		return DefaultTimeout
-	}
-	return c.ConnectionTimeout
-}
-
-func (c *Configuration) GetConnectionKeepAlive() time.Duration {
-	if c.ConnectionKeepAlive == 0 {
-		return DefaultKeepAlive
-	}
-	return c.ConnectionKeepAlive
-}
-
-func (c *Configuration) GetResponseTimeout() time.Duration {
-	return c.ResponseTimeout
-}
-
-func (c *Configuration) GetReadTimeout() time.Duration {
-	if c.ReadTimeout == 0 {
-		return DefaultReadTimeout
-	}
-	return c.ReadTimeout
-}
-
-func (c *Configuration) GetStreamBufferSize() int {
-	if c.StreamBufferSize == 0 {
-		return DefaultStreamBufferSize
-	}
-	return c.StreamBufferSize
 }
 
 // NewService creates a new Sherpa proxy service
@@ -329,8 +278,8 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 	buffer := s.bufferPool.Get()
 	defer s.bufferPool.Put(buffer)
 
-	// Use timeout-aware streaming for edge server reliability
-	bytesWritten, streamErr := s.streamResponseWithTimeout(ctx, ctx, w, resp.Body, *buffer, rlog)
+	// Stream with timeout protection - don't let slow clients hang forever
+	bytesWritten, streamErr := s.streamResponseWithTimeout(ctx, ctx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 

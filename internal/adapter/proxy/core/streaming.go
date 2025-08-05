@@ -8,10 +8,10 @@ import (
 	"github.com/thushan/olla/internal/core/constants"
 )
 
-// DetectStreamingMode works out whether to stream or buffer a response
+// AutoDetectStreamingMode works out whether to stream or buffer a response
 // LLMs benefit from streaming (users see tokens as they're generated),
 // but binary files need buffering to avoid corruption and stalls
-func DetectStreamingMode(ctx context.Context, resp *http.Response, profile string) bool {
+func AutoDetectStreamingMode(ctx context.Context, resp *http.Response, profile string) bool {
 	// Force either if configured
 	if profile == constants.ConfigurationProxyProfileBuffered {
 		return false

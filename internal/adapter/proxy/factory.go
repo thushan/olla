@@ -44,6 +44,7 @@ func NewFactory(statsCollector ports.StatsCollector, theLogger logger.StyledLogg
 			ResponseTimeout:     config.GetResponseTimeout(),
 			ReadTimeout:         config.GetReadTimeout(),
 			StreamBufferSize:    config.GetStreamBufferSize(),
+			Profile:             config.GetProxyProfile(),
 		}
 		return sherpa.NewService(discovery, selector, sherpaConfig, collector, logger)
 	})
@@ -57,6 +58,7 @@ func NewFactory(statsCollector ports.StatsCollector, theLogger logger.StyledLogg
 			ResponseTimeout:     config.GetResponseTimeout(),
 			ReadTimeout:         config.GetReadTimeout(),
 			StreamBufferSize:    config.GetStreamBufferSize(),
+			Profile:             config.GetProxyProfile(),
 			MaxIdleConns:        200,
 			IdleConnTimeout:     90 * time.Second,
 			MaxConnsPerHost:     50,

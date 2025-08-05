@@ -232,9 +232,9 @@ func TestDetectStreamingMode(t *testing.T) {
 				resp.Header.Set("Content-Type", tt.contentType)
 			}
 
-			got := DetectStreamingMode(ctx, resp, tt.profile)
+			got := AutoDetectStreamingMode(ctx, resp, tt.profile)
 			if got != tt.want {
-				t.Errorf("DetectStreamingMode() = %v, want %v", got, tt.want)
+				t.Errorf("AutoDetectStreamingMode() = %v, want %v", got, tt.want)
 			}
 		})
 	}
