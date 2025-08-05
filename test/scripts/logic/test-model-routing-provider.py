@@ -418,4 +418,8 @@ def main():
     tester.print_summary()
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Test interrupted by user (Ctrl+C){RESET}")
+        sys.exit(130)  # Standard exit code for SIGINT

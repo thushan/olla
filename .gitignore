@@ -18,6 +18,7 @@ docker-compose.override.yaml
 # Build directories
 build/
 dist/
+.venv/
 
 # Legacy directories (to be removed)
 config-dev/

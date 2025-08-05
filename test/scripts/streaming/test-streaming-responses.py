@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Olla Streaming Response Test Script
 Tests that LLM responses actually stream data incrementally
@@ -9,9 +10,17 @@ import json
 import time
 import argparse
 import requests
+import os
 from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
 from datetime import datetime
+
+# Fix Windows console encoding for Unicode
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 # ANSI color codes
 RED = '\033[0;31m'
@@ -444,7 +453,8 @@ def main():
         
     tester.print_summary()
 
-if __name__ == '__main__':
+def run_main():
+    """Main execution function wrapped for interrupt handling"""
     # Fix 'self' references in main()
     class MainRunner:
         @staticmethod
@@ -511,3 +521,11 @@ if __name__ == '__main__':
         tester.analyze_streaming_patterns()
         
     tester.print_summary()
+
+
+if __name__ == '__main__':
+    try:
+        run_main()
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Test interrupted by user (Ctrl+C){RESET}")
+        sys.exit(130)  # Standard exit code for SIGINT

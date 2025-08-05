@@ -38,6 +38,17 @@ func (rw *responseWriter) WriteHeader(s int) {
 	rw.ResponseWriter.WriteHeader(s)
 }
 
+// Flush implements http.Flusher interface
+func (rw *responseWriter) Flush() {
+	// OLLA-102: Choppy output in streaming responses
+	// We need to flush the underlying response writer
+	// for streaming responses, otherwise buffers will
+	// not be sent immediately causing choppy output.
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // GetLogger retrieves a logger with request ID from context
 func GetLogger(ctx context.Context) *slog.Logger {
 	if logger, ok := ctx.Value(LoggerKey).(*slog.Logger); ok {
