@@ -12,6 +12,8 @@ config.local.yaml
 config/*.local.yaml
 config/**/*.local.yaml
 config/docker.yaml
+# Test configs
+config/config.test.local.yaml
 docker-compose.local.yaml
 docker-compose.override.yaml
 

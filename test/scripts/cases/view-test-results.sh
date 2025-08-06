@@ -39,6 +39,13 @@ main() {
     print_color "$CYAN" "Latest test results: $results_dir"
     echo ""
     
+    # Show test run info if exists
+    if [[ -f "$results_dir/test-run-info.txt" ]]; then
+        print_section "Test Run Info"
+        cat "$results_dir/test-run-info.txt"
+        echo ""
+    fi
+    
     # Show summary if exists
     if [[ -f "$results_dir/summary.txt" ]]; then
         print_section "Test Summary"
@@ -60,14 +67,6 @@ main() {
                 # Show test case summary
                 if [[ -f "$test_dir/summary.txt" ]]; then
                     cat "$test_dir/summary.txt" | sed 's/^/  /'
-                fi
-                
-                # Show binary info
-                if [[ -d "$test_dir/bin" ]]; then
-                    local binary=$(ls "$test_dir/bin" 2>/dev/null | head -1)
-                    if [[ -n "$binary" ]]; then
-                        print_color "$GREY" "  Binary: $binary"
-                    fi
                 fi
                 
                 # Check logs directory

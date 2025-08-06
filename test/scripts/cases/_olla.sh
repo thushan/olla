@@ -82,6 +82,9 @@ create_test_config() {
     
     print_color "$CYAN" "Creating test configuration..."
     
+    # Ensure config directory exists
+    mkdir -p "$PROJECT_ROOT/config"
+    
     # Use yq if available for reliable YAML manipulation
     if command_exists yq; then
         eval "yq eval '$modifications' \"$base_config\"" > "$PROJECT_ROOT/$TEST_CONFIG"
@@ -96,7 +99,7 @@ create_test_config() {
     fi
     
     if [[ -f "$PROJECT_ROOT/$TEST_CONFIG" ]]; then
-        print_color "$GREEN" "✓ Test configuration created"
+        print_color "$GREEN" "✓ Test configuration created at: $PROJECT_ROOT/$TEST_CONFIG"
         return 0
     else
         print_color "$RED" "ERROR: Failed to create test configuration"
@@ -116,8 +119,9 @@ start_olla() {
     cd "$PROJECT_ROOT"
     
     # Check if port is available
-    if ! is_port_available 40114; then
-        print_color "$RED" "ERROR: Port 40114 is already in use"
+    local port="${TEST_PORT:-40114}"
+    if ! is_port_available $port; then
+        print_color "$RED" "ERROR: Port $port is already in use"
         cd "$current_dir"
         return 1
     fi
@@ -130,13 +134,48 @@ start_olla() {
     fi
     
     # Start Olla in background
-    print_color "$CYAN" "Starting: OLLA_CONFIG=\"$config_file\" ./olla server"
-    OLLA_CONFIG="$config_file" ./olla server > "$log_file" 2>&1 &
+    local port="${TEST_PORT:-40114}"
+    
+    # Ensure config file is absolute path
+    if [[ ! "$config_file" = /* ]]; then
+        config_file="$PROJECT_ROOT/$config_file"
+    fi
+    
+    print_color "$CYAN" "Config file: $config_file"
+    print_color "$CYAN" "Expected port: $port"
+    
+    # Verify config has correct port
+    if [[ -f "$config_file" ]]; then
+        local config_port=$(grep -E "^\s*port:" "$config_file" | awk '{print $2}')
+        print_color "$CYAN" "Port in config file: $config_port"
+        if [[ "$config_port" != "$port" ]]; then
+            print_color "$YELLOW" "WARNING: Config port ($config_port) doesn't match expected port ($port)"
+        fi
+    fi
+    
+    print_color "$CYAN" "Starting: OLLA_CONFIG_FILE=\"$config_file\" ./olla server"
+    
+    OLLA_CONFIG_FILE="$config_file" ./olla server > "$log_file" 2>&1 &
     OLLA_PID=$!
     
+    print_color "$CYAN" "Started Olla process with PID: $OLLA_PID"
+    
     # Wait for Olla to start
-    if wait_for_condition "check_olla_health" 30 "Waiting for Olla to start"; then
+    print_color "$CYAN" "Health check URL: http://localhost:$port/internal/health"
+    if wait_for_condition "check_olla_health" 30 "Waiting for Olla to start on port $port"; then
         print_color "$GREEN" "✓ Olla started successfully (PID: $OLLA_PID)"
+        
+        # Show that it's working
+        local health_response=$(curl -s "http://localhost:$port/internal/health" 2>/dev/null)
+        if [[ -n "$health_response" ]]; then
+            print_color "$GREEN" "✓ Health check response: $health_response"
+        fi
+        
+        # Strip ANSI codes from Olla log
+        if [[ -f "$log_file" ]]; then
+            strip_ansi_codes "$log_file"
+        fi
+        
         cd "$current_dir"
         return 0
     else
@@ -145,8 +184,24 @@ start_olla() {
         # Check if process is still running
         if ! kill -0 $OLLA_PID 2>/dev/null; then
             print_color "$RED" "Olla process died. Last 20 lines of log:"
-            tail -20 "$log_file"
+            tail -20 "$log_file" | sed 's/^/  /'
+        else
+            print_color "$YELLOW" "Olla process is still running but not responding on port $port"
+            print_color "$YELLOW" "Checking if port is actually in use..."
+            if is_port_available $port; then
+                print_color "$RED" "Port $port is not in use - Olla may be listening on wrong port"
+            else
+                print_color "$YELLOW" "Port $port is in use - health endpoint may be failing"
+            fi
+            print_color "$YELLOW" "Last 10 lines of log:"
+            tail -10 "$log_file" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/^/  /'
         fi
+        
+        # Strip ANSI codes from Olla log even on failure
+        if [[ -f "$log_file" ]]; then
+            strip_ansi_codes "$log_file"
+        fi
+        
         cd "$current_dir"
         return 1
     fi
@@ -154,7 +209,20 @@ start_olla() {
 
 # Function to check Olla health
 check_olla_health() {
-    curl -s http://localhost:40114/internal/health > /dev/null 2>&1
+    local port="${TEST_PORT:-40114}"
+    local url="http://localhost:$port/internal/health"
+    
+    # Debug mode - show what we're checking
+    if [[ "${DEBUG:-}" == "true" ]]; then
+        print_color "$GREY" "  Checking: $url"
+    fi
+    
+    # Check if we get a successful response with JSON
+    local response=$(curl -s -w "\n%{http_code}" "$url" 2>/dev/null)
+    local http_code=$(echo "$response" | tail -1)
+    
+    # Check if we got HTTP 200
+    [[ "$http_code" == "200" ]]
 }
 
 # Function to stop Olla
@@ -185,7 +253,8 @@ stop_olla() {
 
 # Function to get Olla status
 get_olla_status() {
-    local response=$(curl -s http://localhost:40114/internal/status 2>/dev/null)
+    local port="${TEST_PORT:-40114}"
+    local response=$(curl -s http://localhost:$port/internal/status 2>/dev/null)
     if [[ $? -eq 0 ]]; then
         echo "$response"
         return 0
@@ -196,7 +265,8 @@ get_olla_status() {
 
 # Function to get available models
 get_available_models() {
-    curl -s http://localhost:40114/olla/models 2>/dev/null | jq -r '.data[].id // .models[].name // .models[].id' 2>/dev/null || true
+    local port="${TEST_PORT:-40114}"
+    curl -s http://localhost:$port/olla/models 2>/dev/null | jq -r '.data[].id // .models[].name // .models[].id' 2>/dev/null || true
 }
 
 # Function to check for specific model

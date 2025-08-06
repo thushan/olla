@@ -17,6 +17,7 @@ source "$SCRIPT_DIR/_streaming_tests.sh"
 # Configuration
 BASE_CONFIG=""
 TEST_RESULTS_DIR=""
+TEST_PORT=""
 
 # Test configuration matrix
 PROXY_ENGINES=("sherpa" "olla")
@@ -91,30 +92,84 @@ create_engine_profile_config() {
     local engine=$1
     local profile=$2
     
-    print_color "$CYAN" "Creating config: engine=$engine, profile=$profile"
+    print_color "$CYAN" "Creating config: engine=$engine, profile=$profile, host=localhost, port=$TEST_PORT"
     
     # Use the create_test_config function from _olla.sh with yq modifications
     if command_exists yq; then
-        create_test_config "$BASE_CONFIG" ".proxy.engine = \"$engine\" | .proxy.profile = \"$profile\""
+        create_test_config "$BASE_CONFIG" ".proxy.engine = \"$engine\" | .proxy.profile = \"$profile\" | .server.host = \"localhost\" | .server.port = $TEST_PORT"
     else
-        # Fallback to sed
+        # Use awk to modify YAML
+        print_color "$YELLOW" "Using awk to modify YAML configuration"
         cp "$BASE_CONFIG" "$PROJECT_ROOT/$TEST_CONFIG"
         
-        # First update the engine
-        sed -i.bak "s/^[[:space:]]*engine:.*/  engine: $engine/" "$PROJECT_ROOT/$TEST_CONFIG"
+        # Create a temporary file with all modifications
+        awk -v engine="$engine" -v profile="$profile" -v port="$TEST_PORT" '
+        BEGIN { in_server = 0; in_proxy = 0 }
         
-        # Then update the profile
-        sed -i.bak "s/^[[:space:]]*profile:.*/  profile: $profile/" "$PROJECT_ROOT/$TEST_CONFIG"
+        # Handle server section
+        /^server:/ { 
+            in_server = 1
+            in_proxy = 0
+            print
+            next
+        }
         
-        rm -f "$PROJECT_ROOT/$TEST_CONFIG.bak"
+        # Handle proxy section
+        /^proxy:/ { 
+            in_proxy = 1
+            in_server = 0
+            print
+            next
+        }
+        
+        # Reset section flags when we hit a new top-level key
+        /^[a-zA-Z]/ && !/^[[:space:]]/ {
+            in_server = 0
+            in_proxy = 0
+        }
+        
+        # Update values in server section
+        in_server && /^[[:space:]]+host:/ {
+            sub(/host:.*/, "host: \"localhost\"")
+        }
+        in_server && /^[[:space:]]+port:/ {
+            sub(/port:.*/, "port: " port)
+        }
+        
+        # Update values in proxy section
+        in_proxy && /^[[:space:]]+engine:/ {
+            sub(/engine:.*/, "engine: \"" engine "\"")
+        }
+        in_proxy && /^[[:space:]]+profile:/ {
+            sub(/profile:.*/, "profile: \"" profile "\"")
+        }
+        
+        { print }
+        ' "$PROJECT_ROOT/$TEST_CONFIG" > "$PROJECT_ROOT/$TEST_CONFIG.tmp" && \
+        mv "$PROJECT_ROOT/$TEST_CONFIG.tmp" "$PROJECT_ROOT/$TEST_CONFIG"
         
         # Verify the changes
-        if grep -q "engine: $engine" "$PROJECT_ROOT/$TEST_CONFIG" && grep -q "profile: $profile" "$PROJECT_ROOT/$TEST_CONFIG"; then
-            print_color "$GREEN" "✓ Test configuration created successfully"
+        local actual_port=$(grep -A10 "^server:" "$PROJECT_ROOT/$TEST_CONFIG" | grep "port:" | head -1 | awk '{print $2}')
+        local actual_engine=$(grep -A10 "^proxy:" "$PROJECT_ROOT/$TEST_CONFIG" | grep "engine:" | head -1 | sed 's/.*engine:[[:space:]]*"\?\([^"]*\)"\?.*/\1/')
+        local actual_profile=$(grep -A10 "^proxy:" "$PROJECT_ROOT/$TEST_CONFIG" | grep "profile:" | head -1 | sed 's/.*profile:[[:space:]]*"\?\([^"]*\)"\?.*/\1/')
+        
+        print_color "$CYAN" "Configuration changes:"
+        print_color "$CYAN" "  Port: $actual_port (expected: $TEST_PORT)"
+        print_color "$CYAN" "  Engine: $actual_engine (expected: $engine)"
+        print_color "$CYAN" "  Profile: $actual_profile (expected: $profile)"
+        
+        if [[ "$actual_port" == "$TEST_PORT" ]]; then
+            print_color "$GREEN" "✓ Configuration updated successfully"
         else
-            print_color "$RED" "ERROR: Failed to update configuration"
-            return 1
+            print_color "$RED" "ERROR: Failed to update port correctly"
         fi
+        
+        # Show what we created
+        print_color "$CYAN" "Test configuration server section:"
+        grep -A5 "^server:" "$PROJECT_ROOT/$TEST_CONFIG" 2>/dev/null | sed 's/^/  /'
+        
+        print_color "$CYAN" "Test configuration proxy section:"
+        grep -A10 "^proxy:" "$PROJECT_ROOT/$TEST_CONFIG" 2>/dev/null | grep -E "^proxy:|engine:|profile:" | sed 's/^/  /'
     fi
 }
 
@@ -141,7 +196,6 @@ run_test_case() {
     
     # Create test case directory structure
     local test_case_dir="$TEST_RESULTS_DIR/$engine-$profile"
-    mkdir -p "$test_case_dir/bin"
     mkdir -p "$test_case_dir/config"
     mkdir -p "$test_case_dir/logs"
     
@@ -154,12 +208,6 @@ run_test_case() {
     # Copy the test configuration to the test case folder
     cp "$PROJECT_ROOT/$TEST_CONFIG" "$test_case_dir/config/config.yaml"
     print_color "$CYAN" "Saved test config to: $test_case_dir/config/config.yaml"
-    
-    # Copy the binary with git version name
-    local binary_name=$(get_git_version)
-    cp "$OLLA_BINARY" "$test_case_dir/bin/$binary_name"
-    chmod +x "$test_case_dir/bin/$binary_name"
-    print_color "$CYAN" "Saved binary as: $test_case_dir/bin/$binary_name"
     
     # Start Olla with the log in the test case directory
     print_color "$YELLOW" "Starting Olla with $engine/$profile configuration..."
@@ -197,8 +245,9 @@ run_test_case() {
     {
         echo "Test Case: $engine/$profile"
         echo "Duration: ${duration}s"
-        echo "Binary: $binary_name"
+        echo "Binary: ../bin/$(ls "$TEST_RESULTS_DIR/bin" | head -1)"
         echo "Config: config.yaml"
+        echo "Port: $TEST_PORT"
         echo "Date: $(date)"
     } > "$test_case_dir/summary.txt"
     
@@ -221,6 +270,7 @@ generate_summary() {
         echo ""
         echo "Test Run: $(date)"
         echo "Base Config: $BASE_CONFIG"
+        echo "Runtime: ${minutes}m ${seconds}s"
         echo ""
         
         for engine in "${PROXY_ENGINES[@]}"; do
@@ -284,6 +334,9 @@ trap cleanup EXIT
 main() {
     print_header "Olla Proxy Engine & Profile Test Suite"
     
+    # Record start time
+    local start_time=$(date +%s)
+    
     # Check virtual environment
     if ! check_venv; then
         exit 1
@@ -296,10 +349,41 @@ main() {
     TEST_RESULTS_DIR=$(create_results_dir "test-results")
     print_color "$CYAN" "Test results will be saved to: $TEST_RESULTS_DIR"
     
+    # Generate random port for this test run
+    TEST_PORT=$(get_random_port 40114 40144)
+    print_color "$CYAN" "Using test port: $TEST_PORT"
+    
     # Build Olla
     if ! build_olla; then
         exit 1
     fi
+    
+    # Copy binary to test results directory
+    mkdir -p "$TEST_RESULTS_DIR/bin"
+    local binary_name=$(get_git_version)
+    cp "$OLLA_BINARY" "$TEST_RESULTS_DIR/bin/$binary_name"
+    chmod +x "$TEST_RESULTS_DIR/bin/$binary_name"
+    print_color "$CYAN" "Test binary: $TEST_RESULTS_DIR/bin/$binary_name"
+    
+    # Create test run info file
+    {
+        echo "Test Run Information"
+        echo "==================="
+        echo "Date: $(date)"
+        echo "Binary: $binary_name"
+        echo "Base Config: $BASE_CONFIG"
+        echo "Test Port: $TEST_PORT"
+        echo "Host: localhost"
+        echo "Git Commit: $(cd "$PROJECT_ROOT" && git rev-parse HEAD 2>/dev/null || echo "unknown")"
+        echo "Git Status: $(cd "$PROJECT_ROOT" && git status --porcelain 2>/dev/null | wc -l) uncommitted changes"
+        echo ""
+        echo "Test Matrix:"
+        for engine in "${PROXY_ENGINES[@]}"; do
+            for profile in "${PROXY_PROFILES[@]}"; do
+                echo "  - $engine/$profile"
+            done
+        done
+    } > "$TEST_RESULTS_DIR/test-run-info.txt"
     
     # Show test matrix
     print_section "Test Matrix"
@@ -331,10 +415,27 @@ main() {
         done
     done
     
+    # Calculate total runtime
+    local end_time=$(date +%s)
+    local total_time=$((end_time - start_time))
+    local minutes=$((total_time / 60))
+    local seconds=$((total_time % 60))
+    
     # Generate summary report
     generate_summary
     
+    # Append runtime to test-run-info
+    {
+        echo ""
+        echo "Test Runtime"
+        echo "============"
+        echo "Start: $(date -d @$start_time 2>/dev/null || date -r $start_time 2>/dev/null || echo "timestamp: $start_time")"
+        echo "End: $(date -d @$end_time 2>/dev/null || date -r $end_time 2>/dev/null || echo "timestamp: $end_time")"
+        echo "Total: ${minutes}m ${seconds}s"
+    } >> "$TEST_RESULTS_DIR/test-run-info.txt"
+    
     print_color "$GREEN" "\n✅ All tests completed!"
+    print_color "$CYAN" "Total runtime: ${minutes}m ${seconds}s"
     print_color "$CYAN" "Full results available in: $TEST_RESULTS_DIR"
 }
 

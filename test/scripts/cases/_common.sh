@@ -16,7 +16,7 @@ RESET='\033[0m'
 # Common paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-TEST_CONFIG="config.test.local.yaml"
+TEST_CONFIG="config/config.test.local.yaml"
 OLLA_BINARY="$PROJECT_ROOT/olla"
 
 # Function to print colored output
@@ -133,7 +133,14 @@ log_with_timestamp() {
 # Function to check if port is available
 is_port_available() {
     local port=$1
-    ! nc -z localhost "$port" 2>/dev/null
+    
+    # Try nc (netcat) first
+    if command_exists nc; then
+        ! nc -z localhost "$port" 2>/dev/null
+    else
+        # Fallback to trying to connect with curl
+        ! curl -s -o /dev/null --connect-timeout 1 "http://localhost:$port" 2>/dev/null
+    fi
 }
 
 # Function to wait for condition with timeout
@@ -142,16 +149,18 @@ wait_for_condition() {
     local timeout=${2:-30}
     local message=${3:-"Waiting for condition"}
     
+    echo -n "$message"
     local count=0
     while [[ $count -lt $timeout ]]; do
         if $condition_fn; then
+            echo " [OK]"
             return 0
         fi
         sleep 1
         ((count++))
         echo -n "."
     done
-    echo ""
+    echo " [TIMEOUT]"
     return 1
 }
 
@@ -160,4 +169,26 @@ run_with_timeout() {
     local timeout=$1
     shift
     timeout --preserve-status "$timeout" "$@"
+}
+
+# Function to get random port in range
+get_random_port() {
+    local min=${1:-40114}
+    local max=${2:-40144}
+    echo $((min + RANDOM % (max - min + 1)))
+}
+
+# Function to strip ANSI codes from a file
+strip_ansi_codes() {
+    local input_file=$1
+    local output_file=${2:-$input_file}
+    
+    # Use sed to remove ANSI escape sequences
+    if [[ "$input_file" == "$output_file" ]]; then
+        # In-place editing
+        sed -i.bak 's/\x1b\[[0-9;]*m//g' "$input_file" && rm -f "$input_file.bak"
+    else
+        # Output to different file
+        sed 's/\x1b\[[0-9;]*m//g' "$input_file" > "$output_file"
+    fi
 }
