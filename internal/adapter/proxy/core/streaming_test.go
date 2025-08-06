@@ -26,13 +26,13 @@ func TestDetectStreamingMode(t *testing.T) {
 		{
 			name:        "explicit streaming profile overrides content type",
 			profile:     constants.ConfigurationProxyProfileStreaming,
-			contentType: "image/png",
+			contentType: constants.ContentTypeImagePNG,
 			want:        true,
 		},
 		{
 			name:        "explicit standard profile overrides content type",
 			profile:     constants.ConfigurationProxyProfileStandard,
-			contentType: "text/event-stream",
+			contentType: constants.ContentTypeEventStream,
 			want:        false,
 		},
 
@@ -40,103 +40,103 @@ func TestDetectStreamingMode(t *testing.T) {
 		{
 			name:        "auto mode detects SSE streaming",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "text/event-stream",
+			contentType: constants.ContentTypeEventStream,
 			want:        true,
 		},
 		{
 			name:        "auto mode detects NDJSON streaming",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/x-ndjson",
+			contentType: constants.ContentTypeNDJSON,
 			want:        true,
 		},
 		{
 			name:        "auto mode detects streaming JSON",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/stream+json",
+			contentType: constants.ContentTypeStreamJSON,
 			want:        true,
 		},
 		{
 			name:        "auto mode detects JSON sequence",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/json-seq",
+			contentType: constants.ContentTypeJSONSeq,
 			want:        true,
 		},
 		{
 			name:        "auto mode detects text/plain streaming (some LLMs)",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "text/plain; charset=utf-8",
+			contentType: constants.ContentTypeTextUTF8,
 			want:        true,
 		},
 
-		// Binary files use standard mode in auto to prevent corruption
+		// Binary files get buffered in auto mode to prevent corruption
 		{
-			name:        "auto mode uses standard for PNG images",
+			name:        "auto mode buffers PNG images",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "image/png",
+			contentType: constants.ContentTypeImagePNG,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for JPEG images",
+			name:        "auto mode buffers JPEG images",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "image/jpeg",
+			contentType: constants.ContentTypeImageJPEG,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for WebP images",
+			name:        "auto mode buffers WebP images",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "image/webp",
+			contentType: constants.ContentTypeImageWebP,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for videos",
+			name:        "auto mode buffers videos",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "video/mp4",
+			contentType: constants.ContentTypeVideoMP4,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for audio",
+			name:        "auto mode buffers audio",
 			profile:     constants.ConfigurationProxyProfileAuto,
 			contentType: "audio/mpeg",
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for PDFs",
+			name:        "auto mode buffers PDFs",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/pdf",
+			contentType: constants.ContentTypePDF,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for ZIP files",
+			name:        "auto mode buffers ZIP files",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/zip",
+			contentType: constants.ContentTypeZIP,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for octet-stream",
+			name:        "auto mode buffers octet-stream",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/octet-stream",
+			contentType: constants.ContentTypeOctetStream,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for Excel files",
+			name:        "auto mode buffers Excel files",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/vnd.ms-excel",
+			contentType: constants.ContentTypeExcel,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for Word documents",
+			name:        "auto mode buffers Word documents",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+			contentType: constants.ContentTypeWordDOCX,
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for fonts",
+			name:        "auto mode buffers fonts",
 			profile:     constants.ConfigurationProxyProfileAuto,
 			contentType: "font/woff2",
 			want:        false,
 		},
 		{
-			name:        "auto mode uses standard for 3D models",
+			name:        "auto mode buffers 3D models",
 			profile:     constants.ConfigurationProxyProfileAuto,
 			contentType: "model/gltf-binary",
 			want:        false,
@@ -146,25 +146,25 @@ func TestDetectStreamingMode(t *testing.T) {
 		{
 			name:        "auto mode streams JSON by default",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/json",
+			contentType: constants.ContentTypeJSON,
 			want:        true,
 		},
 		{
 			name:        "auto mode streams HTML",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "text/html",
+			contentType: constants.ContentTypeHTML,
 			want:        true,
 		},
 		{
 			name:        "auto mode streams XML",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/xml",
+			contentType: constants.ContentTypeXML,
 			want:        true,
 		},
 		{
 			name:        "auto mode streams plain text",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "text/plain",
+			contentType: constants.ContentTypeText,
 			want:        true,
 		},
 
@@ -172,21 +172,21 @@ func TestDetectStreamingMode(t *testing.T) {
 		{
 			name:        "context stream=true forces streaming for JSON",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/json",
+			contentType: constants.ContentTypeJSON,
 			ctxStream:   true,
 			want:        true,
 		},
 		{
 			name:        "context stream=false doesn't force buffering in auto mode",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "application/json",
+			contentType: constants.ContentTypeJSON,
 			ctxStream:   false,
 			want:        true, // Text still streams regardless
 		},
 		{
 			name:        "context stream=true forces streaming even for images in auto mode",
 			profile:     constants.ConfigurationProxyProfileAuto,
-			contentType: "image/png",
+			contentType: constants.ContentTypeImagePNG,
 			ctxStream:   true,
 			want:        true,
 		},
@@ -229,7 +229,7 @@ func TestDetectStreamingMode(t *testing.T) {
 				Header: http.Header{},
 			}
 			if tt.contentType != "" {
-				resp.Header.Set("Content-Type", tt.contentType)
+				resp.Header.Set(constants.HeaderContentType, tt.contentType)
 			}
 
 			got := AutoDetectStreamingMode(ctx, resp, tt.profile)
@@ -246,14 +246,14 @@ func TestIsStreamingContentType(t *testing.T) {
 		contentType string
 		want        bool
 	}{
-		{"SSE", "text/event-stream", true},
-		{"SSE with charset", "text/event-stream; charset=utf-8", true},
-		{"NDJSON", "application/x-ndjson", true},
-		{"Stream JSON", "application/stream+json", true},
-		{"JSON Seq", "application/json-seq", true},
-		{"Plain text streaming", "text/plain; charset=utf-8", true},
-		{"Regular JSON", "application/json", false},
-		{"HTML", "text/html", false},
+		{"SSE", constants.ContentTypeEventStream, true},
+		{"SSE with charset", constants.ContentTypeEventStream + "; charset=utf-8", true},
+		{"NDJSON", constants.ContentTypeNDJSON, true},
+		{"Stream JSON", constants.ContentTypeStreamJSON, true},
+		{"JSON Seq", constants.ContentTypeJSONSeq, true},
+		{"Plain text streaming", constants.ContentTypeTextUTF8, true},
+		{"Regular JSON", constants.ContentTypeJSON, false},
+		{"HTML", constants.ContentTypeHTML, false},
 		{"Empty", "", false},
 	}
 
@@ -273,43 +273,43 @@ func TestIsBinaryContentType(t *testing.T) {
 		want        bool
 	}{
 		// Image formats - always binary
-		{"PNG", "image/png", true},
-		{"JPEG", "image/jpeg", true},
-		{"WebP", "image/webp", true},
-		{"SVG", "image/svg+xml", true},
+		{"PNG", constants.ContentTypeImagePNG, true},
+		{"JPEG", constants.ContentTypeImageJPEG, true},
+		{"WebP", constants.ContentTypeImageWebP, true},
+		{"SVG", constants.ContentTypeImageSVG, true},
 
-		{"MP4", "video/mp4", true},
-		{"WebM", "video/webm", true},
+		{"MP4", constants.ContentTypeVideoMP4, true},
+		{"WebM", constants.ContentTypeVideoWebM, true},
 		{"MP3", "audio/mpeg", true},
 		{"WAV", "audio/wav", true},
 
 		// Office documents and PDFs
-		{"PDF", "application/pdf", true},
-		{"Word", "application/msword", true},
-		{"Word OOXML", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", true},
-		{"Excel", "application/vnd.ms-excel", true},
-		{"PowerPoint", "application/vnd.ms-powerpoint", true},
+		{"PDF", constants.ContentTypePDF, true},
+		{"Word", constants.ContentTypeWordDOC, true},
+		{"Word OOXML", constants.ContentTypeWordDOCX, true},
+		{"Excel", constants.ContentTypeExcel, true},
+		{"PowerPoint", constants.ContentTypePowerPoint, true},
 
 		// Compressed archives
-		{"ZIP", "application/zip", true},
-		{"GZIP", "application/gzip", true},
-		{"TAR", "application/x-tar", true},
-		{"RAR", "application/x-rar", true},
-		{"7Z", "application/x-7z-compressed", true},
+		{"ZIP", constants.ContentTypeZIP, true},
+		{"GZIP", constants.ContentTypeGZIP, true},
+		{"TAR", constants.ContentTypeTAR, true},
+		{"RAR", constants.ContentTypeRAR, true},
+		{"7Z", constants.ContentType7Z, true},
 
 		// Miscellaneous binary formats
-		{"Octet stream", "application/octet-stream", true},
+		{"Octet stream", constants.ContentTypeOctetStream, true},
 		{"Font WOFF", "font/woff", true},
 		{"Font WOFF2", "font/woff2", true},
 		{"3D Model", "model/gltf-binary", true},
 
 		// Text-based formats that should stream
-		{"JSON", "application/json", false},
-		{"HTML", "text/html", false},
-		{"Plain text", "text/plain", false},
-		{"XML", "application/xml", false},
-		{"JavaScript", "application/javascript", false},
-		{"CSS", "text/css", false},
+		{"JSON", constants.ContentTypeJSON, false},
+		{"HTML", constants.ContentTypeHTML, false},
+		{"Plain text", constants.ContentTypeText, false},
+		{"XML", constants.ContentTypeXML, false},
+		{"JavaScript", constants.ContentTypeJavaScript, false},
+		{"CSS", constants.ContentTypeCSS, false},
 		{"Empty", "", false},
 	}
 

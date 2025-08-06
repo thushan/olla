@@ -74,7 +74,7 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			start := time.Now()
 
 			// Get or create request ID
-			requestID := r.Header.Get("X-Request-ID")
+			requestID := r.Header.Get(constants.HeaderXRequestID)
 			if requestID == "" {
 				requestID = util.GenerateRequestID()
 			}

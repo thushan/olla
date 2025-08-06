@@ -34,23 +34,23 @@ echo
 
 # Test 1: Streaming Detection (quick mode)
 echo "1. Running streaming detection test (quick mode)..."
-python test-streaming-detection.py --url "$TARGET_URL" --quick || {
+python test-streaming-detection.py --url "$TARGET_URL" || {
     echo "❌ Streaming detection test failed"
     exit 1
 }
 echo
 
-# Test 2: Streaming Latency (3 questions)
+# Test 2: Streaming Latency (5 questions)
 echo "2. Running streaming latency test..."
-python test-streaming-latency.py --url "$TARGET_URL" --count 3 || {
+python test-streaming-latency.py --url "$TARGET_URL" --count 5 || {
     echo "❌ Streaming latency test failed"
     exit 1
 }
 echo
 
-# Test 3: Streaming Responses (sample mode)
+# Test 3: Streaming Responses
 echo "3. Running streaming responses test (sample mode)..."
-python test-streaming-responses.py --url "$TARGET_URL" --sample || {
+python test-streaming-responses.py --url "$TARGET_URL" || {
     echo "❌ Streaming responses test failed"
     exit 1
 }
