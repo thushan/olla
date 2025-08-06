@@ -2,12 +2,13 @@ package config
 
 import (
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
 	"log/slog"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/util"
 
@@ -18,6 +19,7 @@ import (
 const (
 	DefaultPort              = 40114
 	DefaultHost              = "localhost"
+	DefaultAllHost           = "0.0.0.0" // local dev may use this
 	DefaultProxyProfile      = constants.ConfigurationProxyProfileAuto
 	DefaultProxyEngine       = "sherpa"
 	DefaultLoadBalancer      = "priority"

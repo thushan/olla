@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/thushan/olla/internal/adapter/proxy/core"
 
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/logger"

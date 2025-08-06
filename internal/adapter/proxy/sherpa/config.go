@@ -1,8 +1,9 @@
 package sherpa
 
 import (
-	"github.com/thushan/olla/internal/core/constants"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 // Configuration holds proxy settings

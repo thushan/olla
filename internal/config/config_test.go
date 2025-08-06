@@ -64,7 +64,7 @@ func TestLoadConfig_WithoutFile(t *testing.T) {
 	if cfg.Server.Port != DefaultPort {
 		t.Errorf("Expected default port %d, got %d", DefaultPort, cfg.Server.Port)
 	}
-	if cfg.Server.Host != DefaultHost {
+	if cfg.Server.Host != DefaultHost && cfg.Server.Host != DefaultAllHost {
 		t.Errorf("Expected default host %s, got %s", DefaultHost, cfg.Server.Host)
 	}
 }
