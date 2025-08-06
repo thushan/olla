@@ -21,7 +21,7 @@ func AutoDetectStreamingMode(ctx context.Context, resp *http.Response, profile s
 	}
 
 	// Auto mode - make an intelligent choice based on response content
-	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	contentType := strings.ToLower(resp.Header.Get(constants.HeaderContentType))
 
 	// if we know the streaming format, get streamed immediately
 	if isStreamingContentType(contentType) {
@@ -29,7 +29,7 @@ func AutoDetectStreamingMode(ctx context.Context, resp *http.Response, profile s
 	}
 
 	// respect client preferences from the original request
-	if streamVal := ctx.Value("stream"); streamVal != nil {
+	if streamVal := ctx.Value(constants.ContextKeyStream); streamVal != nil {
 		if stream, ok := streamVal.(bool); ok && stream {
 			return true
 		}
@@ -45,11 +45,11 @@ func AutoDetectStreamingMode(ctx context.Context, resp *http.Response, profile s
 }
 
 var streamingTypes = []string{
-	"text/event-stream",
-	"application/x-ndjson",
-	"application/stream+json",
-	"application/json-seq",
-	"text/plain; charset=utf-8", // Common fallback for LLM streaming
+	constants.ContentTypeEventStream,
+	constants.ContentTypeNDJSON,
+	constants.ContentTypeStreamJSON,
+	constants.ContentTypeJSONSeq,
+	constants.ContentTypeTextUTF8, // Common fallback for LLM streaming
 }
 
 // isStreamingContentType identifies known streaming formats.
@@ -65,24 +65,24 @@ func isStreamingContentType(contentType string) bool {
 }
 
 var binaryPrefixes = []string{
-	"image/",
-	"video/",
-	"audio/",
-	"application/pdf",
-	"application/zip",
-	"application/gzip",
-	"application/x-tar",
-	"application/x-rar",
-	"application/x-7z",
-	"font/",
-	"model/", // 3D models, CAD files
+	constants.ContentTypePrefixImage,
+	constants.ContentTypePrefixVideo,
+	constants.ContentTypePrefixAudio,
+	constants.ContentTypePDF,
+	constants.ContentTypeZIP,
+	constants.ContentTypeGZIP,
+	constants.ContentTypeTAR,
+	constants.ContentTypeRAR,
+	constants.ContentType7Z,
+	constants.ContentTypePrefixFont,
+	constants.ContentTypePrefixModel, // 3D models, CAD files
 }
 var binaryTypes = []string{
-	"application/octet-stream",
-	"application/vnd.ms-excel",
-	"application/vnd.openxmlformats-officedocument",
-	"application/msword",
-	"application/vnd.ms-powerpoint",
+	constants.ContentTypeOctetStream,
+	constants.ContentTypeExcel,
+	constants.ContentTypeOfficeDocument,
+	constants.ContentTypeWordDOC,
+	constants.ContentTypePowerPoint,
 }
 
 // isBinaryContentType identifies content that shouldn't be streamed.

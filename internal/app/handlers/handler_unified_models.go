@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -132,7 +134,7 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	// availability info showing endpoint state. The filtering above ensures
 	// only models from healthy endpoints are shown when include_unavailable=false.
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
@@ -298,7 +300,7 @@ func (a *Application) unifiedModelByAliasHandler(w http.ResponseWriter, r *http.
 	// Build response
 	summary := a.buildUnifiedModelSummary(model, endpointNames)
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(summary)
 }

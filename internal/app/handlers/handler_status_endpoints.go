@@ -6,6 +6,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/core/ports"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -89,7 +91,7 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 		Endpoints:     endpointSummaryPool,
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

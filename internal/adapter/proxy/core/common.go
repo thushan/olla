@@ -13,12 +13,13 @@ import (
 	"github.com/thushan/olla/internal/version"
 )
 
+// Deprecated: Use constants from internal/core/constants/content.go instead
 const (
-	HeaderRequestID    = "X-Olla-Request-ID"
-	HeaderEndpoint     = "X-Olla-Endpoint"
-	HeaderBackendType  = "X-Olla-Backend-Type"
-	HeaderModel        = "X-Olla-Model"
-	HeaderResponseTime = "X-Olla-Response-Time"
+	HeaderRequestID    = constants.HeaderXOllaRequestID
+	HeaderEndpoint     = constants.HeaderXOllaEndpoint
+	HeaderBackendType  = constants.HeaderXOllaBackendType
+	HeaderModel        = constants.HeaderXOllaModel
+	HeaderResponseTime = constants.HeaderXOllaResponseTime
 )
 
 var (
@@ -54,11 +55,11 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 		// SECURITY: Filter sensitive headers to prevent credential leakage
 		// TODO: we should consider a more copmrehensive security policy / technique here
 		normalisedHeader := http.CanonicalHeaderKey(header)
-		if normalisedHeader == "Authorization" ||
-			normalisedHeader == "Cookie" ||
-			normalisedHeader == "X-Api-Key" ||
-			normalisedHeader == "X-Auth-Token" ||
-			normalisedHeader == "Proxy-Authorization" {
+		if normalisedHeader == constants.HeaderAuthorization ||
+			normalisedHeader == constants.HeaderCookie ||
+			normalisedHeader == constants.HeaderXAPIKey ||
+			normalisedHeader == constants.HeaderXAuthToken ||
+			normalisedHeader == constants.HeaderProxyAuthorization {
 			continue
 		}
 
@@ -73,21 +74,21 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 	}
 
 	// Add proxy identification headers
-	proxyReq.Header.Set("X-Proxied-By", GetProxiedByHeader())
+	proxyReq.Header.Set(constants.HeaderXProxiedBy, GetProxiedByHeader())
 
 	// Via header tracks the request path through proxies (RFC 7230 section 5.7.1)
 	// we append to existing via headers to maintain the proxy chain
-	if via := originalReq.Header.Get("Via"); via != "" {
-		proxyReq.Header.Set("Via", via+", "+GetViaHeader())
+	if via := originalReq.Header.Get(constants.HeaderVia); via != "" {
+		proxyReq.Header.Set(constants.HeaderVia, via+", "+GetViaHeader())
 	} else {
-		proxyReq.Header.Set("Via", GetViaHeader())
+		proxyReq.Header.Set(constants.HeaderVia, GetViaHeader())
 	}
 
 	// SHERPA-44: Ensure X-Real-IP header is set
 	// Add real IP tracking headers
-	if realIP := originalReq.Header.Get("X-Real-IP"); realIP == "" {
+	if realIP := originalReq.Header.Get(constants.HeaderXRealIP); realIP == "" {
 		if ip := extractClientIP(originalReq); ip != "" {
-			proxyReq.Header.Set("X-Real-IP", ip)
+			proxyReq.Header.Set(constants.HeaderXRealIP, ip)
 		}
 	}
 
@@ -99,40 +100,40 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 // updateForwardedHeaders updates X-Forwarded-* headers
 func updateForwardedHeaders(proxyReq, originalReq *http.Request) {
 	// X-Forwarded-For
-	if forwarded := originalReq.Header.Get("X-Forwarded-For"); forwarded != "" {
+	if forwarded := originalReq.Header.Get(constants.HeaderXForwardedFor); forwarded != "" {
 		if clientIP := extractClientIP(originalReq); clientIP != "" {
-			proxyReq.Header.Set("X-Forwarded-For", forwarded+", "+clientIP)
+			proxyReq.Header.Set(constants.HeaderXForwardedFor, forwarded+", "+clientIP)
 		} else {
-			proxyReq.Header.Set("X-Forwarded-For", forwarded)
+			proxyReq.Header.Set(constants.HeaderXForwardedFor, forwarded)
 		}
 	} else if clientIP := extractClientIP(originalReq); clientIP != "" {
-		proxyReq.Header.Set("X-Forwarded-For", clientIP)
+		proxyReq.Header.Set(constants.HeaderXForwardedFor, clientIP)
 	}
 
 	// X-Forwarded-Proto
-	if proto := originalReq.Header.Get("X-Forwarded-Proto"); proto == "" {
+	if proto := originalReq.Header.Get(constants.HeaderXForwardedProto); proto == "" {
 		if originalReq.TLS != nil {
-			proxyReq.Header.Set("X-Forwarded-Proto", constants.ProtocolHTTPS)
+			proxyReq.Header.Set(constants.HeaderXForwardedProto, constants.ProtocolHTTPS)
 		} else {
-			proxyReq.Header.Set("X-Forwarded-Proto", constants.ProtocolHTTP)
+			proxyReq.Header.Set(constants.HeaderXForwardedProto, constants.ProtocolHTTP)
 		}
 	}
 
 	// X-Forwarded-Host
-	if host := originalReq.Header.Get("X-Forwarded-Host"); host == "" && originalReq.Host != "" {
-		proxyReq.Header.Set("X-Forwarded-Host", originalReq.Host)
+	if host := originalReq.Header.Get(constants.HeaderXForwardedHost); host == "" && originalReq.Host != "" {
+		proxyReq.Header.Set(constants.HeaderXForwardedHost, originalReq.Host)
 	}
 }
 
 var hopByHopHeaders = []string{
-	"Connection",
-	"Keep-Alive",
-	"Proxy-Authenticate",
-	"Proxy-Authorization",
-	"TE",
-	"Trailers",
-	"Transfer-Encoding",
-	"Upgrade",
+	constants.HeaderConnection,
+	constants.HeaderKeepAlive,
+	constants.HeaderProxyAuthenticate,
+	constants.HeaderProxyAuthorization,
+	constants.HeaderTE,
+	constants.HeaderTrailer,
+	constants.HeaderTransferEncoding,
+	constants.HeaderUpgrade,
 }
 
 // isHopByHopHeader checks if a header is hop-by-hop
@@ -145,7 +146,7 @@ func isHopByHopHeader(header string) bool {
 // extractClientIP extracts the client IP address from the request
 func extractClientIP(r *http.Request) string {
 	// Check X-Forwarded-For header
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+	if xff := r.Header.Get(constants.HeaderXForwardedFor); xff != "" {
 		// Take the first IP in the comma-separated list
 		if idx := strings.Index(xff, ","); idx != -1 {
 			return strings.TrimSpace(xff[:idx])
@@ -155,7 +156,7 @@ func extractClientIP(r *http.Request) string {
 
 	// SHERPA-89: Check X-Forwarded-Host header is set
 	// Check X-Real-IP header
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
+	if xri := r.Header.Get(constants.HeaderXRealIP); xri != "" {
 		return strings.TrimSpace(xri)
 	}
 
@@ -172,8 +173,8 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 	h := w.Header()
 
 	// Set proxy identification headers
-	h.Set("X-Served-By", GetProxiedByHeader())
-	h.Set("Via", GetViaHeader())
+	h.Set(constants.HeaderXServedBy, GetProxiedByHeader())
+	h.Set(constants.HeaderVia, GetViaHeader())
 
 	// Set request tracking headers
 	if stats != nil {

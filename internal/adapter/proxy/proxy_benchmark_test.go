@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/health"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -107,7 +108,7 @@ func benchmarkSmallPayload(b *testing.B, suite ProxyTestSuite) {
 	responseData := `{"status": "ok", "data": {"id": 123, "name": "test"}}`
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(responseData))
 	}))
@@ -143,7 +144,7 @@ func benchmarkLargePayload(b *testing.B, suite ProxyTestSuite) {
 	largeData := strings.Repeat("data", 25000)
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(largeData))
 	}))
@@ -174,7 +175,7 @@ func benchmarkLargePayload(b *testing.B, suite ProxyTestSuite) {
 // benchmarkStreamingResponse tests streaming performance
 func benchmarkStreamingResponse(b *testing.B, suite ProxyTestSuite) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeText)
 		w.WriteHeader(http.StatusOK)
 
 		flusher := w.(http.Flusher)
@@ -404,10 +405,10 @@ func benchmarkHeaderProcessing(b *testing.B, suite ProxyTestSuite) {
 	for i := 0; i < b.N; i++ {
 		req, stats, rlog := createTestRequestWithBody("POST", "/api/test", `{"data": "test"}`)
 		// Add multiple headers to test header processing performance
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		req.Header.Set("Authorization", "Bearer token123")
 		req.Header.Set("User-Agent", "benchmark-client/1.0")
-		req.Header.Set("Accept", "application/json")
+		req.Header.Set(constants.HeaderAccept, constants.ContentTypeJSON)
 		req.Header.Set("Accept-Encoding", "gzip, deflate")
 		req.Header.Set("X-Request-ID", fmt.Sprintf("req-%d", i))
 		req.Header.Set("X-Custom-Header", "custom-value")
