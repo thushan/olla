@@ -128,7 +128,7 @@ server:
 
 proxy:
   engine: "sherpa"          # or "olla" for high performance
-  profile: "auto"           # or 'streaming' or 'buffering'
+  profile: "auto"           # or 'streaming' or 'standard'
   load_balancer: "priority" # or round-robin, least-connections
   ...
 

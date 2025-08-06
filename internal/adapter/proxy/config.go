@@ -27,7 +27,7 @@ const (
 
 type Configuration struct {
 	ProxyPrefix string
-	Profile     string // "streaming" or "buffered"
+	Profile     string
 
 	ConnectionTimeout   time.Duration
 	ConnectionKeepAlive time.Duration

@@ -13,7 +13,7 @@ import (
 // but binary files need buffering to avoid corruption and stalls
 func AutoDetectStreamingMode(ctx context.Context, resp *http.Response, profile string) bool {
 	// Force either if configured
-	if profile == constants.ConfigurationProxyProfileBuffered {
+	if profile == constants.ConfigurationProxyProfileStandard {
 		return false
 	}
 	if profile == constants.ConfigurationProxyProfileStreaming {

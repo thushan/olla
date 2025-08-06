@@ -63,7 +63,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		// Buffered profile - should NEVER flush
 		{
 			name:           "buffered_profile_sse_content",
-			profile:        constants.ConfigurationProxyProfileBuffered,
+			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    "text/event-stream",
 			responseChunks: 5,
 			expectFlushes:  false,
@@ -71,7 +71,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		},
 		{
 			name:           "buffered_profile_json_streaming",
-			profile:        constants.ConfigurationProxyProfileBuffered,
+			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    "application/stream+json",
 			responseChunks: 5,
 			expectFlushes:  false,
@@ -79,7 +79,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		},
 		{
 			name:           "buffered_profile_plain_text",
-			profile:        constants.ConfigurationProxyProfileBuffered,
+			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    constants.ContentTypeText,
 			responseChunks: 5,
 			expectFlushes:  false,
@@ -165,7 +165,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		// Edge cases and mixed scenarios
 		{
 			name:           "buffered_profile_with_chunked_encoding",
-			profile:        constants.ConfigurationProxyProfileBuffered,
+			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    "text/event-stream",
 			responseChunks: 10,
 			expectFlushes:  false,
@@ -395,7 +395,7 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 				// Buffered profile - should NEVER flush regardless of context
 				{
 					name:          "buffered_sse_no_context",
-					profile:       constants.ConfigurationProxyProfileBuffered,
+					profile:       constants.ConfigurationProxyProfileStandard,
 					contentType:   "text/event-stream",
 					contextStream: nil,
 					expectFlushes: false,
@@ -403,7 +403,7 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 				},
 				{
 					name:          "buffered_sse_stream_true",
-					profile:       constants.ConfigurationProxyProfileBuffered,
+					profile:       constants.ConfigurationProxyProfileStandard,
 					contentType:   "text/event-stream",
 					contextStream: true,
 					expectFlushes: false,
@@ -411,7 +411,7 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 				},
 				{
 					name:          "buffered_binary_stream_true",
-					profile:       constants.ConfigurationProxyProfileBuffered,
+					profile:       constants.ConfigurationProxyProfileStandard,
 					contentType:   "image/png",
 					contextStream: true,
 					expectFlushes: false,

@@ -276,11 +276,11 @@ class StreamingDetector:
         
         # Mode determination with color
         mode_color = GREEN if is_streaming else RED
-        mode_text = "STREAMING" if is_streaming else "BUFFERED"
+        mode_text = "STREAMING" if is_streaming else "STANDARD"
         self.print_color(mode_color, f"  Mode: {mode_text}")
         
         return {
-            "mode": "streaming" if is_streaming else "buffered",
+            "mode": "streaming" if is_streaming else "standard",
             "total_time": total_time,
             "first_chunk_time": first_chunk_time,
             "chunk_count": len(self.chunk_times),
@@ -353,10 +353,10 @@ class StreamingDetector:
                 endpoint_used = response.headers.get('X-Olla-Endpoint', 'unknown')
                 self.print_color(GREY, f"  Endpoint: {endpoint_used}")
                 self.print_color(GREY, f"  Response time: {response_time:.3f}s")
-                self.print_color(GREEN, f"  Mode: BUFFERED (as expected with stream:false)")
+                self.print_color(GREEN, f"  Mode: STANDARD (as expected with stream:false)")
                 
                 return {
-                    "mode": "buffered",
+                    "mode": "standard",
                     "total_time": response_time,
                     "first_chunk_time": response_time,  # All data arrives at once
                     "chunk_count": 1,
@@ -451,11 +451,11 @@ class StreamingDetector:
             self.print_color(GREY, f"  Content-Type: {content_type}")
             
             mode_color = GREEN if is_buffered else RED
-            mode_text = "BUFFERED" if is_buffered else "STREAMING"
+            mode_text = "STANDARD" if is_buffered else "STREAMING"
             self.print_color(mode_color, f"  Mode: {mode_text} (expected: BUFFERED for images)")
             
             return {
-                "mode": "buffered" if is_buffered else "streaming",
+                "mode": "standard" if is_buffered else "streaming",
                 "total_time": total_time,
                 "first_chunk_time": first_chunk_time,
                 "chunk_count": chunk_count,
@@ -532,7 +532,7 @@ class StreamingDetector:
             
             if endpoint_type in ["binary", "image", "text_no_stream"]:
                 # These should be buffered
-                if mode == "buffered":
+                if mode == "standard":
                     correct_behavior_count += 1
             else:
                 # Regular text should be streaming
@@ -574,8 +574,8 @@ class StreamingDetector:
                 # - Text with stream:false: buffered is good (GREEN)
                 # - Text with stream:true: streaming is good (GREEN)
                 if endpoint_type in ["binary", "image", "text_no_stream"]:
-                    color = GREEN if mode == "buffered" else RED
-                    expected = " (expected: buffered)"
+                    color = GREEN if mode == "standard" else RED
+                    expected = " (expected: standard)"
                 else:
                     color = GREEN if mode == "streaming" else RED
                     expected = " (expected: streaming)"
@@ -661,7 +661,7 @@ def main():
             # - Text with stream:false: should be buffered
             # - Text with stream:true: should be streaming
             if endpoint_type in ["binary", "image", "text_no_stream"]:
-                if mode != "buffered":
+                if mode != "standard":
                     all_correct = False
             else:
                 if mode != "streaming":

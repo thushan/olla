@@ -31,7 +31,7 @@ func TestDetectStreamingMode(t *testing.T) {
 		},
 		{
 			name:        "explicit buffered profile overrides content type",
-			profile:     constants.ConfigurationProxyProfileBuffered,
+			profile:     constants.ConfigurationProxyProfileStandard,
 			contentType: "text/event-stream",
 			want:        false,
 		},
