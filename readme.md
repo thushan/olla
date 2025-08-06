@@ -122,12 +122,15 @@ Modify the existing `config.yaml` or create a copy:
 
 ```yaml
 server:
-  host: "0.0.0.0"
+  host: "0.0.0.0"           # to allow external connections
   port: 40114
+  ...
 
 proxy:
   engine: "sherpa"          # or "olla" for high performance
+  profile: "auto"           # or 'streaming' or 'standard'
   load_balancer: "priority" # or round-robin, least-connections
+  ...
 
 discovery:
   type: "static"

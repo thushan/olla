@@ -29,8 +29,8 @@ pip install -r requirements.txt
 ## Script Categories
 
 ### `/streaming` - Streaming Behavior Tests
-Tests for validating Olla's streaming vs buffering behavior for LLM responses.
-- Detects whether responses are streamed in real-time or buffered
+Tests for validating Olla's streaming behavior for LLM responses.
+- Detects whether responses are streamed in real-time or use standard HTTP delivery
 - Measures streaming latency and quality
 - Validates streaming across different API formats
 
@@ -48,6 +48,11 @@ Performance and stress testing scripts.
 
 ### `/security` - Security & Rate Limiting Tests
 Security-focused test scripts.
+
+### `/cases` - Automated Test Cases
+Comprehensive test suites for automated validation.
+- Full proxy engine and profile matrix testing
+- Automated build and configuration management
 - Rate limiting validation
 - Request size limits
 - Authentication and authorization

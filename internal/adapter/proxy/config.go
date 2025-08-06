@@ -26,7 +26,9 @@ const (
 )
 
 type Configuration struct {
-	ProxyPrefix         string
+	ProxyPrefix string
+	Profile     string
+
 	ConnectionTimeout   time.Duration
 	ConnectionKeepAlive time.Duration
 	ResponseTimeout     time.Duration
@@ -39,6 +41,12 @@ type Configuration struct {
 	MaxConnsPerHost int
 }
 
+func (c *Configuration) GetProxyProfile() string {
+	if c.Profile == "" {
+		return constants.ConfigurationProxyProfileAuto
+	}
+	return c.Profile
+}
 func (c *Configuration) GetProxyPrefix() string {
 	if c.ProxyPrefix == "" {
 		return constants.ContextRoutePrefixKey

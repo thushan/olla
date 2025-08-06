@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/proxy/core"
+
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -15,10 +17,12 @@ import (
 // streamState tracks the state of an active stream
 type streamState struct {
 	lastReadTime         time.Time
+	contentType          string
 	totalBytes           int
 	readCount            int
 	bytesAfterDisconnect int
 	clientDisconnected   bool
+	isStreaming          bool
 }
 
 // readResult contains the result of a read operation
@@ -29,22 +33,27 @@ type readResult struct {
 
 // streamResponseWithTimeout performs buffered streaming with read timeout protection
 // This is CRITICAL for edge servers to prevent hanging on unresponsive backends (SHERPA-105)
-func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, buffer []byte, rlog logger.StyledLogger) (int, error) {
+func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, error) {
 	state := &streamState{
 		lastReadTime: time.Now(),
+		contentType:  resp.Header.Get("Content-Type"),
+		isStreaming:  core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile()),
 	}
 
 	readTimeout := s.getReadTimeout()
-	rlog.Debug("starting response stream", "read_timeout", readTimeout, "buffer_size", len(buffer))
+	rlog.Debug("starting response stream", "read_timeout", readTimeout, "buffer_size", len(buffer), "profile", s.configuration.GetProxyProfile())
 
 	// Create combined context for cancellation
 	combinedCtx, cancel := s.createCombinedContext(clientCtx, upstreamCtx)
 	defer cancel()
 
 	flusher, canFlush := w.(http.Flusher)
+	if !canFlush {
+		rlog.Warn("ResponseWriter does not support flushing - streaming may be buffered")
+	}
 
 	for {
-		result, err := s.performTimedRead(combinedCtx, body, buffer, readTimeout, state, rlog)
+		result, err := s.performTimedRead(combinedCtx, resp.Body, buffer, readTimeout, state, rlog)
 		if err != nil {
 			return state.totalBytes, err
 		}
@@ -207,11 +216,13 @@ func (s *Service) writeData(w http.ResponseWriter, data []byte, flusher http.Flu
 			return writeErr
 		}
 
-		if canFlush {
+		// Flush if we're in streaming mode
+		if canFlush && s.shouldFlush(state) {
 			flusher.Flush()
 		}
 	} else {
 		// Track bytes after disconnect
+		// client has gone gone, but we'll finish the current chunk, chunky stuff!
 		state.bytesAfterDisconnect += len(data)
 		rlog.Debug("continuing stream briefly after client disconnect")
 

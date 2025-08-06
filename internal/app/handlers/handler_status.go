@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/config"
+
 	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -37,6 +39,12 @@ type SystemSummary struct {
 	SecurityViolations int64  `json:"security_violations"`
 	TotalRequests      int64  `json:"total_requests"`
 	TotalFailures      int64  `json:"total_failures"`
+}
+
+type ProxySummary struct {
+	Engine   string `json:"engine"`
+	Profile  string `json:"profile"`
+	Balancer string `json:"balancer"`
 }
 
 type EndpointResponse struct {
@@ -71,6 +79,7 @@ type SecurityViolation struct {
 type StatusResponse struct {
 	Timestamp time.Time          `json:"timestamp"`
 	Endpoints []EndpointResponse `json:"endpoints"`
+	Proxy     ProxySummary       `json:"proxy"`
 	Security  SecuritySummary    `json:"security"`
 	System    SystemSummary      `json:"system"`
 }
@@ -103,6 +112,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 		Endpoints: make([]EndpointResponse, len(all)),
 	}
 
+	response.Proxy = a.buildProxySummary(a.Config.Proxy)
 	response.System = a.buildSystemSummary(all, healthy, proxyStats, securityStats, connectionStats, endpointStatsMap)
 	a.buildUnifiedEndpoints(all, endpointStatsMap, connectionStats, response.Endpoints, endpointModelsMap)
 	response.Security = a.buildSecuritySummary(securityStats)
@@ -110,6 +120,14 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+func (a *Application) buildProxySummary(proxyConfig config.ProxyConfig) ProxySummary {
+	return ProxySummary{
+		Engine:   proxyConfig.Engine,
+		Profile:  proxyConfig.Profile,
+		Balancer: proxyConfig.LoadBalancer,
+	}
 }
 
 func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy ports.ProxyStats, security ports.SecurityStats, connections map[string]int64, endpointStats map[string]ports.EndpointStats) SystemSummary {

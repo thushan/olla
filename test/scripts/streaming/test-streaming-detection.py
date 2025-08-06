@@ -87,8 +87,8 @@ class StreamingDetector:
             self.print_color(RED, f"Error fetching models: {e}")
             return []
             
-    def select_model(self, preferred_model: Optional[str] = None) -> Optional[str]:
-        """Select a model, preferring phi4:latest if available"""
+    def select_model(self, preferred_model: Optional[str] = None, manual_select: bool = False) -> Optional[str]:
+        """Select a model from CLI arg, auto-select phi models, or user input"""
         models = self.get_available_models()
         if not models:
             self.print_color(RED, "No models available")
@@ -100,17 +100,27 @@ class StreamingDetector:
             text_models = models  # Fallback to all models if no text models
             
         # Check if preferred model exists
-        if preferred_model and preferred_model in text_models:
-            return preferred_model
+        if preferred_model:
+            if preferred_model in text_models:
+                self.print_color(GREEN, f"Using specified model: {preferred_model}")
+                return preferred_model
+            else:
+                self.print_color(RED, f"Model '{preferred_model}' not found in available models")
+                return None
+        
+        # Auto-select phi models if available and not manual selection
+        if not manual_select:
+            preferred_models = ['phi4:latest', 'phi3.5:latest', 'phi3:latest']
+            for model in preferred_models:
+                if model in text_models:
+                    self.print_color(GREEN, f"Auto-selected model: {model}")
+                    return model
             
-        # Try to find phi4:latest
-        phi4_models = [m for m in text_models if 'phi4' in m.lower()]
-        if phi4_models:
-            selected = phi4_models[0]
-            self.print_color(GREEN, f"Auto-selected model: {selected}")
-            return selected
+            # No phi models found
+            self.print_color(YELLOW, "No phi models found (phi4:latest, phi3.5:latest, or phi3:latest)")
+            self.print_color(YELLOW, "Please select a model manually:")
             
-        # If no phi4, prompt user
+        # Prompt user
         self.print_color(WHITE, "\nAvailable models:")
         for i, model in enumerate(text_models[:10], 1):  # Show max 10 models
             self.print_color(GREY, f"  {i:2d}. {model}")
@@ -276,11 +286,11 @@ class StreamingDetector:
         
         # Mode determination with color
         mode_color = GREEN if is_streaming else RED
-        mode_text = "STREAMING" if is_streaming else "BUFFERED"
+        mode_text = "STREAMING" if is_streaming else "STANDARD"
         self.print_color(mode_color, f"  Mode: {mode_text}")
         
         return {
-            "mode": "streaming" if is_streaming else "buffered",
+            "mode": "streaming" if is_streaming else "standard",
             "total_time": total_time,
             "first_chunk_time": first_chunk_time,
             "chunk_count": len(self.chunk_times),
@@ -299,7 +309,7 @@ class StreamingDetector:
         # 2. Regular chunks with reasonable delays between them
         # 3. No extremely large gaps that would indicate buffering
         
-        # If we only get 1-2 chunks, it's likely buffered
+        # If we only get 1-2 chunks, it's likely standard mode (no streaming)
         if chunk_count < 3:
             return False
         
@@ -353,14 +363,14 @@ class StreamingDetector:
                 endpoint_used = response.headers.get('X-Olla-Endpoint', 'unknown')
                 self.print_color(GREY, f"  Endpoint: {endpoint_used}")
                 self.print_color(GREY, f"  Response time: {response_time:.3f}s")
-                self.print_color(GREEN, f"  Mode: BUFFERED (as expected with stream:false)")
+                self.print_color(GREEN, f"  Mode: STANDARD (as expected with stream:false)")
                 
                 return {
-                    "mode": "buffered",
+                    "mode": "standard",
                     "total_time": response_time,
                     "first_chunk_time": response_time,  # All data arrives at once
                     "chunk_count": 1,
-                    "is_buffered": True,
+                    "is_standard": True,
                     "endpoint_type": "text_no_stream"
                 }
             else:
@@ -444,22 +454,22 @@ class StreamingDetector:
             # Analyze timing
             total_time = time.time() - start_time
             
-            # For images, we expect buffering
-            is_buffered = chunk_count == 1 or (chunk_count > 1 and first_chunk_time > 0.5)
+            # For images, we expect standard mode (no streaming)
+            is_standard = chunk_count == 1 or (chunk_count > 1 and first_chunk_time > 0.5)
             
             self.print_color(GREY, f"  Total time: {total_time:.3f}s")
             self.print_color(GREY, f"  Content-Type: {content_type}")
             
-            mode_color = GREEN if is_buffered else RED
-            mode_text = "BUFFERED" if is_buffered else "STREAMING"
-            self.print_color(mode_color, f"  Mode: {mode_text} (expected: BUFFERED for images)")
+            mode_color = GREEN if is_standard else RED
+            mode_text = "STANDARD" if is_standard else "STREAMING"
+            self.print_color(mode_color, f"  Mode: {mode_text} (expected: STANDARD for images)")
             
             return {
-                "mode": "buffered" if is_buffered else "streaming",
+                "mode": "standard" if is_standard else "streaming",
                 "total_time": total_time,
                 "first_chunk_time": first_chunk_time,
                 "chunk_count": chunk_count,
-                "is_buffered": is_buffered,
+                "is_standard": is_standard,
                 "content_type": content_type,
                 "endpoint_type": "image"
             }
@@ -500,10 +510,10 @@ class StreamingDetector:
             endpoint_type="ollama"
         )
         
-        # Test 4: Text with stream:false (should be buffered)
+        # Test 4: Text with stream:false (should be standard mode)
         results["tests"]["stream_false"] = self.test_stream_false(model)
         
-        # Test 5: Image generation (should be buffered)
+        # Test 5: Image generation (should be standard mode)
         results["tests"]["image_generation"] = self.test_image_generation(model)
         
         return results
@@ -518,7 +528,7 @@ class StreamingDetector:
         model = results["model"]
         tests = results["tests"]
         
-        # Count correct behavior (streaming for text, buffered for binary)
+        # Count correct behavior (streaming for text, standard for binary)
         correct_behavior_count = 0
         text_streaming_count = 0
         text_test_count = 0
@@ -531,8 +541,8 @@ class StreamingDetector:
             mode = test_result.get("mode", "unknown")
             
             if endpoint_type in ["binary", "image", "text_no_stream"]:
-                # These should be buffered
-                if mode == "buffered":
+                # These should be standard mode
+                if mode == "standard":
                     correct_behavior_count += 1
             else:
                 # Regular text should be streaming
@@ -570,12 +580,12 @@ class StreamingDetector:
                 endpoint_type = test_result.get("endpoint_type", "text")
                 
                 # Expected behavior:
-                # - Binary/image content: buffered is good (GREEN)
-                # - Text with stream:false: buffered is good (GREEN)
+                # - Binary/image content: standard is good (GREEN)
+                # - Text with stream:false: standard is good (GREEN)
                 # - Text with stream:true: streaming is good (GREEN)
                 if endpoint_type in ["binary", "image", "text_no_stream"]:
-                    color = GREEN if mode == "buffered" else RED
-                    expected = " (expected: buffered)"
+                    color = GREEN if mode == "standard" else RED
+                    expected = " (expected: standard)"
                 else:
                     color = GREEN if mode == "streaming" else RED
                     expected = " (expected: streaming)"
@@ -587,7 +597,7 @@ class StreamingDetector:
         # Configuration hints
         self.print_color(WHITE, "\n💡 Configuration Options:")
         self.print_color(GREY, "  profile: 'streaming' - Always stream (best for LLMs)")
-        self.print_color(GREY, "  profile: 'buffered'  - Always buffer (best for files/images)")
+        self.print_color(GREY, "  profile: 'standard'  - Normal HTTP delivery (best for files/images)")
         self.print_color(GREY, "  profile: 'auto'      - Detect based on content type")
         
         # Note about stream_buffer_size
@@ -602,7 +612,9 @@ def main():
     parser.add_argument('--url', default=TARGET_URL, 
                        help=f'Olla base URL (default: {TARGET_URL})')
     parser.add_argument('--model',
-                       help='Model to test with (auto-detects phi4:latest if not specified)')
+                       help='Model to test with (default: auto-selects phi4:latest if available)')
+    parser.add_argument('--select-model', action='store_true',
+                       help='Force model selection menu instead of auto-selecting')
     parser.add_argument('--quick', action='store_true',
                        help='Run quick test only (single endpoint)')
     parser.add_argument('--timeout', type=int, default=DEFAULT_TIMEOUT,
@@ -619,7 +631,7 @@ def main():
     
     # Select model
     detector.print_color(YELLOW, "\nDetecting available models...")
-    selected_model = detector.select_model(args.model)
+    selected_model = detector.select_model(args.model, args.select_model)
     if not selected_model:
         detector.print_color(RED, "No model selected. Exiting.")
         sys.exit(1)
@@ -657,11 +669,11 @@ def main():
             mode = test_result.get("mode", "unknown")
             
             # Expected behavior:
-            # - Binary/image: should be buffered
-            # - Text with stream:false: should be buffered
+            # - Binary/image: should be standard mode
+            # - Text with stream:false: should be standard mode
             # - Text with stream:true: should be streaming
             if endpoint_type in ["binary", "image", "text_no_stream"]:
-                if mode != "buffered":
+                if mode != "standard":
                     all_correct = False
             else:
                 if mode != "streaming":

@@ -1,13 +1,17 @@
 # Streaming Behavior Test Scripts
 
-These scripts test Olla's streaming vs buffering behavior for LLM responses, ensuring tokens are delivered in real-time rather than being buffered.
+These scripts test Olla's streaming behavior for LLM responses, ensuring tokens are delivered in real-time rather than using standard HTTP delivery.
+
+## Model Selection
+
+All scripts now auto-select phi models (phi4:latest, phi3.5:latest, or phi3:latest) by default for consistent testing. Use the `--select-model` or `--select-models` flag to manually choose a different model.
 
 ## Overview
 
 Olla supports three proxy profiles:
 - **`auto`** (default) - Automatically detects based on content type
 - **`streaming`** - Always streams responses
-- **`buffered`** - Always buffers responses
+- **`standard`** - Normal HTTP delivery without forced flushing
 
 These scripts validate that the proxy correctly streams text responses and buffers binary content.
 
@@ -39,8 +43,8 @@ python test-streaming-detection.py --timeout 60
 
 **What to expect:**
 - For text with `stream: true`: Should show STREAMING mode
-- For text with `stream: false`: Should show BUFFERED mode
-- For images/binary content: Should show BUFFERED mode
+- For text with `stream: false`: Should show STANDARD mode
+- For images/binary content: Should show STANDARD mode
 
 ### test-streaming-latency.py
 Measures streaming latency and quality by analyzing chunk arrival patterns.
@@ -54,11 +58,14 @@ Measures streaming latency and quality by analyzing chunk arrival patterns.
 
 **Usage:**
 ```bash
-# Test with default 5 questions
+# Test with default 5 questions (auto-selects phi model)
 python test-streaming-latency.py
 
+# Force manual model selection
+python test-streaming-latency.py --select-model
+
 # Test with specific model
-python test-streaming-latency.py --model phi4:latest
+python test-streaming-latency.py --model llama2:latest
 
 # Test with more questions
 python test-streaming-latency.py --count 10
@@ -71,7 +78,7 @@ python test-streaming-latency.py --questions my-questions.txt
 - **Smooth**: Regular chunks with <200ms average delay
 - **Choppy**: Irregular chunks or >200ms average delay
 - **Batched**: Very fast chunks (<10ms) suggesting buffering
-- **Single chunk**: Only one chunk received (definitely buffered)
+- **Single chunk**: Only one chunk received (definitely standard mode)
 
 ### test-streaming-responses.py
 Validates streaming across different API formats (OpenAI, Ollama, LM Studio).
@@ -125,8 +132,8 @@ python test-streaming-responses.py --analyze
 - > 1s: Likely buffering between chunks
 
 **Chunk Count**:
-- 1-2 chunks: Definitely buffered
-- 3-10 chunks: Possibly buffered or very short response
+- 1-2 chunks: Definitely standard mode
+- 3-10 chunks: Possibly standard mode or very short response
 - 10+ chunks: Likely streaming
 
 ## Configuration
@@ -135,7 +142,7 @@ python test-streaming-responses.py --analyze
 Set in your Olla config.yaml:
 ```yaml
 proxy:
-  profile: auto  # or 'streaming' or 'buffered'
+  profile: auto  # or 'streaming' or 'standard'
   stream_buffer_size: 8192  # Affects chunk granularity
 ```
 
@@ -146,7 +153,7 @@ proxy:
 
 ## Troubleshooting
 
-### "All tests show buffered"
+### "All tests show standard mode"
 1. Check proxy profile setting in config
 2. Verify middleware implements http.Flusher
 3. Ensure backend (Ollama) is actually streaming
@@ -173,7 +180,7 @@ proxy:
 - BUFFERED mode detected (this is correct)
 
 ### Image Generation
-- Always buffered regardless of stream setting
+- Always standard mode regardless of stream setting
 - BUFFERED mode detected (this is correct)
 
 ## Integration with CI/CD

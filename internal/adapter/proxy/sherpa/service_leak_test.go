@@ -173,7 +173,15 @@ func TestStreamResponseWithTimeout_ClientDisconnect(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			s.streamResponseWithTimeout(clientCtx, upstreamCtx, writer, reader, buffer, logger)
+
+			// create a mock response with the reader as body
+			resp := &http.Response{
+				Body: io.NopCloser(reader),
+				Header: http.Header{
+					"Content-Type": []string{"text/plain"},
+				},
+			}
+			s.streamResponseWithTimeout(clientCtx, upstreamCtx, writer, resp, buffer, logger)
 		}()
 
 		// Simulate client disconnect after short time

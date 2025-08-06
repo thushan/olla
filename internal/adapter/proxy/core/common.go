@@ -124,18 +124,19 @@ func updateForwardedHeaders(proxyReq, originalReq *http.Request) {
 	}
 }
 
+var hopByHopHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Proxy-Authenticate",
+	"Proxy-Authorization",
+	"TE",
+	"Trailers",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
 // isHopByHopHeader checks if a header is hop-by-hop
 func isHopByHopHeader(header string) bool {
-	hopByHopHeaders := []string{
-		"Connection",
-		"Keep-Alive",
-		"Proxy-Authenticate",
-		"Proxy-Authorization",
-		"TE",
-		"Trailers",
-		"Transfer-Encoding",
-		"Upgrade",
-	}
 	return slices.ContainsFunc(hopByHopHeaders, func(h string) bool {
 		return strings.EqualFold(h, header)
 	})

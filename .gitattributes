@@ -1,0 +1,43 @@
+* text=auto eol=lf
+
+*.go   text eol=lf
+*.py   text eol=lf
+*.sh   text eol=lf
+*.pl   text eol=lf
+*.rb   text eol=lf
+*.ps1  text eol=lf
+
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.ini  text eol=lf
+*.env  text eol=lf
+
+*.md   text eol=lf
+*.txt  text eol=lf
+*.rst  text eol=lf
+
+*.html text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+*.ts   text eol=lf
+
+Makefile text eol=lf
+*.mk    text eol=lf
+
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.zip   binary
+*.gz    binary
+*.tar   binary
+*.bz2   binary
+*.exe   binary
+*.dll   binary
+*.so    binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary

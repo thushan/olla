@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/util"
 
 	"github.com/docker/go-units"
@@ -17,6 +19,8 @@ import (
 const (
 	DefaultPort              = 40114
 	DefaultHost              = "localhost"
+	DefaultAllHost           = "0.0.0.0" // local dev may use this
+	DefaultProxyProfile      = constants.ConfigurationProxyProfileAuto
 	DefaultProxyEngine       = "sherpa"
 	DefaultLoadBalancer      = "priority"
 	DefaultModelRegistryType = "memory"
@@ -56,13 +60,14 @@ func DefaultConfig() *Config {
 		},
 		Proxy: ProxyConfig{
 			Engine:            DefaultProxyEngine,
+			LoadBalancer:      DefaultLoadBalancer,
+			Profile:           DefaultProxyProfile,
+			StreamBufferSize:  8 * 1024, // 8KB
 			ConnectionTimeout: 30 * time.Second,
 			ResponseTimeout:   10 * time.Minute,
 			ReadTimeout:       120 * time.Second,
 			MaxRetries:        3,
 			RetryBackoff:      500 * time.Millisecond,
-			LoadBalancer:      DefaultLoadBalancer,
-			StreamBufferSize:  8 * 1024, // 8KB
 		},
 		Discovery: DiscoveryConfig{
 			Type:            DefaultDiscoveryType,

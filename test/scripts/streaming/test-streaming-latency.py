@@ -160,8 +160,8 @@ class StreamingLatencyTester:
         except Exception as e:
             self.print_color(RED, f"Error creating questions file: {e}")
             
-    def select_model(self, model_arg: Optional[str]) -> Optional[str]:
-        """Select model from CLI arg or user input"""
+    def select_model(self, model_arg: Optional[str], manual_select: bool = False) -> Optional[str]:
+        """Select model from CLI arg, auto-select phi4:latest, or user input"""
         if model_arg:
             if model_arg in self.available_models:
                 self.print_color(GREEN, f"Using specified model: {model_arg}")
@@ -169,6 +169,18 @@ class StreamingLatencyTester:
             else:
                 self.print_color(RED, f"Model '{model_arg}' not found in available models")
                 return None
+                
+        # Auto-select phi models if available and not manual selection
+        if not manual_select:
+            preferred_models = ['phi4:latest', 'phi3.5:latest', 'phi3:latest']
+            for model in preferred_models:
+                if model in self.available_models:
+                    self.print_color(GREEN, f"Auto-selecting {model}")
+                    return model
+            
+            # No phi models found
+            self.print_color(YELLOW, "No phi models found (phi4:latest, phi3.5:latest, or phi3:latest)")
+            self.print_color(YELLOW, "Please select a model manually:")
                 
         print()
         self.print_color(WHITE, "Select a model to test:")
@@ -391,7 +403,9 @@ def main():
     parser.add_argument('--url', default=TARGET_URL, 
                        help=f'Olla base URL (default: {TARGET_URL})')
     parser.add_argument('--model', 
-                       help='Specific model to test (if not provided, will show selection menu)')
+                       help='Specific model to test (default: auto-selects phi4:latest if available)')
+    parser.add_argument('--select-model', action='store_true',
+                       help='Force model selection menu instead of auto-selecting')
     parser.add_argument('--questions', default=DEFAULT_QUESTION_FILE,
                        help=f'Questions file (default: {DEFAULT_QUESTION_FILE})')
     parser.add_argument('--count', type=int, default=5,
@@ -416,7 +430,7 @@ def main():
     if not tester.fetch_models():
         sys.exit(1)
         
-    selected_model = tester.select_model(args.model)
+    selected_model = tester.select_model(args.model, args.select_model)
     if not selected_model:
         sys.exit(1)
         
