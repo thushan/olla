@@ -37,6 +37,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
@@ -153,7 +155,7 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 				"method", r.Method,
 				"path", r.URL.Path)
 
-			if w.Header().Get("Content-Type") == "" {
+			if w.Header().Get(constants.HeaderContentType) == "" {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			}
 		}

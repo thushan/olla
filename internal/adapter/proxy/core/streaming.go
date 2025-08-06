@@ -21,7 +21,7 @@ func AutoDetectStreamingMode(ctx context.Context, resp *http.Response, profile s
 	}
 
 	// Auto mode - make an intelligent choice based on response content
-	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+	contentType := strings.ToLower(resp.Header.Get(constants.HeaderContentType))
 
 	// if we know the streaming format, get streamed immediately
 	if isStreamingContentType(contentType) {

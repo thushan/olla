@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 
 	"github.com/thushan/olla/internal/adapter/proxy/common"
@@ -36,7 +38,7 @@ type readResult struct {
 func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, error) {
 	state := &streamState{
 		lastReadTime: time.Now(),
-		contentType:  resp.Header.Get("Content-Type"),
+		contentType:  resp.Header.Get(constants.HeaderContentType),
 		isStreaming:  core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile()),
 	}
 

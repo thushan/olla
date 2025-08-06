@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/version"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -21,7 +23,7 @@ const (
 	DefaultTimeout     = 30 * time.Second
 	MaxResponseSize    = 10 * 1024 * 1024 // 10MB limit for model responses
 	DefaultUserAgent   = "%s-Discovery/%s"
-	DefaultContentType = "application/json"
+	DefaultContentType = constants.DefaultContentTypeJSON
 
 	DefaultMaxIdleConnections        = 10
 	DefaultIdleConnTimeout           = 60 * time.Second

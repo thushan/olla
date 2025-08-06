@@ -6,6 +6,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/pkg/format"
 )
@@ -101,7 +103,7 @@ func (a *Application) modelStatsHandler(w http.ResponseWriter, r *http.Request) 
 		Summary:   summary,
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

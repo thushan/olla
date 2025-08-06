@@ -34,6 +34,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/thushan/olla/internal/adapter/proxy/common"
@@ -427,7 +429,7 @@ func (s *Service) handlePanic(ctx context.Context, w http.ResponseWriter, r *htt
 		"path", r.URL.Path,
 		"stack", string(debug.Stack()))
 
-	if w.Header().Get("Content-Type") == "" {
+	if w.Header().Get(constants.HeaderContentType) == "" {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }

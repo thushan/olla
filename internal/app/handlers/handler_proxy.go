@@ -60,7 +60,7 @@ func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
 	return &proxyRequest{
 		stats:         stats,
 		requestLogger: a.logger.WithRequestID(stats.RequestID),
-		contentType:   r.Header.Get("Content-Type"),
+		contentType:   r.Header.Get(constants.HeaderContentType),
 		method:        r.Method,
 		path:          r.URL.Path,
 		query:         r.URL.RawQuery,
@@ -185,7 +185,7 @@ func (a *Application) handleEndpointError(w http.ResponseWriter, pr *proxyReques
 // content-type check prevents double-writing response after partial stream
 // (learned this the hard way when users got html error messages appended to their json)
 func (a *Application) handleProxyError(w http.ResponseWriter, err error) {
-	if w.Header().Get("Content-Type") == "" {
+	if w.Header().Get(constants.HeaderContentType) == "" {
 		http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
 	}
 }
