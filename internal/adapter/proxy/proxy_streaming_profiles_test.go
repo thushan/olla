@@ -60,30 +60,30 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		expectFlushes  bool
 		description    string
 	}{
-		// Buffered profile - should NEVER flush
+		// Standard profile - should NEVER flush
 		{
-			name:           "buffered_profile_sse_content",
+			name:           "standard_profile_sse_content",
 			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    "text/event-stream",
 			responseChunks: 5,
 			expectFlushes:  false,
-			description:    "Buffered profile should not flush even for SSE content",
+			description:    "Standard profile should not flush even for SSE content",
 		},
 		{
-			name:           "buffered_profile_json_streaming",
+			name:           "standard_profile_json_streaming",
 			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    "application/stream+json",
 			responseChunks: 5,
 			expectFlushes:  false,
-			description:    "Buffered profile should not flush streaming JSON",
+			description:    "Standard profile should not flush streaming JSON",
 		},
 		{
-			name:           "buffered_profile_plain_text",
+			name:           "standard_profile_plain_text",
 			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    constants.ContentTypeText,
 			responseChunks: 5,
 			expectFlushes:  false,
-			description:    "Buffered profile should not flush plain text",
+			description:    "Standard profile should not flush plain text",
 		},
 
 		// Streaming profile - should ALWAYS flush
@@ -164,12 +164,12 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 
 		// Edge cases and mixed scenarios
 		{
-			name:           "buffered_profile_with_chunked_encoding",
+			name:           "standard_profile_with_chunked_encoding",
 			profile:        constants.ConfigurationProxyProfileStandard,
 			contentType:    "text/event-stream",
 			responseChunks: 10,
 			expectFlushes:  false,
-			description:    "Buffered profile should not flush even with many chunks",
+			description:    "Standard profile should not flush even with many chunks",
 		},
 		{
 			name:           "streaming_profile_empty_content_type",
@@ -392,30 +392,30 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 				expectFlushes bool
 				description   string
 			}{
-				// Buffered profile - should NEVER flush regardless of context
+				// Standard profile - should NEVER flush regardless of context
 				{
-					name:          "buffered_sse_no_context",
+					name:          "standard_sse_no_context",
 					profile:       constants.ConfigurationProxyProfileStandard,
 					contentType:   "text/event-stream",
 					contextStream: nil,
 					expectFlushes: false,
-					description:   "Buffered profile should not flush SSE without context",
+					description:   "Standard profile should not flush SSE without context",
 				},
 				{
-					name:          "buffered_sse_stream_true",
+					name:          "standard_sse_stream_true",
 					profile:       constants.ConfigurationProxyProfileStandard,
 					contentType:   "text/event-stream",
 					contextStream: true,
 					expectFlushes: false,
-					description:   "Buffered profile ignores context stream=true",
+					description:   "Standard profile ignores context stream=true",
 				},
 				{
-					name:          "buffered_binary_stream_true",
+					name:          "standard_binary_stream_true",
 					profile:       constants.ConfigurationProxyProfileStandard,
 					contentType:   "image/png",
 					contextStream: true,
 					expectFlushes: false,
-					description:   "Buffered profile should not flush binary even with stream=true",
+					description:   "Standard profile should not flush binary even with stream=true",
 				},
 
 				// Streaming profile - should ALWAYS flush regardless of context

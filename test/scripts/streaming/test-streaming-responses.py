@@ -405,6 +405,8 @@ def main():
                         help='Test only a few models per provider')
     parser.add_argument('--analyze', action='store_true',
                         help='Show detailed streaming pattern analysis')
+    parser.add_argument('--select-models', action='store_true',
+                        help='Force model selection instead of auto-selecting phi models')
     
     args = parser.parse_args()
     
@@ -419,11 +421,11 @@ def main():
     print()
     
     if not tester.fetch_models():
-        self.print_color(RED, "No models found!")
+        tester.print_color(RED, "No models found!")
         sys.exit(1)
         
     print()
-    self.print_color(WHITE, f"Configuration:")
+    tester.print_color(WHITE, f"Configuration:")
     print(f"  Max streaming time: {CYAN}{args.max_time}s{RESET}")
     print(f"  Max tokens:         {CYAN}{DEFAULT_MAX_TOKENS}{RESET}")
     print(f"  Providers:          {CYAN}{', '.join(providers)}{RESET}")
@@ -438,10 +440,24 @@ def main():
             provider_models = tester.provider_models.get(provider, [])
             models_to_test.extend(provider_models[:3])
         models_to_test = list(set(models_to_test))  # Remove duplicates
+    elif not args.select_models:
+        # Auto-select phi models if available
+        preferred_models = ['phi4:latest', 'phi3.5:latest', 'phi3:latest']
+        models_to_test = []
+        for model in preferred_models:
+            if model in tester.all_models:
+                models_to_test.append(model)
+        
+        if models_to_test:
+            tester.print_color(GREEN, f"Auto-selected phi models: {', '.join(models_to_test)}")
+        else:
+            tester.print_color(YELLOW, "No phi models found (phi4:latest, phi3.5:latest, or phi3:latest)")
+            tester.print_color(YELLOW, "Testing all available models...")
+            models_to_test = tester.all_models
     else:
         models_to_test = tester.all_models
         
-    self.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
+    tester.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
     
     # Test each model
     for model in models_to_test:
@@ -474,6 +490,8 @@ def run_main():
                         help='Test only a few models per provider')
     parser.add_argument('--analyze', action='store_true',
                         help='Show detailed streaming pattern analysis')
+    parser.add_argument('--select-models', action='store_true',
+                        help='Force model selection instead of auto-selecting phi models')
     
     args = parser.parse_args()
     
@@ -507,10 +525,24 @@ def run_main():
             provider_models = tester.provider_models.get(provider, [])
             models_to_test.extend(provider_models[:3])
         models_to_test = list(set(models_to_test))  # Remove duplicates
+    elif not args.select_models:
+        # Auto-select phi models if available
+        preferred_models = ['phi4:latest', 'phi3.5:latest', 'phi3:latest']
+        models_to_test = []
+        for model in preferred_models:
+            if model in tester.all_models:
+                models_to_test.append(model)
+        
+        if models_to_test:
+            tester.print_color(GREEN, f"Auto-selected phi models: {', '.join(models_to_test)}")
+        else:
+            tester.print_color(YELLOW, "No phi models found (phi4:latest, phi3.5:latest, or phi3:latest)")
+            tester.print_color(YELLOW, "Testing all available models...")
+            models_to_test = tester.all_models
     else:
         models_to_test = tester.all_models
         
-    runner.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
+    tester.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
     
     # Test each model
     for model in models_to_test:
