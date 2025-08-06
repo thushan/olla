@@ -117,7 +117,9 @@ command_exists() {
 # Function to create results directory with timestamp
 create_results_dir() {
     local prefix="${1:-test-results}"
-    local results_dir="$PROJECT_ROOT/$prefix-$(date +%Y%m%d-%H%M%S)"
+    local results_base="$PROJECT_ROOT/test/results"
+    mkdir -p "$results_base"
+    local results_dir="$results_base/$prefix-$(date +%Y%m%d-%H%M%S)"
     mkdir -p "$results_dir"
     echo "$results_dir"
 }

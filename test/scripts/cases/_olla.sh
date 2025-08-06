@@ -5,6 +5,24 @@
 # Global variable for Olla PID
 OLLA_PID=""
 
+# Function to get git version info for binary naming
+get_git_version() {
+    local current_dir=$(pwd)
+    cd "$PROJECT_ROOT"
+    
+    # Get short hash
+    local git_hash=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+    
+    # Check if working directory is clean
+    if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
+        echo "olla-${git_hash}-wip"
+    else
+        echo "olla-${git_hash}"
+    fi
+    
+    cd "$current_dir"
+}
+
 # Function to build Olla
 build_olla() {
     print_color "$YELLOW" "Building Olla from source..."

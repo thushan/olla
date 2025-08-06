@@ -12,7 +12,12 @@ source "$SCRIPT_DIR/_common.sh"
 
 # Find the latest test results directory
 find_latest_results() {
-    local latest=$(ls -dt "$PROJECT_ROOT"/test-results-* 2>/dev/null | head -1)
+    local results_base="$PROJECT_ROOT/test/results"
+    if [[ ! -d "$results_base" ]]; then
+        return 1
+    fi
+    
+    local latest=$(ls -dt "$results_base"/test-results-* 2>/dev/null | head -1)
     if [[ -n "$latest" ]]; then
         echo "$latest"
     else
@@ -42,7 +47,7 @@ main() {
     fi
     
     # Show all test combinations
-    print_section "Test Logs Available"
+    print_section "Test Cases"
     
     # Find all test directories
     for engine in sherpa olla; do
@@ -52,40 +57,57 @@ main() {
                 echo ""
                 print_color "$WHITE" "$engine/$profile:"
                 
-                # Check Olla log
-                local olla_log="$results_dir/olla-$engine-$profile.log"
-                if [[ -f "$olla_log" ]]; then
-                    local size=$(wc -l < "$olla_log" 2>/dev/null || echo "0")
-                    print_color "$GREY" "  - Olla log: $olla_log ($size lines)"
+                # Show test case summary
+                if [[ -f "$test_dir/summary.txt" ]]; then
+                    cat "$test_dir/summary.txt" | sed 's/^/  /'
                 fi
                 
-                # Check test logs
-                for log in detection latency responses; do
-                    local log_file="$test_dir/$log.log"
-                    if [[ -f "$log_file" ]]; then
-                        local size=$(wc -l < "$log_file" 2>/dev/null || echo "0")
-                        local status="Unknown"
-                        
-                        # Quick status check
-                        if grep -q "FAIL\|ERROR\|failed" "$log_file"; then
-                            status=$(print_color "$RED" "FAILED")
-                        elif grep -q "completed\|passed\|success\|✓" "$log_file"; then
-                            status=$(print_color "$GREEN" "PASSED")
-                        fi
-                        
-                        print_color "$GREY" "  - $log test: $log_file ($size lines) - $status"
-                    else
-                        print_color "$YELLOW" "  - $log test: Not found"
+                # Show binary info
+                if [[ -d "$test_dir/bin" ]]; then
+                    local binary=$(ls "$test_dir/bin" 2>/dev/null | head -1)
+                    if [[ -n "$binary" ]]; then
+                        print_color "$GREY" "  Binary: $binary"
                     fi
-                done
+                fi
+                
+                # Check logs directory
+                if [[ -d "$test_dir/logs" ]]; then
+                    print_color "$GREY" "  Logs:"
+                    
+                    # Olla log
+                    if [[ -f "$test_dir/logs/olla.log" ]]; then
+                        local size=$(wc -l < "$test_dir/logs/olla.log" 2>/dev/null || echo "0")
+                        print_color "$GREY" "    - olla.log ($size lines)"
+                    fi
+                    
+                    # Test logs
+                    for log in detection latency responses; do
+                        local log_file="$test_dir/logs/$log.log"
+                        if [[ -f "$log_file" ]]; then
+                            local size=$(wc -l < "$log_file" 2>/dev/null || echo "0")
+                            local status="Unknown"
+                            
+                            # Quick status check
+                            if grep -q "FAIL\|ERROR\|failed" "$log_file"; then
+                                status=$(print_color "$RED" "FAILED")
+                            elif grep -q "completed\|passed\|success\|✓" "$log_file"; then
+                                status=$(print_color "$GREEN" "PASSED")
+                            fi
+                            
+                            print_color "$GREY" "    - $log.log ($size lines) - $status"
+                        else
+                            print_color "$YELLOW" "    - $log.log: Not found"
+                        fi
+                    done
+                fi
             fi
         done
     done
     
     echo ""
     print_color "$CYAN" "To view a specific log:"
-    print_color "$GREY" "  cat $results_dir/<engine>-<profile>/<test>.log"
-    print_color "$GREY" "  Example: cat $results_dir/sherpa-auto/detection.log"
+    print_color "$GREY" "  cat $results_dir/<engine>-<profile>/logs/<test>.log"
+    print_color "$GREY" "  Example: cat $results_dir/sherpa-auto/logs/detection.log"
 }
 
 # Run main

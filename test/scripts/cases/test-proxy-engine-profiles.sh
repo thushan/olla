@@ -139,15 +139,32 @@ run_test_case() {
     
     print_section "Testing: $engine engine with $profile profile"
     
+    # Create test case directory structure
+    local test_case_dir="$TEST_RESULTS_DIR/$engine-$profile"
+    mkdir -p "$test_case_dir/bin"
+    mkdir -p "$test_case_dir/config"
+    mkdir -p "$test_case_dir/logs"
+    
     # Create test configuration
     if ! create_engine_profile_config "$engine" "$profile"; then
         print_color "$RED" "Failed to create configuration for $engine/$profile"
         return 1
     fi
     
-    # Start Olla
+    # Copy the test configuration to the test case folder
+    cp "$PROJECT_ROOT/$TEST_CONFIG" "$test_case_dir/config/config.yaml"
+    print_color "$CYAN" "Saved test config to: $test_case_dir/config/config.yaml"
+    
+    # Copy the binary with git version name
+    local binary_name=$(get_git_version)
+    cp "$OLLA_BINARY" "$test_case_dir/bin/$binary_name"
+    chmod +x "$test_case_dir/bin/$binary_name"
+    print_color "$CYAN" "Saved binary as: $test_case_dir/bin/$binary_name"
+    
+    # Start Olla with the log in the test case directory
     print_color "$YELLOW" "Starting Olla with $engine/$profile configuration..."
-    if ! start_olla_with_log "$engine" "$profile"; then
+    local log_file="$test_case_dir/logs/olla.log"
+    if ! start_olla "$TEST_CONFIG" "$log_file"; then
         print_color "$RED" "Failed to start Olla for $engine/$profile"
         return 1
     fi
@@ -162,8 +179,7 @@ run_test_case() {
     
     # Run streaming tests
     print_color "$YELLOW" "Running streaming test suite..."
-    local test_dir="$TEST_RESULTS_DIR/$engine-$profile"
-    if run_all_streaming_tests "$test_dir"; then
+    if run_all_streaming_tests "$test_case_dir/logs"; then
         print_color "$GREEN" "All streaming tests passed"
     else
         print_color "$YELLOW" "Some streaming tests failed (check logs)"
@@ -177,9 +193,17 @@ run_test_case() {
     local test_end=$(date +%s)
     local duration=$((test_end - test_start))
     
+    # Create a summary file for this test case
+    {
+        echo "Test Case: $engine/$profile"
+        echo "Duration: ${duration}s"
+        echo "Binary: $binary_name"
+        echo "Config: config.yaml"
+        echo "Date: $(date)"
+    } > "$test_case_dir/summary.txt"
+    
     print_color "$GREEN" "✓ Completed $engine/$profile in ${duration}s"
-    print_color "$GREY" "  Logs: $TEST_RESULTS_DIR/olla-$engine-$profile.log"
-    print_color "$GREY" "  Test results: $test_dir/"
+    print_color "$GREY" "  Test case directory: $test_case_dir/"
     
     # Small delay to ensure clean shutdown
     sleep 2
@@ -205,11 +229,11 @@ generate_summary() {
                 
                 # Check if all test files exist and have content
                 local test_dir="$TEST_RESULTS_DIR/$engine-$profile"
-                if [[ -f "$test_dir/detection.log" ]] && [[ -f "$test_dir/latency.log" ]] && [[ -f "$test_dir/responses.log" ]]; then
+                if [[ -f "$test_dir/logs/detection.log" ]] && [[ -f "$test_dir/logs/latency.log" ]] && [[ -f "$test_dir/logs/responses.log" ]]; then
                     # Use check_streaming_test_passed from _streaming_tests.sh
                     local all_passed=true
                     for log in detection.log latency.log responses.log; do
-                        if ! check_streaming_test_passed "$test_dir/$log"; then
+                        if ! check_streaming_test_passed "$test_dir/logs/$log"; then
                             all_passed=false
                             break
                         fi

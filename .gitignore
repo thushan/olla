@@ -20,6 +20,9 @@ build/
 dist/
 .venv/
 
+# Test results
+test/results/
+
 # Legacy directories (to be removed)
 config-dev/
 default.yml
