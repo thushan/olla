@@ -48,6 +48,11 @@ Performance and stress testing scripts.
 
 ### `/security` - Security & Rate Limiting Tests
 Security-focused test scripts.
+
+### `/cases` - Automated Test Cases
+Comprehensive test suites for automated validation.
+- Full proxy engine and profile matrix testing
+- Automated build and configuration management
 - Rate limiting validation
 - Request size limits
 - Authentication and authorization

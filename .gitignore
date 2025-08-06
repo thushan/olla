@@ -27,5 +27,7 @@ config.yaml
 # Claude specific local files
 .claude/*.local.json
 # just in case
+*.local.yaml
+*.local.yml
 *.local.json
 *.log
