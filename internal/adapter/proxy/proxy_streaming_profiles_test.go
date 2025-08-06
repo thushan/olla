@@ -64,7 +64,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "buffered_profile_sse_content",
 			profile:        constants.ConfigurationProxyProfileBuffered,
-			contentType:    "text/event-stream",
+			contentType:    constants.ContentTypeEventStream,
 			responseChunks: 5,
 			expectFlushes:  false,
 			description:    "Buffered profile should not flush even for SSE content",
@@ -72,7 +72,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "buffered_profile_json_streaming",
 			profile:        constants.ConfigurationProxyProfileBuffered,
-			contentType:    "application/stream+json",
+			contentType:    constants.ContentTypeStreamJSON,
 			responseChunks: 5,
 			expectFlushes:  false,
 			description:    "Buffered profile should not flush streaming JSON",
@@ -90,7 +90,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "streaming_profile_binary_content",
 			profile:        constants.ConfigurationProxyProfileStreaming,
-			contentType:    "image/png",
+			contentType:    constants.ContentTypeImagePNG,
 			responseChunks: 5,
 			expectFlushes:  true,
 			description:    "Streaming profile should flush even for binary content",
@@ -106,7 +106,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "streaming_profile_pdf",
 			profile:        constants.ConfigurationProxyProfileStreaming,
-			contentType:    "application/pdf",
+			contentType:    constants.ContentTypePDF,
 			responseChunks: 5,
 			expectFlushes:  true,
 			description:    "Streaming profile should flush even PDFs",
@@ -116,7 +116,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "auto_profile_sse_content",
 			profile:        constants.ConfigurationProxyProfileAuto,
-			contentType:    "text/event-stream",
+			contentType:    constants.ContentTypeEventStream,
 			responseChunks: 5,
 			expectFlushes:  true,
 			description:    "Auto profile should flush SSE content",
@@ -124,7 +124,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "auto_profile_ndjson",
 			profile:        constants.ConfigurationProxyProfileAuto,
-			contentType:    "application/x-ndjson",
+			contentType:    constants.ContentTypeNDJSON,
 			responseChunks: 5,
 			expectFlushes:  true,
 			description:    "Auto profile should flush NDJSON",
@@ -132,7 +132,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "auto_profile_binary_image",
 			profile:        constants.ConfigurationProxyProfileAuto,
-			contentType:    "image/jpeg",
+			contentType:    constants.ContentTypeImageJPEG,
 			responseChunks: 5,
 			expectFlushes:  false,
 			description:    "Auto profile should NOT flush binary images",
@@ -140,7 +140,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "auto_profile_pdf",
 			profile:        constants.ConfigurationProxyProfileAuto,
-			contentType:    "application/pdf",
+			contentType:    constants.ContentTypePDF,
 			responseChunks: 5,
 			expectFlushes:  false,
 			description:    "Auto profile should NOT flush PDFs",
@@ -148,7 +148,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "auto_profile_plain_text",
 			profile:        constants.ConfigurationProxyProfileAuto,
-			contentType:    "text/plain; charset=utf-8",
+			contentType:    constants.ContentTypeTextUTF8,
 			responseChunks: 5,
 			expectFlushes:  true,
 			description:    "Auto profile should flush plain text (common for LLMs)",
@@ -166,7 +166,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		{
 			name:           "buffered_profile_with_chunked_encoding",
 			profile:        constants.ConfigurationProxyProfileBuffered,
-			contentType:    "text/event-stream",
+			contentType:    constants.ContentTypeEventStream,
 			responseChunks: 10,
 			expectFlushes:  false,
 			description:    "Buffered profile should not flush even with many chunks",
@@ -193,7 +193,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create upstream server that sends chunked responses
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", tt.contentType)
+				w.Header().Set(constants.HeaderContentType, tt.contentType)
 				w.WriteHeader(http.StatusOK)
 
 				// Send response in chunks
@@ -288,7 +288,7 @@ func TestStreamingProfilesWithContextOverride(t *testing.T) {
 		t.Run(suite.Name(), func(t *testing.T) {
 			// Create upstream that sends binary content
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "image/png")
+				w.Header().Set(constants.HeaderContentType, constants.ContentTypeImagePNG)
 				w.WriteHeader(http.StatusOK)
 
 				// Send fake binary data in chunks
@@ -334,7 +334,7 @@ func TestStreamingProfilesWithContextOverride(t *testing.T) {
 			t.Run("context_stream_true_overrides_binary_detection", func(t *testing.T) {
 				req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 				// Add stream=true to context
-				ctx := context.WithValue(req.Context(), "stream", true)
+				ctx := context.WithValue(req.Context(), constants.ContextKeyStream, true)
 				req = req.WithContext(ctx)
 
 				w := &mockResponseWriter{
@@ -483,7 +483,7 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					// Create upstream server
 					upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						w.Header().Set("Content-Type", tt.contentType)
+						w.Header().Set(constants.HeaderContentType, tt.contentType)
 						w.WriteHeader(http.StatusOK)
 
 						// Send appropriate content based on type
@@ -534,7 +534,7 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 					// Create request
 					req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 					if tt.contextStream != nil {
-						ctx := context.WithValue(req.Context(), "stream", tt.contextStream)
+						ctx := context.WithValue(req.Context(), constants.ContextKeyStream, tt.contextStream)
 						req = req.WithContext(ctx)
 					}
 

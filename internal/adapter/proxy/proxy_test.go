@@ -16,6 +16,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/proxy/olla"
 	"github.com/thushan/olla/internal/adapter/proxy/sherpa"
 	"github.com/thushan/olla/internal/adapter/stats"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -192,7 +193,7 @@ func createTestRequestWithBody(method, path, body string) (*http.Request, *ports
 
 	req := httptest.NewRequest(method, path, bodyReader)
 	if body != "" && (method == "POST" || method == "PUT" || method == "PATCH") {
-		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	}
 
 	stats := &ports.RequestStats{
@@ -352,7 +353,7 @@ func runSharedProxyTests(t *testing.T, suite ProxyTestSuite) {
 
 func testProxyRequestSuccess(t *testing.T, suite ProxyTestSuite) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status": "ok"}`))
 	}))
@@ -456,7 +457,7 @@ func testProxyRequestUpstreamError(t *testing.T, suite ProxyTestSuite) {
 
 func testProxyRequestStreamingResponse(t *testing.T, suite ProxyTestSuite) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeText)
 		w.WriteHeader(http.StatusOK)
 
 		flusher := w.(http.Flusher)
@@ -488,7 +489,7 @@ func testProxyRequestStreamingResponse(t *testing.T, suite ProxyTestSuite) {
 
 func testProxyRequestClientDisconnection(t *testing.T, suite ProxyTestSuite) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeText)
 		w.WriteHeader(http.StatusOK)
 
 		data := strings.Repeat("chunk of data ", 100) // ~1.3KB
@@ -644,7 +645,7 @@ func testGetStats(t *testing.T, suite ProxyTestSuite) {
 
 func testLargePayloadHandling(t *testing.T, suite ProxyTestSuite) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 
 		flusher := w.(http.Flusher)
@@ -683,7 +684,7 @@ func testRequestBody(t *testing.T, suite ProxyTestSuite) {
 		body, _ := io.ReadAll(r.Body)
 		receivedBody = string(body)
 
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status": "received"}`))
 	}))
@@ -994,9 +995,9 @@ func testContentTypes(t *testing.T, suite ProxyTestSuite) {
 		contentType string
 		body        string
 	}{
-		{"JSON", "application/json", `{"key": "value"}`},
+		{"JSON", constants.ContentTypeJSON, `{"key": "value"}`},
 		{"XML", "application/xml", `<root><key>value</key></root>`},
-		{"Plain Text", "text/plain", "simple text"},
+		{"Plain Text", constants.ContentTypeText, "simple text"},
 		{"Binary", "application/octet-stream", string([]byte{0x01, 0x02, 0x03, 0x04})},
 		{"Form Data", "application/x-www-form-urlencoded", "key1=value1&key2=value2"},
 	}
@@ -1007,7 +1008,7 @@ func testContentTypes(t *testing.T, suite ProxyTestSuite) {
 			var receivedBody string
 
 			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				receivedContentType = r.Header.Get("Content-Type")
+				receivedContentType = r.Header.Get(constants.HeaderContentType)
 				body, _ := io.ReadAll(r.Body)
 				receivedBody = string(body)
 				w.WriteHeader(http.StatusOK)
@@ -1020,7 +1021,7 @@ func testContentTypes(t *testing.T, suite ProxyTestSuite) {
 			selector.endpoint = endpoint
 
 			req, stats, rlog := createTestRequestWithBody("POST", "/api/test", tc.body)
-			req.Header.Set("Content-Type", tc.contentType)
+			req.Header.Set(constants.HeaderContentType, tc.contentType)
 			_, err := executeProxyRequest(proxy, req, stats, rlog)
 
 			if err != nil {
