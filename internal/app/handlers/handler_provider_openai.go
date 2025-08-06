@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 // openaiModelsHandler returns models from endpoints that implement openai's api.
@@ -24,7 +26,7 @@ func (a *Application) openaiModelsHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

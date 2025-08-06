@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/pkg/pool"
@@ -54,8 +56,8 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		return nil
 	}
 
-	contentType := r.Header.Get("Content-Type")
-	if !strings.Contains(strings.ToLower(contentType), "application/json") {
+	contentType := r.Header.Get(constants.HeaderContentType)
+	if !strings.Contains(strings.ToLower(contentType), constants.ContentTypeJSON) {
 		bi.logger.Debug("Skipping body inspection for non-JSON content", "content_type", contentType)
 		return nil
 	}

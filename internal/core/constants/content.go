@@ -1,8 +1,11 @@
 package constants
 
 const (
-	DefaultContentTypeJSON = "application/json"
-	ContentTypeJSON        = "application/json"
-	ContentTypeText        = "text/plain"
-	ContentTypeHeader      = "Content-Type"
+	DefaultContentTypeJSON = ContentTypeJSON
+
+	ContentTypeJSON = "application/json"
+	ContentTypeText = "text/plain"
+
+	HeaderContentType = "Content-Type"
+	HeaderAccept      = "Accept"
 )

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"runtime"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/version"
 )
 
@@ -63,7 +65,7 @@ func (a *Application) versionHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(versionInfo)
 }

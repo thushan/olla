@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/config"
 
 	"github.com/thushan/olla/internal/util"
@@ -117,7 +119,7 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 	a.buildUnifiedEndpoints(all, endpointStatsMap, connectionStats, response.Endpoints, endpointModelsMap)
 	response.Security = a.buildSecuritySummary(securityStats)
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(response)
 }

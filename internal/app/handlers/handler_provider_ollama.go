@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 // ollamaModelsHandler returns models from all healthy ollama instances
@@ -22,7 +24,7 @@ func (a *Application) ollamaModelsHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
@@ -67,7 +69,7 @@ func (a *Application) ollamaOpenAIModelsHandler(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

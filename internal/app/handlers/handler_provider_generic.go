@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 // genericProviderModelsHandler returns a handler function for any provider's model listing
@@ -27,7 +29,7 @@ func (a *Application) genericProviderModelsHandler(providerType, format string) 
 			return
 		}
 
-		w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
 	}
@@ -65,7 +67,7 @@ func (a *Application) genericModelShowHandler(providerType string) http.HandlerF
 			"details":  "Model details would be retrieved from provider",
 		}
 
-		w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		json.NewEncoder(w).Encode(response)
 	}
 }
