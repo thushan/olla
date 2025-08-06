@@ -66,7 +66,7 @@ const (
 	HeaderKeepAlive         = "Keep-Alive"
 	HeaderProxyAuthenticate = "Proxy-Authenticate"
 	HeaderTE                = "TE"
-	HeaderTrailers          = "Trailers"
+	HeaderTrailer           = "Trailer"
 	HeaderTransferEncoding  = "Transfer-Encoding"
 	HeaderUpgrade           = "Upgrade"
 

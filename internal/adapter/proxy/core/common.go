@@ -131,7 +131,7 @@ var hopByHopHeaders = []string{
 	constants.HeaderProxyAuthenticate,
 	constants.HeaderProxyAuthorization,
 	constants.HeaderTE,
-	constants.HeaderTrailers,
+	constants.HeaderTrailer,
 	constants.HeaderTransferEncoding,
 	constants.HeaderUpgrade,
 }
