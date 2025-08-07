@@ -13,13 +13,38 @@ routing:
 api:
   openai_compatible: true
   paths:
-    - /health          # 0: health check (vLLM-specific endpoint)
-    - /v1/models       # 1: list models
-    - /v1/chat/completions  # 2: chat completions
-    - /v1/completions  # 3: completions
-    - /v1/embeddings   # 4: embeddings
+    # Health and system endpoints
+    - /health              # 0: health check (vLLM-specific endpoint)
+    - /metrics             # 1: Prometheus metrics endpoint
+    - /version             # 2: vLLM version information
+    
+    # Model management
+    - /v1/models           # 3: list models (OpenAI-compatible)
+    
+    # Text generation endpoints (OpenAI-compatible)
+    - /v1/chat/completions # 4: chat completions
+    - /v1/completions      # 5: text completions
+    
+    # Embeddings and pooling
+    - /v1/embeddings       # 6: embeddings/pooling API
+    
+    # Tokenization endpoints (vLLM-specific)
+    - /tokenize            # 7: encode text to tokens
+    - /detokenize          # 8: decode tokens to text
+    - /v1/tokenize         # 9: versioned tokenize endpoint
+    - /v1/detokenize       # 10: versioned detokenize endpoint
+    
+    # Reranking endpoints (compatible with Jina AI and Cohere)
+    - /rerank              # 11: reranking API
+    - /v1/rerank           # 12: versioned reranking API
+    - /v2/rerank           # 13: v2 reranking API
+    
+    # Optional/debug endpoints
+    - /get_tokenizer_info  # 14: tokenizer configuration info
+    
   model_discovery_path: /v1/models
   health_check_path: /health
+  metrics_path: /metrics
 
 # Platform characteristics
 characteristics:
@@ -33,6 +58,8 @@ detection:
   path_indicators:
     - "/v1/models"
     - "/health"
+    - "/metrics"        # Prometheus metrics endpoint is vLLM-specific
+    - "/tokenize"       # vLLM-specific tokenization endpoint
   default_ports:
     - 8000
   response_headers:
@@ -52,10 +79,20 @@ request:
 # Path indices for specific functions
 path_indices:
   health: 0
-  models: 1
-  chat_completions: 2
-  completions: 3
-  embeddings: 4
+  metrics: 1
+  version: 2
+  models: 3
+  chat_completions: 4
+  completions: 5
+  embeddings: 6
+  tokenize: 7
+  detokenize: 8
+  v1_tokenize: 9
+  v1_detokenize: 10
+  rerank: 11
+  v1_rerank: 12
+  v2_rerank: 13
+  tokenizer_info: 14
 
 # Model handling
 models:
@@ -146,3 +183,42 @@ resources:
   timeout_scaling:
     base_timeout_seconds: 120
     load_time_buffer: true
+
+# vLLM-specific features
+features:
+  # Prometheus metrics exposed at /metrics
+  metrics:
+    enabled: true
+    prefix: "vllm:"
+    categories:
+      - system        # num_requests_running, num_requests_waiting, gpu_cache_usage_perc
+      - cache         # cpu_prefix_cache_hit_rate, gpu_prefix_cache_hit_rate
+      - tokens        # prompt_tokens_total, generation_tokens_total
+      - performance   # e2e_request_latency_seconds, time_to_first_token_seconds
+      - speculative   # spec_decode_num_accepted_tokens_total (if enabled)
+  
+  # Tokenization API support
+  tokenization:
+    enabled: true
+    endpoints:
+      - /tokenize       # HuggingFace tokenizer.encode() wrapper
+      - /detokenize     # HuggingFace tokenizer.decode() wrapper
+      - /v1/tokenize    # Versioned API
+      - /v1/detokenize  # Versioned API
+  
+  # Reranking support (Jina AI & Cohere compatible)
+  reranking:
+    enabled: true
+    compatible_with:
+      - jina_ai
+      - cohere
+  
+  # PagedAttention optimisation
+  paged_attention:
+    enabled: true
+    description: "Memory-efficient attention mechanism for high throughput"
+  
+  # Continuous batching
+  continuous_batching:
+    enabled: true
+    description: "Dynamic batching for optimal GPU utilisation"

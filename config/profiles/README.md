@@ -16,8 +16,9 @@ These profiles control:
 ## Built-in Profiles
 
 - `ollama.yaml` - Ollama local inference server
-- `lmstudio.yaml` - LM Studio local inference server  
-- `openai.yaml` - OpenAI-compatible APIs (OpenAI, Azure OpenAI, etc.)
+- `lmstudio.yaml` - LM Studio local inference server
+- `vllm.yaml` - vLLM high-performance inference server
+- `openai.yaml` - OpenAI-compatible APIs (Ollama, LocalAI, etc.)
 
 ## Adding a New Platform
 
@@ -127,12 +128,15 @@ Used for auto-detecting platform types:
 
 ### Request Section
 - `model_field_paths`: JSON paths to find model name in requests
-- `response_format`: Which parser to use (ollama, lmstudio, openai)
+- `response_format`: Which parser to use (ollama, lmstudio, vllm, openai)
 - `parsing_rules`: How to parse different request types
 
 ## Examples
 
 ### Adding vLLM Support
+
+> [!NOTE]  
+> We now have official support for vLLM, but this is just an example of how to add a new profile.
 
 Create `vllm.yaml`:
 
