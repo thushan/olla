@@ -89,17 +89,10 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 	return vllmModel
 }
 
-// findVLLMNativeName looks for the native vLLM name from source endpoints
+// findVLLMNativeName looks for the native vLLM name from aliases
 func (c *VLLMConverter) findVLLMNativeName(model *domain.UnifiedModel) string {
-	for _, endpoint := range model.SourceEndpoints {
-		// Check if this is from a vLLM endpoint based on the native name format
-		if strings.Contains(endpoint.NativeName, "/") {
-			// vLLM models typically use organisation/model-name format
-			return endpoint.NativeName
-		}
-	}
-
-	// Check aliases for vLLM source
+	// Check aliases for vLLM source - this reliably identifies vLLM models
+	// We don't check NativeName for slashes as other providers (Ollama, etc.) also use them
 	for _, alias := range model.Aliases {
 		if alias.Source == constants.ProviderTypeVLLM {
 			return alias.Name

@@ -247,11 +247,15 @@ func TestVLLMConverter_determineOwner(t *testing.T) {
 func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 	converter := &VLLMConverter{}
 
-	t.Run("finds vLLM native name from source endpoints", func(t *testing.T) {
+	t.Run("only finds vLLM name from aliases with vllm source", func(t *testing.T) {
+		// Test that slash-based names from non-vLLM sources are ignored
 		model := &domain.UnifiedModel{
 			ID: "tinyllama/1.1b",
 			SourceEndpoints: []domain.SourceEndpoint{
 				{NativeName: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"},
+			},
+			Aliases: []domain.AliasEntry{
+				{Name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0", Source: "vllm"},
 			},
 		}
 
@@ -285,5 +289,22 @@ func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 
 		result := converter.findVLLMNativeName(model)
 		assert.Equal(t, "", result)
+	})
+
+	t.Run("ignores slash-based names from other providers", func(t *testing.T) {
+		// Important: Test that Ollama models with slashes are not mistaken for vLLM
+		model := &domain.UnifiedModel{
+			ID: "mistral/7b",
+			Aliases: []domain.AliasEntry{
+				{Name: "mistral/mistral-7b-instruct", Source: "ollama"},
+				{Name: "huggingface/mistral-7b", Source: "openai-compatible"},
+			},
+			SourceEndpoints: []domain.SourceEndpoint{
+				{NativeName: "mistral/mistral-7b-instruct"},
+			},
+		}
+
+		result := converter.findVLLMNativeName(model)
+		assert.Equal(t, "", result, "Should not pick up slash-based names from non-vLLM sources")
 	})
 }

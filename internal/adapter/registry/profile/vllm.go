@@ -8,23 +8,23 @@ type VLLMResponse struct {
 
 // VLLMModel represents a model in vLLM response with extended metadata
 type VLLMModel struct {
-	ID          string                `json:"id"`
-	Object      string                `json:"object"`
-	Created     int64                 `json:"created"`
-	OwnedBy     string                `json:"owned_by"`
-	Root        string                `json:"root,omitempty"`          // vLLM-specific: root model identifier
 	Parent      *string               `json:"parent,omitempty"`        // vLLM-specific: parent model for fine-tuned models
 	MaxModelLen *int64                `json:"max_model_len,omitempty"` // vLLM-specific: maximum context length
-	Permission  []VLLMModelPermission `json:"permission,omitempty"`    // vLLM-specific: access permissions
+	ID          string                `json:"id"`
+	Object      string                `json:"object"`
+	OwnedBy     string                `json:"owned_by"`
+	Root        string                `json:"root,omitempty"`       // vLLM-specific: root model identifier
+	Permission  []VLLMModelPermission `json:"permission,omitempty"` // vLLM-specific: access permissions
+	Created     int64                 `json:"created"`
 }
 
 // VLLMModelPermission represents vLLM's granular permission system
 type VLLMModelPermission struct {
+	Group              *string `json:"group"`
 	ID                 string  `json:"id"`
 	Object             string  `json:"object"`
-	Created            int64   `json:"created"`
 	Organization       string  `json:"organization"`
-	Group              *string `json:"group"`
+	Created            int64   `json:"created"`
 	AllowCreateEngine  bool    `json:"allow_create_engine"`
 	AllowSampling      bool    `json:"allow_sampling"`
 	AllowLogprobs      bool    `json:"allow_logprobs"`
