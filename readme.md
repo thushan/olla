@@ -42,10 +42,14 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 
 * [Ollama](https://github.com/ollama/ollama) - full support for Ollama, including model unification. \
   Use: `/olla/ollama/`
-* [LM Studio](https://lmstudio.ai/) - full support for Ollama, including model unification. \
+* [LM Studio](https://lmstudio.ai/) - full support for LMStudio, including model unification. \
   Use: `/olla/lmstudio/` || `/olla/lm-studio/` || `/olla/lm_studio/`
 * [OpenAI](https://platform.openai.com/docs/overview) - You can use OpenAI API that provides a unified query API across all providers. \
   Use: `/olla/openai/`
+
+### Supported Frontends
+
+* [OpenWebUI](https://github.com/open-webui/open-webui) - You can route you OpenWebUI Ollama endpoint to Olla and serve unified models easily. [See Examples](https://github.com/thushan/olla/tree/main/examples/ollama-openwebui)
 
 Coming soon - but you can use the OpenAI compatibility in the interim:
 
@@ -74,7 +78,9 @@ go install github.com/thushan/olla@latest
 ```
 ```bash
 # Build from source
-git clone https://github.com/thushan/olla.git && cd olla && make build
+git clone https://github.com/thushan/olla.git && cd olla && make build-release
+# Run Olla
+./bin/olla
 ```
 
 When you have things running you can check everything's working with:
@@ -98,7 +104,7 @@ We've also got ready-to-use Docker Compose setups for common scenarios:
 
 ### 🌐 **OpenWebUI Integration**
 
-Complete setup with OpenWebUI + Olla load balancing multiple Ollama instances.
+Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla load balancing multiple Ollama instances.
 
 - **See**: [`examples/ollama-openwebui/`](examples/ollama-openwebui/)
 - **Services**: OpenWebUI (web UI) + Olla (proxy/load balancer)  
