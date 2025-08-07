@@ -47,7 +47,8 @@ class StreamingTester:
         self.provider_models = {
             'openai': [],
             'ollama': [],
-            'lmstudio': []
+            'lmstudio': [],
+            'vllm': []
         }
         self.test_results = []
         self.total_tests = 0
@@ -79,7 +80,7 @@ class StreamingTester:
         self.print_color(YELLOW, "Fetching available models...")
         
         # Fetch provider-specific models
-        for provider in ['openai', 'ollama', 'lmstudio']:
+        for provider in ['openai', 'ollama', 'lmstudio', 'vllm']:
             try:
                 response = requests.get(f"{self.base_url}/olla/models?format={provider}", timeout=10)
                 if response.status_code == 200:
@@ -162,6 +163,20 @@ class StreamingTester:
         
         return self._test_streaming(url, data, 'lmstudio', model)
         
+    def test_vllm_streaming(self, model: str) -> Dict[str, Any]:
+        """Test vLLM-format streaming endpoint"""
+        url = f"{self.base_url}/olla/vllm/v1/chat/completions"
+        data = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": "Tell me a story about a robot. Be creative and descriptive."}
+            ],
+            "stream": True,
+            "max_tokens": DEFAULT_MAX_TOKENS
+        }
+        
+        return self._test_streaming(url, data, 'vllm', model)
+        
     def _test_streaming(self, url: str, data: Dict, provider: str, model: str) -> Dict[str, Any]:
         """Generic streaming test implementation"""
         result = {
@@ -221,7 +236,7 @@ class StreamingTester:
                 result['chunk_times'].append(current_time - start_time)
                 
                 # Parse chunk based on provider format
-                if provider in ['openai', 'lmstudio']:
+                if provider in ['openai', 'lmstudio', 'vllm']:
                     # SSE format
                     chunk_data = self.parse_sse_chunk(line)
                     if chunk_data and not chunk_data.get('done'):
@@ -290,6 +305,8 @@ class StreamingTester:
                 result = self.test_ollama_streaming(model)
             elif provider == 'lmstudio':
                 result = self.test_lmstudio_streaming(model)
+            elif provider == 'vllm':
+                result = self.test_vllm_streaming(model)
             else:
                 continue
                 
@@ -399,7 +416,7 @@ def main():
     parser.add_argument('--max-time', type=int, default=DEFAULT_MAX_STREAM_TIME,
                         help='Maximum streaming time per test (seconds)')
     parser.add_argument('--models', nargs='+', help='Specific models to test')
-    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio'],
+    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio', 'vllm'],
                         help='Providers to test (default: all)')
     parser.add_argument('--sample', action='store_true',
                         help='Test only a few models per provider')
@@ -410,7 +427,7 @@ def main():
     
     args = parser.parse_args()
     
-    providers = args.providers or ['openai', 'ollama', 'lmstudio']
+    providers = args.providers or ['openai', 'ollama', 'lmstudio', 'vllm']
     
     tester = StreamingTester(args.url, args.max_time)
     tester.print_header()
@@ -484,7 +501,7 @@ def run_main():
     parser.add_argument('--max-time', type=int, default=DEFAULT_MAX_STREAM_TIME,
                         help='Maximum streaming time per test (seconds)')
     parser.add_argument('--models', nargs='+', help='Specific models to test')
-    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio'],
+    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio', 'vllm'],
                         help='Providers to test (default: all)')
     parser.add_argument('--sample', action='store_true',
                         help='Test only a few models per provider')
@@ -495,7 +512,7 @@ def run_main():
     
     args = parser.parse_args()
     
-    providers = args.providers or ['openai', 'ollama', 'lmstudio']
+    providers = args.providers or ['openai', 'ollama', 'lmstudio', 'vllm']
     
     tester = StreamingTester(args.url, args.max_time)
     tester.print_header()

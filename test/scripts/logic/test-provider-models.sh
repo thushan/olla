@@ -41,13 +41,14 @@ function banner() {
     echo -e "${CYAN}/olla/lmstudio/v1/models${RESET}     ${BLUE}→${RESET} LM Studio models (OpenAI format)"
     echo -e "${CYAN}/olla/lmstudio/api/v0/*${RESET}      ${BLUE}→${RESET} LM Studio models (enhanced format)"
     echo -e "${CYAN}/olla/openai/v1/models${RESET}       ${BLUE}→${RESET} OpenAI-compatible models"
-    echo -e "${CYAN}/olla/vllm/v1/models${RESET}         ${BLUE}→${RESET} vLLM models"
+    echo -e "${CYAN}/olla/vllm/v1/models${RESET}         ${BLUE}→${RESET} vLLM models (enhanced metadata)"
     echo -e "${GREY}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo -e "${CYAN}/olla/models${RESET}                 ${BLUE}→${RESET} Olla Unified format (default)"
     echo -e "${CYAN}/olla/models?format=unified${RESET}  ${BLUE}→${RESET} Olla Unified format (explicit)"
     echo -e "${CYAN}/olla/models?format=openai${RESET}   ${BLUE}→${RESET} OpenAI format (all models)"
     echo -e "${CYAN}/olla/models?format=ollama${RESET}   ${BLUE}→${RESET} Ollama format (filters to Ollama only)"
     echo -e "${CYAN}/olla/models?format=lmstudio${RESET} ${BLUE}→${RESET} LM Studio format (filters to LM Studio only)"
+    echo -e "${CYAN}/olla/models?format=vllm${RESET}     ${BLUE}→${RESET} vLLM format (filters to vLLM only)"
     echo
 }
 
@@ -218,6 +219,17 @@ test_unified_endpoint() {
                 local model_count=$(echo "$response_body" | grep -o '"id"' | wc -l)
                 echo -e "  ${CYAN}→ Found ${model_count} models in OpenAI format${RESET}"
             fi
+        elif [[ "$query" == *"format=vllm"* ]]; then
+            format_type="vllm"
+            if echo "$response_body" | grep -q '"object".*"list"' && echo "$response_body" | grep -q '"data"'; then
+                format_valid=true
+                local model_count=$(echo "$response_body" | grep -o '"id"' | wc -l)
+                echo -e "  ${CYAN}→ Found ${model_count} models in vLLM format${RESET}"
+                # Check for vLLM-specific fields
+                if echo "$response_body" | grep -q '"max_model_len"'; then
+                    echo -e "  ${GREEN}✓ Contains vLLM-specific metadata (max_model_len)${RESET}"
+                fi
+            fi
         else
             # Default unified format
             if echo "$response_body" | grep -q '"data"' && echo "$response_body" | grep -q '"olla"'; then
@@ -284,6 +296,7 @@ run_tests() {
     test_unified_endpoint "/olla/models" "?format=openai" "OpenAI format (all models)"
     test_unified_endpoint "/olla/models" "?format=ollama" "Ollama format (Ollama models only)"
     test_unified_endpoint "/olla/models" "?format=lmstudio" "LM Studio format (LM Studio models only)"
+    test_unified_endpoint "/olla/models" "?format=vllm" "vLLM format (vLLM models only)"
 }
 
 show_summary() {

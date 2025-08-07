@@ -199,8 +199,18 @@ compare_model_counts() {
     local lmstudio_count=$(echo "$lmstudio_response" | grep -o '"name"' | wc -l)
     echo -e "  ${CYAN}LM Studio models (/olla/lmstudio/api/v1/tags):${RESET} $lmstudio_count"
     
+    # Get vLLM model count
+    local vllm_response=$(curl -s "${TARGET_URL}/olla/vllm/v1/models" 2>/dev/null || echo '{}')
+    local vllm_count=$(echo "$vllm_response" | grep -o '"id"' | wc -l)
+    echo -e "  ${CYAN}vLLM models (/olla/vllm/v1/models):${RESET} $vllm_count"
+    
+    # Get OpenAI model count
+    local openai_response=$(curl -s "${TARGET_URL}/olla/openai/v1/models" 2>/dev/null || echo '{}')
+    local openai_count=$(echo "$openai_response" | grep -o '"id"' | wc -l)
+    echo -e "  ${CYAN}OpenAI-compatible models (/olla/openai/v1/models):${RESET} $openai_count"
+    
     # Sanity check: provider models should sum to <= unified count
-    local provider_total=$((ollama_count + lmstudio_count))
+    local provider_total=$((ollama_count + lmstudio_count + vllm_count + openai_count))
     if [ $provider_total -le $unified_count ] || [ $unified_count -eq 0 ]; then
         echo -e "  ${GREEN}✓ Model counts are consistent${RESET}"
     else
@@ -274,6 +284,9 @@ main() {
     test_endpoint "/olla/lmstudio/v1/models" "LM Studio models in OpenAI format" "openai"
     test_endpoint "/olla/lmstudio/api/v1/models" "LM Studio models in OpenAI format (alt path)" "openai"
     
+    # Test vLLM endpoints
+    test_endpoint "/olla/vllm/v1/models" "vLLM models in OpenAI format with enhanced metadata" "openai"
+    
     echo -e "\n${PURPLE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
     echo -e "${WHITE}Testing Provider Proxy Routing:${RESET}"
     
@@ -282,7 +295,8 @@ main() {
     test_proxy_routing "ollama" "/api/chat" "Ollama chat endpoint"
     test_proxy_routing "lmstudio" "/v1/chat/completions" "LM Studio chat completions"
     test_proxy_routing "openai" "/v1/chat/completions" "OpenAI chat completions"
-    test_proxy_routing "vllm" "/generate" "vLLM generate endpoint"
+    test_proxy_routing "vllm" "/v1/chat/completions" "vLLM chat completions"
+    test_proxy_routing "vllm" "/v1/completions" "vLLM completions"
     
     # Compare model counts
     compare_model_counts
