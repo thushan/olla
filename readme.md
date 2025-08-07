@@ -7,7 +7,7 @@
     <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a> <br />
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a> 
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a> 
-    <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-openai-lightblue.svg" alt="vLLM: OpenAI Compatible"></a> 
+    <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a> 
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
@@ -40,10 +40,13 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 
 ### Supported Backends
 
-* [Ollama](https://github.com/ollama/ollama) - full support for Ollama, including model unification. \
+* [Ollama](https://github.com/ollama/ollama) - native support for Ollama, including model unification. \
   Use: `/olla/ollama/`
-* [LM Studio](https://lmstudio.ai/) - full support for LMStudio, including model unification. \
+* [LM Studio](https://lmstudio.ai/) - native support for LMStudio, including model unification. \
   Use: `/olla/lmstudio/` || `/olla/lm-studio/` || `/olla/lm_studio/`
+* [vLLM](https://github.com/vllm-project/vllm) - native support for vllm, including model unification. \
+  Use: `/olla/vllm/` \
+  Models from vLLM will be available under `/olla/models` and `/olla/vllm/v1/models`
 * [OpenAI](https://platform.openai.com/docs/overview) - You can use OpenAI API that provides a unified query API across all providers. \
   Use: `/olla/openai/`
 
@@ -53,7 +56,6 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 
 Coming soon - but you can use the OpenAI compatibility in the interim:
 
-* [vLLM](https://github.com/vllm-project/vllm)
 * [LMDeploy](https://github.com/InternLM/lmdeploy)
 * [Lemonade](https://github.com/lemonade-sdk/lemonade)
 
