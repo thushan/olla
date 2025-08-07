@@ -5,6 +5,7 @@ import (
 	"time"
 
 	jsoniter "github.com/json-iterator/go"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -17,11 +18,13 @@ type ModelResponseParser interface {
 
 func getParserForFormat(format string) ModelResponseParser {
 	switch format {
-	case "ollama":
+	case constants.ProviderTypeOllama:
 		return &ollamaParser{}
-	case "lmstudio":
+	case constants.ProviderPrefixLMStudio1:
 		return &lmStudioParser{}
-	case "openai":
+	case constants.ProviderTypeVLLM:
+		return &vllmParser{}
+	case constants.ProviderTypeOpenAI:
 		return &openAIParser{}
 	default:
 		// openai format is the de facto standard
