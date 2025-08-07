@@ -2,7 +2,7 @@
 name: vllm
 version: "1.0"
 display_name: "vLLM"
-description: "vLLM high-performance inference server"
+description: "vLLM high-performance inference server with PagedAttention"
 
 # Routing configuration
 routing:
@@ -13,12 +13,13 @@ routing:
 api:
   openai_compatible: true
   paths:
-    - /v1/models
-    - /v1/chat/completions
-    - /v1/completions
-    - /v1/embeddings
+    - /health          # 0: health check (vLLM-specific endpoint)
+    - /v1/models       # 1: list models
+    - /v1/chat/completions  # 2: chat completions
+    - /v1/completions  # 3: completions
+    - /v1/embeddings   # 4: embeddings
   model_discovery_path: /v1/models
-  health_check_path: /v1/models
+  health_check_path: /health
 
 # Platform characteristics
 characteristics:
@@ -31,14 +32,17 @@ characteristics:
 detection:
   path_indicators:
     - "/v1/models"
+    - "/health"
   default_ports:
     - 8000
+  response_headers:
+    - "X-vLLM-Version"  # vLLM may add this in future versions
 
 # Request/response handling
 request:
   model_field_paths:
     - "model"
-  response_format: "openai"
+  response_format: "vllm"
   parsing_rules:
     chat_completions_path: "/v1/chat/completions"
     completions_path: "/v1/completions"
@@ -48,16 +52,97 @@ request:
 # Path indices for specific functions
 path_indices:
   health: 0
-  models: 0
-  chat_completions: 1
-  completions: 2
-  embeddings: 3
+  models: 1
+  chat_completions: 2
+  completions: 3
+  embeddings: 4
 
-# Resource management - vLLM is optimized for high throughput
+# Model handling
+models:
+  name_format: "{{.Name}}"  # vLLM uses full model names like "meta-llama/Meta-Llama-3.1-8B-Instruct"
+  capability_patterns:
+    chat:
+      - "*-Chat-*"
+      - "*-Instruct*"
+      - "*-chat-*"
+    embeddings:
+      - "*embedding*"
+      - "*-embed-*"
+    vision:
+      - "*vision*"
+      - "*llava*"
+    code:
+      - "*code*"
+      - "*Code*"
+  # Context window patterns for common vLLM models
+  context_patterns:
+    - pattern: "*llama-3.1*"
+      context: 131072
+    - pattern: "*llama-3*"
+      context: 8192
+    - pattern: "*mistral*"
+      context: 32768
+    - pattern: "*mixtral*"
+      context: 32768
+    - pattern: "*gemma-2*"
+      context: 8192
+    - pattern: "*tinyllama*"
+      context: 2048
+
+# Resource management - vLLM is optimised for high throughput
 resources:
+  # Model size patterns for vLLM deployments
+  model_sizes:
+    - patterns: ["*70b*", "*72b*"]
+      min_memory_gb: 140  # vLLM requires more memory for KV cache
+      recommended_memory_gb: 160
+      min_gpu_memory_gb: 140
+      estimated_load_time_ms: 60000
+    - patterns: ["*34b*", "*33b*", "*30b*"]
+      min_memory_gb: 70
+      recommended_memory_gb: 80
+      min_gpu_memory_gb: 70
+      estimated_load_time_ms: 45000
+    - patterns: ["*13b*", "*14b*"]
+      min_memory_gb: 30
+      recommended_memory_gb: 40
+      min_gpu_memory_gb: 30
+      estimated_load_time_ms: 30000
+    - patterns: ["*7b*", "*8b*"]
+      min_memory_gb: 16
+      recommended_memory_gb: 24
+      min_gpu_memory_gb: 16
+      estimated_load_time_ms: 20000
+    - patterns: ["*3b*"]
+      min_memory_gb: 8
+      recommended_memory_gb: 12
+      min_gpu_memory_gb: 8
+      estimated_load_time_ms: 15000
+    - patterns: ["*1b*", "*1.1b*", "*1.5b*"]
+      min_memory_gb: 4
+      recommended_memory_gb: 8
+      min_gpu_memory_gb: 4
+      estimated_load_time_ms: 10000
+      
   defaults:
     min_memory_gb: 8
     recommended_memory_gb: 16
     min_gpu_memory_gb: 8
     requires_gpu: true
     estimated_load_time_ms: 30000
+    
+  # vLLM supports high concurrency with PagedAttention
+  concurrency_limits:
+    - min_memory_gb: 100  # 70B+ models
+      max_concurrent: 10
+    - min_memory_gb: 50   # 30B+ models
+      max_concurrent: 20
+    - min_memory_gb: 20   # 13B+ models
+      max_concurrent: 50
+    - min_memory_gb: 0    # smaller models
+      max_concurrent: 100
+      
+  # Timeout scaling for vLLM
+  timeout_scaling:
+    base_timeout_seconds: 120
+    load_time_buffer: true

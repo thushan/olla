@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -32,7 +33,7 @@ func NewLMStudioConverter() ports.ModelResponseConverter {
 }
 
 func (c *LMStudioConverter) GetFormatName() string {
-	return "lmstudio"
+	return constants.ProviderPrefixLMStudio1
 }
 
 func (c *LMStudioConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
@@ -59,7 +60,7 @@ func (c *LMStudioConverter) convertModel(model *domain.UnifiedModel) *LMStudioMo
 
 	// First, look for an LM Studio source in aliases
 	for _, alias := range model.Aliases {
-		if alias.Source == "lmstudio" {
+		if alias.Source == constants.ProviderPrefixLMStudio1 {
 			lmstudioName = alias.Name
 			break
 		}

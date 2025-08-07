@@ -3,6 +3,7 @@ package converter
 import (
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -38,7 +39,7 @@ func NewOllamaConverter() ports.ModelResponseConverter {
 }
 
 func (c *OllamaConverter) GetFormatName() string {
-	return "ollama"
+	return constants.ProviderTypeOllama
 }
 
 func (c *OllamaConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
@@ -65,7 +66,7 @@ func (c *OllamaConverter) convertModel(model *domain.UnifiedModel) *OllamaModelD
 
 	// First, look for an Ollama source in aliases
 	for _, alias := range model.Aliases {
-		if alias.Source == "ollama" {
+		if alias.Source == constants.ProviderTypeOllama {
 			ollamaName = alias.Name
 			break
 		}
