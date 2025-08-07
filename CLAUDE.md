@@ -13,27 +13,75 @@ make test         # Run all tests
 make bench        # Run benchmarks
 ```
 
-## Architecture
-The project follows **Hexagonal Architecture** (Ports & Adapters):
-
-- `/internal/core/` - Business logic and domain models
-  - `domain/` - Core entities (Endpoint, LoadBalancer, etc.)
-  - `ports/` - Interface definitions
-- `/internal/adapter/` - Infrastructure implementations
-  - `balancer/` - Load balancing strategies (priority, round-robin, least connections)
-  - `proxy/` - Dual HTTP proxy engines:
-    - **Sherpa**: Clean, simple implementation for moderate loads
-    - **Olla**: High-performance with circuit breakers, connection pooling, object pooling
-  - `health/` - Health checking with circuit breakers
-  - `discovery/` - Service discovery
-  - `security/` - Rate limiting and validation
-  - `stats/` - Atomic statistics collection with lock-free operations
-- `/internal/app/` - Application assembly and HTTP handlers
+## Project Structure
+```
+olla/
+├── main.go                    # Entry point, initialises services
+├── config.yaml               # Default configuration
+├── config/
+│   ├── profiles/            # Provider-specific profiles
+│   │   ├── ollama.yaml     # Ollama configuration
+│   │   ├── lmstudio.yaml   # LM Studio configuration
+│   │   ├── openai.yaml     # OpenAI-compatible configuration
+│   │   └── vllm.yaml       # vLLM configuration
+│   └── models.yaml         # Model configurations
+├── internal/
+│   ├── core/               # Domain layer (business logic)
+│   │   ├── domain/         # Core entities
+│   │   │   ├── endpoint.go         # Endpoint management
+│   │   │   ├── model.go            # Model registry
+│   │   │   ├── unified_model.go    # Unified model format
+│   │   │   └── routing.go          # Request routing logic
+│   │   ├── ports/          # Interface definitions
+│   │   └── constants/      # Application constants
+│   ├── adapter/            # Infrastructure layer
+│   │   ├── balancer/       # Load balancing strategies
+│   │   │   ├── priority.go         # Priority-based selection
+│   │   │   ├── round_robin.go      # Round-robin selection
+│   │   │   └── least_connections.go # Least connections selection
+│   │   ├── proxy/          # Proxy implementations
+│   │   │   ├── sherpa/     # Simple, maintainable proxy
+│   │   │   ├── olla/       # High-performance proxy
+│   │   │   └── core/       # Shared proxy components
+│   │   ├── health/         # Health checking
+│   │   │   ├── checker.go          # Health check coordinator
+│   │   │   └── circuit_breaker.go  # Circuit breaker implementation
+│   │   ├── discovery/      # Service discovery
+│   │   │   └── service.go          # Model discovery service
+│   │   ├── registry/       # Model & profile registries
+│   │   │   ├── profile/            # Provider profiles
+│   │   │   └── unified_memory_registry.go # Unified model registry
+│   │   ├── unifier/        # Model unification
+│   │   ├── converter/      # Model format converters
+│   │   ├── inspector/      # Request inspection
+│   │   ├── security/       # Security features
+│   │   │   ├── request_rate_limit.go  # Rate limiting
+│   │   │   └── request_size_limit.go  # Size limiting
+│   │   └── stats/          # Statistics collection
+│   │       ├── collector.go        # Main stats collector
+│   │       └── model_collector.go  # Model-specific stats
+│   └── app/                # Application layer
+│       ├── app.go          # Service manager
+│       └── handlers/       # HTTP handlers
+│           ├── handler_proxy.go    # Main proxy handler
+│           ├── handler_status.go   # Status endpoints
+│           └── handler_health.go   # Health endpoints
+├── pkg/                    # Reusable packages
+│   ├── pool/              # Object pooling
+│   └── nerdstats/         # Process statistics
+└── test/
+    └── scripts/           # Test scripts
+        ├── logic/         # Logic & routing tests
+        ├── security/      # Security tests
+        └── streaming/     # Streaming tests
+```
 
 ## Key Files
+- `main.go` - Application entry point
 - `config.yaml` - Main configuration
-- `handler_proxy.go` - Request routing logic
-- `proxy_sherpa.go` / `proxy_olla.go` - Proxy implementations
+- `internal/app/handlers/handler_proxy.go` - Request routing logic
+- `internal/adapter/proxy/sherpa/service.go` - Sherpa proxy
+- `internal/adapter/proxy/olla/service.go` - Olla proxy
 - `/test/scripts/logic/test-model-routing.sh` - Test routing & headers
 
 ## Response Headers
