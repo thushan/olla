@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -24,6 +25,15 @@ type ProcessStatsResponse struct {
 		MemoryPressure string `json:"memory_pressure"`
 	} `json:"memory"`
 
+	Runtime struct {
+		Uptime     string `json:"uptime"`
+		GoVersion  string `json:"go_version"`
+		GOARCH     string `json:"goarch"`
+		GOOS       string `json:"goos"`
+		NumCPU     int    `json:"num_cpu"`
+		GOMAXPROCS int    `json:"gomaxprocs"`
+	} `json:"runtime"`
+
 	GarbageCollection struct {
 		LastGC        string  `json:"last_gc"`
 		TotalGCTime   string  `json:"total_gc_time"`
@@ -37,13 +47,6 @@ type ProcessStatsResponse struct {
 		Count        int    `json:"count"`
 		CgoCalls     int64  `json:"cgo_calls"`
 	} `json:"goroutines"`
-
-	Runtime struct {
-		Uptime     string `json:"uptime"`
-		GoVersion  string `json:"go_version"`
-		NumCPU     int    `json:"num_cpu"`
-		GOMAXPROCS int    `json:"gomaxprocs"`
-	} `json:"runtime"`
 
 	Allocations struct {
 		TotalMallocs uint64 `json:"total_mallocs"`
@@ -89,6 +92,8 @@ func (a *Application) processStatsHandler(w http.ResponseWriter, r *http.Request
 	response.Runtime.Uptime = format.Duration(stats.Uptime)
 	response.Runtime.GoVersion = stats.GoVersion
 	response.Runtime.NumCPU = stats.NumCPU
+	response.Runtime.GOARCH = runtime.GOARCH
+	response.Runtime.GOOS = runtime.GOOS
 	response.Runtime.GOMAXPROCS = stats.GOMAXPROCS
 
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)

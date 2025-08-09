@@ -60,10 +60,10 @@ builds:
 
 dockers:
   - image_templates:
-      - "ghcr.io/thushan/olla:latest"
-      - "ghcr.io/thushan/olla:{{ .Tag }}"
-      - "ghcr.io/thushan/olla:v{{ .Major }}"
-      - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}"
+      - "ghcr.io/thushan/olla:latest-amd64"
+      - "ghcr.io/thushan/olla:{{ .Tag }}-amd64"
+      - "ghcr.io/thushan/olla:v{{ .Major }}-amd64"
+      - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-amd64"
     dockerfile: Dockerfile
     goos: linux
     goarch: amd64
@@ -84,6 +84,49 @@ dockers:
       - config/models.yaml
       - config/profiles/
       - logs/.gitkeep
+  - image_templates:
+      - "ghcr.io/thushan/olla:latest-arm64"
+      - "ghcr.io/thushan/olla:{{ .Tag }}-arm64"
+      - "ghcr.io/thushan/olla:v{{ .Major }}-arm64"
+      - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-arm64"
+    dockerfile: Dockerfile
+    goos: linux
+    goarch: arm64
+    use: buildx
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+      - "--label=org.opencontainers.image.description=High-performance LLM front-end load balancer and proxy"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+    extra_files:
+      # For Docker, use the copied config.yaml (which is docker.yaml)
+      - config.yaml
+      - config/models.yaml
+      - config/profiles/
+      - logs/.gitkeep
+
+docker_manifests:
+  - name_template: ghcr.io/thushan/olla:latest
+    image_templates:
+        - "ghcr.io/thushan/olla:latest-amd64"
+        - "ghcr.io/thushan/olla:latest-arm64"
+  - name_template: ghcr.io/thushan/olla:{{ .Tag }}
+    image_templates:
+        - "ghcr.io/thushan/olla:{{ .Tag }}-amd64"
+        - "ghcr.io/thushan/olla:{{ .Tag }}-arm64"
+  - name_template: ghcr.io/thushan/olla:v{{ .Major }}
+    image_templates:
+        - "ghcr.io/thushan/olla:v{{ .Major }}-amd64"
+        - "ghcr.io/thushan/olla:v{{ .Major }}-arm64"
+  - name_template: ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}
+    image_templates:
+        - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-amd64"
+        - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-arm64"
 
 checksum:
   name_template: "checksums.txt"

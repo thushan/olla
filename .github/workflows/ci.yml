@@ -87,3 +87,47 @@ jobs:
             echo "$output"
             exit 1
           fi
+
+  cross-platform:
+    name: Cross-Platform Build Validation
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM64 emulation (Linux only)
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Configure Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build and test native platform
+        run: |
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            make validate-linux
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            make validate-darwin
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            make validate-windows
+          fi
+        shell: bash
+
+      - name: Verify release build
+        run: |
+          make build-release
+          echo "Testing built binary..."
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            ./bin/olla.exe --version
+          else
+            ./bin/olla --version
+          fi
+        shell: bash
