@@ -34,6 +34,7 @@ var (
 
 type SystemSummary struct {
 	Version            string `json:"version"`
+	OS                 string `json:"os"`
 	Arch               string `json:"arch"`
 	Status             string `json:"status"`
 	EndpointsUp        string `json:"endpoints_up"`
@@ -167,6 +168,7 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 
 	return SystemSummary{
 		Version:            version.Version,
+		OS:                 runtime.GOOS,
 		Arch:               runtime.GOARCH,
 		Status:             status,
 		EndpointsUp:        format.EndpointsUp(len(healthy), len(all)),
