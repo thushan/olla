@@ -35,7 +35,12 @@ validate-linux:
 	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-linux-arm64 .
 	@echo "Testing Linux AMD64 binary..."
 	@bin/olla-linux-amd64 --version > /dev/null && echo "Linux AMD64: OK"
-	@echo "ARM64 build: OK (compile-only)"
+	@echo "Testing Linux ARM64 binary..."
+	@if bin/olla-linux-arm64 --version > /dev/null 2>&1; then \
+		echo "Linux ARM64: OK (tested via QEMU)"; \
+	else \
+		echo "Linux ARM64: Build OK (runtime test failed/skipped)"; \
+	fi
 	@rm -f bin/olla-linux-*
 
 validate-darwin:

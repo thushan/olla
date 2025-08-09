@@ -98,6 +98,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up QEMU for ARM64 emulation (Linux only)
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
       - name: Configure Go
         uses: actions/setup-go@v5
         with:
