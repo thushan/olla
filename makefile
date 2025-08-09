@@ -24,7 +24,68 @@ build:
 # Build release version (optimised)
 build-release:
 	@echo "Building olla $(VERSION) for release..."
-	@CGO_ENABLED=0 go build $(LDFLAGS) -a -installsuffix cgo -o bin/olla .
+	@CGO_ENABLED=0 go build $(LDFLAGS) -a -installsuffix cgo -o bin/olla$(shell go env GOEXE) .
+
+# Platform-specific validation (used by CI - builds both archs for current OS but runs only AMD64)
+validate-linux:
+	@echo "Building and testing Linux binaries..."
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-linux-amd64 .
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-linux-arm64 .
+	@echo "Testing Linux AMD64 binary..."
+	@bin/olla-linux-amd64 --version > /dev/null && echo "Linux AMD64: OK"
+	@echo "ARM64 build: OK (compile-only)"
+	@rm -f bin/olla-linux-*
+
+validate-darwin:
+	@echo "Building and testing macOS binaries..."
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-darwin-amd64 .
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-darwin-arm64 .
+	@echo "Testing macOS binary..."
+	@if [ "$$(uname -m)" = "arm64" ]; then \
+		bin/olla-darwin-arm64 --version > /dev/null && echo "Darwin ARM64: OK"; \
+		echo "AMD64 build: OK (compile-only)"; \
+	else \
+		bin/olla-darwin-amd64 --version > /dev/null && echo "Darwin AMD64: OK"; \
+		echo "ARM64 build: OK (compile-only)"; \
+	fi
+	@rm -f bin/olla-darwin-*
+
+validate-windows:
+	@echo "Building and testing Windows binaries..."
+	@CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-windows-amd64.exe .
+	@CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-windows-arm64.exe .
+	@echo "Testing Windows AMD64 binary..."
+	@bin/olla-windows-amd64.exe --version > /dev/null && echo "Windows AMD64: OK"
+	@echo "ARM64 build: OK (compile-only)"
+	@rm -f bin/olla-windows-*
+
+# Validate all platforms (for local testing or releases - builds all 6 targets)
+#
+# Platform Support Matrix:
+#   OS       | AMD64 | ARM64 |
+#   ---------|-------|-------|
+#   Linux    |  ✓    |  ✓    |
+#   macOS    |  ✓    |  ✓    |  (ARM64 = Apple Silicon M1/M2/M3)
+#   Windows  |  ✓    |  ✓    |  (ARM64 = Windows on ARM devices)
+#
+# This target builds all combinations but does NOT test execution
+# Use the OS-specific targets (validate-linux, etc) to test execution
+validate-all-platforms:
+	@echo "Building all platforms (6 targets)..."
+	@echo "Linux AMD64..."
+	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-linux-amd64 .
+	@echo "Linux ARM64..."
+	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-linux-arm64 .
+	@echo "macOS AMD64 (Intel)..."
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-darwin-amd64 .
+	@echo "macOS ARM64 (Apple Silicon)..."
+	@CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-darwin-arm64 .
+	@echo "Windows AMD64..."
+	@CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-windows-amd64.exe .
+	@echo "Windows ARM64..."
+	@CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-windows-arm64.exe .
+	@echo "All platforms built successfully (6 targets)"
+	@rm -f bin/olla-*
 
 # Run the application
 run:
@@ -215,6 +276,10 @@ help:
 	@echo "  deps            - Download and tidy dependencies"
 	@echo "  ready     		 - Make code ready for commit (test, fmt, lint, align)"
 	@echo "  ready-tools     - Check code is ready with tools (fmt, lint, align)"
+	@echo "  validate-linux  - Build and test Linux binaries (AMD64 + ARM64)"
+	@echo "  validate-darwin - Build and test macOS binaries (Intel + Apple Silicon)"
+	@echo "  validate-windows- Build and test Windows binaries (AMD64 + ARM64)"
+	@echo "  validate-all-platforms - Build all 6 platform combinations (local testing)"
 	@echo "  build-local     - Build binary only to ./build/ (fast, for testing)"
 	@echo "  build-snapshot  - Build full release to ./dist/ (archives, checksums, etc)"
 	@echo "  docker-build    - Build Docker images locally"
