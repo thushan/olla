@@ -24,11 +24,13 @@ build:
 # Build release version (optimised)
 build-release:
 	@echo "Building olla $(VERSION) for release..."
+	@mkdir -p bin
 	@CGO_ENABLED=0 go build $(LDFLAGS) -a -installsuffix cgo -o bin/olla$(shell go env GOEXE) .
 
 # Platform-specific validation (used by CI - builds both archs for current OS but runs only AMD64)
 validate-linux:
 	@echo "Building and testing Linux binaries..."
+	@mkdir -p bin
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-linux-amd64 .
 	@CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-linux-arm64 .
 	@echo "Testing Linux AMD64 binary..."
@@ -38,6 +40,7 @@ validate-linux:
 
 validate-darwin:
 	@echo "Building and testing macOS binaries..."
+	@mkdir -p bin
 	@CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-darwin-amd64 .
 	@CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-darwin-arm64 .
 	@echo "Testing macOS binary..."
@@ -52,6 +55,7 @@ validate-darwin:
 
 validate-windows:
 	@echo "Building and testing Windows binaries..."
+	@mkdir -p bin
 	@CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-windows-amd64.exe .
 	@CGO_ENABLED=0 GOOS=windows GOARCH=arm64 go build $(LDFLAGS) -o bin/olla-windows-arm64.exe .
 	@echo "Testing Windows AMD64 binary..."
@@ -72,6 +76,7 @@ validate-windows:
 # Use the OS-specific targets (validate-linux, etc) to test execution
 validate-all-platforms:
 	@echo "Building all platforms (6 targets)..."
+	@mkdir -p bin
 	@echo "Linux AMD64..."
 	@CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o bin/olla-linux-amd64 .
 	@echo "Linux ARM64..."
