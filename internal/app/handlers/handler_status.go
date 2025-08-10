@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
-	"github.com/thushan/olla/internal/version"
 
 	"github.com/thushan/olla/internal/config"
 
@@ -33,9 +31,6 @@ var (
 )
 
 type SystemSummary struct {
-	Version            string `json:"version"`
-	OS                 string `json:"os"`
-	Arch               string `json:"arch"`
 	Status             string `json:"status"`
 	EndpointsUp        string `json:"endpoints_up"`
 	SuccessRate        string `json:"success_rate"`
@@ -167,9 +162,6 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 	totalViolations := security.RateLimitViolations + security.SizeLimitViolations
 
 	return SystemSummary{
-		Version:            version.Version,
-		OS:                 runtime.GOOS,
-		Arch:               runtime.GOARCH,
 		Status:             status,
 		EndpointsUp:        format.EndpointsUp(len(healthy), len(all)),
 		SuccessRate:        format.Percentage(systemSuccessRate),
