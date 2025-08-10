@@ -12,12 +12,18 @@ config.local.yaml
 config/*.local.yaml
 config/**/*.local.yaml
 config/docker.yaml
+# Test configs
+config/config.test.local.yaml
 docker-compose.local.yaml
 docker-compose.override.yaml
 
 # Build directories
 build/
 dist/
+.venv/
+
+# Test results
+test/results/
 
 # Legacy directories (to be removed)
 config-dev/
@@ -26,5 +32,7 @@ config.yaml
 # Claude specific local files
 .claude/*.local.json
 # just in case
+*.local.yaml
+*.local.yml
 *.local.json
 *.log

@@ -27,13 +27,18 @@ server:
 
 proxy:
   engine: "sherpa" # Available: sherpa, olla
+  # Profile controls proxy engine (http) transport buffer behaviour
+  # - "auto": Dynamically selects based on request size, type and other factors (default)
+  # - "streaming": No buffering, tokens stream immediately, low latency & low memory usage
+  # - "standard": Normal HTTP delivery without forced flushing, suitable for REST APIs
+  profile: "auto" # Available: auto, streaming, standard
+  load_balancer: "least-connections" # Available: round-robin, least-connections, priority
+  stream_buffer_size: 8192 # Buffer size per request - larger = fewer syscalls, more memory
   connection_timeout: 60s
   response_timeout: 900s
   read_timeout: 600s
   max_retries: 3
   retry_backoff: 500ms
-  load_balancer: "least-connections" # Available: round-robin, least-connections, priority
-  stream_buffer_size: 8192
 
 discovery:
   type: "static"
@@ -56,6 +61,14 @@ discovery:
         health_check_url: "/"
         check_interval: 2s
         check_timeout: 1s
+      - url: "http://192.168.0.1:8000"
+        name: "local-vllm"
+        type: "vllm"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/health"
+        check_interval: 5s
+        check_timeout: 2s
   model_discovery:
     enabled: true
     interval: 5m

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Olla Provider-Specific Model Routing Test Script
-Tests model routing with different provider formats (OpenAI, Ollama, LM Studio)
+Tests model routing with different provider formats (OpenAI, Ollama, LM Studio, vLLM)
 """
 
 import sys
@@ -35,7 +35,8 @@ class ProviderTester:
         self.provider_models = {
             'openai': [],
             'ollama': [],
-            'lmstudio': []
+            'lmstudio': [],
+            'vllm': []
         }
         self.endpoint_usage = defaultdict(int)
         self.endpoint_success = defaultdict(int)
@@ -113,7 +114,7 @@ class ProviderTester:
             
         # Now fetch provider-specific models
         self.print_color(YELLOW, "Fetching provider-specific models...")
-        for provider in ['openai', 'ollama', 'lmstudio']:
+        for provider in ['openai', 'ollama', 'lmstudio', 'vllm']:
             try:
                 response = requests.get(f"{self.base_url}/olla/models?format={provider}", timeout=TIMEOUT)
                 if response.status_code == 200:
@@ -143,7 +144,7 @@ class ProviderTester:
         self.print_color(CYAN, f"Total models available: {len(self.all_models)}")
         
         # Show models per provider
-        for provider in ['openai', 'ollama', 'lmstudio']:
+        for provider in ['openai', 'ollama', 'lmstudio', 'vllm']:
             if self.provider_models[provider]:
                 print()
                 self.print_color(YELLOW, f"{provider.upper()} models ({len(self.provider_models[provider])}):")
@@ -226,6 +227,13 @@ class ProviderTester:
             self.test_endpoint(
                 "LM Studio Enhanced Models (/olla/lm-studio/api/v0/models)",
                 f"{self.base_url}/olla/lm-studio/api/v0/models",
+                method="GET"
+            )
+            
+        if 'vllm' in providers:
+            self.test_endpoint(
+                "vLLM Models (/olla/vllm/v1/models)",
+                f"{self.base_url}/olla/vllm/v1/models",
                 method="GET"
             )
             
@@ -335,6 +343,38 @@ class ProviderTester:
                         }
                     )
                     
+                elif provider == 'vllm':
+                    if 'embed' not in model:
+                        self.test_endpoint(
+                            "  Chat Completions (/v1/chat/completions)",
+                            f"{self.base_url}/olla/vllm/v1/chat/completions",
+                            {
+                                "model": model,
+                                "messages": [{"role": "user", "content": "Hello"}],
+                                "max_tokens": 10,
+                                "stream": False
+                            }
+                        )
+                        self.test_endpoint(
+                            "  Completions (/v1/completions)",
+                            f"{self.base_url}/olla/vllm/v1/completions",
+                            {
+                                "model": model,
+                                "prompt": "Hello",
+                                "max_tokens": 10,
+                                "stream": False
+                            }
+                        )
+                    else:
+                        self.test_endpoint(
+                            "  Embeddings (/v1/embeddings)",
+                            f"{self.base_url}/olla/vllm/v1/embeddings",
+                            {
+                                "model": model,
+                                "input": "Test text"
+                            }
+                        )
+                    
                 tested_per_provider[provider] += 1
             
     def print_summary(self):
@@ -374,6 +414,7 @@ def main():
     parser.add_argument('--openai', action='store_true', help='Test OpenAI format')
     parser.add_argument('--ollama', action='store_true', help='Test Ollama format')
     parser.add_argument('--lmstudio', '--lm-studio', action='store_true', help='Test LM Studio format')
+    parser.add_argument('--vllm', action='store_true', help='Test vLLM format')
     parser.add_argument('--all', action='store_true', help='Test all models (default: 3 per provider)')
     parser.add_argument('--url', default=TARGET_URL, help='Olla base URL')
     
@@ -387,9 +428,11 @@ def main():
         providers.append('ollama')
     if args.lmstudio:
         providers.append('lmstudio')
+    if args.vllm:
+        providers.append('vllm')
         
     if not providers:
-        providers = ['openai', 'ollama', 'lmstudio']
+        providers = ['openai', 'ollama', 'lmstudio', 'vllm']
         
     tester = ProviderTester(args.url)
     tester.print_header()
@@ -418,4 +461,8 @@ def main():
     tester.print_summary()
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Test interrupted by user (Ctrl+C){RESET}")
+        sys.exit(130)  # Standard exit code for SIGINT

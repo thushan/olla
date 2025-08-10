@@ -1,0 +1,23 @@
+# Questions for testing streaming latency
+# One question per line, lines starting with # are ignored
+
+Tell me a short story about a robot learning to paint.
+Explain how photosynthesis works in simple terms.
+What are the main differences between machine learning and artificial intelligence?
+Describe the process of making bread from scratch.
+Write a haiku about the ocean.
+Explain the concept of recursion in programming with an example.
+What would happen if gravity suddenly became twice as strong?
+Tell me about the history of the internet in three paragraphs.
+How do solar panels convert sunlight into electricity?
+Write a dialogue between two characters meeting for the first time.
+Explain why the sky appears blue during the day.
+What are the benefits and drawbacks of renewable energy?
+Describe how a computer processor works at a basic level.
+Tell me about an interesting historical event from the 1960s.
+How do vaccines help prevent diseases?
+Write a short poem about autumn leaves.
+Explain the water cycle and its importance to life on Earth.
+What makes a good leader, and can leadership skills be learned?
+Describe the process of evolution by natural selection.
+How do search engines like Google find and rank web pages?

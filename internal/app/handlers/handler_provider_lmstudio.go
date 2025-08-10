@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 // lmstudioOpenAIModelsHandler provides models in openai format.
@@ -23,7 +25,7 @@ func (a *Application) lmstudioOpenAIModelsHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }
@@ -48,7 +50,7 @@ func (a *Application) lmstudioEnhancedModelsHandler(w http.ResponseWriter, r *ht
 		return
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

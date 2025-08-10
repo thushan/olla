@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -207,7 +208,7 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 
 			// Check response
 			assert.Equal(t, http.StatusOK, w.Code)
-			assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+			assert.Equal(t, constants.ContentTypeJSON, w.Header().Get(constants.HeaderContentType))
 
 			// Check format-specific response
 			tt.checkResponse(t, w.Body.Bytes())

@@ -90,60 +90,6 @@ type Service struct {
 	circuitBreakers xsync.Map[string, *circuitBreaker]
 }
 
-// Configuration holds proxy settings
-type Configuration struct {
-	ProxyPrefix         string
-	ConnectionTimeout   time.Duration
-	ConnectionKeepAlive time.Duration
-	ResponseTimeout     time.Duration
-	ReadTimeout         time.Duration
-	StreamBufferSize    int
-
-	// Olla-specific fields for advanced connection pooling
-	IdleConnTimeout time.Duration
-	MaxIdleConns    int
-	MaxConnsPerHost int
-}
-
-func (c *Configuration) GetProxyPrefix() string {
-	if c.ProxyPrefix == "" {
-		return constants.DefaultOllaProxyPathPrefix
-	}
-	return c.ProxyPrefix
-}
-
-func (c *Configuration) GetConnectionTimeout() time.Duration {
-	if c.ConnectionTimeout == 0 {
-		return DefaultTimeout
-	}
-	return c.ConnectionTimeout
-}
-
-func (c *Configuration) GetConnectionKeepAlive() time.Duration {
-	if c.ConnectionKeepAlive == 0 {
-		return DefaultKeepAlive
-	}
-	return c.ConnectionKeepAlive
-}
-
-func (c *Configuration) GetResponseTimeout() time.Duration {
-	return c.ResponseTimeout
-}
-
-func (c *Configuration) GetReadTimeout() time.Duration {
-	if c.ReadTimeout == 0 {
-		return DefaultReadTimeout
-	}
-	return c.ReadTimeout
-}
-
-func (c *Configuration) GetStreamBufferSize() int {
-	if c.StreamBufferSize == 0 {
-		return DefaultStreamBufferSize
-	}
-	return c.StreamBufferSize
-}
-
 // connectionPool isolates HTTP transport instances per endpoint
 type connectionPool struct {
 	transport *http.Transport
@@ -483,7 +429,7 @@ func (s *Service) handlePanic(ctx context.Context, w http.ResponseWriter, r *htt
 		"path", r.URL.Path,
 		"stack", string(debug.Stack()))
 
-	if w.Header().Get("Content-Type") == "" {
+	if w.Header().Get(constants.HeaderContentType) == "" {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -629,7 +575,7 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	buffer := s.bufferPool.Get()
 	defer s.bufferPool.Put(buffer)
 
-	bytesWritten, streamErr := s.streamResponse(ctx, ctx, w, resp.Body, *buffer, rlog)
+	bytesWritten, streamErr := s.streamResponse(ctx, ctx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 
@@ -679,9 +625,10 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 }
 
 // streamResponse performs buffered streaming with backpressure handling
-func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, body io.Reader, buffer []byte, rlog logger.StyledLogger) (int, error) {
+func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, error) {
 	totalBytes := 0
 	flusher, canFlush := w.(http.Flusher)
+	isStreaming := core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile())
 
 	clientDisconnected := false
 	bytesAfterDisconnect := 0
@@ -717,7 +664,7 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 		// Reset timer for next read
 		readDeadline.Reset(s.configuration.GetReadTimeout())
 
-		n, err := body.Read(buffer)
+		n, err := resp.Body.Read(buffer)
 		if n > 0 {
 			if !clientDisconnected {
 				written, writeErr := w.Write(buffer[:n])
@@ -728,7 +675,8 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 					return totalBytes, writeErr
 				}
 
-				if canFlush {
+				// force data out for real-time streaming
+				if canFlush && isStreaming {
 					flusher.Flush()
 				}
 			} else {

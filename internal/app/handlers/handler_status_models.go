@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/pkg/format"
 )
@@ -102,7 +104,7 @@ func (a *Application) modelsStatusHandler(w http.ResponseWriter, r *http.Request
 		response.ModelGroups = a.groupModelsByFamilyWithDetails(allModels)
 	}
 
-	w.Header().Set(ContentTypeHeader, ContentTypeJSON)
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
 }

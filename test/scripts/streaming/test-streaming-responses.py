@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Olla Streaming Response Test Script
 Tests that LLM responses actually stream data incrementally
@@ -9,9 +10,17 @@ import json
 import time
 import argparse
 import requests
+import os
 from typing import Dict, List, Tuple, Optional, Any
 from collections import defaultdict
 from datetime import datetime
+
+# Fix Windows console encoding for Unicode
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
 
 # ANSI color codes
 RED = '\033[0;31m'
@@ -38,7 +47,8 @@ class StreamingTester:
         self.provider_models = {
             'openai': [],
             'ollama': [],
-            'lmstudio': []
+            'lmstudio': [],
+            'vllm': []
         }
         self.test_results = []
         self.total_tests = 0
@@ -70,7 +80,7 @@ class StreamingTester:
         self.print_color(YELLOW, "Fetching available models...")
         
         # Fetch provider-specific models
-        for provider in ['openai', 'ollama', 'lmstudio']:
+        for provider in ['openai', 'ollama', 'lmstudio', 'vllm']:
             try:
                 response = requests.get(f"{self.base_url}/olla/models?format={provider}", timeout=10)
                 if response.status_code == 200:
@@ -153,6 +163,20 @@ class StreamingTester:
         
         return self._test_streaming(url, data, 'lmstudio', model)
         
+    def test_vllm_streaming(self, model: str) -> Dict[str, Any]:
+        """Test vLLM-format streaming endpoint"""
+        url = f"{self.base_url}/olla/vllm/v1/chat/completions"
+        data = {
+            "model": model,
+            "messages": [
+                {"role": "user", "content": "Tell me a story about a robot. Be creative and descriptive."}
+            ],
+            "stream": True,
+            "max_tokens": DEFAULT_MAX_TOKENS
+        }
+        
+        return self._test_streaming(url, data, 'vllm', model)
+        
     def _test_streaming(self, url: str, data: Dict, provider: str, model: str) -> Dict[str, Any]:
         """Generic streaming test implementation"""
         result = {
@@ -212,7 +236,7 @@ class StreamingTester:
                 result['chunk_times'].append(current_time - start_time)
                 
                 # Parse chunk based on provider format
-                if provider in ['openai', 'lmstudio']:
+                if provider in ['openai', 'lmstudio', 'vllm']:
                     # SSE format
                     chunk_data = self.parse_sse_chunk(line)
                     if chunk_data and not chunk_data.get('done'):
@@ -281,6 +305,8 @@ class StreamingTester:
                 result = self.test_ollama_streaming(model)
             elif provider == 'lmstudio':
                 result = self.test_lmstudio_streaming(model)
+            elif provider == 'vllm':
+                result = self.test_vllm_streaming(model)
             else:
                 continue
                 
@@ -390,16 +416,18 @@ def main():
     parser.add_argument('--max-time', type=int, default=DEFAULT_MAX_STREAM_TIME,
                         help='Maximum streaming time per test (seconds)')
     parser.add_argument('--models', nargs='+', help='Specific models to test')
-    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio'],
+    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio', 'vllm'],
                         help='Providers to test (default: all)')
     parser.add_argument('--sample', action='store_true',
                         help='Test only a few models per provider')
     parser.add_argument('--analyze', action='store_true',
                         help='Show detailed streaming pattern analysis')
+    parser.add_argument('--select-models', action='store_true',
+                        help='Force model selection instead of auto-selecting phi models')
     
     args = parser.parse_args()
     
-    providers = args.providers or ['openai', 'ollama', 'lmstudio']
+    providers = args.providers or ['openai', 'ollama', 'lmstudio', 'vllm']
     
     tester = StreamingTester(args.url, args.max_time)
     tester.print_header()
@@ -410,11 +438,11 @@ def main():
     print()
     
     if not tester.fetch_models():
-        self.print_color(RED, "No models found!")
+        tester.print_color(RED, "No models found!")
         sys.exit(1)
         
     print()
-    self.print_color(WHITE, f"Configuration:")
+    tester.print_color(WHITE, f"Configuration:")
     print(f"  Max streaming time: {CYAN}{args.max_time}s{RESET}")
     print(f"  Max tokens:         {CYAN}{DEFAULT_MAX_TOKENS}{RESET}")
     print(f"  Providers:          {CYAN}{', '.join(providers)}{RESET}")
@@ -429,10 +457,24 @@ def main():
             provider_models = tester.provider_models.get(provider, [])
             models_to_test.extend(provider_models[:3])
         models_to_test = list(set(models_to_test))  # Remove duplicates
+    elif not args.select_models:
+        # Auto-select phi models if available
+        preferred_models = ['phi4:latest', 'phi3.5:latest', 'phi3:latest']
+        models_to_test = []
+        for model in preferred_models:
+            if model in tester.all_models:
+                models_to_test.append(model)
+        
+        if models_to_test:
+            tester.print_color(GREEN, f"Auto-selected phi models: {', '.join(models_to_test)}")
+        else:
+            tester.print_color(YELLOW, "No phi models found (phi4:latest, phi3.5:latest, or phi3:latest)")
+            tester.print_color(YELLOW, "Testing all available models...")
+            models_to_test = tester.all_models
     else:
         models_to_test = tester.all_models
         
-    self.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
+    tester.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
     
     # Test each model
     for model in models_to_test:
@@ -444,7 +486,8 @@ def main():
         
     tester.print_summary()
 
-if __name__ == '__main__':
+def run_main():
+    """Main execution function wrapped for interrupt handling"""
     # Fix 'self' references in main()
     class MainRunner:
         @staticmethod
@@ -458,16 +501,18 @@ if __name__ == '__main__':
     parser.add_argument('--max-time', type=int, default=DEFAULT_MAX_STREAM_TIME,
                         help='Maximum streaming time per test (seconds)')
     parser.add_argument('--models', nargs='+', help='Specific models to test')
-    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio'],
+    parser.add_argument('--providers', nargs='+', choices=['openai', 'ollama', 'lmstudio', 'vllm'],
                         help='Providers to test (default: all)')
     parser.add_argument('--sample', action='store_true',
                         help='Test only a few models per provider')
     parser.add_argument('--analyze', action='store_true',
                         help='Show detailed streaming pattern analysis')
+    parser.add_argument('--select-models', action='store_true',
+                        help='Force model selection instead of auto-selecting phi models')
     
     args = parser.parse_args()
     
-    providers = args.providers or ['openai', 'ollama', 'lmstudio']
+    providers = args.providers or ['openai', 'ollama', 'lmstudio', 'vllm']
     
     tester = StreamingTester(args.url, args.max_time)
     tester.print_header()
@@ -497,10 +542,24 @@ if __name__ == '__main__':
             provider_models = tester.provider_models.get(provider, [])
             models_to_test.extend(provider_models[:3])
         models_to_test = list(set(models_to_test))  # Remove duplicates
+    elif not args.select_models:
+        # Auto-select phi models if available
+        preferred_models = ['phi4:latest', 'phi3.5:latest', 'phi3:latest']
+        models_to_test = []
+        for model in preferred_models:
+            if model in tester.all_models:
+                models_to_test.append(model)
+        
+        if models_to_test:
+            tester.print_color(GREEN, f"Auto-selected phi models: {', '.join(models_to_test)}")
+        else:
+            tester.print_color(YELLOW, "No phi models found (phi4:latest, phi3.5:latest, or phi3:latest)")
+            tester.print_color(YELLOW, "Testing all available models...")
+            models_to_test = tester.all_models
     else:
         models_to_test = tester.all_models
         
-    runner.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
+    tester.print_color(WHITE, f"\nTesting {len(models_to_test)} models for streaming capability...")
     
     # Test each model
     for model in models_to_test:
@@ -511,3 +570,11 @@ if __name__ == '__main__':
         tester.analyze_streaming_patterns()
         
     tester.print_summary()
+
+
+if __name__ == '__main__':
+    try:
+        run_main()
+    except KeyboardInterrupt:
+        print(f"\n{YELLOW}Test interrupted by user (Ctrl+C){RESET}")
+        sys.exit(130)  # Standard exit code for SIGINT

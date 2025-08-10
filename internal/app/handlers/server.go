@@ -5,13 +5,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/docker/go-units"
-)
+	"github.com/thushan/olla/internal/core/constants"
 
-const (
-	ContentTypeJSON   = "application/json"
-	ContentTypeText   = "text/plain"
-	ContentTypeHeader = "Content-Type"
+	"github.com/docker/go-units"
 )
 
 func (a *Application) startWebServer() {
@@ -72,7 +68,7 @@ func (a *Application) loggingMiddleware(next http.Handler) http.Handler {
 			"remote", r.RemoteAddr,
 			"query", r.URL.RawQuery,
 			"request_uri", r.RequestURI,
-			"content_type", r.Header.Get(ContentTypeHeader),
+			"content_type", r.Header.Get(constants.HeaderContentType),
 			"content_length", r.ContentLength,
 			"host", r.Host,
 			"referer", r.Referer(),

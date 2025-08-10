@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/thushan/olla/internal/adapter/proxy/olla"
 	"github.com/thushan/olla/internal/adapter/proxy/sherpa"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -16,7 +17,7 @@ import (
 func TestProxyResponseHeaders(t *testing.T) {
 	// Create test upstream server that returns some headers
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.Header().Set("X-Upstream-Header", "upstream-value")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
@@ -67,15 +68,15 @@ func TestProxyResponseHeaders(t *testing.T) {
 				assert.NoError(t, err)
 
 				// Check our custom headers
-				assert.Equal(t, "test-endpoint", w.Header().Get("X-Olla-Endpoint"))
-				assert.NotEmpty(t, w.Header().Get("X-Served-By")) // Contains version info
-				assert.Contains(t, w.Header().Get("X-Served-By"), "Olla/")
-				assert.Empty(t, w.Header().Get("X-Olla-Model"))
-				assert.NotEmpty(t, w.Header().Get("X-Olla-Request-ID"))
-				assert.NotEmpty(t, w.Header().Get("X-Olla-Backend-Type"))
+				assert.Equal(t, "test-endpoint", w.Header().Get(constants.HeaderXOllaEndpoint))
+				assert.NotEmpty(t, w.Header().Get(constants.HeaderXServedBy)) // Contains version info
+				assert.Contains(t, w.Header().Get(constants.HeaderXServedBy), "Olla/")
+				assert.Empty(t, w.Header().Get(constants.HeaderXOllaModel))
+				assert.NotEmpty(t, w.Header().Get(constants.HeaderXOllaRequestID))
+				assert.NotEmpty(t, w.Header().Get(constants.HeaderXOllaBackendType))
 
 				// Check upstream headers are preserved
-				assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+				assert.Equal(t, constants.ContentTypeJSON, w.Header().Get(constants.HeaderContentType))
 				assert.Equal(t, "upstream-value", w.Header().Get("X-Upstream-Header"))
 			})
 
@@ -93,15 +94,15 @@ func TestProxyResponseHeaders(t *testing.T) {
 				assert.NoError(t, err)
 
 				// Check our custom headers
-				assert.Equal(t, "test-endpoint", w.Header().Get("X-Olla-Endpoint"))
-				assert.NotEmpty(t, w.Header().Get("X-Served-By")) // Contains version info
-				assert.Contains(t, w.Header().Get("X-Served-By"), "Olla/")
-				assert.Equal(t, "llama3.2:3b", w.Header().Get("X-Olla-Model"))
-				assert.NotEmpty(t, w.Header().Get("X-Olla-Request-ID"))
-				assert.NotEmpty(t, w.Header().Get("X-Olla-Backend-Type"))
+				assert.Equal(t, "test-endpoint", w.Header().Get(constants.HeaderXOllaEndpoint))
+				assert.NotEmpty(t, w.Header().Get(constants.HeaderXServedBy)) // Contains version info
+				assert.Contains(t, w.Header().Get(constants.HeaderXServedBy), "Olla/")
+				assert.Equal(t, "llama3.2:3b", w.Header().Get(constants.HeaderXOllaModel))
+				assert.NotEmpty(t, w.Header().Get(constants.HeaderXOllaRequestID))
+				assert.NotEmpty(t, w.Header().Get(constants.HeaderXOllaBackendType))
 
 				// Check upstream headers are preserved
-				assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+				assert.Equal(t, constants.ContentTypeJSON, w.Header().Get(constants.HeaderContentType))
 				assert.Equal(t, "upstream-value", w.Header().Get("X-Upstream-Header"))
 			})
 		})
@@ -112,9 +113,9 @@ func TestProxyResponseHeaders(t *testing.T) {
 func TestProxyResponseHeaders_NoOverride(t *testing.T) {
 	// Create test upstream that tries to set our headers
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Olla-Endpoint", "fake-endpoint")
-		w.Header().Set("X-Olla-Model", "fake-model")
-		w.Header().Set("X-Served-By", "fake-server")
+		w.Header().Set(constants.HeaderXOllaEndpoint, "fake-endpoint")
+		w.Header().Set(constants.HeaderXOllaModel, "fake-model")
+		w.Header().Set(constants.HeaderXServedBy, "fake-server")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer upstream.Close()
@@ -137,8 +138,8 @@ func TestProxyResponseHeaders_NoOverride(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Our headers should NOT be overridden
-	assert.Equal(t, "real-endpoint", w.Header().Get("X-Olla-Endpoint"))
-	assert.Equal(t, "real-model", w.Header().Get("X-Olla-Model"))
-	assert.NotEmpty(t, w.Header().Get("X-Served-By"))
-	assert.Contains(t, w.Header().Get("X-Served-By"), "Olla/")
+	assert.Equal(t, "real-endpoint", w.Header().Get(constants.HeaderXOllaEndpoint))
+	assert.Equal(t, "real-model", w.Header().Get(constants.HeaderXOllaModel))
+	assert.NotEmpty(t, w.Header().Get(constants.HeaderXServedBy))
+	assert.Contains(t, w.Header().Get(constants.HeaderXServedBy), "Olla/")
 }

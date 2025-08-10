@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
+
 	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/logger"
@@ -38,6 +40,17 @@ func (rw *responseWriter) WriteHeader(s int) {
 	rw.ResponseWriter.WriteHeader(s)
 }
 
+// Flush implements http.Flusher interface
+func (rw *responseWriter) Flush() {
+	// OLLA-102: Choppy output in streaming responses
+	// We need to flush the underlying response writer
+	// for streaming responses, otherwise buffers will
+	// not be sent immediately causing choppy output.
+	if flusher, ok := rw.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // GetLogger retrieves a logger with request ID from context
 func GetLogger(ctx context.Context) *slog.Logger {
 	if logger, ok := ctx.Value(LoggerKey).(*slog.Logger); ok {
@@ -61,7 +74,7 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			start := time.Now()
 
 			// Get or create request ID
-			requestID := r.Header.Get("X-Request-ID")
+			requestID := r.Header.Get(constants.HeaderXRequestID)
 			if requestID == "" {
 				requestID = util.GenerateRequestID()
 			}
@@ -156,8 +169,8 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 				"duration_ms", duration.Milliseconds(),
 				"user_agent", r.UserAgent(),
 				"referer", r.Referer(),
-				"content_type", r.Header.Get("Content-Type"),
-				"accept", r.Header.Get("Accept"))
+				"content_type", r.Header.Get(constants.HeaderContentType),
+				"accept", r.Header.Get(constants.HeaderAccept))
 		})
 	}
 }
@@ -165,6 +178,8 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 // formatBytes converts byte count to human-readable format
 func formatBytes(bytes int64) string {
 	const unit = 1024
+	const suffixes = "KMGTPE"
+
 	if bytes < unit {
 		return fmt.Sprintf("%dB", bytes)
 	}
@@ -173,7 +188,11 @@ func formatBytes(bytes int64) string {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f%cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+	if exp >= len(suffixes) {
+		exp = len(suffixes) - 1
+	}
+	size := float64(bytes) / float64(div)
+	return fmt.Sprintf("%.1f%cB", size, suffixes[exp])
 }
 
 // FormatBytes is the exported version for external use

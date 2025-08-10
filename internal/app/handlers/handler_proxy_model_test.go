@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -154,7 +155,7 @@ func TestBodyInspectorIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest("POST", tt.path, bytes.NewBufferString(tt.body))
-			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 
 			// Inspect
 			profile, err := chain.Inspect(context.Background(), req, tt.path)
