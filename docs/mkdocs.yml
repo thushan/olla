@@ -109,21 +109,53 @@ plugins:
       minify_html: true
 
 nav:
-  - Home: index.md
+  - Home: 
+      - Overview: index.md
+      - FAQ: faq.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
       - Configuration: getting-started/configuration.md
-  - Architecture:
-      - Overview: architecture/overview.md
-      - Proxy Engines: architecture/proxy-engines.md
-      - Load Balancing: architecture/load-balancing.md
-      - Health Checking: architecture/health-checking.md
+  - Concepts:
+      - Overview: concepts/overview.md
+      - Proxy Engines: concepts/proxy-engines.md
+      - Proxy Profiles: concepts/proxy-profiles.md
+      - Load Balancing: concepts/load-balancing.md
+      - Model Unification: concepts/model-unification.md
+      - Health Checking: concepts/health-checking.md
+      - Profile System: concepts/profile-system.md
   - Configuration:
-      - Reference: config/reference.md
-      - Examples: config/examples.md
+      - Overview: configuration/overview.md
+      - Reference: configuration/reference.md
+      - Examples: configuration/examples.md
+      - Best Practices:
+          - Overview: configuration/practices/overview.md
+          - Security: configuration/practices/security.md
+          - Performance: configuration/practices/performance.md
+          - Monitoring: configuration/practices/monitoring.md
+  - Integrations:
+        - Overview: integrations/overview.md
+        - Backends:
+            - Ollama: integrations/backend/ollama.md
+            - LM Studio: integrations/backend/lmstudio.md
+            - vLLM: integrations/backend/vllm.md
+        - Frontends:
+            - OpenWebUI: integrations/frontend/openwebui.md
   - Development:
+      - Overview: development/overview.md
+      - Setup: development/setup.md
+      - Architecture: development/architecture.md
+      - Patterns: development/patterns.md
+      - Circuit Breaker: development/circuit-breaker.md
       - Contributing: development/contributing.md
       - Testing: development/testing.md
       - Benchmarking: development/benchmarking.md
-  - API Reference: api/reference.md
+  - API Reference:
+      - Overview: api-reference/overview.md
+      - System Endpoints: api-reference/system.md
+      - Unified Models: api-reference/models.md
+      - Provider APIs:
+          - Ollama: api-reference/ollama.md
+          - LM Studio: api-reference/lmstudio.md
+          - vLLM: api-reference/vllm.md
+          - OpenAI: api-reference/openai.md

@@ -1,17 +1,50 @@
+---
+title: Installation Guide - Olla High-Performance LLM Proxy
+description: Install Olla on Linux, macOS, or Windows using Docker, Go, or pre-built binaries. Complete setup guide for the high-performance LLM proxy and load balancer.
+keywords: olla installation, llm proxy install, docker proxy, go install, binary download, linux install, macos install, windows install
+---
+
 # Installation
 
 Get Olla running on your system with these installation options.
 
 ## Requirements
 
-- **Go**: Version 1.24 or later
 - **Operating System**: Linux, macOS, or Windows
+- **CPU**: 2-4 Cores minimum
 - **Memory**: Minimum 512MB RAM
-- **Network**: Access to LLM endpoints you want to proxy
+- **Network**: Access to supported LLM endpoints you want to proxy
 
 ## Installation Methods
 
-=== "Go Install (Recommended)"
+=== "Download Binary (Recommended)"
+
+    You can use our script to install or update Olla easily:
+
+    ```bash
+    # Linux/macOS
+    bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
+    ```
+
+    Alternatively, download pre-built binaries from the [releases page](https://github.com/thushan/olla/releases).
+
+=== "Docker"
+
+    Run Olla in a container:
+
+    ```bash
+    # Pull the image
+    docker pull ghcr.io/thushan/olla:latest
+
+    # Run with pretty terminal output 
+    # for locally installed lmstudio, ollama or vllm
+    docker run -t \
+        --name olla \
+        -p 40114:40114 \
+        ghcr.io/thushan/olla:latest
+    ```
+
+=== "Go Install"
 
     Install the latest stable version directly from the Go module:
 
@@ -32,65 +65,13 @@ Get Olla running on your system with these installation options.
     ```bash
     git clone https://github.com/thushan/olla.git
     cd olla
-    make build
+    make build-release
+    # run freshly built olla!
+    bin/olla --version
     ```
 
     The binary will be available at `./bin/olla`.
 
-=== "Docker"
-
-    Run Olla in a container:
-
-    ```bash
-    # Pull the image
-    docker pull thushan/olla:latest
-
-    # Run with your config
-    docker run -d \
-      --name olla \
-      -p 8080:8080 \
-      -v $(pwd)/config.yaml:/app/config.yaml \
-      thushan/olla:latest
-    ```
-
-=== "Binary Releases"
-
-    Download pre-built binaries from the [releases page](https://github.com/thushan/olla/releases):
-
-    ```bash
-    # Linux/macOS
-    curl -LO https://github.com/thushan/olla/releases/latest/download/olla-linux-amd64
-    chmod +x olla-linux-amd64
-    sudo mv olla-linux-amd64 /usr/local/bin/olla
-
-    # Windows (PowerShell)
-    Invoke-WebRequest -Uri "https://github.com/thushan/olla/releases/latest/download/olla-windows-amd64.exe" -OutFile "olla.exe"
-    ```
-
-## Development Setup
-
-For development and contributing:
-
-```bash
-git clone https://github.com/thushan/olla.git
-cd olla
-
-# Install dependencies and run tests
-make ready
-
-# Start development server with auto-reload
-make dev
-```
-
-### Development Commands
-
-| Command | Description |
-|---------|-------------|
-| `make ready` | Run before commit (test + lint + fmt) |
-| `make dev` | Development mode with auto-reload |
-| `make test` | Run all tests |
-| `make bench` | Run benchmarks |
-| `make build` | Build production binary |
 
 ## Verification
 
@@ -104,14 +85,14 @@ olla --version
 olla --config config.yaml
 
 # Check health endpoint
-curl http://localhost:8080/internal/health
+curl http://localhost:40114/internal/health
 ```
 
 ## Next Steps
 
 - [Quick Start Guide](quickstart.md) - Get your first proxy running
-- [Configuration Reference](../config/reference.md) - Understand all configuration options
-- [Architecture Overview](../architecture/overview.md) - Learn how Olla works
+- [Configuration Reference](../configuration/reference.md) - Understand all configuration options
+- [Architecture Overview](../development/architecture.md) - Learn how Olla works
 
 ## Troubleshooting
 
@@ -124,7 +105,7 @@ curl http://localhost:8080/internal/health
 : On Linux/macOS, ensure the binary has execute permissions: `chmod +x olla`
 
 **Port already in use**
-: Change the port in your configuration file or use `--port` flag
+: Change the port in your configuration file or use `OLLA_SERVER_PORT` environment variable.
 
 **Config file not found**
 : Specify the config file path with `--config /path/to/config.yaml`

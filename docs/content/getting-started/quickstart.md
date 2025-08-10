@@ -1,11 +1,17 @@
+---
+title: Quick Start Guide - Get Olla Running in Minutes
+description: Learn how to install and configure Olla for proxying and load balancing LLM backends including Ollama, LM Studio, and vLLM. Step-by-step setup with examples.
+keywords: olla quickstart, llm proxy setup, ollama configuration, lm studio proxy, vllm load balancer
+---
+
 # Quick Start
 
-Get Olla up and running in minutes with this quick start guide.
+Get Olla up and running with this quick start guide.
 
 ## Prerequisites
 
 - [Olla installed](installation.md) on your system
-- At least one LLM endpoint running (Ollama, LM Studio, or OpenAI-compatible)
+- At least one [compatible LLM](../integrations/overview.md) endpoint running
 
 ## Basic Setup
 
@@ -16,7 +22,7 @@ Create a `config.yaml` file:
 ```yaml
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 40114
   request_logging: true
 
 proxy:
@@ -31,7 +37,7 @@ discovery:
         name: "local-ollama"
         type: "ollama"
         priority: 100
-        health_check_url: "/"
+        # health_check_url: "/"  # Optional, defaults to provider-specific path
 
 logging:
   level: "info"
@@ -47,7 +53,7 @@ olla --config config.yaml
 You should see output similar to:
 
 ```json
-{"level":"info","msg":"Starting Olla proxy server","port":8080}
+{"level":"info","msg":"Starting Olla proxy server","port":40114}
 {"level":"info","msg":"Health check passed","endpoint":"local-ollama"}
 {"level":"info","msg":"Server ready","endpoints":1}
 ```
@@ -57,17 +63,17 @@ You should see output similar to:
 Check that Olla is running:
 
 ```bash
-curl http://localhost:8080/internal/health
+curl http://localhost:40114/internal/health
 ```
 
 List available models through the proxy:
 
 ```bash
 # For Ollama endpoints
-curl http://localhost:8080/olla/api/tags
+curl http://localhost:40114/olla/ollama/api/tags
 
 # For OpenAI-compatible endpoints
-curl http://localhost:8080/olla/v1/models
+curl http://localhost:40114/olla/ollama/v1/models
 ```
 
 ## Example Requests
@@ -75,7 +81,7 @@ curl http://localhost:8080/olla/v1/models
 ### Chat Completion (OpenAI-compatible)
 
 ```bash
-curl -X POST http://localhost:8080/olla/v1/chat/completions \
+curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
@@ -88,7 +94,7 @@ curl -X POST http://localhost:8080/olla/v1/chat/completions \
 ### Ollama Generate
 
 ```bash
-curl -X POST http://localhost:8080/olla/api/generate \
+curl -X POST http://localhost:40114/olla/ollama/api/generate \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
@@ -99,7 +105,7 @@ curl -X POST http://localhost:8080/olla/api/generate \
 ### Streaming Response
 
 ```bash
-curl -X POST http://localhost:8080/olla/v1/chat/completions \
+curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
     "model": "llama3.2",
@@ -136,8 +142,6 @@ discovery:
         name: "remote-api"
         type: "openai"
         priority: 10
-        headers:
-          authorization: "Bearer your-api-key"
 ```
 
 ## Monitoring
@@ -146,19 +150,20 @@ Monitor Olla's performance:
 
 ```bash
 # Health status
-curl http://localhost:8080/internal/health
+curl http://localhost:40114/internal/health
 
 # System status and statistics
-curl http://localhost:8080/internal/status
+curl http://localhost:40114/internal/status
 ```
 
 Response headers provide request tracing:
 
 ```bash
-curl -I http://localhost:8080/olla/v1/models
+curl -I http://localhost:40114/olla/ollama/v1/models
 ```
 
 Look for these headers:
+
 - `X-Olla-Endpoint`: Which backend handled the request
 - `X-Olla-Backend-Type`: Type of backend (ollama/openai/lmstudio)
 - `X-Olla-Request-ID`: Unique request identifier
@@ -201,11 +206,26 @@ server:
     max_header_size: 524288   # 512KB
 ```
 
-## Next Steps
+## Learn More
 
-- [Configuration Reference](../config/reference.md) - Complete configuration options
-- [Architecture Overview](../architecture/overview.md) - Understand how Olla works
-- [Load Balancing](../architecture/load-balancing.md) - Advanced load balancing strategies
+### Core Concepts
+
+- **[Proxy Engines](../concepts/proxy-engines.md)** - Compare Sherpa vs Olla engines
+- **[Load Balancing](../concepts/load-balancing.md)** - Priority, round-robin, and least-connections strategies
+- **[Model Unification](../concepts/model-unification.md)** - How models are aggregated across endpoints
+- **[Health Checking](../concepts/health-checking.md)** - Automatic endpoint monitoring
+- **[Profile System](../concepts/profile-system.md)** - Customise backend behaviour
+
+### Configuration
+
+- **[Configuration Overview](../configuration/overview.md)** - Complete configuration guide
+- **[Proxy Profiles](../concepts/proxy-profiles.md)** - Auto, streaming, and standard profiles
+- **[Best Practices](../configuration/practices/overview.md)** - Production recommendations
+
+### Next Steps
+
+- [Backend Integrations](../integrations/overview.md) - Connect Ollama, LM Studio, vLLM
+- [Architecture Overview](../development/architecture.md) - Deep dive into Olla's design
 - [Development Guide](../development/contributing.md) - Contribute to Olla
 
 ## Troubleshooting

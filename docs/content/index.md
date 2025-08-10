@@ -1,3 +1,9 @@
+---
+title: Olla - High-Performance LLM Proxy and Load Balancer
+description: Olla is a high-performance proxy, model unifier and load balancer for Ollama, LM Studio, vLLM and OpenAI-compatible LLM backends. Unified model catalogues, intelligent routing, and automatic failover.
+keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, model unification, load balancer, ai infrastructure
+---
+
 <div align="center">
   <img src="assets/images/banner.png" alt="Olla - LLM Proxy & Load Balancer" style="max-width: 100%; height: auto;">
   <p>
@@ -8,7 +14,7 @@
     <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a> <br />
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a> 
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a> 
-    <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-openai-lightblue.svg" alt="vLLM: OpenAI Compatible"></a> 
+    <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a> 
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
@@ -41,13 +47,17 @@ Perfect for enthusiasts running multiple LLM instances:
 
 ```yaml
 # Home lab config - local first, home-lab second
-endpoints:
-  - name: "rtx-4090-mobile"
-    url: "http://localhost:11434" 
-    priority: 100  # Highest priority
-  - name: "home-lab-rtx-6000"
-    url: "https://192.168.0.1:11434"
-    priority: 10   # Fallback only
+discovery:
+  static:
+    endpoints:
+      - name: "rtx-4090-mobile"
+        url: "http://localhost:11434" 
+        type: "ollama"
+        priority: 100  # Highest priority
+      - name: "home-lab-rtx-6000"
+        url: "https://192.168.0.1:11434"
+        type: "ollama"
+        priority: 10   # Fallback only
 ```
 
 ### 🏢 Business & Teams
@@ -61,10 +71,12 @@ Streamline AI infrastructure for growing teams:
 
 ```yaml
 # Business config - load balanced production
-load_balancer: "least-connections"
-rate_limits:
-  per_ip_requests_per_minute: 100
-  global_requests_per_minute: 1000
+proxy:
+  load_balancer: "least-connections"
+server:
+  rate_limits:
+    per_ip_requests_per_minute: 100
+    global_requests_per_minute: 1000
 ```
 
 ### 🏭 Enterprise & Production
@@ -86,6 +98,16 @@ server:
   rate_limits:
     global_requests_per_minute: 10000
 ```
+
+## Core Concepts
+
+Understand these key concepts to get the most from Olla:
+
+- **[Proxy Engines](concepts/proxy-engines.md)** - Choose between Sherpa (simple) or Olla (high-performance) engines
+- **[Load Balancing](concepts/load-balancing.md)** - Distribute requests across multiple endpoints with priority, round-robin, or least-connections
+- **[Model Unification](concepts/model-unification.md)** - Single catalogue of models across all your backends
+- **[Health Checking](concepts/health-checking.md)** - Automatic endpoint monitoring and intelligent failover
+- **[Profile System](concepts/profile-system.md)** - Customise backend behaviour without writing code
 
 ---
 
@@ -139,8 +161,8 @@ Olla provides detailed response headers for observability:
 
 - [Installation Guide](getting-started/installation.md) - Get Olla installed
 - [Quick Start](getting-started/quickstart.md) - Basic setup and configuration
-- [Architecture Overview](architecture/overview.md) - Understand how Olla works
-- [Configuration Reference](config/reference.md) - Complete configuration options
+- [Architecture Overview](development/architecture.md) - Understand how Olla works
+- [Configuration Reference](configuration/reference.md) - Complete configuration options
 
 ## Community
 
