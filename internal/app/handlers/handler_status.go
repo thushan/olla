@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/version"
 
 	"github.com/thushan/olla/internal/config"
 
@@ -37,6 +38,8 @@ type SystemSummary struct {
 	AvgLatency         string `json:"avg_latency"`
 	TotalTraffic       string `json:"total_traffic"`
 	UptimeHuman        string `json:"uptime"`
+	Version            string `json:"version"`
+	Commit             string `json:"commit"`
 	ActiveConnections  int64  `json:"active_connections"`
 	SecurityViolations int64  `json:"security_violations"`
 	TotalRequests      int64  `json:"total_requests"`
@@ -162,6 +165,8 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 	totalViolations := security.RateLimitViolations + security.SizeLimitViolations
 
 	return SystemSummary{
+		Version:            version.Version,
+		Commit:             version.Commit,
 		Status:             status,
 		EndpointsUp:        format.EndpointsUp(len(healthy), len(all)),
 		SuccessRate:        format.Percentage(systemSuccessRate),
