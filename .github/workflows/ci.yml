@@ -5,10 +5,22 @@ on:
     branches:
       - main
       - 'pipelines/*'
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+      - '**/*.txt'
   pull_request:
     branches: [ main ]
     paths-ignore:
       - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.dockerignore'
+      - '**/*.txt'
 
 env:
   GO_VERSION: 1.24.x
