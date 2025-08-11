@@ -11,10 +11,16 @@
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
+  <p>
+
+[📖 Documentation](https://thushan.github.io/olla/) | [🐛 Issues](https://github.com/thushan/olla/issues) | [🚀 Releases](https://github.com/thushan/olla/releases)
+
+  </p>
 </div>
 
 > [!IMPORTANT]  
-> Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. Your feedback is invaluable!
+> Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. 
+> Your feedback is invaluable! Open an issue and let us know features you'd like to see in the future.
 
 Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
@@ -28,15 +34,15 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 
 ## Key Features
 
-- **🔄 Smart Load Balancing**: [Priority-based routing](docs/user/load-balancers.md) with automatic failover
-- **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](docs/user/models.md)
-- **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](docs/user/proxies.md)
-- **💊 Health Monitoring**: [Continuous endpoint health checks](docs/user/troubleshooting.md#health-monitoring) with circuit breakers
-- **📊 Request Tracking**: Detailed response headers and [statistics](docs/user/endpoints.md#response-headers)
+- **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover
+- **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](https://thushan.github.io/olla/concepts/model-unification/)
+- **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
+- **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers
+- **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
-- **⚙️ High Performace**: Designed to be very lightweight & efficient, runs on less than 50Mb RAM. See [best practices](./docs/user/best-practices.md)
+- **⚙️ High Performace**: Designed to be very lightweight & efficient, runs on less than 50Mb RAM. See [best practices](https://thushan.github.io/olla/configuration/practices/performance/)
 
 ### Supported Backends
 
@@ -115,7 +121,7 @@ curl http://localhost:40114/internal/status/endpoints
 curl http://localhost:40114/internal/status/models
 ```
 
-For detailed installation and deployment options, see [Getting Started Guide](docs/user/getting-started.md).
+For detailed installation and deployment options, see [Getting Started Guide](https://thushan.github.io/olla/getting-started/quickstart/).
 
 ## Examples
 
@@ -180,7 +186,7 @@ discovery:
         check_timeout: 1s
 ```
 
-For comprehensive configuration options, see [Configuration Reference](docs/user/configuration.md).
+For comprehensive configuration options, see [Configuration Reference](https://thushan.github.io/olla/configuration/reference/).
 
 ### Start Olla
 
@@ -276,7 +282,7 @@ curl -X POST http://localhost:40114/olla/openai/v1/chat/completions \
 
 **The Power:** Use one OpenAI client to seamlessly access models from Ollama, LM Studio, and other providers without knowing where they're hosted.
 
-For detailed information about model discovery and unification, see [Model Discovery Guide](docs/user/models.md).
+For detailed information about model discovery and unification, see [Model Discovery Guide](https://thushan.github.io/olla/concepts/model-unification/).
 
 ### Key Endpoints
 
@@ -289,7 +295,7 @@ For detailed information about model discovery and unification, see [Model Disco
 | **Provider Discovery** | `/olla/ollama/v1/models` <br/> `/olla/lmstudio/v1/models` | Models from specific provider type |
 | **Health & Status** | `/internal/health` | Monitor system health |
 
-For complete endpoint documentation, see [API Endpoints](docs/user/endpoints.md).
+For complete endpoint documentation, see [API Endpoints](https://thushan.github.io/olla/api-reference/overview/).
 
 ### Response Headers
 
@@ -303,7 +309,7 @@ X-Olla-Request-ID: req_abc123     # For debugging
 X-Olla-Response-Time: 1.234s      # Total time (trailer)
 ```
 
-For API usage patterns and examples, see [API Endpoints Reference](docs/user/endpoints.md).
+For API usage patterns and examples, see [API Endpoints Reference](https://thushan.github.io/olla/api-reference/overview/).
 
 ## Configuration
 
@@ -313,7 +319,7 @@ For API usage patterns and examples, see [API Endpoints Reference](docs/user/end
 - **Priority**: Routes to highest priority healthy endpoint (recommended for home)
 - **Round Robin**: Even distribution across all endpoints
 
-For detailed strategy selection and configuration, see [Load Balancing Guide](docs/user/load-balancers.md).
+For detailed strategy selection and configuration, see [Load Balancing Guide](https://thushan.github.io/olla/concepts/load-balancing/).
 
 #### 📊 Least Connections (`least-connections`)
 Routes to the endpoint with least active requests. Ideal for:
@@ -350,7 +356,7 @@ load_balancer: "round-robin"
 - **Sherpa**: Simple, maintainable (8KB buffers, shared transport)
 - **Olla**: High-performance (64KB buffers, per-endpoint pools, circuit breakers)
 
-For engine selection and performance tuning, see [Proxy Engine Guide](docs/user/proxies.md).
+For engine selection and performance tuning, see [Proxy Engine Guide](https://thushan.github.io/olla/concepts/proxy-engines/).
 
 ### Why Olla for LLMs?
 
@@ -364,7 +370,7 @@ Unlike generic proxies, Olla is purpose-built for LLM workloads:
 - **Connection Pooling**: Persistent connections to backend endpoints reduce latency
 - **Circuit Breakers**: Automatic failover prevents cascade delays during model loading
 
-For detailed configuration options including Docker deployment and environment variables, see the [Configuration Reference](docs/user/configuration.md), [Load Balancing Guide](docs/user/load-balancers.md), [Proxy Engine Guide](docs/user/proxies.md), and [Getting Started Guide](docs/user/getting-started.md).
+For detailed configuration options including Docker deployment and environment variables, see the [Configuration Reference](https://thushan.github.io/olla/configuration/reference/), [Load Balancing Guide](https://thushan.github.io/olla/concepts/load-balancing/), [Proxy Engine Guide](https://thushan.github.io/olla/concepts/proxy-engines/), and [Getting Started Guide](https://thushan.github.io/olla/getting-started/quickstart/).
 
 ## Example: Multi-Platform Setup
 
@@ -401,10 +407,16 @@ With this setup:
 
 ## Documentation
 
-- **[User Guide](docs/user/getting-started.md)** - Installation, configuration, deployment
-- **[API Reference](docs/api/README.md)** - Complete API documentation
-- **[Technical Docs](docs/technical/)** - Architecture, load balancing, proxy engines
-- **[Best Practices](docs/user/best-practices.md)** - Production deployment guidance
+Full documentation is available at **[https://thushan.github.io/olla/](https://thushan.github.io/olla/)**
+
+### Quick Links
+
+- **[Getting Started](https://thushan.github.io/olla/getting-started/quickstart/)** - Installation and quick setup
+- **[Configuration Reference](https://thushan.github.io/olla/configuration/reference/)** - Complete configuration options
+- **[API Reference](https://thushan.github.io/olla/api-reference/overview/)** - Full API documentation
+- **[Concepts](https://thushan.github.io/olla/concepts/overview/)** - Core concepts and architecture
+- **[Integrations](https://thushan.github.io/olla/integrations/overview/)** - Frontend and backend integrations
+- **[Development](https://thushan.github.io/olla/development/overview/)** - Contributing and development guide
 
 ## Development
 
@@ -440,7 +452,7 @@ A: Olla focuses on load balancing and lets your reverse proxy handle authenticat
 A: Use **Sherpa** for simple deployments with moderate traffic. Choose **Olla** for high-throughput production workloads that need connection pooling, circuit breakers, and maximum performance.
 
 **Q: How does priority routing work with model availability?** \
-A: Olla discovers models within each provider type and routes requests to compatible endpoints. Per-provider unification means Ollama requests only route to Ollama endpoints, LM Studio requests only route to LM Studio endpoints, etc. See the [Model Discovery Guide](docs/user/models.md) for details.
+A: Olla discovers models within each provider type and routes requests to compatible endpoints. Per-provider unification means Ollama requests only route to Ollama endpoints, LM Studio requests only route to LM Studio endpoints, etc. See the [Model Discovery Guide](https://thushan.github.io/olla/concepts/model-unification/) for details.
 
 **Q: Can I run Olla in Kubernetes?** \
 A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!
@@ -494,7 +506,7 @@ Let us know what you want to see!
 
 **Made with ❤️ for the LLM community**
 
-[🏠 Homepage](https://github.com/thushan/olla) • [📖 Documentation](https://github.com/thushan/olla#readme) • [🐛 Issues](https://github.com/thushan/olla/issues) • [🚀 Releases](https://github.com/thushan/olla/releases)
+[🏠 Homepage](https://github.com/thushan/olla) • [📖 Documentation](https://thushan.github.io/olla/) • [🐛 Issues](https://github.com/thushan/olla/issues) • [🚀 Releases](https://github.com/thushan/olla/releases)
 
 
 </div>
