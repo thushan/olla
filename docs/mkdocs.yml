@@ -115,7 +115,7 @@ nav:
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
-      - Configuration: getting-started/configuration.md
+      - Configuration: configuration/overview.md
   - Concepts:
       - Overview: concepts/overview.md
       - Proxy Engines: concepts/proxy-engines.md
