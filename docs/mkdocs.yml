@@ -1,0 +1,161 @@
+site_name: Olla
+site_description: High-performance proxy and load balancer for LLM infrastructure
+site_author: Thushan Fernando
+site_url: https://thushan.github.io/olla/
+
+repo_name: thushan/olla
+repo_url: https://github.com/thushan/olla
+edit_uri: edit/main/docs/content/
+docs_dir: content
+
+theme:
+  name: material
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: light-blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: light-blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.path
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+    - content.code.select
+    - content.action.edit
+    - content.action.view
+
+  icon:
+    repo: fontawesome/brands/github
+    edit: material/pencil
+    view: material/eye
+
+extra_css:
+  - stylesheets/extra.css
+  - stylesheets/nightowl.css
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      normalize_issue_symbols: true
+      repo_url_shorthand: true
+      user: thushan
+      repo: olla
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.snippets:
+      check_paths: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+plugins:
+  - search:
+      separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+
+nav:
+  - Home: 
+      - Overview: index.md
+      - FAQ: faq.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+      - Configuration: configuration/overview.md
+  - Concepts:
+      - Overview: concepts/overview.md
+      - Proxy Engines: concepts/proxy-engines.md
+      - Proxy Profiles: concepts/proxy-profiles.md
+      - Load Balancing: concepts/load-balancing.md
+      - Model Unification: concepts/model-unification.md
+      - Health Checking: concepts/health-checking.md
+      - Profile System: concepts/profile-system.md
+  - Configuration:
+      - Overview: configuration/overview.md
+      - Reference: configuration/reference.md
+      - Examples: configuration/examples.md
+      - Best Practices:
+          - Overview: configuration/practices/overview.md
+          - Security: configuration/practices/security.md
+          - Performance: configuration/practices/performance.md
+          - Monitoring: configuration/practices/monitoring.md
+  - Integrations:
+        - Overview: integrations/overview.md
+        - Backends:
+            - Ollama: integrations/backend/ollama.md
+            - LM Studio: integrations/backend/lmstudio.md
+            - vLLM: integrations/backend/vllm.md
+        - Frontends:
+            - OpenWebUI: integrations/frontend/openwebui.md
+  - Development:
+      - Overview: development/overview.md
+      - Setup: development/setup.md
+      - Architecture: development/architecture.md
+      - Patterns: development/patterns.md
+      - Circuit Breaker: development/circuit-breaker.md
+      - Contributing: development/contributing.md
+      - Testing: development/testing.md
+      - Benchmarking: development/benchmarking.md
+  - API Reference:
+      - Overview: api-reference/overview.md
+      - System Endpoints: api-reference/system.md
+      - Unified Models: api-reference/models.md
+      - Provider APIs:
+          - Ollama: api-reference/ollama.md
+          - LM Studio: api-reference/lmstudio.md
+          - vLLM: api-reference/vllm.md
+          - OpenAI: api-reference/openai.md
