@@ -162,7 +162,7 @@ goreleaser-check:
 # Format code
 fmt:
 	@echo "Running go fmt..."
-	@go fmt . ./internal/... ./pkg/... 2>/dev/null || true
+	@go fmt ./...
 	@echo "Running go fmt...Done!"
 
 # Run linter
