@@ -59,17 +59,34 @@ Coming soon - but you can use the OpenAI compatibility in the interim:
 * [LMDeploy](https://github.com/InternLM/lmdeploy)
 * [Lemonade](https://github.com/lemonade-sdk/lemonade)
 
+## Platform Support
+
+Olla runs on multiple platforms and architectures:
+
+| Platform | AMD64 | ARM64 | Notes |
+|----------|-------|-------|-------|
+| Linux    | ✅ | ✅ | Full support including Raspberry Pi 4+ |
+| macOS    | ✅ | ✅ | Intel and Apple Silicon (M1/M2/M3/M4) |
+| Windows  | ✅ | ✅ | Windows 10/11 and Windows on ARM |
+| Docker   | ✅ | ✅ | Multi-architecture images available |
+
 ## Quick Start
 
 ### Installation
 
 ```bash
-# Download latest release
+# Download latest release (auto-detects your platform)
 bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
 ```
 ```bash
-# Container based
+# Docker (automatically pulls correct architecture)
 docker run -t \
+  --name olla \
+  -p 40114:40114 \
+  ghcr.io/thushan/olla:latest
+
+# Or explicitly specify platform (e.g., for ARM64)
+docker run --platform linux/arm64 -t \
   --name olla \
   -p 40114:40114 \
   ghcr.io/thushan/olla:latest

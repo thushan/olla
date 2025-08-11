@@ -3,6 +3,7 @@ package version
 import (
 	"fmt"
 	"log"
+	"runtime"
 	"strings"
 
 	"github.com/thushan/olla/internal/util"
@@ -58,6 +59,8 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 		b.WriteString(fmt.Sprintf("  Built: %s\n", Date))
 		b.WriteString(fmt.Sprintf("  Using: %s\n", Tool))
 		b.WriteString(fmt.Sprintf("   With: %s\n", Runtime))
+		b.WriteString(fmt.Sprintf("    For: %s\n", runtime.GOOS))
+		b.WriteString(fmt.Sprintf("     On: %s\n", runtime.GOARCH))
 		b.WriteString(fmt.Sprintf("     By: %s\n", User))
 	}
 
