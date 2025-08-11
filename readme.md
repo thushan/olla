@@ -11,16 +11,19 @@
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
+  <br />
   <p>
-
-[📖 Documentation](https://thushan.github.io/olla/) | [🐛 Issues](https://github.com/thushan/olla/issues) | [🚀 Releases](https://github.com/thushan/olla/releases)
-
+    <a href="https://thushan.github.io/olla/"><img src="https://img.shields.io/badge/📖_Documentation-0078D4?style=for-the-badge&logoColor=white" height="32" alt="Documentation"></a>
+    &nbsp;
+    <a href="https://github.com/thushan/olla/issues"><img src="https://img.shields.io/badge/🐛_Issues-D73502?style=for-the-badge&logoColor=white" height="32" alt="Issues"></a>
+    &nbsp;
+    <a href="https://github.com/thushan/olla/releases"><img src="https://img.shields.io/badge/🚀_Releases-6f42c1?style=for-the-badge&logoColor=white" height="32" alt="Releases"></a>
   </p>
 </div>
 
 > [!IMPORTANT]  
 > Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. 
-> Your feedback is invaluable! Open an issue and let us know features you'd like to see in the future.
+> Your feedback is invaluable! Open <a href="https://github.com/thushan/olla/issues">an issue</a> and let us know features you'd like to see in the future.
 
 Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
@@ -42,7 +45,7 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
-- **⚙️ High Performace**: Designed to be very lightweight & efficient, runs on less than 50Mb RAM. See [best practices](https://thushan.github.io/olla/configuration/practices/performance/)
+- **⚙️ High Performance**: Designed to be very lightweight & efficient, runs on less than 50Mb RAM. See [best practices](https://thushan.github.io/olla/configuration/practices/performance/)
 
 ### Supported Backends
 
