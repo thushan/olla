@@ -11,7 +11,6 @@
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
-  <br />
   <p>
     <a href="https://thushan.github.io/olla/"><img src="https://img.shields.io/badge/📖_Documentation-0078D4?style=for-the-badge&logoColor=white" height="32" alt="Documentation"></a>
     &nbsp;
@@ -45,9 +44,11 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
-- **⚙️ High Performance**: Designed to be very lightweight & efficient, runs on less than 50Mb RAM. See [best practices](https://thushan.github.io/olla/configuration/practices/performance/)
+- **⚙️ High Performance**: Designed to be very [lightweight & efficient](https://thushan.github.io/olla/configuration/practices/performance/), runs on less than 50Mb RAM.
 
 ### Supported Backends
+
+Olla natively supports the following backend providers. Learn more about [Olla Integrations](https://thushan.github.io/olla/integrations/overview/).
 
 * [Ollama](https://github.com/ollama/ollama) - native support for Ollama, including model unification. \
   Use: `/olla/ollama/`
@@ -61,12 +62,14 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 
 ### Supported Frontends
 
-* [OpenWebUI](https://github.com/open-webui/open-webui) - You can route you OpenWebUI Ollama endpoint to Olla and serve unified models easily. [See Examples](https://github.com/thushan/olla/tree/main/examples/ollama-openwebui)
+* [OpenWebUI](https://github.com/open-webui/open-webui) - You can route you [OpenWebUI Ollama endpoint to Olla](https://thushan.github.io/olla/integrations/frontend/openwebui/) and serve unified models easily.
 
 Coming soon - but you can use the OpenAI compatibility in the interim:
 
 * [LMDeploy](https://github.com/InternLM/lmdeploy)
 * [Lemonade](https://github.com/lemonade-sdk/lemonade)
+
+Learn more about [Olla's Profile System](https://thushan.github.io/olla/concepts/profile-system/).
 
 ## Platform Support
 
@@ -77,7 +80,7 @@ Olla runs on multiple platforms and architectures:
 | Linux    | ✅ | ✅ | Full support including Raspberry Pi 4+ |
 | macOS    | ✅ | ✅ | Intel and Apple Silicon (M1/M2/M3/M4) |
 | Windows  | ✅ | ✅ | Windows 10/11 and Windows on ARM |
-| Docker   | ✅ | ✅ | Multi-architecture images available |
+| Docker   | ✅ | ✅ | Multi-architecture images (amd64/arm64) |
 
 ## Quick Start
 
@@ -144,6 +147,8 @@ Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla
   docker compose up -d
   # Access OpenWebUI at http://localhost:3000
   ```
+
+You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/olla/integrations/frontend/openwebui/).
 
 More examples coming soon:
 - **Multi-Provider Setup**: Ollama + LM Studio + OpenAI-compatible endpoints
