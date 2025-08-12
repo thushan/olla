@@ -26,11 +26,13 @@ var (
 		"load_balancing",
 		"health_checking",
 		"rate_limiting",
+		"model_unification",
 		"endpoint_discovery",
 	}
 	SupportedBackends = []string{
 		"ollama",
 		"lm_studio",
+		"vllm",
 		"openai_compatible",
 	}
 )
@@ -40,7 +42,6 @@ const (
 	GithubHomeUri   = "https://github.com/thushan/olla"
 	GithubLatestUri = "https://github.com/thushan/olla/releases/latest"
 	BoxWidth        = 70
-	Padding         = 2
 )
 
 func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
@@ -74,33 +75,18 @@ func formatAsciiBanner() string {
 	// For releases, we get:
 	// Version = "v0.0.6"
 	// so for internal builds, we'll show a truncated commit hash
-
+	availableSpace := 33
 	version := Version
-	latestPadding := 4
-	versionlength := 10
-	if len(Version) > versionlength { // ignore GoLand warning as it'll be filled at compile time
-		latestPadding = 1
-		version = Commit[:versionlength-1]
-	}
 
 	githubUri := theme.Hyperlink(GithubHomeUri, GithubHomeText)
 	latestUri := theme.Hyperlink(GithubLatestUri, version)
-
-	bottomLineContent := fmt.Sprintf("  %s    %s", GithubHomeText, version)
 	llamaArt := "   ⢸⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡿  │"
 
-	availableSpace := 55 - len(llamaArt) + 1
-	contentLength := len(bottomLineContent)
+	// Calculate the content lengths
+	githubTextLen := len(GithubHomeText)
+	versionLen := len(version)
 
-	var padLatest, padBuffer string
-	if contentLength <= availableSpace {
-		remainingSpace := availableSpace - contentLength
-		padLatest = strings.Repeat(" ", remainingSpace)
-		padBuffer = ""
-	} else {
-		padLatest = strings.Repeat(" ", latestPadding)
-		padBuffer = ""
-	}
+	bufferSpace := availableSpace - githubTextLen - versionLen
 
 	b.WriteString(theme.ColourSplash(`╔─────────────────────────────────────────────────────╗
 │                                      ⠀⠀⣀⣀⠀⠀⠀⠀⠀⣀⣀⠀⠀  │
@@ -114,9 +100,8 @@ func formatAsciiBanner() string {
 
 	b.WriteString(theme.ColourSplash("│  "))
 	b.WriteString(theme.StyleUrl(githubUri))
-	b.WriteString(padLatest)
+	b.WriteString(strings.Repeat(" ", bufferSpace)) // Add dynamic spacing between GitHub URL and version
 	b.WriteString(theme.ColourVersion(latestUri))
-	b.WriteString(padBuffer)
 	b.WriteString(theme.ColourSplash(llamaArt + "\n"))
 	b.WriteString(theme.ColourSplash("╚─────────────────────────────────────────────────────╝"))
 
