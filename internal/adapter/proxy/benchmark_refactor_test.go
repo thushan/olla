@@ -68,7 +68,7 @@ func createRefactoredProxy(proxyType string, endpoints []*domain.Endpoint) (port
 			ReadTimeout:      10 * time.Second,
 			StreamBufferSize: 8192,
 		}
-		return sherpa.NewService(discovery, selector, config, collector, logger)
+		return sherpa.NewService(discovery, selector, config, collector, nil, logger)
 	case "olla":
 		config := &olla.Configuration{
 			ResponseTimeout:  30 * time.Second,
@@ -78,7 +78,7 @@ func createRefactoredProxy(proxyType string, endpoints []*domain.Endpoint) (port
 			IdleConnTimeout:  90 * time.Second,
 			MaxConnsPerHost:  50,
 		}
-		return olla.NewService(discovery, selector, config, collector, logger)
+		return olla.NewService(discovery, selector, config, collector, nil, logger)
 	default:
 		return nil, fmt.Errorf("unknown proxy type: %s", proxyType)
 	}

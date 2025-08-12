@@ -6,10 +6,13 @@ import "time"
 // new inference platforms without touching Go code. Much easier than
 // submitting PRs for every new LLM server that pops up.
 type ProfileConfig struct {
-	Name        string `yaml:"name"`
-	Version     string `yaml:"version"`
-	DisplayName string `yaml:"display_name"`
-	Description string `yaml:"description"`
+
+	// Metrics extraction configuration for provider responses
+	Metrics     MetricsConfig `yaml:"metrics,omitempty"`
+	Name        string        `yaml:"name"`
+	Version     string        `yaml:"version"`
+	DisplayName string        `yaml:"display_name"`
+	Description string        `yaml:"description"`
 
 	Detection struct {
 		Headers           []string `yaml:"headers"`

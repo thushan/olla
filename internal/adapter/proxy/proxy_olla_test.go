@@ -29,7 +29,7 @@ func createTestOllaProxy(endpoints []*domain.Endpoint) (*olla.Service, *mockEndp
 		IdleConnTimeout:  90 * time.Second,
 		MaxConnsPerHost:  50,
 	}
-	proxy, err := olla.NewService(discovery, selector, config, collector, createTestLogger())
+	proxy, err := olla.NewService(discovery, selector, config, collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Olla proxy: %v", err))
 	}
@@ -40,7 +40,7 @@ func createTestOllaProxyWithConfig(endpoints []*domain.Endpoint, config *olla.Co
 	collector := createTestStatsCollector()
 	discovery := &mockDiscoveryService{endpoints: endpoints}
 	selector := newMockEndpointSelector(collector)
-	proxy, err := olla.NewService(discovery, selector, config, collector, createTestLogger())
+	proxy, err := olla.NewService(discovery, selector, config, collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Olla proxy: %v", err))
 	}
@@ -58,7 +58,7 @@ func TestOllaProxyService_CircuitBreaker(t *testing.T) {
 		MaxConnsPerHost:  50,
 	}
 
-	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
+	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
 		t.Fatalf("failed to create Olla proxy: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestOllaProxyService_CircuitBreaker_Integration(t *testing.T) {
 		MaxConnsPerHost:  50,
 	}
 
-	proxy, err := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+	proxy, err := olla.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
 		t.Fatalf("failed to create Olla proxy: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestOllaProxyService_ObjectPools(t *testing.T) {
 		MaxConnsPerHost:  50,
 	}
 
-	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
+	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
 		t.Fatalf("failed to create Olla proxy: %v", err)
 	}
@@ -267,7 +267,7 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 		MaxConnsPerHost:  50,
 	}
 
-	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
+	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
 		t.Fatalf("failed to create Olla proxy: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestOllaProxyService_ProxyRequest_BackwardCompatibility(t *testing.T) {
 func TestOllaProxyService_ConfigDefaults(t *testing.T) {
 	config := &olla.Configuration{} // Empty config
 
-	_, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
+	_, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
 		t.Fatalf("failed to create Olla proxy: %v", err)
 	}
@@ -489,7 +489,7 @@ func TestOllaProxyService_UpdateConfig(t *testing.T) {
 		MaxConnsPerHost:  25,
 	}
 
-	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, initialConfig, createTestStatsCollector(), createTestLogger())
+	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, initialConfig, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
 		t.Fatalf("failed to create Olla proxy: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestOllaProxyService_Cleanup(t *testing.T) {
 		MaxConnsPerHost:  50,
 	}
 
-	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), createTestLogger())
+	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
 		t.Fatalf("failed to create Olla proxy: %v", err)
 	}

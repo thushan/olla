@@ -20,6 +20,7 @@ import (
 type streamState struct {
 	lastReadTime         time.Time
 	contentType          string
+	lastChunk            []byte // Store last chunk for metrics extraction
 	totalBytes           int
 	readCount            int
 	bytesAfterDisconnect int
@@ -35,7 +36,7 @@ type readResult struct {
 
 // streamResponseWithTimeout performs buffered streaming with read timeout protection
 // This is CRITICAL for edge servers to prevent hanging on unresponsive backends (SHERPA-105)
-func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, error) {
+func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, []byte, error) {
 	state := &streamState{
 		lastReadTime: time.Now(),
 		contentType:  resp.Header.Get(constants.HeaderContentType),
@@ -57,18 +58,18 @@ func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Conte
 	for {
 		result, err := s.performTimedRead(combinedCtx, resp.Body, buffer, readTimeout, state, rlog)
 		if err != nil {
-			return state.totalBytes, err
+			return state.totalBytes, state.lastChunk, err
 		}
 
 		if result == nil {
 			// Context cancelled during read
-			return state.totalBytes, s.handleContextCancellation(clientCtx, upstreamCtx, state, rlog)
+			return state.totalBytes, state.lastChunk, s.handleContextCancellation(clientCtx, upstreamCtx, state, rlog)
 		}
 
 		// Process read result
 		done, err := s.processReadResult(result, w, buffer, flusher, canFlush, state, rlog)
 		if done || err != nil {
-			return state.totalBytes, err
+			return state.totalBytes, state.lastChunk, err
 		}
 	}
 }
@@ -209,6 +210,21 @@ func (s *Service) processReadResult(result *readResult, w http.ResponseWriter, b
 
 // writeData writes data to the response writer
 func (s *Service) writeData(w http.ResponseWriter, data []byte, flusher http.Flusher, canFlush bool, state *streamState, rlog logger.StyledLogger) error {
+	// Store chunk for potential metrics extraction
+	// For Ollama, the final chunk contains the complete metrics in JSON format
+	if len(data) > 0 {
+		// Always keep the last chunk, as it may contain metrics
+		state.lastChunk = make([]byte, len(data))
+		copy(state.lastChunk, data)
+		
+		// Debug: Log a sample of the last chunk to see what we're capturing
+		if len(data) > 100 {
+			rlog.Debug("Captured chunk sample", "size", len(data), "preview", string(data[:100]))
+		} else {
+			rlog.Debug("Captured chunk", "size", len(data), "content", string(data))
+		}
+	}
+
 	if !state.clientDisconnected {
 		written, writeErr := w.Write(data)
 		state.totalBytes += written

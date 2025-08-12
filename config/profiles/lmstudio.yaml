@@ -134,3 +134,19 @@ resources:
   timeout_scaling:
     base_timeout_seconds: 180  # 3 minutes
     load_time_buffer: false
+
+# Metrics extraction for LM Studio responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    # LM Studio uses OpenAI-compatible format
+    paths:
+      model: "$.model"
+      done: "$.choices[0].finish_reason"
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+    calculations:
+      # LM Studio doesn't provide timing data, so we can't calculate tokens/sec

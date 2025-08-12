@@ -3,6 +3,7 @@ module github.com/thushan/olla
 go 1.24
 
 require (
+	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/docker/go-units v0.5.0
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
@@ -19,6 +20,7 @@ require (
 	atomicgo.dev/cursor v0.2.0 // indirect
 	atomicgo.dev/keyboard v0.2.9 // indirect
 	atomicgo.dev/schedule v0.1.0 // indirect
+	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/containerd/console v1.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gookit/color v1.5.4 // indirect

@@ -49,6 +49,7 @@ type BaseProxyComponents struct {
 	DiscoveryService ports.DiscoveryService
 	Selector         domain.EndpointSelector
 	StatsCollector   ports.StatsCollector
+	MetricsExtractor ports.MetricsExtractor
 	Logger           logger.StyledLogger
 	EventBus         *eventbus.EventBus[ProxyEvent]
 
@@ -63,12 +64,14 @@ func NewBaseProxyComponents(
 	discoveryService ports.DiscoveryService,
 	selector domain.EndpointSelector,
 	statsCollector ports.StatsCollector,
+	metricsExtractor ports.MetricsExtractor,
 	logger logger.StyledLogger,
 ) *BaseProxyComponents {
 	return &BaseProxyComponents{
 		DiscoveryService: discoveryService,
 		Selector:         selector,
 		StatsCollector:   statsCollector,
+		MetricsExtractor: metricsExtractor,
 		Logger:           logger,
 		EventBus:         eventbus.New[ProxyEvent](),
 	}

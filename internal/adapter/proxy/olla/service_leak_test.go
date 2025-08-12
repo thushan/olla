@@ -272,7 +272,7 @@ func TestNewService_StartsCleanupGoroutine(t *testing.T) {
 	}
 
 	// Create service
-	service, err := NewService(discovery, selector, config, collector, logger)
+	service, err := NewService(discovery, selector, config, collector, nil, logger)
 	if err != nil {
 		t.Fatal(err)
 	}

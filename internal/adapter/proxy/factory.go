@@ -18,25 +18,27 @@ const (
 )
 
 // ProxyCreator is a function that creates a proxy service
-type ProxyCreator func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, ports.StatsCollector, logger.StyledLogger) (ports.ProxyService, error)
+type ProxyCreator func(ports.DiscoveryService, domain.EndpointSelector, ports.ProxyConfiguration, ports.StatsCollector, ports.MetricsExtractor, logger.StyledLogger) (ports.ProxyService, error)
 
 // Factory creates proxy services using a registry pattern
 type Factory struct {
-	creators       map[string]ProxyCreator
-	statsCollector ports.StatsCollector
-	logger         logger.StyledLogger
-	mu             sync.RWMutex
+	creators         map[string]ProxyCreator
+	statsCollector   ports.StatsCollector
+	metricsExtractor ports.MetricsExtractor
+	logger           logger.StyledLogger
+	mu               sync.RWMutex
 }
 
-func NewFactory(statsCollector ports.StatsCollector, theLogger logger.StyledLogger) *Factory {
+func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.MetricsExtractor, theLogger logger.StyledLogger) *Factory {
 	factory := &Factory{
-		creators:       make(map[string]ProxyCreator),
-		statsCollector: statsCollector,
-		logger:         theLogger,
+		creators:         make(map[string]ProxyCreator),
+		statsCollector:   statsCollector,
+		metricsExtractor: metricsExtractor,
+		logger:           theLogger,
 	}
 
 	// Register Sherpa implementation
-	factory.Register(DefaultProxySherpa, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, logger logger.StyledLogger) (ports.ProxyService, error) {
+	factory.Register(DefaultProxySherpa, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, metricsExtractor ports.MetricsExtractor, logger logger.StyledLogger) (ports.ProxyService, error) {
 		sherpaConfig := &sherpa.Configuration{
 			ProxyPrefix:         config.GetProxyPrefix(),
 			ConnectionTimeout:   config.GetConnectionTimeout(),
@@ -46,11 +48,11 @@ func NewFactory(statsCollector ports.StatsCollector, theLogger logger.StyledLogg
 			StreamBufferSize:    config.GetStreamBufferSize(),
 			Profile:             config.GetProxyProfile(),
 		}
-		return sherpa.NewService(discovery, selector, sherpaConfig, collector, logger)
+		return sherpa.NewService(discovery, selector, sherpaConfig, collector, metricsExtractor, logger)
 	})
 
 	// Register Olla implementation
-	factory.Register(DefaultProxyOlla, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, logger logger.StyledLogger) (ports.ProxyService, error) {
+	factory.Register(DefaultProxyOlla, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, metricsExtractor ports.MetricsExtractor, logger logger.StyledLogger) (ports.ProxyService, error) {
 		ollaConfig := &olla.Configuration{
 			ProxyPrefix:         config.GetProxyPrefix(),
 			ConnectionTimeout:   config.GetConnectionTimeout(),
@@ -63,7 +65,7 @@ func NewFactory(statsCollector ports.StatsCollector, theLogger logger.StyledLogg
 			IdleConnTimeout:     90 * time.Second,
 			MaxConnsPerHost:     50,
 		}
-		return olla.NewService(discovery, selector, ollaConfig, collector, logger)
+		return olla.NewService(discovery, selector, ollaConfig, collector, metricsExtractor, logger)
 	})
 
 	return factory
@@ -87,7 +89,7 @@ func (f *Factory) Create(proxyType string, discoveryService ports.DiscoveryServi
 	}
 
 	f.logger.Info("Initialising proxy service", "type", proxyType)
-	return creator(discoveryService, selector, config, f.statsCollector, f.logger)
+	return creator(discoveryService, selector, config, f.statsCollector, f.metricsExtractor, f.logger)
 }
 
 // GetAvailableTypes returns all registered proxy types

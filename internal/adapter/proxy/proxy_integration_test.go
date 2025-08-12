@@ -431,6 +431,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 			&mockEndpointSelector{endpoint: endpoint},
 			config,
 			createTestStatsCollector(),
+			nil,
 			createTestLogger(),
 		)
 		if err != nil {
@@ -472,6 +473,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 			&mockEndpointSelector{endpoint: endpoint},
 			config,
 			createTestStatsCollector(),
+			nil,
 			createTestLogger(),
 		)
 		if err != nil {

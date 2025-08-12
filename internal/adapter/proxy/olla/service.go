@@ -143,6 +143,7 @@ func NewService(
 	selector domain.EndpointSelector,
 	configuration *Configuration,
 	statsCollector ports.StatsCollector,
+	metricsExtractor ports.MetricsExtractor,
 	logger logger.StyledLogger,
 ) (*Service, error) {
 
@@ -162,7 +163,7 @@ func NewService(
 		configuration.ReadTimeout = DefaultReadTimeout
 	}
 
-	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, logger)
+	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
 
 	bufferPool, err := pool.NewLitePool(func() *[]byte {
 		buf := make([]byte, configuration.StreamBufferSize)
@@ -574,7 +575,7 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	buffer := s.bufferPool.Get()
 	defer s.bufferPool.Put(buffer)
 
-	bytesWritten, streamErr := s.streamResponse(ctx, ctx, w, resp, *buffer, rlog)
+	bytesWritten, lastChunk, streamErr := s.streamResponse(ctx, ctx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 
@@ -582,6 +583,19 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 		rlog.Debug("streaming error", "error", streamErr, "bytes_written", bytesWritten)
 		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), streamErr)
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", s.configuration.GetResponseTimeout())
+	}
+
+	// Extract metrics from response if available
+	if s.MetricsExtractor != nil && len(lastChunk) > 0 && endpoint != nil && endpoint.Type != "" {
+		rlog.Debug("Attempting metrics extraction (Olla)", 
+			"chunk_size", len(lastChunk),
+			"endpoint_type", endpoint.Type)
+		stats.ProviderMetrics = s.MetricsExtractor.ExtractFromChunk(ctx, lastChunk, endpoint.Type)
+		if stats.ProviderMetrics != nil {
+			rlog.Debug("Metrics extracted successfully (Olla)",
+				"input_tokens", stats.ProviderMetrics.InputTokens,
+				"output_tokens", stats.ProviderMetrics.OutputTokens)
+		}
 	}
 
 	// stats update
@@ -624,8 +638,9 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 }
 
 // streamResponse performs buffered streaming with backpressure handling
-func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, error) {
+func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, []byte, error) {
 	totalBytes := 0
+	var lastChunk []byte
 	flusher, canFlush := w.(http.Flusher)
 	isStreaming := core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile())
 
@@ -654,9 +669,9 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 				})
 			}
 		case <-upstreamCtx.Done():
-			return totalBytes, upstreamCtx.Err()
+			return totalBytes, lastChunk, upstreamCtx.Err()
 		case <-readDeadline.C:
-			return totalBytes, fmt.Errorf("read timeout after %v", s.configuration.GetReadTimeout())
+			return totalBytes, lastChunk, fmt.Errorf("read timeout after %v", s.configuration.GetReadTimeout())
 		default:
 		}
 
@@ -665,13 +680,17 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 
 		n, err := resp.Body.Read(buffer)
 		if n > 0 {
+			// Keep last chunk for metrics extraction
+			lastChunk = make([]byte, n)
+			copy(lastChunk, buffer[:n])
+			
 			if !clientDisconnected {
 				written, writeErr := w.Write(buffer[:n])
 				totalBytes += written
 
 				if writeErr != nil {
 					rlog.Debug("write error during streaming", "error", writeErr, "bytes_written", totalBytes)
-					return totalBytes, writeErr
+					return totalBytes, lastChunk, writeErr
 				}
 
 				// force data out for real-time streaming
@@ -686,17 +705,17 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 					rlog.Debug("stopping stream after client disconnect",
 						"bytes_after_disconnect", bytesAfterDisconnect,
 						"time_since_disconnect", time.Since(disconnectTime))
-					return totalBytes, context.Canceled
+					return totalBytes, lastChunk, context.Canceled
 				}
 			}
 		}
 
 		if err != nil {
 			if err == io.EOF {
-				return totalBytes, nil
+				return totalBytes, lastChunk, nil
 			}
 			rlog.Debug("read error during streaming", "error", err, "bytes_read", totalBytes)
-			return totalBytes, err
+			return totalBytes, lastChunk, err
 		}
 	}
 }

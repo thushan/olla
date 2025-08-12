@@ -37,7 +37,7 @@ func (s SherpaTestSuite) Name() string {
 }
 
 func (s SherpaTestSuite) CreateProxy(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector) ports.ProxyService {
-	service, err := sherpa.NewService(discovery, selector, config.(*sherpa.Configuration), collector, createTestLogger())
+	service, err := sherpa.NewService(discovery, selector, config.(*sherpa.Configuration), collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Sherpa proxy: %v", err))
 	}
@@ -60,7 +60,7 @@ func (o OllaTestSuite) Name() string {
 }
 
 func (o OllaTestSuite) CreateProxy(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector) ports.ProxyService {
-	service, err := olla.NewService(discovery, selector, config.(*olla.Configuration), collector, createTestLogger())
+	service, err := olla.NewService(discovery, selector, config.(*olla.Configuration), collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Olla proxy: %v", err))
 	}
