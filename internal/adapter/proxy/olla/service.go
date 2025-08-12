@@ -388,13 +388,12 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 	reqCtx.targetURL = targetURL.String()
 
 	if ctxLogger != nil {
-		ctxLogger.Info("Request dispatching to endpoint",
+		ctxLogger.Info("Request dispatching",
 			"endpoint", endpoint.Name,
 			"target", stats.TargetUrl,
-			"model", stats.Model,
-			"request_id", middleware.GetRequestID(ctx))
+			"model", stats.Model)
 	} else {
-		rlog.Info("Request dispatching to endpoint", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
+		rlog.Info("Request dispatching", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
 	}
 
 	// Create and prepare proxy request
@@ -592,9 +591,9 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	stats.EndTime = time.Now()
 	stats.Latency = duration.Milliseconds()
 
-	// Log detailed completion metrics
+	// Log detailed completion metrics at Debug level to reduce redundancy
 	if ctxLogger != nil {
-		ctxLogger.Info("Olla proxy request completed",
+		ctxLogger.Debug("Olla proxy metrics",
 			"endpoint", endpoint.Name,
 			"latency_ms", stats.Latency,
 			"processing_ms", stats.RequestProcessingMs,

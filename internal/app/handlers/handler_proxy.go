@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -14,16 +15,17 @@ import (
 )
 
 type proxyRequest struct {
-	stats         *ports.RequestStats
 	requestLogger logger.StyledLogger
+	stats         *ports.RequestStats
+	profile       *domain.RequestProfile
 	clientIP      string
 	targetPath    string
-	profile       *domain.RequestProfile
 	model         string
 	contentType   string
 	method        string
 	path          string
 	query         string
+	userAgent     string
 	contentLength int64
 }
 
@@ -52,8 +54,19 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
+	// get the requestID from the middleware context first
+	requestID := ""
+	if id, ok := r.Context().Value(middleware.RequestIDKey).(string); ok {
+		requestID = id
+	}
+
+	// fallback to generating a new one otherwise
+	if requestID == "" {
+		requestID = util.GenerateRequestID()
+	}
+
 	stats := &ports.RequestStats{
-		RequestID: util.GenerateRequestID(),
+		RequestID: requestID,
 		StartTime: time.Now(),
 	}
 
@@ -65,6 +78,7 @@ func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
 		path:          r.URL.Path,
 		query:         r.URL.RawQuery,
 		contentLength: r.ContentLength,
+		userAgent:     r.UserAgent(),
 	}
 }
 
@@ -121,34 +135,69 @@ func (a *Application) executeProxyRequest(ctx context.Context, w http.ResponseWr
 }
 
 func (a *Application) logRequestStart(pr *proxyRequest, endpointCount int) {
+	// Log essential operational info at INFO level
 	logFields := []any{
 		"client_ip", pr.clientIP,
 		"method", pr.method,
 		"path", pr.path,
-		"target_path", pr.targetPath,
 		"compatible_endpoints", endpointCount,
-		"path_resolution_ms", pr.stats.PathResolutionMs,
-		"query", pr.query,
-		"content_type", pr.contentType,
-		"content_length", pr.contentLength,
 	}
 
+	// Add user agent if present
+	if pr.userAgent != "" {
+		logFields = append(logFields, "user_agent", pr.userAgent)
+	}
+
+	// Add model if identified
 	if pr.model != "" {
 		logFields = append(logFields, "model", pr.model)
 	}
 
-	pr.requestLogger.Info("Request started", logFields...)
+	// Add content length if it's a POST/PUT with body
+	if pr.contentLength > 0 {
+		logFields = append(logFields, "content_length", pr.contentLength)
+	}
+
+	pr.requestLogger.Info("Request received", logFields...)
+
+	// Log additional details at DEBUG level
+	debugFields := []any{
+		"target_path", pr.targetPath,
+		"path_resolution_ms", pr.stats.PathResolutionMs,
+		"query", pr.query,
+		"content_type", pr.contentType,
+	}
+
+	pr.requestLogger.Debug("Request details", debugFields...)
 }
 
 func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 	duration := time.Since(pr.stats.StartTime)
 
-	logFields := a.buildLogFields(pr, duration)
-
 	if err != nil {
+		logFields := a.buildLogFields(pr, duration)
 		pr.requestLogger.Error("Request failed", append([]any{"error", err}, logFields...)...)
 	} else {
-		pr.requestLogger.Info("Request completed", logFields...)
+		// Log essential completion info at INFO level
+		infoFields := []any{
+			"endpoint", pr.stats.EndpointName,
+			"duration_ms", duration.Milliseconds(),
+			"status", "completed",
+		}
+
+		if pr.model != "" {
+			infoFields = append(infoFields, "model", pr.model)
+		}
+
+		if pr.stats.TotalBytes > 0 {
+			infoFields = append(infoFields, "total_bytes", pr.stats.TotalBytes)
+		}
+
+		pr.requestLogger.Info("Request completed", infoFields...)
+
+		// Log detailed metrics at DEBUG level
+		debugFields := a.buildLogFields(pr, duration)
+		pr.requestLogger.Debug("Request metrics", debugFields...)
 	}
 }
 

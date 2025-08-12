@@ -43,8 +43,8 @@ proxy:
   profile: "auto"  # auto, streaming, or standard
 ```
 
-!!! note "Environment Variable Not Supported"
-    The proxy profile can only be configured via the YAML configuration file. Environment variable override is not currently implemented.
+You can also use `OLLA_PROXY_PROFILE` environment variable to configure the Proxy Profile.
+
 
 ## Profile Behaviour
 

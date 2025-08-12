@@ -20,7 +20,6 @@ const (
 
 type EndpointSummary struct {
 	Name          string `json:"name"`
-	URL           string `json:"url"`
 	Type          string `json:"type"`
 	Status        string `json:"status"`
 	LastModelSync string `json:"last_model_sync,omitempty"`
@@ -103,7 +102,6 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 
 	summary := EndpointSummary{
 		Name:     endpoint.Name,
-		URL:      url,
 		Type:     endpoint.Type,
 		Status:   endpoint.Status.String(),
 		Priority: endpoint.Priority,
