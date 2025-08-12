@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -21,6 +22,15 @@ const (
 	RequestIDKey contextKey = "request_id"
 	LoggerKey    contextKey = "logger"
 )
+
+// IsProxyRequest determines if a request is for the proxy endpoints
+// Used to decide logging levels to avoid redundancy with proxy handler logging
+func IsProxyRequest(path string) bool {
+	// checks for proxy prefixes
+	// /olla/ is the main proxy prefix
+	return strings.Contains(path, constants.DefaultOllaProxyPathPrefix) ||
+		(strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/api/v0/")) // /api/v0/ is internal
+}
 
 // responseWriter wraps http.ResponseWriter to capture response size and status
 type responseWriter struct {
@@ -89,7 +99,7 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
 
 			// Create a base logger with request ID
-			baseLogger := slog.Default().With("request_id", requestID)
+			baseLogger := slog.Default().With(constants.ContextRequestIdKey, requestID)
 			ctx = context.WithValue(ctx, LoggerKey, baseLogger)
 
 			// Add to response header for client tracking
@@ -98,21 +108,31 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			// Wrap response writer to capture metrics
 			wrapped := &responseWriter{ResponseWriter: w, status: 200}
 
-			// Log request start
-			baseLogger.Info("Request started",
+			// Log request start - use Debug for proxy requests to reduce noise
+			// Proxy requests will log their own "Request received" at INFO level
+			logFields := []any{
 				"method", r.Method,
 				"path", r.URL.Path,
 				"remote_addr", r.RemoteAddr,
 				"user_agent", r.UserAgent(),
 				"request_bytes", requestSize,
-				"request_size_formatted", formatBytes(requestSize))
+				"request_size_formatted", formatBytes(requestSize),
+			}
+
+			if IsProxyRequest(r.URL.Path) {
+				// For proxy requests, just log at debug level since handler will log INFO
+				baseLogger.Debug("HTTP request started", logFields...)
+			} else {
+				// For non-proxy requests (health, status, etc), log at INFO
+				baseLogger.Info("Request started", logFields...)
+			}
 
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
 
 			duration := time.Since(start)
 
-			// Log request completion
-			baseLogger.Info("Request completed",
+			// Log request completion - use Debug for proxy requests to reduce noise
+			completionFields := []any{
 				"method", r.Method,
 				"path", r.URL.Path,
 				"status", wrapped.status,
@@ -120,7 +140,16 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 				"duration_formatted", duration.String(),
 				"request_bytes", requestSize,
 				"response_bytes", wrapped.size,
-				"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)))
+				"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
+			}
+
+			if IsProxyRequest(r.URL.Path) {
+				// For proxy requests, just log at debug level since handler will log INFO
+				baseLogger.Debug("HTTP request completed", completionFields...)
+			} else {
+				// For non-proxy requests, log at INFO
+				baseLogger.Info("Request completed", completionFields...)
+			}
 		})
 	}
 }
