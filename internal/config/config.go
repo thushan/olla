@@ -268,7 +268,9 @@ func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_PROXY_LOAD_BALANCER"); val != "" {
 		config.Proxy.LoadBalancer = val
 	}
-
+	if val := os.Getenv("OLLA_PROXY_PROFILE"); val != "" {
+		config.Proxy.Profile = val
+	}
 	if val := os.Getenv("OLLA_LOGGING_LEVEL"); val != "" {
 		config.Logging.Level = val
 	}
