@@ -63,7 +63,7 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 	}
 
 	// Create registry and register models
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
 	ctx := context.Background()
 
 	// Register endpoints
@@ -253,7 +253,7 @@ func TestProviderModelFiltering(t *testing.T) {
 	}
 
 	// Create registry
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
 	ctx := context.Background()
 
 	// Register endpoints
@@ -336,7 +336,7 @@ func TestUnifiedModelsFormatFiltering(t *testing.T) {
 	}
 
 	// Create registry
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
 	ctx := context.Background()
 
 	// Register endpoints

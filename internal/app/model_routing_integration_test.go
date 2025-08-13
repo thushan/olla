@@ -67,7 +67,7 @@ func TestModelRoutingIntegration(t *testing.T) {
 	styledLogger := logger.NewPlainStyledLogger(log)
 
 	// Create unified registry
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
 
 	// Create test endpoints
 	endpoint1, _ := url.Parse("http://localhost:11434")
