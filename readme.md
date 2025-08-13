@@ -40,10 +40,12 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 
 ## Key Features
 
-- **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover
+- **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover and connection retry
 - **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](https://thushan.github.io/olla/concepts/model-unification/)
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
-- **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers
+- **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers and automatic recovery
+- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate endpoint failover
+- **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats

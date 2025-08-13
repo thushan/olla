@@ -118,7 +118,10 @@ proxy:
   profile: "auto"
   load_balancer: "least-connections"
   connection_timeout: 45s
-  max_retries: 3
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 0  # Try all available endpoints
 
 discovery:
   type: "static"
@@ -197,7 +200,10 @@ proxy:
   profile: "auto"
   load_balancer: "round-robin"  # Test all endpoints equally
   connection_timeout: 10s
-  max_retries: 1
+  retry:
+    enabled: true  # Enable to test retry logic
+    on_connection_failure: true
+    max_attempts: 2  # Limited retries for debugging
 
 discovery:
   type: "static"
@@ -394,7 +400,10 @@ proxy:
   profile: "auto"
   load_balancer: "least-connections"
   connection_timeout: 30s
-  max_retries: 5  # More retries for HA
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 0  # Try all endpoints for maximum availability
 
 discovery:
   type: "static"
@@ -448,6 +457,84 @@ logging:
   level: "info"
   format: "json"
   output: "stdout"
+```
+
+## Resilient Configuration with Auto-Recovery
+
+Configuration optimised for automatic failure handling and recovery:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 40114
+  shutdown_timeout: 30s
+
+proxy:
+  engine: "olla"  # Uses circuit breakers
+  profile: "auto"
+  load_balancer: "priority"
+  connection_timeout: 30s
+  response_timeout: 900s
+  retry:
+    enabled: true  # Automatic retry on failures
+    on_connection_failure: true
+    max_attempts: 0  # Try all available endpoints
+
+discovery:
+  type: "static"
+  health_check:
+    initial_delay: 1s  # Quick startup checks
+  
+  model_discovery:
+    enabled: true  # Auto-discover models
+    interval: 5m
+    timeout: 30s
+    
+  static:
+    endpoints:
+      # Primary endpoint - gets most traffic
+      - url: "http://primary-gpu:11434"
+        name: "primary"
+        type: "ollama"
+        priority: 100
+        check_interval: 2s  # Frequent checks for quick recovery
+        check_timeout: 1s
+        
+      # Secondary endpoint - failover
+      - url: "http://secondary-gpu:11434"
+        name: "secondary"
+        type: "ollama"
+        priority: 75
+        check_interval: 5s
+        check_timeout: 2s
+        
+      # Tertiary endpoint - last resort
+      - url: "http://backup-gpu:11434"
+        name: "backup"
+        type: "ollama"
+        priority: 50
+        check_interval: 10s
+        check_timeout: 3s
+
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  unification:
+    enabled: true
+    stale_threshold: 1h  # Quick cleanup of stale models
+    cleanup_interval: 5m
+
+logging:
+  level: "info"
+  format: "json"
+
+# Key resilience features in this config:
+# 1. Automatic retry on connection failures
+# 2. Circuit breakers prevent cascading failures (Olla engine)
+# 3. Quick health checks for fast recovery detection
+# 4. Automatic model discovery on endpoint recovery
+# 5. Priority routing with automatic failover
+# 6. Exponential backoff for failing endpoints
 ```
 
 ## Environment Variables Override

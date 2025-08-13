@@ -131,7 +131,7 @@ When an endpoint fails, Olla implements exponential backoff:
 1. **First failure**: Check again after `check_interval`
 2. **Second failure**: Wait `check_interval * 2`
 3. **Third failure**: Wait `check_interval * 4`
-4. **Max backoff**: Capped at 5 minutes
+4. **Max backoff**: Capped at 60 seconds
 
 This reduces load on failing endpoints while still detecting recovery.
 
@@ -142,6 +142,17 @@ When an unhealthy endpoint might be recovering:
 1. **Half-Open State**: Send limited test traffic
 2. **Success Threshold**: After 2 successful checks, mark healthy
 3. **Full Traffic**: Resume normal routing
+
+### Automatic Model Discovery on Recovery
+
+When an endpoint recovers from an unhealthy state, Olla automatically:
+
+1. **Detects Recovery**: Health check transitions from unhealthy to healthy
+2. **Triggers Discovery**: Automatically initiates model discovery
+3. **Updates Catalog**: Refreshes the unified model catalog with latest models
+4. **Resumes Routing**: Endpoint is immediately available for request routing
+
+This ensures the model catalog stays up-to-date even if models were added/removed while the endpoint was down.
 
 ## Health Check Types
 
@@ -168,6 +179,33 @@ endpoints:
     model_url: "/api/tags"
     # Health check also validates model availability
 ```
+
+## Connection Failure Handling
+
+### Automatic Retry on Connection Failures
+
+When a request fails due to connection issues, Olla automatically:
+
+1. **Detects Failure**: Identifies connection refused, reset, or timeout errors
+2. **Marks Unhealthy**: Immediately updates endpoint status to unhealthy
+3. **Retries Request**: Automatically tries the next available healthy endpoint
+4. **Updates Health**: Triggers exponential backoff for failed endpoint
+
+This happens transparently without dropping the user request:
+
+```yaml
+proxy:
+  retry:
+    enabled: true                    # Enable automatic retry
+    on_connection_failure: true      # Retry on connection errors
+    max_attempts: 0                  # Try all available endpoints
+```
+
+Connection errors that trigger retry:
+- **Connection Refused**: Backend service is down
+- **Connection Reset**: Backend crashed or restarted
+- **Connection Timeout**: Backend is overloaded
+- **Network Unreachable**: Network connectivity issues
 
 ## Circuit Breaker Integration
 

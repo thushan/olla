@@ -331,6 +331,47 @@ model_registry:
           "llama3": "meta-llama"
 ```
 
+## Routing Configuration
+
+Model routing strategy settings for handling requests when models aren't available on all endpoints.
+
+### Model Routing Strategy
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `routing.model_routing.type` | string | `"strict"` | Routing strategy (`strict`, `optimistic`, `discovery`) |
+| `routing.model_routing.options.fallback_behavior` | string | `"compatible_only"` | Fallback behavior (`compatible_only`, `all`, `none`) |
+| `routing.model_routing.options.discovery_refresh_on_miss` | bool | `false` | Refresh discovery when model not found |
+| `routing.model_routing.options.discovery_timeout` | duration | `2s` | Discovery refresh timeout |
+
+#### Strategy Types
+
+- **`strict`**: Only routes to endpoints known to have the model
+- **`optimistic`**: Falls back to healthy endpoints when model not found
+- **`discovery`**: Refreshes model discovery before routing decisions
+
+Example:
+
+```yaml
+routing:
+  model_routing:
+    type: strict
+    options:
+      fallback_behavior: compatible_only
+      discovery_refresh_on_miss: false
+      discovery_timeout: 2s
+```
+
+### Response Headers
+
+Routing decisions are exposed via response headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-Olla-Routing-Strategy` | Strategy used (strict/optimistic/discovery) |
+| `X-Olla-Routing-Decision` | Action taken (routed/fallback/rejected) |
+| `X-Olla-Routing-Reason` | Human-readable reason for decision |
+
 ## Logging Configuration
 
 Application logging settings.
