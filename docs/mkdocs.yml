@@ -111,8 +111,8 @@ plugins:
 nav:
   - Home: 
       - Overview: index.md
-      - FAQ: faq.md
       - Demo: demo.md
+      - FAQ: faq.md
       - Usage: usage.md
       - About: about.md
   - Getting Started:

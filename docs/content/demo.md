@@ -9,7 +9,7 @@ keywords: olla demo, preview, demo, olla running
 The following is a demo of Olla recorded with [VHS](https://vhs.charm.sh/).
 
 <div align="center">
-  <img src="assets/demos/olla-v1.0.x-demo.gif" alt="Olla - LLM Proxy & Load Balancer" style="max-width: 100%; height: auto;">
+  <img src="../assets/demos/olla-v1.0.x-demo.gif" alt="Olla - LLM Proxy & Load Balancer" style="max-width: 100%; height: auto;">
 </div>
 
 The demonstration shows:

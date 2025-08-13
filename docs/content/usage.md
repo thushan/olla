@@ -20,9 +20,74 @@ More companies are moving workloads to local or on-premises (or own-cloud hosted
 * **Latency** – Responses are generated within your own LAN, not across the internet.
 * **Customisation** – Fine-tune or swap models without vendor lock-in.
 
+## Use Cases
+
+### 🏠 Home Lab & Personal Use
+
+Perfect for enthusiasts running multiple LLM instances:
+
+- **Multi-GPU Setups**: Route between different models on various GPUs
+- **Model Experimentation**: Easy switching between Ollama, LM Studio and OpenAI backends
+- **Resource Management**: Automatic failover when local resources are busy
+- **Cost Optimisation**: Priority routing (local first, cloud fallback)
+
+```yaml
+# Home lab config - local first, home-lab second
+discovery:
+  static:
+    endpoints:
+      - name: "rtx-4090-mobile"
+        url: "http://localhost:11434" 
+        type: "ollama"
+        priority: 100  # Highest priority
+      - name: "home-lab-rtx-6000"
+        url: "https://192.168.0.1:11434"
+        type: "ollama"
+        priority: 10   # Fallback only
+```
+
+### 🏢 Business & Teams
+
+Streamline AI infrastructure for growing teams:
+
+- **Department Isolation**: Route different teams to appropriate endpoints
+- **Budget Controls**: Rate limiting and usage tracking per team
+- **High Availability**: Load balancing across multiple inference servers
+- **Development Staging**: Separate dev/staging/prod model routing
+
+```yaml
+# Business config - load balanced production
+proxy:
+  load_balancer: "least-connections"
+server:
+  rate_limits:
+    per_ip_requests_per_minute: 100
+    global_requests_per_minute: 1000
+```
+
+### 🏭 Enterprise & Production
+
+Mission-critical AI infrastructure at scale:
+
+- **Multi-Region Deployment**: Geographic load balancing and failover
+- **Enterprise Security**: Rate limiting, request validation, audit trails  
+- **Performance Monitoring**: Circuit breakers, health checks, metrics
+- **Vendor Diversity**: Mix of cloud providers and on-premise infrastructure
+
+```yaml
+# Enterprise config - high performance, observability
+proxy:
+  engine: "olla"  # High-performance engine
+  max_retries: 3
+server:
+  request_logging: true
+  rate_limits:
+    global_requests_per_minute: 10000
+```
+
 ## How Olla is Used
 
-Olla sits between your applications and local AI runtimes (e.g., Ollama, LM Studio, vLLM) to:
+Olla sits between your applications and local AI runtimes (eg. Ollama, LM Studio, vLLM etc) to:
 
 * **Unify multiple local backends** under one consistent API.
 * **Route intelligently** between models based on size, speed, and task fit.
