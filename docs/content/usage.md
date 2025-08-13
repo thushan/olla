@@ -1,0 +1,86 @@
+---
+title: Usage - Using Olla
+description: Usecases and usage scenarios with Olla
+keywords: olla use cases, usage, using olla
+---
+
+# Uses of Olla (and Similar Local LLM Proxies)
+
+LLM proxies like **Olla**, **Sherpa** and **Scout** are designed for **local-first AI deployments** - running entirely on infrastructure you control.
+
+They make it easier to adopt and manage local models in corporate or home environments, where privacy, compliance and performance are critical.
+
+## Why Local AI Matters
+
+More companies are moving workloads to local or on-premises (or own-cloud hosted) models because they offer:
+
+* **Data privacy** – Sensitive information stays inside your network.
+* **Compliance** – Easier to meet regulatory requirements without sending data to third-party APIs.
+* **Cost control** – No unpredictable API bills; you pay once for hardware and run as much as you like.
+* **Latency** – Responses are generated within your own LAN, not across the internet.
+* **Customisation** – Fine-tune or swap models without vendor lock-in.
+
+## How Olla is Used
+
+Olla sits between your applications and local AI runtimes (e.g., Ollama, LM Studio, vLLM) to:
+
+* **Unify multiple local backends** under one consistent API.
+* **Route intelligently** between models based on size, speed, and task fit.
+* **Enforce configuration and policy** centrally for all AI requests.
+* **Expose metrics** so you can track performance and usage.
+* **Stream responses efficiently** for low-latency interactive use.
+
+## Customer Usage Scenarios
+
+* A security-conscious company runs several Ollama and LM Studio instances on internal GPU servers, with Olla routing requests to the right model.
+* An engineering team uses Olla to test multiple LLM builds locally without changing client applications.
+* A research group runs large local models on a shared HPC cluster, with Olla handling access control and usage tracking.
+
+From a more home / work scenario, users run Olla containerised locally with configurations for various endpoints to seamlessly change between Home AI inference machines and corporate work enabled endpoints.
+
+This allows you to configure your tools to point to Olla, then let Olla unify models and direct traffic to available nodes.
+
+## Example Integration
+
+For home/personal use, if you have work provisioned or home (or local) provisioned hardware, you can create a profile in Olla like this:
+
+```yaml
+discovery:
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 50
+      - url: "http://localhost:1234"
+        name: "local-lm-studio"
+        type: "lmstudio"
+        priority: 50
+      - url: "http://corp-ollama.acmecorp.com:11434"
+        name: "work-ollama"
+        type: "ollama"
+        priority: 100
+      - url: "http://corp-lmstudio.acmecorp.com:1234"
+        name: "local-lm-studio"
+        type: "work-lmstudio"
+        priority: 100
+```
+
+Then use tools that rely on specific backends or OpenAI compatible APIs easily.
+
+### Development Tools : Junie
+
+A great example of using Olla 'in the middle' would be for [JetBrains Junie](https://www.jetbrains.com/junie/).
+
+Junie supports Ollama, LMStudio and OpenAI compatible API for local-ai.
+
+**Configure Ollama**
+
+![Configure Ollama](assets/images/jetbrains-junie-ollama.png)
+
+**Configure OpenAI**
+
+![Configure OpenAI](assets/images/jetbrains-junie-openai.png)
+
+This way, if you're at home (and considering you can't access `corp-*.acmecorp.com`) Olla will route you through to your local endpoints, at work it will automatically prioritise those endpoints.

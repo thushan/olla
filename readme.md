@@ -13,7 +13,7 @@
   </P>
   <p>
     <div align="center">
-    <img src="./docs/artefacts/olla-v1.0.x-demo.gif" height="" width="" /><br/>
+    <img src="./docs/content/assets/demos/olla-v1.0.x-demo.gif" height="" width="" /><br/>
     <small>Recorded with <a href="https://vhs.charm.sh/">VHS</a> - see <a href="./docs/vhs/demo.tape">demo tape</a></small><br/><br/>
     </div>
     <a href="https://thushan.github.io/olla/"><img src="https://img.shields.io/badge/📖_Documentation-0078D4?style=for-the-badge&logoColor=white" height="32" alt="Documentation"></a>

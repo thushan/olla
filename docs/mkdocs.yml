@@ -112,6 +112,9 @@ nav:
   - Home: 
       - Overview: index.md
       - FAQ: faq.md
+      - Demo: demo.md
+      - Usage: usage.md
+      - About: about.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
