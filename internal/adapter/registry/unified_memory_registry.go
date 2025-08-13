@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/thushan/olla/internal/adapter/registry/routing"
 	"github.com/thushan/olla/internal/adapter/unifier"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
@@ -16,7 +17,8 @@ import (
 
 // UnifiedMemoryModelRegistry extends MemoryModelRegistry with model unification
 type UnifiedMemoryModelRegistry struct {
-	unifier ports.ModelUnifier
+	unifier         ports.ModelUnifier
+	routingStrategy ports.ModelRoutingStrategy
 	*MemoryModelRegistry
 	unifiedModels    *xsync.Map[string, *domain.UnifiedModel] // Endpoint -> []UnifiedModel
 	globalUnified    *xsync.Map[string, *domain.UnifiedModel] // UnifiedID -> UnifiedModel (merged across endpoints)
@@ -25,7 +27,8 @@ type UnifiedMemoryModelRegistry struct {
 }
 
 // NewUnifiedMemoryModelRegistry creates a new registry with unification support
-func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig *config.UnificationConfig) *UnifiedMemoryModelRegistry {
+func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig *config.UnificationConfig,
+	routingConfig *config.ModelRoutingStrategy, discovery DiscoveryService) *UnifiedMemoryModelRegistry {
 	// Create unifier with config
 	unifierFactory := unifier.NewFactory(logger)
 	var modelUnifier ports.ModelUnifier
@@ -43,9 +46,25 @@ func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig
 		modelUnifier, _ = unifierFactory.Create(unifier.DefaultUnifierType)
 	}
 
+	// create routing strategy
+	var routingStrategy ports.ModelRoutingStrategy
+	if routingConfig != nil {
+		factory := routing.NewFactory(logger)
+		// adapt discovery interface if provided
+		var discoveryAdapter ports.DiscoveryService
+		if discovery != nil {
+			discoveryAdapter = &discoveryServiceAdapter{discovery: discovery}
+		}
+		routingStrategy, _ = factory.Create(*routingConfig, discoveryAdapter)
+	} else {
+		// default to strict strategy
+		routingStrategy = routing.NewStrictStrategy(logger)
+	}
+
 	return &UnifiedMemoryModelRegistry{
 		MemoryModelRegistry: NewMemoryModelRegistry(logger),
 		unifier:             modelUnifier,
+		routingStrategy:     routingStrategy,
 		unifiedModels:       xsync.NewMap[string, *domain.UnifiedModel](),
 		globalUnified:       xsync.NewMap[string, *domain.UnifiedModel](),
 		endpoints:           xsync.NewMap[string, *domain.Endpoint](),
@@ -357,4 +376,34 @@ type UnifiedRegistryStats struct {
 	domain.RegistryStats
 	domain.UnificationStats
 	TotalUnifiedModels int `json:"total_unified_models"`
+}
+
+// GetRoutableEndpointsForModel implements model routing strategy
+func (r *UnifiedMemoryModelRegistry) GetRoutableEndpointsForModel(ctx context.Context, modelName string, healthyEndpoints []*domain.Endpoint) ([]*domain.Endpoint, *domain.ModelRoutingDecision, error) {
+	// get endpoints that have this model
+	modelEndpoints, err := r.GetEndpointsForModel(ctx, modelName)
+	if err != nil {
+		r.logger.Error("Failed to get endpoints for model", "model", modelName, "error", err)
+		modelEndpoints = []string{} // treat error as model not found
+	}
+
+	// delegate to routing strategy
+	return r.routingStrategy.GetRoutableEndpoints(ctx, modelName, healthyEndpoints, modelEndpoints)
+}
+
+// discoveryServiceAdapter adapts our DiscoveryService to ports.DiscoveryService
+type discoveryServiceAdapter struct {
+	discovery DiscoveryService
+}
+
+func (a *discoveryServiceAdapter) RefreshEndpoints(ctx context.Context) error {
+	return a.discovery.RefreshEndpoints(ctx)
+}
+
+func (a *discoveryServiceAdapter) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return a.discovery.GetHealthyEndpoints(ctx)
+}
+
+func (a *discoveryServiceAdapter) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return a.discovery.GetHealthyEndpoints(ctx)
 }

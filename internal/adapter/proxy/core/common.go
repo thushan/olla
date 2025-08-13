@@ -187,6 +187,15 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 			responseTime := time.Since(stats.StartTime)
 			h.Set(HeaderResponseTime, responseTime.String())
 		}
+
+		// set routing decision headers if available
+		if stats.RoutingDecision != nil {
+			h.Set(constants.HeaderXOllaRoutingStrategy, stats.RoutingDecision.Strategy)
+			h.Set(constants.HeaderXOllaRoutingDecision, stats.RoutingDecision.Action)
+			if stats.RoutingDecision.Reason != "" {
+				h.Set(constants.HeaderXOllaRoutingReason, stats.RoutingDecision.Reason)
+			}
+		}
 	}
 
 	// Set endpoint information
