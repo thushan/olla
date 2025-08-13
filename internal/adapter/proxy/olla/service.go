@@ -80,6 +80,7 @@ type Service struct {
 
 	transport     *http.Transport
 	configuration *Configuration
+	retryHandler  *core.RetryHandler
 
 	// Cleanup management
 	cleanupTicker *time.Ticker
@@ -203,6 +204,7 @@ func NewService(
 		errorPool:           errorPool,
 		transport:           transport,
 		configuration:       configuration,
+		retryHandler:        core.NewRetryHandler(discoveryService, logger),
 		circuitBreakers:     *xsync.NewMap[string, *circuitBreaker](),
 		endpointPools:       *xsync.NewMap[string, *connectionPool](),
 		cleanupTicker:       time.NewTicker(5 * time.Minute),
@@ -324,7 +326,12 @@ func (s *Service) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *ht
 }
 
 // ProxyRequestToEndpoints proxies the request to the provided endpoints
-func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
+func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+	return s.ProxyRequestToEndpointsWithRetry(ctx, w, r, endpoints, stats, rlog)
+}
+
+// ProxyRequestToEndpointsLegacy is the original implementation without retry logic
+func (s *Service) ProxyRequestToEndpointsLegacy(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
 	// Get request context from pool
 	reqCtx := s.requestPool.Get()
 	defer s.requestPool.Put(reqCtx)

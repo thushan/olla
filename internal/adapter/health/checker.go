@@ -22,12 +22,13 @@ const (
 )
 
 type HTTPHealthChecker struct {
-	repository   domain.EndpointRepository
-	healthClient *HealthClient
-	ticker       *time.Ticker
-	stopCh       chan struct{}
-	logger       logger.StyledLogger
-	isRunning    atomic.Bool
+	repository       domain.EndpointRepository
+	logger           logger.StyledLogger
+	recoveryCallback RecoveryCallback
+	healthClient     *HealthClient
+	ticker           *time.Ticker
+	stopCh           chan struct{}
+	isRunning        atomic.Bool
 }
 
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
@@ -35,12 +36,21 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.St
 	healthClient := NewHealthClient(client, circuitBreaker)
 
 	return &HTTPHealthChecker{
-		healthClient: healthClient,
-		repository:   repository,
-		logger:       logger,
-		stopCh:       make(chan struct{}),
+		healthClient:     healthClient,
+		repository:       repository,
+		logger:           logger,
+		stopCh:           make(chan struct{}),
+		recoveryCallback: NoOpRecoveryCallback{},
 	}
 }
+
+// SetRecoveryCallback sets the callback to be invoked when an endpoint recovers
+func (c *HTTPHealthChecker) SetRecoveryCallback(callback RecoveryCallback) {
+	if callback != nil {
+		c.recoveryCallback = callback
+	}
+}
+
 func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger logger.StyledLogger) *HTTPHealthChecker {
 	// We want to enable connection pooling and reuse with some sane defaults
 	client := &http.Client{
@@ -228,6 +238,21 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		enhancedErr := domain.NewEndpointError("update_endpoint", endpoint.GetURLString(), repoErr)
 		c.logger.Error("Failed to update endpoint", "error", enhancedErr)
 		return
+	}
+
+	// Trigger recovery callback if endpoint recovered (transitioned to healthy from unhealthy)
+	if statusChanged && newStatus == domain.StatusHealthy && oldStatus != domain.StatusUnknown {
+		c.logger.Info("Endpoint recovered, triggering model discovery refresh",
+			"endpoint", endpoint.Name,
+			"was", oldStatus.String())
+
+		if c.recoveryCallback != nil {
+			if callbackErr := c.recoveryCallback.OnEndpointRecovered(ctx, &endpointCopy); callbackErr != nil {
+				c.logger.Warn("Failed to execute recovery callback",
+					"endpoint", endpoint.Name,
+					"error", callbackErr)
+			}
+		}
 	}
 
 	// Enhanced logging with better error context

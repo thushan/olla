@@ -75,6 +75,7 @@ type Service struct {
 	transport     *http.Transport
 	configuration *Configuration
 	bufferPool    *pool.Pool[*[]byte]
+	retryHandler  *core.RetryHandler
 }
 
 // NewService creates a new Sherpa proxy service
@@ -128,6 +129,7 @@ func NewService(
 		transport:           transport,
 		configuration:       configuration,
 		bufferPool:          bufferPool,
+		retryHandler:        core.NewRetryHandler(discoveryService, logger),
 	}, nil
 }
 
@@ -142,7 +144,12 @@ func (s *Service) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *ht
 }
 
 // ProxyRequestToEndpoints proxies the request to the provided endpoints
-func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
+func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+	return s.ProxyRequestToEndpointsWithRetry(ctx, w, r, endpoints, stats, rlog)
+}
+
+// ProxyRequestToEndpointsLegacy is the original implementation without retry logic
+func (s *Service) ProxyRequestToEndpointsLegacy(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
 	// Panic recovery
 	defer func() {
 		if rec := recover(); rec != nil {

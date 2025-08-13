@@ -110,6 +110,15 @@ func (r *StaticEndpointRepository) Exists(ctx context.Context, endpointURL *url.
 	return exists
 }
 
+// AddTestEndpoint adds an endpoint directly for testing purposes
+func (r *StaticEndpointRepository) AddTestEndpoint(endpoint *domain.Endpoint) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	key := endpoint.URL.String()
+	r.endpoints[key] = endpoint
+}
+
 func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs []config.EndpointConfig) error {
 	if len(configs) == 0 {
 		r.mu.Lock()

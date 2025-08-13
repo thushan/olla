@@ -37,12 +37,33 @@ proxy:
   connection_timeout: 60s
   response_timeout: 900s
   read_timeout: 600s
-  max_retries: 3
-  retry_backoff: 500ms
+  
+  # Connection failure retry settings (applies to both Sherpa and Olla engines)
+  # When enabled, the proxy will automatically retry failed requests on other healthy endpoints
+  retry:
+    enabled: true # Enable automatic retry on connection failures
+    on_connection_failure: true # Retry when connection to backend fails (connection refused, reset, timeout)
+    max_attempts: 0 # Maximum retry attempts (0 = try all available endpoints once)
+    # Connection errors that trigger retry:
+    # - Connection refused (backend is down)
+    # - Connection reset (backend crashed)
+    # - Connection timeout (backend is overloaded)
+    # - Network unreachable (network issues)
+    # Failed endpoints are immediately marked as unhealthy and removed from the retry pool
 
 discovery:
   type: "static"
   refresh_interval: 30s
+  
+  # Health check and recovery settings
+  health_check:
+    initial_delay: 1s # Delay before first health check
+    # When an endpoint fails during request processing:
+    # - It's immediately marked as unhealthy
+    # - Consecutive failures increment, causing exponential backoff
+    # - Next check time = now + (consecutive_failures * 2) seconds (max 60s)
+    # - Health checker will automatically recover endpoints when they're back online
+  
   static:
     endpoints:
       - url: "http://localhost:11434"
@@ -51,7 +72,7 @@ discovery:
         priority: 100
         model_url: "/api/tags"
         health_check_url: "/"
-        check_interval: 2s
+        check_interval: 2s # How often to check when healthy
         check_timeout: 1s
       - url: "http://localhost:11234"
         name: "local-lm-studio"

@@ -71,3 +71,9 @@ type DiscoveryService interface {
 	GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error)
 	RefreshEndpoints(ctx context.Context) error
 }
+
+// DiscoveryServiceWithEndpointUpdate extends DiscoveryService with endpoint update capability
+type DiscoveryServiceWithEndpointUpdate interface {
+	DiscoveryService
+	UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error
+}
