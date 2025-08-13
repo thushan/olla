@@ -45,10 +45,12 @@ type ProxyFactory interface {
 }
 
 type RequestStats struct {
+	StartTime       time.Time
+	EndTime         time.Time
+	RoutingDecision *domain.ModelRoutingDecision // routing decision for this request
+
 	RequestID    string
 	Model        string
-	StartTime    time.Time
-	EndTime      time.Time
 	EndpointName string
 	TargetUrl    string
 	TotalBytes   int

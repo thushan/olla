@@ -115,9 +115,23 @@ type EngineeringConfig struct {
 
 // ModelRegistryConfig holds model registry configuration
 type ModelRegistryConfig struct {
-	Type          string            `yaml:"type"`
-	Unification   UnificationConfig `yaml:"unification"`
-	EnableUnifier bool              `yaml:"enable_unifier"`
+	RoutingStrategy ModelRoutingStrategy `yaml:"routing_strategy"`
+	Type            string               `yaml:"type"`
+	Unification     UnificationConfig    `yaml:"unification"`
+	EnableUnifier   bool                 `yaml:"enable_unifier"`
+}
+
+// ModelRoutingStrategy configures how models are routed when not all endpoints have them
+type ModelRoutingStrategy struct {
+	Type    string                      `yaml:"type"` // strict, optimistic, discovery
+	Options ModelRoutingStrategyOptions `yaml:"options"`
+}
+
+// ModelRoutingStrategyOptions holds routing strategy configuration
+type ModelRoutingStrategyOptions struct {
+	FallbackBehavior       string        `yaml:"fallback_behavior"` // compatible_only, none
+	DiscoveryTimeout       time.Duration `yaml:"discovery_timeout"`
+	DiscoveryRefreshOnMiss bool          `yaml:"discovery_refresh_on_miss"`
 }
 
 // UnificationConfig holds model unification configuration

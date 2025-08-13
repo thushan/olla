@@ -90,6 +90,14 @@ func DefaultConfig() *Config {
 		ModelRegistry: ModelRegistryConfig{
 			Type:          DefaultModelRegistryType,
 			EnableUnifier: true,
+			RoutingStrategy: ModelRoutingStrategy{
+				Type: "strict", // default to strict for predictable behavior
+				Options: ModelRoutingStrategyOptions{
+					DiscoveryRefreshOnMiss: false,
+					DiscoveryTimeout:       2 * time.Second,
+					FallbackBehavior:       "compatible_only",
+				},
+			},
 			Unification: UnificationConfig{
 				Enabled:  true,
 				CacheTTL: 10 * time.Minute,
