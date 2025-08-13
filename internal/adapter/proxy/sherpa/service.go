@@ -378,26 +378,7 @@ func (s *Service) recordRequestSuccess(ctx context.Context, endpoint *domain.End
 	stats.TotalBytes = bytesWritten
 
 	// Extract metrics from response if available
-	if s.MetricsExtractor != nil && len(lastChunk) > 0 && endpoint != nil && endpoint.Type != "" {
-		rlog.Debug("Attempting metrics extraction", 
-			"extractor_available", s.MetricsExtractor != nil,
-			"chunk_size", len(lastChunk),
-			"endpoint_type", endpoint.Type)
-		stats.ProviderMetrics = s.MetricsExtractor.ExtractFromChunk(ctx, lastChunk, endpoint.Type)
-		if stats.ProviderMetrics != nil {
-			rlog.Debug("Metrics extracted successfully",
-				"input_tokens", stats.ProviderMetrics.InputTokens,
-				"output_tokens", stats.ProviderMetrics.OutputTokens)
-		} else {
-			rlog.Debug("No metrics extracted from response")
-		}
-	} else {
-		rlog.Debug("Metrics extraction skipped",
-			"extractor", s.MetricsExtractor != nil,
-			"chunk_size", len(lastChunk),
-			"has_endpoint", endpoint != nil,
-			"endpoint_type", endpoint.Type)
-	}
+	core.ExtractProviderMetrics(ctx, s.MetricsExtractor, lastChunk, endpoint, stats, rlog, "Sherpa")
 
 	// Log completion metrics
 	s.logCompletionMetrics(ctx, endpoint, statusCode, stats, rlog)
@@ -435,19 +416,7 @@ func (s *Service) logCompletionMetrics(ctx context.Context, endpoint *domain.End
 
 // appendProviderMetrics appends provider metrics to log fields
 func (s *Service) appendProviderMetrics(logFields []interface{}, pm *domain.ProviderMetrics) []interface{} {
-	if pm.InputTokens > 0 {
-		logFields = append(logFields, "input_tokens", pm.InputTokens)
-	}
-	if pm.OutputTokens > 0 {
-		logFields = append(logFields, "output_tokens", pm.OutputTokens)
-	}
-	if pm.TokensPerSecond > 0 {
-		logFields = append(logFields, "tokens_per_sec", fmt.Sprintf("%.1f", pm.TokensPerSecond))
-	}
-	if pm.TTFTMs > 0 {
-		logFields = append(logFields, "ttft_ms", pm.TTFTMs)
-	}
-	return logFields
+	return core.AppendProviderMetricsToLog(logFields, pm)
 }
 
 // GetStats returns current proxy statistics

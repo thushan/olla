@@ -586,17 +586,7 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	}
 
 	// Extract metrics from response if available
-	if s.MetricsExtractor != nil && len(lastChunk) > 0 && endpoint != nil && endpoint.Type != "" {
-		rlog.Debug("Attempting metrics extraction (Olla)", 
-			"chunk_size", len(lastChunk),
-			"endpoint_type", endpoint.Type)
-		stats.ProviderMetrics = s.MetricsExtractor.ExtractFromChunk(ctx, lastChunk, endpoint.Type)
-		if stats.ProviderMetrics != nil {
-			rlog.Debug("Metrics extracted successfully (Olla)",
-				"input_tokens", stats.ProviderMetrics.InputTokens,
-				"output_tokens", stats.ProviderMetrics.OutputTokens)
-		}
-	}
+	core.ExtractProviderMetrics(ctx, s.MetricsExtractor, lastChunk, endpoint, stats, rlog, "Olla")
 
 	// stats update
 	duration := time.Since(stats.StartTime)
