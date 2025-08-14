@@ -138,9 +138,16 @@ Key timeout and retry settings:
 | **connection_timeout** | Time to establish TCP connection | `30s` |
 | **response_timeout** | Maximum time for complete response | `600s` |
 | **read_timeout** | Time to wait for response chunks | `120s` |
-| **max_retries** | Retry attempts on transient failures | `3` |
-| **retry_backoff** | Delay between retry attempts | `500ms` |
+| **retry.enabled** | Enable automatic retry on failures | `true` |
+| **retry.on_connection_failure** | Retry on connection errors | `true` |
+| **retry.max_attempts** | Maximum retry attempts (0 = all endpoints) | `0` |
 | **stream_buffer_size** | Buffer size for SSE streaming | `8192` |
+
+> **⚠️ Deprecation Warning**
+> 
+> The fields `proxy.max_retries` and `proxy.retry_backoff` are deprecated as of v0.0.16. 
+> Please migrate to the new `proxy.retry` configuration block shown above. The deprecated 
+> fields are ignored and retry behavior now uses intelligent exponential backoff automatically.
 
 ### Proxy Engines
 
