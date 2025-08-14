@@ -279,11 +279,12 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		case oldStatus == domain.StatusUnknown:
 			// Initial discovery of unhealthy endpoint
-			detailedArgs := []interface{}{
+			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
 				"error_type", result.ErrorType,
-			}
+			)
 			if checkErr != nil {
 				var healthCheckErr *domain.HealthCheckError
 				if errors.As(checkErr, &healthCheckErr) {
@@ -311,11 +312,12 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		default:
 			// Status changed to unhealthy
-			detailedArgs := []interface{}{
+			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
 				"error_type", result.ErrorType,
-			}
+			)
 			if checkErr != nil {
 				var healthCheckErr *domain.HealthCheckError
 				if errors.As(checkErr, &healthCheckErr) {
@@ -338,11 +340,13 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 	case checkErr != nil && endpoint.ConsecutiveFailures > 0 && endpoint.ConsecutiveFailures%5 == 0:
 		// Log ongoing issues every 5th consecutive failure instead of time-based throttling
-		detailedArgs := []interface{}{
+		// Pre-allocate with capacity for all fields including error
+		detailedArgs := make([]interface{}, 0, 8)
+		detailedArgs = append(detailedArgs,
 			"endpoint_url", endpoint.GetURLString(),
 			"status_code", result.StatusCode,
 			"error_type", result.ErrorType,
-		}
+		)
 		var healthCheckErr *domain.HealthCheckError
 		if errors.As(checkErr, &healthCheckErr) {
 			detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())

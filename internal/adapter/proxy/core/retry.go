@@ -178,11 +178,13 @@ func (h *RetryHandler) markEndpointUnhealthy(ctx context.Context, endpoint *doma
 		return
 	}
 
+	now := time.Now()
+
 	// Work with copy to preserve original state
 	endpointCopy := *endpoint
 	endpointCopy.Status = domain.StatusOffline
 	endpointCopy.ConsecutiveFailures++
-	endpointCopy.LastChecked = time.Now()
+	endpointCopy.LastChecked = now
 
 	// Calculate proper exponential backoff multiplier
 	// First failure: keep default interval from the endpoint but set multiplier to 2
@@ -207,7 +209,7 @@ func (h *RetryHandler) markEndpointUnhealthy(ctx context.Context, endpoint *doma
 	if backoffInterval > 60*time.Second {
 		backoffInterval = 60 * time.Second
 	}
-	endpointCopy.NextCheckTime = time.Now().Add(backoffInterval)
+	endpointCopy.NextCheckTime = now.Add(backoffInterval)
 
 	h.logger.Warn("Marking endpoint as unhealthy due to connection failure",
 		"endpoint", endpoint.Name,
