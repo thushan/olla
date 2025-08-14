@@ -44,19 +44,28 @@ func (s *OptimisticStrategy) GetRoutableEndpoints(
 			"healthy_endpoints", len(healthyEndpoints),
 			"fallback", s.fallbackBehavior)
 
-		if s.fallbackBehavior == "none" {
+		switch s.fallbackBehavior {
+		case "none":
 			return []*domain.Endpoint{}, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"model_not_found_no_fallback",
+				"model_not_found",
+			), nil
+		case "compatible_only":
+			// For compatible_only, reject when model not found
+			return []*domain.Endpoint{}, ports.NewRoutingDecision(
+				s.Name(),
+				ports.RoutingActionRejected,
+				"model_not_found",
+			), nil
+		default:
+			// "all" or any other value - return all healthy with fallback
+			return healthyEndpoints, ports.NewRoutingDecision(
+				s.Name(),
+				ports.RoutingActionFallback,
+				"model_not_found_fallback",
 			), nil
 		}
-
-		return healthyEndpoints, ports.NewRoutingDecision(
-			s.Name(),
-			ports.RoutingActionFallback,
-			"model_not_found_fallback",
-		), nil
 	}
 
 	// create map for fast lookup

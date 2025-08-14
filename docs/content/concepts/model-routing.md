@@ -99,9 +99,9 @@ model_registry:
 
 Controls what happens when the requested model isn't available on any healthy endpoint:
 
-- **`compatible_only`**: Reject the request - prevents routing to endpoints that don't have the model
+- **`compatible_only`**: Reject the request with 404 - prevents routing to endpoints that don't have the model
 - **`all`**: Route to any healthy endpoint even if they don't have the model
-- **`none`**: Never fall back, always reject if model not found
+- **`none`**: Never fall back, always reject with 404 if model not found
 
 ## Response Headers
 
@@ -113,13 +113,51 @@ X-Olla-Routing-Decision: routed
 X-Olla-Routing-Reason: model_found
 ```
 
-## Status Codes
+## Status Codes and Routing Decisions
 
-Different routing decisions result in appropriate HTTP status codes:
+Different scenarios result in specific HTTP status codes and routing behaviors:
 
-- **200 OK**: Request successfully routed
-- **404 Not Found**: Model doesn't exist on any endpoint
-- **503 Service Unavailable**: Model exists but no healthy endpoints available
+### Strict Mode Behavior
+
+| Scenario | Status Code | Routing Decision | Description |
+|----------|-------------|------------------|-------------|
+| Model found on healthy endpoint | 200 OK | `routed` | Normal routing to endpoint with model |
+| Model not found anywhere | 404 Not Found | `rejected` | Model doesn't exist in the system |
+| Model exists but only on unhealthy endpoints | 503 Service Unavailable | `rejected` | Model unavailable due to endpoint health |
+
+### Optimistic Mode Behavior
+
+| Scenario | Fallback | Status Code | Routing Decision | Description |
+|----------|----------|-------------|------------------|-------------|
+| Model found on healthy endpoint | Any | 200 OK | `routed` | Normal routing to endpoint with model |
+| Model not found | `none` | 404 Not Found | `rejected` | Model doesn't exist, no fallback |
+| Model not found | `compatible_only` | 404 Not Found | `rejected` | Model doesn't exist, no fallback |
+| Model not found | `all` | 200 OK | `fallback` | Routes to any healthy endpoint |
+| Model on unhealthy endpoint only | `none` | 503 Service Unavailable | `rejected` | Model unavailable, no fallback |
+| Model on unhealthy endpoint only | `compatible_only` | 503 Service Unavailable | `rejected` | Model unavailable, no fallback |
+| Model on unhealthy endpoint only | `all` | 200 OK | `fallback` | Routes to any healthy endpoint |
+
+### Discovery Mode Behavior
+
+| Scenario | Status Code | Routing Decision | Description |
+|----------|-------------|------------------|-------------|
+| Model found after refresh | 200 OK | `routed` | Discovery found the model |
+| Model not found after refresh | Depends on fallback | `rejected` or `fallback` | Follows fallback behavior settings |
+| Discovery timeout | Depends on fallback | `rejected` or `fallback` | Falls back to cached data |
+
+## Routing Reasons
+
+The `X-Olla-Routing-Reason` header provides detailed information about routing decisions:
+
+| Reason | Status | Description |
+|--------|--------|-------------|
+| `model_found` | 200 | Model found on healthy endpoints |
+| `model_not_found` | 404 | Model doesn't exist in the system |
+| `model_not_found_fallback` | 200 | Model not found but falling back to all endpoints |
+| `model_unavailable_no_fallback` | 503 | Model exists but unavailable, no fallback |
+| `model_unavailable_compatible_only` | 503 | Model exists but unavailable, compatible_only prevents fallback |
+| `all_healthy_fallback` | 200 | Using all healthy endpoints as fallback |
+| `discovery_failed` | Varies | Discovery refresh failed, using cached data |
 
 ## Configuration Example
 
@@ -171,4 +209,62 @@ Access metrics via `/internal/status` endpoint.
 2. **Enable discovery mode** when models change frequently
 3. **Monitor routing headers** to understand request flow
 4. **Set appropriate timeouts** for discovery mode
-5. **Use compatible_only fallback** to maintain API compatibility
+5. **Choose fallback behavior carefully**:
+   - `none` or `compatible_only` for APIs that need model accuracy
+   - `all` only when any endpoint can handle unknown models
+
+## Troubleshooting
+
+### Getting 404 for Known Models
+
+**Issue**: Requests return 404 even though the model exists
+
+**Possible Causes**:
+- Model only exists on unhealthy endpoints
+- Using `compatible_only` or `none` fallback when model isn't discovered yet
+- Model discovery hasn't run yet
+
+**Solutions**:
+1. Check endpoint health: `curl http://localhost:40114/internal/status/endpoints`
+2. Verify model discovery: `curl http://localhost:40114/internal/status/models`
+3. Try discovery mode with refresh: 
+   ```yaml
+   routing_strategy:
+     type: discovery
+     options:
+       discovery_refresh_on_miss: true
+   ```
+
+### Getting 503 vs 404
+
+**Understanding the Difference**:
+- **404**: Model doesn't exist anywhere in the system
+- **503**: Model exists but no healthy endpoints have it
+
+**How to Debug**:
+```bash
+# Check all models in the system
+curl http://localhost:40114/olla/models
+
+# Check endpoint health
+curl http://localhost:40114/internal/status/endpoints
+
+# Look at routing headers
+curl -I http://localhost:40114/olla/ollama/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "test-model", "messages": []}'
+```
+
+### Unexpected Fallback Behavior
+
+**Issue**: Requests going to endpoints without the model
+
+**Check Your Configuration**:
+```yaml
+# This allows fallback to any endpoint
+fallback_behavior: "all"
+
+# These prevent fallback
+fallback_behavior: "none"        # Returns 404 for unknown models
+fallback_behavior: "compatible_only"  # Returns 404 for unknown models
+```
