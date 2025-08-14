@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -224,10 +225,10 @@ func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]inter
 			return strings.ToLower(platform)
 		}
 		if _, ok := metadata["ollama.version"]; ok {
-			return "ollama"
+			return constants.ProviderTypeOllama
 		}
 		if _, ok := metadata["lmstudio.version"]; ok {
-			return "lmstudio"
+			return constants.ProviderTypeLMStudio
 		}
 	}
 
@@ -242,11 +243,11 @@ func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]inter
 
 	// Check format
 	if format != "" && strings.Contains(strings.ToLower(format), "gguf") {
-		return "ollama"
+		return constants.ProviderTypeOllama
 	}
 
 	// Default to openai-compatible
-	return "openai"
+	return constants.ProviderTypeOpenAI
 }
 
 // MapModelState maps model properties to a state string

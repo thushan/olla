@@ -11,6 +11,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -90,7 +91,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	// Add model header if available
 	if model, ok := ctx.Value("model").(string); ok && model != "" {
-		proxyReq.Header.Set("X-Model", model)
+		proxyReq.Header.Set(constants.HeaderXModel, model)
 		stats.Model = model
 	}
 
