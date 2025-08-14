@@ -164,27 +164,16 @@ proxy:
   read_timeout: 0s
 ```
 
-### Retry Settings
+### Retry Behaviour
 
-The retry mechanism is now built-in and automatic for connection failures. Retry configuration has moved to a structured format:
+As of v0.0.16, the retry mechanism is automatic and built-in for connection failures. When a connection error occurs (e.g., connection refused, network unreachable, timeout), Olla will automatically:
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `retry.enabled` | bool | `true` | Enable automatic retry |
-| `retry.on_connection_failure` | bool | `true` | Retry on connection errors |
-| `retry.max_attempts` | int | `0` | Max retry attempts (0 = try all endpoints) |
+1. Mark the failed endpoint as unhealthy
+2. Try the next available healthy endpoint 
+3. Continue until a successful connection is made or all endpoints have been tried
+4. Use exponential backoff for unhealthy endpoints to prevent overwhelming them
 
-Example:
-
-```yaml
-proxy:
-  retry:
-    enabled: true
-    on_connection_failure: true
-    max_attempts: 0  # Try all available endpoints once
-```
-
-**Note**: The old `max_retries` and `retry_backoff` fields are deprecated and no longer used. Connection retry logic now uses intelligent exponential backoff based on endpoint health status.
+**Note**: The fields `max_retries` and `retry_backoff` that may still appear in the configuration are deprecated and ignored. The retry behaviour is now automatic and cannot be configured.
 
 ### Streaming Settings
 
@@ -541,14 +530,10 @@ proxy:
   connection_timeout: 30s
   response_timeout: 0s
   read_timeout: 0s
-  # DEPRECATED as of v0.0.16 - Use retry configuration instead
+  # DEPRECATED as of v0.0.16 - retry is now automatic
   # max_retries: 3
   # retry_backoff: 1s
   stream_buffer_size: 4096
-  retry:
-    enabled: true
-    on_connection_failure: true
-    max_attempts: 0
 
 discovery:
   type: "static"

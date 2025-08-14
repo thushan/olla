@@ -320,7 +320,7 @@ X-Olla-Endpoint: local-ollama     # Which backend handled it
 X-Olla-Model: llama4              # Model used
 X-Olla-Backend-Type: ollama       # Platform type
 X-Olla-Request-ID: req_abc123     # For debugging
-X-Olla-Response-Time: 1.234s      # Total time (trailer)
+X-Olla-Response-Time: 1.234s      # Total processing time
 ```
 
 For API usage patterns and examples, see [API Endpoints Reference](https://thushan.github.io/olla/api-reference/overview/).

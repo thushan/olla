@@ -87,9 +87,9 @@ olla/
 ## Response Headers
 - `X-Olla-Endpoint`: Backend name
 - `X-Olla-Model`: Model used
-- `X-Olla-Backend-Type`: ollama/openai/lmstudio
+- `X-Olla-Backend-Type`: ollama/openai/lmstudio/vllm
 - `X-Olla-Request-ID`: Request ID
-- `X-Olla-Response-Time`: Total time (trailer)
+- `X-Olla-Response-Time`: Total processing time
 
 ## Testing
 - Unit tests: Components in isolation

@@ -192,17 +192,9 @@ When a request fails due to connection issues, Olla automatically:
 3. **Retries Request**: Automatically tries the next available healthy endpoint
 4. **Updates Health**: Triggers exponential backoff for failed endpoint
 
-This happens transparently without dropping the user request:
+This happens transparently without dropping the user request. The retry behaviour is automatic and built-in as of v0.0.16.
 
-```yaml
-proxy:
-  retry:
-    enabled: true                    # Enable automatic retry
-    on_connection_failure: true      # Retry on connection errors
-    max_attempts: 0                  # Try all available endpoints
-```
-
-Connection errors that trigger retry:
+Connection errors that trigger automatic retry:
 - **Connection Refused**: Backend service is down
 - **Connection Reset**: Backend crashed or restarted
 - **Connection Timeout**: Backend is overloaded
@@ -232,10 +224,10 @@ Health checks work with the circuit breaker to prevent cascade failures:
 
 The circuit breaker activates after consecutive failures:
 
-1. **Failure Threshold**: 3 consecutive failures trigger opening
+1. **Failure Threshold**: 3 failures (health checker) or 5 failures (Olla proxy engine)
 2. **Open Duration**: Circuit stays open for 30 seconds
-3. **Half-Open Test**: Send 3 test requests
-4. **Recovery**: 2 successful tests close the circuit
+3. **Half-Open Test**: Allows one test request through
+4. **Recovery**: First successful request closes the circuit
 
 ## Monitoring Health Status
 
