@@ -129,7 +129,7 @@ type ModelRoutingStrategy struct {
 
 // ModelRoutingStrategyOptions holds routing strategy configuration
 type ModelRoutingStrategyOptions struct {
-	FallbackBehavior       string        `yaml:"fallback_behavior"` // compatible_only, none
+	FallbackBehavior       string        `yaml:"fallback_behavior"` // compatible_only, none, all
 	DiscoveryTimeout       time.Duration `yaml:"discovery_timeout"`
 	DiscoveryRefreshOnMiss bool          `yaml:"discovery_refresh_on_miss"`
 }

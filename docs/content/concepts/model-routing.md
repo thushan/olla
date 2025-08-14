@@ -6,6 +6,28 @@ keywords: model routing, routing strategy, fallback behavior, request routing, m
 
 # Model Routing
 
+> :memo: **Default Configuration**
+> ```yaml
+> model_registry:
+>   routing_strategy:
+>     type: "strict"  # strict, optimistic, or discovery
+>     options:
+>       fallback_behavior: "compatible_only"  # compatible_only, all, or none
+>       discovery_timeout: 2s
+>       discovery_refresh_on_miss: false
+> ```
+> **Routing Strategies**:
+> 
+> - `strict` _(default)_ - Only routes to endpoints with the model
+> - `optimistic` - Routes with configurable fallback behavior
+> - `discovery` - Refreshes model catalog before routing
+> 
+> **Fallback Behaviors**:
+> 
+> - `compatible_only` _(default)_ - Rejects if model not found
+> - `all` - Routes to any healthy endpoint
+> - `none` - Always rejects if model not found
+
 Olla implements intelligent model routing strategies to handle scenarios where requested models aren't available on all endpoints.
 
 ## Overview
@@ -75,10 +97,10 @@ model_registry:
 
 ## Fallback Behavior
 
-Controls what happens when the requested model isn't available:
+Controls what happens when the requested model isn't available on any healthy endpoint:
 
-- **`compatible_only`**: Route to endpoints of compatible type (e.g., Ollama to Ollama)
-- **`all`**: Route to any healthy endpoint regardless of type
+- **`compatible_only`**: Reject the request - prevents routing to endpoints that don't have the model
+- **`all`**: Route to any healthy endpoint even if they don't have the model
 - **`none`**: Never fall back, always reject if model not found
 
 ## Response Headers

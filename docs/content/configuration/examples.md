@@ -79,6 +79,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "optimistic"  # Home lab: more flexible routing
+    options:
+      fallback_behavior: "all"  # Use any available endpoint if model not found
+      discovery_timeout: 5s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 24h
@@ -167,6 +173,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"  # Production: only route to endpoints with the model
+    options:
+      fallback_behavior: "none"  # Fail fast in production
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 1h  # More aggressive cleanup
@@ -229,6 +241,20 @@ discovery:
         priority: 50
         check_interval: 30s
 
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  routing_strategy:
+    type: "discovery"  # Development: auto-discover models
+    options:
+      fallback_behavior: "compatible_only"  # Default: safe fallback
+      discovery_timeout: 10s
+      discovery_refresh_on_miss: true  # Auto-refresh in dev
+  unification:
+    enabled: true
+    stale_threshold: 1h
+    cleanup_interval: 5m
+
 logging:
   level: "debug"  # Maximum verbosity
   format: "text"  # Easier to read
@@ -288,6 +314,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"  # Mixed backends: strict routing
+    options:
+      fallback_behavior: "compatible_only"  # Important: prevent API incompatibilities
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 12h
@@ -349,6 +381,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: false  # Disable for security
+  routing_strategy:
+    type: "strict"  # Public API: strict model routing
+    options:
+      fallback_behavior: "none"  # Never fall back for public API
+      discovery_timeout: 1s
+      discovery_refresh_on_miss: false
 
 logging:
   level: "info"

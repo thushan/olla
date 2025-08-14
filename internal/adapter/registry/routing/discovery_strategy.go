@@ -103,18 +103,12 @@ func (s *DiscoveryStrategy) GetRoutableEndpoints(
 			"duration", time.Since(startTime))
 
 		// fallback based on configuration
-		if s.options.FallbackBehavior == "compatible_only" {
-			return healthyEndpoints, ports.NewRoutingDecision(
-				s.Name(),
-				ports.RoutingActionFallback,
-				"discovery_failed_fallback",
-			), nil
-		}
-
-		return nil, ports.NewRoutingDecision(
+		switch s.options.FallbackBehavior {
+		case "none":
+			return nil, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"discovery_failed",
+				"discovery_failed_no_fallback",
 			), domain.NewModelRoutingError(
 				modelName,
 				s.Name(),
@@ -123,6 +117,29 @@ func (s *DiscoveryStrategy) GetRoutableEndpoints(
 				modelEndpoints,
 				fmt.Errorf("discovery refresh failed: %w", err),
 			)
+		case "compatible_only":
+			// For compatible_only on discovery failure, we can't determine compatibility
+			// because discovery failed, so we reject the request
+			return nil, ports.NewRoutingDecision(
+				s.Name(),
+				ports.RoutingActionRejected,
+				"discovery_failed_compatible_only",
+			), domain.NewModelRoutingError(
+				modelName,
+				s.Name(),
+				"rejected",
+				len(healthyEndpoints),
+				modelEndpoints,
+				fmt.Errorf("discovery refresh failed and compatible_only prevents fallback: %w", err),
+			)
+		default:
+			// "all" or any other value - return all healthy on discovery failure
+			return healthyEndpoints, ports.NewRoutingDecision(
+				s.Name(),
+				ports.RoutingActionFallback,
+				"discovery_failed_all_fallback",
+			), nil
+		}
 	}
 
 	s.logger.Debug("Discovery refresh completed",
@@ -167,10 +184,29 @@ func (s *DiscoveryStrategy) GetRoutableEndpoints(
 			)
 	}
 
-	// return all updated healthy endpoints as discovery may have found the model
-	return updatedHealthy, ports.NewRoutingDecision(
-		s.Name(),
-		ports.RoutingActionFallback,
-		"discovery_complete_fallback",
-	), nil
+	// After discovery, we still don't have the model on any healthy endpoints
+	// Apply fallback behavior
+	switch s.options.FallbackBehavior {
+	case "none", "compatible_only":
+		// For compatible_only and none, reject if model not found
+		return nil, ports.NewRoutingDecision(
+			s.Name(),
+			ports.RoutingActionRejected,
+			"model_unavailable_after_discovery",
+		), domain.NewModelRoutingError(
+			modelName,
+			s.Name(),
+			"rejected",
+			len(updatedHealthy),
+			modelEndpoints,
+			fmt.Errorf("model %s not found after discovery refresh", modelName),
+		)
+	default:
+		// "all" - return all healthy endpoints as fallback
+		return updatedHealthy, ports.NewRoutingDecision(
+			s.Name(),
+			ports.RoutingActionFallback,
+			"all_healthy_after_discovery",
+		), nil
+	}
 }

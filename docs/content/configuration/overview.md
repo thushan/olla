@@ -233,17 +233,41 @@ discovery:
 
 ## Model Registry Configuration
 
-The `model_registry` section controls model management and unification.
+The `model_registry` section controls model management, routing strategy, and unification.
 
 ```yaml
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"              # strict, optimistic, or discovery
+    options:
+      fallback_behavior: "compatible_only"  # compatible_only, all, or none
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 24h   # Model retention time
     cleanup_interval: 10m  # Cleanup frequency
 ```
+
+### Routing Strategy
+
+Control how requests are routed based on model availability:
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| **strict** | Only route to endpoints with the model | Production environments |
+| **optimistic** | Route with configurable fallback | Development/home labs |
+| **discovery** | Refresh models before routing | Dynamic environments |
+
+**Fallback Behavior Options:**
+
+| Option | Description | Use Case |
+|--------|-------------|----------|
+| **compatible_only** | Reject if model not found (default) | Prevent incompatible routing |
+| **all** | Route to any healthy endpoint | Maximum availability |
+| **none** | Always reject if model not found | Strict model enforcement |
 
 ### Model Unification
 

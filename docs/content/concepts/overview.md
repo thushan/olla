@@ -48,8 +48,8 @@ Model unification simplifies working with heterogeneous LLM infrastructure.
 ### [Model Routing](model-routing.md)
 Intelligent routing strategies for model availability:
 
-- **Strict**: Only route to endpoints with the model (default)
-- **Optimistic**: Try any healthy endpoint with fallback
+- **Strict**: Only route to endpoints with the model
+- **Optimistic**: Route to endpoints with model, with configurable fallback
 - **Discovery**: Refresh model catalog before routing
 
 Model routing ensures requests reach appropriate endpoints based on model availability.

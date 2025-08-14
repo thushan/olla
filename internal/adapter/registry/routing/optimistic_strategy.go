@@ -75,25 +75,35 @@ func (s *OptimisticStrategy) GetRoutableEndpoints(
 
 	// no healthy endpoints have the model - fall back
 	if len(routable) == 0 {
-		s.logger.Warn("Model only on unhealthy endpoints, falling back to all healthy",
+		s.logger.Warn("Model only on unhealthy endpoints, applying fallback behavior",
 			"model", modelName,
 			"model_endpoints", len(modelEndpoints),
 			"healthy_endpoints", len(healthyEndpoints),
 			"fallback", s.fallbackBehavior)
 
-		if s.fallbackBehavior == "none" {
+		switch s.fallbackBehavior {
+		case "none":
 			return []*domain.Endpoint{}, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
 				"model_unavailable_no_fallback",
 			), nil
+		case "compatible_only":
+			// For compatible_only, we don't fall back at all if no healthy endpoints have the model
+			// This prevents routing to endpoints that don't support the requested model
+			return []*domain.Endpoint{}, ports.NewRoutingDecision(
+				s.Name(),
+				ports.RoutingActionRejected,
+				"model_unavailable_compatible_only",
+			), nil
+		default:
+			// "all" or any other value - return all healthy
+			return healthyEndpoints, ports.NewRoutingDecision(
+				s.Name(),
+				ports.RoutingActionFallback,
+				"all_healthy_fallback",
+			), nil
 		}
-
-		return healthyEndpoints, ports.NewRoutingDecision(
-			s.Name(),
-			ports.RoutingActionFallback,
-			"model_unavailable_fallback",
-		), nil
 	}
 
 	s.logger.Debug("Optimistic routing found endpoints with model",
