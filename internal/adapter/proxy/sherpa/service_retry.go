@@ -17,7 +17,7 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
-// ProxyRequestToEndpointsWithRetry proxies the request with retry logic for connection failures
+// ProxyRequestToEndpointsWithRetry handles request proxying with automatic failover
 func (s *Service) ProxyRequestToEndpointsWithRetry(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	s.IncrementRequests()
 
@@ -42,16 +42,15 @@ func (s *Service) ProxyRequestToEndpointsWithRetry(ctx context.Context, w http.R
 		return common.ErrNoHealthyEndpoints
 	}
 
-	// Define the proxy function for a single endpoint
+	// Delegate to retry handler with endpoint-specific proxy function
 	proxyFunc := func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error {
 		return s.proxyToSingleEndpoint(ctx, w, r, endpoint, stats, rlog)
 	}
 
-	// Use the shared retry handler
 	return s.retryHandler.ExecuteWithRetry(ctx, w, r, endpoints, s.Selector, stats, proxyFunc)
 }
 
-// proxyToSingleEndpoint handles proxying to a single endpoint
+// proxyToSingleEndpoint executes the proxy request to a specific endpoint
 func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	stats.EndpointName = endpoint.Name
 
@@ -104,7 +103,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	stats.BackendResponseMs = time.Since(backendStart).Milliseconds()
 
 	if err != nil {
-		// Don't log as error if it's a connection failure - the retry handler will handle it
+		// Suppress error logging for connection failures handled by retry logic
 		if core.IsConnectionError(err) {
 			rlog.Debug("round-trip connection failed", "error", err)
 		} else {

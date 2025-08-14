@@ -407,3 +407,8 @@ func (a *discoveryServiceAdapter) GetEndpoints(ctx context.Context) ([]*domain.E
 func (a *discoveryServiceAdapter) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
 	return a.discovery.GetHealthyEndpoints(ctx)
 }
+
+func (a *discoveryServiceAdapter) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
+	// This is a no-op for the registry adapter as it doesn't manage endpoint status
+	return nil
+}

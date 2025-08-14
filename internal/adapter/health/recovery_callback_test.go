@@ -50,8 +50,8 @@ func TestHealthCheckerRecoveryCallback(t *testing.T) {
 		CheckTimeout:         50 * time.Millisecond,
 	}
 
-	// Create repository and add endpoint directly
-	repo := discovery.NewStaticEndpointRepository()
+	// Create test repository and add endpoint directly
+	repo := discovery.NewTestStaticEndpointRepository()
 	// Add the endpoint to the repository (for testing)
 	repo.AddTestEndpoint(endpoint)
 
@@ -60,8 +60,8 @@ func TestHealthCheckerRecoveryCallback(t *testing.T) {
 	log, _, _ := logger.New(logCfg)
 	testLogger := logger.NewPlainStyledLogger(log)
 
-	// Create health checker with callback
-	checker := NewHTTPHealthCheckerWithDefaults(repo, testLogger)
+	// Create health checker with callback (using the embedded repository)
+	checker := NewHTTPHealthCheckerWithDefaults(repo.StaticEndpointRepository, testLogger)
 
 	// Set up recovery callback
 	recoveryCallback := &testRecoveryCallback{}

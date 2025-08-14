@@ -13,4 +13,5 @@ const (
 	DefaultCircuitBreakerTimeout   = 30 * time.Second
 
 	MaxBackoffMultiplier = 12
+	MaxBackoffSeconds    = 60 * time.Second
 )

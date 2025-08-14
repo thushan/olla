@@ -17,7 +17,7 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
-// RetryHandler provides connection failure retry logic for proxy implementations
+// RetryHandler manages connection failure recovery and endpoint failover
 type RetryHandler struct {
 	logger           logger.StyledLogger
 	discoveryService ports.DiscoveryService
@@ -31,10 +31,10 @@ func NewRetryHandler(discoveryService ports.DiscoveryService, logger logger.Styl
 	}
 }
 
-// ProxyFunc is the function signature for proxying to a single endpoint
+// ProxyFunc defines the signature for endpoint proxy implementations
 type ProxyFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error
 
-// ExecuteWithRetry executes a proxy request with retry logic on connection failures
+// ExecuteWithRetry attempts request delivery with automatic failover on connection errors
 func (h *RetryHandler) ExecuteWithRetry(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -48,15 +48,15 @@ func (h *RetryHandler) ExecuteWithRetry(
 		return fmt.Errorf("no endpoints available")
 	}
 
-	// Create a copy of endpoints for retry logic
+	// Work with a copy to avoid modifying the original slice
 	availableEndpoints := make([]*domain.Endpoint, len(endpoints))
 	copy(availableEndpoints, endpoints)
 
 	var lastErr error
-	maxRetries := len(endpoints) // Try each endpoint once
+	maxRetries := len(endpoints)
 	retryCount := 0
 
-	// Save the original request body for retry
+	// Preserve request body for potential retries
 	var bodyBytes []byte
 	if r.Body != nil && r.Body != http.NoBody {
 		bodyBytes, _ = io.ReadAll(r.Body)
@@ -64,28 +64,23 @@ func (h *RetryHandler) ExecuteWithRetry(
 	}
 
 	for retryCount <= maxRetries && len(availableEndpoints) > 0 {
-		// Restore request body for retry
 		if bodyBytes != nil {
 			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
-		// Select endpoint
 		endpoint, err := selector.Select(ctx, availableEndpoints)
 		if err != nil {
 			return fmt.Errorf("endpoint selection failed: %w", err)
 		}
 
-		// Try proxying to this endpoint
 		err = proxyFunc(ctx, w, r, endpoint, stats)
 
 		if err == nil {
-			// Success!
 			return nil
 		}
 
 		lastErr = err
 
-		// Check if this is a connection error
 		if IsConnectionError(err) {
 			h.logger.Warn("Connection failed to endpoint, marking as unhealthy",
 				"endpoint", endpoint.Name,
@@ -93,10 +88,9 @@ func (h *RetryHandler) ExecuteWithRetry(
 				"retry", retryCount+1,
 				"remaining_endpoints", len(availableEndpoints)-1)
 
-			// Mark endpoint as unhealthy
 			h.markEndpointUnhealthy(ctx, endpoint)
 
-			// Remove this endpoint from available list
+			// Filter out failed endpoint for subsequent attempts
 			newAvailable := make([]*domain.Endpoint, 0, len(availableEndpoints)-1)
 			for _, ep := range availableEndpoints {
 				if ep.Name != endpoint.Name {
@@ -107,14 +101,13 @@ func (h *RetryHandler) ExecuteWithRetry(
 
 			retryCount++
 
-			// Continue to next endpoint
 			if len(availableEndpoints) > 0 {
 				h.logger.Info("Retrying request with different endpoint",
 					"available_endpoints", len(availableEndpoints))
 				continue
 			}
 		} else {
-			// Non-connection error, don't retry
+			// Non-connection error warrants immediate failure
 			return err
 		}
 	}
@@ -126,30 +119,28 @@ func (h *RetryHandler) ExecuteWithRetry(
 	return fmt.Errorf("max retries (%d) exceeded: %w", maxRetries, lastErr)
 }
 
-// IsConnectionError determines if an error is a connection failure that warrants retry
+// IsConnectionError identifies transient network errors suitable for retry
 func IsConnectionError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	// Check for network errors
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return true
 	}
 
-	// Check for specific syscall errors
 	var syscallErr syscall.Errno
 	if errors.As(err, &syscallErr) {
 		switch syscallErr {
 		case syscall.ECONNREFUSED, syscall.ECONNRESET, syscall.ECONNABORTED:
 			return true
 		default:
-			// Other syscall errors are not connection errors
+			// Non-connection syscall errors
 		}
 	}
 
-	// Check for common connection error messages
+	// Pattern matching for connection-related error strings
 	errStr := err.Error()
 	connectionErrors := []string{
 		"connection refused",
@@ -172,34 +163,56 @@ func IsConnectionError(err error) bool {
 	return false
 }
 
-// markEndpointUnhealthy marks an endpoint as unhealthy
+// markEndpointUnhealthy transitions endpoint to offline state with backoff calculation
 func (h *RetryHandler) markEndpointUnhealthy(ctx context.Context, endpoint *domain.Endpoint) {
 	if endpoint == nil {
 		return
 	}
 
-	// Create a copy to avoid modifying the original
+	// Work with copy to preserve original state
 	endpointCopy := *endpoint
 	endpointCopy.Status = domain.StatusOffline
 	endpointCopy.ConsecutiveFailures++
 	endpointCopy.LastChecked = time.Now()
 
-	// Calculate backoff for next check
-	backoffSeconds := endpointCopy.ConsecutiveFailures * 2
-	if backoffSeconds > 60 {
-		backoffSeconds = 60
+	// Calculate proper exponential backoff multiplier
+	// First failure: keep default interval from the endpoint but set multiplier to 2
+	// Subsequent failures: apply exponential backoff
+	var backoffInterval time.Duration
+
+	if endpointCopy.BackoffMultiplier <= 1 {
+		// First failure - use normal interval
+		endpointCopy.BackoffMultiplier = 2
+		backoffInterval = endpointCopy.CheckInterval
+	} else {
+		// Subsequent failures - apply current multiplier and calculate next
+		backoffInterval = endpointCopy.CheckInterval * time.Duration(endpointCopy.BackoffMultiplier)
+
+		// Calculate next multiplier for future failures
+		endpointCopy.BackoffMultiplier *= 2
+		if endpointCopy.BackoffMultiplier > 12 {
+			endpointCopy.BackoffMultiplier = 12
+		}
 	}
-	endpointCopy.NextCheckTime = time.Now().Add(time.Duration(backoffSeconds) * time.Second)
+
+	if backoffInterval > 60*time.Second {
+		backoffInterval = 60 * time.Second
+	}
+	endpointCopy.NextCheckTime = time.Now().Add(backoffInterval)
 
 	h.logger.Warn("Marking endpoint as unhealthy due to connection failure",
 		"endpoint", endpoint.Name,
 		"consecutive_failures", endpointCopy.ConsecutiveFailures,
+		"backoff_multiplier", endpointCopy.BackoffMultiplier,
 		"next_check", endpointCopy.NextCheckTime.Format(time.RFC3339))
 
-	// Try to update endpoint status in repository through discovery service
-	if discoveryService, ok := h.discoveryService.(ports.DiscoveryServiceWithEndpointUpdate); ok {
-		if err := discoveryService.UpdateEndpointStatus(ctx, &endpointCopy); err != nil {
-			h.logger.Debug("Failed to update endpoint status in repository", "error", err)
-		}
+	// Persist status change via discovery service
+	h.updateEndpointStatus(ctx, &endpointCopy)
+}
+
+// updateEndpointStatus persists endpoint state changes
+func (h *RetryHandler) updateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) {
+	if err := h.discoveryService.UpdateEndpointStatus(ctx, endpoint); err != nil {
+		h.logger.Debug("Failed to update endpoint status in repository", "error", err)
 	}
 }

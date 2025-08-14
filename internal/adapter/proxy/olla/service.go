@@ -38,6 +38,7 @@ import (
 
 	"github.com/puzpuzpuz/xsync/v4"
 
+	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
@@ -63,9 +64,8 @@ const (
 	ClientDisconnectionBytesThreshold = 1024
 	ClientDisconnectionTimeThreshold  = 5 * time.Second
 
-	// Circuit breaker settings
-	circuitBreakerThreshold = 5
-	circuitBreakerTimeout   = 30 * time.Second
+	// Circuit breaker threshold higher than health checker for tolerance
+	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -290,7 +290,7 @@ func (cb *circuitBreaker) IsOpen() bool {
 
 	// Check if timeout has passed
 	lastFailure := atomic.LoadInt64(&cb.lastFailure)
-	if time.Since(time.Unix(0, lastFailure)) > circuitBreakerTimeout {
+	if time.Since(time.Unix(0, lastFailure)) > health.DefaultCircuitBreakerTimeout {
 		// Try half-open state
 		if atomic.CompareAndSwapInt64(&cb.state, 1, 2) {
 			// State transition: Open -> Half-open
@@ -325,13 +325,14 @@ func (s *Service) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *ht
 	return s.ProxyRequestToEndpoints(ctx, w, r, endpoints, stats, rlog)
 }
 
-// ProxyRequestToEndpoints proxies the request to the provided endpoints
+// ProxyRequestToEndpoints delegates to retry-aware implementation
 func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	return s.ProxyRequestToEndpointsWithRetry(ctx, w, r, endpoints, stats, rlog)
 }
 
-// ProxyRequestToEndpointsLegacy is the original implementation without retry logic
-func (s *Service) ProxyRequestToEndpointsLegacy(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
+// proxyToSingleEndpointLegacy retained for reference during migration
+// TODO: Remove after retry logic stability confirmed
+func (s *Service) proxyToSingleEndpointLegacy(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
 	// Get request context from pool
 	reqCtx := s.requestPool.Get()
 	defer s.requestPool.Put(reqCtx)
@@ -451,7 +452,7 @@ func (s *Service) selectEndpointWithCircuitBreaker(endpoints []*domain.Endpoint,
 			if stateBefore == 1 && stateAfter == 2 {
 				rlog.Info("Circuit breaker entering half-open state",
 					"endpoint", ep.Name,
-					"timeout", circuitBreakerTimeout)
+					"timeout", health.DefaultCircuitBreakerTimeout)
 			}
 			return ep, cb
 		}

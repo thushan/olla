@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/thushan/olla/internal/version"
 
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/util"
 )
 
 const (
@@ -169,23 +169,10 @@ func injectDefaultHeaders(req *http.Request) *http.Request {
 }
 
 func calculateBackoffDelay(attempt int) time.Duration {
-	// Exponential backoff: baseDelay * 2^(attempt-1) with jitter
-	baseDelay := DefaultBaseDelay
-	maxDelay := MaxBackoffDelay
-	backoff := float64(baseDelay) * math.Pow(2, float64(attempt-1))
-
-	// Add 25% jitter to avoid thundering herd
+	// Use centralized backoff calculation with 25% jitter
 	// 	SHERPA-198: Jitterbug - calculation was invalid, 0 jitter was being applied
 	// 	28-Oct-2024 [TF]: Fixed jitter calculation to use a pseudo-random value
-	pseudoRandom := float64(time.Now().UnixNano()%1000) / 1000.0
-	jitter := backoff * 0.25 * (pseudoRandom - 0.5)
-	delay := time.Duration(backoff + jitter)
-
-	if delay > maxDelay {
-		delay = maxDelay
-	}
-
-	return delay
+	return util.CalculateExponentialBackoff(attempt, DefaultBaseDelay, MaxBackoffDelay, 0.25)
 }
 
 func shouldRetry(err error, errorType domain.HealthCheckErrorType) bool {
@@ -271,12 +258,24 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 		return endpoint.CheckInterval, 1
 	}
 
-	// Double the backoff up to max
+	// For first failure (BackoffMultiplier is 1), keep normal interval
+	// Only apply backoff on subsequent failures
+	if endpoint.BackoffMultiplier <= 1 {
+		// First failure - use normal interval but set multiplier to 2 for next time
+		return endpoint.CheckInterval, 2
+	}
+
+	// Calculate the multiplier for subsequent failures (exponential: 2, 4, 8...)
 	multiplier := endpoint.BackoffMultiplier * 2
 	if multiplier > MaxBackoffMultiplier {
 		multiplier = MaxBackoffMultiplier
 	}
 
-	backoffInterval := endpoint.CheckInterval * time.Duration(multiplier)
+	// Use the current BackoffMultiplier for interval (not the new one)
+	backoffInterval := endpoint.CheckInterval * time.Duration(endpoint.BackoffMultiplier)
+	if backoffInterval > MaxBackoffSeconds {
+		backoffInterval = MaxBackoffSeconds
+	}
+
 	return backoffInterval, multiplier
 }

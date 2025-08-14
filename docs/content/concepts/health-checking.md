@@ -128,12 +128,13 @@ endpoints:
 
 When an endpoint fails, Olla implements exponential backoff:
 
-1. **First failure**: Check again after `check_interval`
+1. **First failure**: Check again after `check_interval` (no backoff)
 2. **Second failure**: Wait `check_interval * 2`
 3. **Third failure**: Wait `check_interval * 4`
-4. **Max backoff**: Capped at 60 seconds
+4. **Fourth failure**: Wait `check_interval * 8`
+5. **Max backoff**: Capped at `check_interval * 12` or 60 seconds (whichever is lower)
 
-This reduces load on failing endpoints while still detecting recovery.
+This reduces load on failing endpoints while still detecting recovery quickly on the first failure.
 
 ### Fast Recovery Detection
 

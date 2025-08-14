@@ -44,7 +44,7 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 - **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](https://thushan.github.io/olla/concepts/model-unification/)
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
 - **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers and automatic recovery
-- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate endpoint failover
+- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover
 - **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
