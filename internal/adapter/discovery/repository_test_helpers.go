@@ -19,6 +19,8 @@ func (r *TestStaticEndpointRepository) AddTestEndpoint(endpoint *domain.Endpoint
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	key := endpoint.URL.String()
-	r.endpoints[key] = endpoint
+	if endpoint.URL != nil {
+		key := endpoint.URL.String()
+		r.endpoints[key] = endpoint
+	}
 }

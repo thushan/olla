@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,14 +16,23 @@ import (
 )
 
 type testRecoveryCallback struct {
+	mu       sync.Mutex
 	called   bool
 	endpoint *domain.Endpoint
 }
 
 func (t *testRecoveryCallback) OnEndpointRecovered(ctx context.Context, endpoint *domain.Endpoint) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.called = true
 	t.endpoint = endpoint
 	return nil
+}
+
+func (t *testRecoveryCallback) wasCalledWith() (bool, *domain.Endpoint) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.called, t.endpoint
 }
 
 func TestHealthCheckerRecoveryCallback(t *testing.T) {
@@ -96,14 +106,15 @@ func TestHealthCheckerRecoveryCallback(t *testing.T) {
 	endpoints, _ = repo.GetAll(ctx)
 	checker.checkEndpoint(ctx, endpoints[0])
 
-	// Give it a moment to process
-	time.Sleep(50 * time.Millisecond)
+	// Give the async callback time to execute
+	time.Sleep(100 * time.Millisecond)
 
-	// Verify callback was called
-	assert.True(t, recoveryCallback.called)
-	assert.NotNil(t, recoveryCallback.endpoint)
-	assert.Equal(t, "test-endpoint", recoveryCallback.endpoint.Name)
-	assert.Equal(t, domain.StatusHealthy, recoveryCallback.endpoint.Status)
+	// Verify callback was called using thread-safe accessor
+	called, recoveredEndpoint := recoveryCallback.wasCalledWith()
+	assert.True(t, called)
+	assert.NotNil(t, recoveredEndpoint)
+	assert.Equal(t, "test-endpoint", recoveredEndpoint.Name)
+	assert.Equal(t, domain.StatusHealthy, recoveredEndpoint.Status)
 }
 
 func TestRecoveryCallbackFunc(t *testing.T) {

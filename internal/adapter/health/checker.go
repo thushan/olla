@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	DefaultConcurrentChecks    = 5
-	DefaultHealthCheckInterval = 30 * time.Second
-	LogThrottleInterval        = 2 * time.Minute
+	DefaultConcurrentChecks        = 5
+	DefaultHealthCheckInterval     = 30 * time.Second
+	LogThrottleInterval            = 2 * time.Minute
+	DefaultRecoveryCallbackTimeout = 10 * time.Second
 )
 
 type HTTPHealthChecker struct {
@@ -247,15 +248,31 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 			"was", oldStatus.String())
 
 		if c.recoveryCallback != nil {
-			if callbackErr := c.recoveryCallback.OnEndpointRecovered(ctx, &endpointCopy); callbackErr != nil {
-				c.logger.Warn("Failed to execute recovery callback",
-					"endpoint", endpoint.Name,
-					"error", callbackErr)
-			}
+			// we exec recovery callback asynchronously to avoid blocking health checks
+			go func(ep domain.Endpoint) {
+				callbackCtx, cancel := context.WithTimeout(context.Background(), DefaultRecoveryCallbackTimeout)
+				defer cancel()
+
+				callbackErr := c.recoveryCallback.OnEndpointRecovered(callbackCtx, &ep)
+
+				if callbackErr != nil {
+					if errors.Is(callbackErr, context.DeadlineExceeded) {
+						c.logger.Warn("Recovery callback timed out",
+							"endpoint", ep.Name,
+							"timeout", DefaultRecoveryCallbackTimeout)
+					} else {
+						c.logger.Warn("Failed to execute recovery callback",
+							"endpoint", ep.Name,
+							"error", callbackErr)
+					}
+				} else {
+					c.logger.Debug("Recovery callback completed successfully",
+						"endpoint", ep.Name)
+				}
+			}(endpointCopy)
 		}
 	}
 
-	// Enhanced logging with better error context
 	c.logHealthCheckResult(endpoint, oldStatus, newStatus, statusChanged, result, nextInterval, err)
 }
 
