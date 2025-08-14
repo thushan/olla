@@ -89,15 +89,15 @@ func TestHealthCheckerRecoveryCallback(t *testing.T) {
 	endpoints, _ := repo.GetAll(ctx)
 	checker.checkEndpoint(ctx, endpoints[0])
 
-	// Wait for status to be updated in repository
-	time.Sleep(50 * time.Millisecond)
-
-	// Verify endpoint is now unhealthy (or offline)
-	endpoints, _ = repo.GetAll(ctx)
-	assert.True(t, endpoints[0].Status == domain.StatusUnhealthy || endpoints[0].Status == domain.StatusOffline)
+	// Verify endpoint becomes unhealthy (or offline)
+	assert.Eventually(t, func() bool {
+		endpoints, _ = repo.GetAll(ctx)
+		return endpoints[0].Status == domain.StatusUnhealthy || endpoints[0].Status == domain.StatusOffline
+	}, 2*time.Second, 20*time.Millisecond, "Endpoint should become unhealthy after failed health check")
 
 	// Verify callback was not called (no recovery yet)
-	assert.False(t, recoveryCallback.called)
+	called, _ := recoveryCallback.wasCalledWith()
+	assert.False(t, called)
 
 	// Make server healthy
 	serverIsHealthy = true
@@ -106,15 +106,14 @@ func TestHealthCheckerRecoveryCallback(t *testing.T) {
 	endpoints, _ = repo.GetAll(ctx)
 	checker.checkEndpoint(ctx, endpoints[0])
 
-	// Give the async callback time to execute
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify callback was called using thread-safe accessor
-	called, recoveredEndpoint := recoveryCallback.wasCalledWith()
-	assert.True(t, called)
-	assert.NotNil(t, recoveredEndpoint)
-	assert.Equal(t, "test-endpoint", recoveredEndpoint.Name)
-	assert.Equal(t, domain.StatusHealthy, recoveredEndpoint.Status)
+	// Verify callback was invoked with the expected endpoint and status
+	assert.Eventually(t, func() bool {
+		called, recoveredEndpoint := recoveryCallback.wasCalledWith()
+		return called &&
+			recoveredEndpoint != nil &&
+			recoveredEndpoint.Name == "test-endpoint" &&
+			recoveredEndpoint.Status == domain.StatusHealthy
+	}, 2*time.Second, 20*time.Millisecond, "Recovery callback should be called with healthy endpoint")
 }
 
 func TestRecoveryCallbackFunc(t *testing.T) {

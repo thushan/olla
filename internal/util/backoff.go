@@ -3,6 +3,8 @@ package util
 import (
 	"math"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 // CalculateExponentialBackoff computes exponential backoff with optional jitter.
@@ -28,11 +30,6 @@ func CalculateExponentialBackoff(attempt int, baseDelay time.Duration, maxDelay 
 	return time.Duration(backoff)
 }
 
-const (
-	DefaultMaxBackoffMultiplier = 12
-	DefaultMaxBackoffSeconds    = 60 * time.Second
-)
-
 // CalculateEndpointBackoff computes backoff interval for endpoint health checks.
 // Uses exponential multiplier for proper backoff progression
 func CalculateEndpointBackoff(checkInterval time.Duration, backoffMultiplier int) time.Duration {
@@ -43,19 +40,19 @@ func CalculateEndpointBackoff(checkInterval time.Duration, backoffMultiplier int
 	// Use the provided multiplier directly (already exponential: 1, 2, 4, 8...)
 	backoffInterval := checkInterval * time.Duration(backoffMultiplier)
 
-	if backoffInterval > DefaultMaxBackoffSeconds {
-		backoffInterval = DefaultMaxBackoffSeconds
+	if backoffInterval > constants.DefaultMaxBackoffSeconds {
+		backoffInterval = constants.DefaultMaxBackoffSeconds
 	}
 
 	return backoffInterval
 }
 
 // CalculateConnectionRetryBackoff computes backoff for connection retry attempts.
-// Linear progression: consecutiveFailures * 2 seconds, capped at MaxBackoffSeconds
+// Linear progression: consecutiveFailures * ConnectionRetryBackoffMultiplier seconds, capped at MaxBackoffSeconds
 func CalculateConnectionRetryBackoff(consecutiveFailures int) time.Duration {
-	backoffDuration := time.Duration(consecutiveFailures*2) * time.Second
-	if backoffDuration > DefaultMaxBackoffSeconds {
-		backoffDuration = DefaultMaxBackoffSeconds
+	backoffDuration := time.Duration(consecutiveFailures*constants.ConnectionRetryBackoffMultiplier) * time.Second
+	if backoffDuration > constants.DefaultMaxBackoffSeconds {
+		backoffDuration = constants.DefaultMaxBackoffSeconds
 	}
 	return backoffDuration
 }

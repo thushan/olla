@@ -5,7 +5,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+)
+
+// Local constants aliasing the shared backoff defaults
+const (
+	maxBackoffSeconds    = constants.DefaultMaxBackoffSeconds
+	maxBackoffMultiplier = constants.DefaultMaxBackoffMultiplier
 )
 
 func TestCalculateBackoff(t *testing.T) {
@@ -69,8 +76,8 @@ func TestCalculateBackoff(t *testing.T) {
 			},
 			success:            false,
 			expectedInterval:   40 * time.Second, // Uses current multiplier (8)
-			expectedMultiplier: 12,               // Next multiplier capped at 12
-			description:        "Fourth failure uses multiplier 8, next capped at 12",
+			expectedMultiplier: maxBackoffMultiplier, // Next multiplier capped at max
+			description:        "Fourth failure uses multiplier 8, next capped at max",
 		},
 		{
 			name: "backoff_capped_at_max_seconds",
@@ -79,19 +86,19 @@ func TestCalculateBackoff(t *testing.T) {
 				BackoffMultiplier: 6,
 			},
 			success:            false,
-			expectedInterval:   60 * time.Second, // 10s * 6 = 60s
-			expectedMultiplier: 12,
+			expectedInterval:   maxBackoffSeconds, // 10s * 6 = 60s
+			expectedMultiplier: maxBackoffMultiplier,
 			description:        "Interval should be capped at MaxBackoffSeconds",
 		},
 		{
 			name: "already_at_max_multiplier_stays_at_max",
 			endpoint: &domain.Endpoint{
 				CheckInterval:     5 * time.Second,
-				BackoffMultiplier: 12,
+				BackoffMultiplier: maxBackoffMultiplier,
 			},
 			success:            false,
-			expectedInterval:   60 * time.Second,
-			expectedMultiplier: 12,
+			expectedInterval:   maxBackoffSeconds,
+			expectedMultiplier: maxBackoffMultiplier,
 			description:        "Once at max multiplier, should stay at max",
 		},
 	}
@@ -121,11 +128,11 @@ func TestBackoffProgressionSequence(t *testing.T) {
 		interval   time.Duration
 		multiplier int
 	}{
-		{5 * time.Second, 2},   // First failure - normal interval
-		{10 * time.Second, 4},  // Second failure - 2x interval
-		{20 * time.Second, 8},  // Third failure - 4x interval
-		{40 * time.Second, 12}, // Fourth failure - 8x interval (next multiplier capped)
-		{60 * time.Second, 12}, // Fifth failure - capped at 60s
+		{5 * time.Second, 2},                       // First failure - normal interval
+		{10 * time.Second, 4},                      // Second failure - 2x interval
+		{20 * time.Second, 8},                      // Third failure - 4x interval
+		{40 * time.Second, maxBackoffMultiplier},  // Fourth failure - 8x interval (next multiplier capped)
+		{maxBackoffSeconds, maxBackoffMultiplier}, // Fifth failure - capped at max
 	}
 
 	for i, expected := range expectedSequence {

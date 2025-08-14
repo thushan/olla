@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/thushan/olla/internal/adapter/health"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -202,13 +202,13 @@ func (h *RetryHandler) markEndpointUnhealthy(ctx context.Context, endpoint *doma
 
 		// Calculate next multiplier for future failures
 		endpointCopy.BackoffMultiplier *= 2
-		if endpointCopy.BackoffMultiplier > health.MaxBackoffMultiplier {
-			endpointCopy.BackoffMultiplier = health.MaxBackoffMultiplier
+		if endpointCopy.BackoffMultiplier > constants.DefaultMaxBackoffMultiplier {
+			endpointCopy.BackoffMultiplier = constants.DefaultMaxBackoffMultiplier
 		}
 	}
 
-	if backoffInterval > health.MaxBackoffSeconds {
-		backoffInterval = health.MaxBackoffSeconds
+	if backoffInterval > constants.DefaultMaxBackoffSeconds {
+		backoffInterval = constants.DefaultMaxBackoffSeconds
 	}
 	endpointCopy.NextCheckTime = now.Add(backoffInterval)
 

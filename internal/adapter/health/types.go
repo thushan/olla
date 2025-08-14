@@ -1,6 +1,10 @@
 package health
 
-import "time"
+import (
+	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
+)
 
 const (
 	DefaultHealthCheckerTimeout = 5 * time.Second
@@ -12,6 +16,7 @@ const (
 	DefaultCircuitBreakerThreshold = 3
 	DefaultCircuitBreakerTimeout   = 30 * time.Second
 
-	MaxBackoffMultiplier = 12
-	MaxBackoffSeconds    = 60 * time.Second
+	// Alias the shared constants for backward compatibility
+	MaxBackoffMultiplier = constants.DefaultMaxBackoffMultiplier
+	MaxBackoffSeconds    = constants.DefaultMaxBackoffSeconds
 )
