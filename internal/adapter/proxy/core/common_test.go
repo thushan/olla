@@ -465,9 +465,9 @@ func TestProxyHeaderConstants(t *testing.T) {
 
 func TestHeaderConstants(t *testing.T) {
 	// Test that header constants are defined
-	assert.Equal(t, "X-Olla-Request-ID", HeaderRequestID)
-	assert.Equal(t, "X-Olla-Endpoint", HeaderEndpoint)
-	assert.Equal(t, "X-Olla-Backend-Type", HeaderBackendType)
-	assert.Equal(t, "X-Olla-Model", HeaderModel)
-	assert.Equal(t, "X-Olla-Response-Time", HeaderResponseTime)
+	assert.Equal(t, "X-Olla-Request-ID", constants.HeaderXOllaRequestID)
+	assert.Equal(t, "X-Olla-Endpoint", constants.HeaderXOllaEndpoint)
+	assert.Equal(t, "X-Olla-Backend-Type", constants.HeaderXOllaBackendType)
+	assert.Equal(t, "X-Olla-Model", constants.HeaderXOllaModel)
+	assert.Equal(t, "X-Olla-Response-Time", constants.HeaderXOllaResponseTime)
 }

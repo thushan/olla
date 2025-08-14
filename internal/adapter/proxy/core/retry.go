@@ -90,14 +90,16 @@ func (h *RetryHandler) ExecuteWithRetry(
 
 			h.markEndpointUnhealthy(ctx, endpoint)
 
-			// Filter out failed endpoint for subsequent attempts
-			newAvailable := make([]*domain.Endpoint, 0, len(availableEndpoints)-1)
-			for _, ep := range availableEndpoints {
-				if ep.Name != endpoint.Name {
-					newAvailable = append(newAvailable, ep)
+			// Remove failed endpoint in-place to avoid allocation
+			// Find and remove the failed endpoint by shifting elements
+			for i := 0; i < len(availableEndpoints); i++ {
+				if availableEndpoints[i].Name == endpoint.Name {
+					// Remove element at index i by copying subsequent elements
+					copy(availableEndpoints[i:], availableEndpoints[i+1:])
+					availableEndpoints = availableEndpoints[:len(availableEndpoints)-1]
+					break
 				}
 			}
-			availableEndpoints = newAvailable
 
 			retryCount++
 
@@ -140,22 +142,29 @@ func IsConnectionError(err error) bool {
 		}
 	}
 
-	// Pattern matching for connection-related error strings
-	errStr := err.Error()
-	connectionErrors := []string{
-		"connection refused",
-		"connection reset",
-		"no such host",
-		"network is unreachable",
-		"no route to host",
-		"connection timed out",
-		"i/o timeout",
-		"dial tcp",
-		"connectex:",
+	return hasConnectionError(err)
+}
+
+var connectionErrors = []string{
+	"connection refused",
+	"connection reset",
+	"no such host",
+	"network is unreachable",
+	"no route to host",
+	"connection timed out",
+	"i/o timeout",
+	"dial tcp",
+	"connectex:",
+}
+
+func hasConnectionError(err error) bool {
+	if err == nil {
+		return false
 	}
 
+	errStr := strings.ToLower(err.Error())
 	for _, pattern := range connectionErrors {
-		if strings.Contains(strings.ToLower(errStr), pattern) {
+		if strings.Contains(errStr, pattern) {
 			return true
 		}
 	}

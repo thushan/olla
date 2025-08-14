@@ -13,15 +13,6 @@ import (
 	"github.com/thushan/olla/internal/version"
 )
 
-// Deprecated: Use constants from internal/core/constants/content.go instead
-const (
-	HeaderRequestID    = constants.HeaderXOllaRequestID
-	HeaderEndpoint     = constants.HeaderXOllaEndpoint
-	HeaderBackendType  = constants.HeaderXOllaBackendType
-	HeaderModel        = constants.HeaderXOllaModel
-	HeaderResponseTime = constants.HeaderXOllaResponseTime
-)
-
 var (
 	proxiedByHeader string
 	viaHeader       string
@@ -179,13 +170,13 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 	// Set request tracking headers
 	if stats != nil {
 		if stats.RequestID != "" {
-			h.Set(HeaderRequestID, stats.RequestID)
+			h.Set(constants.HeaderXOllaRequestID, stats.RequestID)
 		}
 
 		// Calculate and set response time if we have timing information
 		if !stats.StartTime.IsZero() {
 			responseTime := time.Since(stats.StartTime)
-			h.Set(HeaderResponseTime, responseTime.String())
+			h.Set(constants.HeaderXOllaResponseTime, responseTime.String())
 		}
 
 		// set routing decision headers if available
@@ -200,12 +191,12 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 
 	// Set endpoint information
 	if endpoint != nil {
-		h.Set(HeaderEndpoint, endpoint.Name)
-		h.Set(HeaderBackendType, endpoint.Type)
+		h.Set(constants.HeaderXOllaEndpoint, endpoint.Name)
+		h.Set(constants.HeaderXOllaBackendType, endpoint.Type)
 
 		// Set model header if available
 		if stats != nil && stats.Model != "" {
-			h.Set(HeaderModel, stats.Model)
+			h.Set(constants.HeaderXOllaModel, stats.Model)
 		}
 	}
 }
