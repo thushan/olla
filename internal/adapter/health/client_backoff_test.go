@@ -75,7 +75,7 @@ func TestCalculateBackoff(t *testing.T) {
 				BackoffMultiplier: 8,
 			},
 			success:            false,
-			expectedInterval:   40 * time.Second, // Uses current multiplier (8)
+			expectedInterval:   40 * time.Second,     // Uses current multiplier (8)
 			expectedMultiplier: maxBackoffMultiplier, // Next multiplier capped at max
 			description:        "Fourth failure uses multiplier 8, next capped at max",
 		},
@@ -128,9 +128,9 @@ func TestBackoffProgressionSequence(t *testing.T) {
 		interval   time.Duration
 		multiplier int
 	}{
-		{5 * time.Second, 2},                       // First failure - normal interval
-		{10 * time.Second, 4},                      // Second failure - 2x interval
-		{20 * time.Second, 8},                      // Third failure - 4x interval
+		{5 * time.Second, 2},                      // First failure - normal interval
+		{10 * time.Second, 4},                     // Second failure - 2x interval
+		{20 * time.Second, 8},                     // Third failure - 4x interval
 		{40 * time.Second, maxBackoffMultiplier},  // Fourth failure - 8x interval (next multiplier capped)
 		{maxBackoffSeconds, maxBackoffMultiplier}, // Fifth failure - capped at max
 	}

@@ -422,7 +422,7 @@ func (s *Service) proxyToSingleEndpointLegacy(ctx context.Context, w http.Respon
 	defer resp.Body.Close()
 
 	// Handle successful response
-	return s.handleSuccessfulResponse(ctx, w, resp, endpoint, cb, stats, rlog)
+	return s.handleSuccessfulResponse(ctx, w, r, resp, endpoint, cb, stats, rlog)
 }
 
 // handlePanic handles panic recovery in proxy requests
@@ -546,7 +546,7 @@ func (s *Service) executeBackendRequest(ctx context.Context, endpoint *domain.En
 }
 
 // handleSuccessfulResponse handles the successful response from the backend
-func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseWriter, resp *http.Response, endpoint *domain.Endpoint, cb *circuitBreaker, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, resp *http.Response, endpoint *domain.Endpoint, cb *circuitBreaker, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	// Get context logger for this function scope
 	ctxLogger := middleware.GetLogger(ctx)
 	// Circuit breaker success
@@ -582,7 +582,15 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	buffer := s.bufferPool.Get()
 	defer s.bufferPool.Put(buffer)
 
-	bytesWritten, streamErr := s.streamResponse(ctx, ctx, w, resp, *buffer, rlog)
+	// Separate client and upstream contexts for proper cancellation handling
+	// Only create a different context if needed to avoid allocations
+	upstreamCtx := ctx
+	if resp != nil && resp.Request != nil {
+		upstreamCtx = resp.Request.Context()
+	}
+
+	// Use r.Context() for client context and upstreamCtx for upstream context
+	bytesWritten, streamErr := s.streamResponse(r.Context(), upstreamCtx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 

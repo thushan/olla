@@ -137,8 +137,15 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	buffer := s.bufferPool.Get()
 	defer s.bufferPool.Put(buffer)
 
+	// Separate client and upstream contexts for proper cancellation handling
+	upstreamCtx := ctx
+	if resp != nil && resp.Request != nil {
+		upstreamCtx = resp.Request.Context()
+	}
+
 	// Stream with timeout protection - don't let slow clients hang forever
-	bytesWritten, streamErr := s.streamResponseWithTimeout(ctx, ctx, w, resp, *buffer, rlog)
+	// Use r.Context() for client context and upstreamCtx for upstream context
+	bytesWritten, streamErr := s.streamResponseWithTimeout(r.Context(), upstreamCtx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 
