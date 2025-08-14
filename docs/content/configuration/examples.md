@@ -321,7 +321,11 @@ proxy:
   profile: "standard"  # No streaming for public API
   load_balancer: "least-connections"
   connection_timeout: 20s
-  max_retries: 2
+  # Automatic retry with failover to other endpoints
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 2  # Limit retries for public API
 
 discovery:
   type: "static"

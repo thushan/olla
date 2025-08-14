@@ -229,7 +229,7 @@ Multi-region deployment:
 ```yaml
 proxy:
   load_balancer: "priority"
-  max_retries: 3
+  # Automatic failover between regions
 
 discovery:
   static:
@@ -398,12 +398,21 @@ proxy:
 
 ### Retry Strategy
 
-Configure retries appropriately:
+Automatic retry is enabled by default for connection failures:
 
 ```yaml
 proxy:
-  max_retries: 3  # Balance reliability vs latency
+  retry:
+    enabled: true  # Automatic failover
+    on_connection_failure: true
+    max_attempts: 0  # Try all endpoints (or set limit)
 ```
+
+The retry mechanism intelligently:
+- Only retries connection failures (not application errors)
+- Automatically tries different endpoints
+- Marks failed endpoints as unhealthy
+- Uses exponential backoff for health checks
 
 ### Model Discovery
 

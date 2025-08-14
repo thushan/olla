@@ -166,18 +166,25 @@ proxy:
 
 ### Retry Settings
 
+The retry mechanism is now built-in and automatic for connection failures. Retry configuration has moved to a structured format:
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `max_retries` | int | `3` | Maximum retry attempts |
-| `retry_backoff` | duration | `1s` | Backoff between retries |
+| `retry.enabled` | bool | `true` | Enable automatic retry |
+| `retry.on_connection_failure` | bool | `true` | Retry on connection errors |
+| `retry.max_attempts` | int | `0` | Max retry attempts (0 = try all endpoints) |
 
 Example:
 
 ```yaml
 proxy:
-  max_retries: 3
-  retry_backoff: 2s
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 0  # Try all available endpoints once
 ```
+
+**Note**: The old `max_retries` and `retry_backoff` fields are deprecated and no longer used. Connection retry logic now uses intelligent exponential backoff based on endpoint health status.
 
 ### Streaming Settings
 
@@ -280,6 +287,7 @@ Model management and unification settings.
 |-------|------|---------|-------------|
 | `type` | string | `"memory"` | Registry type (only `memory` supported) |
 | `enable_unifier` | bool | `true` | Enable model unification |
+| `routing_strategy.type` | string | `"strict"` | Model routing strategy (strict/optimistic/discovery) |
 
 Example:
 
@@ -287,6 +295,43 @@ Example:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: strict  # Default: only route to endpoints with the model
+```
+
+### Model Routing Strategy
+
+Controls how requests are routed when models aren't available on all endpoints:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `routing_strategy.type` | string | `"strict"` | Strategy: `strict`, `optimistic`, or `discovery` |
+| `routing_strategy.options.fallback_behavior` | string | `"compatible_only"` | Fallback: `compatible_only`, `all`, or `none` |
+| `routing_strategy.options.discovery_timeout` | duration | `2s` | Timeout for discovery refresh |
+| `routing_strategy.options.discovery_refresh_on_miss` | bool | `false` | Refresh discovery when model not found |
+
+Example configurations:
+
+```yaml
+# Production - strict routing
+model_registry:
+  routing_strategy:
+    type: strict
+
+# Development - optimistic with fallback
+model_registry:
+  routing_strategy:
+    type: optimistic
+    options:
+      fallback_behavior: compatible_only
+
+# Dynamic environments - discovery mode
+model_registry:
+  routing_strategy:
+    type: discovery
+    options:
+      discovery_refresh_on_miss: true
+      discovery_timeout: 2s
 ```
 
 ### Unification Settings
@@ -496,9 +541,14 @@ proxy:
   connection_timeout: 30s
   response_timeout: 0s
   read_timeout: 0s
-  max_retries: 3
-  retry_backoff: 1s
+  # DEPRECATED as of v0.0.16 - Use retry configuration instead
+  # max_retries: 3
+  # retry_backoff: 1s
   stream_buffer_size: 4096
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 0
 
 discovery:
   type: "static"
@@ -516,6 +566,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"
+    options:
+      fallback_behavior: "compatible_only"
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 24h

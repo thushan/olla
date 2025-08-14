@@ -27,8 +27,8 @@ Only routes requests to endpoints known to have the model.
 **Use Case:** Production environments where predictability is critical.
 
 ```yaml
-routing:
-  model_routing:
+model_registry:
+  routing_strategy:
     type: strict
 ```
 
@@ -45,8 +45,8 @@ Attempts to route to any healthy endpoint when the model isn't found.
 **Use Case:** Development environments or when models might be pulled on-demand.
 
 ```yaml
-routing:
-  model_routing:
+model_registry:
+  routing_strategy:
     type: optimistic
     options:
       fallback_behavior: compatible_only  # or "all", "none"
@@ -65,8 +65,8 @@ Refreshes model discovery before making routing decisions.
 **Use Case:** When models are frequently added/removed from endpoints.
 
 ```yaml
-routing:
-  model_routing:
+model_registry:
+  routing_strategy:
     type: discovery
     options:
       discovery_refresh_on_miss: true
@@ -104,21 +104,27 @@ Different routing decisions result in appropriate HTTP status codes:
 Complete routing configuration:
 
 ```yaml
-# Strict mode for production
-routing:
-  model_routing:
+# Strict mode for production (default)
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  routing_strategy:
     type: strict
     
 # Optimistic with compatible fallback
-routing:
-  model_routing:
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  routing_strategy:
     type: optimistic
     options:
       fallback_behavior: compatible_only
       
 # Discovery with timeout
-routing:
-  model_routing:
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  routing_strategy:
     type: discovery
     options:
       discovery_refresh_on_miss: true

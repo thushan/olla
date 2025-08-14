@@ -120,9 +120,13 @@ proxy:
   connection_timeout: 30s     # Timeout for establishing connections
   response_timeout: 600s      # Timeout for complete response (10 minutes)
   read_timeout: 120s         # Timeout for reading response chunks
-  max_retries: 3             # Maximum retry attempts on failure
-  retry_backoff: 500ms       # Delay between retries
   stream_buffer_size: 8192   # Buffer size for streaming responses (8KB)
+  
+  # Automatic retry on connection failures (v0.0.16+)
+  retry:
+    enabled: true             # Enable automatic retry
+    on_connection_failure: true  # Retry on connection errors
+    max_attempts: 0           # 0 = try all available endpoints
 ```
 
 ### Proxy Settings

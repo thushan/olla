@@ -38,6 +38,10 @@ proxy:
   response_timeout: 900s
   read_timeout: 600s
   
+  # DEPRECATED as of v0.0.16 - These fields are no longer used
+  # max_retries: 3        # Replaced by retry.max_attempts
+  # retry_backoff: 500ms  # Now uses intelligent exponential backoff
+  
   # Connection failure retry settings (applies to both Sherpa and Olla engines)
   # When enabled, the proxy will automatically retry failed requests on other healthy endpoints
   retry:
@@ -101,10 +105,23 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+
   unification:
     enabled: true
     stale_threshold: 24h  # How long to keep models in memory after last seen
     cleanup_interval: 10m  # How often to check for stale models
+  
+  # Model routing strategy (v0.0.16+)
+  # Controls how requests are routed when models aren't available on all endpoints
+  routing_strategy:
+    type: "strict"  # Options: strict, optimistic, discovery
+    options:
+      # Fallback behavior when model not found (optimistic mode)
+      fallback_behavior: "compatible_only"  # Options: compatible_only, all, none
+      
+      # Discovery mode settings
+      discovery_timeout: 2s  # Timeout for discovery refresh
+      discovery_refresh_on_miss: false  # Refresh discovery when model not found
 
 logging:
   level: "info"  # debug, info, warn, error
