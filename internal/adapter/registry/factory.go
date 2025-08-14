@@ -20,8 +20,10 @@ type RegistryConfig struct {
 
 // DiscoveryService interface for discovery operations
 type DiscoveryService interface {
-	RefreshEndpoints(ctx context.Context) error
+	GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error)
 	GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error)
+	RefreshEndpoints(ctx context.Context) error
+	UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error
 }
 
 func NewModelRegistry(regConfig RegistryConfig, logger logger.StyledLogger) (domain.ModelRegistry, error) {

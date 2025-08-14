@@ -401,6 +401,13 @@ func (a *discoveryServiceAdapter) RefreshEndpoints(ctx context.Context) error {
 }
 
 func (a *discoveryServiceAdapter) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	// get all endpoints, not just healthy ones
+	if provider, ok := a.discovery.(interface {
+		GetEndpoints(context.Context) ([]*domain.Endpoint, error)
+	}); ok {
+		return provider.GetEndpoints(ctx)
+	}
+	// fall to healthy endpoints if GetEndpoints not available
 	return a.discovery.GetHealthyEndpoints(ctx)
 }
 
@@ -409,6 +416,10 @@ func (a *discoveryServiceAdapter) GetHealthyEndpoints(ctx context.Context) ([]*d
 }
 
 func (a *discoveryServiceAdapter) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
-	// This is a no-op for the registry adapter as it doesn't manage endpoint status
+	if updater, ok := a.discovery.(interface {
+		UpdateEndpointStatus(context.Context, *domain.Endpoint) error
+	}); ok {
+		return updater.UpdateEndpointStatus(ctx, endpoint)
+	}
 	return nil
 }
