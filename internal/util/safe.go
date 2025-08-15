@@ -20,3 +20,13 @@ func SafeUint64(value int64) uint64 {
 	}
 	return uint64(value)
 }
+
+func SafeInt32(value int64) int32 {
+	if value < math.MinInt32 {
+		return math.MinInt32
+	}
+	if value > math.MaxInt32 {
+		return math.MaxInt32
+	}
+	return int32(value)
+}

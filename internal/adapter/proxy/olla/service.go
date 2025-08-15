@@ -645,86 +645,30 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 
 // streamResponse performs buffered streaming with backpressure handling
 func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, []byte, error) {
-	totalBytes := 0
-	var lastChunk []byte
+	state := &streamState{}
 	flusher, canFlush := w.(http.Flusher)
 	isStreaming := core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile())
-
-	clientDisconnected := false
-	bytesAfterDisconnect := 0
-	disconnectTime := time.Time{}
 
 	// Pre-allocate timer to avoid allocations in hot path
 	readDeadline := time.NewTimer(s.configuration.GetReadTimeout())
 	defer readDeadline.Stop()
 
 	for {
-		select {
-		case <-clientCtx.Done():
-			if !clientDisconnected {
-				clientDisconnected = true
-				disconnectTime = time.Now()
-				rlog.Debug("client disconnected during streaming", "bytes_sent", totalBytes)
-
-				// Publish client disconnect event
-				s.PublishEvent(core.ProxyEvent{
-					Type: core.EventTypeClientDisconnect,
-					Metadata: core.ProxyEventMetadata{
-						BytesSent: int64(totalBytes),
-					},
-				})
-			}
-		case <-upstreamCtx.Done():
-			return totalBytes, lastChunk, upstreamCtx.Err()
-		case <-readDeadline.C:
-			return totalBytes, lastChunk, fmt.Errorf("read timeout after %v", s.configuration.GetReadTimeout())
-		default:
+		// Check for context cancellation
+		if err := s.checkContexts(clientCtx, upstreamCtx, readDeadline, state, rlog); err != nil {
+			return state.totalBytes, state.lastChunk, err
 		}
 
 		// Reset timer for next read
 		readDeadline.Reset(s.configuration.GetReadTimeout())
 
-		n, err := resp.Body.Read(buffer)
-		if n > 0 {
-			// Only keep last chunk when we hit EOF (for metrics extraction)
-			// This avoids continuous allocations during streaming
-			if err == io.EOF {
-				lastChunk = make([]byte, n)
-				copy(lastChunk, buffer[:n])
+		// Read and process data
+		if err := s.processStreamData(resp, buffer, state, w, canFlush, isStreaming, flusher, rlog); err != nil {
+			if errors.Is(err, io.EOF) {
+				return state.totalBytes, state.lastChunk, nil
 			}
-
-			if !clientDisconnected {
-				written, writeErr := w.Write(buffer[:n])
-				totalBytes += written
-
-				if writeErr != nil {
-					rlog.Debug("write error during streaming", "error", writeErr, "bytes_written", totalBytes)
-					return totalBytes, lastChunk, writeErr
-				}
-
-				// force data out for real-time streaming
-				if canFlush && isStreaming {
-					flusher.Flush()
-				}
-			} else {
-				bytesAfterDisconnect += n
-
-				if bytesAfterDisconnect > ClientDisconnectionBytesThreshold ||
-					time.Since(disconnectTime) > ClientDisconnectionTimeThreshold {
-					rlog.Debug("stopping stream after client disconnect",
-						"bytes_after_disconnect", bytesAfterDisconnect,
-						"time_since_disconnect", time.Since(disconnectTime))
-					return totalBytes, lastChunk, context.Canceled
-				}
-			}
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				return totalBytes, lastChunk, nil
-			}
-			rlog.Debug("read error during streaming", "error", err, "bytes_read", totalBytes)
-			return totalBytes, lastChunk, err
+			rlog.Debug("read error during streaming", "error", err, "bytes_read", state.totalBytes)
+			return state.totalBytes, state.lastChunk, err
 		}
 	}
 }

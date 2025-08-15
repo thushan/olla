@@ -55,7 +55,8 @@ func (r *StaticEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.En
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	healthy := make([]*domain.Endpoint, 0)
+	// Pre-allocate with capacity of all endpoints (worst case)
+	healthy := make([]*domain.Endpoint, 0, len(r.endpoints))
 	for _, endpoint := range r.endpoints {
 		if endpoint.Status == domain.StatusHealthy {
 			healthyCopy := *endpoint
@@ -70,7 +71,8 @@ func (r *StaticEndpointRepository) GetRoutable(ctx context.Context) ([]*domain.E
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	routable := make([]*domain.Endpoint, 0)
+	// Pre-allocate with capacity of all endpoints (worst case)
+	routable := make([]*domain.Endpoint, 0, len(r.endpoints))
 	for _, endpoint := range r.endpoints {
 		if endpoint.Status.IsRoutable() {
 			routableCopy := *endpoint

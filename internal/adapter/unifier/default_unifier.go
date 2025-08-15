@@ -485,9 +485,9 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		ParameterCount:   models[0].ParameterCount,
 		Quantization:     models[0].Quantization,
 		Format:           models[0].Format,
-		Aliases:          make([]domain.AliasEntry, 0),
-		SourceEndpoints:  make([]domain.SourceEndpoint, 0),
-		Capabilities:     make([]string, 0),
+		Aliases:          make([]domain.AliasEntry, 0, len(models)*2),   // thinking avg 2 aliases per model
+		SourceEndpoints:  make([]domain.SourceEndpoint, 0, len(models)), // at least 1 source per model
+		Capabilities:     make([]string, 0, len(models)*5),              // should be ~5 capabilities per model
 		MaxContextLength: models[0].MaxContextLength,
 		DiskSize:         0,
 		LastSeen:         models[0].LastSeen,
