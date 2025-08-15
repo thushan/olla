@@ -63,16 +63,6 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		return fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
 	}
 
-	ctxLogger := middleware.GetLogger(ctx)
-	if ctxLogger != nil {
-		ctxLogger.Info("Request dispatching",
-			"endpoint", endpoint.Name,
-			"target", stats.TargetUrl,
-			"model", stats.Model)
-	} else {
-		rlog.Info("Request dispatching", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
-	}
-
 	s.Selector.IncrementConnections(endpoint)
 	defer s.Selector.DecrementConnections(endpoint)
 
@@ -84,6 +74,17 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	}
 
 	stats.TargetUrl = targetURL.String()
+
+	// Log request dispatch after target URL is computed
+	ctxLogger := middleware.GetLogger(ctx)
+	if ctxLogger != nil {
+		ctxLogger.Info("Request dispatching",
+			"endpoint", endpoint.Name,
+			"target", stats.TargetUrl,
+			"model", stats.Model)
+	} else {
+		rlog.Info("Request dispatching", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
+	}
 
 	// Get endpoint-specific connection pool and transport
 	pool := s.getOrCreateEndpointPool(endpoint.Name)

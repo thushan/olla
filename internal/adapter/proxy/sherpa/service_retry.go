@@ -55,16 +55,6 @@ func (s *Service) ProxyRequestToEndpointsWithRetry(ctx context.Context, w http.R
 func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	stats.EndpointName = endpoint.Name
 
-	ctxLogger := middleware.GetLogger(ctx)
-	if ctxLogger != nil {
-		ctxLogger.Info("Request dispatching",
-			"endpoint", endpoint.Name,
-			"target", stats.TargetUrl,
-			"model", stats.Model)
-	} else {
-		rlog.Info("Request dispatching", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
-	}
-
 	s.Selector.IncrementConnections(endpoint)
 	defer s.Selector.DecrementConnections(endpoint)
 
@@ -76,6 +66,17 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	}
 
 	stats.TargetUrl = targetURL.String()
+
+	// Log request dispatch after target URL is computed
+	ctxLogger := middleware.GetLogger(ctx)
+	if ctxLogger != nil {
+		ctxLogger.Info("Request dispatching",
+			"endpoint", endpoint.Name,
+			"target", stats.TargetUrl,
+			"model", stats.Model)
+	} else {
+		rlog.Info("Request dispatching", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
+	}
 
 	proxyReq, err := http.NewRequestWithContext(ctx, r.Method, targetURL.String(), r.Body)
 	if err != nil {
