@@ -6,11 +6,14 @@ keywords: ["provider metrics", "llm metrics", "token usage", "performance monito
 
 # Provider Metrics
 
+!!! info "Part of the Profile System"
+    Provider metrics are configured as part of the [Profile System](profile-system.md). Each provider profile can define its own metrics extraction configuration to capture platform-specific performance data.
+
 Olla automatically extracts and exposes detailed performance metrics from LLM provider responses, giving you real-time insights into model performance, token usage, and processing times.
 
 ## Overview
 
-Provider metrics extraction is a best-effort feature that captures performance data from the final response chunks of LLM providers. This data includes:
+Provider metrics extraction is a **profile-based feature** that captures performance data from the final response chunks of LLM providers. Each provider profile (`config/profiles/*.yaml`) can define how to extract metrics from its specific response format. This data includes:
 
 - Token generation statistics
 - Processing latencies
@@ -99,51 +102,86 @@ The following metrics are extracted when available:
 
 ## Configuration
 
+!!! tip "Profile-Based Configuration"
+    Metrics extraction is configured within each provider's profile file (e.g., `config/profiles/ollama.yaml`). This allows each provider to define its own extraction logic based on its specific response format. See the [Profile System documentation](profile-system.md) for more details on profile configuration.
+
+### Configuration Structure
+Provider metrics are configured in the profile YAML files under the `metrics.extraction` section:
+
+```yaml
+metrics:
+  extraction:
+    enabled: true|false        # Enable/disable metrics extraction
+    source: "response_body"     # Where to extract from (response_body or response_headers)
+    format: "json"              # Format of the source data
+    
+    paths:                      # JSONPath expressions to extract raw values
+      <field_name>: <jsonpath>
+    
+    calculations:               # Mathematical expressions using extracted values
+      <metric_name>: <expression>
+```
+
+### Key Components
+
+1. **`paths`**: Maps field names to JSONPath expressions for extracting values from the provider's response
+2. **`calculations`**: Defines derived metrics using mathematical expressions that reference extracted fields
+3. **Expression variables**: Any field defined in `paths` can be used as a variable in `calculations`
+4. **Pre-compilation**: Expressions are compiled at startup for performance
+
 ### Profile Configuration
-Each provider profile can define how to extract metrics:
+Each provider profile can define how to extract metrics using the `metrics.extraction` configuration:
 
 ```yaml
 # config/profiles/ollama.yaml
-profile:
-  name: ollama
-  type: inference
-  provider: ollama
-  
-  metrics_extraction:
-    # JSONPath expressions for extracting metrics
-    response_paths:
-      total_duration: "$.total_duration"
-      load_duration: "$.load_duration"
-      prompt_eval_count: "$.prompt_eval_count"
-      prompt_eval_duration: "$.prompt_eval_duration"
-      eval_count: "$.eval_count"
-      eval_duration: "$.eval_duration"
-      model: "$.model"
-      done_reason: "$.done_reason"
+name: ollama
+display_name: "Ollama"
+description: "Local Ollama instance for running GGUF models"
+
+# Metrics extraction configuration
+metrics:
+  extraction:
+    enabled: true
+    source: "response_body"  # Where to extract from
+    format: "json"           # Expected format
     
-    # Mathematical transformations
+    # JSONPath expressions for extracting values from provider response
+    paths:
+      model: "$.model"
+      done: "$.done"
+      # Token counts
+      input_tokens: "$.prompt_eval_count"
+      output_tokens: "$.eval_count"
+      # Timing data (in nanoseconds from Ollama)
+      total_duration_ns: "$.total_duration"
+      load_duration_ns: "$.load_duration"
+      prompt_duration_ns: "$.prompt_eval_duration"
+      eval_duration_ns: "$.eval_duration"
+    
+    # Mathematical expressions to calculate derived metrics
     calculations:
-      total_duration_ms: "total_duration / 1000000"
-      load_duration_ms: "load_duration / 1000000"
-      prompt_eval_duration_ms: "prompt_eval_duration / 1000000"
-      eval_duration_ms: "eval_duration / 1000000"
-      tokens_per_second: "eval_count / (eval_duration / 1000000000)"
-      prompt_tokens_per_second: "prompt_eval_count / (prompt_eval_duration / 1000000000)"
-      time_per_token_ms: "(eval_duration / 1000000) / eval_count"
+      tokens_per_second: "output_tokens / (eval_duration_ns / 1000000000)"
+      ttft_ms: "prompt_duration_ns / 1000000"
+      total_ms: "total_duration_ns / 1000000"
+      model_load_ms: "load_duration_ns / 1000000"
 ```
 
 ### OpenAI Profile Example
 ```yaml
 # config/profiles/openai.yaml
-profile:
-  name: openai
-  type: inference
-  provider: openai
-  
-  metrics_extraction:
-    response_paths:
-      prompt_tokens: "$.usage.prompt_tokens"
-      completion_tokens: "$.usage.completion_tokens"
+name: openai
+display_name: "OpenAI Compatible"
+
+metrics:
+  extraction:
+    enabled: true
+    source: "response_body"
+    format: "json"
+    
+    paths:
+      # OpenAI standard usage format
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
       total_tokens: "$.usage.total_tokens"
       model: "$.model"
       finish_reason: "$.choices[0].finish_reason"
@@ -152,16 +190,21 @@ profile:
 ### LM Studio Profile Example
 ```yaml
 # config/profiles/lmstudio.yaml
-profile:
-  name: lmstudio
-  type: inference
-  provider: lmstudio
-  
-  metrics_extraction:
-    response_paths:
-      prompt_tokens: "$.usage.prompt_tokens"
-      completion_tokens: "$.usage.completion_tokens"
+name: lmstudio
+display_name: "LM Studio"
+
+metrics:
+  extraction:
+    enabled: true
+    source: "response_body"
+    format: "json"
+    
+    paths:
+      # Usage data
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
       total_tokens: "$.usage.total_tokens"
+      # Timing data specific to LM Studio
       prompt_n: "$.timings.prompt_n"
       prompt_ms: "$.timings.prompt_ms"
       predicted_n: "$.timings.predicted_n"
@@ -215,15 +258,22 @@ Response includes provider metrics when available:
 
 ## Performance Considerations
 
+### Extraction Implementation
+Olla uses high-performance libraries for metrics extraction:
+- **[gjson](https://github.com/tidwall/gjson)**: For JSONPath parsing (7.6x faster than encoding/json)
+- **[expr](https://github.com/expr-lang/expr)**: For pre-compiled mathematical expressions
+
 ### Extraction Overhead
 - Metrics extraction runs with a 10ms timeout to prevent blocking
 - Extraction is best-effort - failures don't affect request processing
-- Cached JSONPath expressions for efficient repeated extractions
+- Expressions are pre-compiled at startup, not runtime
 - Zero-allocation design for high-throughput scenarios
+- Performance: ~10µs per extraction operation
 
 ### Memory Usage
-- Last chunk buffering: Only the final response chunk is kept for extraction
-- Typical overhead: < 10KB per request
+- **Olla**: Only captures last chunk on EOF (13x reduction in allocations)
+- **Sherpa**: Ring buffer implementation (8KB max) for bounded memory
+- Typical overhead: ~2KB per extraction
 - Automatic cleanup after extraction
 
 ## Monitoring Best Practices
@@ -334,8 +384,34 @@ def collect_metrics():
             ).observe(stats['avg_tokens_per_second'])
 ```
 
+## Adding Metrics to Custom Profiles
+
+Since provider metrics are part of the profile system, you can easily add metrics extraction to any custom provider profile:
+
+1. **Create your profile** in `config/profiles/your-provider.yaml`
+2. **Add the metrics section** following the structure shown above
+3. **Define JSONPath expressions** in `paths` to extract values from your provider's response
+4. **Add calculations** for any derived metrics using the extracted values
+5. **Test with debug logging** to verify metrics are extracted correctly
+
+Example for a custom provider:
+```yaml
+name: my-custom-llm
+metrics:
+  extraction:
+    enabled: true
+    source: "response_body"
+    format: "json"
+    paths:
+      request_id: "$.id"
+      tokens_used: "$.usage.tokens"
+      time_ms: "$.timing.total_ms"
+    calculations:
+      tokens_per_second: "tokens_used / (time_ms / 1000)"
+```
+
 ## Related Documentation
 
-- [Monitoring Guide](../configuration/practices/monitoring.md) - General monitoring setup
-- [Profile System](profile-system.md) - Profile configuration details
-- [API Reference](../api-reference/overview.md) - Response headers documentation
+- **[Profile System](profile-system.md)** - Complete guide to the profile system and how metrics fit within it
+- [Monitoring Guide](../configuration/practices/monitoring.md) - General monitoring setup and best practices
+- [API Reference](../api-reference/overview.md) - Response headers and status endpoint documentation
