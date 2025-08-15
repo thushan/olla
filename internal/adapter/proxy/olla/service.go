@@ -659,7 +659,16 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 			return state.totalBytes, state.lastChunk, err
 		}
 
-		// Reset timer for next read
+		// Reset timer for next read (drain if already fired to prevent race)
+		// this only applies to Olla as Sherpa has a different streaming model
+		// which creates a new timer, instead of resetting the existing one
+		if !readDeadline.Stop() {
+			// Timer already expired, drain the channel
+			select {
+			case <-readDeadline.C:
+			default:
+			}
+		}
 		readDeadline.Reset(s.configuration.GetReadTimeout())
 
 		// Read and process data

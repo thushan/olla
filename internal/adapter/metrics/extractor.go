@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -326,14 +328,29 @@ func (e *Extractor) extractFromHeaders(headers http.Header, config domain.Metric
 // convertToGjsonPath converts JSONPath to gjson syntax
 // gjson uses simpler dot notation: $.foo.bar becomes foo.bar
 func convertToGjsonPath(jsonPath string) string {
-	// Remove leading $. if present
-	if len(jsonPath) > 2 && jsonPath[:2] == "$." {
-		return jsonPath[2:]
-	}
-	if jsonPath == "$" {
+	if jsonPath == "$" || jsonPath == "" {
 		return ""
 	}
-	return jsonPath
+
+	s := jsonPath
+
+	// remove the leasing "$." or "$"
+	if strings.HasPrefix(s, "$.") {
+		s = s[2:]
+	} else if strings.HasPrefix(s, "$") {
+		s = s[1:]
+	}
+
+	// convert bracket array indices: foo[0].bar -> foo.0.bar
+	s = regexp.MustCompile(`\[(\d+)\]`).ReplaceAllString(s, `.$1`)
+
+	// convert bracket keys: ['field'] -> .field
+	s = regexp.MustCompile(`\['([^']+)'\]`).ReplaceAllString(s, `.$1`)
+
+	// trim any accidental leading dots, this sometimes happens in our lab
+	s = strings.TrimPrefix(s, ".")
+
+	return s
 }
 
 // GetStats returns extraction statistics
