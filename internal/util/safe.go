@@ -30,3 +30,17 @@ func SafeInt32(value int64) int32 {
 	}
 	return int32(value)
 }
+
+// SafeFloat32 safely converts float64 to float32, handling special values
+func SafeFloat32(value float64) float32 {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0
+	}
+	if value > math.MaxFloat32 {
+		return math.MaxFloat32
+	}
+	if value < -math.MaxFloat32 {
+		return -math.MaxFloat32
+	}
+	return float32(value)
+}

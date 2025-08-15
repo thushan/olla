@@ -237,7 +237,7 @@ func (e *Extractor) mapFieldToMetrics(field string, result gjson.Result, metrics
 		metrics.Model = result.String()
 	case "finish_reason":
 		metrics.FinishReason = result.String()
-	case "done":
+	case "done", "is_complete":
 		metrics.IsComplete = result.Bool()
 	case "prompt_duration_ns", "prompt_eval_duration":
 		ms := result.Int() / 1_000_000
@@ -290,7 +290,7 @@ func (e *Extractor) runCalculations(profileName string, values map[string]interf
 				if val, ok := result.(float64); ok {
 					switch field {
 					case "tokens_per_second":
-						metrics.TokensPerSecond = float32(val)
+						metrics.TokensPerSecond = util.SafeFloat32(val)
 					case "ttft_ms":
 						metrics.TTFTMs = util.SafeInt32(int64(val))
 					case "total_ms":
@@ -305,7 +305,8 @@ func (e *Extractor) runCalculations(profileName string, values map[string]interf
 
 	// Calculate tokens per second if we have the data and no calculation provided
 	if metrics.TokensPerSecond == 0 && metrics.OutputTokens > 0 && metrics.GenerationMs > 0 {
-		metrics.TokensPerSecond = float32(metrics.OutputTokens) / (float32(metrics.GenerationMs) / 1000.0)
+		tps := float64(metrics.OutputTokens) * 1000.0 / float64(metrics.GenerationMs)
+		metrics.TokensPerSecond = util.SafeFloat32(tps)
 	}
 
 	// Ensure total tokens is set if we have input and output
