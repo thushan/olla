@@ -72,6 +72,16 @@ Provider-specific configuration templates:
 
 The profile system ensures compatibility with various LLM providers.
 
+### [Provider Metrics](provider-metrics.md)
+Real-time performance metrics extraction:
+
+- Automatic extraction from provider responses
+- Token usage and generation speed tracking
+- Processing latency measurements
+- Best-effort extraction with zero performance impact
+
+Provider metrics give insights into model performance and resource usage.
+
 ## How Components Work Together
 
 ```mermaid

@@ -127,6 +127,7 @@ nav:
       - Model Routing: concepts/model-routing.md
       - Model Unification: concepts/model-unification.md
       - Health Checking: concepts/health-checking.md
+      - Provider Metrics: concepts/provider-metrics.md
       - Profile System: concepts/profile-system.md
   - Configuration:
       - Overview: configuration/overview.md
