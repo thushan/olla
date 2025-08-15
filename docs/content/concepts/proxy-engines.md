@@ -48,6 +48,8 @@ Olla ships with the default setting of using the `Sherpa` engine for a wide vari
 | **Performance** | Good for moderate loads | Excellent for high loads |
 | **Memory Usage** | Lower memory footprint | Higher due to pooling |
 | **Connection Handling** | Shared transport with keep-alive | Per-endpoint connection pools |
+| **Circuit Breaker** | Basic failure detection | Advanced circuit breaker per endpoint |
+| **Retry Logic** | Shared retry handler | Shared retry handler with circuit breaker integration |
 | **Streaming** | Standard HTTP streaming (8KB buffer) | Optimised for LLM streaming (64KB buffer) |
 | **Best For** | Development, small deployments | Production, enterprise use |
 
@@ -135,6 +137,7 @@ No other changes are needed. Both engines:
 - Work with all [proxy profiles](proxy-profiles.md)
 - Are compatible with all backends
 - Provide identical functionality
+- Share the same retry and recovery mechanisms
 
 ## Stream Buffer Size
 

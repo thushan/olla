@@ -169,6 +169,11 @@ func (a *endpointRepositoryAdapter) RefreshEndpoints(ctx context.Context) error 
 	return nil
 }
 
+func (a *endpointRepositoryAdapter) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
+	// Update endpoint status in repository
+	return a.repo.UpdateEndpoint(ctx, endpoint)
+}
+
 // SetStatsService sets the stats service dependency
 func (s *ProxyServiceWrapper) SetStatsService(statsService *StatsService) {
 	s.statsService = statsService

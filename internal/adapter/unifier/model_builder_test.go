@@ -2,6 +2,8 @@ package unifier
 
 import (
 	"testing"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 func TestDetectPlatform(t *testing.T) {
@@ -22,13 +24,13 @@ func TestDetectPlatform(t *testing.T) {
 			name:         "ollama version in metadata",
 			metadata:     map[string]interface{}{"ollama.version": "0.1.0"},
 			endpointType: "lmstudio",
-			want:         "ollama",
+			want:         constants.ProviderTypeOllama,
 		},
 		{
 			name:         "lmstudio version in metadata",
 			metadata:     map[string]interface{}{"lmstudio.version": "1.0.0"},
 			endpointType: "openai",
-			want:         "lmstudio",
+			want:         constants.ProviderTypeLMStudio,
 		},
 		{
 			name:         "endpoint type used when no metadata hints",
@@ -59,7 +61,7 @@ func TestDetectPlatform(t *testing.T) {
 			format:       "gguf",
 			metadata:     map[string]interface{}{},
 			endpointType: "",
-			want:         "ollama",
+			want:         constants.ProviderTypeOllama,
 		},
 		{
 			name:         "endpoint type overrides gguf format",
@@ -73,7 +75,7 @@ func TestDetectPlatform(t *testing.T) {
 			format:       "",
 			metadata:     map[string]interface{}{},
 			endpointType: "",
-			want:         "openai",
+			want:         constants.ProviderTypeOpenAI,
 		},
 	}
 

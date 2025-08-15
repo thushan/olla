@@ -39,7 +39,9 @@ It intelligently routes LLM requests across local and remote inference nodes - i
 Understand these key concepts to get the most from Olla:
 
 - **[Proxy Engines](concepts/proxy-engines.md)** - Choose between Sherpa (simple) or Olla (high-performance) engines
-- **[Load Balancing](concepts/load-balancing.md)** - Distribute requests across multiple endpoints with priority, round-robin, or least-connections
+- **[Proxy Profiles](concepts/proxy-profiles.md)** - Learn about different proxy behaviours for streaming or buffering
+- **[Load Balancing](concepts/load-balancing.md)** - Distribute requests across multiple endpoints
+- **[Model Routing](concepts/model-routing.md)** - Different ways Olla routes traffic based on model availability & health
 - **[Model Unification](concepts/model-unification.md)** - Single catalogue of models across all your backends
 - **[Health Checking](concepts/health-checking.md)** - Automatic endpoint monitoring and intelligent failover
 - **[Profile System](concepts/profile-system.md)** - Customise backend behaviour without writing code
@@ -50,6 +52,11 @@ Understand these key concepts to get the most from Olla:
 
 Get up and running with Olla in minutes:
 
+=== "Installer"    
+    ```bash
+    # Linux/macOS
+    bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
+    ```
 === "Using Docker"
     ```bash
     # If you have ollama or lmstudio locally
@@ -62,6 +69,10 @@ Get up and running with Olla in minutes:
     go install github.com/thushan/olla@latest
     olla
     ```
+
+=== "From Binaries"
+
+    <small>Visit [Github Releases](https://github.com/thushan/olla/releases/latest)</small>
 
 === "From Source"
 
@@ -80,7 +91,7 @@ Olla provides detailed response headers for observability:
 |--------|-------------|
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used for the request |
-| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio) |
+| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio/vllm) |
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Response-Time` | Total processing time |
 

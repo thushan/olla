@@ -45,6 +45,15 @@ Standardised model discovery and management:
 
 Model unification simplifies working with heterogeneous LLM infrastructure.
 
+### [Model Routing](model-routing.md)
+Intelligent routing strategies for model availability:
+
+- **Strict**: Only route to endpoints with the model
+- **Optimistic**: Route to endpoints with model, with configurable fallback
+- **Discovery**: Refresh model catalog before routing
+
+Model routing ensures requests reach appropriate endpoints based on model availability.
+
 ### [Proxy Profiles](proxy-profiles.md)
 Response handling strategies for different use cases:
 

@@ -164,20 +164,16 @@ proxy:
   read_timeout: 0s
 ```
 
-### Retry Settings
+### Retry Behaviour
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `max_retries` | int | `3` | Maximum retry attempts |
-| `retry_backoff` | duration | `1s` | Backoff between retries |
+As of v0.0.16, the retry mechanism is automatic and built-in for connection failures. When a connection error occurs (e.g., connection refused, network unreachable, timeout), Olla will automatically:
 
-Example:
+1. Mark the failed endpoint as unhealthy
+2. Try the next available healthy endpoint 
+3. Continue until a successful connection is made or all endpoints have been tried
+4. Use exponential backoff for unhealthy endpoints to prevent overwhelming them
 
-```yaml
-proxy:
-  max_retries: 3
-  retry_backoff: 2s
-```
+**Note**: The fields `max_retries` and `retry_backoff` that may still appear in the configuration are deprecated and ignored. The retry behaviour is now automatic and cannot be configured.
 
 ### Streaming Settings
 
@@ -280,6 +276,7 @@ Model management and unification settings.
 |-------|------|---------|-------------|
 | `type` | string | `"memory"` | Registry type (only `memory` supported) |
 | `enable_unifier` | bool | `true` | Enable model unification |
+| `routing_strategy.type` | string | `"strict"` | Model routing strategy (strict/optimistic/discovery) |
 
 Example:
 
@@ -287,6 +284,43 @@ Example:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: strict  # Default: only route to endpoints with the model
+```
+
+### Model Routing Strategy
+
+Controls how requests are routed when models aren't available on all endpoints:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `routing_strategy.type` | string | `"strict"` | Strategy: `strict`, `optimistic`, or `discovery` |
+| `routing_strategy.options.fallback_behavior` | string | `"compatible_only"` | Fallback: `compatible_only`, `all`, or `none` |
+| `routing_strategy.options.discovery_timeout` | duration | `2s` | Timeout for discovery refresh |
+| `routing_strategy.options.discovery_refresh_on_miss` | bool | `false` | Refresh discovery when model not found |
+
+Example configurations:
+
+```yaml
+# Production - strict routing
+model_registry:
+  routing_strategy:
+    type: strict
+
+# Development - optimistic with fallback
+model_registry:
+  routing_strategy:
+    type: optimistic
+    options:
+      fallback_behavior: compatible_only
+
+# Dynamic environments - discovery mode
+model_registry:
+  routing_strategy:
+    type: discovery
+    options:
+      discovery_refresh_on_miss: true
+      discovery_timeout: 2s
 ```
 
 ### Unification Settings
@@ -330,6 +364,47 @@ model_registry:
         family_overrides:
           "llama3": "meta-llama"
 ```
+
+## Routing Configuration
+
+Model routing strategy settings for handling requests when models aren't available on all endpoints.
+
+### Model Routing Strategy
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `routing.model_routing.type` | string | `"strict"` | Routing strategy (`strict`, `optimistic`, `discovery`) |
+| `routing.model_routing.options.fallback_behavior` | string | `"compatible_only"` | Fallback behavior (`compatible_only`, `all`, `none`) |
+| `routing.model_routing.options.discovery_refresh_on_miss` | bool | `false` | Refresh discovery when model not found |
+| `routing.model_routing.options.discovery_timeout` | duration | `2s` | Discovery refresh timeout |
+
+#### Strategy Types
+
+- **`strict`**: Only routes to endpoints known to have the model
+- **`optimistic`**: Falls back to healthy endpoints when model not found
+- **`discovery`**: Refreshes model discovery before routing decisions
+
+Example:
+
+```yaml
+routing:
+  model_routing:
+    type: strict
+    options:
+      fallback_behavior: compatible_only
+      discovery_refresh_on_miss: false
+      discovery_timeout: 2s
+```
+
+### Response Headers
+
+Routing decisions are exposed via response headers:
+
+| Header | Description |
+|--------|-------------|
+| `X-Olla-Routing-Strategy` | Strategy used (strict/optimistic/discovery) |
+| `X-Olla-Routing-Decision` | Action taken (routed/fallback/rejected) |
+| `X-Olla-Routing-Reason` | Human-readable reason for decision |
 
 ## Logging Configuration
 
@@ -455,8 +530,9 @@ proxy:
   connection_timeout: 30s
   response_timeout: 0s
   read_timeout: 0s
-  max_retries: 3
-  retry_backoff: 1s
+  # DEPRECATED as of v0.0.16 - retry is now automatic
+  # max_retries: 3
+  # retry_backoff: 1s
   stream_buffer_size: 4096
 
 discovery:
@@ -475,6 +551,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"
+    options:
+      fallback_behavior: "compatible_only"
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 24h

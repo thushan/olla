@@ -128,12 +128,13 @@ endpoints:
 
 When an endpoint fails, Olla implements exponential backoff:
 
-1. **First failure**: Check again after `check_interval`
+1. **First failure**: Check again after `check_interval` (no backoff)
 2. **Second failure**: Wait `check_interval * 2`
 3. **Third failure**: Wait `check_interval * 4`
-4. **Max backoff**: Capped at 5 minutes
+4. **Fourth failure**: Wait `check_interval * 8`
+5. **Max backoff**: Capped at `check_interval * 12` or 60 seconds (whichever is lower)
 
-This reduces load on failing endpoints while still detecting recovery.
+This reduces load on failing endpoints while still detecting recovery quickly on the first failure.
 
 ### Fast Recovery Detection
 
@@ -142,6 +143,17 @@ When an unhealthy endpoint might be recovering:
 1. **Half-Open State**: Send limited test traffic
 2. **Success Threshold**: After 2 successful checks, mark healthy
 3. **Full Traffic**: Resume normal routing
+
+### Automatic Model Discovery on Recovery
+
+When an endpoint recovers from an unhealthy state, Olla automatically:
+
+1. **Detects Recovery**: Health check transitions from unhealthy to healthy
+2. **Triggers Discovery**: Automatically initiates model discovery
+3. **Updates Catalog**: Refreshes the unified model catalog with latest models
+4. **Resumes Routing**: Endpoint is immediately available for request routing
+
+This ensures the model catalog stays up-to-date even if models were added/removed while the endpoint was down.
 
 ## Health Check Types
 
@@ -169,6 +181,25 @@ endpoints:
     # Health check also validates model availability
 ```
 
+## Connection Failure Handling
+
+### Automatic Retry on Connection Failures
+
+When a request fails due to connection issues, Olla automatically:
+
+1. **Detects Failure**: Identifies connection refused, reset, or timeout errors
+2. **Marks Unhealthy**: Immediately updates endpoint status to unhealthy
+3. **Retries Request**: Automatically tries the next available healthy endpoint
+4. **Updates Health**: Triggers exponential backoff for failed endpoint
+
+This happens transparently without dropping the user request. The retry behaviour is automatic and built-in as of v0.0.16.
+
+Connection errors that trigger automatic retry:
+- **Connection Refused**: Backend service is down
+- **Connection Reset**: Backend crashed or restarted
+- **Connection Timeout**: Backend is overloaded
+- **Network Unreachable**: Network connectivity issues
+
 ## Circuit Breaker Integration
 
 Health checks work with the circuit breaker to prevent cascade failures:
@@ -193,10 +224,10 @@ Health checks work with the circuit breaker to prevent cascade failures:
 
 The circuit breaker activates after consecutive failures:
 
-1. **Failure Threshold**: 3 consecutive failures trigger opening
+1. **Failure Threshold**: 3 failures (health checker) or 5 failures (Olla proxy engine)
 2. **Open Duration**: Circuit stays open for 30 seconds
-3. **Half-Open Test**: Send 3 test requests
-4. **Recovery**: 2 successful tests close the circuit
+3. **Half-Open Test**: Allows one test request through
+4. **Recovery**: First successful request closes the circuit
 
 ## Monitoring Health Status
 

@@ -105,6 +105,17 @@ func (m *mockDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 	return m.err
 }
 
+func (m *mockDiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
+	// Find and update the endpoint in our mock list
+	for i, ep := range m.endpoints {
+		if ep.URLString == endpoint.URLString {
+			m.endpoints[i] = endpoint
+			return nil
+		}
+	}
+	return nil
+}
+
 type mockEndpointSelector struct {
 	endpoint  *domain.Endpoint
 	err       error

@@ -124,6 +124,7 @@ nav:
       - Proxy Engines: concepts/proxy-engines.md
       - Proxy Profiles: concepts/proxy-profiles.md
       - Load Balancing: concepts/load-balancing.md
+      - Model Routing: concepts/model-routing.md
       - Model Unification: concepts/model-unification.md
       - Health Checking: concepts/health-checking.md
       - Profile System: concepts/profile-system.md

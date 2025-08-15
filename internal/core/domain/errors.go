@@ -123,20 +123,34 @@ func NewProxyError(requestID, targetURL, method, path string, statusCode int, la
 	}
 }
 
-/*
-func NewConfigValidationError(field string, value interface{}, reason string) *ConfigValidationError {
-	return &ConfigValidationError{
-		Field:  field,
-		Value:  value,
-		Reason: reason,
-	}
+type ModelRoutingError struct {
+	Err              error
+	Model            string
+	Strategy         string
+	Decision         string
+	ModelEndpoints   []string
+	HealthyEndpoints int
 }
 
-func NewLoadBalancerError(strategy string, endpointCount int, err error) *LoadBalancerError {
-	return &LoadBalancerError{
-		Strategy:      strategy,
-		EndpointCount: endpointCount,
-		Err:           err,
+func (e *ModelRoutingError) Error() string {
+	if e.Decision == "rejected" {
+		return fmt.Sprintf("model routing strategy %s rejected request for %s: %d healthy endpoints, model on %v: %v",
+			e.Strategy, e.Model, e.HealthyEndpoints, e.ModelEndpoints, e.Err)
+	}
+	return fmt.Sprintf("model routing strategy %s failed for %s: %v", e.Strategy, e.Model, e.Err)
+}
+
+func (e *ModelRoutingError) Unwrap() error {
+	return e.Err
+}
+
+func NewModelRoutingError(model, strategy, decision string, healthyEndpoints int, modelEndpoints []string, err error) *ModelRoutingError {
+	return &ModelRoutingError{
+		Model:            model,
+		Strategy:         strategy,
+		Decision:         decision,
+		HealthyEndpoints: healthyEndpoints,
+		ModelEndpoints:   modelEndpoints,
+		Err:              err,
 	}
 }
-*/

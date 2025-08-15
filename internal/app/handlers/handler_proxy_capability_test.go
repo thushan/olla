@@ -327,20 +327,9 @@ func (m *mockCapabilityModelRegistry) GetModelsByCapability(ctx context.Context,
 
 // Full mock with both model and capability support
 type mockFullModelRegistry struct {
+	baseMockRegistry
 	endpointsForModel  map[string][]string
 	modelsByCapability map[string][]*domain.UnifiedModel
-}
-
-func (m *mockFullModelRegistry) RegisterModel(ctx context.Context, endpointURL string, model *domain.ModelInfo) error {
-	return nil
-}
-
-func (m *mockFullModelRegistry) RegisterModels(ctx context.Context, endpointURL string, models []*domain.ModelInfo) error {
-	return nil
-}
-
-func (m *mockFullModelRegistry) GetModelsForEndpoint(ctx context.Context, endpointURL string) ([]*domain.ModelInfo, error) {
-	return nil, nil
 }
 
 func (m *mockFullModelRegistry) GetEndpointsForModel(ctx context.Context, modelName string) ([]string, error) {
@@ -355,35 +344,53 @@ func (m *mockFullModelRegistry) IsModelAvailable(ctx context.Context, modelName 
 	return ok
 }
 
-func (m *mockFullModelRegistry) GetAllModels(ctx context.Context) (map[string][]*domain.ModelInfo, error) {
-	return nil, nil
-}
-
-func (m *mockFullModelRegistry) GetEndpointModelMap(ctx context.Context) (map[string]*domain.EndpointModels, error) {
-	return nil, nil
-}
-
-func (m *mockFullModelRegistry) RemoveEndpoint(ctx context.Context, endpointURL string) error {
-	return nil
-}
-
-func (m *mockFullModelRegistry) GetStats(ctx context.Context) (domain.RegistryStats, error) {
-	return domain.RegistryStats{}, nil
-}
-
-func (m *mockFullModelRegistry) ModelsToString(models []*domain.ModelInfo) string {
-	return ""
-}
-
-func (m *mockFullModelRegistry) ModelsToStrings(models []*domain.ModelInfo) []string {
-	return []string{}
-}
-
 func (m *mockFullModelRegistry) GetModelsByCapability(ctx context.Context, capability string) ([]*domain.UnifiedModel, error) {
 	if models, ok := m.modelsByCapability[capability]; ok {
 		return models, nil
 	}
 	return []*domain.UnifiedModel{}, nil
+}
+
+func (m *mockFullModelRegistry) GetRoutableEndpointsForModel(ctx context.Context, modelName string, healthyEndpoints []*domain.Endpoint) ([]*domain.Endpoint, *domain.ModelRoutingDecision, error) {
+	// implement strict routing for tests
+	modelEndpoints, _ := m.GetEndpointsForModel(ctx, modelName)
+
+	if len(modelEndpoints) == 0 {
+		// model not found - return all healthy as fallback
+		return healthyEndpoints, &domain.ModelRoutingDecision{
+			Strategy: "test",
+			Action:   "fallback",
+			Reason:   "model not found",
+		}, nil
+	}
+
+	// filter to only endpoints with the model
+	modelEndpointMap := make(map[string]bool)
+	for _, url := range modelEndpoints {
+		modelEndpointMap[url] = true
+	}
+
+	var routable []*domain.Endpoint
+	for _, endpoint := range healthyEndpoints {
+		if modelEndpointMap[endpoint.URLString] {
+			routable = append(routable, endpoint)
+		}
+	}
+
+	if len(routable) == 0 {
+		// model only on unhealthy endpoints
+		return healthyEndpoints, &domain.ModelRoutingDecision{
+			Strategy: "test",
+			Action:   "fallback",
+			Reason:   "model unavailable",
+		}, nil
+	}
+
+	return routable, &domain.ModelRoutingDecision{
+		Strategy: "test",
+		Action:   "routed",
+		Reason:   "model found",
+	}, nil
 }
 
 // Ensure our mocks implement the interface

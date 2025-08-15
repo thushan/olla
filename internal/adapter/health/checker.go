@@ -16,18 +16,20 @@ import (
 )
 
 const (
-	DefaultConcurrentChecks    = 5
-	DefaultHealthCheckInterval = 30 * time.Second
-	LogThrottleInterval        = 2 * time.Minute
+	DefaultConcurrentChecks        = 5
+	DefaultHealthCheckInterval     = 30 * time.Second
+	LogThrottleInterval            = 2 * time.Minute
+	DefaultRecoveryCallbackTimeout = 10 * time.Second
 )
 
 type HTTPHealthChecker struct {
-	repository   domain.EndpointRepository
-	healthClient *HealthClient
-	ticker       *time.Ticker
-	stopCh       chan struct{}
-	logger       logger.StyledLogger
-	isRunning    atomic.Bool
+	repository       domain.EndpointRepository
+	logger           logger.StyledLogger
+	recoveryCallback RecoveryCallback
+	healthClient     *HealthClient
+	ticker           *time.Ticker
+	stopCh           chan struct{}
+	isRunning        atomic.Bool
 }
 
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
@@ -35,12 +37,21 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.St
 	healthClient := NewHealthClient(client, circuitBreaker)
 
 	return &HTTPHealthChecker{
-		healthClient: healthClient,
-		repository:   repository,
-		logger:       logger,
-		stopCh:       make(chan struct{}),
+		healthClient:     healthClient,
+		repository:       repository,
+		logger:           logger,
+		stopCh:           make(chan struct{}),
+		recoveryCallback: NoOpRecoveryCallback{},
 	}
 }
+
+// SetRecoveryCallback sets the callback to be invoked when an endpoint recovers
+func (c *HTTPHealthChecker) SetRecoveryCallback(callback RecoveryCallback) {
+	if callback != nil {
+		c.recoveryCallback = callback
+	}
+}
+
 func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger logger.StyledLogger) *HTTPHealthChecker {
 	// We want to enable connection pooling and reuse with some sane defaults
 	client := &http.Client{
@@ -230,7 +241,38 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		return
 	}
 
-	// Enhanced logging with better error context
+	// Trigger recovery callback if endpoint recovered (transitioned to healthy from unhealthy)
+	if statusChanged && newStatus == domain.StatusHealthy && oldStatus != domain.StatusUnknown {
+		c.logger.Info("Endpoint recovered, triggering model discovery refresh",
+			"endpoint", endpoint.Name,
+			"was", oldStatus.String())
+
+		if c.recoveryCallback != nil {
+			// we exec recovery callback asynchronously to avoid blocking health checks
+			go func(ep domain.Endpoint) {
+				callbackCtx, cancel := context.WithTimeout(context.Background(), DefaultRecoveryCallbackTimeout)
+				defer cancel()
+
+				callbackErr := c.recoveryCallback.OnEndpointRecovered(callbackCtx, &ep)
+
+				if callbackErr != nil {
+					if errors.Is(callbackErr, context.DeadlineExceeded) {
+						c.logger.Warn("Recovery callback timed out",
+							"endpoint", ep.Name,
+							"timeout", DefaultRecoveryCallbackTimeout)
+					} else {
+						c.logger.Warn("Failed to execute recovery callback",
+							"endpoint", ep.Name,
+							"error", callbackErr)
+					}
+				} else {
+					c.logger.Debug("Recovery callback completed successfully",
+						"endpoint", ep.Name)
+				}
+			}(endpointCopy)
+		}
+	}
+
 	c.logHealthCheckResult(endpoint, oldStatus, newStatus, statusChanged, result, nextInterval, err)
 }
 
@@ -254,11 +296,12 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		case oldStatus == domain.StatusUnknown:
 			// Initial discovery of unhealthy endpoint
-			detailedArgs := []interface{}{
+			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
 				"error_type", result.ErrorType,
-			}
+			)
 			if checkErr != nil {
 				var healthCheckErr *domain.HealthCheckError
 				if errors.As(checkErr, &healthCheckErr) {
@@ -286,11 +329,12 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		default:
 			// Status changed to unhealthy
-			detailedArgs := []interface{}{
+			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
 				"error_type", result.ErrorType,
-			}
+			)
 			if checkErr != nil {
 				var healthCheckErr *domain.HealthCheckError
 				if errors.As(checkErr, &healthCheckErr) {
@@ -313,11 +357,13 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 	case checkErr != nil && endpoint.ConsecutiveFailures > 0 && endpoint.ConsecutiveFailures%5 == 0:
 		// Log ongoing issues every 5th consecutive failure instead of time-based throttling
-		detailedArgs := []interface{}{
+		// Pre-allocate with capacity for all fields including error
+		detailedArgs := make([]interface{}, 0, 8)
+		detailedArgs = append(detailedArgs,
 			"endpoint_url", endpoint.GetURLString(),
 			"status_code", result.StatusCode,
 			"error_type", result.ErrorType,
-		}
+		)
 		var healthCheckErr *domain.HealthCheckError
 		if errors.As(checkErr, &healthCheckErr) {
 			detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())

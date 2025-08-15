@@ -120,8 +120,6 @@ proxy:
   connection_timeout: 30s     # Timeout for establishing connections
   response_timeout: 600s      # Timeout for complete response (10 minutes)
   read_timeout: 120s         # Timeout for reading response chunks
-  max_retries: 3             # Maximum retry attempts on failure
-  retry_backoff: 500ms       # Delay between retries
   stream_buffer_size: 8192   # Buffer size for streaming responses (8KB)
 ```
 
@@ -134,9 +132,18 @@ Key timeout and retry settings:
 | **connection_timeout** | Time to establish TCP connection | `30s` |
 | **response_timeout** | Maximum time for complete response | `600s` |
 | **read_timeout** | Time to wait for response chunks | `120s` |
-| **max_retries** | Retry attempts on transient failures | `3` |
-| **retry_backoff** | Delay between retry attempts | `500ms` |
 | **stream_buffer_size** | Buffer size for SSE streaming | `8192` |
+
+> **ℹ️ Automatic Retry Behaviour**
+> 
+> As of v0.0.16, Olla automatically retries requests on connection failures. When a connection 
+> error occurs (e.g., refused connection, network unreachable), the proxy will automatically 
+> try the next available healthy endpoint. This continues until either a successful connection 
+> is made or all endpoints have been tried. The retry logic uses intelligent exponential backoff 
+> for marking failed endpoints as unhealthy.
+>
+> The deprecated fields `proxy.max_retries` and `proxy.retry_backoff` are no longer used and 
+> can be removed from your configuration.
 
 ### Proxy Engines
 
@@ -226,17 +233,41 @@ discovery:
 
 ## Model Registry Configuration
 
-The `model_registry` section controls model management and unification.
+The `model_registry` section controls model management, routing strategy, and unification.
 
 ```yaml
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"              # strict, optimistic, or discovery
+    options:
+      fallback_behavior: "compatible_only"  # compatible_only, all, or none
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 24h   # Model retention time
     cleanup_interval: 10m  # Cleanup frequency
 ```
+
+### Routing Strategy
+
+Control how requests are routed based on model availability:
+
+| Strategy | Description | Use Case |
+|----------|-------------|----------|
+| **strict** | Only route to endpoints with the model | Production environments |
+| **optimistic** | Route with configurable fallback | Development/home labs |
+| **discovery** | Refresh models before routing | Dynamic environments |
+
+**Fallback Behavior Options:**
+
+| Option | Description | Use Case |
+|--------|-------------|----------|
+| **compatible_only** | Reject if model not found (default) | Prevent incompatible routing |
+| **all** | Route to any healthy endpoint | Maximum availability |
+| **none** | Always reject if model not found | Strict model enforcement |
 
 ### Model Unification
 

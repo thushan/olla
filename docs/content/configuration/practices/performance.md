@@ -359,7 +359,7 @@ proxy:
   profile: "auto"              # Dynamic selection
   load_balancer: "least-connections"
   connection_timeout: 60s      # Long connection reuse
-  max_retries: 2               # Limit retries
+  # Note: Automatic retry on connection failures is built-in
 
 discovery:
   model_discovery:
@@ -385,7 +385,7 @@ proxy:
   profile: "streaming"         # Optimise for streaming
   load_balancer: "priority"    # Fastest decisions
   connection_timeout: 120s     # Reuse connections
-  max_retries: 1               # Fast failure
+  # Note: Automatic retry on connection failures is built-in
 
 discovery:
   static:

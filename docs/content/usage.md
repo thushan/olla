@@ -78,7 +78,7 @@ Mission-critical AI infrastructure at scale:
 # Enterprise config - high performance, observability
 proxy:
   engine: "olla"  # High-performance engine
-  max_retries: 3
+  # Automatic retry is enabled by default for connection failures
 server:
   request_logging: true
   rate_limits:

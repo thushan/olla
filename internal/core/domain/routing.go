@@ -23,6 +23,7 @@ type RequestProfile struct {
 	// Rich request metadata for intelligent routing
 	ModelCapabilities    *ModelCapabilities    // What the request needs
 	ResourceRequirements *ResourceRequirements // Resources needed
+	RoutingDecision      *ModelRoutingDecision // Routing strategy decision
 	Path                 string
 	ModelName            string
 	SupportedBy          []string

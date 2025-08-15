@@ -61,9 +61,11 @@ type ProxyConfig struct {
 	ConnectionTimeout time.Duration `yaml:"connection_timeout"`
 	ResponseTimeout   time.Duration `yaml:"response_timeout"`
 	ReadTimeout       time.Duration `yaml:"read_timeout"`
-	MaxRetries        int           `yaml:"max_retries"`
-	RetryBackoff      time.Duration `yaml:"retry_backoff"`
-	StreamBufferSize  int           `yaml:"stream_buffer_size"`
+	// Deprecated: Use model_registry.routing_strategy instead. Retained for backward compatibility. TODO: Removal: v0.1.0
+	MaxRetries int `yaml:"max_retries"`
+	// Deprecated: Use model_registry.routing_strategy instead. Retained for backward compatibility. TODO: Removal: v0.1.0
+	RetryBackoff     time.Duration `yaml:"retry_backoff"`
+	StreamBufferSize int           `yaml:"stream_buffer_size"`
 }
 
 // DiscoveryConfig holds service discovery configuration
@@ -115,9 +117,23 @@ type EngineeringConfig struct {
 
 // ModelRegistryConfig holds model registry configuration
 type ModelRegistryConfig struct {
-	Type          string            `yaml:"type"`
-	Unification   UnificationConfig `yaml:"unification"`
-	EnableUnifier bool              `yaml:"enable_unifier"`
+	RoutingStrategy ModelRoutingStrategy `yaml:"routing_strategy"`
+	Type            string               `yaml:"type"`
+	Unification     UnificationConfig    `yaml:"unification"`
+	EnableUnifier   bool                 `yaml:"enable_unifier"`
+}
+
+// ModelRoutingStrategy configures how models are routed when not all endpoints have them
+type ModelRoutingStrategy struct {
+	Type    string                      `yaml:"type"` // strict, optimistic, discovery
+	Options ModelRoutingStrategyOptions `yaml:"options"`
+}
+
+// ModelRoutingStrategyOptions holds routing strategy configuration
+type ModelRoutingStrategyOptions struct {
+	FallbackBehavior       string        `yaml:"fallback_behavior"` // compatible_only, none, all
+	DiscoveryTimeout       time.Duration `yaml:"discovery_timeout"`
+	DiscoveryRefreshOnMiss bool          `yaml:"discovery_refresh_on_miss"`
 }
 
 // UnificationConfig holds model unification configuration

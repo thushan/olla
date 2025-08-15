@@ -73,7 +73,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	// Provider type must flow through the entire request lifecycle to ensure
 	// consistent routing decisions
 	ctx := r.Context()
-	ctx = context.WithValue(ctx, "provider_type", providerType)
+	ctx = context.WithValue(ctx, constants.ContextProviderTypeKey, providerType)
 
 	// The proxy needs to know which prefix to strip before forwarding.
 	// This mimics the behaviour of the main router for consistency.

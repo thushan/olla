@@ -28,6 +28,10 @@ func (m *mockDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockDiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
+	return nil
+}
+
 // createTestApplication creates a minimal Application for testing
 func createTestApplication(t *testing.T) *Application {
 	logger := &mockStyledLogger{}

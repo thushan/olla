@@ -45,10 +45,12 @@ type ProxyFactory interface {
 }
 
 type RequestStats struct {
+	StartTime       time.Time
+	EndTime         time.Time
+	RoutingDecision *domain.ModelRoutingDecision // routing decision for this request
+
 	RequestID    string
 	Model        string
-	StartTime    time.Time
-	EndTime      time.Time
 	EndpointName string
 	TargetUrl    string
 	TotalBytes   int
@@ -68,4 +70,5 @@ type DiscoveryService interface {
 	GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error)
 	GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error)
 	RefreshEndpoints(ctx context.Context) error
+	UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error
 }

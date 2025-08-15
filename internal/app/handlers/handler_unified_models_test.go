@@ -86,7 +86,7 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 	}
 
 	// Create registry with test models
-	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil)
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
 	ctx := context.Background()
 
 	// Register models on both endpoints

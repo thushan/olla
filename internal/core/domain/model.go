@@ -51,6 +51,17 @@ type ModelRegistry interface {
 	ModelsToString(models []*ModelInfo) string
 	ModelsToStrings(models []*ModelInfo) []string
 	GetModelsByCapability(ctx context.Context, capability string) ([]*UnifiedModel, error)
+
+	// GetRoutableEndpointsForModel returns endpoints that should handle a model request based on routing strategy
+	GetRoutableEndpointsForModel(ctx context.Context, modelName string, healthyEndpoints []*Endpoint) ([]*Endpoint, *ModelRoutingDecision, error)
+}
+
+// ModelRoutingDecision captures routing decision information
+type ModelRoutingDecision struct {
+	Strategy   string // strategy name
+	Action     string // routed, fallback, rejected
+	Reason     string // human-readable reason
+	StatusCode int    // suggested HTTP status for failures
 }
 
 type RegistryStats struct {

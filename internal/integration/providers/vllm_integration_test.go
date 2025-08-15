@@ -28,22 +28,22 @@ func getVLLMTestServer(t *testing.T) string {
 		t.Skip("OLLA_TEST_SERVER_VLLM environment variable not set. " +
 			"Please set it to your vLLM server URL (e.g., http://192.168.0.1:8000) to run vLLM integration tests.")
 	}
-	
+
 	// Ensure the URL has a scheme
 	if !strings.HasPrefix(vllmServer, "http://") && !strings.HasPrefix(vllmServer, "https://") {
 		vllmServer = "http://" + vllmServer
 	}
-	
+
 	// Remove trailing slash if present
 	vllmServer = strings.TrimSuffix(vllmServer, "/")
-	
+
 	return vllmServer
 }
 
 // checkVLLMServerAvailable verifies the vLLM server is reachable
 func checkVLLMServerAvailable(t *testing.T, serverURL string) {
 	healthURL := serverURL + "/health"
-	
+
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Get(healthURL)
 	if err != nil {
@@ -51,7 +51,7 @@ func checkVLLMServerAvailable(t *testing.T, serverURL string) {
 			"Please ensure your vLLM server is running and accessible.", serverURL, err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		t.Skipf("vLLM server health check failed with status %d at %s\n"+
 			"Please ensure your vLLM server is healthy.", resp.StatusCode, serverURL)
@@ -65,7 +65,7 @@ func TestVLLMDiscovery_Integration(t *testing.T) {
 
 	vllmServer := getVLLMTestServer(t)
 	checkVLLMServerAvailable(t, vllmServer)
-	
+
 	t.Logf("Running vLLM integration tests against: %s", vllmServer)
 
 	ctx := context.Background()
@@ -90,15 +90,15 @@ func TestVLLMDiscovery_Integration(t *testing.T) {
 		// Check that at least one model is discovered
 		// We don't assume a specific model since users may run different models
 		t.Logf("Discovered %d models from vLLM server", len(models))
-		
+
 		// Verify basic model properties
 		for _, model := range models {
 			assert.NotEmpty(t, model.Name, "Model name should not be empty")
 			assert.Equal(t, "vllm", model.Type, "Model type should be vllm")
-			
+
 			// Log discovered model for debugging
 			t.Logf("Found model: %s", model.Name)
-			
+
 			// vLLM typically provides max context length
 			if model.Details != nil && model.Details.MaxContextLength != nil {
 				t.Logf("  - Max context length: %d", *model.Details.MaxContextLength)
@@ -123,7 +123,7 @@ func TestVLLMDiscovery_Integration(t *testing.T) {
 		model := models[0]
 		assert.NotEmpty(t, model.Name)
 		assert.Equal(t, "vllm", model.Type)
-		
+
 		t.Logf("Explicit vLLM profile discovered model: %s", model.Name)
 	})
 
@@ -157,7 +157,7 @@ func TestVLLMDiscovery_Integration(t *testing.T) {
 		// Verify vLLM-specific fields are captured
 		model := models[0]
 		assert.NotNil(t, model.Details)
-		
+
 		// Log what we found for debugging
 		t.Logf("Parsed vLLM model: %s", model.Name)
 		if model.Details != nil && model.Details.MaxContextLength != nil {
@@ -173,11 +173,11 @@ func TestVLLMHealthCheck_Integration(t *testing.T) {
 	}
 
 	vllmServer := getVLLMTestServer(t)
-	
+
 	// Test vLLM health endpoint specifically
 	healthURL := vllmServer + "/health"
 	client := &http.Client{Timeout: 5 * time.Second}
-	
+
 	resp, err := client.Get(healthURL)
 	if err != nil {
 		t.Fatalf("Failed to reach vLLM health endpoint at %s: %v", healthURL, err)
@@ -196,35 +196,35 @@ func TestVLLMChatCompletion_Integration(t *testing.T) {
 
 	vllmServer := getVLLMTestServer(t)
 	checkVLLMServerAvailable(t, vllmServer)
-	
+
 	// First, get available models
 	modelsURL := vllmServer + "/v1/models"
 	client := &http.Client{Timeout: 10 * time.Second}
-	
+
 	resp, err := client.Get(modelsURL)
 	if err != nil {
 		t.Fatalf("Failed to get models: %v", err)
 	}
 	defer resp.Body.Close()
-	
+
 	// Parse the response to get model name
 	var modelsResp struct {
 		Data []struct {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	
+
 	if err := json.NewDecoder(resp.Body).Decode(&modelsResp); err != nil {
 		t.Fatalf("Failed to parse models response: %v", err)
 	}
-	
+
 	if len(modelsResp.Data) == 0 {
 		t.Skip("No models available on vLLM server")
 	}
-	
+
 	modelName := modelsResp.Data[0].ID
 	t.Logf("Testing chat completion with model: %s", modelName)
-	
+
 	// Test chat completion
 	chatURL := vllmServer + "/v1/chat/completions"
 	chatRequest := fmt.Sprintf(`{
@@ -233,21 +233,21 @@ func TestVLLMChatCompletion_Integration(t *testing.T) {
 		"max_tokens": 10,
 		"temperature": 0.7
 	}`, modelName)
-	
+
 	req, err := http.NewRequest("POST", chatURL, strings.NewReader(chatRequest))
 	if err != nil {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp2, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to send chat completion request: %v", err)
 	}
 	defer resp2.Body.Close()
-	
+
 	assert.Equal(t, http.StatusOK, resp2.StatusCode, "Chat completion should return 200 OK")
-	
+
 	// Parse response to verify it's valid
 	var chatResp struct {
 		ID      string `json:"id"`
@@ -260,16 +260,16 @@ func TestVLLMChatCompletion_Integration(t *testing.T) {
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	
+
 	if err := json.NewDecoder(resp2.Body).Decode(&chatResp); err != nil {
 		t.Fatalf("Failed to parse chat response: %v", err)
 	}
-	
+
 	assert.NotEmpty(t, chatResp.ID, "Response should have an ID")
 	assert.Equal(t, "chat.completion", chatResp.Object, "Response object should be chat.completion")
 	assert.Equal(t, modelName, chatResp.Model, "Response should echo the model name")
 	assert.NotEmpty(t, chatResp.Choices, "Response should have choices")
-	
+
 	if len(chatResp.Choices) > 0 {
 		t.Logf("vLLM response: %s", chatResp.Choices[0].Message.Content)
 	}
