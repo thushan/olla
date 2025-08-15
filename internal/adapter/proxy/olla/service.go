@@ -686,9 +686,12 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 
 		n, err := resp.Body.Read(buffer)
 		if n > 0 {
-			// Keep last chunk for metrics extraction
-			lastChunk = make([]byte, n)
-			copy(lastChunk, buffer[:n])
+			// Only keep last chunk when we hit EOF (for metrics extraction)
+			// This avoids continuous allocations during streaming
+			if err == io.EOF {
+				lastChunk = make([]byte, n)
+				copy(lastChunk, buffer[:n])
+			}
 
 			if !clientDisconnected {
 				written, writeErr := w.Write(buffer[:n])

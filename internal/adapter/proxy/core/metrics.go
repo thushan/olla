@@ -10,6 +10,10 @@ import (
 
 // ExtractProviderMetrics extracts metrics from the last chunk of a response.
 // This is a common operation for both proxy engines.
+// Optimized to minimize hot path impact:
+// - Early returns for common cases
+// - Only logs at debug level
+// - Extraction happens with timeout protection in the extractor
 func ExtractProviderMetrics(
 	ctx context.Context,
 	extractor ports.MetricsExtractor,
@@ -19,42 +23,29 @@ func ExtractProviderMetrics(
 	rlog logger.StyledLogger,
 	engineName string,
 ) {
-	// Early return if we can't extract metrics
+	// Early return if we can't extract metrics - most common case first
 	if extractor == nil || len(lastChunk) == 0 || endpoint == nil || endpoint.Type == "" {
-		if extractor == nil {
-			rlog.Debug("Metrics extraction skipped - no extractor",
-				"engine", engineName)
-		} else {
-			rlog.Debug("Metrics extraction skipped",
-				"engine", engineName,
-				"chunk_size", len(lastChunk),
-				"has_endpoint", endpoint != nil,
-				"endpoint_type", endpoint.Type)
-		}
+		// Skip logging in hot path unless needed for debugging
 		return
 	}
 
-	// Attempt extraction
-	rlog.Debug("Attempting metrics extraction",
-		"engine", engineName,
-		"chunk_size", len(lastChunk),
-		"endpoint_type", endpoint.Type)
+	// Skip extraction if context is already cancelled
+	select {
+	case <-ctx.Done():
+		return
+	default:
+	}
 
+	// Attempt extraction - this has its own timeout protection
 	stats.ProviderMetrics = extractor.ExtractFromChunk(ctx, lastChunk, endpoint.Type)
 
-	// Log results
+	// Minimal debug logging for metrics extraction results
+	// The logger implementation will handle whether to actually log based on level
 	if stats.ProviderMetrics != nil {
 		pm := stats.ProviderMetrics
-		rlog.Debug("Metrics extracted successfully",
+		rlog.Debug("Metrics extracted",
 			"engine", engineName,
-			"input_tokens", pm.InputTokens,
-			"output_tokens", pm.OutputTokens,
-			"total_tokens", pm.TotalTokens,
-			"tokens_per_sec", pm.TokensPerSecond,
-			"ttft_ms", pm.TTFTMs)
-	} else {
-		rlog.Debug("No metrics extracted from response",
-			"engine", engineName)
+			"tokens", pm.TotalTokens)
 	}
 }
 

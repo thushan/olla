@@ -210,18 +210,27 @@ func (s *Service) processReadResult(result *readResult, w http.ResponseWriter, b
 
 // writeData writes data to the response writer
 func (s *Service) writeData(w http.ResponseWriter, data []byte, flusher http.Flusher, canFlush bool, state *streamState, rlog logger.StyledLogger) error {
-	// Store chunk for potential metrics extraction
-	// For Ollama, the final chunk contains the complete metrics in JSON format
-	if len(data) > 0 {
-		// Always keep the last chunk, as it may contain metrics
-		state.lastChunk = make([]byte, len(data))
-		copy(state.lastChunk, data)
+	// Store chunk for potential metrics extraction using a ring buffer approach
+	// Keep only last 8KB to avoid excessive memory usage while still capturing metrics
+	const maxLastChunkSize = 8192
 
-		// Debug: Log a sample of the last chunk to see what we're capturing
-		if len(data) > 100 {
-			rlog.Debug("Captured chunk sample", "size", len(data), "preview", string(data[:100]))
+	if len(data) > 0 {
+		if len(data) <= maxLastChunkSize {
+			// Data fits entirely, just replace lastChunk
+			if state.lastChunk == nil || cap(state.lastChunk) < len(data) {
+				state.lastChunk = make([]byte, len(data))
+			} else {
+				state.lastChunk = state.lastChunk[:len(data)]
+			}
+			copy(state.lastChunk, data)
 		} else {
-			rlog.Debug("Captured chunk", "size", len(data), "content", string(data))
+			// Data is larger than max, keep only the last portion
+			if state.lastChunk == nil || cap(state.lastChunk) < maxLastChunkSize {
+				state.lastChunk = make([]byte, maxLastChunkSize)
+			} else {
+				state.lastChunk = state.lastChunk[:maxLastChunkSize]
+			}
+			copy(state.lastChunk, data[len(data)-maxLastChunkSize:])
 		}
 	}
 

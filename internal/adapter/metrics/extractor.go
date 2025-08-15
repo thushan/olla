@@ -37,6 +37,7 @@ type Extractor struct {
 
 	// Lock-free caches using xsync
 	compiledPaths *xsync.Map[string, interface{}]
+	compiledExprs *xsync.Map[string, CompiledExpression] // Pre-compiled math expressions
 
 	// Object pool for JSON parsing to reduce allocations
 	jsonPool *pool.Pool[*interface{}]
@@ -61,6 +62,7 @@ func NewExtractor(profileFactory ProfileFactory, logger logger.StyledLogger) (*E
 		profileFactory: profileFactory,
 		logger:         logger,
 		compiledPaths:  xsync.NewMap[string, interface{}](),
+		compiledExprs:  xsync.NewMap[string, CompiledExpression](),
 		jsonPool:       jsonPool,
 	}, nil
 }
@@ -92,12 +94,23 @@ func (e *Extractor) ValidateProfile(profile domain.InferenceProfile) error {
 		e.compiledPaths.Store(cacheKey, compiled)
 	}
 
-	// Validate calculation expressions reference valid fields
-	for _, expr := range metricsConfig.Calculations {
+	// Pre-compile calculation expressions for efficiency
+	for field, expr := range metricsConfig.Calculations {
+		// Validate first
 		e.validateCalculation(expr, metricsConfig.Paths)
+
+		// Then compile and cache
+		compiled, err := CompileExpression(expr)
+		if err != nil {
+			return fmt.Errorf("profile %s: invalid calculation for field %s: %s - %w",
+				profile.GetName(), field, expr, err)
+		}
+
+		cacheKey := fmt.Sprintf("%s:%s", profile.GetName(), field)
+		e.compiledExprs.Store(cacheKey, compiled)
 	}
 
-	e.logger.Debug("Validated metrics configuration",
+	e.logger.Debug("Validated and compiled metrics configuration",
 		"profile", profile.GetName(),
 		"paths", len(metricsConfig.Paths),
 		"calculations", len(metricsConfig.Calculations))
@@ -181,7 +194,7 @@ func (e *Extractor) doExtract(data []byte, headers http.Header, providerName str
 }
 
 // extractFromJSON extracts metrics from JSON response body
-func (e *Extractor) extractFromJSON(data []byte, config domain.MetricsExtractionConfig, _ string, metrics *domain.ProviderMetrics) {
+func (e *Extractor) extractFromJSON(data []byte, config domain.MetricsExtractionConfig, profileName string, metrics *domain.ProviderMetrics) {
 	// Get a JSON object from pool
 	jsonObj := e.jsonPool.Get()
 	defer func() {
@@ -208,7 +221,7 @@ func (e *Extractor) extractFromJSON(data []byte, config domain.MetricsExtraction
 	}
 
 	// Map extracted values to metrics struct
-	e.mapToMetrics(rawValues, config.Calculations, metrics)
+	e.mapToMetrics(profileName, rawValues, config.Calculations, metrics)
 }
 
 // extractFromHeaders extracts metrics from response headers
@@ -228,7 +241,7 @@ func (e *Extractor) extractFromHeaders(headers http.Header, config domain.Metric
 }
 
 // mapToMetrics maps extracted values to the metrics struct
-func (e *Extractor) mapToMetrics(rawValues map[string]interface{}, calculations map[string]string, metrics *domain.ProviderMetrics) {
+func (e *Extractor) mapToMetrics(profileName string, rawValues map[string]interface{}, calculations map[string]string, metrics *domain.ProviderMetrics) {
 	// Direct field mappings
 	if v, ok := getInt32(rawValues, "input_tokens"); ok {
 		metrics.InputTokens = v
@@ -286,11 +299,11 @@ func (e *Extractor) mapToMetrics(rawValues map[string]interface{}, calculations 
 	}
 
 	// Apply any configured calculations
-	e.applyCalculations(rawValues, calculations, metrics)
+	e.applyCalculations(profileName, rawValues, calculations, metrics)
 }
 
-// applyCalculations applies simple math calculations
-func (e *Extractor) applyCalculations(rawValues map[string]interface{}, calculations map[string]string, metrics *domain.ProviderMetrics) {
+// applyCalculations applies pre-compiled math calculations
+func (e *Extractor) applyCalculations(profileName string, rawValues map[string]interface{}, calculations map[string]string, metrics *domain.ProviderMetrics) {
 	// Convert raw values to floats for calculations
 	floatValues := make(map[string]float64)
 	for k, v := range rawValues {
@@ -308,18 +321,21 @@ func (e *Extractor) applyCalculations(rawValues map[string]interface{}, calculat
 		}
 	}
 
-	// Apply calculations
-	for field, expr := range calculations {
-		if result, err := evaluateSimpleMath(expr, floatValues); err == nil {
-			switch field {
-			case "tokens_per_second":
-				metrics.TokensPerSecond = float32(result)
-			case "ttft_ms":
-				metrics.TTFTMs = int32(result)
-			case "total_ms":
-				metrics.TotalMs = int32(result)
-			case "model_load_ms":
-				metrics.ModelLoadMs = int32(result)
+	// Apply calculations using pre-compiled expressions
+	for field := range calculations {
+		cacheKey := fmt.Sprintf("%s:%s", profileName, field)
+		if compiledExpr, ok := e.compiledExprs.Load(cacheKey); ok {
+			if result, err := compiledExpr.Evaluate(floatValues); err == nil {
+				switch field {
+				case "tokens_per_second":
+					metrics.TokensPerSecond = float32(result)
+				case "ttft_ms":
+					metrics.TTFTMs = int32(result)
+				case "total_ms":
+					metrics.TotalMs = int32(result)
+				case "model_load_ms":
+					metrics.ModelLoadMs = int32(result)
+				}
 			}
 		}
 	}
