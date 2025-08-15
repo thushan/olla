@@ -55,7 +55,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 
 	var lastErr error
 	maxRetries := len(endpoints)
-	retryCount := 0
+	attemptCount := 0
 
 	// Preserve request body for potential retries
 	var bodyBytes []byte
@@ -79,9 +79,16 @@ func (h *RetryHandler) ExecuteWithRetry(
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
-	for retryCount <= maxRetries && len(availableEndpoints) > 0 {
+	for attemptCount < maxRetries && len(availableEndpoints) > 0 {
+		// Check for context cancellation before each attempt
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("request cancelled: %w", ctx.Err())
+		default:
+		}
+
 		// Reset body for retries (skip first iteration as body already set above)
-		if bodyBytes != nil && retryCount > 0 {
+		if bodyBytes != nil && attemptCount > 0 {
 			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
@@ -90,6 +97,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 			return fmt.Errorf("endpoint selection failed: %w", err)
 		}
 
+		attemptCount++
 		err = proxyFunc(ctx, w, r, endpoint, stats)
 
 		if err == nil {
@@ -102,7 +110,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 			h.logger.Warn("Connection failed to endpoint, marking as unhealthy",
 				"endpoint", endpoint.Name,
 				"error", err,
-				"retry", retryCount+1,
+				"attempt", attemptCount,
 				"remaining_endpoints", len(availableEndpoints)-1)
 
 			h.markEndpointUnhealthy(ctx, endpoint)
@@ -118,11 +126,10 @@ func (h *RetryHandler) ExecuteWithRetry(
 				}
 			}
 
-			retryCount++
-
-			if len(availableEndpoints) > 0 {
+			if len(availableEndpoints) > 0 && attemptCount < maxRetries {
 				h.logger.Info("Retrying request with different endpoint",
-					"available_endpoints", len(availableEndpoints))
+					"available_endpoints", len(availableEndpoints),
+					"attempts_remaining", maxRetries-attemptCount)
 				continue
 			}
 		} else {
@@ -131,11 +138,12 @@ func (h *RetryHandler) ExecuteWithRetry(
 		}
 	}
 
+	// All endpoints exhausted or max attempts reached
 	if len(availableEndpoints) == 0 {
 		return fmt.Errorf("all endpoints failed with connection errors: %w", lastErr)
 	}
 
-	return fmt.Errorf("max retries (%d) exceeded: %w", maxRetries, lastErr)
+	return fmt.Errorf("max attempts (%d) reached: %w", maxRetries, lastErr)
 }
 
 // IsConnectionError identifies transient network errors suitable for retry
