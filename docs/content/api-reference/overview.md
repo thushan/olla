@@ -98,10 +98,10 @@ When available, provider-specific performance metrics are extracted from respons
 
 | Metric | Description | Providers |
 |--------|-------------|-----------|
-| `provider_total_ms` | Total processing time | Ollama, LM Studio |
-| `provider_prompt_tokens` | Tokens in prompt | All |
-| `provider_completion_tokens` | Tokens generated | All |
-| `provider_tokens_per_second` | Generation speed | Ollama, LM Studio |
+| `provider_total_ms` | Total processing time (ms) | Ollama, LM Studio |
+| `provider_prompt_tokens` | Tokens in prompt (count) | All |
+| `provider_completion_tokens` | Tokens generated (count) | All |
+| `provider_tokens_per_second` | Generation speed (tokens/s) | Ollama, LM Studio |
 | `provider_model` | Actual model used | All |
 
 See [Provider Metrics](../concepts/provider-metrics.md) for detailed information.

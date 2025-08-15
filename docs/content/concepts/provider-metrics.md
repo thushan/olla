@@ -124,7 +124,9 @@ metrics:
 
 ### Key Components
 
-1. **`paths`**: Maps field names to JSONPath expressions for extracting values from the provider's response
+1. **`paths`**: Maps field names to JSON path expressions for extracting values from the provider's response
+   - Supports both JSONPath notation (`$.field.subfield`) and gjson notation (`field.subfield`)
+   - JSONPath prefixes are automatically normalized: `$.` is trimmed, `$` becomes empty string
 2. **`calculations`**: Defines derived metrics using mathematical expressions that reference extracted fields
 3. **Expression variables**: Any field defined in `paths` can be used as a variable in `calculations`
 4. **Pre-compilation**: Expressions are compiled at startup for performance
@@ -146,12 +148,13 @@ metrics:
     format: "json"           # Expected format
     
     # JSONPath expressions for extracting values from provider response
+    # Note: Both JSONPath ($.field) and gjson (field) notation are supported
     paths:
-      model: "$.model"
-      done: "$.done"
+      model: "$.model"                    # JSONPath notation (normalized to "model")
+      is_complete: "done"                 # gjson notation (used as-is)
       # Token counts
       input_tokens: "$.prompt_eval_count"
-      output_tokens: "$.eval_count"
+      output_tokens: "eval_count"         # Both formats work identically
       # Timing data (in nanoseconds from Ollama)
       total_duration_ns: "$.total_duration"
       load_duration_ns: "$.load_duration"
@@ -260,8 +263,15 @@ Response includes provider metrics when available:
 
 ### Extraction Implementation
 Olla uses high-performance libraries for metrics extraction:
-- **[gjson](https://github.com/tidwall/gjson)**: For JSONPath parsing (7.6x faster than encoding/json)
+- **[gjson](https://github.com/tidwall/gjson)**: For JSON path parsing (7.6x faster than encoding/json)
 - **[expr](https://github.com/expr-lang/expr)**: For pre-compiled mathematical expressions
+
+**JSONPath Normalization**: Olla automatically normalizes JSONPath-style prefixes for gjson compatibility:
+- `$.foo.bar` → `foo.bar` (leading `$.` is trimmed)
+- `$` → `` (root selector is converted to empty string)
+- `foo.bar` → `foo.bar` (already normalized paths are unchanged)
+
+This means you can use either JSONPath notation (`$.model`) or gjson notation (`model`) in your configurations - both work identically.
 
 ### Extraction Overhead
 - Metrics extraction runs with a 10ms timeout to prevent blocking
@@ -316,7 +326,7 @@ alerts:
 
 ### Metrics Not Appearing
 1. Check provider supports metrics in responses
-2. Verify profile configuration includes `metrics_extraction`
+2. Verify profile configuration includes `metrics.extraction` section
 3. Enable debug logging to see extraction attempts
 4. Ensure response format matches expected structure
 
