@@ -111,7 +111,7 @@ metrics:
     # OpenAI standard format
     paths:
       model: "$.model"
-      done: "$.choices[0].finish_reason"
+      finish_reason: "$.choices[0].finish_reason"  # String value (e.g., "stop", "length", "function_call")
       input_tokens: "$.usage.prompt_tokens"
       output_tokens: "$.usage.completion_tokens" 
       total_tokens: "$.usage.total_tokens"
@@ -119,4 +119,7 @@ metrics:
       ttft_ms: "$.metrics.time_to_first_token"
       total_ms: "$.metrics.total_time"
     calculations:
-      tokens_per_second: "output_tokens / (total_ms / 1000)"
+      # Derive IsComplete from finish_reason presence (OpenAI doesn't have a separate 'done' field)
+      is_complete: 'len(finish_reason) > 0'
+      # Safe division: multiply first for precision, then divide with guard against zero
+      tokens_per_second: "total_ms > 0 ? (output_tokens * 1000.0) / total_ms : 0"

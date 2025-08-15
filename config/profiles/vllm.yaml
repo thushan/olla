@@ -222,3 +222,25 @@ features:
   continuous_batching:
     enabled: true
     description: "Dynamic batching for optimal GPU utilisation"
+
+# Metrics extraction for vLLM responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    # vLLM uses OpenAI-compatible format for chat/completions endpoints
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"  # String value (e.g., "stop", "length")
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+      # vLLM may include additional performance metrics
+      ttft_ms: "$.metrics.time_to_first_token_ms"
+      generation_time_ms: "$.metrics.generation_time_ms"
+    calculations:
+      # Derive IsComplete from finish_reason presence (vLLM doesn't have a separate 'done' field)
+      is_complete: 'len(finish_reason) > 0'
+      # Safe division: multiply first for precision, then divide with guard against zero
+      tokens_per_second: "generation_time_ms > 0 ? (output_tokens * 1000.0) / generation_time_ms : 0"

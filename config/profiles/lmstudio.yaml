@@ -144,9 +144,11 @@ metrics:
     # LM Studio uses OpenAI-compatible format
     paths:
       model: "$.model"
-      done: "$.choices[0].finish_reason"
+      finish_reason: "$.choices[0].finish_reason"  # String value (e.g., "stop", "length")
       input_tokens: "$.usage.prompt_tokens"
       output_tokens: "$.usage.completion_tokens"
       total_tokens: "$.usage.total_tokens"
     calculations:
+      # Derive IsComplete from finish_reason presence (LM Studio doesn't have a separate 'done' field)
+      is_complete: 'len(finish_reason) > 0'
       # LM Studio doesn't provide timing data, so we can't calculate tokens/sec
