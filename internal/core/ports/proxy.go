@@ -48,7 +48,7 @@ type RequestStats struct {
 	EndTime   time.Time
 
 	// Provider metrics extracted from response (best effort)
-	ProviderMetrics *domain.ProviderMetrics `json:"provider_metrics,omitempty"`
+	ProviderMetrics *domain.ProviderMetrics      `json:"provider_metrics,omitempty"`
 	RoutingDecision *domain.ModelRoutingDecision // routing decision for this request
 
 	RequestID    string

@@ -120,7 +120,7 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 	selector := &testSelector{}
 
 	// Create service (not used in this test, but verifies it can be created)
-	_, err := NewService(discoveryService, selector, config, nil, mockLogger)
+	_, err := NewService(discoveryService, selector, config, nil, nil, mockLogger)
 	assert.NoError(t, err)
 
 	// Create test request
@@ -257,7 +257,7 @@ func TestRetryExhaustsAllEndpoints(t *testing.T) {
 	selector := &testSelector{}
 
 	// Create service (not used in this test, but verifies it can be created)
-	_, err := NewService(discoveryService, selector, config, nil, mockLogger)
+	_, err := NewService(discoveryService, selector, config, nil, nil, mockLogger)
 	assert.NoError(t, err)
 
 	// Create test request
@@ -331,7 +331,7 @@ func TestRetryPreservesRequestBody(t *testing.T) {
 	selector := &testSelector{}
 
 	// Create service (not used in this test, but verifies it can be created)
-	_, err := NewService(discoveryService, selector, config, nil, mockLogger)
+	_, err := NewService(discoveryService, selector, config, nil, nil, mockLogger)
 	assert.NoError(t, err)
 
 	// Create test request with body

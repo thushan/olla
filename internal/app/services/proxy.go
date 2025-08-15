@@ -97,7 +97,7 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 		// Continue without metrics extraction
 		profileFactory = nil
 	} else {
-		s.logger.Info("Profile factory created successfully", 
+		s.logger.Info("Profile factory created successfully",
 			"profiles", profileFactory.GetAvailableProfiles())
 	}
 
@@ -112,11 +112,11 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 			s.logger.Info("Metrics extractor initialized successfully")
 			// Pre-validate profiles for metrics extraction
 			for _, profileName := range profileFactory.GetAvailableProfiles() {
-				if inferenceProfile, err := profileFactory.GetProfile(profileName); err == nil {
+				if inferenceProfile, profileErr := profileFactory.GetProfile(profileName); profileErr == nil {
 					if extractor, ok := metricsExtractor.(*metrics.Extractor); ok {
-						if err := extractor.ValidateProfile(inferenceProfile); err != nil {
-							s.logger.Debug("Profile metrics validation failed", 
-								"profile", profileName, "error", err)
+						if validationErr := extractor.ValidateProfile(inferenceProfile); validationErr != nil {
+							s.logger.Debug("Profile metrics validation failed",
+								"profile", profileName, "error", validationErr)
 						}
 					}
 				}

@@ -689,7 +689,7 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 			// Keep last chunk for metrics extraction
 			lastChunk = make([]byte, n)
 			copy(lastChunk, buffer[:n])
-			
+
 			if !clientDisconnected {
 				written, writeErr := w.Write(buffer[:n])
 				totalBytes += written

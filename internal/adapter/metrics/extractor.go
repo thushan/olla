@@ -112,8 +112,8 @@ func (e *Extractor) ExtractMetrics(ctx context.Context, responseBody []byte, hea
 
 // ExtractFromChunk extracts metrics from a streaming chunk
 func (e *Extractor) ExtractFromChunk(ctx context.Context, chunk []byte, providerName string) *domain.ProviderMetrics {
-	e.logger.Debug("ExtractFromChunk called", 
-		"provider", providerName, 
+	e.logger.Debug("ExtractFromChunk called",
+		"provider", providerName,
 		"chunk_size", len(chunk))
 	return e.extractWithTimeout(ctx, chunk, nil, providerName)
 }

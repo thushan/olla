@@ -216,7 +216,7 @@ func (s *Service) writeData(w http.ResponseWriter, data []byte, flusher http.Flu
 		// Always keep the last chunk, as it may contain metrics
 		state.lastChunk = make([]byte, len(data))
 		copy(state.lastChunk, data)
-		
+
 		// Debug: Log a sample of the last chunk to see what we're capturing
 		if len(data) > 100 {
 			rlog.Debug("Captured chunk sample", "size", len(data), "preview", string(data[:100]))
