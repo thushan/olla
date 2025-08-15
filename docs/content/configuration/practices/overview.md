@@ -398,17 +398,16 @@ proxy:
 
 ### Retry Strategy
 
-Automatic retry is enabled by default for connection failures:
+Automatic retry on connection failures is built-in as of v0.0.16:
 
 ```yaml
 proxy:
-  retry:
-    enabled: true  # Automatic failover
-    on_connection_failure: true
-    max_attempts: 0  # Try all endpoints (or set limit)
+  # Note: Retry is automatic and built-in for connection failures
+  engine: "olla"  # Circuit breaker integration
+  load_balancer: "priority"  # Failover to next endpoint
 ```
 
-The retry mechanism intelligently:
+The automatic retry mechanism intelligently:
 - Only retries connection failures (not application errors)
 - Automatically tries different endpoints
 - Marks failed endpoints as unhealthy

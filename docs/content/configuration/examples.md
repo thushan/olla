@@ -124,10 +124,7 @@ proxy:
   profile: "auto"
   load_balancer: "least-connections"
   connection_timeout: 45s
-  retry:
-    enabled: true
-    on_connection_failure: true
-    max_attempts: 0  # Try all available endpoints
+  # Note: Retry is automatic and built-in for connection failures
 
 discovery:
   type: "static"
@@ -212,10 +209,7 @@ proxy:
   profile: "auto"
   load_balancer: "round-robin"  # Test all endpoints equally
   connection_timeout: 10s
-  retry:
-    enabled: true  # Enable to test retry logic
-    on_connection_failure: true
-    max_attempts: 2  # Limited retries for debugging
+  # Note: Retry is automatic and built-in for connection failures
 
 discovery:
   type: "static"
@@ -353,11 +347,7 @@ proxy:
   profile: "standard"  # No streaming for public API
   load_balancer: "least-connections"
   connection_timeout: 20s
-  # Automatic retry with failover to other endpoints
-  retry:
-    enabled: true
-    on_connection_failure: true
-    max_attempts: 2  # Limit retries for public API
+  # Note: Automatic retry with failover to other endpoints is built-in
 
 discovery:
   type: "static"
@@ -442,10 +432,7 @@ proxy:
   profile: "auto"
   load_balancer: "least-connections"
   connection_timeout: 30s
-  retry:
-    enabled: true
-    on_connection_failure: true
-    max_attempts: 0  # Try all endpoints for maximum availability
+  # Note: Automatic retry tries all endpoints for maximum availability
 
 discovery:
   type: "static"
@@ -517,10 +504,7 @@ proxy:
   load_balancer: "priority"
   connection_timeout: 30s
   response_timeout: 900s
-  retry:
-    enabled: true  # Automatic retry on failures
-    on_connection_failure: true
-    max_attempts: 0  # Try all available endpoints
+  # Note: Automatic retry on failures tries all available endpoints
 
 discovery:
   type: "static"

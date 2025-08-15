@@ -91,7 +91,7 @@ Olla provides detailed response headers for observability:
 |--------|-------------|
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used for the request |
-| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio) |
+| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio/vllm) |
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Response-Time` | Total processing time |
 
