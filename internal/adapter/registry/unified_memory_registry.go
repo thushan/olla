@@ -418,14 +418,14 @@ func (a *discoveryServiceAdapter) RefreshEndpoints(ctx context.Context) error {
 }
 
 func (a *discoveryServiceAdapter) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
-	// get all endpoints, not just healthy ones
-	if provider, ok := a.discovery.(interface {
-		GetEndpoints(context.Context) ([]*domain.Endpoint, error)
-	}); ok {
-		return provider.GetEndpoints(ctx)
+	// Try to get all endpoints first
+	endpoints, err := a.discovery.GetEndpoints(ctx)
+	if err != nil {
+		// Fallback to healthy endpoints for implementations that may fail
+		// when retrieving all endpoints or only provide healthy endpoints
+		return a.discovery.GetHealthyEndpoints(ctx)
 	}
-	// fall to healthy endpoints if GetEndpoints not available
-	return a.discovery.GetHealthyEndpoints(ctx)
+	return endpoints, nil
 }
 
 func (a *discoveryServiceAdapter) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {

@@ -9,8 +9,9 @@ const (
 	RoutingReasonModelFoundNoRefresh = "model_found_no_refresh"
 
 	// Model not found scenarios (404 Not Found)
-	RoutingReasonModelNotFound         = "model_not_found"
-	RoutingReasonModelNotFoundFallback = "model_not_found_fallback"
+	RoutingReasonModelNotFound           = "model_not_found"
+	RoutingReasonModelNotFoundFallback   = "model_not_found_fallback"
+	RoutingReasonNoHealthyAfterDiscovery = "no_healthy_after_discovery"
 
 	// Model unavailable scenarios (503 Service Unavailable)
 	RoutingReasonModelUnavailable               = "model_unavailable"

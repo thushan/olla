@@ -53,44 +53,22 @@ func (h *RetryHandler) ExecuteWithRetry(
 	availableEndpoints := make([]*domain.Endpoint, len(endpoints))
 	copy(availableEndpoints, endpoints)
 
+	// Preserve request body for potential retries
+	bodyBytes, err := h.preserveRequestBody(r)
+	if err != nil {
+		return err
+	}
+
 	var lastErr error
 	maxRetries := len(endpoints)
 	attemptCount := 0
 
-	// Preserve request body for potential retries
-	var bodyBytes []byte
-	if r.Body != nil && r.Body != http.NoBody {
-		var err error
-		bodyBytes, err = io.ReadAll(r.Body)
-		if err != nil {
-			h.logger.Error("Failed to read request body for retry preservation",
-				"error", err)
-			return fmt.Errorf("failed to read request body: %w", err)
-		}
-
-		// Close the original body and handle any error
-		if err := r.Body.Close(); err != nil {
-			h.logger.Warn("Failed to close original request body",
-				"error", err)
-			// Continue as the body has been read successfully
-		}
-
-		// Recreate the body for the first attempt
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-	}
-
 	for attemptCount < maxRetries && len(availableEndpoints) > 0 {
-		// Check for context cancellation before each attempt
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("request cancelled: %w", ctx.Err())
-		default:
+		if err := h.checkContextCancellation(ctx); err != nil {
+			return err
 		}
 
-		// Reset body for retries (skip first iteration as body already set above)
-		if bodyBytes != nil && attemptCount > 0 {
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		}
+		h.resetRequestBodyForRetry(r, bodyBytes, attemptCount)
 
 		endpoint, err := selector.Select(ctx, availableEndpoints)
 		if err != nil {
@@ -98,51 +76,113 @@ func (h *RetryHandler) ExecuteWithRetry(
 		}
 
 		attemptCount++
-		err = proxyFunc(ctx, w, r, endpoint, stats)
+		lastErr = h.executeProxyAttempt(ctx, w, r, endpoint, selector, stats, proxyFunc)
 
-		if err == nil {
+		if lastErr == nil {
 			return nil
 		}
 
-		lastErr = err
-
-		if IsConnectionError(err) {
-			h.logger.Warn("Connection failed to endpoint, marking as unhealthy",
-				"endpoint", endpoint.Name,
-				"error", err,
-				"attempt", attemptCount,
-				"remaining_endpoints", len(availableEndpoints)-1)
-
-			h.markEndpointUnhealthy(ctx, endpoint)
-
-			// Remove failed endpoint in-place to avoid allocation
-			// Find and remove the failed endpoint by shifting elements
-			for i := 0; i < len(availableEndpoints); i++ {
-				if availableEndpoints[i].Name == endpoint.Name {
-					// Remove element at index i by copying subsequent elements
-					copy(availableEndpoints[i:], availableEndpoints[i+1:])
-					availableEndpoints = availableEndpoints[:len(availableEndpoints)-1]
-					break
-				}
-			}
-
-			if len(availableEndpoints) > 0 && attemptCount < maxRetries {
-				h.logger.Info("Retrying request with different endpoint",
-					"available_endpoints", len(availableEndpoints),
-					"attempts_remaining", maxRetries-attemptCount)
-				continue
-			}
-		} else {
+		if !IsConnectionError(lastErr) {
 			// Non-connection error warrants immediate failure
-			return err
+			return lastErr
 		}
+
+		// Handle connection error and retry logic
+		availableEndpoints = h.handleConnectionFailure(ctx, endpoint, lastErr, attemptCount, availableEndpoints, maxRetries)
 	}
 
-	// All endpoints exhausted or max attempts reached
+	return h.buildFinalError(availableEndpoints, maxRetries, lastErr)
+}
+
+// preserveRequestBody reads and preserves request body for potential retries
+func (h *RetryHandler) preserveRequestBody(r *http.Request) ([]byte, error) {
+	if r.Body == nil || r.Body == http.NoBody {
+		return nil, nil
+	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Error("Failed to read request body for retry preservation", "error", err)
+		return nil, fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	if err := r.Body.Close(); err != nil {
+		h.logger.Warn("Failed to close original request body", "error", err)
+	}
+
+	// Recreate the body for the first attempt
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	return bodyBytes, nil
+}
+
+// checkContextCancellation verifies if the context has been cancelled
+func (h *RetryHandler) checkContextCancellation(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("request cancelled: %w", ctx.Err())
+	default:
+		return nil
+	}
+}
+
+// resetRequestBodyForRetry recreates request body for retry attempts
+func (h *RetryHandler) resetRequestBodyForRetry(r *http.Request, bodyBytes []byte, attemptCount int) {
+	if bodyBytes != nil && attemptCount > 0 {
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	}
+}
+
+// executeProxyAttempt executes a single proxy attempt with connection counting
+func (h *RetryHandler) executeProxyAttempt(ctx context.Context, w http.ResponseWriter, r *http.Request,
+	endpoint *domain.Endpoint, selector domain.EndpointSelector, stats *ports.RequestStats, proxyFunc ProxyFunc) error {
+
+	selector.IncrementConnections(endpoint)
+	defer selector.DecrementConnections(endpoint)
+
+	return proxyFunc(ctx, w, r, endpoint, stats)
+}
+
+// handleConnectionFailure processes connection failures and manages endpoint removal
+func (h *RetryHandler) handleConnectionFailure(ctx context.Context, endpoint *domain.Endpoint,
+	err error, attemptCount int, availableEndpoints []*domain.Endpoint, maxRetries int) []*domain.Endpoint {
+
+	h.logger.Warn("Connection failed to endpoint, marking as unhealthy",
+		"endpoint", endpoint.Name,
+		"error", err,
+		"attempt", attemptCount,
+		"remaining_endpoints", len(availableEndpoints)-1)
+
+	h.markEndpointUnhealthy(ctx, endpoint)
+
+	// Remove failed endpoint from available list
+	updatedEndpoints := h.removeFailedEndpoint(availableEndpoints, endpoint)
+
+	if len(updatedEndpoints) > 0 && attemptCount < maxRetries {
+		h.logger.Info("Retrying request with different endpoint",
+			"available_endpoints", len(updatedEndpoints),
+			"attempts_remaining", maxRetries-attemptCount)
+	}
+
+	return updatedEndpoints
+}
+
+// removeFailedEndpoint removes the failed endpoint from the available list
+func (h *RetryHandler) removeFailedEndpoint(endpoints []*domain.Endpoint, failedEndpoint *domain.Endpoint) []*domain.Endpoint {
+	for i := 0; i < len(endpoints); i++ {
+		if endpoints[i].Name == failedEndpoint.Name {
+			// Remove element at index i by copying subsequent elements
+			copy(endpoints[i:], endpoints[i+1:])
+			return endpoints[:len(endpoints)-1]
+		}
+	}
+	return endpoints
+}
+
+// buildFinalError constructs the appropriate error message for retry failure
+func (h *RetryHandler) buildFinalError(availableEndpoints []*domain.Endpoint, maxRetries int, lastErr error) error {
 	if len(availableEndpoints) == 0 {
 		return fmt.Errorf("all endpoints failed with connection errors: %w", lastErr)
 	}
-
 	return fmt.Errorf("max attempts (%d) reached: %w", maxRetries, lastErr)
 }
 

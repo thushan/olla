@@ -61,9 +61,11 @@ type ProxyConfig struct {
 	ConnectionTimeout time.Duration `yaml:"connection_timeout"`
 	ResponseTimeout   time.Duration `yaml:"response_timeout"`
 	ReadTimeout       time.Duration `yaml:"read_timeout"`
-	MaxRetries        int           `yaml:"max_retries"`
-	RetryBackoff      time.Duration `yaml:"retry_backoff"`
-	StreamBufferSize  int           `yaml:"stream_buffer_size"`
+	// Deprecated: Use model_registry.routing_strategy instead. Retained for backward compatibility. TODO: Removal: v0.1.0
+	MaxRetries int `yaml:"max_retries"`
+	// Deprecated: Use model_registry.routing_strategy instead. Retained for backward compatibility. TODO: Removal: v0.1.0
+	RetryBackoff     time.Duration `yaml:"retry_backoff"`
+	StreamBufferSize int           `yaml:"stream_buffer_size"`
 }
 
 // DiscoveryConfig holds service discovery configuration

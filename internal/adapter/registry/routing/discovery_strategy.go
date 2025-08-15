@@ -174,7 +174,7 @@ func (s *DiscoveryStrategy) GetRoutableEndpoints(
 		return nil, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"no_healthy_after_discovery",
+				constants.RoutingReasonNoHealthyAfterDiscovery,
 			), domain.NewModelRoutingError(
 				modelName,
 				s.Name(),
