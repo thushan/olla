@@ -19,6 +19,7 @@ import (
 // streamState tracks the state of an active stream
 type streamState struct {
 	lastReadTime         time.Time
+	lastChunkBuffer      *SimpleRingBuffer // Ring buffer for last 8KB of data
 	contentType          string
 	totalBytes           int
 	readCount            int
@@ -35,11 +36,12 @@ type readResult struct {
 
 // streamResponseWithTimeout performs buffered streaming with read timeout protection
 // This is CRITICAL for edge servers to prevent hanging on unresponsive backends (SHERPA-105)
-func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, error) {
+func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, []byte, error) {
 	state := &streamState{
-		lastReadTime: time.Now(),
-		contentType:  resp.Header.Get(constants.HeaderContentType),
-		isStreaming:  core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile()),
+		lastReadTime:    time.Now(),
+		contentType:     resp.Header.Get(constants.HeaderContentType),
+		isStreaming:     core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile()),
+		lastChunkBuffer: NewSimpleRingBuffer(8192), // Keep last 8KB for metrics
 	}
 
 	readTimeout := s.getReadTimeout()
@@ -57,18 +59,18 @@ func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Conte
 	for {
 		result, err := s.performTimedRead(combinedCtx, resp.Body, buffer, readTimeout, state, rlog)
 		if err != nil {
-			return state.totalBytes, err
+			return state.totalBytes, state.lastChunkBuffer.Bytes(), err
 		}
 
 		if result == nil {
 			// Context cancelled during read
-			return state.totalBytes, s.handleContextCancellation(clientCtx, upstreamCtx, state, rlog)
+			return state.totalBytes, state.lastChunkBuffer.Bytes(), s.handleContextCancellation(clientCtx, upstreamCtx, state, rlog)
 		}
 
 		// Process read result
 		done, err := s.processReadResult(result, w, buffer, flusher, canFlush, state, rlog)
 		if done || err != nil {
-			return state.totalBytes, err
+			return state.totalBytes, state.lastChunkBuffer.Bytes(), err
 		}
 	}
 }
@@ -209,6 +211,11 @@ func (s *Service) processReadResult(result *readResult, w http.ResponseWriter, b
 
 // writeData writes data to the response writer
 func (s *Service) writeData(w http.ResponseWriter, data []byte, flusher http.Flusher, canFlush bool, state *streamState, rlog logger.StyledLogger) error {
+	// Store chunk in ring buffer for potential metrics extraction
+	if len(data) > 0 && state.lastChunkBuffer != nil {
+		state.lastChunkBuffer.Write(data)
+	}
+
 	if !state.clientDisconnected {
 		written, writeErr := w.Write(data)
 		state.totalBytes += written

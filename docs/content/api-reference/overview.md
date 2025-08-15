@@ -88,6 +88,23 @@ All responses include:
 | `X-Olla-Model` | Model used (if applicable) |
 | `X-Olla-Backend-Type` | Provider type (ollama/lmstudio/openai/vllm) |
 | `X-Olla-Response-Time` | Total processing time |
+| `X-Olla-Routing-Strategy` | Routing strategy used (when model routing is active) |
+| `X-Olla-Routing-Decision` | Routing decision made (routed/fallback/rejected) |
+| `X-Olla-Routing-Reason` | Human-readable reason for routing decision |
+
+### Provider Metrics (Debug Logs)
+
+When available, provider-specific performance metrics are extracted from responses and included in debug logs:
+
+| Metric | Description | Providers |
+|--------|-------------|-----------|
+| `provider_total_ms` | Total processing time (ms) | Ollama, LM Studio |
+| `provider_prompt_tokens` | Tokens in prompt (count) | All |
+| `provider_completion_tokens` | Tokens generated (count) | All |
+| `provider_tokens_per_second` | Generation speed (tokens/s) | Ollama, LM Studio |
+| `provider_model` | Actual model used | All |
+
+See [Provider Metrics](../concepts/provider-metrics.md) for detailed information.
 
 ## Error Responses
 

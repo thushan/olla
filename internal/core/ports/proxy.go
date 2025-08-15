@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/thushan/olla/internal/logger"
-
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/logger"
 )
 
 // ProxyService defines the interface for the proxy service
@@ -45,8 +44,11 @@ type ProxyFactory interface {
 }
 
 type RequestStats struct {
-	StartTime       time.Time
-	EndTime         time.Time
+	StartTime time.Time
+	EndTime   time.Time
+
+	// Provider metrics extracted from response (best effort)
+	ProviderMetrics *domain.ProviderMetrics      `json:"provider_metrics,omitempty"`
 	RoutingDecision *domain.ModelRoutingDecision // routing decision for this request
 
 	RequestID    string
@@ -63,6 +65,7 @@ type RequestStats struct {
 	HeaderProcessingMs  int64 // Time spent processing headers
 	PathResolutionMs    int64 // Time spent resolving the target path to an endpoint
 	SelectionMs         int64 // Time spent selecting endpoint
+
 }
 
 // DiscoveryService defines the interface for service discovery

@@ -77,10 +77,11 @@ func NewService(
 	selector domain.EndpointSelector,
 	configuration *Configuration,
 	statsCollector ports.StatsCollector,
+	metricsExtractor ports.MetricsExtractor,
 	logger logger.StyledLogger,
 ) (*Service, error) {
 
-	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, logger)
+	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
 
 	bufferPool, err := pool.NewLitePool(func() *[]byte {
 		buf := make([]byte, configuration.GetStreamBufferSize())

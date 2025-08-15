@@ -210,7 +210,25 @@ func (s *SherpaProxy) ProxyRequest(ctx context.Context,
     }
     defer resp.Body.Close()
     
-    return s.streamResponse(w, resp)
+    // Stream response with new signature
+    // Returns: 
+    //   - bytesWritten: total bytes successfully written to client
+    //   - lastChunk: final bytes of response (up to 8KB) for metrics extraction
+    //   - err: streaming error if any
+    buffer := make([]byte, 32*1024)
+    bytesWritten, lastChunk, err := s.streamResponse(ctx, ctx, w, resp, buffer, logger)
+    if err != nil {
+        return fmt.Errorf("streaming failed after %d bytes: %w", bytesWritten, err)
+    }
+    
+    // lastChunk contains the tail of the response (for extracting provider metrics)
+    // This avoids buffering the entire response while still capturing completion stats
+    if len(lastChunk) > 0 {
+        // Extract provider metrics from the last chunk of response
+        s.extractMetrics(lastChunk, stats)
+    }
+    
+    return nil
 }
 ```
 
@@ -226,11 +244,37 @@ type OllaProxy struct {
 func (o *OllaProxy) ProxyRequest(ctx context.Context,
     w http.ResponseWriter, r *http.Request,
     stats *RequestStats, logger StyledLogger) error {
+    endpoint := o.selectEndpoint()
     pool := o.getPool(endpoint)
-    conn := pool.Get()
-    defer pool.Put(conn)
     
-    return o.streamWithBackpressure(w, conn)
+    resp, err := pool.RoundTrip(r)
+    if err != nil {
+        return err
+    }
+    defer resp.Body.Close()
+    
+    // Get buffer from pool for zero-allocation streaming
+    buffer := o.bufferPool.Get()
+    defer o.bufferPool.Put(buffer)
+    
+    // Stream with optimized backpressure handling
+    // Returns: bytes written, last chunk for metrics, error
+    bytesWritten, lastChunk, err := o.streamResponse(
+        r.Context(),           // client context
+        resp.Request.Context(), // upstream context
+        w, resp, *buffer, logger)
+    
+    if err != nil && !errors.Is(err, context.Canceled) {
+        return fmt.Errorf("stream failed: %w", err)
+    }
+    
+    // Extract metrics from last chunk (Olla buffers only final bytes)
+    if len(lastChunk) > 0 {
+        o.extractProviderMetrics(lastChunk, endpoint, stats)
+    }
+    
+    stats.TotalBytes = bytesWritten
+    return nil
 }
 ```
 

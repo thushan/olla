@@ -60,7 +60,7 @@ func createRefactoredSherpaProxy(endpoints []*domain.Endpoint) (ports.ProxyServi
 		ReadTimeout:      10 * time.Second,
 		StreamBufferSize: 8192,
 	}
-	return sherpa.NewService(discovery, selector, config, collector, logger)
+	return sherpa.NewService(discovery, selector, config, collector, nil, logger)
 }
 
 func createRefactoredOllaProxy(endpoints []*domain.Endpoint) (ports.ProxyService, error) {
@@ -77,7 +77,7 @@ func createRefactoredOllaProxy(endpoints []*domain.Endpoint) (ports.ProxyService
 		IdleConnTimeout:  90 * time.Second,
 		MaxConnsPerHost:  50,
 	}
-	return olla.NewService(discovery, selector, config, collector, logger)
+	return olla.NewService(discovery, selector, config, collector, nil, logger)
 }
 
 func benchmarkProxy(b *testing.B, proxy ports.ProxyService) {

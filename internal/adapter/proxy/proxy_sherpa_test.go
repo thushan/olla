@@ -29,7 +29,7 @@ func createTestSherpaProxy(endpoints []*domain.Endpoint) (*sherpa.Service, *mock
 		ReadTimeout:      10 * time.Second,
 		StreamBufferSize: 1024,
 	}
-	proxy, err := sherpa.NewService(discovery, selector, config, collector, createTestLogger())
+	proxy, err := sherpa.NewService(discovery, selector, config, collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Sherpa proxy: %v", err))
 	}
@@ -40,7 +40,7 @@ func createTestSherpaProxyWithConfig(endpoints []*domain.Endpoint, config *sherp
 	collector := createTestStatsCollector()
 	discovery := &mockDiscoveryService{endpoints: endpoints}
 	selector := newMockEndpointSelector(collector)
-	proxy, err := sherpa.NewService(discovery, selector, config, collector, createTestLogger())
+	proxy, err := sherpa.NewService(discovery, selector, config, collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Sherpa proxy: %v", err))
 	}
@@ -147,7 +147,7 @@ func TestProxyService_ClientDisconnectHandling(t *testing.T) {
 				config := &sherpa.Configuration{
 					ReadTimeout: 200 * time.Millisecond,
 				}
-				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},
@@ -160,7 +160,7 @@ func TestProxyService_ClientDisconnectHandling(t *testing.T) {
 				config := &olla.Configuration{
 					ReadTimeout: 200 * time.Millisecond,
 				}
-				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},
@@ -687,7 +687,7 @@ func TestProxyService_SecurityHeaderFiltering(t *testing.T) {
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
 				config := &sherpa.Configuration{}
-				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},
@@ -698,7 +698,7 @@ func TestProxyService_SecurityHeaderFiltering(t *testing.T) {
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
 				config := &olla.Configuration{}
-				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},
@@ -752,7 +752,7 @@ func TestProxyService_ProxyHeaderAddition(t *testing.T) {
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
 				config := &sherpa.Configuration{}
-				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},
@@ -763,7 +763,7 @@ func TestProxyService_ProxyHeaderAddition(t *testing.T) {
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
 				config := &olla.Configuration{}
-				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},

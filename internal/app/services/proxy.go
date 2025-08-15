@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/balancer"
+	"github.com/thushan/olla/internal/adapter/metrics"
 	"github.com/thushan/olla/internal/adapter/proxy"
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -23,6 +25,7 @@ type ProxyServiceWrapper struct {
 	endpointRepo     domain.EndpointRepository
 	discoveryService ports.DiscoveryService
 	statsCollector   ports.StatsCollector
+	metricsExtractor ports.MetricsExtractor
 	statsService     *StatsService
 	discoverySvc     *DiscoveryService
 	securityService  *SecurityService
@@ -86,8 +89,44 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 	// Create a discovery service adapter
 	s.discoveryService = &endpointRepositoryAdapter{repo: s.endpointRepo}
 
+	// Create metrics extractor with profile factory
+	s.logger.Info("Creating metrics extractor...")
+	profileFactory, err := profile.NewFactoryWithDefaults()
+	if err != nil {
+		s.logger.Warn("Failed to create profile factory for metrics extraction", "error", err)
+		// Continue without metrics extraction
+		profileFactory = nil
+	} else {
+		s.logger.Info("Profile factory created successfully",
+			"profiles", profileFactory.GetAvailableProfiles())
+	}
+
+	var metricsExtractor ports.MetricsExtractor
+	if profileFactory != nil {
+		metricsExtractor, err = metrics.NewExtractor(profileFactory, s.logger)
+		if err != nil {
+			s.logger.Warn("Failed to create metrics extractor", "error", err)
+			// Continue without metrics extraction
+			metricsExtractor = nil
+		} else {
+			s.logger.Info("Metrics extractor initialized successfully")
+			// Pre-validate profiles for metrics extraction
+			for _, profileName := range profileFactory.GetAvailableProfiles() {
+				if inferenceProfile, profileErr := profileFactory.GetProfile(profileName); profileErr == nil {
+					if extractor, ok := metricsExtractor.(*metrics.Extractor); ok {
+						if validationErr := extractor.ValidateProfile(inferenceProfile); validationErr != nil {
+							s.logger.Debug("Profile metrics validation failed",
+								"profile", profileName, "error", validationErr)
+						}
+					}
+				}
+			}
+		}
+	}
+	s.metricsExtractor = metricsExtractor
+
 	// Create proxy service
-	proxyFactory := proxy.NewFactory(s.statsCollector, s.logger)
+	proxyFactory := proxy.NewFactory(s.statsCollector, metricsExtractor, s.logger)
 	s.proxyService, err = proxyFactory.Create(s.config.Engine, s.discoveryService, s.loadBalancer, proxyConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create proxy service: %w", err)

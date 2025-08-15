@@ -121,13 +121,16 @@ nav:
       - Configuration: configuration/overview.md
   - Concepts:
       - Overview: concepts/overview.md
-      - Proxy Engines: concepts/proxy-engines.md
-      - Proxy Profiles: concepts/proxy-profiles.md
       - Load Balancing: concepts/load-balancing.md
       - Model Routing: concepts/model-routing.md
       - Model Unification: concepts/model-unification.md
-      - Health Checking: concepts/health-checking.md
-      - Profile System: concepts/profile-system.md
+      - Health Checking: concepts/health-checking.md      
+      - Proxy Engines: 
+          - Overview: concepts/proxy-engines.md
+          - Proxy Profiles: concepts/proxy-profiles.md
+      - Profile System: 
+          - Overview: concepts/profile-system.md
+          - Provider Metrics: concepts/provider-metrics.md
   - Configuration:
       - Overview: configuration/overview.md
       - Reference: configuration/reference.md

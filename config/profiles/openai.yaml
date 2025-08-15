@@ -101,3 +101,25 @@ resources:
   timeout_scaling:
     base_timeout_seconds: 120  # 2 minutes
     load_time_buffer: false
+
+# Metrics extraction for OpenAI-compatible responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    # OpenAI standard format
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"  # String value (e.g., "stop", "length", "function_call")
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens" 
+      total_tokens: "$.usage.total_tokens"
+      # Some providers include additional metrics
+      ttft_ms: "$.metrics.time_to_first_token"
+      total_ms: "$.metrics.total_time"
+    calculations:
+      # Derive IsComplete from finish_reason presence (OpenAI doesn't have a separate 'done' field)
+      is_complete: 'len(finish_reason) > 0'
+      # Safe division: multiply first for precision, then divide with guard against zero
+      tokens_per_second: "total_ms > 0 ? (output_tokens * 1000.0) / total_ms : 0"

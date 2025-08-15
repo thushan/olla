@@ -225,13 +225,21 @@ While Olla doesn't have built-in Prometheus support, you can scrape the status e
 # prometheus_exporter.py
 import requests
 import time
-from prometheus_client import start_http_server, Gauge
+from prometheus_client import start_http_server, Gauge, Histogram
 
 # Define metrics
 requests_total = Gauge('olla_requests_total', 'Total requests')
 errors_total = Gauge('olla_errors_total', 'Total errors')
 endpoints_healthy = Gauge('olla_endpoints_healthy', 'Healthy endpoints')
 response_time_p50 = Gauge('olla_response_time_p50', 'P50 response time')
+
+# Provider metrics (from extracted data)
+tokens_per_second = Histogram('olla_tokens_per_second', 'Token generation speed', 
+                              ['endpoint', 'model'])
+prompt_tokens = Histogram('olla_prompt_tokens', 'Prompt token count',
+                          ['endpoint', 'model'])
+completion_tokens = Histogram('olla_completion_tokens', 'Completion token count',
+                              ['endpoint', 'model'])
 
 def collect_metrics():
     while True:
@@ -242,7 +250,14 @@ def collect_metrics():
             requests_total.set(data['system']['total_requests'])
             errors_total.set(data['system']['total_failures'])
             endpoints_healthy.set(len([e for e in data['endpoints'] if e['status'] == 'healthy']))
-            # Note: Percentile latencies not available in status endpoint
+            
+            # Extract provider metrics if available
+            for endpoint_name, stats in data.get('proxy', {}).get('endpoints', {}).items():
+                if 'avg_tokens_per_second' in stats:
+                    tokens_per_second.labels(
+                        endpoint=endpoint_name,
+                        model=stats.get('primary_model', 'unknown')
+                    ).observe(stats['avg_tokens_per_second'])
         except:
             pass
         time.sleep(15)
@@ -261,6 +276,31 @@ Key panels for Grafana:
 3. **Latency**: `olla_response_time_p50`, `p95`, `p99`
 4. **Endpoint Health**: `olla_endpoints_healthy`
 5. **Success Rate**: `1 - (rate(errors) / rate(requests))`
+6. **Token Generation Speed**: `olla_tokens_per_second` (from provider metrics)
+7. **Token Usage**: `olla_prompt_tokens` + `olla_completion_tokens`
+
+## Provider Metrics
+
+Olla automatically extracts performance metrics from LLM provider responses:
+
+### Available Metrics
+
+| Metric | Description | Source |
+|--------|-------------|--------|
+| `tokens_per_second` | Generation speed | Ollama, LM Studio |
+| `prompt_tokens` | Input token count | All providers |
+| `completion_tokens` | Output token count | All providers |
+| `total_duration_ms` | End-to-end time | Ollama |
+| `eval_duration_ms` | Generation time | Ollama |
+| `time_per_token_ms` | Per-token latency | Calculated |
+
+### Accessing Provider Metrics
+
+1. **Debug Logs**: Metrics appear in debug-level logs
+2. **Status Endpoint**: Aggregated in `/internal/status`
+3. **Custom Extraction**: Parse from debug logs
+
+See [Provider Metrics Documentation](../../concepts/provider-metrics.md) for configuration details.
 
 ## Health Monitoring
 

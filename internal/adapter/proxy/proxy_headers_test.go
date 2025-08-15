@@ -36,7 +36,7 @@ func TestProxyResponseHeaders(t *testing.T) {
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
 				config := &sherpa.Configuration{}
-				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},
@@ -47,7 +47,7 @@ func TestProxyResponseHeaders(t *testing.T) {
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
 				config := &olla.Configuration{}
-				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
 		},
@@ -124,7 +124,7 @@ func TestProxyResponseHeaders_NoOverride(t *testing.T) {
 	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 	selector := &mockEndpointSelector{endpoint: endpoint}
 	config := &sherpa.Configuration{}
-	proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), createTestLogger())
+	proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 
 	req := httptest.NewRequest("GET", "/test", nil)
 	ctx := context.WithValue(req.Context(), "model", "real-model")

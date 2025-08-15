@@ -116,7 +116,7 @@ func TestProxyRoutingRegression(t *testing.T) {
 			}
 
 			// Create proxy factory and service
-			factory := NewFactory(mockStats, testLogger)
+			factory := NewFactory(mockStats, nil, testLogger)
 			proxyService, err := factory.Create(tt.proxyType, mockDiscovery, mockSelector, config)
 			require.NoError(t, err)
 
@@ -189,7 +189,7 @@ func TestProxyPathHandling(t *testing.T) {
 				StreamBufferSize:    8192,
 			}
 
-			factory := NewFactory(mockStats, testLogger)
+			factory := NewFactory(mockStats, nil, testLogger)
 			proxyService, err := factory.Create(proxyType, mockDiscovery, mockSelector, config)
 			require.NoError(t, err)
 

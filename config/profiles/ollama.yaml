@@ -172,3 +172,32 @@ resources:
   timeout_scaling:
     base_timeout_seconds: 30
     load_time_buffer: true  # adds estimated_load_time_ms to timeout
+
+# Metrics extraction from Ollama responses
+metrics:
+  extraction:
+    enabled: true
+    source: "response_body"
+    format: "json"
+    
+    # JSONPath expressions for extracting values from Ollama response
+    paths:
+      model: "$.model"
+      is_complete: "$.done"  # Ollama provides 'done' as a boolean directly
+      finish_reason: "$.finish_reason"  # Optional: Ollama may include this in some versions
+      # Token counts
+      input_tokens: "$.prompt_eval_count"
+      output_tokens: "$.eval_count"
+      # Timing data (in nanoseconds from Ollama)
+      total_duration_ns: "$.total_duration"
+      load_duration_ns: "$.load_duration"
+      prompt_duration_ns: "$.prompt_eval_duration"
+      eval_duration_ns: "$.eval_duration"
+      
+    # Simple calculations to convert to useful metrics
+    calculations:
+      # Safe division: multiply first for precision, then divide with guard against zero
+      tokens_per_second: "eval_duration_ns > 0 ? (output_tokens * 1000000000.0) / eval_duration_ns : 0"
+      ttft_ms: "prompt_duration_ns / 1000000"
+      total_ms: "total_duration_ns / 1000000"
+      model_load_ms: "load_duration_ns / 1000000"

@@ -181,7 +181,7 @@ func TestStreamResponseWithTimeout_ClientDisconnect(t *testing.T) {
 					"Content-Type": []string{"text/plain"},
 				},
 			}
-			s.streamResponseWithTimeout(clientCtx, upstreamCtx, writer, resp, buffer, logger)
+			_, _, _ = s.streamResponseWithTimeout(clientCtx, upstreamCtx, writer, resp, buffer, logger)
 		}()
 
 		// Simulate client disconnect after short time

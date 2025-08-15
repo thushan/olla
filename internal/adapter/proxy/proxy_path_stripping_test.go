@@ -109,7 +109,7 @@ func TestProxyPathStripping(t *testing.T) {
 			factory: func(config ports.ProxyConfiguration) (ports.ProxyService, error) {
 				discovery := &mockDiscoveryService{}
 				selector := &mockEndpointSelector{}
-				return sherpa.NewService(discovery, selector, config.(*sherpa.Configuration), createTestStatsCollector(), createTestLogger())
+				return sherpa.NewService(discovery, selector, config.(*sherpa.Configuration), createTestStatsCollector(), nil, createTestLogger())
 			},
 		},
 		{
@@ -117,7 +117,7 @@ func TestProxyPathStripping(t *testing.T) {
 			factory: func(config ports.ProxyConfiguration) (ports.ProxyService, error) {
 				discovery := &mockDiscoveryService{}
 				selector := &mockEndpointSelector{}
-				return olla.NewService(discovery, selector, config.(*olla.Configuration), createTestStatsCollector(), createTestLogger())
+				return olla.NewService(discovery, selector, config.(*olla.Configuration), createTestStatsCollector(), nil, createTestLogger())
 			},
 		},
 	}
@@ -221,6 +221,7 @@ func TestProxyPathStrippingDoubleStrippingPrevention(t *testing.T) {
 		&mockEndpointSelector{},
 		sherpaConfig,
 		createTestStatsCollector(),
+		nil,
 		createTestLogger(),
 	)
 	if err != nil {
@@ -310,6 +311,7 @@ func TestProxyPathStrippingWithProviderContext(t *testing.T) {
 				&mockEndpointSelector{},
 				config,
 				createTestStatsCollector(),
+				nil,
 				createTestLogger(),
 			)
 			if err != nil {
@@ -394,6 +396,7 @@ func benchmarkPathStripping(b *testing.B, proxyType, prefix, requestPath string)
 			&mockEndpointSelector{},
 			config,
 			createTestStatsCollector(),
+			nil,
 			createTestLogger(),
 		)
 	} else {
@@ -403,6 +406,7 @@ func benchmarkPathStripping(b *testing.B, proxyType, prefix, requestPath string)
 			&mockEndpointSelector{},
 			config,
 			createTestStatsCollector(),
+			nil,
 			createTestLogger(),
 		)
 	}

@@ -144,6 +144,7 @@ func NewService(
 	selector domain.EndpointSelector,
 	configuration *Configuration,
 	statsCollector ports.StatsCollector,
+	metricsExtractor ports.MetricsExtractor,
 	logger logger.StyledLogger,
 ) (*Service, error) {
 
@@ -163,7 +164,7 @@ func NewService(
 		configuration.ReadTimeout = DefaultReadTimeout
 	}
 
-	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, logger)
+	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
 
 	bufferPool, err := pool.NewLitePool(func() *[]byte {
 		buf := make([]byte, configuration.StreamBufferSize)
@@ -590,7 +591,7 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	}
 
 	// Use r.Context() for client context and upstreamCtx for upstream context
-	bytesWritten, streamErr := s.streamResponse(r.Context(), upstreamCtx, w, resp, *buffer, rlog)
+	bytesWritten, lastChunk, streamErr := s.streamResponse(r.Context(), upstreamCtx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 
@@ -599,6 +600,9 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), streamErr)
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", s.configuration.GetResponseTimeout())
 	}
+
+	// Extract metrics from response if available
+	core.ExtractProviderMetrics(ctx, s.MetricsExtractor, lastChunk, endpoint, stats, rlog, "Olla")
 
 	// stats update
 	duration := time.Since(stats.StartTime)
@@ -640,79 +644,40 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 }
 
 // streamResponse performs buffered streaming with backpressure handling
-func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, error) {
-	totalBytes := 0
+func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, []byte, error) {
+	state := &streamState{}
 	flusher, canFlush := w.(http.Flusher)
 	isStreaming := core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile())
-
-	clientDisconnected := false
-	bytesAfterDisconnect := 0
-	disconnectTime := time.Time{}
 
 	// Pre-allocate timer to avoid allocations in hot path
 	readDeadline := time.NewTimer(s.configuration.GetReadTimeout())
 	defer readDeadline.Stop()
 
 	for {
-		select {
-		case <-clientCtx.Done():
-			if !clientDisconnected {
-				clientDisconnected = true
-				disconnectTime = time.Now()
-				rlog.Debug("client disconnected during streaming", "bytes_sent", totalBytes)
-
-				// Publish client disconnect event
-				s.PublishEvent(core.ProxyEvent{
-					Type: core.EventTypeClientDisconnect,
-					Metadata: core.ProxyEventMetadata{
-						BytesSent: int64(totalBytes),
-					},
-				})
-			}
-		case <-upstreamCtx.Done():
-			return totalBytes, upstreamCtx.Err()
-		case <-readDeadline.C:
-			return totalBytes, fmt.Errorf("read timeout after %v", s.configuration.GetReadTimeout())
-		default:
+		// Check for context cancellation
+		if err := s.checkContexts(clientCtx, upstreamCtx, readDeadline, state, rlog); err != nil {
+			return state.totalBytes, state.lastChunk, err
 		}
 
-		// Reset timer for next read
+		// Reset timer for next read (drain if already fired to prevent race)
+		// this only applies to Olla as Sherpa has a different streaming model
+		// which creates a new timer, instead of resetting the existing one
+		if !readDeadline.Stop() {
+			// Timer already expired, drain the channel
+			select {
+			case <-readDeadline.C:
+			default:
+			}
+		}
 		readDeadline.Reset(s.configuration.GetReadTimeout())
 
-		n, err := resp.Body.Read(buffer)
-		if n > 0 {
-			if !clientDisconnected {
-				written, writeErr := w.Write(buffer[:n])
-				totalBytes += written
-
-				if writeErr != nil {
-					rlog.Debug("write error during streaming", "error", writeErr, "bytes_written", totalBytes)
-					return totalBytes, writeErr
-				}
-
-				// force data out for real-time streaming
-				if canFlush && isStreaming {
-					flusher.Flush()
-				}
-			} else {
-				bytesAfterDisconnect += n
-
-				if bytesAfterDisconnect > ClientDisconnectionBytesThreshold ||
-					time.Since(disconnectTime) > ClientDisconnectionTimeThreshold {
-					rlog.Debug("stopping stream after client disconnect",
-						"bytes_after_disconnect", bytesAfterDisconnect,
-						"time_since_disconnect", time.Since(disconnectTime))
-					return totalBytes, context.Canceled
-				}
+		// Read and process data
+		if err := s.processStreamData(resp, buffer, state, w, canFlush, isStreaming, flusher, rlog); err != nil {
+			if errors.Is(err, io.EOF) {
+				return state.totalBytes, state.lastChunk, nil
 			}
-		}
-
-		if err != nil {
-			if err == io.EOF {
-				return totalBytes, nil
-			}
-			rlog.Debug("read error during streaming", "error", err, "bytes_read", totalBytes)
-			return totalBytes, err
+			rlog.Debug("read error during streaming", "error", err, "bytes_read", state.totalBytes)
+			return state.totalBytes, state.lastChunk, err
 		}
 	}
 }

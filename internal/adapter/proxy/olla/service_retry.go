@@ -154,7 +154,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	// Stream with Olla's optimized streaming
 	// Use r.Context() for client context and upstreamCtx for upstream context
-	bytesWritten, streamErr := s.streamResponse(r.Context(), upstreamCtx, w, resp, *buffer, rlog)
+	bytesWritten, lastChunk, streamErr := s.streamResponse(r.Context(), upstreamCtx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 
@@ -185,21 +185,32 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	stats.Latency = stats.EndTime.Sub(stats.StartTime).Milliseconds()
 	stats.TotalBytes = bytesWritten
 
+	// Extract metrics from response if available
+	core.ExtractProviderMetrics(ctx, s.MetricsExtractor, lastChunk, endpoint, stats, rlog, "Olla")
+
 	// Log detailed completion metrics at Debug level
+	logFields := []interface{}{
+		"endpoint", endpoint.Name,
+		"latency_ms", stats.Latency,
+		"processing_ms", stats.RequestProcessingMs,
+		"backend_ms", stats.BackendResponseMs,
+		"first_data_ms", stats.FirstDataMs,
+		"streaming_ms", stats.StreamingMs,
+		"selection_ms", stats.SelectionMs,
+		"header_ms", stats.HeaderProcessingMs,
+		"total_bytes", stats.TotalBytes,
+		"bytes_formatted", middleware.FormatBytes(int64(stats.TotalBytes)),
+		"status", resp.StatusCode,
+	}
+
+	// Add provider metrics if available
+	if stats.ProviderMetrics != nil {
+		logFields = core.AppendProviderMetricsToLog(logFields, stats.ProviderMetrics)
+	}
+
 	if ctxLogger != nil {
-		ctxLogger.Debug("Olla proxy metrics",
-			"endpoint", endpoint.Name,
-			"latency_ms", stats.Latency,
-			"processing_ms", stats.RequestProcessingMs,
-			"backend_ms", stats.BackendResponseMs,
-			"first_data_ms", stats.FirstDataMs,
-			"streaming_ms", stats.StreamingMs,
-			"selection_ms", stats.SelectionMs,
-			"header_ms", stats.HeaderProcessingMs,
-			"total_bytes", stats.TotalBytes,
-			"bytes_formatted", middleware.FormatBytes(int64(stats.TotalBytes)),
-			"status", resp.StatusCode,
-			"request_id", middleware.GetRequestID(ctx))
+		logFields = append(logFields, "request_id", middleware.GetRequestID(ctx))
+		ctxLogger.Debug("Olla proxy metrics", logFields...)
 	}
 
 	return nil

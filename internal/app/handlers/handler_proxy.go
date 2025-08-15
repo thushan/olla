@@ -198,6 +198,26 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 			infoFields = append(infoFields, "total_bytes", pr.stats.TotalBytes)
 		}
 
+		// Add provider metrics if available
+		if pr.stats.ProviderMetrics != nil {
+			pm := pr.stats.ProviderMetrics
+			if pm.InputTokens > 0 {
+				infoFields = append(infoFields, "input_tokens", pm.InputTokens)
+			}
+			if pm.OutputTokens > 0 {
+				infoFields = append(infoFields, "output_tokens", pm.OutputTokens)
+			}
+			if pm.TotalTokens > 0 {
+				infoFields = append(infoFields, "total_tokens", pm.TotalTokens)
+			}
+			if pm.TokensPerSecond > 0 {
+				infoFields = append(infoFields, "tokens_per_sec", fmt.Sprintf("%.1f", pm.TokensPerSecond))
+			}
+			if pm.TTFTMs > 0 {
+				infoFields = append(infoFields, "ttft_ms", pm.TTFTMs)
+			}
+		}
+
 		pr.requestLogger.Info("Request completed", infoFields...)
 
 		// Log detailed metrics at DEBUG level
@@ -225,6 +245,38 @@ func (a *Application) buildLogFields(pr *proxyRequest, duration time.Duration) [
 
 	if pr.stats.EndpointName == "" {
 		fields = append(fields, "target_path", pr.targetPath)
+	}
+
+	// Add provider metrics if available (detailed view)
+	if pr.stats.ProviderMetrics != nil {
+		pm := pr.stats.ProviderMetrics
+		if pm.InputTokens > 0 {
+			fields = append(fields, "input_tokens", pm.InputTokens)
+		}
+		if pm.OutputTokens > 0 {
+			fields = append(fields, "output_tokens", pm.OutputTokens)
+		}
+		if pm.TotalTokens > 0 {
+			fields = append(fields, "total_tokens", pm.TotalTokens)
+		}
+		if pm.TokensPerSecond > 0 {
+			fields = append(fields, "tokens_per_sec", pm.TokensPerSecond)
+		}
+		if pm.TTFTMs > 0 {
+			fields = append(fields, "ttft_ms", pm.TTFTMs)
+		}
+		if pm.PromptMs > 0 {
+			fields = append(fields, "prompt_ms", pm.PromptMs)
+		}
+		if pm.GenerationMs > 0 {
+			fields = append(fields, "generation_ms", pm.GenerationMs)
+		}
+		if pm.Model != "" {
+			fields = append(fields, "provider_model", pm.Model)
+		}
+		if pm.FinishReason != "" {
+			fields = append(fields, "finish_reason", pm.FinishReason)
+		}
 	}
 
 	return fields

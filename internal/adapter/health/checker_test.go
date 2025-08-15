@@ -70,7 +70,7 @@ func (m *mockRepository) GetHealthy(ctx context.Context) ([]*domain.Endpoint, er
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	healthy := make([]*domain.Endpoint, 0)
+	healthy := make([]*domain.Endpoint, 0, len(m.endpoints))
 	for _, ep := range m.endpoints {
 		if ep.Status == domain.StatusHealthy {
 			healthy = append(healthy, ep)
@@ -83,7 +83,7 @@ func (m *mockRepository) GetRoutable(ctx context.Context) ([]*domain.Endpoint, e
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	routable := make([]*domain.Endpoint, 0)
+	routable := make([]*domain.Endpoint, 0, len(m.endpoints))
 	for _, ep := range m.endpoints {
 		if ep.Status.IsRoutable() {
 			routable = append(routable, ep)
