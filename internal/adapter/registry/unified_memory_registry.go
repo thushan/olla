@@ -55,9 +55,26 @@ func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig
 		if discovery != nil {
 			discoveryAdapter = &discoveryServiceAdapter{discovery: discovery}
 		}
-		routingStrategy, _ = factory.Create(*routingConfig, discoveryAdapter)
+
+		// Attempt to create the configured strategy
+		strategy, err := factory.Create(*routingConfig, discoveryAdapter)
+		if err != nil || strategy == nil {
+			// Log the error and fall back to strict strategy
+			logger.Error("Failed to create routing strategy, falling back to strict",
+				"configured_type", routingConfig.Type,
+				"error", err)
+			routingStrategy = routing.NewStrictStrategy(logger)
+		} else {
+			routingStrategy = strategy
+		}
 	} else {
 		// default to strict strategy
+		routingStrategy = routing.NewStrictStrategy(logger)
+	}
+
+	// Ensure routingStrategy is never nil
+	if routingStrategy == nil {
+		logger.Warn("Routing strategy was nil, using strict strategy as fallback")
 		routingStrategy = routing.NewStrictStrategy(logger)
 	}
 

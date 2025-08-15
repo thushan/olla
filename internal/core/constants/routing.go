@@ -35,10 +35,10 @@ const (
 const (
 	// FallbackBehaviorNone never falls back to other endpoints
 	FallbackBehaviorNone = "none"
-	
+
 	// FallbackBehaviorCompatibleOnly only uses endpoints known to support the model
 	FallbackBehaviorCompatibleOnly = "compatible_only"
-	
+
 	// FallbackBehaviorAll falls back to any healthy endpoint
 	FallbackBehaviorAll = "all"
 )
