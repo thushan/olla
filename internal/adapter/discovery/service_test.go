@@ -479,6 +479,15 @@ type mockModelRegistry struct {
 	mu                sync.Mutex
 }
 
+// GetRoutableEndpointsForModel
+func (m *mockModelRegistry) GetRoutableEndpointsForModel(ctx context.Context, modelName string, healthyEndpoints []*domain.Endpoint) ([]*domain.Endpoint, *domain.ModelRoutingDecision, error) {
+	return healthyEndpoints, &domain.ModelRoutingDecision{
+		Strategy: "mock",
+		Action:   "routed",
+		Reason:   "mock routing",
+	}, nil
+}
+
 func (m *mockModelRegistry) RegisterModel(ctx context.Context, endpointURL string, model *domain.ModelInfo) error {
 	return nil
 }

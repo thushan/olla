@@ -132,6 +132,25 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		}
 		s.modelDiscovery = discovery.NewModelDiscoveryService(client, s.endpointRepo, s.registry, discoveryConfig, s.logger)
 
+		// Set up recovery callback to trigger model discovery when endpoints recover
+		s.healthChecker.SetRecoveryCallback(health.RecoveryCallbackFunc(func(ctx context.Context, endpoint *domain.Endpoint) error {
+			s.logger.Info("Triggering model discovery for recovered endpoint",
+				"endpoint", endpoint.Name,
+				"url", endpoint.GetURLString())
+
+			// Discover models for the recovered endpoint
+			if err := s.modelDiscovery.DiscoverEndpoint(ctx, endpoint); err != nil {
+				s.logger.Warn("Failed to discover models for recovered endpoint",
+					"endpoint", endpoint.Name,
+					"error", err)
+				return err
+			}
+
+			s.logger.Info("Successfully refreshed models for recovered endpoint",
+				"endpoint", endpoint.Name)
+			return nil
+		}))
+
 		if err := s.modelDiscovery.Start(ctx); err != nil {
 			return fmt.Errorf("failed to start model discovery: %w", err)
 		}
@@ -234,4 +253,12 @@ func (s *DiscoveryService) RefreshEndpoints(ctx context.Context) error {
 // SetStatsService sets the stats service dependency
 func (s *DiscoveryService) SetStatsService(statsService *StatsService) {
 	s.statsService = statsService
+}
+
+// UpdateEndpointStatus updates the status of an endpoint in the repository
+func (s *DiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
+	if s.endpointRepo == nil {
+		return fmt.Errorf("endpoint repository not initialized")
+	}
+	return s.endpointRepo.UpdateEndpoint(ctx, endpoint)
 }

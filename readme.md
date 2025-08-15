@@ -12,6 +12,10 @@
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
   <p>
+    <div align="center">
+    <img src="./docs/content/assets/demos/olla-v1.0.x-demo.gif" height="" width="" /><br/>
+    <small>Recorded with <a href="https://vhs.charm.sh/">VHS</a> - see <a href="./docs/vhs/demo.tape">demo tape</a></small><br/><br/>
+    </div>
     <a href="https://thushan.github.io/olla/"><img src="https://img.shields.io/badge/📖_Documentation-0078D4?style=for-the-badge&logoColor=white" height="32" alt="Documentation"></a>
     &nbsp;
     <a href="https://github.com/thushan/olla/issues"><img src="https://img.shields.io/badge/🐛_Issues-D73502?style=for-the-badge&logoColor=white" height="32" alt="Issues"></a>
@@ -36,10 +40,12 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 
 ## Key Features
 
-- **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover
+- **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover and connection retry
 - **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](https://thushan.github.io/olla/concepts/model-unification/)
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
-- **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers
+- **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers and automatic recovery
+- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover
+- **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
@@ -314,7 +320,7 @@ X-Olla-Endpoint: local-ollama     # Which backend handled it
 X-Olla-Model: llama4              # Model used
 X-Olla-Backend-Type: ollama       # Platform type
 X-Olla-Request-ID: req_abc123     # For debugging
-X-Olla-Response-Time: 1.234s      # Total time (trailer)
+X-Olla-Response-Time: 1.234s      # Total processing time
 ```
 
 For API usage patterns and examples, see [API Endpoints Reference](https://thushan.github.io/olla/api-reference/overview/).

@@ -34,77 +34,14 @@ It intelligently routes LLM requests across local and remote inference nodes - i
 - **Security**: Built-in rate limiting and request validation
 - **Observability**: Comprehensive metrics and request tracing
 
-## Use Cases
-
-### 🏠 Home Lab & Personal Use
-
-Perfect for enthusiasts running multiple LLM instances:
-
-- **Multi-GPU Setups**: Route between different models on various GPUs
-- **Model Experimentation**: Easy switching between Ollama, LM Studio and OpenAI backends
-- **Resource Management**: Automatic failover when local resources are busy
-- **Cost Optimisation**: Priority routing (local first, cloud fallback)
-
-```yaml
-# Home lab config - local first, home-lab second
-discovery:
-  static:
-    endpoints:
-      - name: "rtx-4090-mobile"
-        url: "http://localhost:11434" 
-        type: "ollama"
-        priority: 100  # Highest priority
-      - name: "home-lab-rtx-6000"
-        url: "https://192.168.0.1:11434"
-        type: "ollama"
-        priority: 10   # Fallback only
-```
-
-### 🏢 Business & Teams
-
-Streamline AI infrastructure for growing teams:
-
-- **Department Isolation**: Route different teams to appropriate endpoints
-- **Budget Controls**: Rate limiting and usage tracking per team
-- **High Availability**: Load balancing across multiple inference servers
-- **Development Staging**: Separate dev/staging/prod model routing
-
-```yaml
-# Business config - load balanced production
-proxy:
-  load_balancer: "least-connections"
-server:
-  rate_limits:
-    per_ip_requests_per_minute: 100
-    global_requests_per_minute: 1000
-```
-
-### 🏭 Enterprise & Production
-
-Mission-critical AI infrastructure at scale:
-
-- **Multi-Region Deployment**: Geographic load balancing and failover
-- **Enterprise Security**: Rate limiting, request validation, audit trails  
-- **Performance Monitoring**: Circuit breakers, health checks, metrics
-- **Vendor Diversity**: Mix of cloud providers and on-premise infrastructure
-
-```yaml
-# Enterprise config - high performance, observability
-proxy:
-  engine: "olla"  # High-performance engine
-  max_retries: 3
-server:
-  request_logging: true
-  rate_limits:
-    global_requests_per_minute: 10000
-```
-
 ## Core Concepts
 
 Understand these key concepts to get the most from Olla:
 
 - **[Proxy Engines](concepts/proxy-engines.md)** - Choose between Sherpa (simple) or Olla (high-performance) engines
-- **[Load Balancing](concepts/load-balancing.md)** - Distribute requests across multiple endpoints with priority, round-robin, or least-connections
+- **[Proxy Profiles](concepts/proxy-profiles.md)** - Learn about different proxy behaviours for streaming or buffering
+- **[Load Balancing](concepts/load-balancing.md)** - Distribute requests across multiple endpoints
+- **[Model Routing](concepts/model-routing.md)** - Different ways Olla routes traffic based on model availability & health
 - **[Model Unification](concepts/model-unification.md)** - Single catalogue of models across all your backends
 - **[Health Checking](concepts/health-checking.md)** - Automatic endpoint monitoring and intelligent failover
 - **[Profile System](concepts/profile-system.md)** - Customise backend behaviour without writing code
@@ -115,6 +52,11 @@ Understand these key concepts to get the most from Olla:
 
 Get up and running with Olla in minutes:
 
+=== "Installer"    
+    ```bash
+    # Linux/macOS
+    bash <(curl -s https://raw.githubusercontent.com/thushan/olla/main/install.sh)
+    ```
 === "Using Docker"
     ```bash
     # If you have ollama or lmstudio locally
@@ -127,6 +69,10 @@ Get up and running with Olla in minutes:
     go install github.com/thushan/olla@latest
     olla
     ```
+
+=== "From Binaries"
+
+    <small>Visit [Github Releases](https://github.com/thushan/olla/releases/latest)</small>
 
 === "From Source"
 
@@ -145,7 +91,7 @@ Olla provides detailed response headers for observability:
 |--------|-------------|
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used for the request |
-| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio) |
+| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio/vllm) |
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Response-Time` | Total processing time |
 

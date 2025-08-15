@@ -79,6 +79,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "optimistic"  # Home lab: more flexible routing
+    options:
+      fallback_behavior: "all"  # Use any available endpoint if model not found
+      discovery_timeout: 5s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 24h
@@ -118,7 +124,7 @@ proxy:
   profile: "auto"
   load_balancer: "least-connections"
   connection_timeout: 45s
-  max_retries: 3
+  # Note: Retry is automatic and built-in for connection failures
 
 discovery:
   type: "static"
@@ -164,6 +170,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"  # Production: only route to endpoints with the model
+    options:
+      fallback_behavior: "none"  # Fail fast in production
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 1h  # More aggressive cleanup
@@ -197,7 +209,7 @@ proxy:
   profile: "auto"
   load_balancer: "round-robin"  # Test all endpoints equally
   connection_timeout: 10s
-  max_retries: 1
+  # Note: Retry is automatic and built-in for connection failures
 
 discovery:
   type: "static"
@@ -222,6 +234,20 @@ discovery:
         type: "ollama"
         priority: 50
         check_interval: 30s
+
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  routing_strategy:
+    type: "discovery"  # Development: auto-discover models
+    options:
+      fallback_behavior: "compatible_only"  # Default: safe fallback
+      discovery_timeout: 10s
+      discovery_refresh_on_miss: true  # Auto-refresh in dev
+  unification:
+    enabled: true
+    stale_threshold: 1h
+    cleanup_interval: 5m
 
 logging:
   level: "debug"  # Maximum verbosity
@@ -282,6 +308,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: true
+  routing_strategy:
+    type: "strict"  # Mixed backends: strict routing
+    options:
+      fallback_behavior: "compatible_only"  # Important: prevent API incompatibilities
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
   unification:
     enabled: true
     stale_threshold: 12h
@@ -315,7 +347,7 @@ proxy:
   profile: "standard"  # No streaming for public API
   load_balancer: "least-connections"
   connection_timeout: 20s
-  max_retries: 2
+  # Note: Automatic retry with failover to other endpoints is built-in
 
 discovery:
   type: "static"
@@ -339,6 +371,12 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: false  # Disable for security
+  routing_strategy:
+    type: "strict"  # Public API: strict model routing
+    options:
+      fallback_behavior: "none"  # Never fall back for public API
+      discovery_timeout: 1s
+      discovery_refresh_on_miss: false
 
 logging:
   level: "info"
@@ -394,7 +432,7 @@ proxy:
   profile: "auto"
   load_balancer: "least-connections"
   connection_timeout: 30s
-  max_retries: 5  # More retries for HA
+  # Note: Automatic retry tries all endpoints for maximum availability
 
 discovery:
   type: "static"
@@ -448,6 +486,81 @@ logging:
   level: "info"
   format: "json"
   output: "stdout"
+```
+
+## Resilient Configuration with Auto-Recovery
+
+Configuration optimised for automatic failure handling and recovery:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 40114
+  shutdown_timeout: 30s
+
+proxy:
+  engine: "olla"  # Uses circuit breakers
+  profile: "auto"
+  load_balancer: "priority"
+  connection_timeout: 30s
+  response_timeout: 900s
+  # Note: Automatic retry on failures tries all available endpoints
+
+discovery:
+  type: "static"
+  health_check:
+    initial_delay: 1s  # Quick startup checks
+  
+  model_discovery:
+    enabled: true  # Auto-discover models
+    interval: 5m
+    timeout: 30s
+    
+  static:
+    endpoints:
+      # Primary endpoint - gets most traffic
+      - url: "http://primary-gpu:11434"
+        name: "primary"
+        type: "ollama"
+        priority: 100
+        check_interval: 2s  # Frequent checks for quick recovery
+        check_timeout: 1s
+        
+      # Secondary endpoint - failover
+      - url: "http://secondary-gpu:11434"
+        name: "secondary"
+        type: "ollama"
+        priority: 75
+        check_interval: 5s
+        check_timeout: 2s
+        
+      # Tertiary endpoint - last resort
+      - url: "http://backup-gpu:11434"
+        name: "backup"
+        type: "ollama"
+        priority: 50
+        check_interval: 10s
+        check_timeout: 3s
+
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  unification:
+    enabled: true
+    stale_threshold: 1h  # Quick cleanup of stale models
+    cleanup_interval: 5m
+
+logging:
+  level: "info"
+  format: "json"
+
+# Key resilience features in this config:
+# 1. Automatic retry on connection failures
+# 2. Circuit breakers prevent cascading failures (Olla engine)
+# 3. Quick health checks for fast recovery detection
+# 4. Automatic model discovery on endpoint recovery
+# 5. Priority routing with automatic failover
+# 6. Exponential backoff for failing endpoints
 ```
 
 ## Environment Variables Override

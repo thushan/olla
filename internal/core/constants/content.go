@@ -98,9 +98,12 @@ const (
 	HeaderXProfileOllamaVersion = "X-ProfileOllama-Version"
 
 	// Olla-Specific Headers
-	HeaderXOllaRequestID    = "X-Olla-Request-ID"
-	HeaderXOllaEndpoint     = "X-Olla-Endpoint"
-	HeaderXOllaBackendType  = "X-Olla-Backend-Type"
-	HeaderXOllaModel        = "X-Olla-Model"
-	HeaderXOllaResponseTime = "X-Olla-Response-Time"
+	HeaderXOllaRequestID       = "X-Olla-Request-ID"
+	HeaderXOllaEndpoint        = "X-Olla-Endpoint"
+	HeaderXOllaBackendType     = "X-Olla-Backend-Type"
+	HeaderXOllaModel           = "X-Olla-Model"
+	HeaderXOllaResponseTime    = "X-Olla-Response-Time"
+	HeaderXOllaRoutingStrategy = "X-Olla-Routing-Strategy"
+	HeaderXOllaRoutingDecision = "X-Olla-Routing-Decision"
+	HeaderXOllaRoutingReason   = "X-Olla-Routing-Reason"
 )

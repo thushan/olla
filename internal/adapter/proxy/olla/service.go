@@ -38,6 +38,7 @@ import (
 
 	"github.com/puzpuzpuz/xsync/v4"
 
+	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
@@ -63,9 +64,8 @@ const (
 	ClientDisconnectionBytesThreshold = 1024
 	ClientDisconnectionTimeThreshold  = 5 * time.Second
 
-	// Circuit breaker settings
-	circuitBreakerThreshold = 5
-	circuitBreakerTimeout   = 30 * time.Second
+	// Circuit breaker threshold higher than health checker for tolerance
+	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -80,6 +80,7 @@ type Service struct {
 
 	transport     *http.Transport
 	configuration *Configuration
+	retryHandler  *core.RetryHandler
 
 	// Cleanup management
 	cleanupTicker *time.Ticker
@@ -204,6 +205,7 @@ func NewService(
 		errorPool:           errorPool,
 		transport:           transport,
 		configuration:       configuration,
+		retryHandler:        core.NewRetryHandler(discoveryService, logger),
 		circuitBreakers:     *xsync.NewMap[string, *circuitBreaker](),
 		endpointPools:       *xsync.NewMap[string, *connectionPool](),
 		cleanupTicker:       time.NewTicker(5 * time.Minute),
@@ -289,7 +291,7 @@ func (cb *circuitBreaker) IsOpen() bool {
 
 	// Check if timeout has passed
 	lastFailure := atomic.LoadInt64(&cb.lastFailure)
-	if time.Since(time.Unix(0, lastFailure)) > circuitBreakerTimeout {
+	if time.Since(time.Unix(0, lastFailure)) > health.DefaultCircuitBreakerTimeout {
 		// Try half-open state
 		if atomic.CompareAndSwapInt64(&cb.state, 1, 2) {
 			// State transition: Open -> Half-open
@@ -324,8 +326,14 @@ func (s *Service) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *ht
 	return s.ProxyRequestToEndpoints(ctx, w, r, endpoints, stats, rlog)
 }
 
-// ProxyRequestToEndpoints proxies the request to the provided endpoints
-func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
+// ProxyRequestToEndpoints delegates to retry-aware implementation
+func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+	return s.ProxyRequestToEndpointsWithRetry(ctx, w, r, endpoints, stats, rlog)
+}
+
+// proxyToSingleEndpointLegacy retained for reference during migration
+// TODO: Remove after retry logic stability confirmed
+func (s *Service) proxyToSingleEndpointLegacy(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
 	// Get request context from pool
 	reqCtx := s.requestPool.Get()
 	defer s.requestPool.Put(reqCtx)
@@ -415,7 +423,7 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 	defer resp.Body.Close()
 
 	// Handle successful response
-	return s.handleSuccessfulResponse(ctx, w, resp, endpoint, cb, stats, rlog)
+	return s.handleSuccessfulResponse(ctx, w, r, resp, endpoint, cb, stats, rlog)
 }
 
 // handlePanic handles panic recovery in proxy requests
@@ -445,7 +453,7 @@ func (s *Service) selectEndpointWithCircuitBreaker(endpoints []*domain.Endpoint,
 			if stateBefore == 1 && stateAfter == 2 {
 				rlog.Info("Circuit breaker entering half-open state",
 					"endpoint", ep.Name,
-					"timeout", circuitBreakerTimeout)
+					"timeout", health.DefaultCircuitBreakerTimeout)
 			}
 			return ep, cb
 		}
@@ -539,7 +547,7 @@ func (s *Service) executeBackendRequest(ctx context.Context, endpoint *domain.En
 }
 
 // handleSuccessfulResponse handles the successful response from the backend
-func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseWriter, resp *http.Response, endpoint *domain.Endpoint, cb *circuitBreaker, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseWriter, r *http.Request, resp *http.Response, endpoint *domain.Endpoint, cb *circuitBreaker, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	// Get context logger for this function scope
 	ctxLogger := middleware.GetLogger(ctx)
 	// Circuit breaker success
@@ -575,7 +583,15 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	buffer := s.bufferPool.Get()
 	defer s.bufferPool.Put(buffer)
 
-	bytesWritten, lastChunk, streamErr := s.streamResponse(ctx, ctx, w, resp, *buffer, rlog)
+	// Separate client and upstream contexts for proper cancellation handling
+	// Only create a different context if needed to avoid allocations
+	upstreamCtx := ctx
+	if resp != nil && resp.Request != nil {
+		upstreamCtx = resp.Request.Context()
+	}
+
+	// Use r.Context() for client context and upstreamCtx for upstream context
+	bytesWritten, lastChunk, streamErr := s.streamResponse(r.Context(), upstreamCtx, w, resp, *buffer, rlog)
 	stats.StreamingMs = time.Since(streamStart).Milliseconds()
 	stats.TotalBytes = bytesWritten
 

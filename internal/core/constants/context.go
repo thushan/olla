@@ -6,4 +6,5 @@ const (
 	ContextRequestTimeKey  = "request_time"  // generated each proxy_handler request to track the time taken for the request
 	ContextOriginalPathKey = "original_path" // original path before any modifications, useful for logging/debugging
 	ContextKeyStream       = "stream"        // indicates whether the response should be streamed or buffered
+	ContextProviderTypeKey = "provider_type" // the provider type for the request, used for routing and load balancing
 )

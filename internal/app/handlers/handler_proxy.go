@@ -131,6 +131,11 @@ func (a *Application) executeProxyRequest(ctx context.Context, w http.ResponseWr
 		r = r.WithContext(ctx)
 	}
 
+	// pass routing decision to stats for headers
+	if pr.profile != nil && pr.profile.RoutingDecision != nil {
+		pr.stats.RoutingDecision = pr.profile.RoutingDecision
+	}
+
 	return a.proxyService.ProxyRequestToEndpoints(ctx, w, r, endpoints, pr.stats, pr.requestLogger)
 }
 
@@ -339,51 +344,44 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		}
 	}
 
-	// stage 3: specific model filtering eg. llama to llama
+	// stage 3: specific model filtering using routing strategy
 	if profile != nil && profile.ModelName != "" && a.modelRegistry != nil {
 		ctx := context.Background()
-		modelEndpoints, err := a.modelRegistry.GetEndpointsForModel(ctx, profile.ModelName)
+
+		// use new routing strategy method
+		routableEndpoints, decision, err := a.modelRegistry.GetRoutableEndpointsForModel(ctx, profile.ModelName, profileFiltered)
+
+		// store routing decision for headers and metrics
+		if decision != nil {
+			profile.RoutingDecision = decision
+		}
+
 		if err != nil {
-			logger.Warn("Failed to get endpoints for model, skipping model filtering",
+			// handle routing errors based on decision
+			if decision != nil && decision.StatusCode > 0 {
+				logger.Warn("Model routing rejected request",
+					"model", profile.ModelName,
+					"strategy", decision.Strategy,
+					"reason", decision.Reason,
+					"status", decision.StatusCode)
+				// return empty to trigger appropriate error response
+				return []*domain.Endpoint{}
+			}
+
+			logger.Warn("Model routing failed, using all compatible endpoints",
 				"model", profile.ModelName,
 				"error", err)
 			return profileFiltered
 		}
 
-		if len(modelEndpoints) == 0 {
-			logger.Warn("No endpoints have the requested model, using profile-filtered endpoints",
-				"model", profile.ModelName,
-				"available_endpoints", len(profileFiltered))
-			return profileFiltered
-		}
-
-		modelEndpointMap := make(map[string]bool)
-		for _, endpointURL := range modelEndpoints {
-			modelEndpointMap[endpointURL] = true
-		}
-
-		modelFiltered := make([]*domain.Endpoint, 0, len(profileFiltered))
-		for _, endpoint := range profileFiltered {
-			if modelEndpointMap[endpoint.URLString] {
-				modelFiltered = append(modelFiltered, endpoint)
-			}
-		}
-
-		if len(modelFiltered) == 0 {
-			logger.Warn("No profile-compatible endpoints have the requested model, falling back",
-				"model", profile.ModelName,
-				"model_endpoints", len(modelEndpoints),
-				"compatible_endpoints", len(profileFiltered))
-			return profileFiltered
-		}
-
-		logger.Debug("Filtered endpoints by model availability",
+		logger.Debug("Model routing decision",
 			"model", profile.ModelName,
-			"model_filtered_count", len(modelFiltered),
-			"profile_filtered_count", len(profileFiltered),
-			"total_count", len(endpoints))
+			"strategy", decision.Strategy,
+			"action", decision.Action,
+			"routable", len(routableEndpoints),
+			"compatible", len(profileFiltered))
 
-		return modelFiltered
+		return routableEndpoints
 	}
 
 	return profileFiltered

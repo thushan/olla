@@ -49,11 +49,13 @@ type RequestStats struct {
 
 	// Provider metrics extracted from response (best effort)
 	ProviderMetrics *domain.ProviderMetrics `json:"provider_metrics,omitempty"`
-	RequestID       string
-	Model           string
-	EndpointName    string
-	TargetUrl       string
-	TotalBytes      int
+	RoutingDecision *domain.ModelRoutingDecision // routing decision for this request
+
+	RequestID    string
+	Model        string
+	EndpointName string
+	TargetUrl    string
+	TotalBytes   int
 
 	Latency             int64 // Total end-to-end time
 	RequestProcessingMs int64 // Time spent in Olla before upstream call
@@ -71,4 +73,5 @@ type DiscoveryService interface {
 	GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error)
 	GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error)
 	RefreshEndpoints(ctx context.Context) error
+	UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error
 }

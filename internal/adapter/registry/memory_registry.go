@@ -466,3 +466,52 @@ func (r *MemoryModelRegistry) updateStats() {
 	r.stats.ModelsPerEndpoint = modelsPerEndpoint
 	r.stats.LastUpdated = time.Now()
 }
+
+// GetRoutableEndpointsForModel provides basic routing without strategy support
+// the unified registry overrides this with proper strategy support
+func (r *MemoryModelRegistry) GetRoutableEndpointsForModel(ctx context.Context, modelName string, healthyEndpoints []*domain.Endpoint) ([]*domain.Endpoint, *domain.ModelRoutingDecision, error) {
+	// get endpoints that have this model
+	modelEndpoints, err := r.GetEndpointsForModel(ctx, modelName)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// basic decision tracking
+	decision := &domain.ModelRoutingDecision{
+		Strategy: "basic",
+		Action:   "filter",
+	}
+
+	// filter healthy endpoints to only those with the model
+	if len(modelEndpoints) == 0 {
+		decision.Action = "no_model"
+		decision.Reason = "Model not found in any endpoint"
+		decision.StatusCode = 404
+		return []*domain.Endpoint{}, decision, nil
+	}
+
+	// create a set for quick lookup
+	modelEndpointSet := make(map[string]bool)
+	for _, url := range modelEndpoints {
+		modelEndpointSet[url] = true
+	}
+
+	// filter healthy endpoints
+	var routableEndpoints []*domain.Endpoint
+	for _, endpoint := range healthyEndpoints {
+		if modelEndpointSet[endpoint.URLString] {
+			routableEndpoints = append(routableEndpoints, endpoint)
+		}
+	}
+
+	if len(routableEndpoints) == 0 {
+		decision.Action = "no_healthy"
+		decision.Reason = "Model exists but no healthy endpoints available"
+		decision.StatusCode = 503
+		return []*domain.Endpoint{}, decision, nil
+	}
+
+	decision.Action = "routed"
+	decision.Reason = fmt.Sprintf("Found %d healthy endpoints with model", len(routableEndpoints))
+	return routableEndpoints, decision, nil
+}

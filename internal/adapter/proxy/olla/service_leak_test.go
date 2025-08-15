@@ -320,6 +320,10 @@ func (m *mockDiscoveryService) RefreshEndpoints(ctx context.Context) error {
 	return nil
 }
 
+func (m *mockDiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
+	return nil
+}
+
 type mockEndpointSelector struct{}
 
 func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {

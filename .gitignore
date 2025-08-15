@@ -6,7 +6,7 @@ debug/
 logs/
 tmp/
 *.exe
-olla
+/olla
 # Local config files (never ship these)
 config.local.yaml
 config/*.local.yaml

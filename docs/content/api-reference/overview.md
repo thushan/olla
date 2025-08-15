@@ -87,7 +87,7 @@ All responses include:
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used (if applicable) |
 | `X-Olla-Backend-Type` | Provider type (ollama/lmstudio/openai/vllm) |
-| `X-Olla-Response-Time` | Total processing time (trailer) |
+| `X-Olla-Response-Time` | Total processing time |
 
 ## Error Responses
 

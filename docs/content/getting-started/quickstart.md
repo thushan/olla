@@ -180,7 +180,7 @@ proxy:
   engine: "olla"  # High-performance engine
   load_balancer: "least-connections"
   connection_timeout: 30s
-  max_retries: 3
+  # Note: Automatic retry on connection failures is built-in
 ```
 
 ### Rate Limiting
