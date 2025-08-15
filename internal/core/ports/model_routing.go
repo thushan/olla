@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -39,7 +40,7 @@ func NewRoutingDecision(strategy, action, reason string) *domain.ModelRoutingDec
 	// set appropriate status codes based on action
 	switch action {
 	case RoutingActionRejected:
-		if reason == "model_not_found" {
+		if reason == constants.RoutingReasonModelNotFound {
 			decision.StatusCode = http.StatusNotFound
 		} else {
 			decision.StatusCode = http.StatusServiceUnavailable

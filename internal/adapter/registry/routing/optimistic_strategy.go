@@ -3,6 +3,7 @@ package routing
 import (
 	"context"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -17,7 +18,7 @@ type OptimisticStrategy struct {
 // NewOptimisticStrategy creates a new optimistic routing strategy
 func NewOptimisticStrategy(fallbackBehavior string, logger logger.StyledLogger) *OptimisticStrategy {
 	if fallbackBehavior == "" {
-		fallbackBehavior = "compatible_only"
+		fallbackBehavior = constants.FallbackBehaviorCompatibleOnly
 	}
 	return &OptimisticStrategy{
 		fallbackBehavior: fallbackBehavior,
@@ -45,25 +46,25 @@ func (s *OptimisticStrategy) GetRoutableEndpoints(
 			"fallback", s.fallbackBehavior)
 
 		switch s.fallbackBehavior {
-		case "none":
+		case constants.FallbackBehaviorNone:
 			return []*domain.Endpoint{}, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"model_not_found",
+				constants.RoutingReasonModelNotFound,
 			), nil
-		case "compatible_only":
+		case constants.FallbackBehaviorCompatibleOnly:
 			// For compatible_only, reject when model not found
 			return []*domain.Endpoint{}, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"model_not_found",
+				constants.RoutingReasonModelNotFound,
 			), nil
 		default:
 			// "all" or any other value - return all healthy with fallback
 			return healthyEndpoints, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionFallback,
-				"model_not_found_fallback",
+				constants.RoutingReasonModelNotFoundFallback,
 			), nil
 		}
 	}
@@ -91,26 +92,26 @@ func (s *OptimisticStrategy) GetRoutableEndpoints(
 			"fallback", s.fallbackBehavior)
 
 		switch s.fallbackBehavior {
-		case "none":
+		case constants.FallbackBehaviorNone:
 			return []*domain.Endpoint{}, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"model_unavailable_no_fallback",
+				constants.RoutingReasonModelUnavailableNoFallback,
 			), nil
-		case "compatible_only":
+		case constants.FallbackBehaviorCompatibleOnly:
 			// For compatible_only, we don't fall back at all if no healthy endpoints have the model
 			// This prevents routing to endpoints that don't support the requested model
 			return []*domain.Endpoint{}, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"model_unavailable_compatible_only",
+				constants.RoutingReasonModelUnavailableCompatibleOnly,
 			), nil
 		default:
 			// "all" or any other value - return all healthy
 			return healthyEndpoints, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionFallback,
-				"all_healthy_fallback",
+				constants.RoutingReasonAllHealthyFallback,
 			), nil
 		}
 	}
@@ -123,6 +124,6 @@ func (s *OptimisticStrategy) GetRoutableEndpoints(
 	return routable, ports.NewRoutingDecision(
 		s.Name(),
 		ports.RoutingActionRouted,
-		"model_found",
+		constants.RoutingReasonModelFound,
 	), nil
 }

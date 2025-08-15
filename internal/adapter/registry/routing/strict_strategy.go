@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -42,7 +43,7 @@ func (s *StrictStrategy) GetRoutableEndpoints(
 		return nil, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"model_not_found",
+				constants.RoutingReasonModelNotFound,
 			), domain.NewModelRoutingError(
 				modelName,
 				s.Name(),
@@ -77,7 +78,7 @@ func (s *StrictStrategy) GetRoutableEndpoints(
 		return nil, ports.NewRoutingDecision(
 				s.Name(),
 				ports.RoutingActionRejected,
-				"model_unavailable",
+				constants.RoutingReasonModelUnavailable,
 			), domain.NewModelRoutingError(
 				modelName,
 				s.Name(),
@@ -96,6 +97,6 @@ func (s *StrictStrategy) GetRoutableEndpoints(
 	return routable, ports.NewRoutingDecision(
 		s.Name(),
 		ports.RoutingActionRouted,
-		"model_found",
+		constants.RoutingReasonModelFound,
 	), nil
 }

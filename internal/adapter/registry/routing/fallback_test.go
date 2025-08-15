@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -29,8 +30,8 @@ func TestOptimisticStrategy_FallbackBehavior(t *testing.T) {
 
 	t.Run("compatible_only rejects when model not on healthy endpoints", func(t *testing.T) {
 		strategy := &OptimisticStrategy{
-			fallbackBehavior: "compatible_only",
-			logger:          testLogger,
+			fallbackBehavior: constants.FallbackBehaviorCompatibleOnly,
+			logger:           testLogger,
 		}
 
 		result, decision, err := strategy.GetRoutableEndpoints(ctx, "test-model", healthyEndpoints, modelEndpoints)
@@ -38,13 +39,13 @@ func TestOptimisticStrategy_FallbackBehavior(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Empty(t, result)
 		assert.Equal(t, "rejected", string(decision.Action))
-		assert.Equal(t, "model_unavailable_compatible_only", decision.Reason)
+		assert.Equal(t, constants.RoutingReasonModelUnavailableCompatibleOnly, decision.Reason)
 	})
 
 	t.Run("none rejects when model not on healthy endpoints", func(t *testing.T) {
 		strategy := &OptimisticStrategy{
-			fallbackBehavior: "none",
-			logger:          testLogger,
+			fallbackBehavior: constants.FallbackBehaviorNone,
+			logger:           testLogger,
 		}
 
 		result, decision, err := strategy.GetRoutableEndpoints(ctx, "test-model", healthyEndpoints, modelEndpoints)
@@ -52,13 +53,13 @@ func TestOptimisticStrategy_FallbackBehavior(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Empty(t, result)
 		assert.Equal(t, "rejected", string(decision.Action))
-		assert.Equal(t, "model_unavailable_no_fallback", decision.Reason)
+		assert.Equal(t, constants.RoutingReasonModelUnavailableNoFallback, decision.Reason)
 	})
 
 	t.Run("all returns all healthy when model not on healthy endpoints", func(t *testing.T) {
 		strategy := &OptimisticStrategy{
-			fallbackBehavior: "all",
-			logger:          testLogger,
+			fallbackBehavior: constants.FallbackBehaviorAll,
+			logger:           testLogger,
 		}
 
 		result, decision, err := strategy.GetRoutableEndpoints(ctx, "test-model", healthyEndpoints, modelEndpoints)
@@ -66,13 +67,13 @@ func TestOptimisticStrategy_FallbackBehavior(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, healthyEndpoints, result)
 		assert.Equal(t, "fallback", string(decision.Action))
-		assert.Equal(t, "all_healthy_fallback", decision.Reason)
+		assert.Equal(t, constants.RoutingReasonAllHealthyFallback, decision.Reason)
 	})
 
 	t.Run("returns model endpoints when available", func(t *testing.T) {
 		strategy := &OptimisticStrategy{
-			fallbackBehavior: "compatible_only",
-			logger:          testLogger,
+			fallbackBehavior: constants.FallbackBehaviorCompatibleOnly,
+			logger:           testLogger,
 		}
 
 		// Model on healthy endpoint
@@ -84,7 +85,7 @@ func TestOptimisticStrategy_FallbackBehavior(t *testing.T) {
 		assert.Len(t, result, 1)
 		assert.Equal(t, "ep1", result[0].Name)
 		assert.Equal(t, "routed", string(decision.Action))
-		assert.Equal(t, "model_found", decision.Reason)
+		assert.Equal(t, constants.RoutingReasonModelFound, decision.Reason)
 	})
 }
 
@@ -108,7 +109,7 @@ func TestDiscoveryStrategy_FallbackBehavior(t *testing.T) {
 		strategy := &DiscoveryStrategy{
 			discovery: mockDiscovery,
 			options: config.ModelRoutingStrategyOptions{
-				FallbackBehavior:       "compatible_only",
+				FallbackBehavior:       constants.FallbackBehaviorCompatibleOnly,
 				DiscoveryRefreshOnMiss: true,
 			},
 			logger:         testLogger,
@@ -130,7 +131,7 @@ func TestDiscoveryStrategy_FallbackBehavior(t *testing.T) {
 		strategy := &DiscoveryStrategy{
 			discovery: mockDiscovery,
 			options: config.ModelRoutingStrategyOptions{
-				FallbackBehavior:       "all",
+				FallbackBehavior:       constants.FallbackBehaviorAll,
 				DiscoveryRefreshOnMiss: true,
 			},
 			logger:         testLogger,

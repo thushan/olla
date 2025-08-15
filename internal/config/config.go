@@ -95,7 +95,7 @@ func DefaultConfig() *Config {
 				Options: ModelRoutingStrategyOptions{
 					DiscoveryRefreshOnMiss: false,
 					DiscoveryTimeout:       2 * time.Second,
-					FallbackBehavior:       "compatible_only",
+					FallbackBehavior:       constants.FallbackBehaviorCompatibleOnly,
 				},
 			},
 			Unification: UnificationConfig{

@@ -60,12 +60,28 @@ func (h *RetryHandler) ExecuteWithRetry(
 	// Preserve request body for potential retries
 	var bodyBytes []byte
 	if r.Body != nil && r.Body != http.NoBody {
-		bodyBytes, _ = io.ReadAll(r.Body)
-		r.Body.Close()
+		var err error
+		bodyBytes, err = io.ReadAll(r.Body)
+		if err != nil {
+			h.logger.Error("Failed to read request body for retry preservation",
+				"error", err)
+			return fmt.Errorf("failed to read request body: %w", err)
+		}
+
+		// Close the original body and handle any error
+		if err := r.Body.Close(); err != nil {
+			h.logger.Warn("Failed to close original request body",
+				"error", err)
+			// Continue as the body has been read successfully
+		}
+
+		// Recreate the body for the first attempt
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 	}
 
 	for retryCount <= maxRetries && len(availableEndpoints) > 0 {
-		if bodyBytes != nil {
+		// Reset body for retries (skip first iteration as body already set above)
+		if bodyBytes != nil && retryCount > 0 {
 			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
