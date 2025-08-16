@@ -12,6 +12,8 @@ keywords: olla faq, troubleshooting, common questions, proxy help
 
 Olla is a high-performance proxy and load balancer specifically designed for LLM infrastructure. It intelligently routes requests across multiple LLM backends (Ollama, LM Studio, OpenAI-compatible endpoints) while providing load balancing, health checking, and unified model management.
 
+See how Olla compares to [other tools](compare/overview.md) in the ecosystem.
+
 ### Why use Olla instead of connecting directly to backends?
 
 Olla provides several benefits:
@@ -189,7 +191,7 @@ server:
 
 ### Does Olla work with OpenAI SDK?
 
-Yes, Olla provides OpenAI-compatible endpoints:
+Yes, Olla provides OpenAI-compatible endpoints (similar to [LocalAI](compare/localai.md)):
 
 ```python
 from openai import OpenAI
@@ -204,6 +206,10 @@ response = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello"}]
 )
 ```
+
+### How does Olla compare to LiteLLM?
+
+[LiteLLM](compare/litellm.md) is an API translation layer for cloud providers, while Olla is an infrastructure proxy for self-hosted endpoints. They solve different problems and work well together - LiteLLM for cloud APIs, Olla for local infrastructure reliability.
 
 ### Can I use Olla with LangChain?
 
@@ -229,6 +235,10 @@ curl http://localhost:40114/olla/ollama/v1/embeddings \
 ```
 
 ## Deployment
+
+### Can Olla deploy models like GPUStack?
+
+No, Olla doesn't deploy models. It routes to existing endpoints. For model deployment across GPU clusters, use [GPUStack](compare/gpustack.md). Olla can then provide routing and failover for GPUStack-managed endpoints.
 
 ### Can I run multiple Olla instances?
 
@@ -332,6 +342,15 @@ Only in development or when debugging. Request logging significantly impacts per
 - **Minimum**: 2 for redundancy
 - **Typical**: 3-5 endpoints
 - **Maximum**: No hard limit, but more endpoints increase health check overhead
+
+### Should I use Olla with other tools?
+
+Yes! Olla works well in combination with other tools:
+
+- Use [LiteLLM](compare/litellm.md) for cloud API access
+- Use [GPUStack](compare/gpustack.md) for GPU cluster management
+- Use [LocalAI](compare/localai.md) for OpenAI compatibility
+- See [integration patterns](compare/integration-patterns.md) for architectures
 
 ## Getting Help
 

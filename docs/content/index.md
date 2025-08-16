@@ -24,6 +24,8 @@ Olla is a high-performance, low-overhead, low-latency proxy, model unifier and l
 
 It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
+Unlike API gateways like [LiteLLM](compare/litellm.md) or orchestration platforms like [GPUStack](compare/gpustack.md), Olla focuses on making your existing LLM infrastructure reliable through intelligent routing and failover.
+
 ## Key Features
 
 - **Unified Model Registry**: Unifies models registered across instances (of the same type - Eg. Ollama or LMStudio)
@@ -102,6 +104,8 @@ Olla provides detailed response headers for observability:
 - **Observable**: Rich metrics and tracing out of the box
 - **Reliable**: Circuit breakers and automatic failover
 - **Fast**: Optimised for minimal latency and maximum throughput
+
+See how Olla compares to [LiteLLM](compare/litellm.md), [GPUStack](compare/gpustack.md) and [LocalAI](compare/localai.md) in our [comparison guide](compare/overview.md).
 
 ## Next Steps
 

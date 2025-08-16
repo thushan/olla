@@ -115,6 +115,12 @@ nav:
       - FAQ: faq.md
       - Usage: usage.md
       - About: about.md
+      - Compare:
+        - Overview: compare/overview.md
+        - Patterns: compare/integration-patterns.md
+        - vs GpuStack: compare/gpustack.md
+        - vs LiteLLM: compare/litellm.md
+        - vs LocalAI: compare/localai.md
   - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md

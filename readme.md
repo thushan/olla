@@ -30,13 +30,13 @@
 
 Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
-You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
+Unlike API gateways like [LiteLLM](https://github.com/BerriAI/litellm) or orchestration platforms like [GPUStack](https://github.com/gpustack/gpustack), Olla focuses on making your **existing** LLM infrastructure reliable through intelligent routing and failover. You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
 Single CLI application and config file is all you need to go Olla!
 
 ![Olla Usecase](assets/diagrams/usecases.excalidraw.png)
 
-In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/junie/) to use Olla for its Ollama and LMStudio endpoints for local-ai inference with Junie.
+In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/junie/) to use Olla for its Ollama and LMStudio endpoints for local-ai inference with Junie (see [how to configure Jetbrains Junie](https://thushan.github.io/olla/usage/#development-tools-junie)).
 
 ## Key Features
 
@@ -51,6 +51,18 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
 - **⚙️ High Performance**: Designed to be very [lightweight & efficient](https://thushan.github.io/olla/configuration/practices/performance/), runs on less than 50Mb RAM.
+
+## How Olla Fits in Your Stack
+
+| Tool | Purpose | Use Together? |
+|------|---------|--------------|
+| **Olla** | Load balancing & failover for existing endpoints | - |
+| **[LiteLLM](https://github.com/BerriAI/litellm)** | API translation for cloud providers | ✅ Use for cloud APIs |
+| **[GPUStack](https://github.com/gpustack/gpustack)** | GPU cluster orchestration | ✅ Route to managed endpoints |
+| **[LocalAI](https://github.com/mudler/LocalAI)** | OpenAI-compatible local API | ✅ Load balance multiple instances |
+| **[Ollama](https://github.com/ollama/ollama)** | Local model serving | ✅ Primary use case |
+
+See our [detailed comparisons](https://thushan.github.io/olla/compare/overview/) and [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/) for more.
 
 ### Supported Backends
 
@@ -155,6 +167,15 @@ Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla
   ```
 
 You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/olla/integrations/frontend/openwebui/).
+
+### Common Architectures
+
+- **Home Lab**: Olla → Multiple Ollama instances across your machines
+- **Hybrid Cloud**: Olla → Local endpoints + LiteLLM → Cloud APIs  
+- **Enterprise**: Olla → GPUStack cluster + vLLM servers + Cloud overflow
+- **Development**: Olla → Local + Shared team endpoints
+
+See [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/) for detailed architectures.
 
 More examples coming soon:
 - **Multi-Provider Setup**: Ollama + LM Studio + OpenAI-compatible endpoints
@@ -429,6 +450,7 @@ Full documentation is available at **[https://thushan.github.io/olla/](https://t
 - **[Configuration Reference](https://thushan.github.io/olla/configuration/reference/)** - Complete configuration options
 - **[API Reference](https://thushan.github.io/olla/api-reference/overview/)** - Full API documentation
 - **[Concepts](https://thushan.github.io/olla/concepts/overview/)** - Core concepts and architecture
+- **[Comparisons](https://thushan.github.io/olla/compare/overview/)** - Compare with LiteLLM, GPUStack, LocalAI
 - **[Integrations](https://thushan.github.io/olla/integrations/overview/)** - Frontend and backend integrations
 - **[Development](https://thushan.github.io/olla/development/overview/)** - Contributing and development guide
 
@@ -456,8 +478,14 @@ The built-in security features are optimised for this deployment pattern:
 **Q: Why use Olla instead of nginx or HAProxy?** \
 A: Olla understands LLM-specific patterns like model routing, streaming responses, and health semantics. It also provides built-in model discovery and LLM-optimised timeouts.
 
+**Q: How does Olla compare to LiteLLM?** \
+A: [LiteLLM](https://github.com/BerriAI/litellm) is an API translation layer for cloud providers (OpenAI, Anthropic, etc.), while Olla is an infrastructure proxy for self-hosted endpoints. They work great together - use LiteLLM for cloud APIs and Olla for local infrastructure reliability. See our [detailed comparison](https://thushan.github.io/olla/compare/litellm/).
+
+**Q: Can Olla manage GPU clusters like GPUStack?** \
+A: No, Olla doesn't deploy or orchestrate models. For GPU cluster management, use [GPUStack](https://github.com/gpustack/gpustack). Olla can then provide routing and failover for your GPUStack-managed endpoints. See our [comparison guide](https://thushan.github.io/olla/compare/gpustack/).
+
 **Q: Can I use Olla with other LLM providers?** \
-A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints (such as vLLM, LocalAI, Together AI, etc.).
+A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints (such as LiteLLM, [LocalAI](https://github.com/mudler/LocalAI), Together AI, etc.). See [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/).
 
 **Q: Does Olla support authentication?** \
 A: Olla focuses on load balancing and lets your reverse proxy handle authentication. This follows the Unix philosophy of doing one thing well.
