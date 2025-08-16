@@ -27,9 +27,9 @@ More companies are moving workloads to local or on-premises (or own-cloud hosted
 Perfect for enthusiasts running multiple LLM instances:
 
 - **Multi-GPU Setups**: Route between different models on various GPUs
-- **Model Experimentation**: Easy switching between Ollama, LM Studio and OpenAI backends
+- **Model Experimentation**: Easy switching between Ollama, LM Studio and OpenAI backends  
 - **Resource Management**: Automatic failover when local resources are busy
-- **Cost Optimisation**: Priority routing (local first, cloud fallback)
+- **Cost Optimisation**: Priority routing (local first, cloud fallback via [LiteLLM](compare/litellm.md))
 
 ```yaml
 # Home lab config - local first, home-lab second
@@ -94,6 +94,8 @@ Olla sits between your applications and local AI runtimes (eg. Ollama, LM Studio
 * **Enforce configuration and policy** centrally for all AI requests.
 * **Expose metrics** so you can track performance and usage.
 * **Stream responses efficiently** for low-latency interactive use.
+
+For cloud API management, consider [LiteLLM](compare/litellm.md). For GPU cluster orchestration, see [GPUStack](compare/gpustack.md). Olla can work alongside these tools - see our [integration patterns](compare/integration-patterns.md).
 
 ## Customer Usage Scenarios
 
