@@ -290,23 +290,23 @@ LiteLLM supports provider-prefixed model names:
 ```python
 import openai
 
-client = openai.OpenAI(base_url="http://localhost:40114/olla/openai")
+client = openai.OpenAI(base_url="http://localhost:40114/olla/litellm/v1")
 
-# Routes to OpenAI
+# Routes to OpenAI via LiteLLM
 response = client.chat.completions.create(
-    model="gpt-4",
+    model="openai/gpt-4",
     messages=[{"role": "user", "content": "Hello!"}]
 )
 
 # Routes to Anthropic via LiteLLM
 response = client.chat.completions.create(
-    model="claude-4-opus",
+    model="anthropic/claude-3-opus-20240229",
     messages=[{"role": "user", "content": "Hello!"}]
 )
 
 # Routes to AWS Bedrock via LiteLLM
 response = client.chat.completions.create(
-    model="claude-4-bedrock",
+    model="bedrock/anthropic.claude-3-sonnet",
     messages=[{"role": "user", "content": "Hello!"}]
 )
 ```

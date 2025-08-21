@@ -13,7 +13,7 @@ keywords: LM Studio, Olla, LLM proxy, local inference, OpenAI compatible, model 
     </tr>
     <tr>
         <th>Since</th>
-        <td>Olla <code>v0.0.7</code></td>
+        <td>Olla <code>v0.0.12</code></td>
     </tr>
     <tr>
         <th>Type</th>

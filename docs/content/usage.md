@@ -35,6 +35,7 @@ Perfect for enthusiasts running multiple LLM instances:
 ```yaml
 # Home lab config - local first, cloud fallback
 discovery:
+  type: "static"
   static:
     endpoints:
       - name: "rtx-4090-mobile"
@@ -86,6 +87,7 @@ Seamlessly combine local and cloud models with native LiteLLM support:
 ```yaml
 # Hybrid setup with LiteLLM
 discovery:
+  type: "static"
   static:
     endpoints:
       # Local models for privacy/cost
