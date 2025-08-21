@@ -8,6 +8,7 @@
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a> 
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a> 
     <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a> 
+    <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a> 
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
@@ -30,7 +31,7 @@
 
 Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) and OpenAI-compatible endpoints like [vLLM](https://github.com/vllm-project/vllm). Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
-Unlike API gateways like [LiteLLM](https://github.com/BerriAI/litellm) or orchestration platforms like [GPUStack](https://github.com/gpustack/gpustack), Olla focuses on making your **existing** LLM infrastructure reliable through intelligent routing and failover. You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
+Olla works alongside API gateways like [LiteLLM](https://github.com/BerriAI/litellm) or orchestration platforms like [GPUStack](https://github.com/gpustack/gpustack), focusing on making your **existing** LLM infrastructure reliable through intelligent routing and failover. You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
 Single CLI application and config file is all you need to go Olla!
 
@@ -75,6 +76,9 @@ Olla natively supports the following backend providers. Learn more about [Olla I
 * [vLLM](https://github.com/vllm-project/vllm) - native support for vllm, including model unification. \
   Use: `/olla/vllm/` \
   Models from vLLM will be available under `/olla/models` and `/olla/vllm/v1/models`
+* [LiteLLM](https://github.com/BerriAI/litellm) - native support for LiteLLM, providing unified gateway to 100+ LLM providers. \
+  Use: `/olla/litellm/` \
+  Access models from OpenAI, Anthropic, Bedrock, Azure, Google Vertex AI, Cohere, and many more through a single interface
 * [OpenAI](https://platform.openai.com/docs/overview) - You can use OpenAI API that provides a unified query API across all providers. \
   Use: `/olla/openai/`
 
@@ -171,9 +175,9 @@ You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/
 ### Common Architectures
 
 - **Home Lab**: Olla → Multiple Ollama instances across your machines
-- **Hybrid Cloud**: Olla → Local endpoints + LiteLLM → Cloud APIs  
-- **Enterprise**: Olla → GPUStack cluster + vLLM servers + Cloud overflow
-- **Development**: Olla → Local + Shared team endpoints
+- **Hybrid Cloud**: Olla → Local endpoints + LiteLLM → Cloud APIs (OpenAI, Anthropic, Bedrock, etc.)
+- **Enterprise**: Olla → GPUStack cluster + vLLM servers + LiteLLM (cloud overflow)
+- **Development**: Olla → Local + Shared team endpoints + LiteLLM (API access)
 
 See [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/) for detailed architectures.
 
@@ -433,12 +437,23 @@ discovery:
         health_check_url: "/"
         check_interval: 2s
         check_timeout: 1s
+      
+      # LiteLLM for cloud APIs (lower priority)
+      - url: "http://localhost:4000"
+        name: "litellm-gateway"
+        type: "litellm"
+        priority: 50
+        model_url: "/v1/models"
+        health_check_url: "/health"
+        check_interval: 5s
+        check_timeout: 2s
 ```
 
 With this setup:
-1. Requests go to your workstation first
-2. If workstation fails, tries laptop
-3. Models from each provider are discoverable and available for routing
+1. Requests go to your workstation first (Ollama)
+2. If workstation fails, tries laptop (LM Studio)
+3. If both local options fail, falls back to cloud APIs via LiteLLM
+4. Models from each provider are discoverable and available for routing
 
 ## Documentation
 
@@ -479,7 +494,7 @@ The built-in security features are optimised for this deployment pattern:
 A: Olla understands LLM-specific patterns like model routing, streaming responses, and health semantics. It also provides built-in model discovery and LLM-optimised timeouts.
 
 **Q: How does Olla compare to LiteLLM?** \
-A: [LiteLLM](https://github.com/BerriAI/litellm) is an API translation layer for cloud providers (OpenAI, Anthropic, etc.), while Olla is an infrastructure proxy for self-hosted endpoints. They work great together - use LiteLLM for cloud APIs and Olla for local infrastructure reliability. See our [detailed comparison](https://thushan.github.io/olla/compare/litellm/).
+A: [LiteLLM](https://github.com/BerriAI/litellm) is a unified gateway to 100+ LLM providers (OpenAI, Anthropic, Bedrock, etc.), while Olla is an infrastructure proxy that adds load balancing, failover, and health management. They work excellently together - Olla can load balance multiple LiteLLM instances and provide failover between them. With native LiteLLM support, you can use Olla to manage both local infrastructure (Ollama, LM Studio) and cloud APIs through LiteLLM. See our [detailed comparison](https://thushan.github.io/olla/compare/litellm/).
 
 **Q: Can Olla manage GPU clusters like GPUStack?** \
 A: No, Olla doesn't deploy or orchestrate models. For GPU cluster management, use [GPUStack](https://github.com/gpustack/gpustack). Olla can then provide routing and failover for your GPUStack-managed endpoints. See our [comparison guide](https://thushan.github.io/olla/compare/gpustack/).

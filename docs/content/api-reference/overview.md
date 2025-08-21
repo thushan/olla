@@ -51,6 +51,11 @@ Proxy endpoints for vLLM servers.
 
 - `/olla/vllm/*` - vLLM API endpoints
 
+### [LiteLLM API](litellm.md)
+Proxy endpoints for LiteLLM gateway (100+ providers).
+
+- `/olla/litellm/*` - LiteLLM API endpoints
+
 ## Authentication
 
 Currently, Olla does not implement authentication at the proxy level. Authentication should be handled by:

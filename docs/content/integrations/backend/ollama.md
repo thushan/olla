@@ -12,6 +12,10 @@ keywords: ollama integration, ollama proxy, olla ollama, ollama configuration, o
         <td><a href="https://github.com/ollama/ollama">github.com/ollama/ollama</a></td>
     </tr>
     <tr>
+        <th>Since</th>
+        <td>Olla <code>v0.0.1</code></td>
+    </tr>
+    <tr>
         <th>Type</th>
         <td><code>ollama</code> (use in endpoint configuration)</td>
     </tr>
@@ -57,7 +61,7 @@ keywords: ollama integration, ollama proxy, olla ollama, ollama configuration, o
         <th>Prefixes</th>
         <td>
             <ul>
-                <li><code>/ollama</code> (see <a href="../../concepts/profile-system.md#routing-prefixes">Routing Prefixes</a>)</li>
+                <li><code>/ollama</code> (see <a href="/olla/concepts/profile-system/#routing-prefixes">Routing Prefixes</a>)</li>
             </ul>
         </td>
     </tr>

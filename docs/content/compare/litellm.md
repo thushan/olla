@@ -6,9 +6,12 @@ keywords: olla vs litellm, litellm comparison, llm proxy comparison, ai gateway,
 
 # Olla vs LiteLLM
 
+> **Native Integration Available!** 🎉  
+> Olla now includes native LiteLLM support through a dedicated profile. This means you can use LiteLLM as a backend provider just like Ollama or LM Studio, with full health checking, load balancing and failover capabilities. See [LiteLLM Integration](../integrations/backend/litellm.md).
+
 ## Overview
 
-[Olla](https://github.com/thushan/olla) and [LiteLLM](https://github.com/BerriAI/litellm) solve different problems in the LLM infrastructure stack. Rather than competitors, they're often complementary tools that work well together.
+[Olla](https://github.com/thushan/olla) and [LiteLLM](https://github.com/BerriAI/litellm) solve different problems in the LLM infrastructure stack. **Olla now provides native LiteLLM support**, making them perfect companions rather than competitors.
 
 ## Core Differences
 
@@ -28,15 +31,19 @@ keywords: olla vs litellm, litellm comparison, llm proxy comparison, ai gateway,
 
 ### Architecture
 
-**Olla**:
+**Olla (with native LiteLLM support)**:
 ```
-Application → Olla → Physical Endpoints
+Application → Olla → Multiple Backends
                 ├── Ollama instance 1
                 ├── Ollama instance 2
-                └── LM Studio instance
+                ├── LM Studio instance
+                └── LiteLLM gateway → Cloud Providers
+                                  ├── OpenAI API
+                                  ├── Anthropic API
+                                  └── 100+ other providers
 ```
 
-**LiteLLM**:
+**LiteLLM (standalone)**:
 ```
 Application → LiteLLM → Provider APIs
                     ├── OpenAI API
@@ -87,30 +94,36 @@ Application → LiteLLM → Provider APIs
 - Require provider-specific features
 - Building provider-agnostic applications
 
-## Using Them Together
+## Using Them Together (Native Integration)
 
-Olla and LiteLLM work brilliantly together in a layered architecture:
+With Olla's **native LiteLLM support**, integration is seamless:
 
-### Option 1: LiteLLM Behind Olla
+### Native Integration (Recommended)
 ```yaml
-# Olla config
+# Olla config with native LiteLLM support
 endpoints:
-  - name: litellm-primary
-    url: http://litellm1:8000
-    priority: 1
-  - name: litellm-backup
-    url: http://litellm2:8000
-    priority: 2
+  # Local models (high priority)
   - name: local-ollama
     url: http://localhost:11434
-    priority: 3
+    type: ollama
+    priority: 100
+    
+  # LiteLLM gateway (native support)
+  - name: litellm-gateway
+    url: http://localhost:4000
+    type: litellm  # Native LiteLLM profile
+    priority: 75
+    model_url: /v1/models
+    health_check_url: /health
 ```
 
 **Benefits**:
 
-- High availability for LiteLLM
-- Failover to local models if cloud is down
-- Unified endpoint for all models
+- Native profile for optimal integration
+- Automatic model discovery from LiteLLM
+- Health monitoring and circuit breakers for cloud providers
+- Unified endpoint for local AND cloud models
+- Intelligent routing based on model availability
 
 ### Option 2: Side-by-Side
 ```

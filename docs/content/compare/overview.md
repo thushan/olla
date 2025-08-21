@@ -43,7 +43,7 @@ Instead, we excel at:
 **Perfect for Olla!** Point Olla at all your Ollama instances and get automatic failover, load balancing, and unified access.
 
 ### "I need to use OpenAI, Anthropic, and local models"
-**Use Olla + [LiteLLM](./litellm.md)**: LiteLLM handles the API translation, Olla provides resilience and routing between LiteLLM instances and local endpoints.
+**Use Olla with native [LiteLLM](./litellm.md) support**: Olla now includes native LiteLLM integration. Configure LiteLLM as a backend type alongside your local endpoints for seamless routing between local and cloud models.
 
 ### "I have a cluster of GPUs to manage"
 **Use [GPUStack](./gpustack.md) + Olla**: GPUStack orchestrates model deployment across GPUs, Olla provides the reliable routing layer on top.
