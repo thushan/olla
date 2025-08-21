@@ -75,7 +75,7 @@ description: "Local Ollama instance for running GGUF models"
 - `display_name` - A nicer way to display information about the profile
 - `description` - A short description for the interface
 
-### Routing Prefixes
+### Routing Prefixes {#routing-prefixes}
 
 The `routing.prefixes` section defines URL paths that route to this backend.
 
@@ -226,7 +226,7 @@ request:
 | lmstudio | `data` | OpenAI-compatible |
 | vllm | `data` | OpenAI-compatible |
 
-### Capability Detection
+### Capability Detection {#capability-detection}
 
 The `models.capability_patterns` section uses glob patterns to detect model features.
 
@@ -396,7 +396,7 @@ features:
       - /detokenize
 ```
 
-## Creating Custom Profiles
+## Creating Custom Profiles {#creating-custom-profiles}
 
 ### Basic Custom Profile
 

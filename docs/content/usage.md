@@ -29,21 +29,30 @@ Perfect for enthusiasts running multiple LLM instances:
 - **Multi-GPU Setups**: Route between different models on various GPUs
 - **Model Experimentation**: Easy switching between Ollama, LM Studio and OpenAI backends  
 - **Resource Management**: Automatic failover when local resources are busy
-- **Cost Optimisation**: Priority routing (local first, cloud fallback via [LiteLLM](compare/litellm.md))
+- **Cost Optimisation**: Priority routing (local first, cloud fallback via native [LiteLLM](integrations/backend/litellm.md) support)
+- **Hybrid Cloud**: Access GPT-4, Claude, and 100+ cloud models when needed
 
 ```yaml
-# Home lab config - local first, home-lab second
+# Home lab config - local first, cloud fallback
 discovery:
   static:
     endpoints:
       - name: "rtx-4090-mobile"
         url: "http://localhost:11434" 
         type: "ollama"
-        priority: 100  # Highest priority
+        priority: 100  # Highest priority - use local when available
+        
       - name: "home-lab-rtx-6000"
         url: "https://192.168.0.1:11434"
         type: "ollama"
-        priority: 10   # Fallback only
+        priority: 80   # Second choice
+        
+      - name: "litellm-cloud"
+        url: "http://localhost:4000"
+        type: "litellm"  # Native LiteLLM support
+        priority: 50     # Cloud APIs as last resort
+        model_url: "/v1/models"
+        health_check_url: "/health"
 ```
 
 ### 🏢 Business & Teams
@@ -65,6 +74,37 @@ server:
     global_requests_per_minute: 1000
 ```
 
+### ☁️ Hybrid Cloud Integration
+
+Seamlessly combine local and cloud models with native LiteLLM support:
+
+- **Smart Routing**: Use local models for sensitive data, cloud for complex tasks
+- **Cost Control**: Prioritise free local models, failover to paid APIs
+- **Best-of-Both**: GPT-4 for coding, local Llama for chat, Claude for analysis
+- **Unified Interface**: One API endpoint for all models (local and cloud)
+
+```yaml
+# Hybrid setup with LiteLLM
+discovery:
+  static:
+    endpoints:
+      # Local models for privacy/cost
+      - name: "local-ollama"
+        url: "http://localhost:11434"
+        type: "ollama"
+        priority: 100
+        
+      # LiteLLM gateway to cloud providers
+      - name: "litellm-gateway"
+        url: "http://localhost:4000"
+        type: "litellm"
+        priority: 75
+        
+# Single endpoint accesses all models
+# http://localhost:40114/olla/openai/v1/chat/completions
+# Automatically routes to the right backend based on model name
+```
+
 ### 🏭 Enterprise & Production
 
 Mission-critical AI infrastructure at scale:
@@ -72,7 +112,7 @@ Mission-critical AI infrastructure at scale:
 - **Multi-Region Deployment**: Geographic load balancing and failover
 - **Enterprise Security**: Rate limiting, request validation, audit trails  
 - **Performance Monitoring**: Circuit breakers, health checks, metrics
-- **Vendor Diversity**: Mix of cloud providers and on-premise infrastructure
+- **Vendor Diversity**: Mix of cloud providers (via LiteLLM) and on-premise infrastructure
 
 ```yaml
 # Enterprise config - high performance, observability

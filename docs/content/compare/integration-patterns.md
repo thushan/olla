@@ -125,32 +125,38 @@ endpoints:
 
 ## Tool-Specific Integrations
 
-### Olla + [LiteLLM](./litellm.md)
+### Olla + [LiteLLM](./litellm.md) (Native Support!)
 
-**Option 1: LiteLLM for Cloud, Olla for Everything**
+**Option 1: Native Integration with LiteLLM (Recommended)**
 ```yaml
-# Olla manages routing, LiteLLM handles cloud APIs
+# Olla has native LiteLLM support - use the dedicated profile
 endpoints:
   - name: local-models
     url: http://ollama:11434
-    priority: 1
+    type: ollama
+    priority: 100
     
   - name: litellm-cloud
-    url: http://litellm:8000
-    priority: 5  # When local unavailable
+    url: http://litellm:4000
+    type: litellm  # Native LiteLLM profile!
+    priority: 75
+    model_url: /v1/models
+    health_check_url: /health
 ```
 
-**Option 2: Redundant LiteLLM Instances**
+**Option 2: Redundant LiteLLM Instances with Native Support**
 ```yaml
-# Olla provides HA for LiteLLM
+# Multiple LiteLLM instances with health monitoring
 endpoints:
   - name: litellm-primary
-    url: http://litellm1:8000
-    priority: 1
+    url: http://litellm1:4000
+    type: litellm
+    priority: 90
     
   - name: litellm-backup
-    url: http://litellm2:8000
-    priority: 1  # Round-robin
+    url: http://litellm2:4000
+    type: litellm
+    priority: 90  # Same priority for round-robin
 ```
 
 ### Olla + [GPUStack](./gpustack.md)

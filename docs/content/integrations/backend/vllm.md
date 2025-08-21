@@ -12,6 +12,10 @@ keywords: vLLM, Olla proxy, LLM inference, GPU optimization, PagedAttention, ten
         <td><a href="https://github.com/vllm-project/vllm">github.com/vllm-project/vllm</a></td>
     </tr>
     <tr>
+        <th>Since</th>
+        <td>Olla <code>v0.0.16</code></td>
+    </tr>
+    <tr>
         <th>Type</th>
         <td><code>vllm</code> (use in endpoint configuration)</td>
     </tr>
@@ -59,7 +63,7 @@ keywords: vLLM, Olla proxy, LLM inference, GPU optimization, PagedAttention, ten
         <th>Prefixes</th>
         <td>
             <ul>
-                <li><code>/vllm</code> (see <a href="../../concepts/profile-system.md#routing-prefixes">Routing Prefixes</a>)</li>
+                <li><code>/vllm</code> (see <a href="/olla/concepts/profile-system/#routing-prefixes">Routing Prefixes</a>)</li>
             </ul>
         </td>
     </tr>

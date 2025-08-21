@@ -12,6 +12,10 @@ keywords: LM Studio, Olla, LLM proxy, local inference, OpenAI compatible, model 
         <td><a href="https://lmstudio.ai/">lmstudio.ai</a></td>
     </tr>
     <tr>
+        <th>Since</th>
+        <td>Olla <code>v0.0.7</code></td>
+    </tr>
+    <tr>
         <th>Type</th>
         <td><code>lm-studio</code> (use in endpoint configuration)</td>
     </tr>
@@ -59,7 +63,7 @@ keywords: LM Studio, Olla, LLM proxy, local inference, OpenAI compatible, model 
                 <li><code>/lm-studio</code></li>
                 <li><code>/lm_studio</code></li>
             </ul>
-            (see <a href="../../concepts/profile-system.md#routing-prefixes">Routing Prefixes</a>)
+            (see <a href="/olla/concepts/profile-system/#routing-prefixes">Routing Prefixes</a>)
         </td>
     </tr>
     <tr>

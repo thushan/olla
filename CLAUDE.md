@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 ## Overview
-Olla is a high-performance proxy and load balancer for LLM infrastructure, written in Go. It intelligently routes requests across local and remote inference nodes (Ollama, LM Studio, OpenAI-compatible endpoints). 
+Olla is a high-performance proxy and load balancer for LLM infrastructure, written in Go. It intelligently routes requests across local and remote inference nodes (Ollama, LM Studio, LiteLLM, vLLM, OpenAI-compatible endpoints). 
 
 The project provides two proxy engines: Sherpa (simple, maintainable) and Olla (high-performance with advanced features).
 
@@ -22,6 +22,7 @@ olla/
 │   ├── profiles/            # Provider-specific profiles
 │   │   ├── ollama.yaml     # Ollama configuration
 │   │   ├── lmstudio.yaml   # LM Studio configuration
+│   │   ├── litellm.yaml    # LiteLLM gateway configuration
 │   │   ├── openai.yaml     # OpenAI-compatible configuration
 │   │   └── vllm.yaml       # vLLM configuration
 │   └── models.yaml         # Model configurations
@@ -87,7 +88,7 @@ olla/
 ## Response Headers
 - `X-Olla-Endpoint`: Backend name
 - `X-Olla-Model`: Model used
-- `X-Olla-Backend-Type`: ollama/openai/lmstudio/vllm
+- `X-Olla-Backend-Type`: ollama/openai/lmstudio/vllm/litellm
 - `X-Olla-Request-ID`: Request ID
 - `X-Olla-Response-Time`: Total processing time
 
