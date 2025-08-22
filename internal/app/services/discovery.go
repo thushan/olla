@@ -82,10 +82,11 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 
 	switch s.config.Type {
 	case "static":
-		s.endpointRepo = discovery.NewStaticEndpointRepository()
-		if err := s.endpointRepo.LoadFromConfig(ctx, s.config.Static.Endpoints); err != nil {
+		staticRepo := discovery.NewStaticEndpointRepository()
+		if err := staticRepo.LoadFromConfig(ctx, s.config.Static.Endpoints); err != nil {
 			return fmt.Errorf("failed to load endpoints from config: %w", err)
 		}
+		s.endpointRepo = staticRepo
 	default:
 		return fmt.Errorf("unsupported discovery type: %s", s.config.Type)
 	}

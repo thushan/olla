@@ -158,6 +158,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			Priority:              cfg.Priority,
 			HealthCheckURL:        healthCheckURL,
 			ModelUrl:              modelURL,
+			ModelFilter:           cfg.ModelFilter,
 			CheckInterval:         cfg.CheckInterval,
 			CheckTimeout:          cfg.CheckTimeout,
 			Status:                domain.StatusUnknown,

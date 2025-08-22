@@ -32,7 +32,7 @@ func (r *MemoryFilterRepository) GetFilterConfig(ctx context.Context, key string
 		return nil, fmt.Errorf("filter configuration not found for key: %s", key)
 	}
 
-	// Return a clone to prevent external modification
+	// we return a clone to prevent external modification
 	return config.Clone(), nil
 }
 
@@ -45,7 +45,7 @@ func (r *MemoryFilterRepository) SetFilterConfig(ctx context.Context, key string
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Store a clone to prevent external modification
+	// storing a clone to avoid external modifications
 	r.filters[key] = config.Clone()
 	return nil
 }
@@ -82,12 +82,10 @@ func (r *MemoryFilterRepository) ValidateAndStore(ctx context.Context, key strin
 		return fmt.Errorf("filter configuration cannot be nil")
 	}
 
-	// Validate the configuration
 	if err := config.Validate(); err != nil {
 		return fmt.Errorf("invalid filter configuration: %w", err)
 	}
 
-	// Store the validated configuration
 	return r.SetFilterConfig(ctx, key, config)
 }
 
@@ -102,7 +100,7 @@ func (r *MemoryFilterRepository) LoadFromConfig(configs map[string]*domain.Filte
 			continue
 		}
 
-		// Validate before storing
+		// need to validate before storing
 		if err := config.Validate(); err != nil {
 			return fmt.Errorf("invalid filter configuration for key '%s': %w", key, err)
 		}

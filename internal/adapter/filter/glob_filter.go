@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/util/pattern"
 )
 
 // GlobFilter implements the Filter interface using glob pattern matching
 type GlobFilter struct {
-	// Cache for compiled patterns to improve performance
+	// cache for compiled patterns to improve performance
 	patternCache map[string]bool
 	cacheMu      sync.RWMutex
 }
@@ -28,16 +28,16 @@ func NewGlobFilter() ports.Filter {
 // Apply filters a slice of items based on the filter configuration
 func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, items interface{}, nameExtractor func(interface{}) string) (*domain.FilterResult, error) {
 	if config == nil || config.IsEmpty() {
-		// No filtering needed, return all items as accepted
+		// no filtering needed, return all items as accepted
 		return f.createResultFromItems(items, nil), nil
 	}
 
-	// Validate the configuration
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid filter configuration: %w", err)
 	}
 
-	// Use reflection to handle any slice type
+	// tried without reflection but it was slower
+	// so we'll consider it for now
 	itemsValue := reflect.ValueOf(items)
 	if itemsValue.Kind() != reflect.Slice {
 		return nil, fmt.Errorf("items must be a slice, got %T", items)
@@ -71,7 +71,7 @@ func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, ite
 // ApplyToMap filters a map of items based on the filter configuration
 func (f *GlobFilter) ApplyToMap(ctx context.Context, config *domain.FilterConfig, items map[string]interface{}) (map[string]interface{}, error) {
 	if config == nil || config.IsEmpty() {
-		// No filtering needed, return a copy of the original map
+		// not filtering needed, return a copy of the original map
 		result := make(map[string]interface{}, len(items))
 		for k, v := range items {
 			result[k] = v
@@ -79,7 +79,6 @@ func (f *GlobFilter) ApplyToMap(ctx context.Context, config *domain.FilterConfig
 		return result, nil
 	}
 
-	// Validate the configuration
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid filter configuration: %w", err)
 	}
@@ -102,10 +101,10 @@ func (f *GlobFilter) Matches(config *domain.FilterConfig, itemName string) bool 
 		return true
 	}
 
-	// First check if item should be included
+	// lets check if item should be included
 	included := false
 
-	// If no include patterns or include has "*", include everything initially
+	// if there's no include patterns or include has "*", include everything initially
 	if config.HasIncludeAll() {
 		included = true
 	} else {
@@ -118,13 +117,13 @@ func (f *GlobFilter) Matches(config *domain.FilterConfig, itemName string) bool 
 		}
 	}
 
-	// If not included, no need to check exclude patterns
+	// if not included, no need to check exclude patterns
 	if !included {
 		return false
 	}
 
-	// Check if item matches any exclude pattern
-	// Exclude takes precedence over include
+	// check if item matches any exclude pattern
+	// exclude takes precedence over include
 	for _, pattern := range config.Exclude {
 		if f.matchesPattern(itemName, pattern) {
 			return false
@@ -134,11 +133,10 @@ func (f *GlobFilter) Matches(config *domain.FilterConfig, itemName string) bool 
 	return true
 }
 
-// matchesPattern checks if a string matches a glob pattern
-// This replicates the logic from configurable_profile.go for consistency
-func (f *GlobFilter) matchesPattern(s, pattern string) bool {
-	// Use cache for performance
-	cacheKey := fmt.Sprintf("%s::%s", s, pattern)
+// matchesPattern checks if a string matches a glob pattern with caching
+func (f *GlobFilter) matchesPattern(s, patternStr string) bool {
+	// caching for perf
+	cacheKey := fmt.Sprintf("%s::%s", s, patternStr)
 
 	f.cacheMu.RLock()
 	if result, exists := f.patternCache[cacheKey]; exists {
@@ -147,40 +145,10 @@ func (f *GlobFilter) matchesPattern(s, pattern string) bool {
 	}
 	f.cacheMu.RUnlock()
 
-	// Simple glob matching for * wildcard
-	pattern = strings.ToLower(pattern)
-	s = strings.ToLower(s)
+	// Use the centralized pattern matching logic
+	matches := pattern.MatchesGlob(s, patternStr)
 
-	var matches bool
-
-	switch {
-	case pattern == "*":
-		matches = true
-	case strings.Contains(pattern, "*"):
-		// Handle patterns like "*llava*" or "llava*" or "*llava"
-		switch {
-		case strings.HasPrefix(pattern, "*") && strings.HasSuffix(pattern, "*"):
-			// *text* - contains
-			core := strings.Trim(pattern, "*")
-			matches = strings.Contains(s, core)
-		case strings.HasPrefix(pattern, "*"):
-			// *text - ends with
-			suffix := strings.TrimPrefix(pattern, "*")
-			matches = strings.HasSuffix(s, suffix)
-		case strings.HasSuffix(pattern, "*"):
-			// text* - starts with
-			prefix := strings.TrimSuffix(pattern, "*")
-			matches = strings.HasPrefix(s, prefix)
-		default:
-			// Shouldn't happen with our validation, but be safe
-			matches = s == pattern
-		}
-	default:
-		// Exact match
-		matches = s == pattern
-	}
-
-	// Cache the result
+	// cache this pup
 	f.cacheMu.Lock()
 	f.patternCache[cacheKey] = matches
 	f.cacheMu.Unlock()
