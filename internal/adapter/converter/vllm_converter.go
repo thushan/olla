@@ -50,6 +50,7 @@ func (c *VLLMConverter) ConvertToFormat(models []*domain.UnifiedModel, filters p
 
 func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMModel {
 	// For vLLM, prefer the native vLLM name if available from source endpoints
+	now := time.Now().Unix()
 	modelID := c.findVLLMNativeName(model)
 	if modelID == "" {
 		// Fallback to first alias or unified ID
@@ -63,7 +64,7 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 	vllmModel := &profile.VLLMModel{
 		ID:      modelID,
 		Object:  "model",
-		Created: time.Now().Unix(),
+		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 		Root:    modelID, // vLLM typically sets root to the model ID
 	}
@@ -78,7 +79,7 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 		{
 			ID:                 "modelperm-olla-" + strings.ReplaceAll(modelID, "/", "-"),
 			Object:             "model_permission",
-			Created:            time.Now().Unix(),
+			Created:            now,
 			AllowCreateEngine:  false, // Engine creation not applicable in proxy context
 			AllowSampling:      true,
 			AllowLogprobs:      true,
