@@ -219,23 +219,21 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 			// Create config with the test profile
 			var proxy ports.ProxyService
 			if suite.Name() == "Sherpa" {
-				config := &sherpa.Configuration{
-					Profile:          tt.profile,
-					ResponseTimeout:  5 * time.Second,
-					ReadTimeout:      5 * time.Second,
-					StreamBufferSize: 8192,
-				}
+				config := &sherpa.Configuration{}
+				config.Profile = tt.profile
+				config.ResponseTimeout = 5 * time.Second
+				config.ReadTimeout = 5 * time.Second
+				config.StreamBufferSize = 8192
 				proxy = suite.CreateProxy(discovery, selector, config, collector)
 			} else {
-				config := &olla.Configuration{
-					Profile:          tt.profile,
-					ResponseTimeout:  5 * time.Second,
-					ReadTimeout:      5 * time.Second,
-					StreamBufferSize: 8192,
-					MaxIdleConns:     10,
-					IdleConnTimeout:  90 * time.Second,
-					MaxConnsPerHost:  5,
-				}
+				config := &olla.Configuration{}
+				config.Profile = tt.profile
+				config.ResponseTimeout = 5 * time.Second
+				config.ReadTimeout = 5 * time.Second
+				config.StreamBufferSize = 8192
+				config.MaxIdleConns = 10
+				config.IdleConnTimeout = 90 * time.Second
+				config.MaxConnsPerHost = 5
 				proxy = suite.CreateProxy(discovery, selector, config, collector)
 			}
 
@@ -310,23 +308,21 @@ func TestStreamingProfilesWithContextOverride(t *testing.T) {
 
 			var proxy ports.ProxyService
 			if suite.Name() == "Sherpa" {
-				config := &sherpa.Configuration{
-					Profile:          constants.ConfigurationProxyProfileAuto,
-					ResponseTimeout:  5 * time.Second,
-					ReadTimeout:      5 * time.Second,
-					StreamBufferSize: 8192,
-				}
+				config := &sherpa.Configuration{}
+				config.Profile = constants.ConfigurationProxyProfileAuto
+				config.ResponseTimeout = 5 * time.Second
+				config.ReadTimeout = 5 * time.Second
+				config.StreamBufferSize = 8192
 				proxy = suite.CreateProxy(discovery, selector, config, collector)
 			} else {
-				config := &olla.Configuration{
-					Profile:          constants.ConfigurationProxyProfileAuto,
-					ResponseTimeout:  5 * time.Second,
-					ReadTimeout:      5 * time.Second,
-					StreamBufferSize: 8192,
-					MaxIdleConns:     10,
-					IdleConnTimeout:  90 * time.Second,
-					MaxConnsPerHost:  5,
-				}
+				config := &olla.Configuration{}
+				config.Profile = constants.ConfigurationProxyProfileAuto
+				config.ResponseTimeout = 5 * time.Second
+				config.ReadTimeout = 5 * time.Second
+				config.StreamBufferSize = 8192
+				config.MaxIdleConns = 10
+				config.IdleConnTimeout = 90 * time.Second
+				config.MaxConnsPerHost = 5
 				proxy = suite.CreateProxy(discovery, selector, config, collector)
 			}
 
@@ -511,23 +507,21 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 
 					var proxy ports.ProxyService
 					if suite.Name() == "Sherpa" {
-						config := &sherpa.Configuration{
-							Profile:          tt.profile,
-							ResponseTimeout:  5 * time.Second,
-							ReadTimeout:      5 * time.Second,
-							StreamBufferSize: 8192,
-						}
+						config := &sherpa.Configuration{}
+						config.Profile = tt.profile
+						config.ResponseTimeout = 5 * time.Second
+						config.ReadTimeout = 5 * time.Second
+						config.StreamBufferSize = 8192
 						proxy = suite.CreateProxy(discovery, selector, config, collector)
 					} else {
-						config := &olla.Configuration{
-							Profile:          tt.profile,
-							ResponseTimeout:  5 * time.Second,
-							ReadTimeout:      5 * time.Second,
-							StreamBufferSize: 8192,
-							MaxIdleConns:     10,
-							IdleConnTimeout:  90 * time.Second,
-							MaxConnsPerHost:  5,
-						}
+						config := &olla.Configuration{}
+						config.Profile = tt.profile
+						config.ResponseTimeout = 5 * time.Second
+						config.ReadTimeout = 5 * time.Second
+						config.StreamBufferSize = 8192
+						config.MaxIdleConns = 10
+						config.IdleConnTimeout = 90 * time.Second
+						config.MaxConnsPerHost = 5
 						proxy = suite.CreateProxy(discovery, selector, config, collector)
 					}
 

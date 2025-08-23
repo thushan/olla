@@ -82,14 +82,13 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 	mockLogger := createRetryTestLogger()
 
 	// Create test configuration
-	config := &Configuration{
-		ProxyPrefix:         "/olla/",
-		ConnectionTimeout:   time.Second,
-		ConnectionKeepAlive: time.Second,
-		ResponseTimeout:     time.Second,
-		ReadTimeout:         time.Second,
-		StreamBufferSize:    8192,
-	}
+	config := &Configuration{}
+	config.ProxyPrefix = "/olla/"
+	config.ConnectionTimeout = time.Second
+	config.ConnectionKeepAlive = time.Second
+	config.ResponseTimeout = time.Second
+	config.ReadTimeout = time.Second
+	config.StreamBufferSize = 8192
 
 	// Create test endpoints - first will fail with connection error, second will succeed
 	failingEndpoint := &domain.Endpoint{
@@ -222,14 +221,13 @@ func TestRetryExhaustsAllEndpoints(t *testing.T) {
 	mockLogger := createRetryTestLogger()
 
 	// Create test configuration
-	config := &Configuration{
-		ProxyPrefix:         "/olla/",
-		ConnectionTimeout:   100 * time.Millisecond,
-		ConnectionKeepAlive: time.Second,
-		ResponseTimeout:     100 * time.Millisecond,
-		ReadTimeout:         100 * time.Millisecond,
-		StreamBufferSize:    8192,
-	}
+	config := &Configuration{}
+	config.ProxyPrefix = "/olla/"
+	config.ConnectionTimeout = 100 * time.Millisecond
+	config.ConnectionKeepAlive = time.Second
+	config.ResponseTimeout = 100 * time.Millisecond
+	config.ReadTimeout = 100 * time.Millisecond
+	config.StreamBufferSize = 8192
 
 	// Create test endpoints - all will fail with connection errors
 	endpoint1 := &domain.Endpoint{
@@ -299,14 +297,13 @@ func TestRetryPreservesRequestBody(t *testing.T) {
 	mockLogger := createRetryTestLogger()
 
 	// Create test configuration
-	config := &Configuration{
-		ProxyPrefix:         "/olla/",
-		ConnectionTimeout:   time.Second,
-		ConnectionKeepAlive: time.Second,
-		ResponseTimeout:     time.Second,
-		ReadTimeout:         time.Second,
-		StreamBufferSize:    8192,
-	}
+	config := &Configuration{}
+	config.ProxyPrefix = "/olla/"
+	config.ConnectionTimeout = time.Second
+	config.ConnectionKeepAlive = time.Second
+	config.ResponseTimeout = time.Second
+	config.ReadTimeout = time.Second
+	config.StreamBufferSize = 8192
 
 	// Track request bodies received
 	var receivedBodies []string

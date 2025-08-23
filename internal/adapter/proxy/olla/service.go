@@ -40,6 +40,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy/common"
+	"github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/domain"
@@ -50,15 +51,8 @@ import (
 )
 
 const (
-	// TCP connection tuning for AI streaming workloads
-	DefaultMaxIdleConns        = 100
-	DefaultMaxConnsPerHost     = 50
-	DefaultIdleConnTimeout     = 90 * time.Second
+	// Olla-specific constants (others are in proxy package)
 	DefaultTLSHandshakeTimeout = 10 * time.Second
-	DefaultTimeout             = 30 * time.Second
-	DefaultKeepAlive           = 30 * time.Second
-	DefaultReadTimeout         = 30 * time.Second
-	DefaultStreamBufferSize    = 64 * 1024
 	DefaultSetNoDelay          = true
 
 	ClientDisconnectionBytesThreshold = 1024
@@ -149,19 +143,19 @@ func NewService(
 ) (*Service, error) {
 
 	if configuration.StreamBufferSize == 0 {
-		configuration.StreamBufferSize = DefaultStreamBufferSize
+		configuration.StreamBufferSize = config.OllaDefaultStreamBufferSize
 	}
 	if configuration.MaxIdleConns == 0 {
-		configuration.MaxIdleConns = DefaultMaxIdleConns
+		configuration.MaxIdleConns = config.OllaDefaultMaxIdleConns
 	}
 	if configuration.MaxConnsPerHost == 0 {
-		configuration.MaxConnsPerHost = DefaultMaxConnsPerHost
+		configuration.MaxConnsPerHost = config.OllaDefaultMaxConnsPerHost
 	}
 	if configuration.IdleConnTimeout == 0 {
-		configuration.IdleConnTimeout = DefaultIdleConnTimeout
+		configuration.IdleConnTimeout = config.OllaDefaultIdleConnTimeout
 	}
 	if configuration.ReadTimeout == 0 {
-		configuration.ReadTimeout = DefaultReadTimeout
+		configuration.ReadTimeout = config.DefaultReadTimeout
 	}
 
 	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
@@ -689,18 +683,18 @@ func (s *Service) GetStats(ctx context.Context) (ports.ProxyStats, error) {
 
 // UpdateConfig updates the proxy configuration
 func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
-	newConfig := &Configuration{
-		ProxyPrefix:         config.GetProxyPrefix(),
-		ConnectionTimeout:   config.GetConnectionTimeout(),
-		ConnectionKeepAlive: config.GetConnectionKeepAlive(),
-		ResponseTimeout:     config.GetResponseTimeout(),
-		ReadTimeout:         config.GetReadTimeout(),
-		StreamBufferSize:    config.GetStreamBufferSize(),
-		// Preserve Olla-specific settings
-		MaxIdleConns:    s.configuration.MaxIdleConns,
-		IdleConnTimeout: s.configuration.IdleConnTimeout,
-		MaxConnsPerHost: s.configuration.MaxConnsPerHost,
-	}
+	newConfig := &Configuration{}
+	newConfig.ProxyPrefix = config.GetProxyPrefix()
+	newConfig.ConnectionTimeout = config.GetConnectionTimeout()
+	newConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
+	newConfig.ResponseTimeout = config.GetResponseTimeout()
+	newConfig.ReadTimeout = config.GetReadTimeout()
+	newConfig.StreamBufferSize = config.GetStreamBufferSize()
+	newConfig.Profile = config.GetProxyProfile()
+	// Preserve Olla-specific settings
+	newConfig.MaxIdleConns = s.configuration.MaxIdleConns
+	newConfig.IdleConnTimeout = s.configuration.IdleConnTimeout
+	newConfig.MaxConnsPerHost = s.configuration.MaxConnsPerHost
 
 	// Update configuration atomically
 	s.configuration = newConfig

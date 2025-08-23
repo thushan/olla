@@ -63,21 +63,19 @@ func createRefactoredProxy(proxyType string, endpoints []*domain.Endpoint) (port
 
 	switch proxyType {
 	case "sherpa":
-		config := &sherpa.Configuration{
-			ResponseTimeout:  30 * time.Second,
-			ReadTimeout:      10 * time.Second,
-			StreamBufferSize: 8192,
-		}
+		config := &sherpa.Configuration{}
+		config.ResponseTimeout = 30 * time.Second
+		config.ReadTimeout = 10 * time.Second
+		config.StreamBufferSize = 8192
 		return sherpa.NewService(discovery, selector, config, collector, nil, logger)
 	case "olla":
-		config := &olla.Configuration{
-			ResponseTimeout:  30 * time.Second,
-			ReadTimeout:      10 * time.Second,
-			StreamBufferSize: 8192,
-			MaxIdleConns:     200,
-			IdleConnTimeout:  90 * time.Second,
-			MaxConnsPerHost:  50,
-		}
+		config := &olla.Configuration{}
+		config.ResponseTimeout = 30 * time.Second
+		config.ReadTimeout = 10 * time.Second
+		config.StreamBufferSize = 8192
+		config.MaxIdleConns = 200
+		config.IdleConnTimeout = 90 * time.Second
+		config.MaxConnsPerHost = 50
 		return olla.NewService(discovery, selector, config, collector, nil, logger)
 	default:
 		return nil, fmt.Errorf("unknown proxy type: %s", proxyType)

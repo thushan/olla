@@ -45,11 +45,11 @@ func (s SherpaTestSuite) CreateProxy(discovery ports.DiscoveryService, selector 
 }
 
 func (s SherpaTestSuite) CreateConfig() ports.ProxyConfiguration {
-	return &sherpa.Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 8192,
-	}
+	config := &sherpa.Configuration{}
+	config.ResponseTimeout = 30 * time.Second
+	config.ReadTimeout = 10 * time.Second
+	config.StreamBufferSize = 8192
+	return config
 }
 
 // OllaTestSuite implements ProxyTestSuite for the Olla proxy
@@ -68,14 +68,14 @@ func (o OllaTestSuite) CreateProxy(discovery ports.DiscoveryService, selector do
 }
 
 func (o OllaTestSuite) CreateConfig() ports.ProxyConfiguration {
-	return &olla.Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 8192,
-		MaxIdleConns:     200,
-		IdleConnTimeout:  90 * time.Second,
-		MaxConnsPerHost:  50,
-	}
+	config := &olla.Configuration{}
+	config.ResponseTimeout = 30 * time.Second
+	config.ReadTimeout = 10 * time.Second
+	config.StreamBufferSize = 8192
+	config.MaxIdleConns = 200
+	config.IdleConnTimeout = 90 * time.Second
+	config.MaxConnsPerHost = 50
+	return config
 }
 
 type mockDiscoveryService struct {
@@ -925,20 +925,20 @@ func testUpdateConfig(t *testing.T, suite ProxyTestSuite) {
 	// Create new config with different values
 	var newConfig ports.ProxyConfiguration
 	if suite.Name() == "Sherpa" {
-		newConfig = &sherpa.Configuration{
-			ResponseTimeout:  60 * time.Second,
-			ReadTimeout:      30 * time.Second,
-			StreamBufferSize: 16384,
-		}
+		sherpaConfig := &sherpa.Configuration{}
+		sherpaConfig.ResponseTimeout = 60 * time.Second
+		sherpaConfig.ReadTimeout = 30 * time.Second
+		sherpaConfig.StreamBufferSize = 16384
+		newConfig = sherpaConfig
 	} else {
-		newConfig = &olla.Configuration{
-			ResponseTimeout:  60 * time.Second,
-			ReadTimeout:      30 * time.Second,
-			StreamBufferSize: 16384,
-			MaxIdleConns:     400,
-			IdleConnTimeout:  120 * time.Second,
-			MaxConnsPerHost:  100,
-		}
+		ollaConfig := &olla.Configuration{}
+		ollaConfig.ResponseTimeout = 60 * time.Second
+		ollaConfig.ReadTimeout = 30 * time.Second
+		ollaConfig.StreamBufferSize = 16384
+		ollaConfig.MaxIdleConns = 400
+		ollaConfig.IdleConnTimeout = 120 * time.Second
+		ollaConfig.MaxConnsPerHost = 100
+		newConfig = ollaConfig
 	}
 
 	// Update config should not panic

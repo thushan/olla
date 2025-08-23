@@ -21,14 +21,13 @@ func createTestOllaProxy(endpoints []*domain.Endpoint) (*olla.Service, *mockEndp
 	collector := createTestStatsCollector()
 	discovery := &mockDiscoveryService{endpoints: endpoints}
 	selector := newMockEndpointSelector(collector)
-	config := &olla.Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-		MaxIdleConns:     200,
-		IdleConnTimeout:  90 * time.Second,
-		MaxConnsPerHost:  50,
-	}
+	config := &olla.Configuration{}
+	config.ResponseTimeout = 30 * time.Second
+	config.ReadTimeout = 10 * time.Second
+	config.StreamBufferSize = 1024
+	config.MaxIdleConns = 200
+	config.IdleConnTimeout = 90 * time.Second
+	config.MaxConnsPerHost = 50
 	proxy, err := olla.NewService(discovery, selector, config, collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Olla proxy: %v", err))
@@ -49,14 +48,13 @@ func createTestOllaProxyWithConfig(endpoints []*domain.Endpoint, config *olla.Co
 
 // TestOllaProxyService_CircuitBreaker tests the circuit breaker functionality
 func TestOllaProxyService_CircuitBreaker(t *testing.T) {
-	config := &olla.Configuration{
-		ResponseTimeout:  5 * time.Second,
-		ReadTimeout:      2 * time.Second,
-		StreamBufferSize: 8192,
-		MaxIdleConns:     200,
-		IdleConnTimeout:  90 * time.Second,
-		MaxConnsPerHost:  50,
-	}
+	config := &olla.Configuration{}
+	config.ResponseTimeout = 5 * time.Second
+	config.ReadTimeout = 2 * time.Second
+	config.StreamBufferSize = 8192
+	config.MaxIdleConns = 200
+	config.IdleConnTimeout = 90 * time.Second
+	config.MaxConnsPerHost = 50
 
 	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
@@ -116,14 +114,13 @@ func TestOllaProxyService_CircuitBreaker_Integration(t *testing.T) {
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
 	discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 	selector := &mockEndpointSelector{endpoint: endpoint}
-	config := &olla.Configuration{
-		ResponseTimeout:  5 * time.Second,
-		ReadTimeout:      2 * time.Second,
-		StreamBufferSize: 8192,
-		MaxIdleConns:     200,
-		IdleConnTimeout:  90 * time.Second,
-		MaxConnsPerHost:  50,
-	}
+	config := &olla.Configuration{}
+	config.ResponseTimeout = 5 * time.Second
+	config.ReadTimeout = 2 * time.Second
+	config.StreamBufferSize = 8192
+	config.MaxIdleConns = 200
+	config.IdleConnTimeout = 90 * time.Second
+	config.MaxConnsPerHost = 50
 
 	proxy, err := olla.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
@@ -199,14 +196,13 @@ func TestOllaProxyService_ConnectionPools(t *testing.T) {
 
 // TestOllaProxyService_ObjectPools tests memory optimization object pools
 func TestOllaProxyService_ObjectPools(t *testing.T) {
-	config := &olla.Configuration{
-		ResponseTimeout:  5 * time.Second,
-		ReadTimeout:      2 * time.Second,
-		StreamBufferSize: 4096,
-		MaxIdleConns:     200,
-		IdleConnTimeout:  90 * time.Second,
-		MaxConnsPerHost:  50,
-	}
+	config := &olla.Configuration{}
+	config.ResponseTimeout = 5 * time.Second
+	config.ReadTimeout = 2 * time.Second
+	config.StreamBufferSize = 4096
+	config.MaxIdleConns = 200
+	config.IdleConnTimeout = 90 * time.Second
+	config.MaxConnsPerHost = 50
 
 	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
@@ -258,14 +254,13 @@ func TestOllaProxyService_ObjectPools(t *testing.T) {
 
 // TestOllaProxyService_AtomicStats tests lock-free statistics tracking
 func TestOllaProxyService_AtomicStats(t *testing.T) {
-	config := &olla.Configuration{
-		ResponseTimeout:  5 * time.Second,
-		ReadTimeout:      2 * time.Second,
-		StreamBufferSize: 8192,
-		MaxIdleConns:     200,
-		IdleConnTimeout:  90 * time.Second,
-		MaxConnsPerHost:  50,
-	}
+	config := &olla.Configuration{}
+	config.ResponseTimeout = 5 * time.Second
+	config.ReadTimeout = 2 * time.Second
+	config.StreamBufferSize = 8192
+	config.MaxIdleConns = 200
+	config.IdleConnTimeout = 90 * time.Second
+	config.MaxConnsPerHost = 50
 
 	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
@@ -480,14 +475,13 @@ func TestOllaProxyService_ConfigDefaults(t *testing.T) {
 
 // TestOllaProxyService_UpdateConfig tests configuration updates
 func TestOllaProxyService_UpdateConfig(t *testing.T) {
-	initialConfig := &olla.Configuration{
-		ResponseTimeout:  10 * time.Second,
-		ReadTimeout:      5 * time.Second,
-		StreamBufferSize: 4096,
-		MaxIdleConns:     100,
-		IdleConnTimeout:  60 * time.Second,
-		MaxConnsPerHost:  25,
-	}
+	initialConfig := &olla.Configuration{}
+	initialConfig.ResponseTimeout = 10 * time.Second
+	initialConfig.ReadTimeout = 5 * time.Second
+	initialConfig.StreamBufferSize = 4096
+	initialConfig.MaxIdleConns = 100
+	initialConfig.IdleConnTimeout = 60 * time.Second
+	initialConfig.MaxConnsPerHost = 25
 
 	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, initialConfig, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {
@@ -495,11 +489,10 @@ func TestOllaProxyService_UpdateConfig(t *testing.T) {
 	}
 
 	// Update config through interface
-	newConfig := &olla.Configuration{
-		ResponseTimeout:  20 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 8192,
-	}
+	newConfig := &olla.Configuration{}
+	newConfig.ResponseTimeout = 20 * time.Second
+	newConfig.ReadTimeout = 10 * time.Second
+	newConfig.StreamBufferSize = 8192
 
 	proxy.UpdateConfig(newConfig)
 
@@ -533,14 +526,13 @@ func TestOllaProxyService_UpdateConfig(t *testing.T) {
 
 // TestOllaProxyService_Cleanup tests graceful cleanup
 func TestOllaProxyService_Cleanup(t *testing.T) {
-	config := &olla.Configuration{
-		ResponseTimeout:  5 * time.Second,
-		ReadTimeout:      2 * time.Second,
-		StreamBufferSize: 8192,
-		MaxIdleConns:     200,
-		IdleConnTimeout:  90 * time.Second,
-		MaxConnsPerHost:  50,
-	}
+	config := &olla.Configuration{}
+	config.ResponseTimeout = 5 * time.Second
+	config.ReadTimeout = 2 * time.Second
+	config.StreamBufferSize = 8192
+	config.MaxIdleConns = 200
+	config.IdleConnTimeout = 90 * time.Second
+	config.MaxConnsPerHost = 50
 
 	proxy, err := olla.NewService(&mockDiscoveryService{}, &mockEndpointSelector{}, config, createTestStatsCollector(), nil, createTestLogger())
 	if err != nil {

@@ -24,11 +24,10 @@ func createTestSherpaProxy(endpoints []*domain.Endpoint) (*sherpa.Service, *mock
 	collector := createTestStatsCollector()
 	discovery := &mockDiscoveryService{endpoints: endpoints}
 	selector := newMockEndpointSelector(collector)
-	config := &sherpa.Configuration{
-		ResponseTimeout:  30 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
+	config := &sherpa.Configuration{}
+	config.ResponseTimeout = 30 * time.Second
+	config.ReadTimeout = 10 * time.Second
+	config.StreamBufferSize = 1024
 	proxy, err := sherpa.NewService(discovery, selector, config, collector, nil, createTestLogger())
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Sherpa proxy: %v", err))
@@ -144,9 +143,8 @@ func TestProxyService_ClientDisconnectHandling(t *testing.T) {
 				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
-				config := &sherpa.Configuration{
-					ReadTimeout: 200 * time.Millisecond,
-				}
+				config := &sherpa.Configuration{}
+				config.ReadTimeout = 200 * time.Millisecond
 				proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
@@ -157,9 +155,8 @@ func TestProxyService_ClientDisconnectHandling(t *testing.T) {
 				endpoint := createTestEndpoint("test-endpoint", upstream.URL, domain.StatusHealthy)
 				discovery := &mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}}
 				selector := &mockEndpointSelector{endpoint: endpoint}
-				config := &olla.Configuration{
-					ReadTimeout: 200 * time.Millisecond,
-				}
+				config := &olla.Configuration{}
+				config.ReadTimeout = 200 * time.Millisecond
 				proxy, _ := olla.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 				return proxy
 			},
@@ -233,11 +230,10 @@ func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
 	defer upstream.Close()
 
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-	config := &sherpa.Configuration{
-		ResponseTimeout:  5 * time.Second,
-		ReadTimeout:      100 * time.Millisecond, // Short timeout
-		StreamBufferSize: 1024,
-	}
+	config := &sherpa.Configuration{}
+	config.ResponseTimeout = 5 * time.Second
+	config.ReadTimeout = 100 * time.Millisecond // Short timeout
+	config.StreamBufferSize = 1024
 	proxy, selector, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{endpoint}, config)
 	selector.endpoint = endpoint
 
@@ -262,7 +258,8 @@ func TestSherpaProxyService_StreamResponse_ReadTimeout(t *testing.T) {
 
 // TestSherpaProxyService_BufferPooling tests buffer pool behaviour
 func TestSherpaProxyService_BufferPooling(t *testing.T) {
-	config := &sherpa.Configuration{StreamBufferSize: 4096}
+	config := &sherpa.Configuration{}
+	config.StreamBufferSize = 4096
 	proxy, _, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{}, config)
 
 	// Buffer pooling is now internal - we can verify it works by making requests
@@ -321,19 +318,17 @@ func TestSherpaProxyService_ConfigDefaults(t *testing.T) {
 
 // TestSherpaProxyService_UpdateConfig tests configuration updates
 func TestSherpaProxyService_UpdateConfig(t *testing.T) {
-	initialConfig := &sherpa.Configuration{
-		ResponseTimeout:  10 * time.Second,
-		ReadTimeout:      5 * time.Second,
-		StreamBufferSize: 4096,
-	}
+	initialConfig := &sherpa.Configuration{}
+	initialConfig.ResponseTimeout = 10 * time.Second
+	initialConfig.ReadTimeout = 5 * time.Second
+	initialConfig.StreamBufferSize = 4096
 	proxy, _, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{}, initialConfig)
 
 	// Update config
-	newConfig := &sherpa.Configuration{
-		ResponseTimeout:  20 * time.Second,
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 8192,
-	}
+	newConfig := &sherpa.Configuration{}
+	newConfig.ResponseTimeout = 20 * time.Second
+	newConfig.ReadTimeout = 10 * time.Second
+	newConfig.StreamBufferSize = 8192
 
 	proxy.UpdateConfig(newConfig)
 
@@ -625,11 +620,10 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_ContextCancellation(t *testi
 	defer slowBackend.Close()
 
 	endpoint := createTestEndpoint("test", slowBackend.URL, domain.StatusHealthy)
-	config := &sherpa.Configuration{
-		ResponseTimeout:  50 * time.Millisecond, // Increased slightly to be more reliable
-		ReadTimeout:      10 * time.Second,
-		StreamBufferSize: 1024,
-	}
+	config := &sherpa.Configuration{}
+	config.ResponseTimeout = 50 * time.Millisecond // Increased slightly to be more reliable
+	config.ReadTimeout = 10 * time.Second
+	config.StreamBufferSize = 1024
 	proxy, selector, _ := createTestSherpaProxyWithConfig([]*domain.Endpoint{endpoint}, config)
 	selector.endpoint = endpoint
 
