@@ -42,11 +42,15 @@ type EndpointStatus struct {
 }
 
 // UnifiedConverter converts models to the default Olla unified format
-type UnifiedConverter struct{}
+type UnifiedConverter struct {
+	*BaseConverter
+}
 
 // NewUnifiedConverter creates a new unified format converter
 func NewUnifiedConverter() ports.ModelResponseConverter {
-	return &UnifiedConverter{}
+	return &UnifiedConverter{
+		BaseConverter: NewBaseConverter("unified"),
+	}
 }
 
 func (c *UnifiedConverter) GetFormatName() string {
@@ -176,12 +180,16 @@ func matchesTypeFilter(model *domain.UnifiedModel, filterType string) bool {
 		return true
 	}
 
-	// Check metadata first
-	if modelType, ok := model.Metadata["type"].(string); ok && modelType == filterType {
+	// Use base converter to determine model type
+	base := NewBaseConverter("")
+	modelType := base.DetermineModelType(model, "")
+
+	// If model type matches directly, return true
+	if modelType == filterType {
 		return true
 	}
 
-	// Check capabilities as fallback
+	// Also check capabilities for backward compatibility
 	return matchesTypeByCapabilities(model.Capabilities, filterType)
 }
 

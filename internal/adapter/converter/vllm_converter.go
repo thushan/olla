@@ -16,11 +16,15 @@ type VLLMModelData = profile.VLLMModel
 type VLLMModelPermission = profile.VLLMModelPermission
 
 // VLLMConverter converts models to vLLM-compatible format with extended metadata
-type VLLMConverter struct{}
+type VLLMConverter struct {
+	*BaseConverter
+}
 
 // NewVLLMConverter creates a new vLLM format converter
 func NewVLLMConverter() ports.ModelResponseConverter {
-	return &VLLMConverter{}
+	return &VLLMConverter{
+		BaseConverter: NewBaseConverter(constants.ProviderTypeVLLM),
+	}
 }
 
 func (c *VLLMConverter) GetFormatName() string {
@@ -91,14 +95,11 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 
 // findVLLMNativeName looks for the native vLLM name from aliases
 func (c *VLLMConverter) findVLLMNativeName(model *domain.UnifiedModel) string {
-	// Check aliases for vLLM source - this reliably identifies vLLM models
-	// We don't check NativeName for slashes as other providers (Ollama, etc.) also use them
-	for _, alias := range model.Aliases {
-		if alias.Source == constants.ProviderTypeVLLM {
-			return alias.Name
-		}
+	// Use base converter to find vLLM-specific alias
+	alias, found := c.BaseConverter.FindProviderAlias(model)
+	if found {
+		return alias
 	}
-
 	return ""
 }
 
