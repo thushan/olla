@@ -21,9 +21,11 @@ func TestPerformTimedRead_NoGoroutineLeak_Stress(t *testing.T) {
 	initialGoroutines := runtime.NumGoroutine()
 
 	s := &Service{
-		configuration: &Configuration{
-			ReadTimeout: 100 * time.Millisecond, // Original timeout
-		},
+		configuration: func() *Configuration {
+			c := &Configuration{}
+			c.ReadTimeout = 100 * time.Millisecond // Original timeout
+			return c
+		}(),
 	}
 
 	state := &streamState{}
@@ -91,9 +93,11 @@ func TestPerformTimedRead_ConcurrentStress(t *testing.T) {
 	initialGoroutines := runtime.NumGoroutine()
 
 	s := &Service{
-		configuration: &Configuration{
-			ReadTimeout: 50 * time.Millisecond,
-		},
+		configuration: func() *Configuration {
+			c := &Configuration{}
+			c.ReadTimeout = 50 * time.Millisecond
+			return c
+		}(),
 	}
 
 	state := &streamState{}

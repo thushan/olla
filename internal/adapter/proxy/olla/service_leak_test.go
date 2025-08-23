@@ -23,11 +23,13 @@ func TestEndpointPoolCleanup_NoMemoryLeak(t *testing.T) {
 		BaseProxyComponents: &core.BaseProxyComponents{
 			Logger: createTestLogger(),
 		},
-		configuration: &Configuration{
-			MaxIdleConns:    10,
-			MaxConnsPerHost: 5,
-			IdleConnTimeout: 30 * time.Second,
-		},
+		configuration: func() *Configuration {
+			c := &Configuration{}
+			c.MaxIdleConns = 10
+			c.MaxConnsPerHost = 5
+			c.IdleConnTimeout = 30 * time.Second
+			return c
+		}(),
 		endpointPools:   *xsync.NewMap[string, *connectionPool](),
 		circuitBreakers: *xsync.NewMap[string, *circuitBreaker](),
 		cleanupTicker:   time.NewTicker(100 * time.Millisecond), // Fast cleanup for testing
@@ -267,9 +269,8 @@ func TestNewService_StartsCleanupGoroutine(t *testing.T) {
 	collector := &mockStatsCollector{}
 	logger := createTestLogger()
 
-	config := &Configuration{
-		StreamBufferSize: 8192,
-	}
+	config := &Configuration{}
+	config.StreamBufferSize = 8192
 
 	// Create service
 	service, err := NewService(discovery, selector, config, collector, nil, logger)

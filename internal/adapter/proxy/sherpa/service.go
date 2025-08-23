@@ -43,14 +43,9 @@ import (
 )
 
 const (
-	DefaultReadTimeout      = 60 * time.Second
-	DefaultStreamBufferSize = 8 * 1024
-
+	// Sherpa-specific constants that aren't in the base proxy package
 	DefaultSetNoDelay         = true
 	DefaultDisableCompression = false
-
-	DefaultTimeout   = 60 * time.Second
-	DefaultKeepAlive = 60 * time.Second
 
 	DefaultMaxIdleConns        = 20
 	DefaultMaxIdleConnsPerHost = 5
@@ -149,14 +144,14 @@ func (s *Service) GetStats(ctx context.Context) (ports.ProxyStats, error) {
 
 // UpdateConfig updates the proxy configuration
 func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
-	newConfig := &Configuration{
-		ProxyPrefix:         config.GetProxyPrefix(),
-		ConnectionTimeout:   config.GetConnectionTimeout(),
-		ConnectionKeepAlive: config.GetConnectionKeepAlive(),
-		ResponseTimeout:     config.GetResponseTimeout(),
-		ReadTimeout:         config.GetReadTimeout(),
-		StreamBufferSize:    config.GetStreamBufferSize(),
-	}
+	newConfig := &Configuration{}
+	newConfig.ProxyPrefix = config.GetProxyPrefix()
+	newConfig.ConnectionTimeout = config.GetConnectionTimeout()
+	newConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
+	newConfig.ResponseTimeout = config.GetResponseTimeout()
+	newConfig.ReadTimeout = config.GetReadTimeout()
+	newConfig.StreamBufferSize = config.GetStreamBufferSize()
+	newConfig.Profile = config.GetProxyProfile()
 
 	s.configuration = newConfig
 }

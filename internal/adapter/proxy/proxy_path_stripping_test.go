@@ -137,13 +137,13 @@ func TestProxyPathStripping(t *testing.T) {
 					// Create proxy configuration
 					var config ports.ProxyConfiguration
 					if proxyType.name == "Sherpa" {
-						config = &sherpa.Configuration{
-							ProxyPrefix: tc.proxyPrefix,
-						}
+						sherpaConfig := &sherpa.Configuration{}
+						sherpaConfig.ProxyPrefix = tc.proxyPrefix
+						config = sherpaConfig
 					} else {
-						config = &olla.Configuration{
-							ProxyPrefix: tc.proxyPrefix,
-						}
+						ollaConfig := &olla.Configuration{}
+						ollaConfig.ProxyPrefix = tc.proxyPrefix
+						config = ollaConfig
 					}
 
 					// Create proxy service
@@ -213,9 +213,8 @@ func TestProxyPathStrippingDoubleStrippingPrevention(t *testing.T) {
 	expectedPath := "/api/chat"
 
 	// Create Sherpa proxy
-	sherpaConfig := &sherpa.Configuration{
-		ProxyPrefix: "/olla",
-	}
+	sherpaConfig := &sherpa.Configuration{}
+	sherpaConfig.ProxyPrefix = "/olla"
 	sherpaProxy, err := sherpa.NewService(
 		&mockDiscoveryService{},
 		&mockEndpointSelector{},
@@ -303,9 +302,8 @@ func TestProxyPathStrippingWithProviderContext(t *testing.T) {
 			defer upstream.Close()
 
 			// Create Olla proxy with configured prefix
-			config := &olla.Configuration{
-				ProxyPrefix: tc.proxyConfigPrefix,
-			}
+			config := &olla.Configuration{}
+			config.ProxyPrefix = tc.proxyConfigPrefix
 			proxy, err := olla.NewService(
 				&mockDiscoveryService{},
 				&mockEndpointSelector{},
@@ -390,7 +388,8 @@ func benchmarkPathStripping(b *testing.B, proxyType, prefix, requestPath string)
 	var err error
 
 	if proxyType == "sherpa" {
-		config := &sherpa.Configuration{ProxyPrefix: prefix}
+		config := &sherpa.Configuration{}
+		config.ProxyPrefix = prefix
 		proxy, err = sherpa.NewService(
 			&mockDiscoveryService{},
 			&mockEndpointSelector{},
@@ -400,7 +399,8 @@ func benchmarkPathStripping(b *testing.B, proxyType, prefix, requestPath string)
 			createTestLogger(),
 		)
 	} else {
-		config := &olla.Configuration{ProxyPrefix: prefix}
+		config := &olla.Configuration{}
+		config.ProxyPrefix = prefix
 		proxy, err = olla.NewService(
 			&mockDiscoveryService{},
 			&mockEndpointSelector{},

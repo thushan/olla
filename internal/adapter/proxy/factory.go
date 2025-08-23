@@ -39,32 +39,31 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 
 	// Register Sherpa implementation
 	factory.Register(DefaultProxySherpa, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, metricsExtractor ports.MetricsExtractor, logger logger.StyledLogger) (ports.ProxyService, error) {
-		sherpaConfig := &sherpa.Configuration{
-			ProxyPrefix:         config.GetProxyPrefix(),
-			ConnectionTimeout:   config.GetConnectionTimeout(),
-			ConnectionKeepAlive: config.GetConnectionKeepAlive(),
-			ResponseTimeout:     config.GetResponseTimeout(),
-			ReadTimeout:         config.GetReadTimeout(),
-			StreamBufferSize:    config.GetStreamBufferSize(),
-			Profile:             config.GetProxyProfile(),
-		}
+		sherpaConfig := &sherpa.Configuration{}
+		sherpaConfig.ProxyPrefix = config.GetProxyPrefix()
+		sherpaConfig.ConnectionTimeout = config.GetConnectionTimeout()
+		sherpaConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
+		sherpaConfig.ResponseTimeout = config.GetResponseTimeout()
+		sherpaConfig.ReadTimeout = config.GetReadTimeout()
+		sherpaConfig.StreamBufferSize = config.GetStreamBufferSize()
+		sherpaConfig.Profile = config.GetProxyProfile()
 		return sherpa.NewService(discovery, selector, sherpaConfig, collector, metricsExtractor, logger)
 	})
 
 	// Register Olla implementation
 	factory.Register(DefaultProxyOlla, func(discovery ports.DiscoveryService, selector domain.EndpointSelector, config ports.ProxyConfiguration, collector ports.StatsCollector, metricsExtractor ports.MetricsExtractor, logger logger.StyledLogger) (ports.ProxyService, error) {
-		ollaConfig := &olla.Configuration{
-			ProxyPrefix:         config.GetProxyPrefix(),
-			ConnectionTimeout:   config.GetConnectionTimeout(),
-			ConnectionKeepAlive: config.GetConnectionKeepAlive(),
-			ResponseTimeout:     config.GetResponseTimeout(),
-			ReadTimeout:         config.GetReadTimeout(),
-			StreamBufferSize:    config.GetStreamBufferSize(),
-			Profile:             config.GetProxyProfile(),
-			MaxIdleConns:        200,
-			IdleConnTimeout:     90 * time.Second,
-			MaxConnsPerHost:     50,
-		}
+		ollaConfig := &olla.Configuration{}
+		ollaConfig.ProxyPrefix = config.GetProxyPrefix()
+		ollaConfig.ConnectionTimeout = config.GetConnectionTimeout()
+		ollaConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
+		ollaConfig.ResponseTimeout = config.GetResponseTimeout()
+		ollaConfig.ReadTimeout = config.GetReadTimeout()
+		ollaConfig.StreamBufferSize = config.GetStreamBufferSize()
+		ollaConfig.Profile = config.GetProxyProfile()
+		// Olla-specific fields
+		ollaConfig.MaxIdleConns = 200
+		ollaConfig.IdleConnTimeout = 90 * time.Second
+		ollaConfig.MaxConnsPerHost = 50
 		return olla.NewService(discovery, selector, ollaConfig, collector, metricsExtractor, logger)
 	})
 
