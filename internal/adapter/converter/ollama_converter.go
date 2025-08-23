@@ -31,11 +31,15 @@ type OllamaDetails struct {
 }
 
 // OllamaConverter converts models to Ollama-compatible format
-type OllamaConverter struct{}
+type OllamaConverter struct {
+	*BaseConverter
+}
 
 // NewOllamaConverter creates a new Ollama format converter
 func NewOllamaConverter() ports.ModelResponseConverter {
-	return &OllamaConverter{}
+	return &OllamaConverter{
+		BaseConverter: NewBaseConverter(constants.ProviderTypeOllama),
+	}
 }
 
 func (c *OllamaConverter) GetFormatName() string {
@@ -60,51 +64,18 @@ func (c *OllamaConverter) ConvertToFormat(models []*domain.UnifiedModel, filters
 }
 
 func (c *OllamaConverter) convertModel(model *domain.UnifiedModel) *OllamaModelData {
-	// Find the Ollama-specific alias or endpoint
-	var ollamaName string
-	var ollamaEndpoint *domain.SourceEndpoint
+	helper := c.BaseConverter.NewConversionHelper(model)
 
-	// First, look for an Ollama source in aliases
-	for _, alias := range model.Aliases {
-		if alias.Source == constants.ProviderTypeOllama {
-			ollamaName = alias.Name
-			break
-		}
-	}
-
-	// Find corresponding Ollama endpoint
-	for i := range model.SourceEndpoints {
-		ep := &model.SourceEndpoints[i]
-		// Check if this is an Ollama endpoint (could be by port or other logic)
-		if ollamaName != "" && ep.NativeName == ollamaName {
-			ollamaEndpoint = ep
-			break
-		}
-	}
-
-	// If no Ollama-specific data, skip this model for Ollama format
-	if ollamaName == "" {
+	if helper.ShouldSkip() {
 		return nil
 	}
 
-	// Extract digest from metadata if available
-	digest := ""
-	if d, ok := model.Metadata["digest"].(string); ok {
-		digest = d
-	}
-
-	// Use actual disk size from endpoint if available, otherwise use total
-	size := model.DiskSize
-	if ollamaEndpoint != nil && ollamaEndpoint.DiskSize > 0 {
-		size = ollamaEndpoint.DiskSize
-	}
-
 	return &OllamaModelData{
-		Name:       ollamaName,
-		Model:      ollamaName,
+		Name:       helper.Alias,
+		Model:      helper.Alias,
 		ModifiedAt: model.LastSeen.Format(time.RFC3339),
-		Size:       size,
-		Digest:     digest,
+		Size:       helper.GetDiskSize(),
+		Digest:     helper.GetMetadataString("digest"),
 		Details: &OllamaDetails{
 			Family:            model.Family,
 			ParameterSize:     model.ParameterSize,

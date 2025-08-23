@@ -22,11 +22,15 @@ type OpenAIModelData struct {
 }
 
 // OpenAIConverter converts models to OpenAI-compatible format
-type OpenAIConverter struct{}
+type OpenAIConverter struct {
+	*BaseConverter
+}
 
 // NewOpenAIConverter creates a new OpenAI format converter
 func NewOpenAIConverter() ports.ModelResponseConverter {
-	return &OpenAIConverter{}
+	return &OpenAIConverter{
+		BaseConverter: NewBaseConverter("openai"),
+	}
 }
 
 func (c *OpenAIConverter) GetFormatName() string {

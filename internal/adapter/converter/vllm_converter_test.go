@@ -207,7 +207,7 @@ func TestVLLMConverter_GetFormatName(t *testing.T) {
 }
 
 func TestVLLMConverter_determineOwner(t *testing.T) {
-	converter := &VLLMConverter{}
+	converter := NewVLLMConverter().(*VLLMConverter)
 
 	tests := []struct {
 		name     string
@@ -245,7 +245,7 @@ func TestVLLMConverter_determineOwner(t *testing.T) {
 }
 
 func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
-	converter := &VLLMConverter{}
+	converter := NewVLLMConverter().(*VLLMConverter)
 
 	t.Run("only finds vLLM name from aliases with vllm source", func(t *testing.T) {
 		// Test that slash-based names from non-vLLM sources are ignored

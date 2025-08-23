@@ -16,11 +16,15 @@ type VLLMModelData = profile.VLLMModel
 type VLLMModelPermission = profile.VLLMModelPermission
 
 // VLLMConverter converts models to vLLM-compatible format with extended metadata
-type VLLMConverter struct{}
+type VLLMConverter struct {
+	*BaseConverter
+}
 
 // NewVLLMConverter creates a new vLLM format converter
 func NewVLLMConverter() ports.ModelResponseConverter {
-	return &VLLMConverter{}
+	return &VLLMConverter{
+		BaseConverter: NewBaseConverter(constants.ProviderTypeVLLM),
+	}
 }
 
 func (c *VLLMConverter) GetFormatName() string {
@@ -46,6 +50,7 @@ func (c *VLLMConverter) ConvertToFormat(models []*domain.UnifiedModel, filters p
 
 func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMModel {
 	// For vLLM, prefer the native vLLM name if available from source endpoints
+	now := time.Now().Unix()
 	modelID := c.findVLLMNativeName(model)
 	if modelID == "" {
 		// Fallback to first alias or unified ID
@@ -59,7 +64,7 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 	vllmModel := &profile.VLLMModel{
 		ID:      modelID,
 		Object:  "model",
-		Created: time.Now().Unix(),
+		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 		Root:    modelID, // vLLM typically sets root to the model ID
 	}
@@ -74,7 +79,7 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 		{
 			ID:                 "modelperm-olla-" + strings.ReplaceAll(modelID, "/", "-"),
 			Object:             "model_permission",
-			Created:            time.Now().Unix(),
+			Created:            now,
 			AllowCreateEngine:  false, // Engine creation not applicable in proxy context
 			AllowSampling:      true,
 			AllowLogprobs:      true,
@@ -91,14 +96,11 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 
 // findVLLMNativeName looks for the native vLLM name from aliases
 func (c *VLLMConverter) findVLLMNativeName(model *domain.UnifiedModel) string {
-	// Check aliases for vLLM source - this reliably identifies vLLM models
-	// We don't check NativeName for slashes as other providers (Ollama, etc.) also use them
-	for _, alias := range model.Aliases {
-		if alias.Source == constants.ProviderTypeVLLM {
-			return alias.Name
-		}
+	// Use base converter to find vLLM-specific alias
+	alias, found := c.BaseConverter.FindProviderAlias(model)
+	if found {
+		return alias
 	}
-
 	return ""
 }
 
