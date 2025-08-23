@@ -25,11 +25,15 @@ type LMStudioModelData struct {
 }
 
 // LMStudioConverter converts models to LM Studio-compatible format
-type LMStudioConverter struct{}
+type LMStudioConverter struct {
+	*BaseConverter
+}
 
 // NewLMStudioConverter creates a new LM Studio format converter
 func NewLMStudioConverter() ports.ModelResponseConverter {
-	return &LMStudioConverter{}
+	return &LMStudioConverter{
+		BaseConverter: NewBaseConverter(constants.ProviderPrefixLMStudio1),
+	}
 }
 
 func (c *LMStudioConverter) GetFormatName() string {
@@ -54,64 +58,29 @@ func (c *LMStudioConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 }
 
 func (c *LMStudioConverter) convertModel(model *domain.UnifiedModel) *LMStudioModelData {
-	// Find the LM Studio-specific alias or endpoint
-	var lmstudioName string
-	var lmstudioEndpoint *domain.SourceEndpoint
+	helper := c.BaseConverter.NewConversionHelper(model)
 
-	// First, look for an LM Studio source in aliases
-	for _, alias := range model.Aliases {
-		if alias.Source == constants.ProviderPrefixLMStudio1 {
-			lmstudioName = alias.Name
-			break
-		}
-	}
-
-	// Find corresponding LM Studio endpoint
-	for i := range model.SourceEndpoints {
-		ep := &model.SourceEndpoints[i]
-		if lmstudioName != "" && ep.NativeName == lmstudioName {
-			lmstudioEndpoint = ep
-			break
-		}
-	}
-
-	// If no LM Studio-specific data, skip this model
-	if lmstudioName == "" {
+	if helper.ShouldSkip() {
 		return nil
 	}
 
 	// Determine model type
-	modelType := "llm"
-	if t, ok := model.Metadata["type"].(string); ok {
-		modelType = t
-	} else if hasCapability(model.Capabilities, "vision") {
-		modelType = "vlm"
-	} else if hasCapability(model.Capabilities, "embedding") || hasCapability(model.Capabilities, "embeddings") {
-		modelType = "embeddings"
-	}
+	modelType := helper.GetModelType("llm")
 
-	// Extract publisher from metadata or model name
-	publisher := ""
-	if p, ok := model.Metadata["publisher"].(string); ok {
-		publisher = p
-	} else if v, ok := model.Metadata["vendor"].(string); ok {
-		publisher = v
-	}
-
-	// Determine state from endpoint
-	state := "not-loaded"
-	if lmstudioEndpoint != nil {
-		state = lmstudioEndpoint.State
+	// Extract publisher from metadata
+	publisher := helper.GetMetadataString("publisher")
+	if publisher == "" {
+		publisher = helper.GetMetadataString("vendor")
 	}
 
 	return &LMStudioModelData{
-		ID:               lmstudioName,
+		ID:               helper.Alias,
 		Object:           "model",
 		Type:             modelType,
 		Publisher:        publisher,
 		Arch:             model.Family,
 		Quantization:     denormalizeQuantization(model.Quantization),
-		State:            state,
+		State:            helper.GetState("not-loaded"),
 		MaxContextLength: model.MaxContextLength,
 	}
 }
