@@ -374,3 +374,17 @@ func (l *ProfileLoader) GetAllProfiles() map[string]domain.InferenceProfile {
 	}
 	return profiles
 }
+
+// SetFilter sets the profile filter configuration
+func (l *ProfileLoader) SetFilter(filter *domain.FilterConfig) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.profileFilter = filter
+}
+
+// SetFilterAdapter sets the filter implementation
+func (l *ProfileLoader) SetFilterAdapter(filterAdapter ports.Filter) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.filter = filterAdapter
+}

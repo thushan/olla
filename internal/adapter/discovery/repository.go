@@ -35,6 +35,13 @@ func NewStaticEndpointRepository() *StaticEndpointRepository {
 	}
 }
 
+func NewStaticEndpointRepositoryWithFactory(factory *profile.Factory) *StaticEndpointRepository {
+	return &StaticEndpointRepository{
+		endpoints:      make(map[string]*domain.Endpoint),
+		profileFactory: factory,
+	}
+}
+
 func (r *StaticEndpointRepository) GetAll(ctx context.Context) ([]*domain.Endpoint, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
