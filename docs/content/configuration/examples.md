@@ -563,6 +563,168 @@ logging:
 # 6. Exponential backoff for failing endpoints
 ```
 
+## Filtering Examples
+
+Examples showing profile and model filtering capabilities. See [Filter Concepts](filters.md) for detailed pattern syntax.
+
+### Specialized Embedding Service
+
+Configure endpoints to serve only embedding models:
+
+```yaml
+server:
+  port: 40114
+
+proxy:
+  engine: "sherpa"
+  load_balancer: "priority"
+  # Only load profiles that support embeddings
+  profile_filter:
+    include:
+      - "ollama"
+      - "openai*"
+    exclude:
+      - "lm-studio"  # Doesn't have good embedding support
+
+discovery:
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "embedding-server"
+        type: "ollama"
+        priority: 100
+        model_filter:
+          include:
+            - "*embed*"      # Embedding models
+            - "bge-*"        # BGE models
+            - "e5-*"         # E5 models
+            - "nomic-*"      # Nomic models
+          exclude:
+            - "*test*"       # No test models
+```
+
+### Production Chat Service
+
+Filter out experimental and inappropriate models:
+
+```yaml
+proxy:
+  engine: "olla"
+  load_balancer: "least-connections"
+  # Exclude test/debug profiles
+  profile_filter:
+    exclude:
+      - "*test*"
+      - "*debug*"
+
+discovery:
+  static:
+    endpoints:
+      - url: "http://prod-gpu-1:11434"
+        name: "prod-chat-1"
+        type: "ollama"
+        priority: 100
+        model_filter:
+          include:
+            - "llama*"       # Llama family
+            - "mistral*"     # Mistral family
+            - "qwen*"        # Qwen family
+          exclude:
+            - "*uncensored*" # No uncensored models
+            - "*test*"       # No test models
+            - "*debug*"      # No debug models
+            - "*embed*"      # No embedding models
+            
+      - url: "http://prod-gpu-2:11434"
+        name: "prod-chat-2"
+        type: "ollama"
+        priority: 100
+        model_filter:
+          # Same filters for consistency
+          include: ["llama*", "mistral*", "qwen*"]
+          exclude: ["*uncensored*", "*test*", "*debug*", "*embed*"]
+```
+
+### Mixed Workload with Different Endpoints
+
+Different model types on different endpoints:
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      # Code generation endpoint
+      - url: "http://code-server:11434"
+        name: "code-gen"
+        type: "ollama"
+        priority: 100
+        model_filter:
+          include:
+            - "*code*"       # Code models
+            - "deepseek-coder*"
+            - "codellama*"
+            - "starcoder*"
+            
+      # General chat endpoint
+      - url: "http://chat-server:11434"
+        name: "chat"
+        type: "ollama"
+        priority: 90
+        model_filter:
+          include:
+            - "*chat*"       # Chat models
+            - "*instruct*"   # Instruction models
+          exclude:
+            - "*code*"       # No code models
+            - "*embed*"      # No embeddings
+            
+      # Vision endpoint
+      - url: "http://vision-server:11434"
+        name: "vision"
+        type: "ollama"
+        priority: 80
+        model_filter:
+          include:
+            - "*vision*"     # Vision models
+            - "llava*"       # LLaVA models
+            - "*clip*"       # CLIP models
+```
+
+### Resource-Constrained Environment
+
+Filter by model size:
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      # Small GPU - only small models
+      - url: "http://small-gpu:11434"
+        name: "small-models"
+        type: "ollama"
+        priority: 100
+        model_filter:
+          include:
+            - "*-3b*"        # 3B models
+            - "*-7b*"        # 7B models
+            - "*-8b*"        # 8B models
+          exclude:
+            - "*-13b*"       # Nothing larger
+            - "*-34b*"
+            - "*-70b*"
+            
+      # Large GPU - only large models
+      - url: "http://large-gpu:11434"
+        name: "large-models"
+        type: "ollama"
+        priority: 50
+        model_filter:
+          include:
+            - "*-34b*"       # 34B+ models
+            - "*-70b*"
+            - "*-72b*"
+```
+
 ## Environment Variables Override
 
 Example showing environment variable overrides:

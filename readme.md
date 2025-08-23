@@ -44,6 +44,7 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 - **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover and connection retry
 - **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](https://thushan.github.io/olla/concepts/model-unification/)
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
+- **🎯 Advanced Filtering**: [Profile and model filtering](https://thushan.github.io/olla/filters/) with glob patterns for precise control
 - **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers and automatic recovery
 - **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover
 - **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
@@ -223,9 +224,13 @@ discovery:
         health_check_url: "/"
         check_interval: 2s
         check_timeout: 1s
+        model_filter:         # Filter models for this endpoint
+          exclude:
+            - "*embed*"       # No embedding models
+            - "*uncensored*"  # No uncensored models
 ```
 
-For comprehensive configuration options, see [Configuration Reference](https://thushan.github.io/olla/configuration/reference/).
+For comprehensive configuration options, see [Configuration Reference](https://thushan.github.io/olla/configuration/reference/). Learn about [filtering capabilities](https://thushan.github.io/olla/filters/) for controlling profiles and models.
 
 ### Start Olla
 

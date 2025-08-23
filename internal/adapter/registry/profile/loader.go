@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
@@ -9,20 +10,40 @@ import (
 	"sync"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/filter"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 	"gopkg.in/yaml.v3"
 )
 
 type ProfileLoader struct {
-	profiles    map[string]domain.InferenceProfile
-	profilesDir string
-	mu          sync.RWMutex
+	filter        ports.Filter
+	profiles      map[string]domain.InferenceProfile
+	profileFilter *domain.FilterConfig
+	profilesDir   string
+	mu            sync.RWMutex
 }
 
 func NewProfileLoader(profilesDir string) *ProfileLoader {
 	return &ProfileLoader{
 		profilesDir: profilesDir,
 		profiles:    make(map[string]domain.InferenceProfile),
+		filter:      filter.NewGlobFilter(),
+	}
+}
+
+// NewProfileLoaderWithFilter creates a new ProfileLoader with a custom filter
+func NewProfileLoaderWithFilter(profilesDir string, profileFilter *domain.FilterConfig, customFilter ports.Filter) *ProfileLoader {
+	filterToUse := customFilter
+	if filterToUse == nil {
+		filterToUse = filter.NewGlobFilter()
+	}
+
+	return &ProfileLoader{
+		profilesDir:   profilesDir,
+		profiles:      make(map[string]domain.InferenceProfile),
+		profileFilter: profileFilter,
+		filter:        filterToUse,
 	}
 }
 
@@ -33,14 +54,15 @@ func (l *ProfileLoader) LoadProfiles() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.profiles = make(map[string]domain.InferenceProfile)
+	allProfiles := make(map[string]domain.InferenceProfile)
 
 	// built-ins ensure it works out of the box, even without config files
-	l.loadBuiltInProfiles()
+	l.loadBuiltInProfilesInto(allProfiles)
 
 	if _, err := os.Stat(l.profilesDir); os.IsNotExist(err) {
 		// no config dir is fine - built-ins cover the common cases
-		return nil
+		// Apply filtering before returning
+		return l.applyProfileFilter(allProfiles)
 	}
 
 	// yaml files in config dir override built-ins
@@ -60,11 +82,51 @@ func (l *ProfileLoader) LoadProfiles() error {
 			return nil
 		}
 
-		l.profiles[profile.GetName()] = profile
+		allProfiles[profile.GetName()] = profile
 		return nil
 	})
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Apply filtering to all loaded profiles
+	return l.applyProfileFilter(allProfiles)
+}
+
+// applyProfileFilter applies the configured filter to the profiles
+func (l *ProfileLoader) applyProfileFilter(allProfiles map[string]domain.InferenceProfile) error {
+	// If no filter is configured, use all profiles
+	if l.profileFilter == nil || l.profileFilter.IsEmpty() {
+		l.profiles = allProfiles
+		return nil
+	}
+
+	// Apply the filter
+	ctx := context.Background()
+	filteredProfiles, err := l.filter.ApplyToMap(ctx, l.profileFilter, convertProfilesToMap(allProfiles))
+	if err != nil {
+		return fmt.Errorf("failed to apply profile filter: %w", err)
+	}
+
+	// Convert back to typed map
+	l.profiles = make(map[string]domain.InferenceProfile)
+	for name, profile := range filteredProfiles {
+		if p, ok := profile.(domain.InferenceProfile); ok {
+			l.profiles[name] = p
+		}
+	}
+
+	return nil
+}
+
+// convertProfilesToMap converts typed profile map to generic map for filtering
+func convertProfilesToMap(profiles map[string]domain.InferenceProfile) map[string]interface{} {
+	result := make(map[string]interface{}, len(profiles))
+	for name, profile := range profiles {
+		result[name] = profile
+	}
+	return result
 }
 
 func (l *ProfileLoader) loadProfile(path string) (domain.InferenceProfile, error) {
@@ -103,8 +165,8 @@ func (l *ProfileLoader) createCustomProfile(config *domain.ProfileConfig) (domai
 	return NewConfigurableProfile(config), nil
 }
 
-// loadBuiltInProfiles ensures olla works out of the box without config files
-func (l *ProfileLoader) loadBuiltInProfiles() {
+// loadBuiltInProfilesInto loads built-in profiles into the provided map
+func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.InferenceProfile) {
 	// hardcoded defaults for the common platforms everyone uses
 
 	ollamaConfig := &domain.ProfileConfig{
@@ -202,7 +264,7 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 		LoadTimeBuffer:     true,
 	}
 
-	l.profiles[domain.ProfileOllama] = NewConfigurableProfile(ollamaConfig)
+	profiles[domain.ProfileOllama] = NewConfigurableProfile(ollamaConfig)
 
 	// LM Studio built-in profile
 	lmStudioConfig := &domain.ProfileConfig{
@@ -252,7 +314,7 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 		MinMemoryGB: 4.2, RecommendedMemoryGB: 5.25, MinGPUMemoryGB: 4.2, RequiresGPU: false, EstimatedLoadTimeMS: 1000,
 	}
 
-	l.profiles[domain.ProfileLmStudio] = NewConfigurableProfile(lmStudioConfig)
+	profiles[domain.ProfileLmStudio] = NewConfigurableProfile(lmStudioConfig)
 
 	// OpenAI-compatible built-in profile
 	openAIConfig := &domain.ProfileConfig{
@@ -288,7 +350,7 @@ func (l *ProfileLoader) loadBuiltInProfiles() {
 	openAIConfig.PathIndices.Completions = 2
 	openAIConfig.PathIndices.Embeddings = 3
 
-	l.profiles[domain.ProfileOpenAICompatible] = NewConfigurableProfile(openAIConfig)
+	profiles[domain.ProfileOpenAICompatible] = NewConfigurableProfile(openAIConfig)
 }
 
 // GetProfile returns a profile by name
@@ -311,4 +373,18 @@ func (l *ProfileLoader) GetAllProfiles() map[string]domain.InferenceProfile {
 		profiles[k] = v
 	}
 	return profiles
+}
+
+// SetFilter sets the profile filter configuration
+func (l *ProfileLoader) SetFilter(filter *domain.FilterConfig) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.profileFilter = filter
+}
+
+// SetFilterAdapter sets the filter implementation
+func (l *ProfileLoader) SetFilterAdapter(filterAdapter ports.Filter) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.filter = filterAdapter
 }

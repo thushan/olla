@@ -188,6 +188,28 @@ proxy:
   stream_buffer_size: 8192
 ```
 
+### Profile Filtering
+
+Control which inference profiles are loaded at startup. See [Filter Concepts](filters.md) for pattern details.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `profile_filter.include` | []string | `[]` | Profiles to include (glob patterns) |
+| `profile_filter.exclude` | []string | `[]` | Profiles to exclude (glob patterns) |
+
+Example:
+
+```yaml
+proxy:
+  profile_filter:
+    include:
+      - "ollama"        # Include Ollama
+      - "openai*"       # Include all OpenAI variants
+    exclude:
+      - "*test*"        # Exclude test profiles
+      - "*debug*"       # Exclude debug profiles
+```
+
 ## Discovery Configuration
 
 Endpoint discovery and health checking.
@@ -219,6 +241,16 @@ discovery:
 | `static.endpoints[].model_url` | string | No | Model discovery path |
 | `static.endpoints[].check_interval` | duration | No | Health check interval |
 | `static.endpoints[].check_timeout` | duration | No | Health check timeout |
+| `static.endpoints[].model_filter` | object | No | Model filtering for this endpoint |
+
+#### Endpoint Model Filtering
+
+Filter models at the endpoint level during discovery. See [Filter Concepts](filters.md) for pattern syntax.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `model_filter.include` | []string | Models to include (glob patterns) |
+| `model_filter.exclude` | []string | Models to exclude (glob patterns) |
 
 Example:
 
@@ -234,12 +266,21 @@ discovery:
         model_url: "/api/tags"
         check_interval: 30s
         check_timeout: 5s
+        model_filter:
+          exclude:
+            - "*embed*"         # No embedding models
+            - "*uncensored*"    # No uncensored models
+            - "nomic-*"         # No Nomic models
         
       - url: "http://remote:11434"
         name: "remote-ollama"
         type: "ollama"
         priority: 50
         check_interval: 60s
+        model_filter:
+          include:
+            - "llama*"          # Only Llama models
+            - "mistral*"        # And Mistral models
 ```
 
 ### Model Discovery

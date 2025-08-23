@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/util/pattern"
 )
 
 const (
@@ -157,8 +158,8 @@ func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry do
 
 	// Check for embeddings capability
 	if patterns, ok := p.config.Models.CapabilityPatterns["embeddings"]; ok {
-		for _, pattern := range patterns {
-			if matchesGlobPattern(modelName, pattern) {
+		for _, pat := range patterns {
+			if pattern.MatchesGlob(modelName, pat) {
 				caps.Embeddings = true
 				caps.ChatCompletion = false
 				caps.TextGeneration = false
@@ -169,8 +170,8 @@ func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry do
 
 	// Check for vision capability
 	if patterns, ok := p.config.Models.CapabilityPatterns["vision"]; ok {
-		for _, pattern := range patterns {
-			if matchesGlobPattern(modelName, pattern) {
+		for _, pat := range patterns {
+			if pattern.MatchesGlob(modelName, pat) {
 				caps.VisionUnderstanding = true
 				break
 			}
@@ -179,8 +180,8 @@ func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry do
 
 	// Check for code capability
 	if patterns, ok := p.config.Models.CapabilityPatterns["code"]; ok {
-		for _, pattern := range patterns {
-			if matchesGlobPattern(modelName, pattern) {
+		for _, pat := range patterns {
+			if pattern.MatchesGlob(modelName, pat) {
 				caps.CodeGeneration = true
 				break
 			}
@@ -194,46 +195,14 @@ func (p *ConfigurableProfile) GetModelCapabilities(modelName string, registry do
 	}
 
 	// Check context patterns from config
-	for _, pattern := range p.config.Models.ContextPatterns {
-		if matchesGlobPattern(modelName, pattern.Pattern) {
-			caps.MaxContextLength = pattern.Context
+	for _, contextPattern := range p.config.Models.ContextPatterns {
+		if pattern.MatchesGlob(modelName, contextPattern.Pattern) {
+			caps.MaxContextLength = contextPattern.Context
 			break
 		}
 	}
 
 	return caps
-}
-
-// matchesGlobPattern checks if a string matches a glob pattern
-func matchesGlobPattern(s, pattern string) bool {
-	// Simple glob matching for * wildcard
-	pattern = strings.ToLower(pattern)
-	s = strings.ToLower(s)
-
-	if pattern == "*" {
-		return true
-	}
-
-	// Handle patterns like "*llava*" or "llava*" or "*llava"
-	if strings.Contains(pattern, "*") {
-		switch {
-		case strings.HasPrefix(pattern, "*") && strings.HasSuffix(pattern, "*"):
-			// *text* - contains
-			core := strings.Trim(pattern, "*")
-			return strings.Contains(s, core)
-		case strings.HasPrefix(pattern, "*"):
-			// *text - ends with
-			suffix := strings.TrimPrefix(pattern, "*")
-			return strings.HasSuffix(s, suffix)
-		case strings.HasSuffix(pattern, "*"):
-			// text* - starts with
-			prefix := strings.TrimSuffix(pattern, "*")
-			return strings.HasPrefix(s, prefix)
-		}
-	}
-
-	// Exact match
-	return s == pattern
 }
 
 func (p *ConfigurableProfile) IsModelSupported(modelName string, registry domain.ModelRegistry) bool {

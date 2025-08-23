@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"time"
-
-	"github.com/thushan/olla/internal/config"
 )
 
 const (
@@ -24,6 +22,7 @@ type Endpoint struct {
 	URL                   *url.URL
 	HealthCheckURL        *url.URL
 	ModelUrl              *url.URL
+	ModelFilter           *FilterConfig
 	Name                  string
 	Type                  string `json:"type,omitempty"`
 	Status                EndpointStatus
@@ -97,7 +96,6 @@ type EndpointRepository interface {
 	GetRoutable(ctx context.Context) ([]*Endpoint, error)
 	GetHealthy(ctx context.Context) ([]*Endpoint, error)
 	UpdateEndpoint(ctx context.Context, endpoint *Endpoint) error
-	LoadFromConfig(ctx context.Context, configs []config.EndpointConfig) error
 	Exists(ctx context.Context, endpointURL *url.URL) bool
 }
 

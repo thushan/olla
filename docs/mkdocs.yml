@@ -139,6 +139,7 @@ nav:
           - Provider Metrics: concepts/provider-metrics.md
   - Configuration:
       - Overview: configuration/overview.md
+      - Filters: configuration/filters.md
       - Reference: configuration/reference.md
       - Examples: configuration/examples.md
       - Best Practices:

@@ -160,3 +160,8 @@ func (f *Factory) buildPrefixLookup() {
 		f.prefixLookup[profileName] = profileName
 	}
 }
+
+// GetLoader returns the profile loader for testing purposes
+func (f *Factory) GetLoader() *ProfileLoader {
+	return f.loader
+}

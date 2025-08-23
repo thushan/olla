@@ -10,8 +10,10 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/thushan/olla/internal/adapter/filter"
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
 
@@ -26,9 +28,11 @@ type ModelDiscoveryService struct {
 	endpointRepo      domain.EndpointRepository
 	modelRegistry     domain.ModelRegistry
 	logger            logger.StyledLogger
+	modelFilter       ports.Filter
 	stopCh            chan struct{}
 	ticker            *time.Ticker
-	disabledEndpoints map[string]int // tracks consecutive failures
+	disabledEndpoints map[string]int                  // tracks consecutive failures
+	endpointFilters   map[string]*domain.FilterConfig // per-endpoint filter configs
 	config            DiscoveryConfig
 	mu                sync.RWMutex
 	isRunning         atomic.Bool
@@ -52,6 +56,8 @@ func NewModelDiscoveryService(client ModelDiscoveryClient, endpointRepo domain.E
 		config:            config,
 		stopCh:            make(chan struct{}),
 		disabledEndpoints: make(map[string]int),
+		modelFilter:       filter.NewGlobFilter(),
+		endpointFilters:   make(map[string]*domain.FilterConfig),
 	}
 }
 
@@ -152,22 +158,37 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 	// Reset failure count on success
 	s.resetFailureCount(endpoint.URLString)
 
+	// Apply model filtering if configured for this endpoint
+	filteredModels := models
+	if filterConfig := s.getEndpointFilterConfig(endpoint); filterConfig != nil {
+		filteredModels, err = s.applyModelFilter(ctx, models, filterConfig)
+		if err != nil {
+			s.logger.ErrorWithEndpoint("Failed to apply model filter", endpoint.Name, "error", err)
+			// Continue with unfiltered models rather than failing completely
+			filteredModels = models
+		} else if len(filteredModels) < len(models) {
+			s.logger.InfoWithEndpoint("Applied model filter", endpoint.Name,
+				"original_count", len(models),
+				"filtered_count", len(filteredModels))
+		}
+	}
+
 	// Check if registry supports endpoint registration
 	if unifiedRegistry, ok := s.modelRegistry.(*registry.UnifiedMemoryModelRegistry); ok {
 		// Use the new method that accepts endpoint objects
-		if err := unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoint, models); err != nil {
+		if err := unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoint, filteredModels); err != nil {
 			s.logger.ErrorWithEndpoint("Failed to register discovered models", endpoint.Name, "error", err)
 			return fmt.Errorf("failed to register models: %w", err)
 		}
 	} else {
 		// Fall back to string-based registration
-		if err := s.modelRegistry.RegisterModels(ctx, endpoint.URLString, models); err != nil {
+		if err := s.modelRegistry.RegisterModels(ctx, endpoint.URLString, filteredModels); err != nil {
 			s.logger.ErrorWithEndpoint("Failed to register discovered models", endpoint.Name, "error", err)
 			return fmt.Errorf("failed to register models: %w", err)
 		}
 	}
 
-	s.logger.InfoWithEndpoint(" ", endpoint.Name, "models", len(models))
+	s.logger.InfoWithEndpoint(" ", endpoint.Name, "models", len(filteredModels))
 	return nil
 }
 
@@ -295,4 +316,68 @@ func (s *ModelDiscoveryService) GetMetrics() DiscoveryMetrics {
 	}
 
 	return metrics
+}
+
+// SetEndpointFilterConfig sets a filter configuration for a specific endpoint
+func (s *ModelDiscoveryService) SetEndpointFilterConfig(endpointName string, filterConfig *domain.FilterConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if filterConfig != nil {
+		s.endpointFilters[endpointName] = filterConfig
+	} else {
+		delete(s.endpointFilters, endpointName)
+	}
+}
+
+// getEndpointFilterConfig retrieves the filter configuration for an endpoint
+func (s *ModelDiscoveryService) getEndpointFilterConfig(endpoint *domain.Endpoint) *domain.FilterConfig {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check by endpoint name first
+	if config, exists := s.endpointFilters[endpoint.Name]; exists {
+		return config
+	}
+
+	// Fallback to URL string if name doesn't match
+	if config, exists := s.endpointFilters[endpoint.URLString]; exists {
+		return config
+	}
+
+	// Use the endpoint's own ModelFilter if no override has been set
+	if endpoint.ModelFilter != nil {
+		return endpoint.ModelFilter
+	}
+
+	return nil
+}
+
+// applyModelFilter applies filtering to discovered models
+func (s *ModelDiscoveryService) applyModelFilter(ctx context.Context, models []*domain.ModelInfo, filterConfig *domain.FilterConfig) ([]*domain.ModelInfo, error) {
+	if filterConfig == nil || filterConfig.IsEmpty() {
+		return models, nil
+	}
+
+	// Use the filter to process models
+	result, err := s.modelFilter.Apply(ctx, filterConfig, models, func(item interface{}) string {
+		if model, ok := item.(*domain.ModelInfo); ok {
+			return model.Name
+		}
+		return ""
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply model filter: %w", err)
+	}
+
+	// Convert filtered results back to ModelInfo slice
+	filtered := make([]*domain.ModelInfo, 0, len(result.Accepted))
+	for _, item := range result.Accepted {
+		if model, ok := item.(*domain.ModelInfo); ok {
+			filtered = append(filtered, model)
+		}
+	}
+
+	return filtered, nil
 }
