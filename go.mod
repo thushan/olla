@@ -9,7 +9,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/pterm/pterm v0.12.81
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/gjson v1.18.0
 	golang.org/x/sync v0.16.0
 	golang.org/x/time v0.12.0
