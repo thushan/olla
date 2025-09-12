@@ -1,6 +1,6 @@
 module github.com/thushan/olla
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/docker/go-units v0.5.0
@@ -11,7 +11,7 @@ require (
 	github.com/puzpuzpuz/xsync/v4 v4.1.0
 	github.com/stretchr/testify v1.10.0
 	github.com/tidwall/gjson v1.18.0
-	golang.org/x/sync v0.16.0
+	golang.org/x/sync v0.17.0
 	golang.org/x/time v0.12.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
