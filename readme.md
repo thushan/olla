@@ -137,7 +137,7 @@ git clone https://github.com/thushan/olla.git && cd olla && make build-release
 ./bin/olla
 ```
 
-When you have things running you can check everything's working with:
+When you have everything running, you can check it's all working with:
 
 ```bash
 # Check health of Olla
