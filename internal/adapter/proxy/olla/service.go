@@ -691,10 +691,18 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 	newConfig.ReadTimeout = config.GetReadTimeout()
 	newConfig.StreamBufferSize = config.GetStreamBufferSize()
 	newConfig.Profile = config.GetProxyProfile()
-	// Preserve Olla-specific settings
-	newConfig.MaxIdleConns = s.configuration.MaxIdleConns
-	newConfig.IdleConnTimeout = s.configuration.IdleConnTimeout
-	newConfig.MaxConnsPerHost = s.configuration.MaxConnsPerHost
+
+	// we try to get Olla-specific fields from incoming config if it's an *olla.Configuration
+	if ollaConfig, ok := config.(*Configuration); ok && ollaConfig != nil {
+		newConfig.MaxIdleConns = ollaConfig.MaxIdleConns
+		newConfig.IdleConnTimeout = ollaConfig.IdleConnTimeout
+		newConfig.MaxConnsPerHost = ollaConfig.MaxConnsPerHost
+	} else {
+		// fallback: preserve current Olla-specific settings for non-Olla configs
+		newConfig.MaxIdleConns = s.configuration.MaxIdleConns
+		newConfig.IdleConnTimeout = s.configuration.IdleConnTimeout
+		newConfig.MaxConnsPerHost = s.configuration.MaxConnsPerHost
+	}
 
 	// Update configuration atomically
 	s.configuration = newConfig
