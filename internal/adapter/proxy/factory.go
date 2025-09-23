@@ -60,10 +60,22 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 		ollaConfig.ReadTimeout = config.GetReadTimeout()
 		ollaConfig.StreamBufferSize = config.GetStreamBufferSize()
 		ollaConfig.Profile = config.GetProxyProfile()
-		// Olla-specific fields
-		ollaConfig.MaxIdleConns = 200
-		ollaConfig.IdleConnTimeout = 90 * time.Second
-		ollaConfig.MaxConnsPerHost = 50
+
+		if ollaSpecific, ok := config.(interface {
+			GetMaxIdleConns() int
+			GetIdleConnTimeout() time.Duration
+			GetMaxConnsPerHost() int
+		}); ok {
+			ollaConfig.MaxIdleConns = ollaSpecific.GetMaxIdleConns()
+			ollaConfig.IdleConnTimeout = ollaSpecific.GetIdleConnTimeout()
+			ollaConfig.MaxConnsPerHost = ollaSpecific.GetMaxConnsPerHost()
+		} else {
+			// fallback option with defaults
+			ollaConfig.MaxIdleConns = 200
+			ollaConfig.IdleConnTimeout = 90 * time.Second
+			ollaConfig.MaxConnsPerHost = 50
+		}
+
 		return olla.NewService(discovery, selector, ollaConfig, collector, metricsExtractor, logger)
 	})
 
