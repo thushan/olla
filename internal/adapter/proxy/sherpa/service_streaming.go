@@ -10,6 +10,7 @@ import (
 
 	"github.com/thushan/olla/internal/core/constants"
 
+	"github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 
 	"github.com/thushan/olla/internal/adapter/proxy/common"
@@ -79,7 +80,7 @@ func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Conte
 func (s *Service) getReadTimeout() time.Duration {
 	readTimeout := s.configuration.GetReadTimeout()
 	if readTimeout == 0 {
-		readTimeout = DefaultReadTimeout
+		readTimeout = config.DefaultReadTimeout
 	}
 	return readTimeout
 }

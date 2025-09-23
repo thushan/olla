@@ -171,19 +171,18 @@ func TestProxyImplementationParity(t *testing.T) {
 				}))
 			},
 			setupConfig: func() (*sherpa.Configuration, *olla.Configuration) {
-				sherpaConfig := &sherpa.Configuration{
-					ResponseTimeout:  30 * time.Second,
-					ReadTimeout:      10 * time.Second,
-					StreamBufferSize: 8192,
-				}
-				ollaConfig := &olla.Configuration{
-					ResponseTimeout:  30 * time.Second,
-					ReadTimeout:      10 * time.Second,
-					StreamBufferSize: 8192,
-					MaxIdleConns:     200,
-					IdleConnTimeout:  90 * time.Second,
-					MaxConnsPerHost:  50,
-				}
+				sherpaConfig := &sherpa.Configuration{}
+				sherpaConfig.ResponseTimeout = 30 * time.Second
+				sherpaConfig.ReadTimeout = 10 * time.Second
+				sherpaConfig.StreamBufferSize = 8192
+
+				ollaConfig := &olla.Configuration{}
+				ollaConfig.ResponseTimeout = 30 * time.Second
+				ollaConfig.ReadTimeout = 10 * time.Second
+				ollaConfig.StreamBufferSize = 8192
+				ollaConfig.MaxIdleConns = 200
+				ollaConfig.IdleConnTimeout = 90 * time.Second
+				ollaConfig.MaxConnsPerHost = 50
 				return sherpaConfig, ollaConfig
 			},
 			testRequest: func(proxy ports.ProxyService, endpoint *domain.Endpoint) error {
@@ -199,19 +198,18 @@ func TestProxyImplementationParity(t *testing.T) {
 				return nil // Will use unreachable endpoint
 			},
 			setupConfig: func() (*sherpa.Configuration, *olla.Configuration) {
-				sherpaConfig := &sherpa.Configuration{
-					ResponseTimeout:  5 * time.Second,
-					ReadTimeout:      2 * time.Second,
-					StreamBufferSize: 8192,
-				}
-				ollaConfig := &olla.Configuration{
-					ResponseTimeout:  5 * time.Second,
-					ReadTimeout:      2 * time.Second,
-					StreamBufferSize: 8192,
-					MaxIdleConns:     200,
-					IdleConnTimeout:  90 * time.Second,
-					MaxConnsPerHost:  50,
-				}
+				sherpaConfig := &sherpa.Configuration{}
+				sherpaConfig.ResponseTimeout = 5 * time.Second
+				sherpaConfig.ReadTimeout = 2 * time.Second
+				sherpaConfig.StreamBufferSize = 8192
+
+				ollaConfig := &olla.Configuration{}
+				ollaConfig.ResponseTimeout = 5 * time.Second
+				ollaConfig.ReadTimeout = 2 * time.Second
+				ollaConfig.StreamBufferSize = 8192
+				ollaConfig.MaxIdleConns = 200
+				ollaConfig.IdleConnTimeout = 90 * time.Second
+				ollaConfig.MaxConnsPerHost = 50
 				return sherpaConfig, ollaConfig
 			},
 			testRequest: func(proxy ports.ProxyService, endpoint *domain.Endpoint) error {
@@ -241,19 +239,18 @@ func TestProxyImplementationParity(t *testing.T) {
 				}))
 			},
 			setupConfig: func() (*sherpa.Configuration, *olla.Configuration) {
-				sherpaConfig := &sherpa.Configuration{
-					ResponseTimeout:  30 * time.Second,
-					ReadTimeout:      10 * time.Second,
-					StreamBufferSize: 1024,
-				}
-				ollaConfig := &olla.Configuration{
-					ResponseTimeout:  30 * time.Second,
-					ReadTimeout:      10 * time.Second,
-					StreamBufferSize: 1024,
-					MaxIdleConns:     200,
-					IdleConnTimeout:  90 * time.Second,
-					MaxConnsPerHost:  50,
-				}
+				sherpaConfig := &sherpa.Configuration{}
+				sherpaConfig.ResponseTimeout = 30 * time.Second
+				sherpaConfig.ReadTimeout = 10 * time.Second
+				sherpaConfig.StreamBufferSize = 1024
+
+				ollaConfig := &olla.Configuration{}
+				ollaConfig.ResponseTimeout = 30 * time.Second
+				ollaConfig.ReadTimeout = 10 * time.Second
+				ollaConfig.StreamBufferSize = 1024
+				ollaConfig.MaxIdleConns = 200
+				ollaConfig.IdleConnTimeout = 90 * time.Second
+				ollaConfig.MaxConnsPerHost = 50
 				return sherpaConfig, ollaConfig
 			},
 			testRequest: func(proxy ports.ProxyService, endpoint *domain.Endpoint) error {
@@ -417,14 +414,13 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 
 	t.Run("Olla_CircuitBreaker", func(t *testing.T) {
 		endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-		config := &olla.Configuration{
-			ResponseTimeout:  2 * time.Second,
-			ReadTimeout:      1 * time.Second,
-			StreamBufferSize: 8192,
-			MaxIdleConns:     200,
-			IdleConnTimeout:  90 * time.Second,
-			MaxConnsPerHost:  50,
-		}
+		config := &olla.Configuration{}
+		config.ResponseTimeout = 2 * time.Second
+		config.ReadTimeout = 1 * time.Second
+		config.StreamBufferSize = 8192
+		config.MaxIdleConns = 200
+		config.IdleConnTimeout = 90 * time.Second
+		config.MaxConnsPerHost = 50
 
 		proxy, err := olla.NewService(
 			&mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}},
@@ -462,11 +458,10 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 
 	t.Run("Sherpa_Traditional", func(t *testing.T) {
 		endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
-		config := &sherpa.Configuration{
-			ResponseTimeout:  2 * time.Second,
-			ReadTimeout:      1 * time.Second,
-			StreamBufferSize: 8192,
-		}
+		config := &sherpa.Configuration{}
+		config.ResponseTimeout = 2 * time.Second
+		config.ReadTimeout = 1 * time.Second
+		config.StreamBufferSize = 8192
 
 		proxy, err := sherpa.NewService(
 			&mockDiscoveryService{endpoints: []*domain.Endpoint{endpoint}},
@@ -591,20 +586,20 @@ func TestConfigurationCompatibility(t *testing.T) {
 			for i := 1; i <= 5; i++ {
 				var config ports.ProxyConfiguration
 				if suite.Name() == "Sherpa" {
-					config = &sherpa.Configuration{
-						ResponseTimeout:  time.Duration(i*10) * time.Second,
-						ReadTimeout:      time.Duration(i*5) * time.Second,
-						StreamBufferSize: i * 1024,
-					}
+					sherpaConfig := &sherpa.Configuration{}
+					sherpaConfig.ResponseTimeout = time.Duration(i*10) * time.Second
+					sherpaConfig.ReadTimeout = time.Duration(i*5) * time.Second
+					sherpaConfig.StreamBufferSize = i * 1024
+					config = sherpaConfig
 				} else {
-					config = &olla.Configuration{
-						ResponseTimeout:  time.Duration(i*10) * time.Second,
-						ReadTimeout:      time.Duration(i*5) * time.Second,
-						StreamBufferSize: i * 1024,
-						MaxIdleConns:     i * 50,
-						IdleConnTimeout:  time.Duration(i*30) * time.Second,
-						MaxConnsPerHost:  i * 10,
-					}
+					ollaConfig := &olla.Configuration{}
+					ollaConfig.ResponseTimeout = time.Duration(i*10) * time.Second
+					ollaConfig.ReadTimeout = time.Duration(i*5) * time.Second
+					ollaConfig.StreamBufferSize = i * 1024
+					ollaConfig.MaxIdleConns = i * 50
+					ollaConfig.IdleConnTimeout = time.Duration(i*30) * time.Second
+					ollaConfig.MaxConnsPerHost = i * 10
+					config = ollaConfig
 				}
 
 				// Should not panic

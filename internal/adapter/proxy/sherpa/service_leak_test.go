@@ -68,9 +68,11 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 	initialGoroutines := runtime.NumGoroutine()
 
 	s := &Service{
-		configuration: &Configuration{
-			ReadTimeout: 10 * time.Millisecond, // Much shorter for tests
-		},
+		configuration: func() *Configuration {
+			c := &Configuration{}
+			c.ReadTimeout = 10 * time.Millisecond // Much shorter for tests
+			return c
+		}(),
 	}
 
 	logger := createTestLogger()
@@ -153,9 +155,11 @@ func TestStreamResponseWithTimeout_ClientDisconnect(t *testing.T) {
 	initialGoroutines := runtime.NumGoroutine()
 
 	s := &Service{
-		configuration: &Configuration{
-			ReadTimeout: 100 * time.Millisecond,
-		},
+		configuration: func() *Configuration {
+			c := &Configuration{}
+			c.ReadTimeout = 100 * time.Millisecond
+			return c
+		}(),
 	}
 
 	// Create a reader that streams data slowly
