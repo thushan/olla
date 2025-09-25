@@ -32,6 +32,7 @@ var (
 	SupportedBackends = []string{
 		"ollama",
 		"lm_studio",
+		"sglang",
 		"vllm",
 		"openai_compatible",
 	}

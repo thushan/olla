@@ -3,6 +3,7 @@ package domain
 const (
 	ProfileOllama           = "ollama"
 	ProfileLmStudio         = "lm-studio"
+	ProfileSGLang           = "sglang"
 	ProfileVLLM             = "vllm"
 	ProfileOpenAICompatible = "openai-compatible"
 	ProfileAuto             = "auto"
