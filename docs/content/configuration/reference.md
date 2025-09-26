@@ -98,7 +98,7 @@ server:
     max_header_size: 1048576     # 1MB
 ```
 
-### Rate Limits
+### Rate Limits {#rate-limiting}
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
