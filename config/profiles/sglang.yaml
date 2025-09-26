@@ -1,0 +1,245 @@
+# SGLang inference platform profile
+name: sglang
+home: "https://github.com/sgl-project/sglang"
+version: "1.0"
+display_name: "SGLang"
+description: "SGLang fast serving framework with RadixAttention and Frontend Language"
+
+# Routing configuration
+routing:
+  prefixes:
+    - sglang
+
+# API compatibility
+api:
+  openai_compatible: true
+  paths:
+    # Health and system endpoints
+    - /health              # 0: health check
+    - /metrics             # 1: Prometheus metrics
+    - /version             # 2: SGLang version information
+
+    # Model management
+    - /v1/models           # 3: list models (OpenAI-compatible)
+
+    # Text generation endpoints (OpenAI-compatible)
+    - /v1/chat/completions # 4: chat completions
+    - /v1/completions      # 5: text completions
+
+    # Embeddings
+    - /v1/embeddings       # 6: embeddings API
+
+    # SGLang-specific frontend language endpoints
+    - /generate            # 7: SGLang native generation
+    - /batch               # 8: batch processing
+    - /extend              # 9: conversation extension
+
+    # Vision and multimodal (SGLang-specific)
+    - /v1/chat/completions/vision # 10: vision chat completions
+
+  model_discovery_path: /v1/models
+  health_check_path: /health
+  metrics_path: /metrics
+
+# Platform characteristics
+characteristics:
+  timeout: 2m
+  max_concurrent_requests: 150  # SGLang handles higher concurrency
+  default_priority: 85          # Slightly higher than vLLM due to efficiency
+  streaming_support: true
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/v1/models"
+    - "/health"
+    - "/generate"         # SGLang-specific
+    - "/batch"            # SGLang-specific
+  default_ports:
+    - 30000               # SGLang default (vs vLLM's 8000)
+  response_headers:
+    - "X-SGLang-Version"  # SGLang may add this
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "sglang"
+  parsing_rules:
+    chat_completions_path: "/v1/chat/completions"
+    completions_path: "/v1/completions"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions
+path_indices:
+  health: 0
+  metrics: 1
+  version: 2
+  models: 3
+  chat_completions: 4
+  completions: 5
+  embeddings: 6
+  generate: 7
+  batch: 8
+  extend: 9
+  vision_chat: 10
+
+# Model handling
+models:
+  name_format: "{{.Name}}"  # SGLang uses full model names like "meta-llama/Meta-Llama-3.1-8B-Instruct"
+  capability_patterns:
+    chat:
+      - "*-Chat-*"
+      - "*-Instruct*"
+      - "*-chat-*"
+    embeddings:
+      - "*embedding*"
+      - "*-embed-*"
+    vision:
+      - "*vision*"
+      - "*llava*"
+      - "*multimodal*"
+    code:
+      - "*code*"
+      - "*Code*"
+  # Context window patterns for common SGLang models
+  context_patterns:
+    - pattern: "*llama-3.1*"
+      context: 131072
+    - pattern: "*llama-3*"
+      context: 8192
+    - pattern: "*mistral*"
+      context: 32768
+    - pattern: "*mixtral*"
+      context: 32768
+    - pattern: "*gemma-2*"
+      context: 8192
+    - pattern: "*tinyllama*"
+      context: 2048
+
+# SGLang-specific features
+features:
+  # RadixAttention (more advanced than PagedAttention)
+  radix_attention:
+    enabled: true
+    description: "Advanced prefix caching with tree-based attention"
+
+  # Frontend Language support
+  frontend_language:
+    enabled: true
+    description: "Flexible programming interface for LLM applications"
+    endpoints:
+      - /generate
+      - /batch
+      - /extend
+
+  # Vision and multimodal
+  multimodal:
+    enabled: true
+    supported_types:
+      - text
+      - image
+      - vision_chat
+
+  # Speculative decoding
+  speculative_decoding:
+    enabled: true
+    description: "Enhanced performance through speculative execution"
+
+  # Prefill-decode disaggregation
+  disaggregation:
+    enabled: true
+    description: "Separate prefill and decode phases for efficiency"
+
+  # Prometheus metrics exposed at /metrics
+  metrics:
+    enabled: true
+    prefix: "sglang:"
+    categories:
+      - system        # num_requests_running, num_requests_waiting, radix_cache_usage_perc
+      - cache         # radix_cache_hit_rate, prefix_cache_efficiency
+      - tokens        # prompt_tokens_total, generation_tokens_total
+      - performance   # e2e_request_latency_seconds, time_to_first_token_seconds
+      - speculative   # spec_decode_num_accepted_tokens_total (if enabled)
+
+# Resource management - SGLang optimisations
+resources:
+  # SGLang memory requirements (generally more efficient than vLLM)
+  model_sizes:
+    - patterns: ["*70b*", "*72b*"]
+      min_memory_gb: 120    # Less than vLLM due to RadixAttention
+      recommended_memory_gb: 140
+      min_gpu_memory_gb: 120
+      estimated_load_time_ms: 50000  # Faster than vLLM
+    - patterns: ["*34b*", "*33b*", "*30b*"]
+      min_memory_gb: 60
+      recommended_memory_gb: 70
+      min_gpu_memory_gb: 60
+      estimated_load_time_ms: 35000
+    - patterns: ["*13b*", "*14b*"]
+      min_memory_gb: 25
+      recommended_memory_gb: 35
+      min_gpu_memory_gb: 25
+      estimated_load_time_ms: 25000
+    - patterns: ["*7b*", "*8b*"]
+      min_memory_gb: 14
+      recommended_memory_gb: 20
+      min_gpu_memory_gb: 14
+      estimated_load_time_ms: 15000
+    - patterns: ["*3b*"]
+      min_memory_gb: 6
+      recommended_memory_gb: 10
+      min_gpu_memory_gb: 6
+      estimated_load_time_ms: 12000
+    - patterns: ["*1b*", "*1.1b*", "*1.5b*"]
+      min_memory_gb: 3
+      recommended_memory_gb: 6
+      min_gpu_memory_gb: 3
+      estimated_load_time_ms: 8000
+
+  defaults:
+    min_memory_gb: 6
+    recommended_memory_gb: 12
+    min_gpu_memory_gb: 6
+    requires_gpu: true
+    estimated_load_time_ms: 25000
+
+  # SGLang supports higher concurrency
+  concurrency_limits:
+    - min_memory_gb: 100
+      max_concurrent: 15    # Higher than vLLM
+    - min_memory_gb: 50
+      max_concurrent: 30
+    - min_memory_gb: 20
+      max_concurrent: 75
+    - min_memory_gb: 0
+      max_concurrent: 150
+
+  # Timeout scaling for SGLang
+  timeout_scaling:
+    base_timeout_seconds: 120
+    load_time_buffer: true
+
+# Metrics extraction for SGLang responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    # SGLang uses OpenAI-compatible format for chat/completions endpoints
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"  # String value (e.g., "stop", "length")
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+      # SGLang may include additional performance metrics
+      ttft_ms: "$.metrics.time_to_first_token_ms"
+      generation_time_ms: "$.metrics.generation_time_ms"
+      radix_cache_hit_rate: "$.metrics.radix_cache_hit_rate"
+    calculations:
+      # Derive IsComplete from finish_reason presence
+      is_complete: 'len(finish_reason) > 0'
+      # Safe division: multiply first for precision, then divide with guard against zero
+      tokens_per_second: "generation_time_ms > 0 ? (output_tokens * 1000.0) / generation_time_ms : 0"

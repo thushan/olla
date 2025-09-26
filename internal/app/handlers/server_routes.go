@@ -210,6 +210,13 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 				{path: "", handler: a.providerProxyHandler, description: "OpenAI-compatible proxy", isProxy: true},
 			},
 		},
+		constants.ProviderTypeSGLang: {
+			prefixes: []string{constants.ProviderTypeSGLang},
+			routes: []staticRoute{
+				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeSGLang, constants.ProviderTypeOpenAI), description: "SGLang models (OpenAI format)", method: "GET"},
+				{path: "", handler: a.providerProxyHandler, description: "SGLang proxy", isProxy: true},
+			},
+		},
 		constants.ProviderTypeVLLM: {
 			prefixes: []string{constants.ProviderTypeVLLM},
 			routes: []staticRoute{
