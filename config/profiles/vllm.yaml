@@ -1,5 +1,6 @@
 # vLLM inference platform profile
 name: vllm
+home: "https://github.com/vllm-project/vllm"
 version: "1.0"
 display_name: "vLLM"
 description: "vLLM high-performance inference server with PagedAttention"

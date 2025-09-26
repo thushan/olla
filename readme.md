@@ -8,7 +8,8 @@
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a> 
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a> 
     <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a> 
-    <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a> 
+    <a href="https://github.com/sgl-project/sglang"><img src="https://img.shields.io/badge/SGLang-native-lightgreen.svg" alt="SGLang: Native Support"></a>
+    <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a><br/>
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
@@ -70,18 +71,15 @@ See our [detailed comparisons](https://thushan.github.io/olla/compare/overview/)
 
 Olla natively supports the following backend providers. Learn more about [Olla Integrations](https://thushan.github.io/olla/integrations/overview/).
 
-* [Ollama](https://github.com/ollama/ollama) - native support for Ollama, including model unification. \
-  Use: `/olla/ollama/`
-* [LM Studio](https://lmstudio.ai/) - native support for LMStudio, including model unification. \
-  Use: `/olla/lmstudio/` || `/olla/lm-studio/` || `/olla/lm_studio/`
-* [vLLM](https://github.com/vllm-project/vllm) - native support for vllm, including model unification. \
-  Use: `/olla/vllm/` \
-  Models from vLLM will be available under `/olla/models` and `/olla/vllm/v1/models`
-* [LiteLLM](https://github.com/BerriAI/litellm) - native support for LiteLLM, providing unified gateway to 100+ LLM providers. \
-  Use: `/olla/litellm/` \
-  Access models from OpenAI, Anthropic, Bedrock, Azure, Google Vertex AI, Cohere, and many more through a single interface
-* [OpenAI](https://platform.openai.com/docs/overview) - You can use OpenAI API that provides a unified query API across all providers. \
-  Use: `/olla/openai/`
+| Provider | Description | Usage / Prefix |
+|----------|-------------|-------|
+| **[Ollama](https://github.com/ollama/ollama)** | Native support for Ollama, including model unification. | `/olla/ollama/` |
+| **[LM Studio](https://lmstudio.ai/)** | Native support for LM Studio, including model unification. | `/olla/lmstudio/` &#124;&#124; `/olla/lm-studio/` &#124;&#124; `/olla/lm_studio/` |
+| **[vLLM](https://github.com/vllm-project/vllm)** | Native support for vLLM, including model unification.<br>Models from vLLM will be available under `/olla/models` and `/olla/vllm/v1/models`. | `/olla/vllm/` |
+| **[LiteLLM](https://github.com/BerriAI/litellm)** | Native support for LiteLLM, providing unified gateway to 100+ LLM providers.<br>Access models from OpenAI, Anthropic, Bedrock, Azure, Google Vertex AI, Cohere, and many more through a single interface. | `/olla/litellm/` |
+| **[SGLang](https://github.com/sgl-project/sglang)** | Native support for SGLang, including model unification. | `/olla/sglang/` |
+| **[OpenAI](https://platform.openai.com/docs/overview)** | Use OpenAI API that provides a unified query API across all providers. | `/olla/openai/` |
+
 
 ### Supported Frontends
 
