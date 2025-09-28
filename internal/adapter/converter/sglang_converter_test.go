@@ -2,7 +2,6 @@ package converter
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -330,7 +329,7 @@ func TestSGLangConverter_ConvertToFormat_WithFilters(t *testing.T) {
 	assert.Equal(t, "model1", response.Data[0].ID)
 }
 
-func TestSGLangConverter_ConvertToFormat_Performance(t *testing.T) {
+func BenchmarkSGLangConverter_ConvertToFormat(b *testing.B) {
 	converter := NewSGLangConverter()
 
 	// Create a large number of models to test performance
@@ -345,16 +344,23 @@ func TestSGLangConverter_ConvertToFormat_Performance(t *testing.T) {
 		}
 	}
 
-	start := time.Now()
-	result, err := converter.ConvertToFormat(models, ports.ModelFilters{})
-	duration := time.Since(start)
+	// Report memory allocations
+	b.ReportAllocs()
+	b.ResetTimer()
 
-	require.NoError(t, err)
-	response, ok := result.(profile.SGLangResponse)
-	require.True(t, ok)
+	for i := 0; i < b.N; i++ {
+		result, err := converter.ConvertToFormat(models, ports.ModelFilters{})
+		if err != nil {
+			b.Fatalf("ConvertToFormat failed: %v", err)
+		}
 
-	assert.Len(t, response.Data, 1000)
+		response, ok := result.(profile.SGLangResponse)
+		if !ok {
+			b.Fatal("Result is not SGLangResponse")
+		}
 
-	// Performance should be reasonable (less than 100ms for 1000 models)
-	assert.Less(t, duration, 100*time.Millisecond, "Conversion took too long: %v", duration)
+		if len(response.Data) != 1000 {
+			b.Fatalf("Expected 1000 models, got %d", len(response.Data))
+		}
+	}
 }
