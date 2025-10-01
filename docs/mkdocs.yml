@@ -153,6 +153,7 @@ nav:
             - Ollama: integrations/backend/ollama.md
             - LM Studio: integrations/backend/lmstudio.md
             - vLLM: integrations/backend/vllm.md
+            - SGLang: integrations/backend/sglang.md
             - LiteLLM: integrations/backend/litellm.md
         - Frontends:
             - OpenWebUI: integrations/frontend/openwebui.md
@@ -173,5 +174,6 @@ nav:
           - Ollama: api-reference/ollama.md
           - LM Studio: api-reference/lmstudio.md
           - vLLM: api-reference/vllm.md
+          - SGLang: api-reference/sglang.md
           - LiteLLM: api-reference/litellm.md
           - OpenAI: api-reference/openai.md

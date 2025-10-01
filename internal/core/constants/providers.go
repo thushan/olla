@@ -5,12 +5,14 @@ const (
 	ProviderTypeLMStudio     = "lm-studio"
 	ProviderTypeOpenAI       = "openai"
 	ProviderTypeOpenAICompat = "openai-compatible"
+	ProviderTypeSGLang       = "sglang"
 	ProviderTypeVLLM         = "vllm"
 
 	// Provider display names
 	ProviderDisplayOllama   = "Ollama"
 	ProviderDisplayLMStudio = "LM Studio"
 	ProviderDisplayOpenAI   = "OpenAI"
+	ProviderDisplaySGLang   = "SGLang"
 	ProviderDisplayVLLM     = "vLLM"
 
 	// Common provider prefixes

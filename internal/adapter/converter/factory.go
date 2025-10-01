@@ -22,6 +22,7 @@ func NewConverterFactory() *ConverterFactory {
 	factory.RegisterConverter(NewOpenAIConverter())
 	factory.RegisterConverter(NewOllamaConverter())
 	factory.RegisterConverter(NewLMStudioConverter())
+	factory.RegisterConverter(NewSGLangConverter())
 	factory.RegisterConverter(NewVLLMConverter())
 
 	return factory

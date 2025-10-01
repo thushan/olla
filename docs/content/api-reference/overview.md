@@ -51,6 +51,12 @@ Proxy endpoints for vLLM servers.
 
 - `/olla/vllm/*` - vLLM API endpoints
 
+### [SGLang API](sglang.md)
+Proxy endpoints for SGLang servers with RadixAttention and Frontend Language support.
+
+- `/olla/sglang/*` - SGLang API endpoints
+- Includes vision model support and speculative decoding
+
 ### [LiteLLM API](litellm.md)
 Proxy endpoints for LiteLLM gateway (100+ providers).
 
@@ -91,7 +97,7 @@ All responses include:
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used (if applicable) |
-| `X-Olla-Backend-Type` | Provider type (ollama/lmstudio/openai/vllm) |
+| `X-Olla-Backend-Type` | Provider type (ollama/lmstudio/openai/vllm/sglang) |
 | `X-Olla-Response-Time` | Total processing time |
 | `X-Olla-Routing-Strategy` | Routing strategy used (when model routing is active) |
 | `X-Olla-Routing-Decision` | Routing decision made (routed/fallback/rejected) |

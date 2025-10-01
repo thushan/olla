@@ -52,7 +52,7 @@ func TestConverterFactory(t *testing.T) {
 
 	t.Run("GetSupportedFormats returns all formats", func(t *testing.T) {
 		formats := factory.GetSupportedFormats()
-		assert.Len(t, formats, 5)
+		assert.Len(t, formats, 6)
 
 		// Check all expected formats are present
 		formatMap := make(map[string]bool)
@@ -63,6 +63,7 @@ func TestConverterFactory(t *testing.T) {
 		assert.True(t, formatMap["unified"])
 		assert.True(t, formatMap["openai"])
 		assert.True(t, formatMap["ollama"])
+		assert.True(t, formatMap["sglang"])
 		assert.True(t, formatMap["vllm"])
 		assert.True(t, formatMap["lmstudio"])
 	})

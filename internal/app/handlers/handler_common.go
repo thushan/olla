@@ -82,6 +82,7 @@ func (a *Application) isProviderSupported(provider string) bool {
 		constants.ProviderTypeOllama:   true,
 		constants.ProviderTypeLMStudio: true,
 		constants.ProviderTypeOpenAI:   true,
+		constants.ProviderTypeSGLang:   true,
 		constants.ProviderTypeVLLM:     true,
 	}
 	return staticProviders[normalised]

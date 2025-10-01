@@ -22,6 +22,8 @@ func getParserForFormat(format string) ModelResponseParser {
 		return &ollamaParser{}
 	case constants.ProviderPrefixLMStudio1:
 		return &lmStudioParser{}
+	case constants.ProviderTypeSGLang:
+		return &sglangParser{}
 	case constants.ProviderTypeVLLM:
 		return &vllmParser{}
 	case constants.ProviderTypeOpenAI:

@@ -15,6 +15,7 @@ Olla natively supports:
 * [Ollama](./backend/ollama.md) - native support for [Ollama](https://github.com/ollama/ollama), including model unification.
 * [LM Studio](./backend/lmstudio.md) - native support for [LM Studio](https://lmstudio.ai/), including model unification.
 * [vLLM](./backend/vllm.md) - native support for [vLLM](https://github.com/vllm-project/vllm), including model unification.
+* [SGLang](./backend/sglang.md) - native support for [SGLang](https://github.com/sgl-project/sglang) with RadixAttention and Frontend Language, including model unification and vision support.
 * [LiteLLM](./backend/litellm.md) - native support for [LiteLLM](https://github.com/BerriAI/litellm), providing unified gateway to 100+ LLM providers.
 
 Other backends that support OpenAI APIs can be integrated too:

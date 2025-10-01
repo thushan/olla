@@ -351,6 +351,60 @@ func process() []byte {
 3. Benchmark new performance
 4. Include results in PR
 
+## Troubleshooting {#troubleshooting}
+
+### Build Issues
+
+If you encounter build problems:
+
+```bash
+# Clean and rebuild
+make clean
+make build
+
+# Check Go version
+go version  # Should be 1.24+
+
+# Update dependencies
+go mod tidy
+go mod download
+```
+
+### Test Failures
+
+For failing tests:
+
+```bash
+# Run with verbose output
+go test -v ./internal/...
+
+# Run specific test
+go test -v ./internal/adapter/proxy/ -run TestProxyService
+
+# Check for race conditions
+go test -race ./internal/...
+```
+
+### Development Environment
+
+Common setup issues:
+
+1. **Path Issues**: Ensure `$GOPATH/bin` is in your `$PATH`
+2. **Module Issues**: Run `go mod tidy` to fix dependency issues
+3. **Version Issues**: Use Go 1.24+ as specified in `go.mod`
+
+### Performance Problems
+
+If benchmarks are slow:
+
+```bash
+# Profile CPU usage
+go test -bench=. -cpuprofile=cpu.prof ./internal/adapter/proxy/
+
+# Profile memory usage
+go test -bench=. -memprofile=mem.prof ./internal/adapter/proxy/
+```
+
 ## Getting Help
 
 ### Discord

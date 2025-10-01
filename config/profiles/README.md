@@ -18,7 +18,8 @@ These profiles control:
 - `ollama.yaml` - Ollama local inference server
 - `lmstudio.yaml` - LM Studio local inference server
 - `vllm.yaml` - vLLM high-performance inference server
-- `openai.yaml` - OpenAI-compatible APIs (Ollama, LocalAI, etc.)
+- `sglang.yaml` - SGLang high-performance inference server
+- `openai.yaml` - OpenAI-compatible API generic profile (Ollama, LocalAI, etc.)
 
 ## Adding a New Platform
 
