@@ -2,6 +2,7 @@ package domain
 
 const (
 	ProfileOllama           = "ollama"
+	ProfileLemonade         = "lemonade"
 	ProfileLmStudio         = "lm-studio"
 	ProfileSGLang           = "sglang"
 	ProfileVLLM             = "vllm"
