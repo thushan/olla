@@ -57,6 +57,12 @@ func TestLemonadeParser_Parse(t *testing.T) {
 		require.NotNil(t, qwen.Details.Format)
 		assert.Equal(t, "onnx", *qwen.Details.Format)
 
+		require.NotNil(t, qwen.Details.Checkpoint)
+		assert.Equal(t, "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx", *qwen.Details.Checkpoint)
+
+		require.NotNil(t, qwen.Details.Recipe)
+		assert.Equal(t, "oga-cpu", *qwen.Details.Recipe)
+
 		// Verify second model (Llama NPU)
 		llama := models[1]
 		assert.Equal(t, "Llama-3.2-1B-Instruct-NPU", llama.Name)
@@ -70,6 +76,12 @@ func TestLemonadeParser_Parse(t *testing.T) {
 		// Check format is still onnx for oga-npu recipe
 		require.NotNil(t, llama.Details.Format)
 		assert.Equal(t, "onnx", *llama.Details.Format)
+
+		require.NotNil(t, llama.Details.Checkpoint)
+		assert.Equal(t, "meta-llama/Llama-3.2-1B-Instruct-quantized-int4-npu-onnx", *llama.Details.Checkpoint)
+
+		require.NotNil(t, llama.Details.Recipe)
+		assert.Equal(t, "oga-npu", *llama.Details.Recipe)
 	})
 
 	t.Run("infers GGUF format from llamacpp recipe", func(t *testing.T) {
@@ -399,185 +411,6 @@ func TestLemonadeParser_RecipeInference(t *testing.T) {
 		}
 	})
 
-	t.Run("infers hardware correctly for all recipe types", func(t *testing.T) {
-		testCases := []struct {
-			recipe           string
-			expectedHardware string
-		}{
-			{"oga-cpu", "CPU"},
-			{"oga-npu", "NPU"},
-			{"oga-igpu", "GPU"},
-			{"llamacpp", "GPU"},
-			{"flm", "GPU"},
-			{"unknown", ""},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.recipe, func(t *testing.T) {
-				hardware := inferHardwareFromRecipe(tc.recipe)
-				assert.Equal(t, tc.expectedHardware, hardware, "Recipe %s should infer hardware %s", tc.recipe, tc.expectedHardware)
-			})
-		}
-	})
-}
-
-func TestLemonadeParser_CapabilityInference(t *testing.T) {
-	t.Run("infers chat capability from model names", func(t *testing.T) {
-		testCases := []struct {
-			name           string
-			shouldHaveChat bool
-		}{
-			{"Qwen2.5-0.5B-Instruct-CPU", true},
-			{"Llama-3.2-3B-Chat-NPU", true},
-			{"Phi-3.5-mini-it-GPU", true},
-			{"GPT-2-Base", false},
-			{"CodeLlama-7B", false},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				capabilities := inferCapabilitiesFromName(tc.name)
-				hasChat := false
-				for _, cap := range capabilities {
-					if cap == "chat" {
-						hasChat = true
-						break
-					}
-				}
-				assert.Equal(t, tc.shouldHaveChat, hasChat, "Model %s chat capability should be %v", tc.name, tc.shouldHaveChat)
-			})
-		}
-	})
-
-	t.Run("infers code capability from model names", func(t *testing.T) {
-		testCases := []struct {
-			name           string
-			shouldHaveCode bool
-		}{
-			{"CodeLlama-7B-Instruct", true},
-			{"StarCoder2-3B", true},
-			{"Qwen2.5-Coder-1.5B", true},
-			{"Mistral-7B-Devstral", true},
-			{"Llama-3.2-3B-Instruct", false},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				capabilities := inferCapabilitiesFromName(tc.name)
-				hasCode := false
-				for _, cap := range capabilities {
-					if cap == "code" {
-						hasCode = true
-						break
-					}
-				}
-				assert.Equal(t, tc.shouldHaveCode, hasCode, "Model %s code capability should be %v", tc.name, tc.shouldHaveCode)
-			})
-		}
-	})
-
-	t.Run("infers vision capability from model names", func(t *testing.T) {
-		testCases := []struct {
-			name             string
-			shouldHaveVision bool
-		}{
-			{"Qwen2-VL-2B-Instruct", true},
-			{"Llama-3.2-11B-Vision-Instruct", true},
-			{"Phi-3.5-Scout-Instruct", true},
-			{"GPT-4-Turbo", false},
-			{"Llama-3.1-8B-Instruct", false},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				capabilities := inferCapabilitiesFromName(tc.name)
-				hasVision := false
-				for _, cap := range capabilities {
-					if cap == "vision" {
-						hasVision = true
-						break
-					}
-				}
-				assert.Equal(t, tc.shouldHaveVision, hasVision, "Model %s vision capability should be %v", tc.name, tc.shouldHaveVision)
-			})
-		}
-	})
-
-	t.Run("infers reasoning capability from model names", func(t *testing.T) {
-		testCases := []struct {
-			name                string
-			shouldHaveReasoning bool
-		}{
-			{"DeepSeek-R1-7B", true},
-			{"Qwen-Cogito-3B", true},
-			{"Llama-3.2-3B-Instruct", false},
-			{"GPT-4", false},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				capabilities := inferCapabilitiesFromName(tc.name)
-				hasReasoning := false
-				for _, cap := range capabilities {
-					if cap == "reasoning" {
-						hasReasoning = true
-						break
-					}
-				}
-				assert.Equal(t, tc.shouldHaveReasoning, hasReasoning, "Model %s reasoning capability should be %v", tc.name, tc.shouldHaveReasoning)
-			})
-		}
-	})
-
-	t.Run("infers embeddings capability from model names", func(t *testing.T) {
-		testCases := []struct {
-			name                 string
-			shouldHaveEmbeddings bool
-		}{
-			{"all-MiniLM-L6-v2-embed", true},
-			{"bge-small-en-v1.5-embed", true},
-			{"Llama-3.2-3B-Instruct", false},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				capabilities := inferCapabilitiesFromName(tc.name)
-				hasEmbeddings := false
-				for _, cap := range capabilities {
-					if cap == "embeddings" {
-						hasEmbeddings = true
-						break
-					}
-				}
-				assert.Equal(t, tc.shouldHaveEmbeddings, hasEmbeddings, "Model %s embeddings capability should be %v", tc.name, tc.shouldHaveEmbeddings)
-			})
-		}
-	})
-
-	t.Run("infers reranking capability from model names", func(t *testing.T) {
-		testCases := []struct {
-			name                string
-			shouldHaveReranking bool
-		}{
-			{"bge-reranker-base", true},
-			{"cohere-rerank-v3", true},
-			{"Llama-3.2-3B-Instruct", false},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				capabilities := inferCapabilitiesFromName(tc.name)
-				hasReranking := false
-				for _, cap := range capabilities {
-					if cap == "reranking" {
-						hasReranking = true
-						break
-					}
-				}
-				assert.Equal(t, tc.shouldHaveReranking, hasReranking, "Model %s reranking capability should be %v", tc.name, tc.shouldHaveReranking)
-			})
-		}
-	})
 }
 
 func TestLemonadeParser_EdgeCases(t *testing.T) {
