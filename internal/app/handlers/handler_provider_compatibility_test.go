@@ -54,6 +54,12 @@ func TestProviderCompatibility(t *testing.T) {
 			providerType: "openai",
 			compatible:   true,
 		},
+		{
+			name:         "openai provider accepts lemonade",
+			endpointType: "lemonade",
+			providerType: "openai",
+			compatible:   true,
+		},
 		// Ollama provider should only accept ollama endpoints
 		{
 			name:         "ollama provider accepts ollama",
@@ -109,6 +115,25 @@ func TestProviderCompatibility(t *testing.T) {
 			name:         "vllm provider rejects ollama",
 			endpointType: "ollama",
 			providerType: "vllm",
+			compatible:   false,
+		},
+		// Lemonade provider should only accept lemonade endpoints
+		{
+			name:         "lemonade provider accepts lemonade",
+			endpointType: "lemonade",
+			providerType: "lemonade",
+			compatible:   true,
+		},
+		{
+			name:         "lemonade provider rejects ollama",
+			endpointType: "ollama",
+			providerType: "lemonade",
+			compatible:   false,
+		},
+		{
+			name:         "lemonade provider rejects vllm",
+			endpointType: "vllm",
+			providerType: "lemonade",
 			compatible:   false,
 		},
 		// Unknown provider should reject everything

@@ -178,6 +178,14 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 // This duplicates some YAML content but ensures tests can run independently.
 func getStaticProviders(a *Application) map[string]staticProvider {
 	return map[string]staticProvider{
+		constants.ProviderTypeLemonade: {
+			prefixes: []string{constants.ProviderTypeLemonade},
+			routes: []staticRoute{
+				{path: "api/v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeLemonade, constants.ProviderTypeOpenAI), description: "Lemonade models (OpenAI format)", method: "GET"},
+				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeLemonade, constants.ProviderTypeOpenAI), description: "Lemonade models (OpenAI format alt path)", method: "GET"},
+				{path: "", handler: a.providerProxyHandler, description: "Lemonade proxy", isProxy: true},
+			},
+		},
 		constants.ProviderTypeOllama: {
 			prefixes: []string{constants.ProviderTypeOllama},
 			routes: []staticRoute{

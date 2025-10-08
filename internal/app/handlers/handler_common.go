@@ -79,8 +79,9 @@ func (a *Application) isProviderSupported(provider string) bool {
 	// check against the static provider list used in registerStaticProviderRoutes
 	// this ensures consistency between validation and route registration
 	staticProviders := map[string]bool{
-		constants.ProviderTypeOllama:   true,
+		constants.ProviderTypeLemonade: true,
 		constants.ProviderTypeLMStudio: true,
+		constants.ProviderTypeOllama:   true,
 		constants.ProviderTypeOpenAI:   true,
 		constants.ProviderTypeSGLang:   true,
 		constants.ProviderTypeVLLM:     true,

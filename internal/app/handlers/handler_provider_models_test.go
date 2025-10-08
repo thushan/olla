@@ -30,6 +30,7 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 	lmstudioURL, _ := url.Parse("http://lmstudio:1234")
 	openaiURL, _ := url.Parse("http://openai:8080")
 	vllmURL, _ := url.Parse("http://vllm:8000")
+	lemonadeURL, _ := url.Parse("http://lemonade:8000")
 
 	endpoints := []*domain.Endpoint{
 		{
@@ -60,6 +61,13 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 			Status:    domain.StatusHealthy,
 			Type:      "vllm",
 		},
+		{
+			Name:      "lemonade-1",
+			URL:       lemonadeURL,
+			URLString: lemonadeURL.String(),
+			Status:    domain.StatusHealthy,
+			Type:      "lemonade",
+		},
 	}
 
 	// Create registry and register models
@@ -76,11 +84,13 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 	lmstudioModels := []*domain.ModelInfo{{Name: "TheBloke/Llama-2-7B-Chat-GGUF"}}
 	openaiModels := []*domain.ModelInfo{{Name: "gpt-3.5-turbo"}}
 	vllmModels := []*domain.ModelInfo{{Name: "meta-llama/Llama-2-7b-hf"}}
+	lemonadeModels := []*domain.ModelInfo{{Name: "Qwen2.5-0.5B-Instruct-CPU"}}
 
 	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[0], ollamaModels))
 	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[1], lmstudioModels))
 	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[2], openaiModels))
 	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[3], vllmModels))
+	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[4], lemonadeModels))
 
 	// Wait for async unification to complete
 	time.Sleep(200 * time.Millisecond)
@@ -170,8 +180,8 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 				require.NoError(t, json.Unmarshal(body, &response))
 				assert.Equal(t, "list", response.Object)
 				// openai provider accepts all OpenAI-compatible endpoints
-				// so we should get models from ollama, lmstudio, openai, and vllm
-				assert.Len(t, response.Data, 5)
+				// so we should get models from ollama, lmstudio, openai, vllm, and lemonade
+				assert.Len(t, response.Data, 6)
 				// verify all expected models are present
 				modelIDs := make([]string, len(response.Data))
 				for i, model := range response.Data {
@@ -181,6 +191,7 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 				assert.Contains(t, modelIDs, "llama3:latest")
 				assert.Contains(t, modelIDs, "TheBloke/Llama-2-7B-Chat-GGUF")
 				assert.Contains(t, modelIDs, "meta-llama/Llama-2-7b-hf")
+				assert.Contains(t, modelIDs, "Qwen2.5-0.5B-Instruct-CPU")
 			},
 		},
 		{
@@ -194,6 +205,32 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 				assert.Equal(t, "list", response.Object)
 				assert.Len(t, response.Data, 1)
 				assert.Equal(t, "meta-llama/Llama-2-7b-hf", response.Data[0].ID)
+			},
+		},
+		{
+			name:           "lemonade_native_format",
+			endpoint:       "/olla/lemonade/api/v1/models",
+			handler:        app.genericProviderModelsHandler("lemonade", "openai"),
+			expectedFormat: "openai",
+			checkResponse: func(t *testing.T, body []byte) {
+				var response converter.OpenAIModelResponse
+				require.NoError(t, json.Unmarshal(body, &response))
+				assert.Equal(t, "list", response.Object)
+				assert.Len(t, response.Data, 1)
+				assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", response.Data[0].ID)
+			},
+		},
+		{
+			name:           "lemonade_openai_format",
+			endpoint:       "/olla/lemonade/v1/models",
+			handler:        app.genericProviderModelsHandler("lemonade", "openai"),
+			expectedFormat: "openai",
+			checkResponse: func(t *testing.T, body []byte) {
+				var response converter.OpenAIModelResponse
+				require.NoError(t, json.Unmarshal(body, &response))
+				assert.Equal(t, "list", response.Object)
+				assert.Len(t, response.Data, 1)
+				assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", response.Data[0].ID)
 			},
 		},
 	}
