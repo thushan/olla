@@ -17,6 +17,7 @@ These profiles control:
 
 - `ollama.yaml` - Ollama local inference server
 - `lmstudio.yaml` - LM Studio local inference server
+- `lemonade.yaml` - Lemonade local LLM serving platform with AMD Ryzen AI support
 - `vllm.yaml` - vLLM high-performance inference server
 - `sglang.yaml` - SGLang high-performance inference server
 - `openai.yaml` - OpenAI-compatible API generic profile (Ollama, LocalAI, etc.)
@@ -129,7 +130,7 @@ Used for auto-detecting platform types:
 
 ### Request Section
 - `model_field_paths`: JSON paths to find model name in requests
-- `response_format`: Which parser to use (ollama, lmstudio, vllm, openai)
+- `response_format`: Which parser to use (ollama, lmstudio, vllm, sglang, lemonade, openai)
 - `parsing_rules`: How to parse different request types
 
 ## Examples
