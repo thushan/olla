@@ -17,7 +17,7 @@ keywords: vLLM, Olla proxy, LLM inference, GPU optimization, PagedAttention, ten
     </tr>
     <tr>
         <th>Type</th>
-        <td><code>vllm</code> (use in endpoint configuration)</td>
+        <td><code>vllm</code> (use in <a href="/olla/configuration/overview/#endpoint-configuration">endpoint configuration</a>)</td>
     </tr>
     <tr>
         <th>Profile</th>

@@ -1,7 +1,7 @@
 ---
 title: Quick Start Guide - Get Olla Running in Minutes
-description: Learn how to install and configure Olla for proxying and load balancing LLM backends including Ollama, LM Studio, and vLLM. Step-by-step setup with examples.
-keywords: olla quickstart, llm proxy setup, ollama configuration, lm studio proxy, vllm load balancer
+description: Learn how to install and configure Olla for proxying and load balancing LLM backends including Ollama, LM Studio, vLLM, SGLang, and Lemonade SDK. Step-by-step setup with examples.
+keywords: olla quickstart, llm proxy setup, ollama configuration, lm studio proxy, vllm load balancer, sglang, lemonade sdk
 ---
 
 # Quick Start
@@ -224,7 +224,7 @@ server:
 
 ### Next Steps
 
-- [Backend Integrations](../integrations/overview.md) - Connect Ollama, LM Studio, vLLM
+- [Backend Integrations](../integrations/overview.md) - Connect Ollama, LM Studio, vLLM, SGLang, Lemonade SDK, LiteLLM
 - [Architecture Overview](../development/architecture.md) - Deep dive into Olla's design
 - [Development Guide](../development/contributing.md) - Contribute to Olla
 

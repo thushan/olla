@@ -154,6 +154,7 @@ nav:
             - LM Studio: integrations/backend/lmstudio.md
             - vLLM: integrations/backend/vllm.md
             - SGLang: integrations/backend/sglang.md
+            - Lemonade SDK: integrations/backend/lemonade.md
             - LiteLLM: integrations/backend/litellm.md
         - Frontends:
             - OpenWebUI: integrations/frontend/openwebui.md
@@ -175,5 +176,6 @@ nav:
           - LM Studio: api-reference/lmstudio.md
           - vLLM: api-reference/vllm.md
           - SGLang: api-reference/sglang.md
+          - Lemonade SDK: api-reference/lemonade.md
           - LiteLLM: api-reference/litellm.md
           - OpenAI: api-reference/openai.md

@@ -1,6 +1,6 @@
 # Lemonade SDK inference platform profile
 name: lemonade
-home: "https://github.com/lemonade-sdk/lemonade"
+home: "https://lemonade-server.ai"
 version: "1.0"
 display_name: "Lemonade"
 description: "Lemonade local LLM serving platform with AMD Ryzen AI optimisation"

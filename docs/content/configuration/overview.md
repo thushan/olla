@@ -203,8 +203,10 @@ Each endpoint requires:
 |-------|-------------|---------|
 | **url** | Base URL of the endpoint | `http://localhost:11434` |
 | **name** | Unique identifier | `local-ollama` |
-| **type** | Platform type | `ollama`, `lm-studio`, `vllm`, `openai` |
+| **type** | Platform type | `ollama`, `lm-studio`, `vllm`, `openai` (See [integrations](../integrations/overview.md#backend-endpoints)) |
 | **priority** | Selection priority (higher = preferred) | `100` |
+
+Current list of supported types can be found in [integrations](../integrations/overview.md#backend-endpoints).
 
 Optional fields:
 

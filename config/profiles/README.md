@@ -17,7 +17,7 @@ These profiles control:
 
 - `ollama.yaml` - Ollama local inference server
 - `lmstudio.yaml` - LM Studio local inference server
-- `lemonade.yaml` - Lemonade local LLM serving platform with AMD Ryzen AI support
+- `lemonade.yaml` - Lemonade SDK local LLM serving platform with AMD Ryzen AI support
 - `vllm.yaml` - vLLM high-performance inference server
 - `sglang.yaml` - SGLang high-performance inference server
 - `openai.yaml` - OpenAI-compatible API generic profile (Ollama, LocalAI, etc.)

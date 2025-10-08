@@ -14,6 +14,8 @@ Olla exposes several API endpoints for proxy operations, health monitoring, and 
 http://localhost:40114
 ```
 
+If you ever need to remember the port, think - what's the port, 4 OLLA?!
+
 ## API Sections
 
 ### [System Endpoints](system.md)
@@ -62,6 +64,12 @@ Proxy endpoints for LiteLLM gateway (100+ providers).
 
 - `/olla/litellm/*` - LiteLLM API endpoints
 
+### [Lemonade SDK API](lemonade.md)
+Proxy endpoints for Lemonade SDK servers with AMD Ryzen AI support.
+
+- `/olla/lemonade/*` - Lemonade SDK API endpoints
+- Includes ONNX and GGUF model support with hardware acceleration
+
 ## Authentication
 
 Currently, Olla does not implement authentication at the proxy level. Authentication should be handled by:
@@ -97,7 +105,7 @@ All responses include:
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used (if applicable) |
-| `X-Olla-Backend-Type` | Provider type (ollama/lmstudio/openai/vllm/sglang) |
+| `X-Olla-Backend-Type` | Provider type, examples: <br> `ollama/lmstudio/openai/vllm/sglang/lemonade/litellm` |
 | `X-Olla-Response-Time` | Total processing time |
 | `X-Olla-Routing-Strategy` | Routing strategy used (when model routing is active) |
 | `X-Olla-Routing-Decision` | Routing decision made (routed/fallback/rejected) |

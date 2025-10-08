@@ -10,7 +10,7 @@ keywords: olla faq, troubleshooting, common questions, proxy help
 
 ### What is Olla?
 
-Olla is a high-performance proxy and load balancer specifically designed for LLM infrastructure. It intelligently routes requests across multiple LLM backends (Ollama, LM Studio, OpenAI-compatible endpoints) while providing load balancing, health checking, and unified model management.
+Olla is a high-performance proxy and load balancer specifically designed for LLM infrastructure. It intelligently routes requests across multiple LLM backends (Ollama, LM Studio, vLLM, SGLang, Lemonade SDK, LiteLLM, and OpenAI-compatible endpoints) while providing load balancing, health checking, and unified model management.
 
 See how Olla compares to [other tools](compare/overview.md) in the ecosystem.
 
