@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -466,13 +467,13 @@ func BenchmarkLemonadeConverter_ConvertToFormat(b *testing.B) {
 	models := make([]*domain.UnifiedModel, 1000)
 	for i := 0; i < 1000; i++ {
 		models[i] = &domain.UnifiedModel{
-			ID: "performance-test-model-" + string(rune(i)),
+			ID: "performance-test-model-" + strconv.Itoa(i),
 			Metadata: map[string]interface{}{
-				"checkpoint": "test/checkpoint-" + string(rune(i)),
+				"checkpoint": "test/checkpoint-" + strconv.Itoa(i),
 				"recipe":     "oga-cpu",
 			},
 			Aliases: []domain.AliasEntry{
-				{Name: "perf-model-" + string(rune(i)), Source: constants.ProviderTypeLemonade},
+				{Name: "perf-model-" + strconv.Itoa(i), Source: constants.ProviderTypeLemonade},
 			},
 		}
 	}
