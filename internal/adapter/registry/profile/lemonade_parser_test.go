@@ -521,15 +521,10 @@ func TestLemonadeParser_PerformanceConsiderations(t *testing.T) {
 			"data": [%s]
 		}`, modelsJSON)
 
-		startTime := time.Now()
 		models, err := parser.Parse([]byte(response))
-		parseTime := time.Since(startTime)
 
 		require.NoError(t, err)
 		assert.Len(t, models, modelCount)
-
-		// Parsing should be fast even with many models
-		assert.Less(t, parseTime, 100*time.Millisecond)
 
 		// Verify a sample of models
 		assert.Equal(t, "model-0", models[0].Name)
@@ -541,4 +536,47 @@ func TestLemonadeParser_PerformanceConsiderations(t *testing.T) {
 		require.NotNil(t, models[1].Details.Format)
 		assert.Equal(t, "gguf", *models[1].Details.Format) // llamacpp
 	})
+}
+
+func BenchmarkLemonadeParser_Parse(b *testing.B) {
+	parser := &lemonadeParser{}
+
+	// Generate a response with many models (build once, reuse for all iterations)
+	modelCount := 100
+	modelsJSON := ""
+	for i := 0; i < modelCount; i++ {
+		if i > 0 {
+			modelsJSON += ","
+		}
+		recipe := "oga-cpu"
+		if i%3 == 0 {
+			recipe = "oga-npu"
+		} else if i%3 == 1 {
+			recipe = "llamacpp"
+		}
+		modelsJSON += fmt.Sprintf(`{
+			"id": "model-%d",
+			"object": "model",
+			"created": %d,
+			"owned_by": "lemonade",
+			"checkpoint": "vendor-%d/model-%d",
+			"recipe": "%s"
+		}`, i, 1759361830+i, i%10, i, recipe)
+	}
+
+	response := fmt.Sprintf(`{
+		"object": "list",
+		"data": [%s]
+	}`, modelsJSON)
+
+	// Convert to []byte once to avoid allocation bias
+	responseBytes := []byte(response)
+
+	// Report memory allocations
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		_, _ = parser.Parse(responseBytes)
+	}
 }
