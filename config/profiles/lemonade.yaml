@@ -241,7 +241,10 @@ metrics:
     format: json
     # Lemonade uses OpenAI-compatible format
     paths:
-      model: "$.model"                                    # Returns checkpoint, not model ID
+      # We get back hf checkpoint path instead of model name due to Lemonade design.
+      # Eg. "model": "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx"
+      # vs "Qwen2.5-0.5B-Instruct-CPU"
+      model: "$.model"
       finish_reason: "$.choices[0].finish_reason"
       input_tokens: "$.usage.prompt_tokens"
       output_tokens: "$.usage.completion_tokens"
