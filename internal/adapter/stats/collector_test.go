@@ -21,8 +21,9 @@ func createTestLogger() logger.StyledLogger {
 func createTestEndpoint(uri, name string) *domain.Endpoint {
 	uril, _ := url.Parse(uri)
 	return &domain.Endpoint{
-		Name: name,
-		URL:  uril,
+		Name:      name,
+		URL:       uril,
+		URLString: uril.String(),
 	}
 }
 

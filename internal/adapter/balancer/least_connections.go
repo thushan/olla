@@ -47,8 +47,7 @@ func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*doma
 	minConnections := int64(-1)
 
 	for _, endpoint := range routable {
-		key := endpoint.URL.String()
-		connections := connectionStats[key] // Will be 0 if not found
+		connections := connectionStats[endpoint.URLString] // Will be 0 if not found
 
 		if minConnections == -1 || connections < minConnections {
 			minConnections = connections

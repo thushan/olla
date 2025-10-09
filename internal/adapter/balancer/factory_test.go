@@ -278,13 +278,15 @@ func createTestEndpoints(count int, status domain.EndpointStatus) []*domain.Endp
 		testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
 		healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
 		endpoints[i] = &domain.Endpoint{
-			Name:           fmt.Sprintf("endpoint-%d", i),
-			URL:            testURL,
-			HealthCheckURL: healthURL,
-			Status:         status,
-			Priority:       100 + i,
-			CheckInterval:  5 * time.Second,
-			CheckTimeout:   2 * time.Second,
+			Name:                 fmt.Sprintf("endpoint-%d", i),
+			URL:                  testURL,
+			URLString:            testURL.String(),
+			HealthCheckURL:       healthURL,
+			HealthCheckURLString: healthURL.String(),
+			Status:               status,
+			Priority:             100 + i,
+			CheckInterval:        5 * time.Second,
+			CheckTimeout:         2 * time.Second,
 		}
 	}
 	return endpoints
