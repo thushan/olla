@@ -203,7 +203,7 @@ func (r *UnifiedMemoryModelRegistry) updateEndpointSet(modelID string, endpoints
 }
 
 // GetEndpointSet returns the cached endpoint set for a given model
-func (r *UnifiedMemoryModelRegistry) GetEndpointSet(modelID string) (*xsync.MapOf[string, struct{}], bool) {
+func (r *UnifiedMemoryModelRegistry) GetEndpointSet(modelID string) (*xsync.Map[string, struct{}], bool) {
 	return r.modelEndpointSets.Load(modelID)
 }
 
