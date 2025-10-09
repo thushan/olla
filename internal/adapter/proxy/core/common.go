@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -178,8 +179,8 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 
 		// Calculate and set response time if we have timing information
 		if !stats.StartTime.IsZero() {
-			responseTime := time.Since(stats.StartTime)
-			h.Set(constants.HeaderXOllaResponseTime, responseTime.String())
+			responseTimeMs := time.Since(stats.StartTime).Milliseconds()
+			h.Set(constants.HeaderXOllaResponseTime, strconv.FormatInt(responseTimeMs, 10)+"ms")
 		}
 
 		// set routing decision headers if available

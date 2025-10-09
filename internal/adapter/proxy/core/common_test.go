@@ -345,7 +345,9 @@ func TestSetResponseHeaders(t *testing.T) {
 			if tt.stats != nil && !tt.stats.StartTime.IsZero() {
 				responseTimeHeader := w.Header().Get("X-Olla-Response-Time")
 				assert.NotEmpty(t, responseTimeHeader, "X-Olla-Response-Time should be set when StartTime is present")
-				// Verify it's a valid duration string
+				// Verify itss in milliseconds format (e.g., "123ms")
+				assert.Contains(t, responseTimeHeader, "ms", "X-Olla-Response-Time should be in milliseconds format")
+				// Verify it'ss still parseable as a duration
 				_, err := time.ParseDuration(responseTimeHeader)
 				assert.NoError(t, err, "X-Olla-Response-Time should be a valid duration")
 			} else {
@@ -477,12 +479,12 @@ func TestHeaderConstants(t *testing.T) {
 // This verifies that the current fix handles the scenario correctly even when the map is not nil
 func TestCopyHeaders_ExistingHeaders(t *testing.T) {
 	tests := []struct {
-		name              string
-		existingHeaders   map[string][]string
-		originalHeaders   map[string][]string
-		expectedHeaders   map[string][]string
-		shouldClearExist  bool
-		description       string
+		name             string
+		existingHeaders  map[string][]string
+		originalHeaders  map[string][]string
+		expectedHeaders  map[string][]string
+		shouldClearExist bool
+		description      string
 	}{
 		{
 			name: "pre_existing_headers_overwritten",
@@ -686,5 +688,25 @@ func BenchmarkCopyHeaders_WithExistingHeaders(b *testing.B) {
 		proxyReq.Header.Set("X-Pre-Existing-1", "value1")
 		proxyReq.Header.Set("X-Pre-Existing-2", "value2")
 		CopyHeaders(proxyReq, originalReq)
+	}
+}
+
+// BenchmarkSetResponseHeaders benchmarks the SetResponseHeaders function
+func BenchmarkSetResponseHeaders(b *testing.B) {
+	stats := &ports.RequestStats{
+		RequestID: "test-request-123",
+		Model:     "gpt-4",
+		StartTime: time.Now().Add(-100 * time.Millisecond),
+	}
+	endpoint := &domain.Endpoint{
+		Name: "backend-1",
+		Type: "openai",
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		SetResponseHeaders(w, stats, endpoint)
 	}
 }
