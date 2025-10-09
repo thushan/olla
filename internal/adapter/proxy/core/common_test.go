@@ -560,7 +560,7 @@ func TestCopyHeaders_ExistingHeaders(t *testing.T) {
 			description:      "Edge case: many existing entries, few new ones - tests potential rehashing",
 		},
 		{
-			name: "empty_existing_map_normal_operation",
+			name:            "empty_existing_map_normal_operation",
 			existingHeaders: map[string][]string{
 				// Empty but non-nil map (len=0)
 			},
