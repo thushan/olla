@@ -20,10 +20,11 @@ type UnifiedMemoryModelRegistry struct {
 	unifier         ports.ModelUnifier
 	routingStrategy ports.ModelRoutingStrategy
 	*MemoryModelRegistry
-	unifiedModels    *xsync.Map[string, *domain.UnifiedModel] // Endpoint -> []UnifiedModel
-	globalUnified    *xsync.Map[string, *domain.UnifiedModel] // UnifiedID -> UnifiedModel (merged across endpoints)
-	endpoints        *xsync.Map[string, *domain.Endpoint]     // URL -> Endpoint mapping
-	unificationMutex sync.Mutex
+	unifiedModels     *xsync.Map[string, *domain.UnifiedModel]         // Endpoint -> []UnifiedModel
+	globalUnified     *xsync.Map[string, *domain.UnifiedModel]         // UnifiedID -> UnifiedModel (merged across endpoints)
+	endpoints         *xsync.Map[string, *domain.Endpoint]             // URL -> Endpoint mapping
+	modelEndpointSets *xsync.Map[string, *xsync.Map[string, struct{}]] // ModelID -> Set of endpoint URLs (cached for fast lookup)
+	unificationMutex  sync.Mutex
 }
 
 // NewUnifiedMemoryModelRegistry creates a new registry with unification support
@@ -85,6 +86,7 @@ func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig
 		unifiedModels:       xsync.NewMap[string, *domain.UnifiedModel](),
 		globalUnified:       xsync.NewMap[string, *domain.UnifiedModel](),
 		endpoints:           xsync.NewMap[string, *domain.Endpoint](),
+		modelEndpointSets:   xsync.NewMap[string, *xsync.Map[string, struct{}]](),
 	}
 }
 
@@ -109,6 +111,13 @@ func (r *UnifiedMemoryModelRegistry) RegisterModels(ctx context.Context, endpoin
 	// First, register models normally
 	if err := r.MemoryModelRegistry.RegisterModels(ctx, endpointURL, models); err != nil {
 		return err
+	}
+
+	// Invalidate any cached endpoint sets for these models since they're being updated
+	for _, model := range models {
+		if model != nil {
+			r.modelEndpointSets.Delete(model.Name)
+		}
 	}
 
 	// Then unify them
@@ -161,9 +170,41 @@ func (r *UnifiedMemoryModelRegistry) unifyModelsAsync(ctx context.Context, endpo
 		}
 
 		r.globalUnified.Store(id, merged)
+
+		// update cached endpoint set for this model
+		var endpointURLs []string
+		for _, sourceEndpoint := range merged.SourceEndpoints {
+			endpointURLs = append(endpointURLs, sourceEndpoint.EndpointURL)
+		}
+
+		// we cache under the unified ID
+		r.updateEndpointSet(id, endpointURLs)
+
+		// and also cache under all native names and aliases for fast lookup
+		for _, sourceEndpoint := range merged.SourceEndpoints {
+			r.updateEndpointSet(sourceEndpoint.NativeName, endpointURLs)
+		}
+		for _, alias := range merged.Aliases {
+			r.updateEndpointSet(alias.Name, endpointURLs)
+		}
 	}
 
 	// r.logger.InfoWithEndpoint(" ", endpointUrl, "models", len(unifiedModels))
+}
+
+// updateEndpointSet updates the cached endpoint set for a given model
+// trying to avoid repeated list-to-set conversions in GetHealthyEndpointsForModel
+func (r *UnifiedMemoryModelRegistry) updateEndpointSet(modelID string, endpoints []string) {
+	endpointSet := xsync.NewMap[string, struct{}]()
+	for _, url := range endpoints {
+		endpointSet.Store(url, struct{}{})
+	}
+	r.modelEndpointSets.Store(modelID, endpointSet)
+}
+
+// GetEndpointSet returns the cached endpoint set for a given model
+func (r *UnifiedMemoryModelRegistry) GetEndpointSet(modelID string) (*xsync.MapOf[string, struct{}], bool) {
+	return r.modelEndpointSets.Load(modelID)
 }
 
 // GetUnifiedModels returns all unified models
@@ -277,13 +318,36 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 	// Remove endpoint from all unified models
 	r.globalUnified.Range(func(id string, model *domain.UnifiedModel) bool {
 		if model.RemoveEndpoint(endpointURL) {
-			// If no endpoints left, remove the unified model
+			// If no endpoints left, remove the unified model and its cached sets
 			if !model.IsAvailable() {
 				r.globalUnified.Delete(id)
+				// delete cache entries for all model names
+				r.modelEndpointSets.Delete(id)
+				for _, sourceEndpoint := range model.SourceEndpoints {
+					r.modelEndpointSets.Delete(sourceEndpoint.NativeName)
+				}
+				for _, alias := range model.Aliases {
+					r.modelEndpointSets.Delete(alias.Name)
+				}
 			} else {
 				// Update the model
 				model.DiskSize = model.GetTotalDiskSize()
 				model.LastSeen = time.Now()
+
+				// update cached endpoint set to reflect the removed endpoint
+				var endpointURLs []string
+				for _, sourceEndpoint := range model.SourceEndpoints {
+					endpointURLs = append(endpointURLs, sourceEndpoint.EndpointURL)
+				}
+
+				// update cache for all model names
+				r.updateEndpointSet(id, endpointURLs)
+				for _, sourceEndpoint := range model.SourceEndpoints {
+					r.updateEndpointSet(sourceEndpoint.NativeName, endpointURLs)
+				}
+				for _, alias := range model.Aliases {
+					r.updateEndpointSet(alias.Name, endpointURLs)
+				}
 			}
 		}
 		return true
@@ -300,14 +364,36 @@ func (r *UnifiedMemoryModelRegistry) GetHealthyEndpointsForModel(ctx context.Con
 	default:
 	}
 
-	// Get all endpoints that have this model
-	endpointURLs, err := r.GetEndpointsForModel(ctx, modelName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get endpoints for model %s: %w", modelName, err)
-	}
+	endpointSet, found := r.GetEndpointSet(modelName)
+	if !found {
+		// Fallback: build set on demand and cache it
+		endpointURLs, err := r.GetEndpointsForModel(ctx, modelName)
+		if err != nil {
+			// Error handling is a bit more nuanced, we want to propagate context errors
+			// but treat model-not-found as empty result
 
-	if len(endpointURLs) == 0 {
-		return []*domain.Endpoint{}, nil
+			// If there's a better way to do this, we should improve the unifier's ResolveAlias method
+			// and also apply the same fix in Scout, Sherpa and Scoot.
+
+			// context errors should propagate - these indicate interrupted operations
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("failed to get endpoints for model: %w", err)
+			}
+
+			// model-not-found is treated as empty result (intentional design pattern)
+			return []*domain.Endpoint{}, nil
+		}
+
+		if len(endpointURLs) == 0 {
+			return []*domain.Endpoint{}, nil
+		}
+
+		// we create and cache the set for future lookups
+		endpointSet = xsync.NewMap[string, struct{}]()
+		for _, url := range endpointURLs {
+			endpointSet.Store(url, struct{}{})
+		}
+		r.modelEndpointSets.Store(modelName, endpointSet)
 	}
 
 	// Get all healthy endpoints from the repository
@@ -316,15 +402,10 @@ func (r *UnifiedMemoryModelRegistry) GetHealthyEndpointsForModel(ctx context.Con
 		return nil, fmt.Errorf("failed to get healthy endpoints: %w", err)
 	}
 
-	// Filter to only include endpoints that have the model
-	endpointURLSet := make(map[string]bool)
-	for _, url := range endpointURLs {
-		endpointURLSet[url] = true
-	}
-
+	// Filter to only include endpoints that have the model using cached set
 	var result []*domain.Endpoint
 	for _, endpoint := range healthyEndpoints {
-		if endpointURLSet[endpoint.GetURLString()] {
+		if _, ok := endpointSet.Load(endpoint.GetURLString()); ok {
 			result = append(result, endpoint)
 		}
 	}
