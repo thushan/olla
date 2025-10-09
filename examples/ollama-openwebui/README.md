@@ -2,6 +2,8 @@
 
 This example demonstrates how to set up OpenWebUI with Olla as a proxy/load balancer for multiple Ollama instances.
 
+However, you can also opt to use any OpenAI Compatible API as well (so you can use vLLM, SgLang backends for instance).
+
 ## Architecture
 
 ```

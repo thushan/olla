@@ -36,10 +36,6 @@ Olla works alongside API gateways like [LiteLLM](https://github.com/BerriAI/lite
 
 Single CLI application and config file is all you need to go Olla!
 
-![Olla Usecase](assets/diagrams/usecases.excalidraw.png)
-
-In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/junie/) to use Olla for its Ollama and LMStudio endpoints for local-ai inference with Junie (see [how to configure Jetbrains Junie](https://thushan.github.io/olla/usage/#development-tools-junie)).
-
 ## Key Features
 
 - **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover and connection retry
@@ -54,43 +50,6 @@ In the above example, we configure [Jetbrains Junie](https://www.jetbrains.com/j
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
 - **⚙️ High Performance**: Designed to be very [lightweight & efficient](https://thushan.github.io/olla/configuration/practices/performance/), runs on less than 50Mb RAM.
-
-## How Olla Fits in Your Stack
-
-| Tool | Purpose | Use Together? |
-|------|---------|--------------|
-| **Olla** | Load balancing & failover for existing endpoints | - |
-| **[LiteLLM](https://github.com/BerriAI/litellm)** | API translation for cloud providers | ✅ Use for cloud APIs |
-| **[GPUStack](https://github.com/gpustack/gpustack)** | GPU cluster orchestration | ✅ Route to managed endpoints |
-| **[LocalAI](https://github.com/mudler/LocalAI)** | OpenAI-compatible local API | ✅ Load balance multiple instances |
-| **[Ollama](https://github.com/ollama/ollama)** | Local model serving | ✅ Primary use case |
-
-See our [detailed comparisons](https://thushan.github.io/olla/compare/overview/) and [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/) for more.
-
-### Supported Backends
-
-Olla natively supports the following backend providers. Learn more about [Olla Integrations](https://thushan.github.io/olla/integrations/overview/).
-
-| Provider | Description | Usage / Prefix |
-|----------|-------------|-------|
-| **[Ollama](https://github.com/ollama/ollama)** | Native support for Ollama, including model unification. | `/olla/ollama/` |
-| **[LM Studio](https://lmstudio.ai/)** | Native support for LM Studio, including model unification. | `/olla/lmstudio/` &#124;&#124; `/olla/lm-studio/` &#124;&#124; `/olla/lm_studio/` |
-| **[vLLM](https://github.com/vllm-project/vllm)** | Native support for vLLM, including model unification.<br>Models from vLLM will be available under `/olla/models` and `/olla/vllm/v1/models`. | `/olla/vllm/` |
-| **[LiteLLM](https://github.com/BerriAI/litellm)** | Native support for LiteLLM, providing unified gateway to 100+ LLM providers.<br>Access models from OpenAI, Anthropic, Bedrock, Azure, Google Vertex AI, Cohere, and many more through a single interface. | `/olla/litellm/` |
-| **[SGLang](https://github.com/sgl-project/sglang)** | Native support for SGLang, including model unification. | `/olla/sglang/` |
-| **[Lemonade SDK](https://github.com/amd/LLM-on-Windows)** | Native support for Lemonade SDK, AMD's local inference solution.<br>Optimised for AMD Ryzen AI (NPU), IGPU (DirectML), and CPU with ONNX and GGUF models. | `/olla/lemonade/` |
-| **[OpenAI](https://platform.openai.com/docs/overview)** | Use OpenAI API that provides a unified query API across all providers. | `/olla/openai/` |
-
-
-### Supported Frontends
-
-* [OpenWebUI](https://github.com/open-webui/open-webui) - You can route you [OpenWebUI Ollama endpoint to Olla](https://thushan.github.io/olla/integrations/frontend/openwebui/) and serve unified models easily.
-
-Coming soon - but you can use the OpenAI compatibility in the interim:
-
-* [LMDeploy](https://github.com/InternLM/lmdeploy)
-
-Learn more about [Olla's Profile System](https://thushan.github.io/olla/concepts/profile-system/).
 
 ## Platform Support
 
@@ -154,9 +113,18 @@ For detailed installation and deployment options, see [Getting Started Guide](ht
 
 We've also got ready-to-use Docker Compose setups for common scenarios:
 
+### Common Architectures
+
+- **Home Lab**: Olla → Multiple Ollama (or OpenAI Compatible - eg. vLLM) instances across your machines
+- **Hybrid Cloud**: Olla → Local endpoints + LiteLLM → Cloud APIs (OpenAI, Anthropic, Bedrock, etc.)
+- **Enterprise**: Olla → GPUStack cluster + vLLM servers + LiteLLM (cloud overflow)
+- **Development**: Olla → Local + Shared team endpoints + LiteLLM (API access)
+
+See [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/) for detailed architectures.
+
 ### 🌐 **OpenWebUI Integration**
 
-Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla load balancing multiple Ollama instances.
+Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla load balancing multiple [Ollama instances](https://thushan.github.io/olla/integrations/frontend/openwebui/) or unify all [OpenAI compatible models](https://thushan.github.io/olla/integrations/frontend/openwebui-openai/).
 
 - **See**: [`examples/ollama-openwebui/`](examples/ollama-openwebui/)
 - **Services**: OpenWebUI (web UI) + Olla (proxy/load balancer)  
@@ -169,356 +137,19 @@ Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla
   # Access OpenWebUI at http://localhost:3000
   ```
 
-You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/olla/integrations/frontend/openwebui/).
-
-### Common Architectures
-
-- **Home Lab**: Olla → Multiple Ollama instances across your machines
-- **Hybrid Cloud**: Olla → Local endpoints + LiteLLM → Cloud APIs (OpenAI, Anthropic, Bedrock, etc.)
-- **Enterprise**: Olla → GPUStack cluster + vLLM servers + LiteLLM (cloud overflow)
-- **Development**: Olla → Local + Shared team endpoints + LiteLLM (API access)
-
-See [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/) for detailed architectures.
-
-More examples coming soon:
-- **Multi-Provider Setup**: Ollama + LM Studio + OpenAI-compatible endpoints
-- **High-Availability**: Production deployment with failover
-- **Kubernetes**: K8s manifests for container orchestration
-
-## Basic Configuration
-
-Modify the existing `config.yaml` or create a copy:
-
-```yaml
-server:
-  host: "0.0.0.0"           # to allow external connections
-  port: 40114
-  ...
-
-proxy:
-  engine: "sherpa"          # or "olla" for high performance
-  profile: "auto"           # or 'streaming' or 'standard'
-  load_balancer: "priority" # or round-robin, least-connections
-  ...
-
-discovery:
-  type: "static"
-  static:
-    endpoints:
-      - url: "http://localhost:11434"
-        name: "local-ollama"
-        type: "ollama"
-        priority: 100         # Higher = preferred
-        model_url: "/api/tags"
-        health_check_url: "/"
-        check_interval: 2s
-        check_timeout: 1s
-
-      - url: "https://ollama-42.acmecorp.com/"
-        name: "work-ollama"
-        type: "ollama"
-        priority: 50          # Lower priority fallback
-        model_url: "/api/tags"
-        health_check_url: "/"
-        check_interval: 2s
-        check_timeout: 1s
-        model_filter:         # Filter models for this endpoint
-          exclude:
-            - "*embed*"       # No embedding models
-            - "*uncensored*"  # No uncensored models
-```
-
-For comprehensive configuration options, see [Configuration Reference](https://thushan.github.io/olla/configuration/reference/). Learn about [filtering capabilities](https://thushan.github.io/olla/configuration/filters/) for controlling profiles and models.
-
-### Start Olla
-
-```bash
-./olla                    # Uses config.yaml
-# or
-./olla -c custom.yaml     # Custom config
-```
-
-## Usage
-
-### API Compatibility & Smart Routing
-
-Olla is **OpenAI, LM Studio and Ollama compatible**. The magic is in the unified OpenAI-compatible endpoint:
-
-```python
-import openai
-
-# One client, multiple providers seamlessly
-client = openai.OpenAI(base_url="http://localhost:40114/olla/openai")
-
-# This routes to Ollama automatically  
-response = client.chat.completions.create(
-    model="llama3.2:latest",
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-
-# This routes to LM Studio automatically
-response = client.chat.completions.create(
-    model="microsoft/phi-4-mini-reasoning", 
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-
-# Your code doesn't need to know or care where models are hosted!
-```
-
-### Provider Examples
-
-**Ollama Provider**
-```bash
-# Chat via Ollama (OpenAI-compatible)
-curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "llama3.2",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-
-# Ollama native API
-curl -X POST http://localhost:40114/olla/ollama/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "llama3.2",
-    "prompt": "Hello!"
-  }'
-
-# List Ollama models (native format)
-curl http://localhost:40114/olla/ollama/api/tags
-```
-
-**LM Studio Provider**
-```bash
-# Chat via LM Studio
-curl -X POST http://localhost:40114/olla/lmstudio/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "local-model",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-
-# List LM Studio models
-curl http://localhost:40114/olla/lmstudio/v1/models
-```
-
-### Model Discovery & Smart Unification
-
-Olla's magic lies in its intelligent model discovery and routing. It unifies models within each provider type while providing seamless cross-provider access via OpenAI-compatible APIs.
-
-```bash
-# Discover all models (per-provider unification)
-curl http://localhost:40114/olla/models
-# Example: 15 Ollama + 6 LM Studio = 21 total models
-
-# The beauty: One API, multiple backends
-curl -X POST http://localhost:40114/olla/openai/v1/chat/completions \
-  -d '{"model": "llama3.2:latest", "messages": [...]}'
-# ↳ Routes to Ollama automatically
-
-curl -X POST http://localhost:40114/olla/openai/v1/chat/completions \
-  -d '{"model": "microsoft/phi-4-mini-reasoning", "messages": [...]}'
-# ↳ Routes to LM Studio automatically
-```
-
-**The Power:** Use one OpenAI client to seamlessly access models from Ollama, LM Studio, and other providers without knowing where they're hosted.
-
-For detailed information about model discovery and unification, see [Model Discovery Guide](https://thushan.github.io/olla/concepts/model-unification/).
-
-### Key Endpoints
-
-| Type | Example | Description |
-|------|---------|-------------|
-| **🎯 Smart Routing** | `/olla/openai/v1/chat/completions` | OpenAI Compatible API, auto-routes to any provider based on model |
-| **Ollama Routes** | `/olla/ollama/v1/chat/completions` | Explicit routing to Ollama endpoints only |
-| **LM Studio Routes** | `/olla/lmstudio/v1/chat/completions` | Explicit routing to LM Studio endpoints only |
-| **Unified Discovery** | `/olla/models` | All models across all providers (21 total) |
-| **Provider Discovery** | `/olla/ollama/v1/models` <br/> `/olla/lmstudio/v1/models` | Models from specific provider type |
-| **Health & Status** | `/internal/health` | Monitor system health |
-
-For complete endpoint documentation, see [API Endpoints](https://thushan.github.io/olla/api-reference/overview/).
-
-### Response Headers
-
-Every request includes tracking information:
-
-```
-X-Olla-Endpoint: local-ollama     # Which backend handled it
-X-Olla-Model: llama4              # Model used
-X-Olla-Backend-Type: ollama       # Platform type
-X-Olla-Request-ID: req_abc123     # For debugging
-X-Olla-Response-Time: 1.234s      # Total processing time
-```
-
-For API usage patterns and examples, see [API Endpoints Reference](https://thushan.github.io/olla/api-reference/overview/).
-
-## Configuration
-
-### ⚖️ Load Balancing Strategies
-
-- **Least Connections**: Routes to endpoint with fewest active connections (recommended for businesses)
-- **Priority**: Routes to highest priority healthy endpoint (recommended for home)
-- **Round Robin**: Even distribution across all endpoints
-
-For detailed strategy selection and configuration, see [Load Balancing Guide](https://thushan.github.io/olla/concepts/load-balancing/).
-
-#### 📊 Least Connections (`least-connections`)
-Routes to the endpoint with least active requests. Ideal for:
-- **Mixed workloads**: Different request types with varying processing times
-- **Dynamic balancing**: Automatically adapts to endpoint performance
-- **Optimal resource utilisation**: Prevents any single endpoint from being overwhelmed
-
-```yaml
-load_balancer: "least-connections"
-```
-
-#### 🎯 Priority (`priority`)
-Routes requests to the highest priority healthy endpoint. Perfect for:
-- **Home setups**: Workstation (priority 100) → Laptop (priority 50)
-- **Tiered infrastructure**: GPU servers → CPU servers → Cloud endpoints
-- **Cost optimisation**: Local hardware → Expensive cloud APIs
-
-```yaml
-load_balancer: "priority"
-```
-
-#### 🔄 Round Robin (`round-robin`)
-Distributes requests evenly across all healthy endpoints. Good for:
-- **Equal hardware**: Multiple identical servers
-- **Even load distribution**: When all endpoints have similar capacity
-- **Simple load spreading**: No complex routing logic needed
-
-```yaml
-load_balancer: "round-robin"
-```
-
-### Proxy Engines
-
-- **Sherpa**: Simple, maintainable (8KB buffers, shared transport)
-- **Olla**: High-performance (64KB buffers, per-endpoint pools, circuit breakers)
-
-For engine selection and performance tuning, see [Proxy Engine Guide](https://thushan.github.io/olla/concepts/proxy-engines/).
-
-### Why Olla for LLMs?
-
-Unlike generic proxies, Olla is purpose-built for LLM workloads:
-
-- **Smart Model Routing**: One API endpoint, automatic routing to the right provider
-- **Unified Client Experience**: Use OpenAI clients to access Ollama, LM Studio, and cloud APIs
-- **Streaming-First**: Immediate response streaming without buffering delays
-- **Long-Running Requests**: Optimised timeouts for extended LLM inference times  
-- **Memory Efficient**: 64KB buffers optimised for token streaming (Olla engine)
-- **Connection Pooling**: Persistent connections to backend endpoints reduce latency
-- **Circuit Breakers**: Automatic failover prevents cascade delays during model loading
-
-For detailed configuration options including Docker deployment and environment variables, see the [Configuration Reference](https://thushan.github.io/olla/configuration/reference/), [Load Balancing Guide](https://thushan.github.io/olla/concepts/load-balancing/), [Proxy Engine Guide](https://thushan.github.io/olla/concepts/proxy-engines/), and [Getting Started Guide](https://thushan.github.io/olla/getting-started/quickstart/).
-
-## Example: Multi-Platform Setup
-
-```yaml
-discovery:
-  type: "static"
-  static:
-    endpoints:
-      # Local Ollama (highest priority)
-      - url: "http://localhost:11434"
-        name: "workstation"
-        type: "ollama"
-        priority: 100
-        model_url: "/api/tags"
-        health_check_url: "/"
-        check_interval: 2s
-        check_timeout: 1s
-        
-      # LM Studio backup
-      - url: "http://192.168.1.100:1234"
-        name: "laptop"
-        type: "lm-studio"
-        priority: 80
-        model_url: "/v1/models"
-        health_check_url: "/"
-        check_interval: 2s
-        check_timeout: 1s
-      
-      # LiteLLM for cloud APIs (lower priority)
-      - url: "http://localhost:4000"
-        name: "litellm-gateway"
-        type: "litellm"
-        priority: 50
-        model_url: "/v1/models"
-        health_check_url: "/health"
-        check_interval: 5s
-        check_timeout: 2s
-```
-
-With this setup:
-1. Requests go to your workstation first (Ollama)
-2. If workstation fails, tries laptop (LM Studio)
-3. If both local options fail, falls back to cloud APIs via LiteLLM
-4. Models from each provider are discoverable and available for routing
+You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/olla/integrations/frontend/openwebui/) or see [OpenWebUI OpenAI with Olla](https://thushan.github.io/olla/integrations/frontend/openwebui-openai/).
 
 ## Documentation
 
 Full documentation is available at **[https://thushan.github.io/olla/](https://thushan.github.io/olla/)**
 
-### Quick Links
-
-- **[Getting Started](https://thushan.github.io/olla/getting-started/quickstart/)** - Installation and quick setup
-- **[Configuration Reference](https://thushan.github.io/olla/configuration/reference/)** - Complete configuration options
-- **[API Reference](https://thushan.github.io/olla/api-reference/overview/)** - Full API documentation
-- **[Concepts](https://thushan.github.io/olla/concepts/overview/)** - Core concepts and architecture
-- **[Comparisons](https://thushan.github.io/olla/compare/overview/)** - Compare with LiteLLM, GPUStack, LocalAI
-- **[Integrations](https://thushan.github.io/olla/integrations/overview/)** - Frontend and backend integrations
-- **[Development](https://thushan.github.io/olla/development/overview/)** - Contributing and development guide
-
-## Development
-
-```bash
-make build        # Build binary
-make test         # Run tests
-make ready        # Test + lint + format (run before commit)
-make dev          # Development mode with auto-reload
-```
-
-## 🚨 Security Considerations
-
-Olla is designed to sit behind a reverse proxy (nginx, Cloudflare, etc.) in production. 
-
-The built-in security features are optimised for this deployment pattern:
-- **Rate limiting**: Protects against request flooding
-- **Request size limits**: Prevents resource exhaustion
-- **Trusted proxy support**: Correctly handles client IPs behind load balancers
-- **No authentication**: Relies on your reverse proxy for authentication
-
-## 🤔 FAQ
-
-**Q: Why use Olla instead of nginx or HAProxy?** \
-A: Olla understands LLM-specific patterns like model routing, streaming responses, and health semantics. It also provides built-in model discovery and LLM-optimised timeouts.
-
-**Q: How does Olla compare to LiteLLM?** \
-A: [LiteLLM](https://github.com/BerriAI/litellm) is a unified gateway to 100+ LLM providers (OpenAI, Anthropic, Bedrock, etc.), while Olla is an infrastructure proxy that adds load balancing, failover, and health management. They work excellently together - Olla can load balance multiple LiteLLM instances and provide failover between them. With native LiteLLM support, you can use Olla to manage both local infrastructure (Ollama, LM Studio) and cloud APIs through LiteLLM. See our [detailed comparison](https://thushan.github.io/olla/compare/litellm/).
-
-**Q: Can Olla manage GPU clusters like GPUStack?** \
-A: No, Olla doesn't deploy or orchestrate models. For GPU cluster management, use [GPUStack](https://github.com/gpustack/gpustack). Olla can then provide routing and failover for your GPUStack-managed endpoints. See our [comparison guide](https://thushan.github.io/olla/compare/gpustack/).
-
-**Q: Can I use Olla with other LLM providers?** \
-A: Yes! Any OpenAI-compatible API works. Configure them as `type: "openai-compatible"` endpoints (such as LiteLLM, [LocalAI](https://github.com/mudler/LocalAI), Together AI, etc.). See [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/).
-
-**Q: Does Olla support authentication?** \
-A: Olla focuses on load balancing and lets your reverse proxy handle authentication. This follows the Unix philosophy of doing one thing well.
-
-**Q: Which proxy engine should I use?** \
-A: Use **Sherpa** for simple deployments with moderate traffic. Choose **Olla** for high-throughput production workloads that need connection pooling, circuit breakers, and maximum performance.
-
-**Q: How does priority routing work with model availability?** \
-A: Olla discovers models within each provider type and routes requests to compatible endpoints. Per-provider unification means Ollama requests only route to Ollama endpoints, LM Studio requests only route to LM Studio endpoints, etc. See the [Model Discovery Guide](https://thushan.github.io/olla/concepts/model-unification/) for details.
-
-**Q: Can I run Olla in Kubernetes?** \
-A: Absolutely! Olla is stateless and containerised. We'll add some examples soon - but if you'd like to share, PR away!
-
-**Q: What is behind the name Olla?** \
-A: Olla is the name of our llama (featured in the logo). It's pronounced like 'holla' and comes from a running joke about getting things working with Ollama. The fact it means 'pot' in Spanish is coincidental—though you can indeed cook up a lot when Olla is in the middle!
+* **[Getting Started](https://thushan.github.io/olla/getting-started/installation/)** - Getting Started with Olla
+* **[Integrations](https://thushan.github.io/olla/integrations/overview/)** -  See which LLM backends are supported by Olla
+* **[Comparisons](https://thushan.github.io/olla/compare/overview/)** - Compare with LiteLLM, GPUStack, LocalAI
+* **[Olla Concepts](https://thushan.github.io/olla/concepts/overview/)** - Understand Key Olla concepts
+* **[Configuration](https://thushan.github.io/olla/configuration/overview/)** - Extensive configuration documentation
+* **[API Reference](https://thushan.github.io/olla/api-reference/overview/)** - Olla System API Reference
+* **[Development](https://thushan.github.io/olla/development/overview/)** - Contributing and development guide
 
 ## 🤝 Contributing
 

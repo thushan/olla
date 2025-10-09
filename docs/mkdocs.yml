@@ -157,7 +157,8 @@ nav:
             - Lemonade SDK: integrations/backend/lemonade.md
             - LiteLLM: integrations/backend/litellm.md
         - Frontends:
-            - OpenWebUI: integrations/frontend/openwebui.md
+            - OpenWebUI + Ollama: integrations/frontend/openwebui.md
+            - OpenWebUI + OpenAI: integrations/frontend/openwebui-openai.md
   - Development:
       - Overview: development/overview.md
       - Setup: development/setup.md

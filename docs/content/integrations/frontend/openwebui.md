@@ -4,9 +4,15 @@ description: Connect OpenWebUI to multiple Ollama instances through Olla proxy. 
 keywords: OpenWebUI, Olla, Ollama, LLM interface, web UI, load balancing, model management
 ---
 
-# OpenWebUI Integration
+# OpenWebUI Integration with Ollama
 
 OpenWebUI is a powerful web interface for interacting with LLMs. Olla acts as a proxy between OpenWebUI and your Ollama backends, providing load balancing, failover and unified model management across multiple Ollama instances.
+
+**Set in OpenWebUI:**
+
+```bash
+export OLLAMA_BASE_URL="http://localhost:40114/olla/ollama"
+```
 
 You can find an example integration of OpenWebUI with Olla and Ollama instances in <code>examples/ollama-openwebui</code> - see [latest in Github](https://github.com/thushan/olla/tree/main/examples/ollama-openwebui).
 

@@ -26,7 +26,12 @@ You can use the `type` in [Endpoint Configurations](/olla/configuration/overview
 
 ## Frontend Support
 
-* [OpenWebUI](./frontend/openwebui.md) - native support for [OpenWebUI](https://github.com/open-webui/open-webui).
+### OpenWebUI
+
+Native support for [OpenWebUI](https://github.com/open-webui/open-webui) with Olla via:
+
+* [OpenWebUI with Ollama](./frontend/openwebui.md)
+* [OpenWebUI with OpenAI](./frontend/openwebui-openai.md)
 
 ## Profiles
 
