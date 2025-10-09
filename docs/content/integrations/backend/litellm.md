@@ -17,7 +17,7 @@ keywords: LiteLLM, Olla proxy, API gateway, OpenAI, Anthropic, Bedrock, cloud LL
     </tr>
     <tr>
         <th>Type</th>
-        <td><code>litellm</code> (use in endpoint configuration)</td>
+        <td><code>litellm</code> (use in <a href="/olla/configuration/overview/#endpoint-configuration">endpoint configuration</a>)</td>
     </tr>
     <tr>
         <th>Profile</th>

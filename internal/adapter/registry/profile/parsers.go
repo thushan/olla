@@ -20,6 +20,8 @@ func getParserForFormat(format string) ModelResponseParser {
 	switch format {
 	case constants.ProviderTypeOllama:
 		return &ollamaParser{}
+	case constants.ProviderTypeLemonade:
+		return &lemonadeParser{}
 	case constants.ProviderPrefixLMStudio1:
 		return &lmStudioParser{}
 	case constants.ProviderTypeSGLang:

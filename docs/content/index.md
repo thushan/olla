@@ -1,7 +1,7 @@
 ---
 title: Olla - High-Performance LLM Proxy and Load Balancer
-description: Olla is a high-performance proxy, model unifier and load balancer for Ollama, LM Studio, vLLM and OpenAI-compatible LLM backends. Unified model catalogues, intelligent routing, and automatic failover.
-keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, model unification, load balancer, ai infrastructure
+description: Olla is a high-performance proxy, model unifier and load balancer for Ollama, LM Studio, vLLM, SGLang, Lemonade SDK and OpenAI-compatible LLM backends. Unified model catalogues, intelligent routing, and automatic failover.
+keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, sglang, lemonade sdk, model unification, load balancer, ai infrastructure
 ---
 
 <div align="center">
@@ -17,14 +17,14 @@ keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, model unificatio
     <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a>
     <a href="https://github.com/sgl-project/sglang"><img src="https://img.shields.io/badge/SGLang-native-lightgreen.svg" alt="SGLang: Native Support"></a>
     <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a> 
-    <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
+    <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-native-lightgreen.svg" alt="Lemonade AI: Native Support"></a> 
     <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
   </P>
 </div>
 
 Olla is a high-performance, low-overhead, low-latency proxy, model unifier and load balancer for managing LLM infrastructure. 
 
-It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/), [SGLang](https://github.com/sgl-project/sglang) (with RadixAttention), [vLLM](https://github.com/vllm-project/vllm), [LiteLLM](https://github.com/BerriAI/litellm) (100+ cloud providers), and other OpenAI-compatible endpoints. Olla provides model discovery and unified model catalogues across all providers, enabling seamless routing to available models on compatible endpoints.
+It intelligently routes LLM requests across local and remote inference nodes - including [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/), [SGLang](https://github.com/sgl-project/sglang) (with RadixAttention), [vLLM](https://github.com/vllm-project/vllm), [Lemonade SDK](https://lemonade-server.ai) (AMD Ryzen AI), [LiteLLM](https://github.com/BerriAI/litellm) (100+ cloud providers), and other OpenAI-compatible endpoints. Olla provides model discovery and unified model catalogues across all providers, enabling seamless routing to available models on compatible endpoints.
 
 With native [LiteLLM support](integrations/backend/litellm.md), Olla bridges local and cloud infrastructure - use local models when available, automatically failover to cloud APIs when needed. Unlike orchestration platforms like [GPUStack](compare/gpustack.md), Olla focuses on making your existing LLM infrastructure reliable through intelligent routing and failover.
 
@@ -95,7 +95,7 @@ Olla provides detailed response headers for observability:
 |--------|-------------|
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used for the request |
-| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio/vllm/sglang/litellm) |
+| `X-Olla-Backend-Type` | Backend type (ollama/openai/lmstudio/vllm/sglang/lemonade/litellm) |
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Response-Time` | Total processing time |
 

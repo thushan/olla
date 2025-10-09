@@ -17,7 +17,7 @@ keywords: LM Studio, Olla, LLM proxy, local inference, OpenAI compatible, model 
     </tr>
     <tr>
         <th>Type</th>
-        <td><code>lm-studio</code> (use in endpoint configuration)</td>
+        <td><code>lm-studio</code> (use in <a href="/olla/configuration/overview/#endpoint-configuration">endpoint configuration</a>)</td>
     </tr>
     <tr>
         <th>Profile</th>

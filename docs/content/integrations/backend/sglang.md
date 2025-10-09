@@ -13,11 +13,11 @@ keywords: SGLang, Olla proxy, LLM inference, RadixAttention, Frontend Language, 
     </tr>
     <tr>
         <th>Since</th>
-        <td>Olla <code>v0.1.0</code></td>
+        <td>Olla <code>v0.0.19</code></td>
     </tr>
     <tr>
         <th>Type</th>
-        <td><code>sglang</code> (use in endpoint configuration)</td>
+        <td><code>sglang</code> (use in <a href="/olla/configuration/overview/#endpoint-configuration">endpoint configuration</a>)</td>
     </tr>
     <tr>
         <th>Profile</th>

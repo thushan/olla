@@ -31,6 +31,7 @@ var (
 	}
 	SupportedBackends = []string{
 		"ollama",
+		"lemonade",
 		"lm_studio",
 		"sglang",
 		"vllm",

@@ -17,7 +17,7 @@ keywords: ollama integration, ollama proxy, olla ollama, ollama configuration, o
     </tr>
     <tr>
         <th>Type</th>
-        <td><code>ollama</code> (use in endpoint configuration)</td>
+        <td><code>ollama</code> (use in <a href="/olla/configuration/overview/#endpoint-configuration">endpoint configuration</a>)</td>
     </tr>
     <tr>
         <th>Profile</th>

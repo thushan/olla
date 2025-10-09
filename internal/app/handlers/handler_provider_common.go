@@ -42,6 +42,7 @@ func (a *Application) createProviderProfile(providerType string) *domain.Request
 			// Tests get a minimal set without full profile loading
 			profile.AddSupportedProfile(constants.ProviderTypeOpenAI)
 			profile.AddSupportedProfile(constants.ProviderTypeVLLM)
+			profile.AddSupportedProfile(constants.ProviderTypeLemonade)
 		}
 	} else {
 		// Non-OpenAI providers only route to their specific backend type

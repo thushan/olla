@@ -20,6 +20,8 @@ type ModelDetails struct {
 	Digest            *string    `json:"digest,omitempty"`             // super important for comparison checks
 	MaxContextLength  *int64     `json:"max_context_length,omitempty"` // Max context length in tokens (LMStudio gives this)
 	ModifiedAt        *time.Time `json:"modified_at,omitempty"`
+	Checkpoint        *string    `json:"checkpoint,omitempty"` // Lemonade: HuggingFace model path
+	Recipe            *string    `json:"recipe,omitempty"`     // Lemonade: inference engine (oga-cpu, oga-npu, llamacpp, flm)
 	Families          []string   `json:"families,omitempty"`
 }
 

@@ -10,17 +10,19 @@ Olla supports various backends (endpoints) and front-ends integrations powered b
 
 ## Backend Endpoints
 
-Olla natively supports:
+Olla natively supports the following backends:
 
-* [Ollama](./backend/ollama.md) - native support for [Ollama](https://github.com/ollama/ollama), including model unification.
-* [LM Studio](./backend/lmstudio.md) - native support for [LM Studio](https://lmstudio.ai/), including model unification.
-* [vLLM](./backend/vllm.md) - native support for [vLLM](https://github.com/vllm-project/vllm), including model unification.
-* [SGLang](./backend/sglang.md) - native support for [SGLang](https://github.com/sgl-project/sglang) with RadixAttention and Frontend Language, including model unification and vision support.
-* [LiteLLM](./backend/litellm.md) - native support for [LiteLLM](https://github.com/BerriAI/litellm), providing unified gateway to 100+ LLM providers.
+| Backend | Type | Description |
+|---------|------|-------------|
+| [Ollama](./backend/ollama.md) | `ollama` | Native support for [Ollama](https://github.com/ollama/ollama), including model unification |
+| [LM Studio](./backend/lmstudio.md) | `lm-studio` | Native support for [LM Studio](https://lmstudio.ai/), including model unification |
+| [vLLM](./backend/vllm.md) | `vllm` | Native support for [vLLM](https://github.com/vllm-project/vllm), including model unification |
+| [SGLang](./backend/sglang.md) | `sglang` | Native support for [SGLang](https://github.com/sgl-project/sglang) with RadixAttention and Frontend Language, including model unification and vision support |
+| [Lemonade SDK](./backend/lemonade.md) | `lemonade` | Native support for [Lemonade SDK](https://lemonade-server.ai/), AMD's local inference solution with Ryzen AI optimisation, including model unification |
+| [LiteLLM](./backend/litellm.md) | `litellm` | Native support for [LiteLLM](https://github.com/BerriAI/litellm), providing unified gateway to 100+ LLM providers |
+| [OpenAI Compatible](https://platform.openai.com/docs/overview) | `openai` | Generic support for any OpenAI-compatible API |
 
-Other backends that support OpenAI APIs can be integrated too:
-
-* [OpenAI Compatibility](https://platform.openai.com/docs/overview) - Provides a unified query API across all OpenAI backends.
+You can use the `type` in [Endpoint Configurations](/olla/configuration/overview/#endpoint-configuration) when adding new endpoints.
 
 ## Frontend Support
 

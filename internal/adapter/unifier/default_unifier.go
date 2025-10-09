@@ -363,47 +363,65 @@ func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model 
 	}
 
 	if info.Details != nil {
-		if info.Details.Digest != nil {
-			model.Digest = *info.Details.Digest
-			model.Metadata["digest"] = *info.Details.Digest
-		}
-		if info.Details.Format != nil {
-			model.Format = *info.Details.Format
-			model.Metadata["format"] = *info.Details.Format
-		}
-		if info.Details.Family != nil {
-			model.Family = *info.Details.Family
-		} else if len(info.Details.Families) > 0 {
-			model.Family = info.Details.Families[0]
-			model.Metadata["families"] = info.Details.Families
-		}
-		if info.Details.MaxContextLength != nil {
-			model.ContextWindow = *info.Details.MaxContextLength
-			model.Metadata["max_context_length"] = *info.Details.MaxContextLength
-		}
-		if info.Details.State != nil {
-			model.Metadata["state"] = *info.Details.State
-		}
-		if info.Details.ParameterSize != nil {
-			model.Metadata["parameter_size"] = *info.Details.ParameterSize
-		}
-		if info.Details.QuantizationLevel != nil {
-			model.Metadata["quantization_level"] = *info.Details.QuantizationLevel
-		}
-		if info.Details.Publisher != nil {
-			model.Metadata["publisher"] = *info.Details.Publisher
-		}
-		if info.Details.Type != nil {
-			model.Metadata["model_type"] = *info.Details.Type
-		}
-		if info.Details.ParentModel != nil {
-			model.Metadata["parent_model"] = *info.Details.ParentModel
-		}
-		if info.Details.ModifiedAt != nil {
-			model.Metadata["modified_at"] = info.Details.ModifiedAt.Format(time.RFC3339)
-		}
+		u.applyModelDetails(model, info.Details)
 	}
 
+	u.applyModelInfo(model, info)
+
+	return model
+}
+
+// applyModelDetails transfers ModelDetails fields to Model and its metadata
+func (u *DefaultUnifier) applyModelDetails(model *Model, details *domain.ModelDetails) {
+	if details.Digest != nil {
+		model.Digest = *details.Digest
+		model.Metadata["digest"] = *details.Digest
+	}
+	if details.Format != nil {
+		model.Format = *details.Format
+		model.Metadata["format"] = *details.Format
+	}
+	if details.Family != nil {
+		model.Family = *details.Family
+	} else if len(details.Families) > 0 {
+		model.Family = details.Families[0]
+		model.Metadata["families"] = details.Families
+	}
+	if details.MaxContextLength != nil {
+		model.ContextWindow = *details.MaxContextLength
+		model.Metadata["max_context_length"] = *details.MaxContextLength
+	}
+	if details.State != nil {
+		model.Metadata["state"] = *details.State
+	}
+	if details.ParameterSize != nil {
+		model.Metadata["parameter_size"] = *details.ParameterSize
+	}
+	if details.QuantizationLevel != nil {
+		model.Metadata["quantization_level"] = *details.QuantizationLevel
+	}
+	if details.Publisher != nil {
+		model.Metadata["publisher"] = *details.Publisher
+	}
+	if details.Type != nil {
+		model.Metadata["model_type"] = *details.Type
+	}
+	if details.ParentModel != nil {
+		model.Metadata["parent_model"] = *details.ParentModel
+	}
+	if details.ModifiedAt != nil {
+		model.Metadata["modified_at"] = details.ModifiedAt.Format(time.RFC3339)
+	}
+	if details.Checkpoint != nil {
+		model.Metadata["checkpoint"] = *details.Checkpoint
+	}
+	if details.Recipe != nil {
+		model.Metadata["recipe"] = *details.Recipe
+	}
+}
+
+// applyModelInfo transfers top-level ModelInfo fields to Model metadata
+func (u *DefaultUnifier) applyModelInfo(model *Model, info *domain.ModelInfo) {
 	if info.Type != "" {
 		model.Metadata["type"] = info.Type
 	}
@@ -413,8 +431,6 @@ func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model 
 	if !info.LastSeen.IsZero() {
 		model.Metadata["last_seen"] = info.LastSeen.Format(time.RFC3339)
 	}
-
-	return model
 }
 
 func (u *DefaultUnifier) UnifyModel(ctx context.Context, sourceModel *domain.ModelInfo, endpoint *domain.Endpoint) (*domain.UnifiedModel, error) {

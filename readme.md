@@ -7,11 +7,11 @@
     <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a> <br />
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a> 
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a> 
-    <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a> 
+    <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a>
     <a href="https://github.com/sgl-project/sglang"><img src="https://img.shields.io/badge/SGLang-native-lightgreen.svg" alt="SGLang: Native Support"></a>
-    <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a><br/>
-    <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
-    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
+    <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a>
+    <a href="https://lemonade-server.ai"><img src="https://img.shields.io/badge/Lemonade SDK-native-lightgreen.svg" alt="Lemonade SDK: Native Support"></a><br/>
+    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="LM Deploy: OpenAI Compatible"></a> 
   </P>
   <p>
     <div align="center">
@@ -78,6 +78,7 @@ Olla natively supports the following backend providers. Learn more about [Olla I
 | **[vLLM](https://github.com/vllm-project/vllm)** | Native support for vLLM, including model unification.<br>Models from vLLM will be available under `/olla/models` and `/olla/vllm/v1/models`. | `/olla/vllm/` |
 | **[LiteLLM](https://github.com/BerriAI/litellm)** | Native support for LiteLLM, providing unified gateway to 100+ LLM providers.<br>Access models from OpenAI, Anthropic, Bedrock, Azure, Google Vertex AI, Cohere, and many more through a single interface. | `/olla/litellm/` |
 | **[SGLang](https://github.com/sgl-project/sglang)** | Native support for SGLang, including model unification. | `/olla/sglang/` |
+| **[Lemonade SDK](https://github.com/amd/LLM-on-Windows)** | Native support for Lemonade SDK, AMD's local inference solution.<br>Optimised for AMD Ryzen AI (NPU), IGPU (DirectML), and CPU with ONNX and GGUF models. | `/olla/lemonade/` |
 | **[OpenAI](https://platform.openai.com/docs/overview)** | Use OpenAI API that provides a unified query API across all providers. | `/olla/openai/` |
 
 
@@ -88,7 +89,6 @@ Olla natively supports the following backend providers. Learn more about [Olla I
 Coming soon - but you can use the OpenAI compatibility in the interim:
 
 * [LMDeploy](https://github.com/InternLM/lmdeploy)
-* [Lemonade](https://github.com/lemonade-sdk/lemonade)
 
 Learn more about [Olla's Profile System](https://thushan.github.io/olla/concepts/profile-system/).
 

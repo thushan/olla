@@ -2,6 +2,7 @@ package constants
 
 const (
 	ProviderTypeOllama       = "ollama"
+	ProviderTypeLemonade     = "lemonade"
 	ProviderTypeLMStudio     = "lm-studio"
 	ProviderTypeOpenAI       = "openai"
 	ProviderTypeOpenAICompat = "openai-compatible"
@@ -10,6 +11,7 @@ const (
 
 	// Provider display names
 	ProviderDisplayOllama   = "Ollama"
+	ProviderDisplayLemonade = "Lemonade"
 	ProviderDisplayLMStudio = "LM Studio"
 	ProviderDisplayOpenAI   = "OpenAI"
 	ProviderDisplaySGLang   = "SGLang"

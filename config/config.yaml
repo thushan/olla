@@ -70,6 +70,8 @@ discovery:
   
   static:
     endpoints:
+      # See docs for details on configuring endpoints:
+      # http://127.0.0.1:8000/olla/configuration/overview/#endpoint-configuration
       - url: "http://localhost:11434"
         name: "local-ollama"
         type: "ollama"

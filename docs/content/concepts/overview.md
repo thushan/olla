@@ -66,7 +66,7 @@ Profiles optimise response handling for specific workload patterns.
 ### [Profile System](profile-system.md)
 Provider-specific configuration templates:
 
-- Pre-configured profiles for Ollama, LM Studio, OpenAI, vLLM
+- Pre-configured profiles for Ollama, LM Studio, vLLM, SGLang, Lemonade SDK, LiteLLM, OpenAI
 - Custom header mappings and endpoint patterns
 - Model format converters for each provider
 
