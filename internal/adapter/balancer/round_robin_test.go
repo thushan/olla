@@ -516,12 +516,14 @@ func createRoundRobinEndpoint(name string, port int, status domain.EndpointStatu
 	testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
 	healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
 	return &domain.Endpoint{
-		Name:           name,
-		URL:            testURL,
-		HealthCheckURL: healthURL,
-		Status:         status,
-		Priority:       100,
-		CheckInterval:  5 * time.Second,
-		CheckTimeout:   2 * time.Second,
+		Name:                 name,
+		URL:                  testURL,
+		URLString:            testURL.String(),
+		HealthCheckURL:       healthURL,
+		HealthCheckURLString: healthURL.String(),
+		Status:               status,
+		Priority:             100,
+		CheckInterval:        5 * time.Second,
+		CheckTimeout:         2 * time.Second,
 	}
 }

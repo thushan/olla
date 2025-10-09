@@ -14,10 +14,6 @@ import (
 	"github.com/thushan/olla/pkg/format"
 )
 
-const (
-	maxEndpointsCapacity = 32 // sized for a typical deployment
-)
-
 type EndpointSummary struct {
 	Name          string `json:"name"`
 	Type          string `json:"type"`
@@ -40,15 +36,8 @@ type EndpointStatusResponse struct {
 	RoutableCount int               `json:"routable_count"`
 }
 
-// we try and preallocate slices and buffers to avoid allocations
-// especially in high-load scenarios where this endpoint is hit frequently
-var (
-	endpointSummaryPool = make([]EndpointSummary, 0, maxEndpointsCapacity)
-	stringBuilderPool   = make([]byte, 0, 64) // For building issue strings
-)
-
 const (
-	poolHealthHealthy = "healthy"
+	healthyStatus = "healthy"
 )
 
 func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -63,31 +52,27 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 
 	endpointStats := a.statsCollector.GetEndpointStats()
 	modelMap, _ := a.modelRegistry.GetEndpointModelMap(ctx)
-
-	endpointSummaryPool = endpointSummaryPool[:0]
-	if cap(endpointSummaryPool) < len(allEndpoints) {
-		endpointSummaryPool = make([]EndpointSummary, 0, len(allEndpoints))
-	}
+	summaries := make([]EndpointSummary, 0, len(allEndpoints))
 
 	for _, endpoint := range allEndpoints {
 		summary := a.buildEndpointSummaryOptimised(endpoint, endpointStats, modelMap)
-		endpointSummaryPool = append(endpointSummaryPool, summary)
+		summaries = append(summaries, summary)
 	}
 
-	sort.Slice(endpointSummaryPool, func(i, j int) bool {
-		if endpointSummaryPool[i].Priority != endpointSummaryPool[j].Priority {
-			return endpointSummaryPool[i].Priority > endpointSummaryPool[j].Priority
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].Priority != summaries[j].Priority {
+			return summaries[i].Priority > summaries[j].Priority
 		}
-		return endpointSummaryPool[i].Status == poolHealthHealthy && endpointSummaryPool[j].Status != poolHealthHealthy
+		return summaries[i].Status == healthyStatus && summaries[j].Status != healthyStatus
 	})
 
-	// create a response with minimal allocs
+	// create a response with minimal mallocs
 	response := EndpointStatusResponse{
 		Timestamp:     time.Now(),
 		TotalCount:    len(allEndpoints),
 		HealthyCount:  len(healthyEndpoints),
 		RoutableCount: len(routableEndpoints),
-		Endpoints:     endpointSummaryPool,
+		Endpoints:     summaries,
 	}
 
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)

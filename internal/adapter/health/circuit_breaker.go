@@ -20,7 +20,7 @@ type HTTPClient interface {
 
 // CircuitBreaker tracks failure rates and prevents cascading failures
 // TODO: (HOT-RELOAD) Add cleanup mechanism for removed endpoints when hot reload is implemented
-// The endpoints xsync.MapOf will accumulate stale entries for removed/changed endpoints without TTL
+// The endpoints xsync.Map will accumulate stale entries for removed/changed endpoints without TTL
 type CircuitBreaker struct {
 	endpoints        *xsync.Map[string, *circuitState]
 	failureThreshold int

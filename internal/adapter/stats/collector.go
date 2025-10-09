@@ -313,7 +313,7 @@ func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 }
 
 func (c *Collector) getOrInitEndpoint(endpoint *domain.Endpoint, now int64) *endpointData {
-	key := endpoint.URL.String()
+	key := endpoint.URLString
 	data, _ := c.endpoints.LoadOrCompute(key, func() (newValue *endpointData, cancel bool) {
 		return &endpointData{
 			url:                key,

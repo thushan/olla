@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +36,10 @@ func GetViaHeader() string {
 
 // CopyHeaders copies headers from originalReq to proxyReq with proper handling
 func CopyHeaders(proxyReq, originalReq *http.Request) {
-	proxyReq.Header = make(http.Header)
+	// Pre-size based on source to avoid rehashing
+	if proxyReq.Header == nil {
+		proxyReq.Header = make(http.Header, len(originalReq.Header))
+	}
 	for header, values := range originalReq.Header {
 		// Skip hop-by-hop headers as per RFC 2616 section 13.5.1
 		// these headers are connection-specific and shouldn't be forwarded
@@ -175,8 +179,8 @@ func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoi
 
 		// Calculate and set response time if we have timing information
 		if !stats.StartTime.IsZero() {
-			responseTime := time.Since(stats.StartTime)
-			h.Set(constants.HeaderXOllaResponseTime, responseTime.String())
+			responseTimeMs := time.Since(stats.StartTime).Milliseconds()
+			h.Set(constants.HeaderXOllaResponseTime, strconv.FormatInt(responseTimeMs, 10)+"ms")
 		}
 
 		// set routing decision headers if available

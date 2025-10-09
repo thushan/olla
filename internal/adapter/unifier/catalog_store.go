@@ -3,16 +3,17 @@ package unifier
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
 
 // CatalogStore provides thread-safe storage with fast lookups
-// by ID, name, and digest
+// by ID, name, and digest. Uses atomic pointers for zero-copy reads.
 type CatalogStore struct {
 	lastCleanup     time.Time
-	catalog         map[string]*domain.UnifiedModel
+	catalog         map[string]*atomic.Pointer[domain.UnifiedModel]
 	digestIndex     map[string][]string
 	nameIndex       map[string][]string
 	endpointModels  map[string][]string
@@ -22,7 +23,7 @@ type CatalogStore struct {
 
 func NewCatalogStore(cleanupInterval time.Duration) *CatalogStore {
 	return &CatalogStore{
-		catalog:         make(map[string]*domain.UnifiedModel),
+		catalog:         make(map[string]*atomic.Pointer[domain.UnifiedModel]),
 		digestIndex:     make(map[string][]string),
 		nameIndex:       make(map[string][]string),
 		endpointModels:  make(map[string][]string),
@@ -33,29 +34,45 @@ func NewCatalogStore(cleanupInterval time.Duration) *CatalogStore {
 
 func (c *CatalogStore) GetModel(id string) (*domain.UnifiedModel, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
+	ptr := c.catalog[id]
+	c.mu.RUnlock()
 
-	model, exists := c.catalog[id]
-	if !exists {
+	if ptr == nil {
 		return nil, false
 	}
-	return c.deepCopyModel(model), true
+	// Zero-copy read via atomic load
+	// WARNING: Returned model MUST be treated as read-only
+	// Callers that need to modify should call deepCopyForModification
+	return ptr.Load(), true
 }
 
 func (c *CatalogStore) PutModel(model *domain.UnifiedModel) {
+	if model == nil {
+		return
+	}
+
+	// Copy-on-write: deep copy before storing
+	// this allows callers to modify their reference while we store immutable version
+	modelCopy := c.deepCopyForModification(model)
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.catalog[model.ID] = model
+	ptr, exists := c.catalog[modelCopy.ID]
+	if !exists {
+		ptr = &atomic.Pointer[domain.UnifiedModel]{}
+		c.catalog[modelCopy.ID] = ptr
+	}
+	ptr.Store(modelCopy)
 
-	if model.Metadata != nil {
-		if digest, ok := model.Metadata["digest"].(string); ok && digest != "" {
-			c.addToIndex(c.digestIndex, digest, model.ID)
+	if modelCopy.Metadata != nil {
+		if digest, ok := modelCopy.Metadata["digest"].(string); ok && digest != "" {
+			c.addToIndex(c.digestIndex, digest, modelCopy.ID)
 		}
 	}
 
-	for _, alias := range model.Aliases {
-		c.addToIndex(c.nameIndex, strings.ToLower(alias.Name), model.ID)
+	for _, alias := range modelCopy.Aliases {
+		c.addToIndex(c.nameIndex, strings.ToLower(alias.Name), modelCopy.ID)
 	}
 }
 
@@ -64,10 +81,12 @@ func (c *CatalogStore) GetAllModels() []*domain.UnifiedModel {
 	defer c.mu.RUnlock()
 
 	models := make([]*domain.UnifiedModel, 0, len(c.catalog))
-	for _, model := range c.catalog {
-		// Deep copy prevents races when caller modifies returned models
-		modelCopy := c.deepCopyModel(model)
-		models = append(models, modelCopy)
+	for _, ptr := range c.catalog {
+		if ptr != nil {
+			if model := ptr.Load(); model != nil {
+				models = append(models, model)
+			}
+		}
 	}
 	return models
 }
@@ -77,22 +96,30 @@ func (c *CatalogStore) ResolveByName(name string) (*domain.UnifiedModel, bool) {
 	defer c.mu.RUnlock()
 
 	// Direct ID lookup is fastest
-	if model, exists := c.catalog[name]; exists {
-		return c.deepCopyModel(model), true
+	if ptr, exists := c.catalog[name]; exists && ptr != nil {
+		if model := ptr.Load(); model != nil {
+			return model, true
+		}
 	}
 
 	lowercaseName := strings.ToLower(name)
 	if modelIDs, exists := c.nameIndex[lowercaseName]; exists && len(modelIDs) > 0 {
-		if model, exists := c.catalog[modelIDs[0]]; exists {
-			return c.deepCopyModel(model), true
+		if ptr, exists := c.catalog[modelIDs[0]]; exists && ptr != nil {
+			if model := ptr.Load(); model != nil {
+				return model, true
+			}
 		}
 	}
 
 	// Fallback to full scan for aliases
-	for _, model := range c.catalog {
-		for _, alias := range model.Aliases {
-			if strings.EqualFold(alias.Name, name) {
-				return c.deepCopyModel(model), true
+	for _, ptr := range c.catalog {
+		if ptr != nil {
+			if model := ptr.Load(); model != nil {
+				for _, alias := range model.Aliases {
+					if strings.EqualFold(alias.Name, name) {
+						return model, true
+					}
+				}
 			}
 		}
 	}
@@ -111,8 +138,10 @@ func (c *CatalogStore) ResolveByDigest(digest string) ([]*domain.UnifiedModel, b
 
 	models := make([]*domain.UnifiedModel, 0, len(modelIDs))
 	for _, id := range modelIDs {
-		if model, exists := c.catalog[id]; exists {
-			models = append(models, c.deepCopyModel(model))
+		if ptr, exists := c.catalog[id]; exists && ptr != nil {
+			if model := ptr.Load(); model != nil {
+				models = append(models, model)
+			}
 		}
 	}
 
@@ -123,10 +152,16 @@ func (c *CatalogStore) RemoveModel(id string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	model, exists := c.catalog[id]
-	if !exists {
+	ptr, exists := c.catalog[id]
+	if !exists || ptr == nil {
 		return false
 	}
+
+	model := ptr.Load()
+	if model == nil {
+		return false
+	}
+
 	if model.Metadata != nil {
 		if digest, ok := model.Metadata["digest"].(string); ok && digest != "" {
 			c.removeFromIndex(c.digestIndex, digest, id)
@@ -173,25 +208,32 @@ func (c *CatalogStore) CleanupStaleModels(staleThreshold time.Duration) []string
 	c.lastCleanup = now
 
 	toRemove := []string{}
-	for id, model := range c.catalog {
-		if now.Sub(model.LastSeen) > staleThreshold {
-			toRemove = append(toRemove, id)
+	for id, ptr := range c.catalog {
+		if ptr != nil {
+			if model := ptr.Load(); model != nil {
+				if now.Sub(model.LastSeen) > staleThreshold {
+					toRemove = append(toRemove, id)
+				}
+			}
 		}
 	}
 
 	for _, id := range toRemove {
-		model := c.catalog[id]
-		delete(c.catalog, id)
+		ptr := c.catalog[id]
+		if ptr != nil {
+			if model := ptr.Load(); model != nil {
+				if model.Metadata != nil {
+					if digest, ok := model.Metadata["digest"].(string); ok && digest != "" {
+						c.removeFromIndex(c.digestIndex, digest, id)
+					}
+				}
 
-		if model.Metadata != nil {
-			if digest, ok := model.Metadata["digest"].(string); ok && digest != "" {
-				c.removeFromIndex(c.digestIndex, digest, id)
+				for _, alias := range model.Aliases {
+					c.removeFromIndex(c.nameIndex, strings.ToLower(alias.Name), id)
+				}
 			}
 		}
-
-		for _, alias := range model.Aliases {
-			c.removeFromIndex(c.nameIndex, strings.ToLower(alias.Name), id)
-		}
+		delete(c.catalog, id)
 	}
 
 	return toRemove
@@ -240,8 +282,9 @@ func (c *CatalogStore) removeFromIndex(index map[string][]string, key, value str
 	}
 }
 
-// deepCopyModel prevents race conditions when models are accessed concurrently
-func (c *CatalogStore) deepCopyModel(model *domain.UnifiedModel) *domain.UnifiedModel {
+// deepCopyForModification creates a deep copy for the copy-on-write pattern.
+// This ensures modifications by callers don't affect the stored immutable version.
+func (c *CatalogStore) deepCopyForModification(model *domain.UnifiedModel) *domain.UnifiedModel {
 	if model == nil {
 		return nil
 	}

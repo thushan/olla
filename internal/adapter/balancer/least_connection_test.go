@@ -347,9 +347,10 @@ func TestLeastConnectionsSelector_DifferentURLFormats(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testURL, _ := url.Parse(tc.url)
 			endpoint := &domain.Endpoint{
-				Name:   tc.name,
-				URL:    testURL,
-				Status: domain.StatusHealthy,
+				Name:      tc.name,
+				URL:       testURL,
+				URLString: testURL.String(),
+				Status:    domain.StatusHealthy,
 			}
 
 			// Test connection tracking with different URL formats
@@ -375,12 +376,14 @@ func createTestEndpoint(name string, port int, status domain.EndpointStatus) *do
 	testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
 	healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
 	return &domain.Endpoint{
-		Name:           name,
-		URL:            testURL,
-		HealthCheckURL: healthURL,
-		Status:         status,
-		Priority:       100,
-		CheckInterval:  5 * time.Second,
-		CheckTimeout:   2 * time.Second,
+		Name:                 name,
+		URL:                  testURL,
+		URLString:            testURL.String(),
+		HealthCheckURL:       healthURL,
+		HealthCheckURLString: healthURL.String(),
+		Status:               status,
+		Priority:             100,
+		CheckInterval:        5 * time.Second,
+		CheckTimeout:         2 * time.Second,
 	}
 }

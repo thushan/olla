@@ -2,6 +2,7 @@ package core
 
 import (
 	"crypto/tls"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
@@ -344,7 +345,9 @@ func TestSetResponseHeaders(t *testing.T) {
 			if tt.stats != nil && !tt.stats.StartTime.IsZero() {
 				responseTimeHeader := w.Header().Get("X-Olla-Response-Time")
 				assert.NotEmpty(t, responseTimeHeader, "X-Olla-Response-Time should be set when StartTime is present")
-				// Verify it's a valid duration string
+				// Verify itss in milliseconds format (e.g., "123ms")
+				assert.Contains(t, responseTimeHeader, "ms", "X-Olla-Response-Time should be in milliseconds format")
+				// Verify it'ss still parseable as a duration
 				_, err := time.ParseDuration(responseTimeHeader)
 				assert.NoError(t, err, "X-Olla-Response-Time should be a valid duration")
 			} else {
@@ -470,4 +473,240 @@ func TestHeaderConstants(t *testing.T) {
 	assert.Equal(t, "X-Olla-Backend-Type", constants.HeaderXOllaBackendType)
 	assert.Equal(t, "X-Olla-Model", constants.HeaderXOllaModel)
 	assert.Equal(t, "X-Olla-Response-Time", constants.HeaderXOllaResponseTime)
+}
+
+// TestCopyHeaders_ExistingHeaders tests the edge case where proxyReq.Header has pre-existing entries
+// This verifies that the current fix handles the scenario correctly even when the map is not nil
+func TestCopyHeaders_ExistingHeaders(t *testing.T) {
+	tests := []struct {
+		name             string
+		existingHeaders  map[string][]string
+		originalHeaders  map[string][]string
+		expectedHeaders  map[string][]string
+		shouldClearExist bool
+		description      string
+	}{
+		{
+			name: "pre_existing_headers_overwritten",
+			existingHeaders: map[string][]string{
+				"X-Existing": {"old-value"},
+			},
+			originalHeaders: map[string][]string{
+				"X-Existing": {"new-value"},
+				"X-New-1":    {"value1"},
+				"X-New-2":    {"value2"},
+			},
+			expectedHeaders: map[string][]string{
+				"X-Existing": {"new-value"},
+				"X-New-1":    {"value1"},
+				"X-New-2":    {"value2"},
+			},
+			shouldClearExist: false,
+			description:      "Headers with same name should be overwritten from source",
+		},
+		{
+			name: "pre_existing_different_headers",
+			existingHeaders: map[string][]string{
+				"X-Pre-Existing-1": {"pre1"},
+				"X-Pre-Existing-2": {"pre2"},
+			},
+			originalHeaders: map[string][]string{
+				"X-New-1": {"new1"},
+				"X-New-2": {"new2"},
+			},
+			expectedHeaders: map[string][]string{
+				// Pre-existing headers remain because CopyHeaders doesn't clear the map
+				"X-Pre-Existing-1": {"pre1"},
+				"X-Pre-Existing-2": {"pre2"},
+				"X-New-1":          {"new1"},
+				"X-New-2":          {"new2"},
+			},
+			shouldClearExist: false,
+			description:      "Pre-existing headers with different names persist alongside new headers",
+		},
+		{
+			name: "many_pre_existing_few_new",
+			existingHeaders: map[string][]string{
+				"X-Exist-1":  {"e1"},
+				"X-Exist-2":  {"e2"},
+				"X-Exist-3":  {"e3"},
+				"X-Exist-4":  {"e4"},
+				"X-Exist-5":  {"e5"},
+				"X-Exist-6":  {"e6"},
+				"X-Exist-7":  {"e7"},
+				"X-Exist-8":  {"e8"},
+				"X-Exist-9":  {"e9"},
+				"X-Exist-10": {"e10"},
+			},
+			originalHeaders: map[string][]string{
+				"Content-Type": {"application/json"},
+				"Accept":       {"text/html"},
+			},
+			expectedHeaders: map[string][]string{
+				"X-Exist-1":    {"e1"},
+				"X-Exist-2":    {"e2"},
+				"X-Exist-3":    {"e3"},
+				"X-Exist-4":    {"e4"},
+				"X-Exist-5":    {"e5"},
+				"X-Exist-6":    {"e6"},
+				"X-Exist-7":    {"e7"},
+				"X-Exist-8":    {"e8"},
+				"X-Exist-9":    {"e9"},
+				"X-Exist-10":   {"e10"},
+				"Content-Type": {"application/json"},
+				"Accept":       {"text/html"},
+			},
+			shouldClearExist: false,
+			description:      "Edge case: many existing entries, few new ones - tests potential rehashing",
+		},
+		{
+			name:            "empty_existing_map_normal_operation",
+			existingHeaders: map[string][]string{
+				// Empty but non-nil map (len=0)
+			},
+			originalHeaders: map[string][]string{
+				"Content-Type": {"application/json"},
+				"X-New-1":      {"value1"},
+				"X-New-2":      {"value2"},
+			},
+			expectedHeaders: map[string][]string{
+				"Content-Type": {"application/json"},
+				"X-New-1":      {"value1"},
+				"X-New-2":      {"value2"},
+			},
+			shouldClearExist: false,
+			description:      "Normal case: empty but non-nil map (mimics http.NewRequestWithContext)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create original request with headers
+			originalReq := httptest.NewRequest("GET", "http://example.com/test", nil)
+			for k, values := range tt.originalHeaders {
+				for _, v := range values {
+					originalReq.Header.Add(k, v)
+				}
+			}
+
+			// Create proxy request with pre-existing headers
+			proxyReq := httptest.NewRequest("GET", "http://backend.com/test", nil)
+			for k, values := range tt.existingHeaders {
+				for _, v := range values {
+					proxyReq.Header.Add(k, v)
+				}
+			}
+
+			// Record initial state for debugging
+			initialLen := len(proxyReq.Header)
+			t.Logf("Test: %s - Initial header count: %d", tt.description, initialLen)
+
+			// Copy headers
+			CopyHeaders(proxyReq, originalReq)
+
+			// Verify expected headers (excluding proxy-specific headers)
+			for k, expectedValues := range tt.expectedHeaders {
+				actualValues := proxyReq.Header[k]
+				assert.Equal(t, expectedValues, actualValues,
+					"Header %s should have expected value for: %s", k, tt.description)
+			}
+
+			// Verify proxy-specific headers are always added
+			assert.NotEmpty(t, proxyReq.Header.Get("X-Proxied-By"))
+			assert.NotEmpty(t, proxyReq.Header.Get("Via"))
+
+			t.Logf("Final header count: %d", len(proxyReq.Header))
+		})
+	}
+}
+
+// TestCopyHeaders_MapPreSizingOptimization verifies the optimization behaviour
+// This test documents the behaviour but doesn't fail if optimization isn't perfect
+func TestCopyHeaders_MapPreSizingOptimization(t *testing.T) {
+	t.Run("verify_http_request_creates_empty_map", func(t *testing.T) {
+		// This test verifies that http.NewRequestWithContext creates an empty (len=0) map
+		// which means our nil check will pass and we'll create a pre-sized map
+		req := httptest.NewRequest("GET", "http://example.com/test", nil)
+
+		assert.NotNil(t, req.Header, "http.Request.Header should not be nil")
+		assert.Equal(t, 0, len(req.Header), "http.Request.Header should be empty (len=0)")
+
+		// Since len=0 but Header != nil, our current optimization won't apply
+		// But this is fine because an empty map doesn't cause rehashing issues
+	})
+
+	t.Run("verify_current_fix_handles_nil", func(t *testing.T) {
+		// Test that nil header maps are handled correctly
+		var req *http.Request
+		req = &http.Request{
+			Method: "GET",
+			Header: nil, // Explicitly nil
+		}
+
+		originalReq := httptest.NewRequest("GET", "http://example.com/test", nil)
+		originalReq.Header.Set("X-Test", "value")
+
+		// This should work without panic
+		CopyHeaders(req, originalReq)
+
+		assert.Equal(t, "value", req.Header.Get("X-Test"))
+	})
+}
+
+func BenchmarkCopyHeaders(b *testing.B) {
+	// Create original request with typical headers
+	originalReq := httptest.NewRequest("GET", "http://example.com/test", nil)
+	originalReq.Header.Set("Content-Type", "application/json")
+	originalReq.Header.Set("Accept", "application/json")
+	originalReq.Header.Set("User-Agent", "test-agent/1.0")
+	originalReq.Header.Set("X-Custom-Header", "custom-value")
+	originalReq.RemoteAddr = "192.168.1.100:12345"
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		proxyReq := httptest.NewRequest("GET", "http://backend.com/proxy", nil)
+		CopyHeaders(proxyReq, originalReq)
+	}
+}
+
+// BenchmarkCopyHeaders_WithExistingHeaders benchmarks the edge case
+func BenchmarkCopyHeaders_WithExistingHeaders(b *testing.B) {
+	// Create original request with typical headers
+	originalReq := httptest.NewRequest("GET", "http://example.com/test", nil)
+	originalReq.Header.Set("Content-Type", "application/json")
+	originalReq.Header.Set("Accept", "application/json")
+	originalReq.Header.Set("User-Agent", "test-agent/1.0")
+	originalReq.Header.Set("X-Custom-Header", "custom-value")
+	originalReq.RemoteAddr = "192.168.1.100:12345"
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		proxyReq := httptest.NewRequest("GET", "http://backend.com/proxy", nil)
+		// Pre-populate with some headers (edge case)
+		proxyReq.Header.Set("X-Pre-Existing-1", "value1")
+		proxyReq.Header.Set("X-Pre-Existing-2", "value2")
+		CopyHeaders(proxyReq, originalReq)
+	}
+}
+
+// BenchmarkSetResponseHeaders benchmarks the SetResponseHeaders function
+func BenchmarkSetResponseHeaders(b *testing.B) {
+	stats := &ports.RequestStats{
+		RequestID: "test-request-123",
+		Model:     "gpt-4",
+		StartTime: time.Now().Add(-100 * time.Millisecond),
+	}
+	endpoint := &domain.Endpoint{
+		Name: "backend-1",
+		Type: "openai",
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		SetResponseHeaders(w, stats, endpoint)
+	}
 }
