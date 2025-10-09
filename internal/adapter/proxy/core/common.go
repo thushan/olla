@@ -35,7 +35,10 @@ func GetViaHeader() string {
 
 // CopyHeaders copies headers from originalReq to proxyReq with proper handling
 func CopyHeaders(proxyReq, originalReq *http.Request) {
-	proxyReq.Header = make(http.Header)
+	// Pre-size based on source to avoid rehashing
+	if proxyReq.Header == nil {
+		proxyReq.Header = make(http.Header, len(originalReq.Header))
+	}
 	for header, values := range originalReq.Header {
 		// Skip hop-by-hop headers as per RFC 2616 section 13.5.1
 		// these headers are connection-specific and shouldn't be forwarded
