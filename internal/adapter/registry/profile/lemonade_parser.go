@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -88,7 +89,7 @@ func inferFormatFromRecipe(recipe string) string {
 	if strings.HasPrefix(recipe, "oga-") {
 		return "onnx" // ONNX Runtime recipes (oga-cpu, oga-npu, oga-igpu)
 	}
-	if recipe == "llamacpp" || recipe == "flm" {
+	if recipe == constants.BackendLlamaCpp || recipe == "flm" {
 		return "gguf" // GGUF format for llama.cpp and FLM
 	}
 	return ""
