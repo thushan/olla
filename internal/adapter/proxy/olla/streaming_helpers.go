@@ -18,6 +18,7 @@ type streamState struct {
 	lastChunk            []byte
 	totalBytes           int
 	bytesAfterDisconnect int
+	lastChunkBuf         [8192]byte
 	clientDisconnected   bool
 }
 
@@ -80,9 +81,18 @@ func (s *Service) processStreamData(resp *http.Response, buffer []byte, state *s
 	n, err := resp.Body.Read(buffer)
 	if n > 0 {
 		// Only keep last chunk when we hit EOF (for metrics extraction)
+		// OLLA-221: large allocations per s tream adds GC Pressure over time
+		// using a pre-allocated buffer to avoid heap allocation on hot path
 		if errors.Is(err, io.EOF) {
-			state.lastChunk = make([]byte, n)
-			copy(state.lastChunk, buffer[:n])
+			if n <= len(state.lastChunkBuf) {
+				// most likely case is the chunk fits in pre-allocated buffer
+				copy(state.lastChunkBuf[:], buffer[:n])
+				state.lastChunk = state.lastChunkBuf[:n]
+			} else {
+				// rarer r case: chunk exceeds 8KB, fallback to allocation
+				state.lastChunk = make([]byte, n)
+				copy(state.lastChunk, buffer[:n])
+			}
 		}
 
 		// Handle data write
