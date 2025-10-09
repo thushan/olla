@@ -65,7 +65,7 @@ func TestLemonadeConverter_ConvertToFormat_SingleModel(t *testing.T) {
 	assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", lemonadeModel.ID)
 	assert.Equal(t, "model", lemonadeModel.Object)
 	assert.NotZero(t, lemonadeModel.Created)
-	assert.Equal(t, constants.ProviderTypeLemonade, lemonadeModel.OwnedBy) // No slash in model ID, defaults to "lemonade"
+	assert.Equal(t, constants.ProviderTypeLemonade, lemonadeModel.OwnedBy)
 	assert.Equal(t, "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx", lemonadeModel.Checkpoint)
 	assert.Equal(t, "oga-cpu", lemonadeModel.Recipe)
 }
@@ -108,14 +108,14 @@ func TestLemonadeConverter_ConvertToFormat_MultipleModels(t *testing.T) {
 	// Check first model (CPU)
 	model1 := response.Data[0]
 	assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", model1.ID)
-	assert.Equal(t, constants.ProviderTypeLemonade, model1.OwnedBy) // No slash in model ID, defaults to "lemonade"
+	assert.Equal(t, constants.ProviderTypeLemonade, model1.OwnedBy)
 	assert.Equal(t, "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx", model1.Checkpoint)
 	assert.Equal(t, "oga-cpu", model1.Recipe)
 
 	// Check second model (NPU)
 	model2 := response.Data[1]
 	assert.Equal(t, "Llama-3.2-1B-Instruct-NPU", model2.ID)
-	assert.Equal(t, constants.ProviderTypeLemonade, model2.OwnedBy) // No slash in model ID, defaults to "lemonade"
+	assert.Equal(t, constants.ProviderTypeLemonade, model2.OwnedBy)
 	assert.Equal(t, "meta-llama/Llama-3.2-1B-Instruct-ONNX", model2.Checkpoint)
 	assert.Equal(t, "oga-npu", model2.Recipe)
 }

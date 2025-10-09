@@ -87,10 +87,10 @@ func (p *lemonadeParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 // This allows proper routing and compatibility checking
 func inferFormatFromRecipe(recipe string) string {
 	if strings.HasPrefix(recipe, "oga-") {
-		return "onnx" // ONNX Runtime recipes (oga-cpu, oga-npu, oga-igpu)
+		return constants.RecipeOnnx // ONNX Runtime recipes (oga-cpu, oga-npu, oga-igpu)
 	}
-	if recipe == constants.BackendLlamaCpp || recipe == "flm" {
-		return "gguf" // GGUF format for llama.cpp and FLM
+	if recipe == constants.RecipeLlamaCpp || recipe == constants.RecipeFLM {
+		return constants.RecipeGGUF // GGUF format for llama.cpp and FLM
 	}
 	return ""
 }

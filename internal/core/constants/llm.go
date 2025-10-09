@@ -1,5 +1,8 @@
 package constants
 
 const (
-	BackendLlamaCpp = "llamacpp"
+	RecipeLlamaCpp = "llamacpp"
+	RecipeFLM      = "flm"
+	RecipeGGUF     = "gguf"
+	RecipeOnnx     = "onnx"
 )
