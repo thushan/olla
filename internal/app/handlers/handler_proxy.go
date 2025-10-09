@@ -409,7 +409,7 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 }
 
 func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities) []string {
-	requiredCapabilities := make([]string, 0)
+	requiredCapabilities := make([]string, 0, 5)
 
 	if caps.VisionUnderstanding {
 		requiredCapabilities = append(requiredCapabilities, "vision")
