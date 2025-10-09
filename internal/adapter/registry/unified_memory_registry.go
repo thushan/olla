@@ -317,16 +317,23 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 
 	// Remove endpoint from all unified models
 	r.globalUnified.Range(func(id string, model *domain.UnifiedModel) bool {
+		// we're capturing model metadata BEFORE mutation to avoid accessing empty slices
+		// when the last endpoint is removed (model.RemoveEndpoint empties SourceEndpoints)
+		sourceEndpoints := make([]domain.SourceEndpoint, len(model.SourceEndpoints))
+		copy(sourceEndpoints, model.SourceEndpoints)
+		aliases := make([]domain.AliasEntry, len(model.Aliases))
+		copy(aliases, model.Aliases)
+
 		if model.RemoveEndpoint(endpointURL) {
 			// If no endpoints left, remove the unified model and its cached sets
 			if !model.IsAvailable() {
 				r.globalUnified.Delete(id)
-				// delete cache entries for all model names
+				// delete cache entries for all model names using captured snapshots
 				r.modelEndpointSets.Delete(id)
-				for _, sourceEndpoint := range model.SourceEndpoints {
+				for _, sourceEndpoint := range sourceEndpoints {
 					r.modelEndpointSets.Delete(sourceEndpoint.NativeName)
 				}
-				for _, alias := range model.Aliases {
+				for _, alias := range aliases {
 					r.modelEndpointSets.Delete(alias.Name)
 				}
 			} else {

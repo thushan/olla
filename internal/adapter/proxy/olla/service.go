@@ -468,9 +468,8 @@ func (s *Service) buildTargetURL(r *http.Request, endpoint *domain.Endpoint) *ur
 	if endpoint.URL.Path == "" || endpoint.URL.Path == "/" {
 		targetURL := *endpoint.URL
 		targetURL.Path = targetPath
-		if r.URL.RawQuery != "" {
-			targetURL.RawQuery = r.URL.RawQuery
-		}
+		targetURL.RawQuery = r.URL.RawQuery
+		targetURL.Fragment = ""
 		return &targetURL
 	}
 
