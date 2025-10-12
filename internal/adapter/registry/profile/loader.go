@@ -351,6 +351,72 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	openAIConfig.PathIndices.Embeddings = 3
 
 	profiles[domain.ProfileOpenAICompatible] = NewConfigurableProfile(openAIConfig)
+
+	// Load llama.cpp built-in profile
+	l.loadLlamaCppBuiltIn(profiles)
+}
+
+// Built-in llama.cpp profile added for Phase 5 integration
+func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.InferenceProfile) {
+	llamaCppConfig := &domain.ProfileConfig{
+		Name:        domain.ProfileLlamaCpp,
+		Version:     "1.0",
+		DisplayName: "llama.cpp",
+		Description: "llama.cpp high-performance C++ inference server for GGUF models",
+	}
+	llamaCppConfig.Routing.Prefixes = []string{"llamacpp", "llama-cpp", "llama_cpp"}
+	llamaCppConfig.API.OpenAICompatible = true
+	llamaCppConfig.API.Paths = []string{
+		"/health",              // health check
+		"/props",               // server properties
+		"/slots",               // slot status
+		"/metrics",             // prometheus metrics
+		DefaultModelsUri,       // /v1/models
+		"/v1/chat/completions", // chat
+		"/v1/completions",      // completions
+		"/v1/embeddings",       // embeddings
+	}
+	llamaCppConfig.API.ModelDiscoveryPath = DefaultModelsUri
+	llamaCppConfig.API.HealthCheckPath = "/health"
+	llamaCppConfig.Characteristics.Timeout = 5 * time.Minute
+	llamaCppConfig.Characteristics.MaxConcurrentRequests = 4
+	llamaCppConfig.Characteristics.DefaultPriority = 95 // High priority: native GGUF inference
+	llamaCppConfig.Characteristics.StreamingSupport = true
+	llamaCppConfig.Detection.PathIndicators = []string{DefaultModelsUri, "/health", "/slots", "/props"}
+	llamaCppConfig.Request.ResponseFormat = "llamacpp"
+	llamaCppConfig.Request.ModelFieldPaths = []string{DefaultModelKey}
+	llamaCppConfig.Request.ParsingRules.ChatCompletionsPath = "/v1/chat/completions"
+	llamaCppConfig.Request.ParsingRules.CompletionsPath = "/v1/completions"
+	llamaCppConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
+	llamaCppConfig.Request.ParsingRules.SupportsStreaming = true
+	llamaCppConfig.PathIndices.Health = 0
+	llamaCppConfig.PathIndices.Models = 4
+	llamaCppConfig.PathIndices.ChatCompletions = 5
+	llamaCppConfig.PathIndices.Completions = 6
+	llamaCppConfig.PathIndices.Embeddings = 7
+
+	// Resource patterns for built-in llama.cpp profile
+	llamaCppConfig.Resources.ModelSizes = []domain.ModelSizePattern{
+		{Patterns: []string{"70b", "72b"}, MinMemoryGB: 40, RecommendedMemoryGB: 48, MinGPUMemoryGB: 40, EstimatedLoadTimeMS: 300000},
+		{Patterns: []string{"34b", "33b", "30b"}, MinMemoryGB: 20, RecommendedMemoryGB: 24, MinGPUMemoryGB: 20, EstimatedLoadTimeMS: 120000},
+		{Patterns: []string{"13b", "14b"}, MinMemoryGB: 10, RecommendedMemoryGB: 16, MinGPUMemoryGB: 10, EstimatedLoadTimeMS: 60000},
+		{Patterns: []string{"7b", "8b"}, MinMemoryGB: 6, RecommendedMemoryGB: 8, MinGPUMemoryGB: 6, EstimatedLoadTimeMS: 30000},
+		{Patterns: []string{"3b"}, MinMemoryGB: 3, RecommendedMemoryGB: 4, MinGPUMemoryGB: 3, EstimatedLoadTimeMS: 15000},
+		{Patterns: []string{"1b", "1.5b"}, MinMemoryGB: 2, RecommendedMemoryGB: 3, MinGPUMemoryGB: 2, EstimatedLoadTimeMS: 10000},
+	}
+	llamaCppConfig.Resources.Quantization.Multipliers = map[string]float64{
+		"q2": 0.35,
+		"q3": 0.45,
+		"q4": 0.50,
+		"q5": 0.625,
+		"q6": 0.75,
+		"q8": 0.875,
+	}
+	llamaCppConfig.Resources.Defaults = domain.ResourceRequirements{
+		MinMemoryGB: 4, RecommendedMemoryGB: 8, MinGPUMemoryGB: 4, RequiresGPU: false, EstimatedLoadTimeMS: 5000,
+	}
+
+	profiles[domain.ProfileLlamaCpp] = NewConfigurableProfile(llamaCppConfig)
 }
 
 // GetProfile returns a profile by name

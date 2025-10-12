@@ -10,12 +10,12 @@ import (
 // Package-level to avoid allocations on every call
 // TODO: Move to TaxonomyService + Files
 var knownOrganizations = []string{
-	"openai", "anthropic", "google", "meta", "microsoft", "amazon", "xai",
+	"openai", "anthropic", "google", "meta", "microsoft", "amazon", "xai", "apple",
 	"cohere", "ai21", "databricks", "snowflake", "ibm", "salesforce", "nvidia",
 
 	"mistral", "qwen", "alibaba", "deepseek", "zhipuai", "tii", // qwen/alibaba, glm/zhipuai, falcon/tii
 	"01ai", "baichuan", "stability", "eleutherai", "mosaicml", "bigcode",
-	"servicenow", "cerebras", "nomic",
+	"servicenow", "cerebras", "nomic", "huggingface",
 
 	"openrouter", "together", "replicate", "fireworks", "perplexity", "groq",
 }

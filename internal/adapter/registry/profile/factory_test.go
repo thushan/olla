@@ -20,10 +20,11 @@ func TestNewFactory(t *testing.T) {
 	factory := testFactory(t)
 
 	profiles := factory.GetAvailableProfiles()
-	expectedProfiles := []string{domain.ProfileLmStudio, domain.ProfileOllama}
+	expectedProfiles := []string{domain.ProfileLmStudio, domain.ProfileOllama, domain.ProfileLlamaCpp}
 
+	// Built-in profiles: Ollama, LM Studio, llama.cpp (not OpenAI-compatible since it's fallback)
 	if len(profiles) != len(expectedProfiles) {
-		t.Errorf("Expected %d profiles, got %d", len(expectedProfiles), len(profiles))
+		t.Errorf("Expected %d profiles, got %d (profiles: %v)", len(expectedProfiles), len(profiles), profiles)
 	}
 
 	for _, expected := range expectedProfiles {

@@ -27,6 +27,7 @@ func TestProfileFilteringIntegration(t *testing.T) {
 				domain.ProfileOllama,
 				domain.ProfileLmStudio,
 				domain.ProfileOpenAICompatible,
+				domain.ProfileLlamaCpp,
 			},
 		},
 		{
@@ -57,6 +58,7 @@ func TestProfileFilteringIntegration(t *testing.T) {
 			expectedProfiles: []string{
 				domain.ProfileOllama,
 				domain.ProfileOpenAICompatible,
+				domain.ProfileLlamaCpp,
 			},
 		},
 		{
