@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/filter"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"gopkg.in/yaml.v3"
@@ -185,8 +186,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		"/api/tags", // models
 		"/api/show",
 		DefaultModelsUri,
-		"/v1/chat/completions",
-		"/v1/completions",
+		constants.PathV1ChatCompletions,
+		constants.PathV1Completions,
 		"/v1/embeddings",
 	}
 	ollamaConfig.API.ModelDiscoveryPath = "/api/tags"
@@ -277,8 +278,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	lmStudioConfig.API.OpenAICompatible = true
 	lmStudioConfig.API.Paths = []string{
 		DefaultModelsUri, // both health check and models
-		"/v1/chat/completions",
-		"/v1/completions",
+		constants.PathV1ChatCompletions,
+		constants.PathV1Completions,
 		"/v1/embeddings",
 		"/api/v0/models",
 	}
@@ -291,8 +292,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	lmStudioConfig.Detection.PathIndicators = []string{DefaultModelsUri, "/api/v0/models"}
 	lmStudioConfig.Request.ResponseFormat = "lmstudio"
 	lmStudioConfig.Request.ModelFieldPaths = []string{DefaultModelKey}
-	lmStudioConfig.Request.ParsingRules.ChatCompletionsPath = "/v1/chat/completions"
-	lmStudioConfig.Request.ParsingRules.CompletionsPath = "/v1/completions"
+	lmStudioConfig.Request.ParsingRules.ChatCompletionsPath = constants.PathV1ChatCompletions
+	lmStudioConfig.Request.ParsingRules.CompletionsPath = constants.PathV1Completions
 	lmStudioConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
 	lmStudioConfig.Request.ParsingRules.SupportsStreaming = true
 	lmStudioConfig.PathIndices.Health = 0
@@ -327,8 +328,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	openAIConfig.API.OpenAICompatible = true
 	openAIConfig.API.Paths = []string{
 		DefaultModelsUri,
-		"/v1/chat/completions",
-		"/v1/completions",
+		constants.PathV1ChatCompletions,
+		constants.PathV1Completions,
 		"/v1/embeddings",
 	}
 	openAIConfig.API.ModelDiscoveryPath = DefaultModelsUri
@@ -340,8 +341,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	openAIConfig.Detection.PathIndicators = []string{DefaultModelsUri}
 	openAIConfig.Request.ResponseFormat = "openai"
 	openAIConfig.Request.ModelFieldPaths = []string{DefaultModelKey}
-	openAIConfig.Request.ParsingRules.ChatCompletionsPath = "/v1/chat/completions"
-	openAIConfig.Request.ParsingRules.CompletionsPath = "/v1/completions"
+	openAIConfig.Request.ParsingRules.ChatCompletionsPath = constants.PathV1ChatCompletions
+	openAIConfig.Request.ParsingRules.CompletionsPath = constants.PathV1Completions
 	openAIConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
 	openAIConfig.Request.ParsingRules.SupportsStreaming = true
 	openAIConfig.PathIndices.Health = 0
@@ -367,14 +368,14 @@ func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.Inference
 	llamaCppConfig.Routing.Prefixes = []string{"llamacpp", "llama-cpp", "llama_cpp"}
 	llamaCppConfig.API.OpenAICompatible = true
 	llamaCppConfig.API.Paths = []string{
-		"/health",              // health check
-		"/props",               // server properties
-		"/slots",               // slot status
-		"/metrics",             // prometheus metrics
-		DefaultModelsUri,       // /v1/models
-		"/v1/chat/completions", // chat
-		"/v1/completions",      // completions
-		"/v1/embeddings",       // embeddings
+		"/health",                       // health check
+		"/props",                        // server properties
+		"/slots",                        // slot status
+		"/metrics",                      // prometheus metrics
+		DefaultModelsUri,                // /v1/models
+		constants.PathV1ChatCompletions, // chat
+		constants.PathV1Completions,     // completions
+		"/v1/embeddings",                // embeddings
 	}
 	llamaCppConfig.API.ModelDiscoveryPath = DefaultModelsUri
 	llamaCppConfig.API.HealthCheckPath = "/health"
@@ -383,10 +384,10 @@ func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.Inference
 	llamaCppConfig.Characteristics.DefaultPriority = 95 // High priority: native GGUF inference
 	llamaCppConfig.Characteristics.StreamingSupport = true
 	llamaCppConfig.Detection.PathIndicators = []string{DefaultModelsUri, "/health", "/slots", "/props"}
-	llamaCppConfig.Request.ResponseFormat = "llamacpp"
+	llamaCppConfig.Request.ResponseFormat = constants.ProviderTypeLlamaCpp
 	llamaCppConfig.Request.ModelFieldPaths = []string{DefaultModelKey}
-	llamaCppConfig.Request.ParsingRules.ChatCompletionsPath = "/v1/chat/completions"
-	llamaCppConfig.Request.ParsingRules.CompletionsPath = "/v1/completions"
+	llamaCppConfig.Request.ParsingRules.ChatCompletionsPath = constants.PathV1ChatCompletions
+	llamaCppConfig.Request.ParsingRules.CompletionsPath = constants.PathV1Completions
 	llamaCppConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
 	llamaCppConfig.Request.ParsingRules.SupportsStreaming = true
 	llamaCppConfig.PathIndices.Health = 0
