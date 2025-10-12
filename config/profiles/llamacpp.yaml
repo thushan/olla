@@ -1,0 +1,467 @@
+# llama.cpp inference server profile
+name: llamacpp
+home: "https://github.com/ggerganov/llama.cpp"
+version: "1.0"
+display_name: "llama.cpp"
+description: "llama.cpp high-performance C++ inference server for GGUF models"
+
+# Routing configuration
+routing:
+  prefixes:
+    - llamacpp
+    - llama-cpp
+    - llama_cpp
+
+# API compatibility
+api:
+  openai_compatible: true
+  paths:
+    # Health and system endpoints
+    - /health              # 0: health check
+    - /props               # 1: server properties (model info, context size, etc.)
+    - /slots               # 2: slot status (concurrent request tracking)
+    - /metrics             # 3: Prometheus metrics
+
+    # Model management (OpenAI-compatible)
+    - /v1/models           # 4: list models (typically returns single model)
+
+    # Text generation endpoints
+    - /completion          # 5: native completion endpoint (llama.cpp format)
+    - /v1/completions      # 6: OpenAI-compatible completions
+    - /v1/chat/completions # 7: OpenAI-compatible chat
+
+    # Embeddings
+    - /embedding           # 8: native embedding endpoint
+    - /v1/embeddings       # 9: OpenAI-compatible embeddings
+
+    # Tokenisation (llama.cpp-specific)
+    - /tokenize            # 10: encode text to tokens
+    - /detokenize          # 11: decode tokens to text
+
+    # Code completion (llama.cpp-specific)
+    - /infill              # 12: code infill/completion (FIM support)
+
+  model_discovery_path: /v1/models
+  health_check_path: /health
+  metrics_path: /metrics
+  props_path: /props           # llama.cpp-specific: runtime configuration
+  slots_path: /slots           # llama.cpp-specific: concurrency monitoring
+
+# Platform characteristics
+characteristics:
+  timeout: 5m                  # Similar to Ollama for large models
+  max_concurrent_requests: 4   # Conservative for single-model architecture
+  default_priority: 95         # High priority for direct GGUF inference
+  streaming_support: true
+  single_model_server: true    # important: One model per instance
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/v1/models"
+    - "/health"
+    - "/slots"
+    - "/props"
+  default_ports:
+    - 8080
+    - 8001
+  response_headers:
+    - "Server: llama.cpp"
+  server_signatures:
+    - "llama.cpp"
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "llamacpp"
+  parsing_rules:
+    chat_completions_path: "/v1/chat/completions"
+    completions_path: "/v1/completions"
+    native_completion_path: "/completion"
+    native_embedding_path: "/embedding"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions
+path_indices:
+  health: 0
+  props: 1
+  slots: 2
+  metrics: 3
+  models: 4
+  native_completion: 5
+  completions: 6
+  chat_completions: 7
+  native_embedding: 8
+  embeddings: 9
+  tokenize: 10
+  detokenize: 11
+  infill: 12
+
+# Model handling
+models:
+  name_format: "{{.Name}}"  # llama.cpp typically uses single model names or paths
+  capability_patterns:
+    chat:
+      - "*-chat-*"
+      - "*-instruct*"
+      - "*-Chat*"
+      - "*-Instruct*"
+      - "*chat*"
+      - "*instruct*"
+    embeddings:
+      - "*embed*"
+      - "*-embed-*"
+      - "*embedding*"
+    vision:
+      - "*vision*"
+      - "*llava*"
+      - "*-vision*"
+      - "*bakllava*"
+      - "*minicpm*"
+    code:
+      - "*code*"
+      - "*-code-*"
+      - "*coder*"
+      - "*deepseek-coder*"
+      - "*codellama*"
+      - "*starcoder*"
+  # Context window patterns for common GGUF models
+  context_patterns:
+    - pattern: "*-32k*"
+      context: 32768
+    - pattern: "*-16k*"
+      context: 16384
+    - pattern: "*-8k*"
+      context: 8192
+    - pattern: "*:32k*"
+      context: 32768
+    - pattern: "*:16k*"
+      context: 16384
+    - pattern: "*:8k*"
+      context: 8192
+    - pattern: "*llama-3.1*"
+      context: 131072
+    - pattern: "*llama-3.2*"
+      context: 131072
+    - pattern: "*llama-3*"
+      context: 8192
+    - pattern: "*mistral*"
+      context: 32768
+    - pattern: "*mixtral*"
+      context: 32768
+    - pattern: "*phi*"
+      context: 4096
+    - pattern: "*qwen*"
+      context: 32768
+    - pattern: "*gemma*"
+      context: 8192
+
+# llama.cpp-specific features
+features:
+  # Single model per server (critical architectural difference)
+  single_model_server:
+    enabled: true
+    description: "Each llama.cpp instance serves a single model loaded at startup"
+    implications:
+      - "No runtime model switching"
+      - "Model discovery returns single model"
+      - "Efficient memory usage for dedicated workloads"
+
+  # Slot-based concurrency management
+  slot_management:
+    enabled: true
+    description: "Fine-grained concurrency control and monitoring via slots"
+    endpoint: "/slots"
+    capabilities:
+      - "Real-time slot status monitoring"
+      - "Queue depth visibility"
+      - "Per-request tracking"
+      - "Concurrent request limits"
+
+  # Server properties introspection
+  runtime_props:
+    enabled: true
+    description: "Query server configuration and model information at runtime"
+    endpoint: "/props"
+    provides:
+      - "Model path and metadata"
+      - "Context window size"
+      - "Hardware configuration"
+      - "Quantization level"
+      - "Slot configuration"
+
+  # Tokenization API (llama.cpp-specific)
+  tokenization:
+    enabled: true
+    description: "Direct tokenization/detokenization support using model's tokenizer"
+    endpoints:
+      - /tokenize       # Encode text to token IDs
+      - /detokenize     # Decode token IDs to text
+    use_cases:
+      - "Token counting for context management"
+      - "Custom prompt engineering"
+      - "Token-level analysis"
+
+  # Code infill/completion (FIM - Fill In the Middle)
+  code_infill:
+    enabled: true
+    description: "Code completion and infill for FIM-trained models"
+    endpoint: "/infill"
+    use_cases:
+      - "IDE code completion"
+      - "In-line code generation"
+      - "Code refactoring suggestions"
+    supported_models:
+      - "CodeLlama"
+      - "StarCoder"
+      - "DeepSeek-Coder"
+
+  # Prometheus metrics
+  metrics:
+    enabled: true
+    prefix: "llamacpp:"
+    categories:
+      - system        # slots_available, slots_used, requests_queued
+      - tokens        # prompt_tokens_total, completion_tokens_total
+      - performance   # processing_time_seconds, queue_time_seconds, ttft_seconds
+      - hardware      # cpu_usage, memory_usage, gpu_memory_used (if applicable)
+
+  # GGUF format exclusive support
+  model_format:
+    enabled: true
+    description: "Exclusive GGUF format support with extensive quantization options"
+    supported_formats:
+      - "GGUF"
+    quantization_levels:
+      # 2-bit quantization
+      - "Q2_K"         # 2.63 BPW (bits per weight)
+      - "Q2_K_S"       # 2.16 BPW (smaller)
+      # 3-bit quantization
+      - "Q3_K_S"       # 3.50 BPW
+      - "Q3_K_M"       # 3.91 BPW (recommended 3-bit)
+      - "Q3_K_L"       # 4.27 BPW
+      # 4-bit quantization (most popular)
+      - "Q4_0"         # 4.55 BPW (legacy, fast)
+      - "Q4_1"         # 5.05 BPW (legacy, better quality)
+      - "Q4_K_S"       # 4.58 BPW
+      - "Q4_K_M"       # 4.85 BPW (recommended 4-bit)
+      # 5-bit quantization
+      - "Q5_0"         # 5.54 BPW
+      - "Q5_1"         # 6.04 BPW
+      - "Q5_K_S"       # 5.54 BPW
+      - "Q5_K_M"       # 5.69 BPW (recommended 5-bit)
+      # 6-bit quantization
+      - "Q6_K"         # 6.59 BPW (recommended 6-bit)
+      # 8-bit quantization
+      - "Q8_0"         # 8.50 BPW (high quality)
+      # Full precision
+      - "F16"          # 16-bit float
+      - "F32"          # 32-bit float (original weights)
+
+  # Multi-backend hardware support
+  hardware_backends:
+    enabled: true
+    description: "Supports multiple hardware acceleration backends"
+    supported_backends:
+      - "CPU"          # Pure CPU inference (no GPU required)
+      - "CUDA"         # NVIDIA GPUs
+      - "Metal"        # Apple Silicon (M1/M2/M3)
+      - "Vulkan"       # Cross-platform GPU
+      - "SYCL"         # Intel GPUs
+      - "ROCm"         # AMD GPUs
+      - "OpenCL"       # Legacy GPU support
+    cpu_inference:
+      enabled: true
+      description: "Full functionality without GPU requirements"
+
+# Resource management - GGUF quantization optimisations
+resources:
+  # Model size patterns (GGUF quantized models)
+  # Memory requirements are LOWER than other backends due to quantization
+  model_sizes:
+    - patterns: ["*70b*", "*72b*"]
+      min_memory_gb: 40        # Q4_K_M quantization
+      recommended_memory_gb: 48
+      min_gpu_memory_gb: 40    # If using GPU
+      estimated_load_time_ms: 300000  # 5 minutes
+      notes: "70B models require ~40GB for Q4, ~80GB for Q8, ~140GB for F16"
+    - patterns: ["*34b*", "*33b*", "*30b*"]
+      min_memory_gb: 20        # Q4_K_M quantization
+      recommended_memory_gb: 24
+      min_gpu_memory_gb: 20
+      estimated_load_time_ms: 120000  # 2 minutes
+      notes: "30B models require ~20GB for Q4, ~40GB for Q8"
+    - patterns: ["*13b*", "*14b*"]
+      min_memory_gb: 10        # Q4_K_M quantization
+      recommended_memory_gb: 16
+      min_gpu_memory_gb: 10
+      estimated_load_time_ms: 60000   # 1 minute
+      notes: "13B models require ~8-10GB for Q4, ~20GB for Q8"
+    - patterns: ["*7b*", "*8b*"]
+      min_memory_gb: 6         # Q4_K_M quantization
+      recommended_memory_gb: 8
+      min_gpu_memory_gb: 6
+      estimated_load_time_ms: 30000   # 30 seconds
+      notes: "7-8B models require ~4-6GB for Q4, ~8-12GB for Q8"
+    - patterns: ["*3b*"]
+      min_memory_gb: 3         # Q4_K_M quantization
+      recommended_memory_gb: 4
+      min_gpu_memory_gb: 3
+      estimated_load_time_ms: 15000   # 15 seconds
+      notes: "3B models require ~2-3GB for Q4"
+    - patterns: ["*1b*", "*1.5b*"]
+      min_memory_gb: 2         # Q4_K_M quantization
+      recommended_memory_gb: 3
+      min_gpu_memory_gb: 2
+      estimated_load_time_ms: 10000   # 10 seconds
+      notes: "Small models require ~1-2GB for Q4"
+
+  # Quantization multipliers (memory reduction vs F16 baseline)
+  # These are more aggressive than Ollama due to GGUF's efficient implementation
+  quantization:
+    multipliers:
+      q2: 0.35      # 2-bit ~65% reduction (aggressive, quality loss)
+      q3: 0.45      # 3-bit ~55% reduction (balanced compression)
+      q4: 0.50      # 4-bit ~50% reduction (recommended, good quality)
+      q5: 0.625     # 5-bit ~37.5% reduction (high quality)
+      q6: 0.75      # 6-bit ~25% reduction (very high quality)
+      q8: 0.875     # 8-bit ~12.5% reduction (near-original quality)
+      f16: 1.0      # No reduction (baseline)
+      f32: 2.0      # 2x memory (original weights)
+
+  defaults:
+    min_memory_gb: 4
+    recommended_memory_gb: 8
+    min_gpu_memory_gb: 4
+    requires_gpu: false        # CPU inference fully supported!
+    estimated_load_time_ms: 5000
+
+  # Concurrency limits (single model architecture with slot management)
+  # More conservative than multi-model backends
+  concurrency_limits:
+    - min_memory_gb: 30   # 70B+ models
+      max_concurrent: 1   # Large models typically single-request only
+    - min_memory_gb: 15   # 30B+ models
+      max_concurrent: 2   # Limited concurrency for medium-large models
+    - min_memory_gb: 8    # 13B+ models
+      max_concurrent: 4   # Moderate concurrency
+    - min_memory_gb: 0    # Smaller models
+      max_concurrent: 8   # Good concurrency for small models
+
+  # Slot configuration (llama.cpp-specific)
+  slot_configuration:
+    default_slots: 4            # Default number of processing slots
+    max_slots: 16               # Maximum configurable slots
+    slot_monitoring: true       # Enable slot status monitoring
+    queue_management: true      # Enable request queuing
+
+  # Timeout scaling
+  timeout_scaling:
+    base_timeout_seconds: 30
+    load_time_buffer: true      # Add estimated load time to timeout
+    per_token_timeout_ms: 100   # Additional timeout per expected token
+
+# Metrics extraction for llama.cpp responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    # deprecated ggml, old llamacpp response formats
+    # llama.cpp uses OpenAI-compatible format but includes additional timing fields
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+      # llama.cpp-specific timing metrics
+      processing_time_ms: "$.timings.predicted_ms"       # Actual generation time
+      prompt_processing_ms: "$.timings.prompt_ms"        # Prompt processing time
+      total_time_ms: "$.timings.total_ms"                # Total request time
+      predicted_per_second: "$.timings.predicted_per_second" # Server-provided generation speed
+      prompt_tokens_per_second: "$.timings.prompt_per_second" # Prompt processing speed
+      predicted_n: "$.timings.predicted_n"               # Number of tokens predicted
+      predicted_ms: "$.timings.predicted_ms"             # Time spent generating tokens
+    calculations:
+      is_complete: 'len(finish_reason) > 0'
+      # Use server-provided tokens_per_second if available, otherwise calculate from timings
+      tokens_per_second: "predicted_per_second > 0 ? predicted_per_second : (predicted_ms > 0 ? (predicted_n * 1000.0) / predicted_ms : 0)"
+      ttft_ms: "prompt_processing_ms"
+
+# Performance characteristics
+performance:
+  # llama.cpp is optimised for efficiency and broad hardware support
+  characteristics:
+    - name: "Memory Efficiency"
+      description: "GGUF quantization provides excellent memory/quality trade-offs"
+      benefit: "Run larger models on consumer hardware"
+
+    - name: "CPU Inference"
+      description: "Full-featured CPU-only inference without GPU requirements"
+      benefit: "Deploy on any hardware, including edge devices"
+
+    - name: "Single Model Focus"
+      description: "Dedicated resources for single model workload"
+      benefit: "Predictable performance, no model switching overhead"
+
+    - name: "Slot Management"
+      description: "Explicit concurrency control via processing slots"
+      benefit: "Fine-grained monitoring and resource management"
+
+    - name: "Lightweight"
+      description: "Minimal dependencies, pure C++ implementation"
+      benefit: "Fast startup, low overhead, portable deployment"
+
+# Security considerations
+security:
+  # llama.cpp is often deployed locally or on edge devices
+  local_deployment_common: true
+  recommendations:
+    - "Bind to localhost (127.0.0.1) for local-only access"
+    - "Use reverse proxy (nginx/caddy) for external access"
+    - "Enable authentication via reverse proxy if needed"
+    - "Monitor /slots endpoint for capacity management"
+    - "Implement rate limiting to prevent slot exhaustion"
+    - "Use firewall rules to restrict access to trusted networks"
+
+  # llama.cpp typically runs without authentication
+  authentication:
+    built_in: false
+    recommendation: "Use reverse proxy with authentication (OAuth, basic auth, etc.)"
+
+# Deployment patterns
+deployment:
+  common_scenarios:
+    - name: "Local Development"
+      description: "Single model on developer workstation"
+      typical_setup: "CPU-only inference, Q4 quantization, 1-2 slots"
+
+    - name: "Edge Deployment"
+      description: "On-device inference for IoT/embedded systems"
+      typical_setup: "ARM CPU, small models (1-3B), Q4 quantization, 1 slot"
+
+    - name: "Production Server"
+      description: "Dedicated inference server with GPU acceleration"
+      typical_setup: "CUDA/Metal backend, 7-13B models, Q4-Q8 quantization, 4-8 slots"
+
+    - name: "High-Memory Server"
+      description: "Large model deployment on high-spec hardware"
+      typical_setup: "70B+ models, F16/Q8 quantization, 1-2 slots, GPU required"
+
+    - name: "Multi-Instance"
+      description: "Multiple llama.cpp instances behind Olla proxy"
+      typical_setup: "Different models per instance, load-balanced via Olla"
+
+olla_integration:
+  routing_strategy: "model-aware"
+  load_balancing: "round-robin with health checks"
+  failover: "automatic to other llama.cpp instances"
+  model_discovery: "single model per endpoint"
+  capabilities:
+    - "Slot status monitoring via /slots"
+    - "Runtime configuration via /props"
+    - "Health checking via /health"
+    - "Metrics aggregation from /metrics"
