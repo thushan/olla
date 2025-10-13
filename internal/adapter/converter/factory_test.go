@@ -21,6 +21,7 @@ func TestConverterFactory(t *testing.T) {
 			{"openai", "*converter.OpenAIConverter"},
 			{"ollama", "*converter.OllamaConverter"},
 			{"lemonade", "*converter.LemonadeConverter"},
+			{"llamacpp", "*converter.LlamaCppConverter"},
 			{"lmstudio", "*converter.LMStudioConverter"},
 			{"sglang", "*converter.SGLangConverter"},
 			{"vllm", "*converter.VLLMConverter"},
@@ -50,6 +51,7 @@ func TestConverterFactory(t *testing.T) {
 		assert.Contains(t, qpErr.Reason, "openai")
 		assert.Contains(t, qpErr.Reason, "ollama")
 		assert.Contains(t, qpErr.Reason, "lemonade")
+		assert.Contains(t, qpErr.Reason, "llamacpp")
 		assert.Contains(t, qpErr.Reason, "lmstudio")
 		assert.Contains(t, qpErr.Reason, "sglang")
 		assert.Contains(t, qpErr.Reason, "vllm")
@@ -57,7 +59,7 @@ func TestConverterFactory(t *testing.T) {
 
 	t.Run("GetSupportedFormats returns all formats", func(t *testing.T) {
 		formats := factory.GetSupportedFormats()
-		assert.Len(t, formats, 7)
+		assert.Len(t, formats, 8)
 
 		// Check all expected formats are present
 		formatMap := make(map[string]bool)
@@ -69,6 +71,7 @@ func TestConverterFactory(t *testing.T) {
 		assert.True(t, formatMap["openai"])
 		assert.True(t, formatMap["ollama"])
 		assert.True(t, formatMap["lemonade"])
+		assert.True(t, formatMap["llamacpp"])
 		assert.True(t, formatMap["sglang"])
 		assert.True(t, formatMap["vllm"])
 		assert.True(t, formatMap["lmstudio"])

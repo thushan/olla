@@ -1,8 +1,24 @@
 package converter
 
 import (
+	"strings"
+
 	"github.com/thushan/olla/internal/core/domain"
 )
+
+// Known AI model organisations for owner detection
+// Package-level to avoid allocations on every call
+// TODO: Move to TaxonomyService + Files
+var knownOrganizations = []string{
+	"openai", "anthropic", "google", "meta", "microsoft", "amazon", "xai", "apple",
+	"cohere", "ai21", "databricks", "snowflake", "ibm", "salesforce", "nvidia",
+
+	"mistral", "qwen", "alibaba", "deepseek", "zhipuai", "tii", // qwen/alibaba, glm/zhipuai, falcon/tii
+	"01ai", "baichuan", "stability", "eleutherai", "mosaicml", "bigcode",
+	"servicenow", "cerebras", "nomic", "huggingface",
+
+	"openrouter", "together", "replicate", "fireworks", "perplexity", "groq",
+}
 
 // BaseConverter provides common functionality for all converters
 type BaseConverter struct {
@@ -157,4 +173,43 @@ func (h *ConversionHelper) GetMetadataInt(key string) int {
 // GetMetadataBool extracts a bool from model metadata
 func (h *ConversionHelper) GetMetadataBool(key string) bool {
 	return h.ExtractMetadataBool(h.Model.Metadata, key)
+}
+
+// ExtractOwnerFromModelID extracts the organisation/owner from a model ID
+// Handles both slash-separated (org/model) and hyphenated (org-model) formats
+// Returns defaultOwner if no organisation can be detected
+func ExtractOwnerFromModelID(modelID string, defaultOwner string) string {
+	// First check for "/" separator (e.g., "meta-llama/model.gguf")
+	if parts := strings.SplitN(modelID, "/", 2); len(parts) == 2 {
+		return parts[0]
+	}
+
+	// Check for "-" separator with organisation name pattern (e.g., "meta-llama-3-8b")
+	if parts := strings.Split(modelID, "-"); len(parts) > 1 {
+		potentialOrg := parts[0]
+		if isKnownOrganization(potentialOrg) {
+			return potentialOrg
+		}
+	}
+
+	return defaultOwner
+}
+
+// isKnownOrganization checks if a string matches a known AI model organisation
+// Uses package-level knownOrganizations slice to avoid allocations
+func isKnownOrganization(s string) bool {
+	// Length check: organisations are typically 3-20 characters
+	if len(s) < 3 || len(s) > 20 {
+		return false
+	}
+
+	// Check against known organisations (case-insensitive substring match)
+	sLower := strings.ToLower(s)
+	for _, org := range knownOrganizations {
+		if strings.Contains(sLower, org) {
+			return true
+		}
+	}
+
+	return false
 }

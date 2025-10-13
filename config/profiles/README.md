@@ -15,12 +15,36 @@ These profiles control:
 
 ## Built-in Profiles
 
-- `ollama.yaml` - Ollama local inference server
+- `ollama.yaml` - Ollama local inference server (GGUF models with management layer)
+- `llamacpp.yaml` - llama.cpp lightweight C++ inference server (GGUF models, single model per instance)
 - `lmstudio.yaml` - LM Studio local inference server
 - `lemonade.yaml` - Lemonade SDK local LLM serving platform with AMD Ryzen AI support
 - `vllm.yaml` - vLLM high-performance inference server
 - `sglang.yaml` - SGLang high-performance inference server
-- `openai.yaml` - OpenAI-compatible API generic profile (Ollama, LocalAI, etc.)
+- `anthropic.yaml` - Anthropic Claude API
+- `openai.yaml` - OpenAI-compatible API generic profile
+
+### llama.cpp vs Ollama
+
+Both llama.cpp and Ollama use GGUF models, but they serve different use cases:
+
+**llama.cpp:**
+- Lightweight C++ inference server
+- Single model per instance
+- Direct GGUF support without management layer
+- Slot-based concurrency control
+- Code infill support via `/infill`
+- Runtime introspection via `/props`
+- CPU inference without GPU requirements
+- Ideal for: Edge devices, embedded systems, dedicated single-model workloads
+
+**Ollama:**
+- Go-based inference platform with model management
+- Multiple models per instance with dynamic loading
+- Model library with pull/push functionality
+- Ollama-specific API with `/api/tags`, `/api/show`
+- Built-in Modelfile support
+- Ideal for: Local development, model experimentation, multi-model deployments
 
 ## Adding a New Platform
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/filter"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"gopkg.in/yaml.v3"
@@ -185,8 +186,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		"/api/tags", // models
 		"/api/show",
 		DefaultModelsUri,
-		"/v1/chat/completions",
-		"/v1/completions",
+		constants.PathV1ChatCompletions,
+		constants.PathV1Completions,
 		"/v1/embeddings",
 	}
 	ollamaConfig.API.ModelDiscoveryPath = "/api/tags"
@@ -277,8 +278,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	lmStudioConfig.API.OpenAICompatible = true
 	lmStudioConfig.API.Paths = []string{
 		DefaultModelsUri, // both health check and models
-		"/v1/chat/completions",
-		"/v1/completions",
+		constants.PathV1ChatCompletions,
+		constants.PathV1Completions,
 		"/v1/embeddings",
 		"/api/v0/models",
 	}
@@ -291,8 +292,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	lmStudioConfig.Detection.PathIndicators = []string{DefaultModelsUri, "/api/v0/models"}
 	lmStudioConfig.Request.ResponseFormat = "lmstudio"
 	lmStudioConfig.Request.ModelFieldPaths = []string{DefaultModelKey}
-	lmStudioConfig.Request.ParsingRules.ChatCompletionsPath = "/v1/chat/completions"
-	lmStudioConfig.Request.ParsingRules.CompletionsPath = "/v1/completions"
+	lmStudioConfig.Request.ParsingRules.ChatCompletionsPath = constants.PathV1ChatCompletions
+	lmStudioConfig.Request.ParsingRules.CompletionsPath = constants.PathV1Completions
 	lmStudioConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
 	lmStudioConfig.Request.ParsingRules.SupportsStreaming = true
 	lmStudioConfig.PathIndices.Health = 0
@@ -327,8 +328,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	openAIConfig.API.OpenAICompatible = true
 	openAIConfig.API.Paths = []string{
 		DefaultModelsUri,
-		"/v1/chat/completions",
-		"/v1/completions",
+		constants.PathV1ChatCompletions,
+		constants.PathV1Completions,
 		"/v1/embeddings",
 	}
 	openAIConfig.API.ModelDiscoveryPath = DefaultModelsUri
@@ -340,8 +341,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	openAIConfig.Detection.PathIndicators = []string{DefaultModelsUri}
 	openAIConfig.Request.ResponseFormat = "openai"
 	openAIConfig.Request.ModelFieldPaths = []string{DefaultModelKey}
-	openAIConfig.Request.ParsingRules.ChatCompletionsPath = "/v1/chat/completions"
-	openAIConfig.Request.ParsingRules.CompletionsPath = "/v1/completions"
+	openAIConfig.Request.ParsingRules.ChatCompletionsPath = constants.PathV1ChatCompletions
+	openAIConfig.Request.ParsingRules.CompletionsPath = constants.PathV1Completions
 	openAIConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
 	openAIConfig.Request.ParsingRules.SupportsStreaming = true
 	openAIConfig.PathIndices.Health = 0
@@ -351,6 +352,72 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	openAIConfig.PathIndices.Embeddings = 3
 
 	profiles[domain.ProfileOpenAICompatible] = NewConfigurableProfile(openAIConfig)
+
+	// Load llama.cpp built-in profile
+	l.loadLlamaCppBuiltIn(profiles)
+}
+
+// Built-in llama.cpp profile added for Phase 5 integration
+func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.InferenceProfile) {
+	llamaCppConfig := &domain.ProfileConfig{
+		Name:        domain.ProfileLlamaCpp,
+		Version:     "1.0",
+		DisplayName: "llama.cpp",
+		Description: "llama.cpp high-performance C++ inference server for GGUF models",
+	}
+	llamaCppConfig.Routing.Prefixes = []string{"llamacpp", "llama-cpp", "llama_cpp"}
+	llamaCppConfig.API.OpenAICompatible = true
+	llamaCppConfig.API.Paths = []string{
+		"/health",                       // health check
+		"/props",                        // server properties
+		"/slots",                        // slot status
+		"/metrics",                      // prometheus metrics
+		DefaultModelsUri,                // /v1/models
+		constants.PathV1ChatCompletions, // chat
+		constants.PathV1Completions,     // completions
+		"/v1/embeddings",                // embeddings
+	}
+	llamaCppConfig.API.ModelDiscoveryPath = DefaultModelsUri
+	llamaCppConfig.API.HealthCheckPath = "/health"
+	llamaCppConfig.Characteristics.Timeout = 5 * time.Minute
+	llamaCppConfig.Characteristics.MaxConcurrentRequests = 4
+	llamaCppConfig.Characteristics.DefaultPriority = 95 // High priority: native GGUF inference
+	llamaCppConfig.Characteristics.StreamingSupport = true
+	llamaCppConfig.Detection.PathIndicators = []string{DefaultModelsUri, "/health", "/slots", "/props"}
+	llamaCppConfig.Request.ResponseFormat = constants.ProviderTypeLlamaCpp
+	llamaCppConfig.Request.ModelFieldPaths = []string{DefaultModelKey}
+	llamaCppConfig.Request.ParsingRules.ChatCompletionsPath = constants.PathV1ChatCompletions
+	llamaCppConfig.Request.ParsingRules.CompletionsPath = constants.PathV1Completions
+	llamaCppConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
+	llamaCppConfig.Request.ParsingRules.SupportsStreaming = true
+	llamaCppConfig.PathIndices.Health = 0
+	llamaCppConfig.PathIndices.Models = 4
+	llamaCppConfig.PathIndices.ChatCompletions = 5
+	llamaCppConfig.PathIndices.Completions = 6
+	llamaCppConfig.PathIndices.Embeddings = 7
+
+	// Resource patterns for built-in llama.cpp profile
+	llamaCppConfig.Resources.ModelSizes = []domain.ModelSizePattern{
+		{Patterns: []string{"70b", "72b"}, MinMemoryGB: 40, RecommendedMemoryGB: 48, MinGPUMemoryGB: 40, EstimatedLoadTimeMS: 300000},
+		{Patterns: []string{"34b", "33b", "30b"}, MinMemoryGB: 20, RecommendedMemoryGB: 24, MinGPUMemoryGB: 20, EstimatedLoadTimeMS: 120000},
+		{Patterns: []string{"13b", "14b"}, MinMemoryGB: 10, RecommendedMemoryGB: 16, MinGPUMemoryGB: 10, EstimatedLoadTimeMS: 60000},
+		{Patterns: []string{"7b", "8b"}, MinMemoryGB: 6, RecommendedMemoryGB: 8, MinGPUMemoryGB: 6, EstimatedLoadTimeMS: 30000},
+		{Patterns: []string{"3b"}, MinMemoryGB: 3, RecommendedMemoryGB: 4, MinGPUMemoryGB: 3, EstimatedLoadTimeMS: 15000},
+		{Patterns: []string{"1b", "1.5b"}, MinMemoryGB: 2, RecommendedMemoryGB: 3, MinGPUMemoryGB: 2, EstimatedLoadTimeMS: 10000},
+	}
+	llamaCppConfig.Resources.Quantization.Multipliers = map[string]float64{
+		"q2": 0.35,
+		"q3": 0.45,
+		"q4": 0.50,
+		"q5": 0.625,
+		"q6": 0.75,
+		"q8": 0.875,
+	}
+	llamaCppConfig.Resources.Defaults = domain.ResourceRequirements{
+		MinMemoryGB: 4, RecommendedMemoryGB: 8, MinGPUMemoryGB: 4, RequiresGPU: false, EstimatedLoadTimeMS: 5000,
+	}
+
+	profiles[domain.ProfileLlamaCpp] = NewConfigurableProfile(llamaCppConfig)
 }
 
 // GetProfile returns a profile by name

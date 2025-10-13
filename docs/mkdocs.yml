@@ -156,6 +156,7 @@ nav:
             - SGLang: integrations/backend/sglang.md
             - Lemonade SDK: integrations/backend/lemonade.md
             - LiteLLM: integrations/backend/litellm.md
+            - llama.cpp: integrations/backend/llamacpp.md
         - Frontends:
             - OpenWebUI + Ollama: integrations/frontend/openwebui.md
             - OpenWebUI + OpenAI: integrations/frontend/openwebui-openai.md
@@ -179,4 +180,5 @@ nav:
           - SGLang: api-reference/sglang.md
           - Lemonade SDK: api-reference/lemonade.md
           - LiteLLM: api-reference/litellm.md
+          - llama.cpp: api-reference/llamacpp.md
           - OpenAI: api-reference/openai.md

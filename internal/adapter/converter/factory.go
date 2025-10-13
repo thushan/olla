@@ -25,6 +25,7 @@ func NewConverterFactory() *ConverterFactory {
 	factory.RegisterConverter(NewLMStudioConverter())
 	factory.RegisterConverter(NewSGLangConverter())
 	factory.RegisterConverter(NewVLLMConverter())
+	factory.RegisterConverter(NewLlamaCppConverter())
 
 	return factory
 }
