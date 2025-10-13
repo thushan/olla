@@ -16,6 +16,7 @@ Olla natively supports the following backends:
 |---------|------|-------------|
 | [Ollama](./backend/ollama.md) | `ollama` | Native support for [Ollama](https://github.com/ollama/ollama), including model unification |
 | [LM Studio](./backend/lmstudio.md) | `lm-studio` | Native support for [LM Studio](https://lmstudio.ai/), including model unification |
+| [llama.cpp](./backend/llamacpp.md) | `llamacpp` | Native support for [llama.cpp](https://github.com/ggml-org/llama.cpp) lightweight C++ inference server with GGUF models, including slot management, code infill, and CPU-first design for edge deployment |
 | [vLLM](./backend/vllm.md) | `vllm` | Native support for [vLLM](https://github.com/vllm-project/vllm), including model unification |
 | [SGLang](./backend/sglang.md) | `sglang` | Native support for [SGLang](https://github.com/sgl-project/sglang) with RadixAttention and Frontend Language, including model unification and vision support |
 | [Lemonade SDK](./backend/lemonade.md) | `lemonade` | Native support for [Lemonade SDK](https://lemonade-server.ai/), AMD's local inference solution with Ryzen AI optimisation, including model unification |

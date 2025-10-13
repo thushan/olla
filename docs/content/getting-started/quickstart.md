@@ -116,6 +116,17 @@ curl -X POST http://localhost:40114/olla/ollama/v1/chat/completions \
   }'
 ```
 
+### llama.cpp Endpoint
+
+```bash
+curl -X POST http://localhost:40114/olla/llamacpp/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "llama-3.2-3b-instruct-q4_k_m.gguf",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
 ## Multiple Endpoints Configuration
 
 Configure multiple LLM endpoints with load balancing:
@@ -136,7 +147,13 @@ discovery:
         name: "local-lm-studio"
         type: "lm-studio"
         priority: 50
-        
+
+      # llama.cpp endpoint
+      - url: "http://localhost:8080"
+        name: "local-llamacpp"
+        type: "llamacpp"
+        priority: 95
+
       # Low priority remote endpoint
       - url: "https://api.example.com"
         name: "remote-api"
@@ -224,7 +241,7 @@ server:
 
 ### Next Steps
 
-- [Backend Integrations](../integrations/overview.md) - Connect Ollama, LM Studio, vLLM, SGLang, Lemonade SDK, LiteLLM
+- [Backend Integrations](../integrations/overview.md) - Connect Ollama, LM Studio, llama.cpp, vLLM, SGLang, Lemonade SDK, LiteLLM
 - [Architecture Overview](../development/architecture.md) - Deep dive into Olla's design
 - [Development Guide](../development/contributing.md) - Contribute to Olla
 

@@ -76,6 +76,13 @@ discovery:
         priority: 50
         check_interval: 10s
 
+      # llama.cpp instance
+      - url: "http://localhost:8080"
+        name: "llamacpp-local"
+        type: "llamacpp"
+        priority: 95
+        check_interval: 10s
+
 model_registry:
   type: "memory"
   enable_unifier: true
@@ -166,6 +173,19 @@ discovery:
         model_url: "/v1/models"
         health_check_url: "/health"
         check_interval: 10s
+
+      # llama.cpp instances (different quantisation levels)
+      - url: "http://llamacpp-q4.internal:8080"
+        name: "llamacpp-q4"
+        type: "llamacpp"
+        priority: 95
+        check_interval: 5s
+
+      - url: "http://llamacpp-q8.internal:8080"
+        name: "llamacpp-q8"
+        type: "llamacpp"
+        priority: 90
+        check_interval: 5s
 
 model_registry:
   type: "memory"
@@ -289,7 +309,14 @@ discovery:
         priority: 90
         model_url: "/v1/models"
         health_check_url: "/"
-        
+
+      # llama.cpp for edge deployment
+      - url: "http://localhost:8080"
+        name: "llamacpp-edge"
+        type: "llamacpp"
+        priority: 95
+        health_check_url: "/health"
+
       # vLLM for high-throughput serving
       - url: "http://vllm-server:8000"
         name: "vllm-production"

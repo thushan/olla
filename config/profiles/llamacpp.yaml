@@ -9,19 +9,14 @@ description: "llama.cpp high-performance C++ inference server for GGUF models"
 routing:
   prefixes:
     - llamacpp
-    - llama-cpp
-    - llama_cpp
+    # Enable other aliases if needed
+    #- llama-cpp
+    #- llama_cpp
 
 # API compatibility
 api:
   openai_compatible: true
   paths:
-    # Health and system endpoints
-    - /health              # 0: health check
-    - /props               # 1: server properties (model info, context size, etc.)
-    - /slots               # 2: slot status (concurrent request tracking)
-    - /metrics             # 3: Prometheus metrics
-
     # Model management (OpenAI-compatible)
     - /v1/models           # 4: list models (typically returns single model)
 
@@ -40,6 +35,15 @@ api:
 
     # Code completion (llama.cpp-specific)
     - /infill              # 12: code infill/completion (FIM support)
+
+    # Health and system endpoints (disabled)
+    # Until Olla aggregates these properly, we disable them as the
+    # load balancer will decide endpoint is used instead.
+    # We will enable this in the future when Olla supports it.
+    #- /health              # 0: health check
+    #- /props               # 1: server properties (model info, context size, etc.)
+    #- /slots               # 2: slot status (concurrent request tracking)
+    #- /metrics             # 3: Prometheus metrics
 
   model_discovery_path: /v1/models
   health_check_path: /health

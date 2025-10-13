@@ -64,6 +64,13 @@ Proxy endpoints for LiteLLM gateway (100+ providers).
 
 - `/olla/litellm/*` - LiteLLM API endpoints
 
+### [llama.cpp API](llamacpp.md)
+Proxy endpoints for llama.cpp servers.
+
+- `/olla/llamacpp/*` - llama.cpp API endpoints
+- OpenAI-compatible endpoints plus native llamacpp features
+- Includes slot monitoring, code infill, and tokenisation
+
 ### [Lemonade SDK API](lemonade.md)
 Proxy endpoints for Lemonade SDK servers with AMD Ryzen AI support.
 
@@ -73,6 +80,7 @@ Proxy endpoints for Lemonade SDK servers with AMD Ryzen AI support.
 ## Authentication
 
 Currently, Olla does not implement authentication at the proxy level. Authentication should be handled by:
+
 - Backend services (Ollama, LM Studio, etc.)
 - Network-level security (firewalls, VPNs)
 - Reverse proxy authentication (nginx, Traefik)
@@ -105,7 +113,7 @@ All responses include:
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used (if applicable) |
-| `X-Olla-Backend-Type` | Provider type, examples: <br> `ollama/lmstudio/openai/vllm/sglang/lemonade/litellm` |
+| `X-Olla-Backend-Type` | Provider type, examples: <br> `ollama/lmstudio/llamacpp/openai/vllm/sglang/lemonade/litellm` |
 | `X-Olla-Response-Time` | Total processing time |
 | `X-Olla-Routing-Strategy` | Routing strategy used (when model routing is active) |
 | `X-Olla-Routing-Decision` | Routing decision made (routed/fallback/rejected) |
