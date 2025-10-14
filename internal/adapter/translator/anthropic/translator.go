@@ -42,16 +42,9 @@ func (t *Translator) Name() string {
 	return "anthropic"
 }
 
-// TransformResponse converts an OpenAI response back to Anthropic format
-// This method will be implemented in Phase 2 (response.go)
-func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
-	// TODO: Implement in Phase 2
-	return nil, nil
-}
-
 // TransformStreamingResponse handles streaming response conversion
-// This method will be implemented in Phase 2 (streaming.go)
+// This method will be implemented in Phase 3 (streaming.go)
 func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error {
-	// TODO: Implement in Phase 2
+	// TODO: Implement in Phase 3
 	return nil
 }
