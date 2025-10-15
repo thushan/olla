@@ -44,6 +44,9 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
 	a.routeRegistry.RegisterWithMethod("/olla/proxy/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
 
+	// Translators: Anthropic -> OpenAI -> Anthropic
+	a.routeRegistry.RegisterWithMethod("/olla/anthropic/v1/messages", a.anthropicHandler, "Anthropic Messages API", "POST")
+
 	// Provider routes are built from YAML configs when available
 	a.registerProviderRoutes()
 }
