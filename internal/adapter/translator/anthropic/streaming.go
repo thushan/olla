@@ -37,10 +37,9 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		return fmt.Errorf("response writer does not support flushing")
-	}
+	// Use http.ResponseController for modern flush handling (Go 1.20+)
+	// Provides better error handling and cleaner API than type assertion
+	rc := http.NewResponseController(w)
 
 	state := &StreamingState{
 		messageID:       t.generateMessageID(),
@@ -61,7 +60,7 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 		default:
 		}
 
-		if err := t.processStreamLine(line, state, w, flusher); err != nil {
+		if err := t.processStreamLine(line, state, w, rc); err != nil {
 			t.logger.Error("Error processing stream line", "error", err)
 			continue // Continue processing, don't fail entire stream
 		}
@@ -77,13 +76,15 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 		if err := t.writeEvent(w, "message_start", t.createMessageStart(state)); err != nil {
 			return err
 		}
-		flusher.Flush()
+		if err := rc.Flush(); err != nil {
+			return fmt.Errorf("flush failed: %w", err)
+		}
 		state.messageStartSent = true
 	}
 
 	// Send final events
 	// Completes the stream with stop reason and final token counts
-	if err := t.finalizeStream(state, w, flusher); err != nil {
+	if err := t.finalizeStream(state, w, rc); err != nil {
 		return err
 	}
 
@@ -92,7 +93,7 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 
 // processStreamLine processes a single SSE line from OpenAI
 // Parses the OpenAI chunk and routes to appropriate handlers for content or tool calls
-func (t *Translator) processStreamLine(line string, state *StreamingState, w http.ResponseWriter, flusher http.Flusher) error {
+func (t *Translator) processStreamLine(line string, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
 	// OpenAI format: "data: {...}"
 	if !strings.HasPrefix(line, "data: ") {
 		return nil
@@ -140,12 +141,12 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 
 	// Handle content delta
 	if content, ok := delta["content"].(string); ok && content != "" {
-		return t.handleContentDelta(content, state, w, flusher)
+		return t.handleContentDelta(content, state, w, rc)
 	}
 
 	// Handle tool calls delta
 	if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
-		return t.handleToolCallsDelta(toolCalls, state, w, flusher)
+		return t.handleToolCallsDelta(toolCalls, state, w, rc)
 	}
 
 	return nil
@@ -153,12 +154,14 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 
 // ensureMessageStartSent sends message_start if not already sent
 // This ensures message_start is always the first event before any content events
-func (t *Translator) ensureMessageStartSent(state *StreamingState, w http.ResponseWriter, flusher http.Flusher) error {
+func (t *Translator) ensureMessageStartSent(state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
 	if !state.messageStartSent {
 		if err := t.writeEvent(w, "message_start", t.createMessageStart(state)); err != nil {
 			return err
 		}
-		flusher.Flush()
+		if err := rc.Flush(); err != nil {
+			return fmt.Errorf("flush failed: %w", err)
+		}
 		state.messageStartSent = true
 	}
 	return nil
@@ -166,9 +169,9 @@ func (t *Translator) ensureMessageStartSent(state *StreamingState, w http.Respon
 
 // handleContentDelta processes text content delta
 // Starts a new content block if needed and sends appropriate Anthropic events
-func (t *Translator) handleContentDelta(content string, state *StreamingState, w http.ResponseWriter, flusher http.Flusher) error {
+func (t *Translator) handleContentDelta(content string, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
 	// Ensure message_start is sent before any content events
-	if err := t.ensureMessageStartSent(state, w, flusher); err != nil {
+	if err := t.ensureMessageStartSent(state, w, rc); err != nil {
 		return err
 	}
 
@@ -183,7 +186,9 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 			}); err != nil {
 				return err
 			}
-			flusher.Flush()
+			if err := rc.Flush(); err != nil {
+				return fmt.Errorf("flush failed: %w", err)
+			}
 		}
 
 		state.currentBlock = &ContentBlock{
@@ -204,7 +209,9 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 		}); err != nil {
 			return err
 		}
-		flusher.Flush()
+		if err := rc.Flush(); err != nil {
+			return fmt.Errorf("flush failed: %w", err)
+		}
 	}
 
 	// Send content_block_delta
@@ -219,7 +226,9 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 	}); err != nil {
 		return err
 	}
-	flusher.Flush()
+	if err := rc.Flush(); err != nil {
+		return fmt.Errorf("flush failed: %w", err)
+	}
 
 	// Update state
 	// Track the accumulated text for debugging and validation
@@ -231,9 +240,9 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 
 // handleToolCallsDelta processes tool calls delta
 // Buffers partial JSON arguments and sends Anthropic tool_use events
-func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *StreamingState, w http.ResponseWriter, flusher http.Flusher) error {
+func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
 	// Ensure message_start is sent before any content events
-	if err := t.ensureMessageStartSent(state, w, flusher); err != nil {
+	if err := t.ensureMessageStartSent(state, w, rc); err != nil {
 		return err
 	}
 
@@ -283,7 +292,9 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 				}); err != nil {
 					return err
 				}
-				flusher.Flush()
+				if err := rc.Flush(); err != nil {
+					return fmt.Errorf("flush failed: %w", err)
+				}
 			}
 		}
 
@@ -304,7 +315,9 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 			}); err != nil {
 				return err
 			}
-			flusher.Flush()
+			if err := rc.Flush(); err != nil {
+				return fmt.Errorf("flush failed: %w", err)
+			}
 		}
 	}
 
@@ -313,7 +326,7 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 
 // finalizeStream sends final events and completes the stream
 // Processes buffered tool arguments and determines stop_reason from OpenAI finish_reason
-func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter, flusher http.Flusher) error {
+func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
 	// Send content_block_stop for current block if active
 	// Anthropic requires explicit stop event for each block
 	if state.currentBlock != nil {
@@ -323,7 +336,9 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 		}); err != nil {
 			return err
 		}
-		flusher.Flush()
+		if err := rc.Flush(); err != nil {
+			return fmt.Errorf("flush failed: %w", err)
+		}
 	}
 
 	// Parse tool call buffers into input objects
@@ -364,7 +379,9 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 	}); err != nil {
 		return err
 	}
-	flusher.Flush()
+	if err := rc.Flush(); err != nil {
+		return fmt.Errorf("flush failed: %w", err)
+	}
 
 	// Send message_stop
 	// Final event to indicate stream completion
@@ -373,7 +390,9 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 	}); err != nil {
 		return err
 	}
-	flusher.Flush()
+	if err := rc.Flush(); err != nil {
+		return fmt.Errorf("flush failed: %w", err)
+	}
 
 	return nil
 }

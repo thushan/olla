@@ -52,10 +52,9 @@ func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Conte
 	combinedCtx, cancel := s.createCombinedContext(clientCtx, upstreamCtx)
 	defer cancel()
 
-	flusher, canFlush := w.(http.Flusher)
-	if !canFlush {
-		rlog.Warn("ResponseWriter does not support flushing - streaming may be buffered")
-	}
+	// Use http.ResponseController for modern flush handling (Go 1.20+)
+	// Provides better error handling and cleaner API than type assertion
+	rc := http.NewResponseController(w)
 
 	for {
 		result, err := s.performTimedRead(combinedCtx, resp.Body, buffer, readTimeout, state, rlog)
@@ -69,7 +68,7 @@ func (s *Service) streamResponseWithTimeout(clientCtx, upstreamCtx context.Conte
 		}
 
 		// Process read result
-		done, err := s.processReadResult(result, w, buffer, flusher, canFlush, state, rlog)
+		done, err := s.processReadResult(result, w, buffer, rc, state, rlog)
 		if done || err != nil {
 			return state.totalBytes, state.lastChunkBuffer.Bytes(), err
 		}
@@ -180,12 +179,12 @@ func (s *Service) handleContextCancellation(clientCtx, upstreamCtx context.Conte
 }
 
 // processReadResult processes the result of a read operation
-func (s *Service) processReadResult(result *readResult, w http.ResponseWriter, buffer []byte, flusher http.Flusher, canFlush bool, state *streamState, rlog logger.StyledLogger) (bool, error) {
+func (s *Service) processReadResult(result *readResult, w http.ResponseWriter, buffer []byte, rc *http.ResponseController, state *streamState, rlog logger.StyledLogger) (bool, error) {
 	n, err := result.n, result.err
 
 	// Handle data if available
 	if n > 0 {
-		if writeErr := s.writeData(w, buffer[:n], flusher, canFlush, state, rlog); writeErr != nil {
+		if writeErr := s.writeData(w, buffer[:n], rc, state, rlog); writeErr != nil {
 			return true, writeErr
 		}
 	} else if n == 0 && err == nil {
@@ -211,7 +210,7 @@ func (s *Service) processReadResult(result *readResult, w http.ResponseWriter, b
 }
 
 // writeData writes data to the response writer
-func (s *Service) writeData(w http.ResponseWriter, data []byte, flusher http.Flusher, canFlush bool, state *streamState, rlog logger.StyledLogger) error {
+func (s *Service) writeData(w http.ResponseWriter, data []byte, rc *http.ResponseController, state *streamState, rlog logger.StyledLogger) error {
 	// Store chunk in ring buffer for potential metrics extraction
 	if len(data) > 0 && state.lastChunkBuffer != nil {
 		state.lastChunkBuffer.Write(data)
@@ -227,8 +226,12 @@ func (s *Service) writeData(w http.ResponseWriter, data []byte, flusher http.Flu
 		}
 
 		// Flush if we're in streaming mode
-		if canFlush && s.shouldFlush(state) {
-			flusher.Flush()
+		// ResponseController provides better error handling than direct Flusher interface
+		if s.shouldFlush(state) {
+			if err := rc.Flush(); err != nil {
+				rlog.Debug("flush failed", "error", err)
+				// Don't fail on flush errors - response may still succeed
+			}
 		}
 	} else {
 		// Track bytes after disconnect

@@ -2,7 +2,10 @@ package anthropic
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/pkg/pool"
 )
@@ -37,4 +40,52 @@ func NewTranslator(log logger.StyledLogger) *Translator {
 // Name returns the translator identifier
 func (t *Translator) Name() string {
 	return "anthropic"
+}
+
+// GetAPIPath implements PathProvider interface for dynamic route registration
+// Returns the Anthropic Messages API endpoint path
+func (t *Translator) GetAPIPath() string {
+	return "/olla/anthropic/v1/messages"
+}
+
+// WriteError implements ErrorWriter interface for Anthropic-specific error formatting
+// Formats errors according to Anthropic's error schema
+// See: https://docs.anthropic.com/claude/reference/errors
+func (t *Translator) WriteError(w http.ResponseWriter, err error, statusCode int) {
+	t.logger.Error("Anthropic request failed",
+		"error", err.Error(),
+		"status", statusCode)
+
+	// Map HTTP status codes to Anthropic error types
+	errorType := "api_error"
+	switch statusCode {
+	case http.StatusBadRequest:
+		errorType = "invalid_request_error"
+	case http.StatusUnauthorized:
+		errorType = "authentication_error"
+	case http.StatusForbidden:
+		errorType = "permission_error"
+	case http.StatusNotFound:
+		errorType = "not_found_error"
+	case http.StatusTooManyRequests:
+		errorType = "rate_limit_error"
+	case http.StatusServiceUnavailable:
+		errorType = "overloaded_error"
+	}
+
+	// Anthropic error format
+	errorResp := map[string]interface{}{
+		"type": "error",
+		"error": map[string]interface{}{
+			"type":    errorType,
+			"message": err.Error(),
+		},
+	}
+
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	w.WriteHeader(statusCode)
+
+	if encErr := json.NewEncoder(w).Encode(errorResp); encErr != nil {
+		t.logger.Error("Failed to write error response", "error", encErr)
+	}
 }

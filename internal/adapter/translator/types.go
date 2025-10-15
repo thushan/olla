@@ -34,3 +34,18 @@ type TransformedRequest struct {
 	OriginalBody  []byte                 // Original request body for response translation context
 	IsStreaming   bool                   // Whether response should stream
 }
+
+// PathProvider is an optional interface that translators can implement to define
+// their API endpoints. This enables dynamic route registration without hardcoding
+// paths in the application layer. If not implemented, routes must be registered manually.
+type PathProvider interface {
+	GetAPIPath() string // Returns the API path (e.g., "/olla/anthropic/v1/messages")
+}
+
+// ErrorWriter is an optional interface that translators can implement to format
+// errors according to their API's error schema. This ensures error responses match
+// the expected format for each translator (e.g., Anthropic's error structure).
+// If not implemented, generic JSON errors are used as a fallback.
+type ErrorWriter interface {
+	WriteError(w http.ResponseWriter, err error, statusCode int)
+}

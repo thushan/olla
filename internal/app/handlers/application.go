@@ -9,6 +9,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
+	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/adapter/translator/anthropic"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/config"
@@ -68,22 +69,22 @@ func (s *SecurityAdapters) CreateRateLimitMiddleware() func(http.Handler) http.H
 
 // Application holds all the dependencies needed for the HTTP handlers
 type Application struct {
-	Config              *config.Config
-	logger              logger.StyledLogger
-	proxyService        ports.ProxyService
-	statsCollector      ports.StatsCollector
-	modelRegistry       domain.ModelRegistry
-	discoveryService    ports.DiscoveryService
-	repository          domain.EndpointRepository
-	inspectorChain      *inspector.Chain
-	securityAdapters    *SecurityAdapters
-	routeRegistry       *router.RouteRegistry
-	converterFactory    *converter.ConverterFactory
-	profileFactory      profile.ProfileFactory
-	anthropicTranslator *anthropic.Translator
-	server              *http.Server
-	errCh               chan error
-	StartTime           time.Time
+	Config             *config.Config
+	logger             logger.StyledLogger
+	proxyService       ports.ProxyService
+	statsCollector     ports.StatsCollector
+	modelRegistry      domain.ModelRegistry
+	discoveryService   ports.DiscoveryService
+	repository         domain.EndpointRepository
+	inspectorChain     *inspector.Chain
+	securityAdapters   *SecurityAdapters
+	routeRegistry      *router.RouteRegistry
+	converterFactory   *converter.ConverterFactory
+	profileFactory     profile.ProfileFactory
+	translatorRegistry *translator.Registry
+	server             *http.Server
+	errCh              chan error
+	StartTime          time.Time
 }
 
 // NewApplication creates a new Application instance with all required dependencies
@@ -138,23 +139,29 @@ func NewApplication(
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
+	// Create translator registry and register translators
+	// Registry pattern enables unlimited translators (Gemini, Bedrock, etc.)
+	// without bloating the Application struct with individual fields
+	translatorRegistry := translator.NewRegistry(logger)
+	translatorRegistry.Register("anthropic", anthropic.NewTranslator(logger))
+
 	return &Application{
-		Config:              cfg,
-		logger:              logger,
-		proxyService:        proxyService,
-		statsCollector:      statsCollector,
-		modelRegistry:       modelRegistry,
-		discoveryService:    discoveryService,
-		repository:          repository,
-		inspectorChain:      inspectorChain,
-		securityAdapters:    securityAdapters,
-		routeRegistry:       routeRegistry,
-		profileFactory:      profileFactory,
-		converterFactory:    converter.NewConverterFactory(),
-		anthropicTranslator: anthropic.NewTranslator(logger),
-		server:              server,
-		errCh:               make(chan error, 1),
-		StartTime:           time.Now(),
+		Config:             cfg,
+		logger:             logger,
+		proxyService:       proxyService,
+		statsCollector:     statsCollector,
+		modelRegistry:      modelRegistry,
+		discoveryService:   discoveryService,
+		repository:         repository,
+		inspectorChain:     inspectorChain,
+		securityAdapters:   securityAdapters,
+		routeRegistry:      routeRegistry,
+		profileFactory:     profileFactory,
+		converterFactory:   converter.NewConverterFactory(),
+		translatorRegistry: translatorRegistry,
+		server:             server,
+		errCh:              make(chan error, 1),
+		StartTime:          time.Now(),
 	}, nil
 }
 
@@ -171,6 +178,12 @@ func (a *Application) GetSecurityAdapters() *SecurityAdapters {
 // GetServer returns the HTTP server instance
 func (a *Application) GetServer() *http.Server {
 	return a.server
+}
+
+// GetTranslatorRegistry returns the translator registry for accessing registered translators
+// Used by handlers and route registration to retrieve translators dynamically
+func (a *Application) GetTranslatorRegistry() *translator.Registry {
+	return a.translatorRegistry
 }
 
 func (a *Application) RegisterRoutes() {
