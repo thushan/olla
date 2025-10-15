@@ -29,8 +29,8 @@ type RequestTranslator interface {
 // This preserves information needed to translate the response back to the original format
 type TransformedRequest struct {
 	OpenAIRequest map[string]interface{} // Converted OpenAI format request body
-	OriginalBody  []byte                 // Original request body for response translation context
-	ModelName     string                 // Extracted model name for routing
-	IsStreaming   bool                   // Whether response should stream
 	Metadata      map[string]interface{} // Additional context for response translation
+	ModelName     string                 // Extracted model name for routing
+	OriginalBody  []byte                 // Original request body for response translation context
+	IsStreaming   bool                   // Whether response should stream
 }

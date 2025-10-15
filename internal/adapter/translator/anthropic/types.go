@@ -3,38 +3,38 @@ package anthropic
 // AnthropicRequest represents an Anthropic API request
 // Maps to the Anthropic Messages API format
 type AnthropicRequest struct {
-	Model         string                 `json:"model"`
-	Messages      []AnthropicMessage     `json:"messages"`
-	System        string                 `json:"system,omitempty"`
-	MaxTokens     int                    `json:"max_tokens"`
+	ToolChoice    interface{}            `json:"tool_choice,omitempty"` // string or object
 	Temperature   *float64               `json:"temperature,omitempty"`
 	TopP          *float64               `json:"top_p,omitempty"`
 	TopK          *int                   `json:"top_k,omitempty"`
-	StopSequences []string               `json:"stop_sequences,omitempty"`
-	Stream        bool                   `json:"stream,omitempty"`
-	Tools         []AnthropicTool        `json:"tools,omitempty"`
-	ToolChoice    interface{}            `json:"tool_choice,omitempty"` // string or object
 	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+	Model         string                 `json:"model"`
+	System        string                 `json:"system,omitempty"`
+	Messages      []AnthropicMessage     `json:"messages"`
+	StopSequences []string               `json:"stop_sequences,omitempty"`
+	Tools         []AnthropicTool        `json:"tools,omitempty"`
+	MaxTokens     int                    `json:"max_tokens"`
+	Stream        bool                   `json:"stream,omitempty"`
 }
 
 // AnthropicMessage represents a message in the conversation
 // Content can be either a simple string or an array of content blocks
 type AnthropicMessage struct {
-	Role    string      `json:"role"`    // "user" or "assistant"
 	Content interface{} `json:"content"` // string or []ContentBlock
+	Role    string      `json:"role"`    // "user" or "assistant"
 }
 
 // ContentBlock represents different types of content in messages
 // Anthropic uses a block-based content model for text, images, tool use, and tool results
 type ContentBlock struct {
+	Content   interface{}            `json:"content,omitempty"` // for tool_result
+	Source    *ImageSource           `json:"source,omitempty"`
+	Input     map[string]interface{} `json:"input,omitempty"`
 	Type      string                 `json:"type"` // "text", "image", "tool_use", "tool_result"
 	Text      string                 `json:"text,omitempty"`
-	Source    *ImageSource           `json:"source,omitempty"`
 	ID        string                 `json:"id,omitempty"`
 	Name      string                 `json:"name,omitempty"`
-	Input     map[string]interface{} `json:"input,omitempty"`
 	ToolUseID string                 `json:"tool_use_id,omitempty"`
-	Content   interface{}            `json:"content,omitempty"` // for tool_result
 }
 
 // ImageSource represents image data in content blocks
@@ -49,9 +49,9 @@ type ImageSource struct {
 // AnthropicTool represents a tool definition
 // Tools enable the model to call external functions
 type AnthropicTool struct {
+	InputSchema map[string]interface{} `json:"input_schema"` // JSON Schema for tool parameters
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
-	InputSchema map[string]interface{} `json:"input_schema"` // JSON Schema for tool parameters
 }
 
 // ToolChoiceAuto represents automatic tool selection
@@ -73,13 +73,13 @@ type ToolChoiceTool struct {
 // AnthropicResponse represents an Anthropic API response
 // Contains the assistant's reply with content blocks and usage stats
 type AnthropicResponse struct {
+	StopSequence *string        `json:"stop_sequence"`
 	ID           string         `json:"id"`
 	Type         string         `json:"type"` // "message"
 	Role         string         `json:"role"` // "assistant"
 	Model        string         `json:"model"`
-	Content      []ContentBlock `json:"content"`
 	StopReason   string         `json:"stop_reason,omitempty"` // "end_turn", "max_tokens", "tool_use"
-	StopSequence *string        `json:"stop_sequence"`
+	Content      []ContentBlock `json:"content"`
 	Usage        AnthropicUsage `json:"usage"`
 }
 
@@ -109,16 +109,16 @@ type MessageStartDetail struct {
 
 // ContentBlockStart represents the start of a content block
 type ContentBlockStart struct {
+	ContentBlock ContentBlock `json:"content_block"`
 	Type         string       `json:"type"` // "content_block_start"
 	Index        int          `json:"index"`
-	ContentBlock ContentBlock `json:"content_block"`
 }
 
 // ContentBlockDelta represents incremental content updates
 type ContentBlockDelta struct {
-	Type  string      `json:"type"` // "content_block_delta"
-	Index int         `json:"index"`
 	Delta interface{} `json:"delta"` // TextDelta or InputJSONDelta
+	Type  string      `json:"type"`  // "content_block_delta"
+	Index int         `json:"index"`
 }
 
 // TextDelta represents incremental text updates
@@ -141,15 +141,15 @@ type ContentBlockStop struct {
 
 // MessageDelta represents message-level updates (stop reason, final tokens)
 type MessageDelta struct {
-	Type  string              `json:"type"` // "message_delta"
 	Delta MessageDeltaContent `json:"delta"`
+	Type  string              `json:"type"` // "message_delta"
 	Usage AnthropicUsage      `json:"usage"`
 }
 
 // MessageDeltaContent contains stop reason information
 type MessageDeltaContent struct {
-	StopReason   string  `json:"stop_reason,omitempty"`
 	StopSequence *string `json:"stop_sequence"`
+	StopReason   string  `json:"stop_reason,omitempty"`
 }
 
 // MessageStop marks the end of the streaming message

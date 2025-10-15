@@ -147,6 +147,7 @@ func TestTransformResponse_MultipleToolCalls(t *testing.T) {
 						},
 					},
 				},
+				"finish_reason": "tool_calls",
 			},
 		},
 		"usage": map[string]interface{}{},
@@ -520,35 +521,82 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 		assert.Equal(t, "tool_use", anthropicResp.StopReason, "Tool invocation maps to tool_use")
 	})
 
-	// TODO: Uncomment these tests once implementation checks finish_reason field
-	// Currently the implementation only derives stop_reason from presence of tool_calls
-	// and doesn't check the OpenAI finish_reason field for "length" -> "max_tokens" mapping
-	/*
-		t.Run("length_to_max_tokens", func(t *testing.T) {
-			openaiResp := map[string]interface{}{
-				"id":    "chatcmpl-length",
-				"model": "claude-3-5-sonnet-20241022",
-				"choices": []interface{}{
-					map[string]interface{}{
-						"message": map[string]interface{}{
-							"role":    "assistant",
-							"content": "Test response",
-						},
-						"finish_reason": "length",
+	t.Run("length_to_max_tokens", func(t *testing.T) {
+		openaiResp := map[string]interface{}{
+			"id":    "chatcmpl-length",
+			"model": "claude-3-5-sonnet-20241022",
+			"choices": []interface{}{
+				map[string]interface{}{
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "Test response",
 					},
+					"finish_reason": "length",
 				},
-				"usage": map[string]interface{}{},
-			}
+			},
+			"usage": map[string]interface{}{},
+		}
 
-			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
-			require.NoError(t, err)
+		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		require.NoError(t, err)
 
-			anthropicResp, ok := result.(AnthropicResponse)
-			require.True(t, ok)
+		anthropicResp, ok := result.(AnthropicResponse)
+		require.True(t, ok)
 
-			assert.Equal(t, "max_tokens", anthropicResp.StopReason, "Token limit maps to max_tokens")
-		})
-	*/
+		assert.Equal(t, "max_tokens", anthropicResp.StopReason, "Token limit maps to max_tokens")
+	})
+
+	t.Run("explicit_stop_reason", func(t *testing.T) {
+		// Test that explicit finish_reason is respected even when tool_calls are present
+		// This validates that finish_reason takes precedence in the mapping logic
+		openaiResp := map[string]interface{}{
+			"id":    "chatcmpl-explicit",
+			"model": "claude-3-5-sonnet-20241022",
+			"choices": []interface{}{
+				map[string]interface{}{
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "Response text",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{},
+		}
+
+		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		require.NoError(t, err)
+
+		anthropicResp, ok := result.(AnthropicResponse)
+		require.True(t, ok)
+
+		assert.Equal(t, "end_turn", anthropicResp.StopReason, "Explicit stop should map to end_turn")
+	})
+
+	t.Run("unknown_finish_reason_defaults_to_end_turn", func(t *testing.T) {
+		openaiResp := map[string]interface{}{
+			"id":    "chatcmpl-unknown",
+			"model": "claude-3-5-sonnet-20241022",
+			"choices": []interface{}{
+				map[string]interface{}{
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "Test",
+					},
+					"finish_reason": "content_filter", // Unknown reason
+				},
+			},
+			"usage": map[string]interface{}{},
+		}
+
+		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		require.NoError(t, err)
+
+		anthropicResp, ok := result.(AnthropicResponse)
+		require.True(t, ok)
+
+		assert.Equal(t, "end_turn", anthropicResp.StopReason, "Unknown finish_reason should default to end_turn")
+	})
 }
 
 // TestTransformResponse_MessageIDGeneration tests message ID handling

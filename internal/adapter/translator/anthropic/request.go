@@ -23,7 +23,8 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 
 	// Parse Anthropic request
 	var anthropicReq AnthropicRequest
-	if err := json.Unmarshal(body, &anthropicReq); err != nil {
+	err = json.Unmarshal(body, &anthropicReq)
+	if err != nil {
 		return nil, fmt.Errorf("failed to parse Anthropic request: %w", err)
 	}
 
@@ -55,17 +56,14 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 
 	// Convert tools if present
 	if len(anthropicReq.Tools) > 0 {
-		openaiTools, err := t.convertTools(anthropicReq.Tools)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert tools: %w", err)
-		}
+		openaiTools := t.convertTools(anthropicReq.Tools)
 		openaiReq["tools"] = openaiTools
 
 		// Convert tool_choice
 		if anthropicReq.ToolChoice != nil {
-			openaiToolChoice, err := t.convertToolChoice(anthropicReq.ToolChoice)
-			if err != nil {
-				return nil, fmt.Errorf("failed to convert tool_choice: %w", err)
+			openaiToolChoice, tcErr := t.convertToolChoice(anthropicReq.ToolChoice)
+			if tcErr != nil {
+				return nil, fmt.Errorf("failed to convert tool_choice: %w", tcErr)
 			}
 			openaiReq["tool_choice"] = openaiToolChoice
 		}
@@ -177,11 +175,11 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 
 		blockType, _ := blockMap["type"].(string)
 		switch blockType {
-		case "text":
+		case contentTypeText:
 			if text, ok := blockMap["text"].(string); ok && text != "" {
 				textParts = append(textParts, text)
 			}
-		case "tool_result":
+		case contentTypeToolResult:
 			// Tool results become separate messages in OpenAI format
 			// Map tool_use_id to tool_call_id
 			toolUseID, _ := blockMap["tool_use_id"].(string)
@@ -202,7 +200,7 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 				"tool_call_id": toolUseID,
 				"content":      content,
 			})
-		case "image":
+		case contentTypeImage:
 			// TODO: Phase 2 - Image support
 			t.logger.Debug("Image content not yet supported in Phase 1")
 		}
@@ -237,11 +235,11 @@ func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]in
 
 		blockType, _ := blockMap["type"].(string)
 		switch blockType {
-		case "text":
+		case contentTypeText:
 			if text, ok := blockMap["text"].(string); ok {
 				textContent += text
 			}
-		case "tool_use":
+		case contentTypeToolUse:
 			toolCall := t.convertToolUse(blockMap)
 			if toolCall != nil {
 				toolCalls = append(toolCalls, toolCall)
@@ -284,7 +282,7 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 
 	return map[string]interface{}{
 		"id":   id,
-		"type": "function",
+		"type": openAITypeFunction,
 		"function": map[string]interface{}{
 			"name":      name,
 			"arguments": string(inputJSON),

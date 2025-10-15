@@ -35,6 +35,13 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 		return nil, fmt.Errorf("no message in choice")
 	}
 
+	// Extract finish_reason from the OpenAI choice
+	// This is critical for proper stop_reason mapping to Anthropic format
+	finishReason := ""
+	if fr, ok := choice["finish_reason"].(string); ok {
+		finishReason = fr
+	}
+
 	// Build Anthropic response
 	anthropicResp := AnthropicResponse{
 		ID:    t.generateMessageID(),
@@ -43,8 +50,8 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 		Model: t.extractModel(respMap),
 	}
 
-	// Convert content
-	content, stopReason := t.convertResponseContent(message)
+	// Convert content with finish_reason for proper stop_reason mapping
+	content, stopReason := t.convertResponseContent(message, finishReason)
 	anthropicResp.Content = content
 	anthropicResp.StopReason = stopReason
 	anthropicResp.StopSequence = nil
@@ -65,15 +72,15 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 
 // convertResponseContent converts message content and tool calls
 // Processes both text content and tool_calls from OpenAI format to Anthropic content blocks
+// The finish_reason from OpenAI is used to properly map to Anthropic's stop_reason
 // Returns the content blocks and the appropriate stop reason
-func (t *Translator) convertResponseContent(message map[string]interface{}) ([]ContentBlock, string) {
+func (t *Translator) convertResponseContent(message map[string]interface{}, finishReason string) ([]ContentBlock, string) {
 	var content []ContentBlock
-	stopReason := "end_turn" // default
 
 	// Handle text content
 	if textContent, ok := message["content"].(string); ok && textContent != "" {
 		content = append(content, ContentBlock{
-			Type: "text",
+			Type: contentTypeText,
 			Text: textContent,
 		})
 	}
@@ -91,19 +98,38 @@ func (t *Translator) convertResponseContent(message map[string]interface{}) ([]C
 				content = append(content, *toolUse)
 			}
 		}
-		stopReason = "tool_use"
 	}
 
 	// If no content, add empty text block
 	// Anthropic requires at least one content block in the response
 	if len(content) == 0 {
 		content = append(content, ContentBlock{
-			Type: "text",
+			Type: contentTypeText,
 			Text: "",
 		})
 	}
 
+	// Map OpenAI finish_reason to Anthropic stop_reason
+	// This ensures proper termination signalling to clients
+	stopReason := mapFinishReasonToStopReason(finishReason)
+
 	return content, stopReason
+}
+
+// mapFinishReasonToStopReason converts OpenAI finish_reason to Anthropic stop_reason
+// Centralised mapping used by both regular and streaming responses for consistency
+func mapFinishReasonToStopReason(finishReason string) string {
+	switch finishReason {
+	case "stop":
+		return "end_turn"
+	case "tool_calls":
+		return contentTypeToolUse
+	case "length":
+		return "max_tokens"
+	default:
+		// Default to end_turn for unknown or empty finish reasons
+		return "end_turn"
+	}
 }
 
 // convertToToolUse converts OpenAI tool_call to Anthropic tool_use
@@ -127,7 +153,7 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 	}
 
 	return &ContentBlock{
-		Type:  "tool_use",
+		Type:  contentTypeToolUse,
 		ID:    id,
 		Name:  name,
 		Input: input,

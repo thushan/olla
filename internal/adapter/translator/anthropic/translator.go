@@ -2,9 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
-	"io"
-	"net/http"
 
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/pkg/pool"
@@ -40,11 +37,4 @@ func NewTranslator(log logger.StyledLogger) *Translator {
 // Name returns the translator identifier
 func (t *Translator) Name() string {
 	return "anthropic"
-}
-
-// TransformStreamingResponse handles streaming response conversion
-// This method will be implemented in Phase 3 (streaming.go)
-func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error {
-	// TODO: Implement in Phase 3
-	return nil
 }
