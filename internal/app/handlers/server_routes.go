@@ -80,14 +80,59 @@ func (a *Application) registerTranslatorRoutes() {
 				"POST",
 			)
 
-			a.logger.Debug("Registered translator route",
-				"translator", name,
-				"path", path)
+			// Register models endpoint for translators
+			// Uses base path from translator + "/models" (e.g., /olla/anthropic/v1/models)
+			modelsPath := extractBasePath(path) + "/models"
+			modelsHandler := a.translatorModelsHandler(trans)
+
+			a.routeRegistry.RegisterWithMethod(
+				modelsPath,
+				modelsHandler,
+				name+" Models API",
+				"GET",
+			)
+
+			// Register token counting endpoint for translators that support it
+			// Uses message path + "_count_tokens" (e.g., /olla/anthropic/v1/messages/count_tokens)
+			if _, ok := trans.(translator.TokenCounter); ok {
+				tokenCountPath := path + "/count_tokens"
+				tokenCountHandler := a.tokenCountHandler(trans)
+
+				a.routeRegistry.RegisterWithMethod(
+					tokenCountPath,
+					tokenCountHandler,
+					name+" Token Count API",
+					"POST",
+				)
+
+				a.logger.Debug("Registered translator routes",
+					"translator", name,
+					"messages_path", path,
+					"models_path", modelsPath,
+					"token_count_path", tokenCountPath)
+			} else {
+				a.logger.Debug("Registered translator routes",
+					"translator", name,
+					"messages_path", path,
+					"models_path", modelsPath)
+			}
 		} else {
 			a.logger.Debug("Translator does not implement PathProvider, skipping route registration",
 				"translator", name)
 		}
 	}
+}
+
+// extractBasePath extracts the base path from a translator's API path
+// For example: "/olla/anthropic/v1/messages" -> "/olla/anthropic/v1"
+func extractBasePath(path string) string {
+	// Find the last slash and return everything before it
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '/' {
+			return path[:i]
+		}
+	}
+	return path
 }
 
 // registerProviderRoutes builds HTTP paths from provider YAML configurations.

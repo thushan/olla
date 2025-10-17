@@ -12,6 +12,13 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
+const (
+	MessageFormat     = "anthropic"
+	ClaudeSonnetModel = "claude-sonnet-4-20250929"
+	ClaudeOpusModel   = "claude-opus-4-1-20250805"
+	ClaudeHaikuModel  = "claude-haiku-4-5-20251001"
+)
+
 // createIntegrationTestLogger creates a logger for integration tests
 func createIntegrationTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
@@ -56,7 +63,7 @@ func simulateBackendResponse(content string, toolCalls []map[string]interface{},
 
 	return map[string]interface{}{
 		"id":    "chatcmpl-test-123",
-		"model": "claude-3-5-sonnet-20241022",
+		"model": ClaudeSonnetModel,
 		"choices": []interface{}{
 			map[string]interface{}{
 				"message":       message,
@@ -82,7 +89,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 	t.Run("simple_text_conversation", func(t *testing.T) {
 		// 1. Create Anthropic request
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{
@@ -98,12 +105,12 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 		require.NoError(t, err, "Request transformation should succeed")
 
 		// 3. Verify OpenAI request format
-		assert.Equal(t, "claude-3-5-sonnet-20241022", transformed.ModelName)
+		assert.Equal(t, ClaudeSonnetModel, transformed.ModelName)
 		assert.False(t, transformed.IsStreaming)
-		assert.Equal(t, "anthropic", transformed.Metadata["format"])
+		assert.Equal(t, MessageFormat, transformed.Metadata["format"])
 
 		openaiReq := transformed.OpenAIRequest
-		assert.Equal(t, "claude-3-5-sonnet-20241022", openaiReq["model"])
+		assert.Equal(t, ClaudeSonnetModel, openaiReq["model"])
 		assert.Equal(t, 1024, openaiReq["max_tokens"])
 		assert.Equal(t, false, openaiReq["stream"])
 
@@ -130,7 +137,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 
 		assert.Equal(t, "message", resp.Type)
 		assert.Equal(t, "assistant", resp.Role)
-		assert.Equal(t, "claude-3-5-sonnet-20241022", resp.Model)
+		assert.Equal(t, ClaudeSonnetModel, resp.Model)
 		assert.Equal(t, "end_turn", resp.StopReason)
 		assert.NotEmpty(t, resp.ID)
 
@@ -145,7 +152,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 	t.Run("multi_turn_conversation", func(t *testing.T) {
 		// Test multi-turn conversation with history
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-opus-20240229",
+			Model:     ClaudeOpusModel,
 			MaxTokens: 2048,
 			Messages: []AnthropicMessage{
 				{
@@ -177,19 +184,19 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 
 		// Simulate response with correct model
 		backendResp := simulateBackendResponse("The capital of Germany is Berlin.", nil, "stop")
-		backendResp["model"] = "claude-3-opus-20240229" // Set correct model
+		backendResp["model"] = ClaudeOpusModel
 		anthropicResp, err := translator.TransformResponse(ctx, backendResp, httpReq)
 		require.NoError(t, err)
 
 		resp := anthropicResp.(AnthropicResponse)
-		assert.Equal(t, "claude-3-opus-20240229", resp.Model)
+		assert.Equal(t, ClaudeOpusModel, resp.Model)
 		assert.Equal(t, "The capital of Germany is Berlin.", resp.Content[0].Text)
 	})
 
 	t.Run("with_system_prompt", func(t *testing.T) {
 		// Test system prompt injection
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			System:    "You are a helpful assistant that speaks like a pirate.",
 			Messages: []AnthropicMessage{
@@ -226,7 +233,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 		topP := 0.9
 
 		anthropicReq := AnthropicRequest{
-			Model:         "claude-3-5-sonnet-20241022",
+			Model:         ClaudeSonnetModel,
 			MaxTokens:     2048,
 			Temperature:   &temp,
 			TopP:          &topP,
@@ -273,7 +280,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				anthropicReq := AnthropicRequest{
-					Model:     "claude-3-5-sonnet-20241022",
+					Model:     ClaudeSonnetModel,
 					MaxTokens: 10,
 					Messages: []AnthropicMessage{
 						{Role: "user", Content: "Hi"},
@@ -298,7 +305,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 	t.Run("message_id_generation", func(t *testing.T) {
 		// Test that message IDs are generated
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{{Role: "user", Content: "Test"}},
 		}
@@ -319,7 +326,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 	t.Run("complex_content_blocks", func(t *testing.T) {
 		// Test content with multiple text blocks (should concatenate)
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{
@@ -367,12 +374,12 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	t.Run("single_tool_definition", func(t *testing.T) {
 		// 1. Create request with tool definition
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{
 					Role:    "user",
-					Content: "What's the weather in San Francisco?",
+					Content: "What's the weather in Melbourne?",
 				},
 			},
 			Tools: []AnthropicTool{
@@ -428,7 +435,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 			"type": "function",
 			"function": map[string]interface{}{
 				"name":      "get_weather",
-				"arguments": `{"location":"San Francisco","unit":"celsius"}`,
+				"arguments": `{"location":"Melbourne","unit":"celsius"}`,
 			},
 		}
 		backendResp := simulateBackendResponse(
@@ -470,14 +477,14 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 
 		// Verify input arguments parsed correctly
 		require.NotNil(t, toolBlock.Input)
-		assert.Equal(t, "San Francisco", toolBlock.Input["location"])
+		assert.Equal(t, "Melbourne", toolBlock.Input["location"])
 		assert.Equal(t, "celsius", toolBlock.Input["unit"])
 	})
 
 	t.Run("tool_result_round_trip", func(t *testing.T) {
 		// Test sending tool result back to assistant
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				// Original user question
@@ -494,7 +501,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 							"id":   "toolu_weather_123",
 							"name": "get_weather",
 							"input": map[string]interface{}{
-								"location": "San Francisco",
+								"location": "Melbourne",
 							},
 						},
 					},
@@ -539,7 +546,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 
 		// Simulate final assistant response
 		backendResp := simulateBackendResponse(
-			"Based on the weather data, it's currently 18°C and partly cloudy in San Francisco.",
+			"Based on the weather data, it's currently 18°C and partly cloudy in Melbourne.",
 			nil,
 			"stop",
 		)
@@ -555,7 +562,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	t.Run("multiple_tools", func(t *testing.T) {
 		// Test with multiple tool definitions
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{{Role: "user", Content: "Check weather and time"}},
 			Tools: []AnthropicTool{
@@ -586,7 +593,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	t.Run("multiple_tool_calls_in_response", func(t *testing.T) {
 		// Test response with multiple simultaneous tool calls
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{{Role: "user", Content: "Get info"}},
 		}
@@ -668,7 +675,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				anthropicReq := AnthropicRequest{
-					Model:     "claude-3-5-sonnet-20241022",
+					Model:     ClaudeSonnetModel,
 					MaxTokens: 1024,
 					Messages:  []AnthropicMessage{{Role: "user", Content: "Test"}},
 					Tools: []AnthropicTool{
@@ -698,7 +705,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	t.Run("tool_only_response", func(t *testing.T) {
 		// Test response with tool calls but no text content
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{{Role: "user", Content: "Search something"}},
 		}
@@ -718,7 +725,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		}
 		backendResp := map[string]interface{}{
 			"id":    "chatcmpl-test",
-			"model": "claude-3-5-sonnet-20241022",
+			"model": ClaudeSonnetModel,
 			"choices": []interface{}{
 				map[string]interface{}{
 					"message": map[string]interface{}{
@@ -750,7 +757,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	t.Run("complex_tool_arguments", func(t *testing.T) {
 		// Test tool call with complex nested arguments
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{{Role: "user", Content: "Process data"}},
 		}
@@ -821,7 +828,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 
 	t.Run("empty_messages_array", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{}, // Empty
 		}
@@ -836,7 +843,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 
 	t.Run("empty_content_string", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{Role: "user", Content: ""}, // Empty content
@@ -854,7 +861,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 
 	t.Run("invalid_json_in_tool_arguments", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{{Role: "user", Content: "Test"}},
 		}
@@ -888,7 +895,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 
 	t.Run("missing_backend_choices", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages:  []AnthropicMessage{{Role: "user", Content: "Test"}},
 		}
@@ -900,7 +907,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		// Backend response missing choices
 		backendResp := map[string]interface{}{
 			"id":    "chatcmpl-nochoices",
-			"model": "claude-3-5-sonnet-20241022",
+			"model": ClaudeSonnetModel,
 			// Missing choices field
 		}
 
@@ -912,7 +919,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 	t.Run("assistant_with_only_tool_calls", func(t *testing.T) {
 		// Test assistant message with no text, only tool_use
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{
@@ -947,7 +954,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 	t.Run("user_with_text_and_tool_result", func(t *testing.T) {
 		// Test user message with both text and tool result
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{
@@ -986,7 +993,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 	t.Run("tool_result_with_structured_content", func(t *testing.T) {
 		// Test tool result with non-string content (should be serialised to JSON)
 		anthropicReq := AnthropicRequest{
-			Model:     "claude-3-5-sonnet-20241022",
+			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{
@@ -1029,10 +1036,10 @@ func TestAnthropicModelPreservation(t *testing.T) {
 	ctx := context.Background()
 
 	models := []string{
-		"claude-3-5-sonnet-20241022",
-		"claude-3-opus-20240229",
-		"claude-3-sonnet-20240229",
-		"claude-3-haiku-20240307",
+		ClaudeSonnetModel,
+		ClaudeOpusModel,
+		ClaudeSonnetModel,
+		ClaudeHaikuModel,
 	}
 
 	for _, model := range models {
@@ -1071,7 +1078,7 @@ func TestAnthropicUsageTracking(t *testing.T) {
 	ctx := context.Background()
 
 	anthropicReq := AnthropicRequest{
-		Model:     "claude-3-5-sonnet-20241022",
+		Model:     ClaudeSonnetModel,
 		MaxTokens: 1024,
 		Messages:  []AnthropicMessage{{Role: "user", Content: "Count token usage"}},
 	}
@@ -1096,7 +1103,7 @@ func TestAnthropicUsageTracking(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			backendResp := map[string]interface{}{
 				"id":    "chatcmpl-usage",
-				"model": "claude-3-5-sonnet-20241022",
+				"model": ClaudeSonnetModel,
 				"choices": []interface{}{
 					map[string]interface{}{
 						"message":       map[string]interface{}{"role": "assistant", "content": "Test"},
@@ -1123,7 +1130,7 @@ func TestAnthropicUsageTracking(t *testing.T) {
 		// Test response without usage field
 		backendResp := map[string]interface{}{
 			"id":    "chatcmpl-nousage",
-			"model": "claude-3-5-sonnet-20241022",
+			"model": ClaudeSonnetModel,
 			"choices": []interface{}{
 				map[string]interface{}{
 					"message":       map[string]interface{}{"role": "assistant", "content": "Test"},

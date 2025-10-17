@@ -49,3 +49,23 @@ type PathProvider interface {
 type ErrorWriter interface {
 	WriteError(w http.ResponseWriter, err error, statusCode int)
 }
+
+// TokenCounter is an optional interface for translators that support token counting
+// This enables API compatibility with services that require token estimation endpoints
+type TokenCounter interface {
+	CountTokens(ctx context.Context, r *http.Request) (*TokenCountResponse, error)
+}
+
+// TokenCountResponse represents the token count result
+// Used by translators that implement token counting (e.g., Anthropic's count_tokens endpoint)
+type TokenCountResponse struct {
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+	TotalTokens  int `json:"total_tokens"`
+}
+
+// ModelsProvider is an optional interface for translators that provide model listings
+// This enables translators to expose available models in their native API format
+type ModelsProvider interface {
+	GetModels(ctx context.Context) (interface{}, error)
+}

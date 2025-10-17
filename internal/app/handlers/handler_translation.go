@@ -243,6 +243,49 @@ func (a *Application) writeTranslatorError(
 	}
 }
 
+// tokenCountHandler creates an HTTP handler for token counting endpoints
+// This enables translators to provide token estimation without proxy overhead
+// Only available for translators that implement the TokenCounter interface
+func (a *Application) tokenCountHandler(trans translator.RequestTranslator) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Check if translator implements token counting
+		counter, ok := trans.(translator.TokenCounter)
+		if !ok {
+			a.logger.Error("Translator does not support token counting", "translator", trans.Name())
+			http.Error(w, "Token counting not supported", http.StatusNotImplemented)
+			return
+		}
+
+		ctx := r.Context()
+
+		// Call the translator's token counting implementation
+		resp, err := counter.CountTokens(ctx, r)
+		if err != nil {
+			a.logger.Error("Token counting failed",
+				"translator", trans.Name(),
+				"error", err.Error())
+
+			// Use translator's error format if available
+			if errorWriter, ok := trans.(translator.ErrorWriter); ok {
+				errorWriter.WriteError(w, err, http.StatusBadRequest)
+				return
+			}
+
+			// Fallback to generic error
+			http.Error(w, fmt.Sprintf("Token counting failed: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Write successful response
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+		w.WriteHeader(http.StatusOK)
+
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			a.logger.Error("Failed to encode token count response", "error", err)
+		}
+	}
+}
+
 // copyOllaHeaders copies observability headers from recorder to response
 // These headers provide insight into routing decisions and backend selection
 func (a *Application) copyOllaHeaders(from headerGetter, to http.ResponseWriter) {
