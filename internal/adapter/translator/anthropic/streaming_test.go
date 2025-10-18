@@ -73,7 +73,7 @@ func verifyEventSequence(t *testing.T, events []map[string]interface{}, expected
 // TestTransformStreamingResponse_SimpleText tests basic text streaming
 // Validates that OpenAI text deltas are converted to Anthropic events correctly
 func TestTransformStreamingResponse_SimpleText(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	// Simulate OpenAI streaming response with text chunks
 	openaiStream := createMockOpenAIStream([]string{
@@ -136,7 +136,7 @@ func TestTransformStreamingResponse_SimpleText(t *testing.T) {
 // TestTransformStreamingResponse_WithToolCalls tests tool call streaming
 // Validates that tool calls are streamed with proper input_json_delta events
 func TestTransformStreamingResponse_WithToolCalls(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	// Simulate OpenAI streaming with text followed by tool call
 	openaiStream := createMockOpenAIStream([]string{
@@ -189,7 +189,7 @@ func TestTransformStreamingResponse_WithToolCalls(t *testing.T) {
 // TestTransformStreamingResponse_MultipleToolCalls tests multiple tool calls in one response
 // Validates that multiple tools are handled correctly in streaming mode
 func TestTransformStreamingResponse_MultipleToolCalls(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-789\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
@@ -232,7 +232,7 @@ func TestTransformStreamingResponse_MultipleToolCalls(t *testing.T) {
 // TestTransformStreamingResponse_ToolCallsOnly tests response with only tool calls, no text
 // Validates that tool-only responses work correctly without preceding text
 func TestTransformStreamingResponse_ToolCallsOnly(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-tool-only\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_only\",\"type\":\"function\",\"function\":{\"name\":\"search\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
@@ -269,7 +269,7 @@ func TestTransformStreamingResponse_ToolCallsOnly(t *testing.T) {
 // TestTransformStreamingResponse_ContextCancellation tests cancellation handling
 // Validates that context cancellation is properly handled during streaming
 func TestTransformStreamingResponse_ContextCancellation(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	// Create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -311,7 +311,7 @@ func (r *slowReader) Read(p []byte) (n int, err error) {
 // Validates graceful handling of invalid JSON in streaming chunks
 // Per spec: malformed chunks are logged and processing continues without failing the stream
 func TestTransformStreamingResponse_MalformedChunk(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-bad\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
@@ -337,7 +337,7 @@ func TestTransformStreamingResponse_MalformedChunk(t *testing.T) {
 // TestTransformStreamingResponse_EmptyStream tests handling of empty/minimal streams
 // Validates that streams with only [DONE] marker are handled gracefully
 func TestTransformStreamingResponse_EmptyStream(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	openaiStream := createMockOpenAIStream([]string{
 		"data: [DONE]\n\n",
@@ -359,7 +359,7 @@ func TestTransformStreamingResponse_EmptyStream(t *testing.T) {
 // TestTransformStreamingResponse_ModelExtraction tests model field extraction
 // Validates that model name is correctly captured from first chunk and included in message_start
 func TestTransformStreamingResponse_ModelExtraction(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	testCases := []struct {
 		name      string
@@ -400,7 +400,7 @@ func TestTransformStreamingResponse_ModelExtraction(t *testing.T) {
 // TestTransformStreamingResponse_UsageTokens tests usage token tracking
 // Validates that token usage is properly tracked and included in message_delta
 func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-usage\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
@@ -468,7 +468,7 @@ func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 // TestTransformStreamingResponse_SSEFormat tests SSE event format compliance
 // Validates that output conforms to Server-Sent Events specification
 func TestTransformStreamingResponse_SSEFormat(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-sse\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Test\"},\"index\":0}]}\n\n",
@@ -512,7 +512,7 @@ func TestTransformStreamingResponse_SSEFormat(t *testing.T) {
 // TestTransformStreamingResponse_FinishReasonMapping tests finish_reason mapping in streaming
 // Validates that OpenAI finish_reason values map to correct Anthropic stop_reason
 func TestTransformStreamingResponse_FinishReasonMapping(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	testCases := []struct {
 		name               string
@@ -571,7 +571,7 @@ func TestTransformStreamingResponse_FinishReasonMapping(t *testing.T) {
 // TestTransformStreamingResponse_EmptyContent tests handling of empty content deltas
 // Validates that empty deltas are handled gracefully without creating unnecessary events
 func TestTransformStreamingResponse_EmptyContent(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-empty\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"\"},\"index\":0}]}\n\n",
@@ -604,7 +604,7 @@ func TestTransformStreamingResponse_EmptyContent(t *testing.T) {
 // TestTransformStreamingResponse_PartialJSONAccumulation tests tool argument accumulation
 // Validates that partial JSON chunks are correctly accumulated and streamed
 func TestTransformStreamingResponse_PartialJSONAccumulation(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger())
+	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
 	// Test with complex nested JSON arguments streamed in small chunks
 	openaiStream := createMockOpenAIStream([]string{

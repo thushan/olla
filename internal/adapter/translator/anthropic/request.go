@@ -15,7 +15,8 @@ import (
 // Reads the request body, parses it and transforms messages, tools and parameters
 func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 	// Limit request body size to prevent DoS attacks
-	limitedBody := io.LimitReader(r.Body, maxAnthropicRequestSize)
+	// Uses configured max_message_size rather than hard-coded constant
+	limitedBody := io.LimitReader(r.Body, t.maxMessageSize)
 	defer r.Body.Close()
 
 	// Parse Anthropic request using decoder for better memory efficiency and strict validation

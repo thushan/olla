@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/thushan/olla/internal/adapter/translator/anthropic"
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -43,8 +44,13 @@ func TestTranslatorModelsHandler_Success(t *testing.T) {
 		repository:       &mockEndpointRepository{},
 	}
 
-	// Create Anthropic translator
-	trans := anthropic.NewTranslator(app.logger)
+	// Create Anthropic translator with test config
+	testConfig := config.AnthropicTranslatorConfig{
+		Enabled:        true,
+		MaxMessageSize: 10 << 20, // 10MB
+		StreamAsync:    false,
+	}
+	trans := anthropic.NewTranslator(app.logger, testConfig)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/olla/anthropic/v1/models", nil)
@@ -99,8 +105,13 @@ func TestTranslatorModelsHandler_EmptyRegistry(t *testing.T) {
 	// Create test application with empty registry
 	app := createTranslatorTestApp(t)
 
-	// Create Anthropic translator
-	trans := anthropic.NewTranslator(app.logger)
+	// Create Anthropic translator with test config
+	testConfig := config.AnthropicTranslatorConfig{
+		Enabled:        true,
+		MaxMessageSize: 10 << 20, // 10MB
+		StreamAsync:    false,
+	}
+	trans := anthropic.NewTranslator(app.logger, testConfig)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/olla/anthropic/v1/models", nil)
@@ -155,8 +166,13 @@ func TestTranslatorModelsHandler_ResponseFormat(t *testing.T) {
 		repository:       &mockEndpointRepository{},
 	}
 
-	// Create Anthropic translator
-	trans := anthropic.NewTranslator(app.logger)
+	// Create Anthropic translator with test config
+	testConfig := config.AnthropicTranslatorConfig{
+		Enabled:        true,
+		MaxMessageSize: 10 << 20, // 10MB
+		StreamAsync:    false,
+	}
+	trans := anthropic.NewTranslator(app.logger, testConfig)
 
 	// Create request
 	req := httptest.NewRequest(http.MethodGet, "/olla/anthropic/v1/models", nil)

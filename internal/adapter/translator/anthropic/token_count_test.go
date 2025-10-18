@@ -10,7 +10,7 @@ import (
 )
 
 func TestCountTokens(t *testing.T) {
-	trans := NewTranslator(createTestLogger())
+	trans := NewTranslator(createTestLogger(), createTestConfig())
 
 	tests := []struct {
 		name          string
@@ -252,7 +252,7 @@ func TestCountTokens(t *testing.T) {
 }
 
 func TestCountTokensWithRawJSON(t *testing.T) {
-	trans := NewTranslator(createTestLogger())
+	trans := NewTranslator(createTestLogger(), createTestConfig())
 
 	tests := []struct {
 		name          string
@@ -322,7 +322,7 @@ func TestCountTokensWithRawJSON(t *testing.T) {
 }
 
 func TestCountTokensErrors(t *testing.T) {
-	trans := NewTranslator(createTestLogger())
+	trans := NewTranslator(createTestLogger(), createTestConfig())
 
 	tests := []struct {
 		name        string
@@ -380,7 +380,7 @@ func TestCountTokensErrors(t *testing.T) {
 // TestCountTokensMatchesPythonReference verifies our implementation matches
 // the Python reference from anthropic-proxy.py
 func TestCountTokensMatchesPythonReference(t *testing.T) {
-	trans := NewTranslator(createTestLogger())
+	trans := NewTranslator(createTestLogger(), createTestConfig())
 
 	// This test case directly mirrors the Python implementation logic
 	testCase := AnthropicRequest{

@@ -143,7 +143,24 @@ func NewApplication(
 	// Registry pattern enables unlimited translators (Gemini, Bedrock, etc.)
 	// without bloating the Application struct with individual fields
 	translatorRegistry := translator.NewRegistry(logger)
-	translatorRegistry.Register("anthropic", anthropic.NewTranslator(logger))
+
+	// Register Anthropic translator if enabled
+	if cfg.Translators.Anthropic.Enabled {
+		// Validate configuration before registering
+		if err := cfg.Translators.Anthropic.Validate(); err != nil {
+			logger.Error("Invalid Anthropic translator configuration", "error", err)
+			return nil, fmt.Errorf("invalid Anthropic translator config: %w", err)
+		}
+
+		anthropicTranslator := anthropic.NewTranslator(logger, cfg.Translators.Anthropic)
+		translatorRegistry.Register("anthropic", anthropicTranslator)
+
+		logger.Info("Registered Anthropic translator",
+			"max_message_size", cfg.Translators.Anthropic.MaxMessageSize,
+			"stream_async", cfg.Translators.Anthropic.StreamAsync)
+	} else {
+		logger.Info("Anthropic translator disabled via configuration")
+	}
 
 	return &Application{
 		Config:             cfg,

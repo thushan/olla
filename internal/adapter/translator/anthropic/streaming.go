@@ -30,6 +30,7 @@ type StreamingState struct {
 // TransformStreamingResponse converts OpenAI SSE stream to Anthropic format
 // Orchestrates the entire streaming process from OpenAI format to Anthropic SSE events
 // Handles context cancellation and ensures proper cleanup
+// Supports both synchronous (blocking Scanner) and asynchronous (non-blocking Reader) modes
 func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error {
 	// Set headers for SSE
 	// Anthropic uses text/event-stream with no caching for real-time streaming
@@ -47,27 +48,18 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 		toolCallBuffers: make(map[string]*strings.Builder),
 	}
 
-	// Process OpenAI stream chunks
-	scanner := bufio.NewScanner(openaiStream)
-	for scanner.Scan() {
-		line := scanner.Text()
-
-		// Check for cancellation
-		// Allows graceful shutdown if client disconnects
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		if err := t.processStreamLine(line, state, w, rc); err != nil {
-			t.logger.Error("Error processing stream line", "error", err)
-			continue // Continue processing, don't fail entire stream
-		}
+	// Choose streaming mode based on config
+	// stream_async=false: synchronous Scanner (blocks, safer default for Claude Code agents)
+	// stream_async=true: asynchronous Reader (allows parallel agent execution)
+	var streamErr error
+	if t.config.StreamAsync {
+		streamErr = t.transformStreamingAsync(ctx, openaiStream, w, rc, state)
+	} else {
+		streamErr = t.transformStreamingSync(ctx, openaiStream, w, rc, state)
 	}
 
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("error reading stream: %w", err)
+	if streamErr != nil {
+		return streamErr
 	}
 
 	// Ensure message_start is sent even if we had no chunks with model
@@ -86,6 +78,77 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 	// Completes the stream with stop reason and final token counts
 	if err := t.finalizeStream(state, w, rc); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// transformStreamingSync processes the stream using synchronous Scanner
+// This is the safer default that blocks until data is available
+// Matches the original implementation behaviour
+func (t *Translator) transformStreamingSync(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, rc *http.ResponseController, state *StreamingState) error {
+	scanner := bufio.NewScanner(openaiStream)
+	for scanner.Scan() {
+		// Check for cancellation
+		// Allows graceful shutdown if client disconnects
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		line := scanner.Text()
+		if err := t.processStreamLine(line, state, w, rc); err != nil {
+			t.logger.Error("Error processing stream line", "error", err)
+			continue // Continue processing, don't fail entire stream
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("error reading stream: %w", err)
+	}
+
+	return nil
+}
+
+// transformStreamingAsync processes the stream using asynchronous Reader
+// This enables parallel agent execution in Claude Code by not blocking on reads
+// Uses ReadString which will return immediately when newline is found
+func (t *Translator) transformStreamingAsync(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, rc *http.ResponseController, state *StreamingState) error {
+	reader := bufio.NewReader(openaiStream)
+
+	for {
+		// Check for cancellation before reading
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		// Read until newline - non-blocking approach
+		line, err := reader.ReadString('\n')
+
+		// Process the line if we got any content
+		if len(line) > 0 {
+			// Trim the newline characters
+			trimmedLine := strings.TrimRight(line, "\r\n")
+			if trimmedLine != "" {
+				if processErr := t.processStreamLine(trimmedLine, state, w, rc); processErr != nil {
+					t.logger.Error("Error processing stream line", "error", processErr)
+					// Continue processing, don't fail entire stream
+				}
+			}
+		}
+
+		// Handle read errors
+		if err != nil {
+			if err == io.EOF {
+				// End of stream - normal completion
+				break
+			}
+			// Other errors are fatal
+			return fmt.Errorf("error reading stream: %w", err)
+		}
 	}
 
 	return nil

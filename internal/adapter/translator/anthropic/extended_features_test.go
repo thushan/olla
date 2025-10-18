@@ -15,7 +15,7 @@ import (
 // TestTransformRequest_WithThinkingField tests that the thinking field is accepted
 // This verifies the Thinking field is a known field and won't cause "unknown field" errors
 func TestTransformRequest_WithThinkingField(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	tests := []struct {
 		name     string
@@ -82,7 +82,7 @@ func TestTransformRequest_WithThinkingField(t *testing.T) {
 // TestTransformRequest_SystemPromptAsArray tests system prompt with content blocks
 // Anthropic API supports system prompts as arrays of content blocks
 func TestTransformRequest_SystemPromptAsArray(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -130,7 +130,7 @@ func TestTransformRequest_SystemPromptAsArray(t *testing.T) {
 
 // TestTransformRequest_SystemPromptArrayWithEmptyBlocks tests handling of empty content blocks
 func TestTransformRequest_SystemPromptArrayWithEmptyBlocks(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -174,7 +174,7 @@ func TestTransformRequest_SystemPromptArrayWithEmptyBlocks(t *testing.T) {
 
 // TestTransformRequest_SystemPromptArrayEmpty tests empty system prompt array
 func TestTransformRequest_SystemPromptArrayEmpty(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -207,7 +207,7 @@ func TestTransformRequest_SystemPromptArrayEmpty(t *testing.T) {
 
 // TestTransformRequest_SystemPromptString tests traditional string system prompt still works
 func TestTransformRequest_SystemPromptString(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -242,7 +242,7 @@ func TestTransformRequest_SystemPromptString(t *testing.T) {
 
 // TestTransformRequest_CombinedThinkingAndSystemArray tests both new features together
 func TestTransformRequest_CombinedThinkingAndSystemArray(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",

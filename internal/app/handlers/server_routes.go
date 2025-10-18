@@ -64,7 +64,7 @@ func (a *Application) registerTranslatorRoutes() {
 	}
 
 	translators := a.translatorRegistry.GetAll()
-	a.logger.Info("Registering translator routes", "count", len(translators))
+	a.logger.InfoWithCount("Starting registering translator routes", len(translators))
 
 	for name, trans := range translators {
 		// Check if translator implements PathProvider for dynamic route registration
@@ -110,6 +110,8 @@ func (a *Application) registerTranslatorRoutes() {
 					"messages_path", path,
 					"models_path", modelsPath,
 					"token_count_path", tokenCountPath)
+
+				a.logger.InfoWithEndpoint(" ", name, "path", path)
 			} else {
 				a.logger.Debug("Registered translator routes",
 					"translator", name,
@@ -121,6 +123,8 @@ func (a *Application) registerTranslatorRoutes() {
 				"translator", name)
 		}
 	}
+
+	a.logger.InfoWithCount("Finished registering translator routes", len(translators))
 }
 
 // extractBasePath extracts the base path from a translator's API path

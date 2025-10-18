@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/pkg/pool"
@@ -13,13 +14,16 @@ import (
 // Translator converts between Anthropic and OpenAI API formats
 // Uses buffer pooling to minimise memory allocations during translation
 type Translator struct {
-	logger     logger.StyledLogger
-	bufferPool *pool.Pool[*bytes.Buffer]
+	logger         logger.StyledLogger
+	bufferPool     *pool.Pool[*bytes.Buffer]
+	config         config.AnthropicTranslatorConfig
+	maxMessageSize int64 // derived from config
 }
 
 // NewTranslator creates a new Anthropic translator instance
 // Uses a buffer pool to reduce GC pressure during high-throughput operations
-func NewTranslator(log logger.StyledLogger) *Translator {
+// Accepts configuration for request size limits and streaming behaviour
+func NewTranslator(log logger.StyledLogger, cfg config.AnthropicTranslatorConfig) *Translator {
 	// Create buffer pool with 4KB initial capacity
 	// This size fits most chat completions without reallocation
 	bufferPool, err := pool.NewLitePool(func() *bytes.Buffer {
@@ -31,9 +35,18 @@ func NewTranslator(log logger.StyledLogger) *Translator {
 		panic("translator: failed to initialise buffer pool")
 	}
 
+	// Apply defaults if needed
+	maxSize := cfg.MaxMessageSize
+	if maxSize <= 0 {
+		maxSize = 10 << 20 // 10MB default
+		log.Warn("Invalid or missing max_message_size, using default", "default", maxSize)
+	}
+
 	return &Translator{
-		logger:     log,
-		bufferPool: bufferPool,
+		logger:         log,
+		bufferPool:     bufferPool,
+		config:         cfg,
+		maxMessageSize: maxSize,
 	}
 }
 

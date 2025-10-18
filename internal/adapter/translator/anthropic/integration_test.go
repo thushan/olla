@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/thushan/olla/internal/config"
 	"net/http"
 	"testing"
 
@@ -24,6 +25,13 @@ func createIntegrationTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
 	return logger.NewPlainStyledLogger(log)
+}
+func createTestConfig() config.AnthropicTranslatorConfig {
+	return config.AnthropicTranslatorConfig{
+		Enabled:        true,
+		MaxMessageSize: 10 << 20, // 10MB
+		StreamAsync:    false,
+	}
 }
 
 // createHTTPRequest creates a mock HTTP request from an Anthropic request
@@ -83,7 +91,7 @@ func simulateBackendResponse(content string, toolCalls []map[string]interface{},
 // Validates that data survives the full transformation pipeline:
 // Anthropic request → OpenAI format → backend response → Anthropic response
 func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
-	translator := NewTranslator(createIntegrationTestLogger())
+	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("simple_text_conversation", func(t *testing.T) {
@@ -368,7 +376,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 // Validates the full tool calling cycle:
 // Request with tools → OpenAI format → Response with tool_use → Final assistant reply
 func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
-	translator := NewTranslator(createIntegrationTestLogger())
+	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("single_tool_definition", func(t *testing.T) {
@@ -823,7 +831,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 // TestAnthropicEdgeCases_RoundTrip tests edge cases and error scenarios
 // Validates that the translator handles unusual inputs gracefully
 func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
-	translator := NewTranslator(createIntegrationTestLogger())
+	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("empty_messages_array", func(t *testing.T) {
@@ -1030,7 +1038,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 
 // TestAnthropicModelPreservation tests that model names are preserved through the round-trip
 func TestAnthropicModelPreservation(t *testing.T) {
-	translator := NewTranslator(createIntegrationTestLogger())
+	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	models := []string{
@@ -1072,7 +1080,7 @@ func TestAnthropicModelPreservation(t *testing.T) {
 
 // TestAnthropicUsageTracking tests that token usage is correctly tracked
 func TestAnthropicUsageTracking(t *testing.T) {
-	translator := NewTranslator(createIntegrationTestLogger())
+	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	anthropicReq := AnthropicRequest{

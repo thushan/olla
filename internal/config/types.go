@@ -17,6 +17,7 @@ type Config struct {
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
 	Server        ServerConfig        `yaml:"server"`
 	Engineering   EngineeringConfig   `yaml:"engineering"`
+	Translators   TranslatorsConfig   `yaml:"translators"`
 }
 
 // ServerConfig holds HTTP server configuration
@@ -152,4 +153,28 @@ type UnificationRuleConfig struct {
 	FamilyOverrides map[string]string `yaml:"family_overrides"`
 	NamePatterns    map[string]string `yaml:"name_patterns"`
 	Platform        string            `yaml:"platform"`
+}
+
+// TranslatorsConfig holds translator-specific configuration
+type TranslatorsConfig struct {
+	Anthropic AnthropicTranslatorConfig `yaml:"anthropic"`
+}
+
+// AnthropicTranslatorConfig holds configuration for the Anthropic translator
+type AnthropicTranslatorConfig struct {
+	MaxMessageSize int64 `yaml:"max_message_size"`
+	Enabled        bool  `yaml:"enabled"`
+	StreamAsync    bool  `yaml:"stream_async"`
+}
+
+// Validate validates the Anthropic translator configuration
+// Ensures message size is within safe bounds to prevent DoS and API errors
+func (c *AnthropicTranslatorConfig) Validate() error {
+	if c.MaxMessageSize < 0 {
+		return fmt.Errorf("max_message_size must be non-negative, got %d", c.MaxMessageSize)
+	}
+	if c.MaxMessageSize > 100<<20 {
+		return fmt.Errorf("max_message_size exceeds 100MB safety limit, got %d", c.MaxMessageSize)
+	}
+	return nil
 }

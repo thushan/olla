@@ -15,7 +15,7 @@ import (
 
 // TestRequestValidation_RequiredFields tests validation of required fields
 func TestRequestValidation_RequiredFields(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("missing_model", func(t *testing.T) {
@@ -61,7 +61,7 @@ func TestRequestValidation_RequiredFields(t *testing.T) {
 
 // TestRequestValidation_ParameterRanges tests validation of parameter ranges
 func TestRequestValidation_ParameterRanges(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("negative_max_tokens", func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestRequestValidation_ParameterRanges(t *testing.T) {
 
 // TestRequestValidation_ValidParameters tests that valid parameters pass validation
 func TestRequestValidation_ValidParameters(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("valid_temperature_boundary", func(t *testing.T) {
@@ -296,7 +296,7 @@ func TestRequestValidation_ValidParameters(t *testing.T) {
 
 // TestRequestSizeLimit tests that large requests are rejected
 func TestRequestSizeLimit(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("request_exceeding_10MB", func(t *testing.T) {
@@ -351,7 +351,7 @@ func TestRequestSizeLimit(t *testing.T) {
 
 // TestUnknownFieldsRejection tests that requests with unknown fields are rejected
 func TestUnknownFieldsRejection(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("request_with_unknown_field", func(t *testing.T) {
@@ -395,7 +395,7 @@ func TestUnknownFieldsRejection(t *testing.T) {
 
 // TestSecurityFeaturesCombined tests multiple security features together
 func TestSecurityFeaturesCombined(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("invalid_params_with_unknown_fields", func(t *testing.T) {

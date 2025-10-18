@@ -15,7 +15,7 @@ import (
 // TestPathTranslation verifies that the translator sets the correct target path
 // This ensures requests are proxied to the correct OpenAI endpoint
 func TestPathTranslation(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	tests := []struct {
@@ -94,7 +94,7 @@ func TestPathTranslation(t *testing.T) {
 
 // TestPathTranslationPreservesOtherFields verifies that setting TargetPath doesn't affect other fields
 func TestPathTranslationPreservesOtherFields(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	anthropicReq := AnthropicRequest{
@@ -143,7 +143,7 @@ func TestPathTranslationPreservesOtherFields(t *testing.T) {
 // TestTranslatorSetsPathWithoutOllaPrefix verifies that the translator sets the path correctly WITHOUT /olla prefix
 // The handler layer is responsible for stripping the /olla prefix, not the translator
 func TestTranslatorSetsPathWithoutOllaPrefix(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",

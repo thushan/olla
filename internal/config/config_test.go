@@ -495,3 +495,168 @@ func TestDefaultConfig_TrustedProxyCIDRs(t *testing.T) {
 		}
 	}
 }
+
+func TestAnthropicTranslatorConfig_Validate(t *testing.T) {
+	testCases := []struct {
+		name        string
+		config      AnthropicTranslatorConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid config with 10MB limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 10 << 20, // 10MB
+				StreamAsync:    false,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with 50MB limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 50 << 20, // 50MB
+				StreamAsync:    true,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config at upper bound (100MB)",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 100 << 20, // 100MB
+				StreamAsync:    false,
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with zero size (will use default in translator)",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 0,
+				StreamAsync:    false,
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid config with negative size",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: -1,
+				StreamAsync:    false,
+			},
+			expectError: true,
+			errorMsg:    "max_message_size must be non-negative",
+		},
+		{
+			name: "invalid config exceeding 100MB limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 101 << 20, // 101MB
+				StreamAsync:    false,
+			},
+			expectError: true,
+			errorMsg:    "max_message_size exceeds 100MB safety limit",
+		},
+		{
+			name: "invalid config way over limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 500 << 20, // 500MB
+				StreamAsync:    false,
+			},
+			expectError: true,
+			errorMsg:    "max_message_size exceeds 100MB safety limit",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.config.Validate()
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error containing %q, but got nil", tc.errorMsg)
+				} else if !contains(err.Error(), tc.errorMsg) {
+					t.Errorf("Expected error containing %q, got %q", tc.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, but got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfig_WithTranslatorConfig(t *testing.T) {
+	// Test environment variables for translator config
+	testEnvVars := map[string]string{
+		"OLLA_TRANSLATORS_ANTHROPIC_ENABLED":          "true",
+		"OLLA_TRANSLATORS_ANTHROPIC_MAX_MESSAGE_SIZE": "20971520", // 20MB
+		"OLLA_TRANSLATORS_ANTHROPIC_STREAM_ASYNC":     "true",
+	}
+
+	// Set env vars
+	for key, value := range testEnvVars {
+		os.Setenv(key, value)
+	}
+
+	// Clean up after test
+	defer func() {
+		for key := range testEnvVars {
+			os.Unsetenv(key)
+		}
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with translator env vars failed: %v", err)
+	}
+
+	// Verify translator config overrides
+	if !cfg.Translators.Anthropic.Enabled {
+		t.Error("Expected Anthropic translator enabled from env var")
+	}
+	expectedSize := int64(20 << 20) // 20MB
+	if cfg.Translators.Anthropic.MaxMessageSize != expectedSize {
+		t.Errorf("Expected max message size %d from env var, got %d",
+			expectedSize, cfg.Translators.Anthropic.MaxMessageSize)
+	}
+	if !cfg.Translators.Anthropic.StreamAsync {
+		t.Error("Expected stream_async true from env var")
+	}
+}
+
+func TestDefaultConfig_Translators(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Test Anthropic translator defaults
+	if !cfg.Translators.Anthropic.Enabled {
+		t.Error("Expected Anthropic translator enabled by default")
+	}
+	expectedSize := int64(10 << 20) // 10MB
+	if cfg.Translators.Anthropic.MaxMessageSize != expectedSize {
+		t.Errorf("Expected default max message size %d, got %d",
+			expectedSize, cfg.Translators.Anthropic.MaxMessageSize)
+	}
+	if cfg.Translators.Anthropic.StreamAsync {
+		t.Error("Expected stream_async false by default (synchronous)")
+	}
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && stringContains(s, substr)))
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

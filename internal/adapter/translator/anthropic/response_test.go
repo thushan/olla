@@ -20,7 +20,7 @@ func createResponseTestLogger() logger.StyledLogger {
 // Validates that a simple OpenAI text response is correctly transformed
 // to Anthropic format with proper type, role, and content structure
 func TestTransformResponse_SimpleText(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	openaiResp := map[string]interface{}{
 		"id":    "chatcmpl-123",
@@ -64,7 +64,7 @@ func TestTransformResponse_SimpleText(t *testing.T) {
 // Validates that OpenAI tool_calls are converted to Anthropic tool_use blocks
 // and that tool arguments are correctly parsed from JSON string to object
 func TestTransformResponse_WithToolCalls(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	openaiResp := map[string]interface{}{
 		"id":    "chatcmpl-123",
@@ -121,7 +121,7 @@ func TestTransformResponse_WithToolCalls(t *testing.T) {
 // Validates that multiple OpenAI tool_calls are converted to multiple
 // Anthropic tool_use content blocks in the correct order
 func TestTransformResponse_MultipleToolCalls(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	openaiResp := map[string]interface{}{
 		"choices": []interface{}{
@@ -172,7 +172,7 @@ func TestTransformResponse_MultipleToolCalls(t *testing.T) {
 // TestTransformResponse_EmptyResponse tests handling of empty or minimal responses
 // Validates that the translator handles edge cases gracefully
 func TestTransformResponse_EmptyResponse(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("empty_content", func(t *testing.T) {
 		// OpenAI response with empty content string
@@ -249,7 +249,7 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 // TestTransformResponse_MissingUsage tests handling of missing usage statistics
 // Validates that the translator handles responses without usage data gracefully
 func TestTransformResponse_MissingUsage(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("usage_not_present", func(t *testing.T) {
 		openaiResp := map[string]interface{}{
@@ -312,7 +312,7 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 // TestTransformResponse_InvalidToolArguments tests handling of malformed tool call arguments
 // Validates that the translator handles invalid JSON in tool arguments gracefully
 func TestTransformResponse_InvalidToolArguments(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("malformed_json", func(t *testing.T) {
 		openaiResp := map[string]interface{}{
@@ -407,7 +407,7 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 // TestTransformResponse_OnlyToolCalls tests response with only tool calls, no text
 // Validates that responses can have tool_use blocks without preceding text
 func TestTransformResponse_OnlyToolCalls(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	openaiResp := map[string]interface{}{
 		"id":    "chatcmpl-toolonly",
@@ -459,7 +459,7 @@ func TestTransformResponse_OnlyToolCalls(t *testing.T) {
 // NOTE: Current implementation only checks for presence of tool_calls, not finish_reason
 // TODO: Implementation should check finish_reason field for proper length/max_tokens mapping
 func TestTransformResponse_FinishReasonMapping(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("stop_to_end_turn", func(t *testing.T) {
 		openaiResp := map[string]interface{}{
@@ -602,7 +602,7 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 // TestTransformResponse_MessageIDGeneration tests message ID handling
 // Validates that message IDs are correctly generated in Anthropic's format
 func TestTransformResponse_MessageIDGeneration(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("generates_anthropic_format_id", func(t *testing.T) {
 		openaiResp := map[string]interface{}{
@@ -713,7 +713,7 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 // TestTransformResponse_ComplexToolArguments tests tool calls with nested objects
 // Validates that complex JSON structures in tool arguments are correctly parsed
 func TestTransformResponse_ComplexToolArguments(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	openaiResp := map[string]interface{}{
 		"id":    "chatcmpl-complex",
@@ -785,7 +785,7 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 // TestTransformResponse_InvalidFormat tests handling of malformed OpenAI responses
 // Validates that the translator handles invalid response structures gracefully
 func TestTransformResponse_InvalidFormat(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("missing_choices", func(t *testing.T) {
 		openaiResp := map[string]interface{}{
@@ -847,7 +847,7 @@ func TestTransformResponse_InvalidFormat(t *testing.T) {
 // TestTransformResponse_StopSequenceHandling tests stop_sequence field handling
 // Validates that custom stop sequences are correctly handled
 func TestTransformResponse_StopSequenceHandling(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("with_stop_sequence", func(t *testing.T) {
 		// OpenAI doesn't have a standard stop_sequence field in responses
@@ -881,7 +881,7 @@ func TestTransformResponse_StopSequenceHandling(t *testing.T) {
 // TestTransformResponse_ModelFieldPreservation tests model name preservation
 // Validates that the model name is correctly passed through
 func TestTransformResponse_ModelFieldPreservation(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	testCases := []struct {
 		name      string
@@ -932,7 +932,7 @@ func TestTransformResponse_ModelFieldPreservation(t *testing.T) {
 // TestTransformResponse_TypeAndRoleFields tests constant field values
 // Validates that type and role fields are set correctly
 func TestTransformResponse_TypeAndRoleFields(t *testing.T) {
-	translator := NewTranslator(createResponseTestLogger())
+	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	openaiResp := map[string]interface{}{
 		"id":    "chatcmpl-fields",

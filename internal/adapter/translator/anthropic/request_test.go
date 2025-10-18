@@ -22,7 +22,7 @@ func createTestLogger() logger.StyledLogger {
 
 // TestTransformRequest_SimpleMessage tests basic string content conversion
 func TestTransformRequest_SimpleMessage(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -62,7 +62,7 @@ func TestTransformRequest_SimpleMessage(t *testing.T) {
 
 // TestTransformRequest_WithSystemPrompt tests system prompt injection as first message
 func TestTransformRequest_WithSystemPrompt(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -101,7 +101,7 @@ func TestTransformRequest_WithSystemPrompt(t *testing.T) {
 
 // TestTransformRequest_WithTools tests tool definitions conversion
 func TestTransformRequest_WithTools(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -161,7 +161,7 @@ func TestTransformRequest_WithTools(t *testing.T) {
 
 // TestTransformRequest_MultipleTools tests conversion of multiple tool definitions
 func TestTransformRequest_MultipleTools(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -218,7 +218,7 @@ func TestTransformRequest_MultipleTools(t *testing.T) {
 
 // TestConvertToolChoice tests all tool_choice variations
 func TestConvertToolChoice(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	testCases := []struct {
 		name            string
@@ -283,7 +283,7 @@ func TestConvertToolChoice(t *testing.T) {
 
 // TestConvertToolChoice_EdgeCases tests error handling for tool_choice
 func TestConvertToolChoice_EdgeCases(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	t.Run("unknown_string_defaults_to_auto", func(t *testing.T) {
 		result, err := translator.convertToolChoice("unknown")
@@ -317,7 +317,7 @@ func TestConvertToolChoice_EdgeCases(t *testing.T) {
 
 // TestConvertMessages_ToolUseAndResult tests full tool calling round-trip
 func TestConvertMessages_ToolUseAndResult(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -409,7 +409,7 @@ func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 
 // TestTransformRequest_ComplexContent tests content blocks with text
 func TestTransformRequest_ComplexContent(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -452,7 +452,7 @@ func TestTransformRequest_ComplexContent(t *testing.T) {
 
 // TestTransformRequest_MultipleMessages tests conversation history
 func TestTransformRequest_MultipleMessages(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -504,7 +504,7 @@ func TestTransformRequest_MultipleMessages(t *testing.T) {
 
 // TestTransformRequest_EmptyContent tests edge case handling
 func TestTransformRequest_EmptyContent(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	t.Run("empty_string_content", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
@@ -570,7 +570,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 
 // TestTransformRequest_InvalidJSON tests error handling
 func TestTransformRequest_InvalidJSON(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	t.Run("malformed_json", func(t *testing.T) {
 		req := &http.Request{
@@ -594,7 +594,7 @@ func TestTransformRequest_InvalidJSON(t *testing.T) {
 
 // TestTransformRequest_OptionalParameters tests parameter mapping
 func TestTransformRequest_OptionalParameters(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	temp := 0.7
 	topP := 0.9
@@ -638,7 +638,7 @@ func TestTransformRequest_OptionalParameters(t *testing.T) {
 
 // TestTransformRequest_AssistantWithOnlyToolCalls tests assistant message with no text
 func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -686,7 +686,7 @@ func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 
 // TestTransformRequest_UserWithOnlyToolResults tests user message with only tool results
 func TestTransformRequest_UserWithOnlyToolResults(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -727,7 +727,7 @@ func TestTransformRequest_UserWithOnlyToolResults(t *testing.T) {
 
 // TestTransformRequest_ToolResultWithStructuredContent tests tool result with non-string content
 func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -779,7 +779,7 @@ func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 
 // TestTransformRequest_MultipleToolCalls tests assistant message with multiple tool calls
 func TestTransformRequest_MultipleToolCalls(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -847,7 +847,7 @@ func TestTransformRequest_MultipleToolCalls(t *testing.T) {
 
 // TestConvertToolUse_InvalidData tests tool use conversion with missing fields
 func TestConvertToolUse_InvalidData(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	t.Run("missing_id", func(t *testing.T) {
 		block := map[string]interface{}{
@@ -886,7 +886,7 @@ func TestConvertToolUse_InvalidData(t *testing.T) {
 
 // TestTransformRequest_NoMessages tests request with no messages
 func TestTransformRequest_NoMessages(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -908,7 +908,7 @@ func TestTransformRequest_NoMessages(t *testing.T) {
 
 // TestTransformRequest_ToolChoiceObjectForm tests tool_choice with object form
 func TestTransformRequest_ToolChoiceObjectForm(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -956,7 +956,7 @@ func TestTransformRequest_ToolChoiceObjectForm(t *testing.T) {
 
 // TestTransformRequest_MixedTextAndToolResults tests user message with both text and tool results
 func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
@@ -1005,7 +1005,7 @@ func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
 
 // TestConvertSystemPrompt_AllFormats tests all three system prompt formats
 func TestConvertSystemPrompt_AllFormats(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	t.Run("string_format", func(t *testing.T) {
 		// Test simple string format
@@ -1110,7 +1110,7 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 
 // TestTransformRequest_SystemPromptWithContentBlocks tests system prompt as content blocks via JSON
 func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	// Simulate a request with system prompt as content blocks ([]interface{} format)
 	anthropicReq := AnthropicRequest{
@@ -1158,7 +1158,7 @@ func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
 
 // TestTransformRequest_StronglyTypedSystemPrompt tests strongly-typed ContentBlock system prompt
 func TestTransformRequest_StronglyTypedSystemPrompt(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	// Create a request with strongly-typed system prompt
 	// This simulates what happens when System field is unmarshalled as []ContentBlock

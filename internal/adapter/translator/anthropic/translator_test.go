@@ -14,7 +14,7 @@ import (
 
 // TestGetAPIPath tests the PathProvider interface implementation
 func TestGetAPIPath(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	path := translator.GetAPIPath()
 	assert.Equal(t, "/olla/anthropic/v1/messages", path, "should return the correct Anthropic API path")
@@ -82,7 +82,7 @@ func TestWriteError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			translator := NewTranslator(createTestLogger())
+			translator := NewTranslator(createTestLogger(), createTestConfig())
 			rec := httptest.NewRecorder()
 
 			translator.WriteError(rec, tt.err, tt.statusCode)
@@ -113,7 +113,7 @@ func TestWriteError(t *testing.T) {
 
 // TestWriteError_ErrorFormat tests Anthropic error format compliance
 func TestWriteError_ErrorFormat(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	rec := httptest.NewRecorder()
 
 	testErr := errors.New("test error message")
@@ -135,14 +135,14 @@ func TestWriteError_ErrorFormat(t *testing.T) {
 
 // TestName tests the Name method
 func TestName(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	assert.Equal(t, "anthropic", translator.Name())
 }
 
 // TestWriteError_JSONEncodingFailure tests handling of JSON encoding errors
 // This test is mostly for coverage, as encoding errors are rare
 func TestWriteError_JSONEncodingSuccess(t *testing.T) {
-	translator := NewTranslator(createTestLogger())
+	translator := NewTranslator(createTestLogger(), createTestConfig())
 	rec := httptest.NewRecorder()
 
 	// Standard error that should encode successfully
