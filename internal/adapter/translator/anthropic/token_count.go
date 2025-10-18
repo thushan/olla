@@ -43,9 +43,8 @@ func estimateTokensFromRequest(req *AnthropicRequest) int {
 	totalChars := 0
 
 	// Count system prompt characters
-	if req.System != "" {
-		totalChars += len(req.System)
-	}
+	// System can be either a string or an array of content blocks
+	totalChars += countSystemChars(req.System)
 
 	// Count all message content
 	for _, msg := range req.Messages {
@@ -60,6 +59,32 @@ func estimateTokensFromRequest(req *AnthropicRequest) int {
 	}
 
 	return tokenCount
+}
+
+// countSystemChars counts characters in the system prompt
+// Handles both string and array of content blocks formats
+func countSystemChars(system interface{}) int {
+	if system == nil {
+		return 0
+	}
+
+	// Handle string form
+	if systemStr, ok := system.(string); ok {
+		return len(systemStr)
+	}
+
+	// Handle array form (content blocks)
+	if systemBlocks, ok := system.([]interface{}); ok {
+		totalChars := 0
+		for _, block := range systemBlocks {
+			if blockMap, ok := block.(map[string]interface{}); ok {
+				totalChars += countContentBlockChars(blockMap)
+			}
+		}
+		return totalChars
+	}
+
+	return 0
 }
 
 // countMessageChars counts characters in a message

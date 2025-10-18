@@ -31,6 +31,7 @@ type TransformedRequest struct {
 	OpenAIRequest map[string]interface{} // Converted OpenAI format request body
 	Metadata      map[string]interface{} // Additional context for response translation
 	ModelName     string                 // Extracted model name for routing
+	TargetPath    string                 // Target API path for the backend (e.g., "/v1/chat/completions" - proxy handles /olla prefix)
 	OriginalBody  []byte                 // Original request body for response translation context
 	IsStreaming   bool                   // Whether response should stream
 }

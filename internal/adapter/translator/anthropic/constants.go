@@ -23,3 +23,8 @@ const (
 const (
 	openAITypeFunction = "function"
 )
+
+const (
+	// [TF] added to avoid memory exhaustion for some massive requests
+	maxAnthropicRequestSize = 10 << 20 // 10MB, TODO: make configurable
+)

@@ -14,18 +14,28 @@ import (
 // TransformRequest converts an Anthropic API request to OpenAI format
 // Reads the request body, parses it and transforms messages, tools and parameters
 func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
-	// Read request body
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read request body: %w", err)
-	}
-	r.Body.Close()
+	// Limit request body size to prevent DoS attacks
+	limitedBody := io.LimitReader(r.Body, maxAnthropicRequestSize)
+	defer r.Body.Close()
 
-	// Parse Anthropic request
+	// Parse Anthropic request using decoder for better memory efficiency and strict validation
 	var anthropicReq AnthropicRequest
-	err = json.Unmarshal(body, &anthropicReq)
-	if err != nil {
+	decoder := json.NewDecoder(limitedBody)
+	decoder.DisallowUnknownFields() // Reject requests with unknown fields
+
+	if err := decoder.Decode(&anthropicReq); err != nil {
 		return nil, fmt.Errorf("failed to parse Anthropic request: %w", err)
+	}
+
+	// Validate required fields and parameter ranges
+	if err := anthropicReq.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	// Re-marshal to get the body bytes for the original body
+	body, err := json.Marshal(anthropicReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	// Convert to OpenAI format
@@ -80,6 +90,7 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 		OriginalBody:  body,
 		ModelName:     anthropicReq.Model,
 		IsStreaming:   anthropicReq.Stream,
+		TargetPath:    "/v1/chat/completions", // Backend API endpoint (proxy layer handles /olla prefix)
 		Metadata: map[string]interface{}{
 			"format": "anthropic",
 		},
@@ -88,17 +99,21 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 
 // convertMessages transforms Anthropic messages to OpenAI format
 // Injects system prompt as the first message if present
-func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, systemPrompt string) ([]map[string]interface{}, error) {
+func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, systemPrompt interface{}) ([]map[string]interface{}, error) {
 	// Pre-allocate with space for system message
 	openaiMessages := make([]map[string]interface{}, 0, len(anthropicMessages)+1)
 
 	// Add system message first if present
 	// OpenAI expects system prompts as the first message with role="system"
-	if systemPrompt != "" {
-		openaiMessages = append(openaiMessages, map[string]interface{}{
-			"role":    "system",
-			"content": systemPrompt,
-		})
+	// System can be either a string or an array of content blocks
+	if systemPrompt != nil {
+		systemContent := t.convertSystemPrompt(systemPrompt)
+		if systemContent != nil {
+			openaiMessages = append(openaiMessages, map[string]interface{}{
+				"role":    "system",
+				"content": systemContent,
+			})
+		}
 	}
 
 	// Convert each Anthropic message
@@ -181,7 +196,7 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 			}
 		case contentTypeToolResult:
 			// Tool results become separate messages in OpenAI format
-			// Map tool_use_id to tool_call_id
+			// Map tool_use_id --> tool_call_id
 			toolUseID, _ := blockMap["tool_use_id"].(string)
 
 			// Content can be string or structured - convert to string
@@ -288,4 +303,42 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 			"arguments": string(inputJSON),
 		},
 	}
+}
+
+// convertSystemPrompt converts Anthropic system prompt to OpenAI format
+// Handles both string and array of content blocks formats
+func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
+	// Handle string form (simple case)
+	if systemStr, ok := systemPrompt.(string); ok {
+		if systemStr == "" {
+			return nil
+		}
+		return systemStr
+	}
+
+	// Handle array form (content blocks)
+	// Anthropic supports system prompts as arrays of content blocks
+	if systemBlocks, ok := systemPrompt.([]interface{}); ok {
+		var textParts []string
+		for _, block := range systemBlocks {
+			blockMap, ok := block.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			blockType, _ := blockMap["type"].(string)
+			if blockType == contentTypeText {
+				if text, ok := blockMap["text"].(string); ok && text != "" {
+					textParts = append(textParts, text)
+				}
+			}
+		}
+
+		if len(textParts) > 0 {
+			return strings.Join(textParts, "")
+		}
+	}
+
+	// No valid content found
+	return nil
 }

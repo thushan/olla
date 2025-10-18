@@ -834,11 +834,9 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		}
 
 		httpReq := createHTTPRequest(t, anthropicReq)
-		transformed, err := translator.TransformRequest(ctx, httpReq)
-		require.NoError(t, err)
-
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
-		assert.Len(t, messages, 0)
+		_, err := translator.TransformRequest(ctx, httpReq)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "at least one message is required")
 	})
 
 	t.Run("empty_content_string", func(t *testing.T) {

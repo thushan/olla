@@ -901,12 +901,9 @@ func TestTransformRequest_NoMessages(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
-	require.NoError(t, err)
-
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
-	require.True(t, ok)
-	assert.Len(t, messages, 0)
+	_, err = translator.TransformRequest(context.Background(), req)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "at least one message is required")
 }
 
 // TestTransformRequest_ToolChoiceObjectForm tests tool_choice with object form

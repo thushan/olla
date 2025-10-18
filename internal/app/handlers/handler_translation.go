@@ -11,6 +11,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/util"
 )
 
 // translationHandler creates a generic HTTP handler for any RequestTranslator
@@ -44,6 +45,36 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		r.Body = io.NopCloser(bytes.NewReader(openaiBody))
 		r.ContentLength = int64(len(openaiBody))
 
+		// Update request path if translator specified a target path
+		// This enables path translation (e.g., Anthropic /v1/messages → OpenAI /v1/chat/completions)
+		if transformedReq.TargetPath != "" {
+			// Strip the proxy prefix if translator included it using the standard utility
+			// This ensures consistency with the rest of the proxy layer
+			targetPath := util.StripPrefix(transformedReq.TargetPath, constants.DefaultOllaProxyPathPrefix)
+
+			// Warn if translator incorrectly included the prefix
+			if targetPath != transformedReq.TargetPath {
+				pr.requestLogger.Warn("TargetPath included proxy prefix, stripped it",
+					"translator", trans.Name(),
+					"proxy_prefix", constants.DefaultOllaProxyPathPrefix,
+					"original_target", transformedReq.TargetPath,
+					"corrected_target", targetPath)
+			}
+
+			pr.requestLogger.Debug("Path translation applied",
+				"original_path", r.URL.Path,
+				"target_path", targetPath,
+				"translator", trans.Name())
+			r.URL.Path = targetPath
+		} else if trans.Name() != "passthrough" {
+			// Warn if translator might need path translation
+			// Non-translating proxies (e.g., passthrough) can ignore this
+			pr.requestLogger.Warn("Translator did not set TargetPath, using original path",
+				"translator", trans.Name(),
+				"original_path", r.URL.Path,
+				"note", "This may cause routing issues if translation requires different endpoint")
+		}
+
 		// Run through standard proxy pipeline (inspector, security, endpoint selection)
 		a.analyzeRequest(ctx, r, pr)
 
@@ -63,6 +94,15 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			proxyErr = a.executeTranslatedStreamingRequest(ctx, w, r, endpoints, pr, trans)
 		} else {
 			proxyErr = a.executeTranslatedNonStreamingRequest(ctx, w, r, endpoints, pr, trans)
+		}
+
+		if proxyErr == nil {
+			pr.requestLogger.Debug("Translation request completed successfully",
+				"translator", trans.Name(),
+				"model", pr.model,
+				"path_translated", transformedReq.TargetPath != "",
+				"target_path", transformedReq.TargetPath,
+				"streaming", transformedReq.IsStreaming)
 		}
 
 		a.logRequestResult(pr, proxyErr)
@@ -112,7 +152,45 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 		return fmt.Errorf("failed to parse OpenAI response: %w", jerr)
 	}
 
-	// Transform OpenAI response back to target format
+	// Check if backend returned an error status code
+	// If so, translate the error response to the target format using ErrorWriter
+	if recorder.status >= 400 {
+		pr.requestLogger.Debug("Backend returned error, translating to target format",
+			"status_code", recorder.status,
+			"translator", trans.Name())
+
+		// Extract error message from OpenAI error response
+		errorMsg := "Backend error"
+		if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
+			if msg, ok := errObj["message"].(string); ok && msg != "" {
+				errorMsg = msg
+			}
+		}
+
+		pr.requestLogger.Info("Translating backend error response",
+			"status_code", recorder.status,
+			"error_message", errorMsg,
+			"translator", trans.Name())
+
+		// Copy observability headers before writing error
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+		a.copyOllaHeaders(recorder, w)
+
+		// Use translator's error formatter if available
+		if errorWriter, ok := trans.(translator.ErrorWriter); ok {
+			errorWriter.WriteError(w, fmt.Errorf("%s", errorMsg), recorder.status)
+			return nil
+		}
+
+		// Fallback: write generic error in target format
+		w.WriteHeader(recorder.status)
+		if _, werr := w.Write(recorder.body.Bytes()); werr != nil {
+			return fmt.Errorf("failed to write error response: %w", werr)
+		}
+		return nil
+	}
+
+	// Transform successful OpenAI response back to target format
 	targetResp, err := trans.TransformResponse(ctx, openaiResp, r)
 	if err != nil {
 		return fmt.Errorf("failed to transform response: %w", err)
@@ -177,6 +255,28 @@ func (a *Application) executeTranslatedStreamingRequest(
 		err := a.proxyService.ProxyRequestToEndpoints(localCtx, streamRecorder, localR, endpoints, pr.stats, pr.requestLogger)
 		pipeWriter.Close() // Signal end of stream
 		proxyErrChan <- err
+	}()
+
+	// Add panic recovery to prevent goroutine leak
+	// If transformation panics, we must close pipe and drain error channel
+	// to unblock the proxy goroutine before re-panicking
+	defer func() {
+		if r := recover(); r != nil {
+			// Close both ends of the pipe to unblock the goroutine
+			pipeReader.Close()
+			pipeWriter.Close()
+
+			// Drain the error channel to prevent goroutine leak
+			<-proxyErrChan
+
+			a.logger.Error("Panic during stream transformation",
+				"panic", r,
+				"translator", trans.Name(),
+				"model", pr.model)
+
+			// Re-panic after cleanup to preserve the panic behavior
+			panic(r)
+		}
 	}()
 
 	// Wait for headers to be set by proxy before copying them
