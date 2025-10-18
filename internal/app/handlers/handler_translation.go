@@ -159,18 +159,39 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 			"status_code", recorder.status,
 			"translator", trans.Name())
 
-		// Extract error message from OpenAI error response
+		// Extract error details from OpenAI error response
+		// Preserve additional metadata for better debugging
 		errorMsg := "Backend error"
+		var errorType, errorParam, errorCode string
+
 		if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
 			if msg, ok := errObj["message"].(string); ok && msg != "" {
 				errorMsg = msg
 			}
-		}
+			if typ, ok := errObj["type"].(string); ok {
+				errorType = typ
+			}
+			if param, ok := errObj["param"].(string); ok {
+				errorParam = param
+			}
+			if code, ok := errObj["code"].(string); ok {
+				errorCode = code
+			}
 
-		pr.requestLogger.Info("Translating backend error response",
-			"status_code", recorder.status,
-			"error_message", errorMsg,
-			"translator", trans.Name())
+			// Log full error details for debugging
+			pr.requestLogger.Info("Translating backend error response",
+				"status_code", recorder.status,
+				"error_message", errorMsg,
+				"error_type", errorType,
+				"error_param", errorParam,
+				"error_code", errorCode,
+				"translator", trans.Name())
+		} else {
+			pr.requestLogger.Info("Translating backend error response",
+				"status_code", recorder.status,
+				"error_message", errorMsg,
+				"translator", trans.Name())
+		}
 
 		// Copy observability headers before writing error
 		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)

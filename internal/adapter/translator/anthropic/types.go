@@ -32,8 +32,8 @@ func (r *AnthropicRequest) Validate() error {
 	}
 
 	// Validate optional fields have acceptable values
-	if r.MaxTokens < 0 {
-		return fmt.Errorf("max_tokens must be non-negative, got %d", r.MaxTokens)
+	if r.MaxTokens < 1 {
+		return fmt.Errorf("max_tokens must be at least 1, got %d", r.MaxTokens)
 	}
 	if r.Temperature != nil && (*r.Temperature < 0 || *r.Temperature > 2) {
 		return fmt.Errorf("temperature must be between 0 and 2, got %f", *r.Temperature)

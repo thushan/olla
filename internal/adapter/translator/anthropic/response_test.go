@@ -600,11 +600,11 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 }
 
 // TestTransformResponse_MessageIDGeneration tests message ID handling
-// Validates that message IDs are correctly passed through or generated
+// Validates that message IDs are correctly generated in Anthropic's format
 func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger())
 
-	t.Run("with_openai_id", func(t *testing.T) {
+	t.Run("generates_anthropic_format_id", func(t *testing.T) {
 		openaiResp := map[string]interface{}{
 			"id":    "chatcmpl-original-123",
 			"model": "claude-3-5-sonnet-20241022",
@@ -626,15 +626,51 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Should preserve or transform the OpenAI ID
+		// Should generate an ID in Anthropic format
 		assert.NotEmpty(t, anthropicResp.ID)
-		// Anthropic IDs typically start with "msg_"
-		// The implementation may choose to preserve or transform
+		assert.Contains(t, anthropicResp.ID, "msg_01", "Message ID should start with msg_01 prefix")
+
+		// Verify ID is the expected length (27-29 characters typical for Anthropic)
+		// msg_01 (6 chars) + base58 encoded 16 bytes (~22 chars) = ~28 chars total
+		assert.GreaterOrEqual(t, len(anthropicResp.ID), 20, "ID should be at least 20 characters")
+		assert.LessOrEqual(t, len(anthropicResp.ID), 35, "ID should be at most 35 characters")
 	})
 
-	t.Run("without_openai_id", func(t *testing.T) {
+	t.Run("generates_unique_ids", func(t *testing.T) {
 		openaiResp := map[string]interface{}{
-			// Missing id field
+			"model": "claude-3-5-sonnet-20241022",
+			"choices": []interface{}{
+				map[string]interface{}{
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "Test",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{},
+		}
+
+		// Generate multiple IDs and ensure they're unique
+		ids := make(map[string]bool)
+		for i := 0; i < 100; i++ {
+			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+			require.NoError(t, err)
+
+			anthropicResp, ok := result.(AnthropicResponse)
+			require.True(t, ok)
+
+			// Check for duplicates
+			assert.False(t, ids[anthropicResp.ID], "Generated duplicate ID: %s", anthropicResp.ID)
+			ids[anthropicResp.ID] = true
+		}
+
+		// Should have generated 100 unique IDs
+		assert.Len(t, ids, 100)
+	})
+
+	t.Run("id_contains_only_valid_base58_chars", func(t *testing.T) {
+		openaiResp := map[string]interface{}{
 			"model": "claude-3-5-sonnet-20241022",
 			"choices": []interface{}{
 				map[string]interface{}{
@@ -654,8 +690,23 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Should generate an ID when none provided
-		assert.NotEmpty(t, anthropicResp.ID)
+		// After the msg_01 prefix, should only contain base58 characters
+		// Base58: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
+		// (excludes 0, O, I, l)
+		id := anthropicResp.ID
+		assert.True(t, len(id) > 6, "ID should be longer than just the prefix")
+
+		suffix := id[6:] // Skip "msg_01" prefix
+		for _, char := range suffix {
+			assert.Contains(t, "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz", string(char),
+				"ID suffix should only contain base58 characters, found: %c", char)
+		}
+
+		// Ensure ambiguous characters are NOT present
+		assert.NotContains(t, suffix, "0", "ID should not contain digit 0")
+		assert.NotContains(t, suffix, "O", "ID should not contain uppercase O")
+		assert.NotContains(t, suffix, "I", "ID should not contain uppercase I")
+		assert.NotContains(t, suffix, "l", "ID should not contain lowercase l")
 	})
 }
 

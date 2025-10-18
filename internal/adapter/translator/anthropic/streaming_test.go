@@ -399,7 +399,6 @@ func TestTransformStreamingResponse_ModelExtraction(t *testing.T) {
 
 // TestTransformStreamingResponse_UsageTokens tests usage token tracking
 // Validates that token usage is properly tracked and included in message_delta
-// Note: Current implementation may not extract usage from OpenAI streaming chunks
 func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger())
 
@@ -415,20 +414,55 @@ func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 
 	body := recorder.Body.String()
 
-	// Verify message_delta event exists (usage tracking may be zero if not implemented yet)
-	assert.Contains(t, body, "event: message_delta")
-	assert.Contains(t, body, `"type":"message_delta"`)
+	// Parse events to verify token usage in message_delta
+	events, err := parseAnthropicEvents(body)
+	require.NoError(t, err)
 
-	// Check if usage is tracked - if implementation supports it, values should be non-zero
-	// This test documents current behavior and can be strengthened when usage tracking is fully implemented
-	if strings.Contains(body, `"input_tokens":10`) && strings.Contains(body, `"output_tokens":5`) {
-		// Full usage tracking is implemented
-		t.Log("Usage tracking is fully implemented")
-	} else {
-		// Usage may be zero or not yet implemented - this is acceptable for current phase
-		t.Log("Usage tracking may not be fully implemented in streaming yet")
-		assert.Contains(t, body, `"output_tokens"`) // At least the field should exist
+	// Find the message_delta event
+	var messageDeltaEvent map[string]interface{}
+	for _, event := range events {
+		if event["_event_type"] == "message_delta" {
+			messageDeltaEvent = event
+			break
+		}
 	}
+
+	require.NotNil(t, messageDeltaEvent, "message_delta event should exist")
+
+	// Verify usage is present and correct
+	usage, ok := messageDeltaEvent["usage"].(map[string]interface{})
+	require.True(t, ok, "message_delta should have usage field")
+
+	inputTokens, ok := usage["input_tokens"].(float64)
+	require.True(t, ok, "usage should have input_tokens")
+	assert.Equal(t, float64(10), inputTokens, "input_tokens should be 10")
+
+	outputTokens, ok := usage["output_tokens"].(float64)
+	require.True(t, ok, "usage should have output_tokens")
+	assert.Equal(t, float64(5), outputTokens, "output_tokens should be 5")
+
+	// Verify message_start includes usage structure (values will be 0 initially)
+	// In OpenAI streaming, usage information comes at the end, so message_start will have 0 tokens
+	var messageStartEvent map[string]interface{}
+	for _, event := range events {
+		if event["_event_type"] == "message_start" {
+			messageStartEvent = event
+			break
+		}
+	}
+
+	require.NotNil(t, messageStartEvent, "message_start event should exist")
+	message, ok := messageStartEvent["message"].(map[string]interface{})
+	require.True(t, ok, "message_start should have message field")
+
+	startUsage, ok := message["usage"].(map[string]interface{})
+	require.True(t, ok, "message_start.message should have usage field")
+
+	// OpenAI provides usage at the end of the stream, so message_start will have 0 tokens
+	// This is different from native Anthropic which provides input_tokens in message_start
+	startInputTokens, ok := startUsage["input_tokens"].(float64)
+	require.True(t, ok, "message_start usage should have input_tokens field")
+	assert.Equal(t, float64(0), startInputTokens, "message_start input_tokens should be 0 (usage comes at end in OpenAI)")
 }
 
 // TestTransformStreamingResponse_SSEFormat tests SSE event format compliance

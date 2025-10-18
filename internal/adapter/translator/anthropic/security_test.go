@@ -82,7 +82,28 @@ func TestRequestValidation_ParameterRanges(t *testing.T) {
 
 		_, err = translator.TransformRequest(ctx, req)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "max_tokens must be non-negative")
+		assert.Contains(t, err.Error(), "max_tokens must be at least 1")
+	})
+
+	t.Run("zero_max_tokens", func(t *testing.T) {
+		anthropicReq := AnthropicRequest{
+			Model:     "claude-sonnet-4-20250929",
+			MaxTokens: 0, // Invalid - must be at least 1
+			Messages: []AnthropicMessage{
+				{Role: "user", Content: "Hello"},
+			},
+		}
+
+		body, err := json.Marshal(anthropicReq)
+		require.NoError(t, err)
+
+		req := &http.Request{
+			Body: io.NopCloser(bytes.NewReader(body)),
+		}
+
+		_, err = translator.TransformRequest(ctx, req)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "max_tokens must be at least 1")
 	})
 
 	t.Run("temperature_too_high", func(t *testing.T) {

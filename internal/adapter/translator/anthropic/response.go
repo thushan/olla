@@ -2,11 +2,11 @@ package anthropic
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
-
-	"github.com/google/uuid"
 )
 
 // TransformResponse converts OpenAI response to Anthropic format
@@ -134,6 +134,8 @@ func mapFinishReasonToStopReason(finishReason string) string {
 
 // convertToToolUse converts OpenAI tool_call to Anthropic tool_use
 // Parses the JSON string arguments from OpenAI into a structured object for Anthropic
+// If JSON parsing fails, logs the error and uses empty input for graceful degradation
+// Returns (contentBlock, nil) for successful/graceful cases, or (nil, nil) for malformed tool calls
 func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentBlock {
 	id, _ := toolCall["id"].(string)
 	function, ok := toolCall["function"].(map[string]interface{})
@@ -148,7 +150,13 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 	// OpenAI sends tool arguments as a JSON string, Anthropic expects a structured object
 	var input map[string]interface{}
 	if err := json.Unmarshal([]byte(argsStr), &input); err != nil {
-		t.logger.Warn("Failed to parse tool arguments", "error", err)
+		// Log detailed error for debugging but use empty input for graceful degradation
+		// This prevents a single malformed tool call from breaking the entire response
+		t.logger.Warn("Failed to parse tool arguments, using empty input",
+			"tool", name,
+			"tool_id", id,
+			"error", err,
+			"raw_arguments", argsStr)
 		input = make(map[string]interface{})
 	}
 
@@ -188,8 +196,68 @@ func (t *Translator) extractModel(resp map[string]interface{}) string {
 	return "unknown"
 }
 
-// generateMessageID creates a unique message ID
-// Uses UUID v4 truncated to 16 characters to match Anthropic's ID format
+// base58Alphabet is the character set used for base58 encoding
+// Excludes visually similar characters (0, O, I, l) to reduce transcription errors
+const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+// generateMessageID creates a unique message ID matching Anthropic's format
+// Anthropic uses the format "msg_01" followed by base58-encoded random bytes
+// resulting in IDs like "msg_01XYZ..." with total length around 27-29 characters
 func (t *Translator) generateMessageID() string {
-	return fmt.Sprintf("msg_%s", uuid.New().String()[:16])
+	// Generate 16 random bytes for the ID suffix
+	// This provides 128 bits of entropy, ensuring uniqueness
+	randomBytes := make([]byte, 16)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to a simpler format if crypto/rand fails
+		// This should never happen in practice but provides safety
+		t.logger.Warn("Failed to generate random bytes for message ID", "error", err)
+		return fmt.Sprintf("msg_01fallback%d", big.NewInt(0).SetBytes(randomBytes[:8]).Uint64())
+	}
+
+	// Encode to base58 for a compact, human-friendly representation
+	encoded := encodeBase58(randomBytes)
+
+	// Anthropic's format starts with "msg_01" prefix
+	return fmt.Sprintf("msg_01%s", encoded)
+}
+
+// encodeBase58 converts bytes to base58 string
+// Base58 encoding produces shorter, more readable IDs than hex or base64
+// and avoids ambiguous characters
+func encodeBase58(input []byte) string {
+	// Convert bytes to a big integer
+	num := new(big.Int).SetBytes(input)
+
+	// Handle zero case
+	if num.Sign() == 0 {
+		return string(base58Alphabet[0])
+	}
+
+	// Encode using base58
+	var encoded []byte
+	base := big.NewInt(58)
+	zero := big.NewInt(0)
+	mod := new(big.Int)
+
+	for num.Cmp(zero) > 0 {
+		num.DivMod(num, base, mod)
+		encoded = append(encoded, base58Alphabet[mod.Int64()])
+	}
+
+	// Add leading '1' for each leading zero byte
+	// This preserves the length information from leading zeros
+	for _, b := range input {
+		if b == 0 {
+			encoded = append(encoded, base58Alphabet[0])
+		} else {
+			break
+		}
+	}
+
+	// Reverse the result (base58 is big-endian)
+	for i, j := 0, len(encoded)-1; i < j; i, j = i+1, j-1 {
+		encoded[i], encoded[j] = encoded[j], encoded[i]
+	}
+
+	return string(encoded)
 }

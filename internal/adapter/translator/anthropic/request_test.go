@@ -1002,3 +1002,200 @@ func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
 	assert.Equal(t, "tool_mixed", messages[1]["tool_call_id"])
 	assert.Equal(t, "Data from tool", messages[1]["content"])
 }
+
+// TestConvertSystemPrompt_AllFormats tests all three system prompt formats
+func TestConvertSystemPrompt_AllFormats(t *testing.T) {
+	translator := NewTranslator(createTestLogger())
+
+	t.Run("string_format", func(t *testing.T) {
+		// Test simple string format
+		result := translator.convertSystemPrompt("You are a helpful assistant")
+		assert.Equal(t, "You are a helpful assistant", result)
+	})
+
+	t.Run("empty_string", func(t *testing.T) {
+		// Empty string should return nil
+		result := translator.convertSystemPrompt("")
+		assert.Nil(t, result)
+	})
+
+	t.Run("interface_array_format", func(t *testing.T) {
+		// Test []interface{} with content blocks
+		systemBlocks := []interface{}{
+			map[string]interface{}{
+				"type": "text",
+				"text": "First part. ",
+			},
+			map[string]interface{}{
+				"type": "text",
+				"text": "Second part.",
+			},
+		}
+		result := translator.convertSystemPrompt(systemBlocks)
+		assert.Equal(t, "First part. Second part.", result)
+	})
+
+	t.Run("interface_array_with_empty_blocks", func(t *testing.T) {
+		// Test []interface{} with empty text blocks
+		systemBlocks := []interface{}{
+			map[string]interface{}{
+				"type": "text",
+				"text": "",
+			},
+		}
+		result := translator.convertSystemPrompt(systemBlocks)
+		assert.Nil(t, result)
+	})
+
+	t.Run("strongly_typed_contentblock_array", func(t *testing.T) {
+		// Test []ContentBlock format (strongly-typed)
+		contentBlocks := []ContentBlock{
+			{
+				Type: "text",
+				Text: "Strongly-typed first part. ",
+			},
+			{
+				Type: "text",
+				Text: "Strongly-typed second part.",
+			},
+		}
+		result := translator.convertSystemPrompt(contentBlocks)
+		assert.Equal(t, "Strongly-typed first part. Strongly-typed second part.", result)
+	})
+
+	t.Run("strongly_typed_contentblock_with_empty_text", func(t *testing.T) {
+		// Test []ContentBlock with empty text
+		contentBlocks := []ContentBlock{
+			{
+				Type: "text",
+				Text: "",
+			},
+		}
+		result := translator.convertSystemPrompt(contentBlocks)
+		assert.Nil(t, result)
+	})
+
+	t.Run("strongly_typed_contentblock_mixed_types", func(t *testing.T) {
+		// Test []ContentBlock with non-text blocks (should be ignored)
+		contentBlocks := []ContentBlock{
+			{
+				Type: "image",
+				Text: "",
+			},
+			{
+				Type: "text",
+				Text: "Valid text content",
+			},
+			{
+				Type: "tool_use",
+				Text: "",
+			},
+		}
+		result := translator.convertSystemPrompt(contentBlocks)
+		assert.Equal(t, "Valid text content", result)
+	})
+
+	t.Run("nil_system_prompt", func(t *testing.T) {
+		// Test nil
+		result := translator.convertSystemPrompt(nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("unsupported_type", func(t *testing.T) {
+		// Test unsupported type
+		result := translator.convertSystemPrompt(42)
+		assert.Nil(t, result)
+	})
+}
+
+// TestTransformRequest_SystemPromptWithContentBlocks tests system prompt as content blocks via JSON
+func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
+	translator := NewTranslator(createTestLogger())
+
+	// Simulate a request with system prompt as content blocks ([]interface{} format)
+	anthropicReq := AnthropicRequest{
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 1024,
+		System: []interface{}{
+			map[string]interface{}{
+				"type": "text",
+				"text": "You are a helpful ",
+			},
+			map[string]interface{}{
+				"type": "text",
+				"text": "AI assistant.",
+			},
+		},
+		Messages: []AnthropicMessage{
+			{
+				Role:    "user",
+				Content: "Hello",
+			},
+		},
+	}
+
+	body, err := json.Marshal(anthropicReq)
+	require.NoError(t, err)
+
+	req := &http.Request{
+		Body: io.NopCloser(bytes.NewReader(body)),
+	}
+
+	result, err := translator.TransformRequest(context.Background(), req)
+	require.NoError(t, err)
+
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	require.True(t, ok)
+	require.Len(t, messages, 2)
+
+	// System message should concatenate all text blocks
+	assert.Equal(t, "system", messages[0]["role"])
+	assert.Equal(t, "You are a helpful AI assistant.", messages[0]["content"])
+
+	assert.Equal(t, "user", messages[1]["role"])
+	assert.Equal(t, "Hello", messages[1]["content"])
+}
+
+// TestTransformRequest_StronglyTypedSystemPrompt tests strongly-typed ContentBlock system prompt
+func TestTransformRequest_StronglyTypedSystemPrompt(t *testing.T) {
+	translator := NewTranslator(createTestLogger())
+
+	// Create a request with strongly-typed system prompt
+	// This simulates what happens when System field is unmarshalled as []ContentBlock
+	req := AnthropicRequest{
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 1024,
+		Messages: []AnthropicMessage{
+			{
+				Role:    "user",
+				Content: "What's 2+2?",
+			},
+		},
+	}
+
+	// Manually set System to strongly-typed ContentBlock array
+	req.System = []ContentBlock{
+		{
+			Type: "text",
+			Text: "You are a mathematics expert. ",
+		},
+		{
+			Type: "text",
+			Text: "Provide precise answers.",
+		},
+	}
+
+	// We need to test the convertMessages directly since JSON marshalling
+	// would convert the strongly-typed array to []interface{}
+	messages, err := translator.convertMessages(req.Messages, req.System)
+	require.NoError(t, err)
+	require.Len(t, messages, 2)
+
+	// System message should be first
+	assert.Equal(t, "system", messages[0]["role"])
+	assert.Equal(t, "You are a mathematics expert. Provide precise answers.", messages[0]["content"])
+
+	// User message should be second
+	assert.Equal(t, "user", messages[1]["role"])
+	assert.Equal(t, "What's 2+2?", messages[1]["content"])
+}

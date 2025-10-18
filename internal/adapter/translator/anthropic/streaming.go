@@ -106,7 +106,10 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 
 	var chunk map[string]interface{}
 	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-		return fmt.Errorf("failed to parse chunk: %w", err)
+		// Log malformed chunks but don't fail the stream - graceful degradation
+		// This allows partial responses to be delivered even if some chunks are corrupted
+		t.logger.Warn("Malformed chunk encountered, skipping", "error", err, "data", data)
+		return nil
 	}
 
 	// Extract model if not set
@@ -132,6 +135,17 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 	// This is used to determine the final stop_reason in Anthropic format
 	if finishReason, finishOk := choice["finish_reason"].(string); finishOk && finishReason != "" {
 		state.lastFinishReason = finishReason
+	}
+
+	// Extract usage information if present in the chunk
+	// OpenAI may include usage statistics at the chunk level, typically in the final chunk
+	if usage, usageOk := chunk["usage"].(map[string]interface{}); usageOk {
+		if promptTokens, promptOk := usage["prompt_tokens"].(float64); promptOk {
+			state.inputTokens = int(promptTokens)
+		}
+		if completionTokens, completionsOk := usage["completion_tokens"].(float64); completionsOk {
+			state.outputTokens = int(completionTokens)
+		}
 	}
 
 	delta, ok := choice["delta"].(map[string]interface{})
@@ -366,7 +380,7 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 	stopReason := mapFinishReasonToStopReason(state.lastFinishReason)
 
 	// Send message_delta
-	// Contains the final stop_reason and token usage
+	// Contains the final stop_reason and cumulative token usage
 	if err := t.writeEvent(w, "message_delta", map[string]interface{}{
 		"type": "message_delta",
 		"delta": map[string]interface{}{
@@ -374,6 +388,7 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 			"stop_sequence": nil,
 		},
 		"usage": map[string]interface{}{
+			"input_tokens":  state.inputTokens,
 			"output_tokens": state.outputTokens,
 		},
 	}); err != nil {

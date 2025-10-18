@@ -306,7 +306,7 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 }
 
 // convertSystemPrompt converts Anthropic system prompt to OpenAI format
-// Handles both string and array of content blocks formats
+// Handles string, []interface{}, and []ContentBlock formats
 func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
 	// Handle string form (simple case)
 	if systemStr, ok := systemPrompt.(string); ok {
@@ -316,7 +316,22 @@ func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
 		return systemStr
 	}
 
-	// Handle array form (content blocks)
+	// Handle strongly-typed []ContentBlock array
+	// This can happen when JSON is unmarshalled into a strongly-typed struct
+	if contentBlocks, ok := systemPrompt.([]ContentBlock); ok {
+		var textParts []string
+		for _, block := range contentBlocks {
+			if block.Type == contentTypeText && block.Text != "" {
+				textParts = append(textParts, block.Text)
+			}
+		}
+
+		if len(textParts) > 0 {
+			return strings.Join(textParts, "")
+		}
+	}
+
+	// Handle []interface{} array form (content blocks)
 	// Anthropic supports system prompts as arrays of content blocks
 	if systemBlocks, ok := systemPrompt.([]interface{}); ok {
 		var textParts []string
