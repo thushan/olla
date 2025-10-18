@@ -156,8 +156,7 @@ func NewApplication(
 		translatorRegistry.Register("anthropic", anthropicTranslator)
 
 		logger.Info("Registered Anthropic translator",
-			"max_message_size", cfg.Translators.Anthropic.MaxMessageSize,
-			"stream_async", cfg.Translators.Anthropic.StreamAsync)
+			"max_message_size", cfg.Translators.Anthropic.MaxMessageSize)
 	} else {
 		logger.Info("Anthropic translator disabled via configuration")
 	}

@@ -30,7 +30,6 @@ func createTestConfig() config.AnthropicTranslatorConfig {
 	return config.AnthropicTranslatorConfig{
 		Enabled:        true,
 		MaxMessageSize: 10 << 20, // 10MB
-		StreamAsync:    false,
 	}
 }
 

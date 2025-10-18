@@ -164,7 +164,6 @@ type TranslatorsConfig struct {
 type AnthropicTranslatorConfig struct {
 	MaxMessageSize int64 `yaml:"max_message_size"`
 	Enabled        bool  `yaml:"enabled"`
-	StreamAsync    bool  `yaml:"stream_async"`
 }
 
 // Validate validates the Anthropic translator configuration

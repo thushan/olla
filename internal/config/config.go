@@ -123,7 +123,6 @@ func DefaultConfig() *Config {
 			Anthropic: AnthropicTranslatorConfig{
 				Enabled:        true,
 				MaxMessageSize: 10 << 20, // 10MB - Anthropic API limit
-				StreamAsync:    false,    // Synchronous streaming (safer default)
 			},
 		},
 	}
@@ -324,11 +323,6 @@ func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_MAX_MESSAGE_SIZE"); val != "" {
 		if size, err := strconv.ParseInt(val, 10, 64); err == nil {
 			config.Translators.Anthropic.MaxMessageSize = size
-		}
-	}
-	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_STREAM_ASYNC"); val != "" {
-		if async, err := strconv.ParseBool(val); err == nil {
-			config.Translators.Anthropic.StreamAsync = async
 		}
 	}
 }

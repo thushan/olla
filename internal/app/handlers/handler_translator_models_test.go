@@ -48,7 +48,6 @@ func TestTranslatorModelsHandler_Success(t *testing.T) {
 	testConfig := config.AnthropicTranslatorConfig{
 		Enabled:        true,
 		MaxMessageSize: 10 << 20, // 10MB
-		StreamAsync:    false,
 	}
 	trans := anthropic.NewTranslator(app.logger, testConfig)
 
@@ -109,7 +108,6 @@ func TestTranslatorModelsHandler_EmptyRegistry(t *testing.T) {
 	testConfig := config.AnthropicTranslatorConfig{
 		Enabled:        true,
 		MaxMessageSize: 10 << 20, // 10MB
-		StreamAsync:    false,
 	}
 	trans := anthropic.NewTranslator(app.logger, testConfig)
 
@@ -170,7 +168,6 @@ func TestTranslatorModelsHandler_ResponseFormat(t *testing.T) {
 	testConfig := config.AnthropicTranslatorConfig{
 		Enabled:        true,
 		MaxMessageSize: 10 << 20, // 10MB
-		StreamAsync:    false,
 	}
 	trans := anthropic.NewTranslator(app.logger, testConfig)
 
