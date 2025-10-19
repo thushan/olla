@@ -9,9 +9,8 @@ import (
 	"net/http"
 )
 
-// TransformResponse converts OpenAI response to Anthropic format
-// Takes the OpenAI response structure and maps it to Anthropic's message format
-// including content blocks, tool calls, and usage statistics
+// convert openai response to anthropic format
+// maps choices/messages to content blocks, handles tools and token usage
 func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
 	// Parse OpenAI response
 	respMap, ok := openaiResp.(map[string]interface{})
@@ -35,8 +34,7 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 		return nil, fmt.Errorf("no message in choice")
 	}
 
-	// Extract finish_reason from the OpenAI choice
-	// This is critical for proper stop_reason mapping to Anthropic format
+	// grab finish_reason for stop_reason mapping
 	finishReason := ""
 	if fr, ok := choice["finish_reason"].(string); ok {
 		finishReason = fr
@@ -50,7 +48,7 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 		Model: t.extractModel(respMap),
 	}
 
-	// Convert content with finish_reason for proper stop_reason mapping
+	// convert content and figure out stop_reason
 	content, stopReason := t.convertResponseContent(message, finishReason)
 	anthropicResp.Content = content
 	anthropicResp.StopReason = stopReason
@@ -70,10 +68,8 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 	return anthropicResp, nil
 }
 
-// convertResponseContent converts message content and tool calls
-// Processes both text content and tool_calls from OpenAI format to Anthropic content blocks
-// The finish_reason from OpenAI is used to properly map to Anthropic's stop_reason
-// Returns the content blocks and the appropriate stop reason
+// parse text and tool_calls from openai message into content blocks
+// finish_reason determines what stop_reason to use
 func (t *Translator) convertResponseContent(message map[string]interface{}, finishReason string) ([]ContentBlock, string) {
 	var content []ContentBlock
 
@@ -100,8 +96,7 @@ func (t *Translator) convertResponseContent(message map[string]interface{}, fini
 		}
 	}
 
-	// If no content, add empty text block
-	// Anthropic requires at least one content block in the response
+	// anthropic needs at least one block, even if empty
 	if len(content) == 0 {
 		content = append(content, ContentBlock{
 			Type: contentTypeText,
@@ -109,15 +104,13 @@ func (t *Translator) convertResponseContent(message map[string]interface{}, fini
 		})
 	}
 
-	// Map OpenAI finish_reason to Anthropic stop_reason
-	// This ensures proper termination signalling to clients
 	stopReason := mapFinishReasonToStopReason(finishReason)
 
 	return content, stopReason
 }
 
-// mapFinishReasonToStopReason converts OpenAI finish_reason to Anthropic stop_reason
-// Centralised mapping used by both regular and streaming responses for consistency
+// map openai finish_reason to anthropic stop_reason
+// shared between normal and streaming paths
 func mapFinishReasonToStopReason(finishReason string) string {
 	switch finishReason {
 	case "stop":
@@ -127,15 +120,12 @@ func mapFinishReasonToStopReason(finishReason string) string {
 	case "length":
 		return "max_tokens"
 	default:
-		// Default to end_turn for unknown or empty finish reasons
 		return "end_turn"
 	}
 }
 
-// convertToToolUse converts OpenAI tool_call to Anthropic tool_use
-// Parses the JSON string arguments from OpenAI into a structured object for Anthropic
-// If JSON parsing fails, logs the error and uses empty input for graceful degradation
-// Returns (contentBlock, nil) for successful/graceful cases, or (nil, nil) for malformed tool calls
+// convert openai tool_call to anthropic tool_use block
+// parses json args string into an object, logs errors but doesn't fail
 func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentBlock {
 	id, _ := toolCall["id"].(string)
 	function, ok := toolCall["function"].(map[string]interface{})
@@ -146,12 +136,10 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 	name, _ := function["name"].(string)
 	argsStr, _ := function["arguments"].(string)
 
-	// Parse arguments JSON string to object
-	// OpenAI sends tool arguments as a JSON string, Anthropic expects a structured object
+	// openai sends args as json string, we need it as an object
 	var input map[string]interface{}
 	if err := json.Unmarshal([]byte(argsStr), &input); err != nil {
-		// Log detailed error for debugging but use empty input for graceful degradation
-		// This prevents a single malformed tool call from breaking the entire response
+		// use empty input if json is bad, don't fail the whole response
 		t.logger.Warn("Failed to parse tool arguments, using empty input",
 			"tool", name,
 			"tool_id", id,
@@ -168,8 +156,7 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 	}
 }
 
-// convertUsage transforms OpenAI usage to Anthropic format
-// Maps prompt_tokens to input_tokens and completion_tokens to output_tokens
+// map openai token counts to anthropic names
 func (t *Translator) convertUsage(usage map[string]interface{}) AnthropicUsage {
 	promptTokens := 0
 	completionTokens := 0
@@ -187,8 +174,7 @@ func (t *Translator) convertUsage(usage map[string]interface{}) AnthropicUsage {
 	}
 }
 
-// extractModel gets model name from response
-// Falls back to "unknown" if not present in the response
+// grab model name from response, default to "unknown"
 func (t *Translator) extractModel(resp map[string]interface{}) string {
 	if model, ok := resp["model"].(string); ok {
 		return model
@@ -196,44 +182,30 @@ func (t *Translator) extractModel(resp map[string]interface{}) string {
 	return "unknown"
 }
 
-// base58Alphabet is the character set used for base58 encoding
-// Excludes visually similar characters (0, O, I, l) to reduce transcription errors
+// base58 charset, skips confusing chars like 0/O and I/l
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
-// generateMessageID creates a unique message ID matching Anthropic's format
-// Anthropic uses the format "msg_01" followed by base58-encoded random bytes
-// resulting in IDs like "msg_01XYZ..." with total length around 27-29 characters
+// generate msg_01... ids like anthropic does
+// 16 random bytes encoded as base58 gives ~27-29 char ids
 func (t *Translator) generateMessageID() string {
-	// Generate 16 random bytes for the ID suffix
-	// This provides 128 bits of entropy, ensuring uniqueness
 	randomBytes := make([]byte, 16)
 	if _, err := rand.Read(randomBytes); err != nil {
-		// Fallback to a simpler format if crypto/rand fails
-		// This should never happen in practice but provides safety
+		// crypto/rand shouldn't fail but just in case
 		t.logger.Warn("Failed to generate random bytes for message ID", "error", err)
 		return fmt.Sprintf("msg_01fallback%d", big.NewInt(0).SetBytes(randomBytes[:8]).Uint64())
 	}
 
-	// Encode to base58 for a compact, human-friendly representation
 	encoded := encodeBase58(randomBytes)
-
-	// Anthropic's format starts with "msg_01" prefix
 	return fmt.Sprintf("msg_01%s", encoded)
 }
 
-// encodeBase58 converts bytes to base58 string
-// Base58 encoding produces shorter, more readable IDs than hex or base64
-// and avoids ambiguous characters
+// encode bytes to base58, shorter and less ambigious than hex
 func encodeBase58(input []byte) string {
-	// Convert bytes to a big integer
 	num := new(big.Int).SetBytes(input)
 
-	// Handle zero case
 	if num.Sign() == 0 {
 		return string(base58Alphabet[0])
 	}
-
-	// Encode using base58
 	var encoded []byte
 	base := big.NewInt(58)
 	zero := big.NewInt(0)
@@ -244,8 +216,7 @@ func encodeBase58(input []byte) string {
 		encoded = append(encoded, base58Alphabet[mod.Int64()])
 	}
 
-	// Add leading '1' for each leading zero byte
-	// This preserves the length information from leading zeros
+	// preserve leading zeros as '1' chars
 	for _, b := range input {
 		if b == 0 {
 			encoded = append(encoded, base58Alphabet[0])
@@ -254,7 +225,7 @@ func encodeBase58(input []byte) string {
 		}
 	}
 
-	// Reverse the result (base58 is big-endian)
+	// reverse since we built it backwards
 	for i, j := 0, len(encoded)-1; i < j; i, j = i+1, j-1 {
 		encoded[i], encoded[j] = encoded[j], encoded[i]
 	}

@@ -13,14 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRequestValidation_RequiredFields tests validation of required fields
 func TestRequestValidation_RequiredFields(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("missing_model", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
-			// Model: "", // Missing required field
+			// Model: "", // missing required field
 			MaxTokens: 1024,
 			Messages: []AnthropicMessage{
 				{Role: "user", Content: "Hello"},
@@ -43,7 +42,7 @@ func TestRequestValidation_RequiredFields(t *testing.T) {
 		anthropicReq := AnthropicRequest{
 			Model:     "claude-sonnet-4-20250929",
 			MaxTokens: 1024,
-			Messages:  []AnthropicMessage{}, // Empty - required
+			Messages:  []AnthropicMessage{}, // empty - required
 		}
 
 		body, err := json.Marshal(anthropicReq)
@@ -59,7 +58,6 @@ func TestRequestValidation_RequiredFields(t *testing.T) {
 	})
 }
 
-// TestRequestValidation_ParameterRanges tests validation of parameter ranges
 func TestRequestValidation_ParameterRanges(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
@@ -67,7 +65,7 @@ func TestRequestValidation_ParameterRanges(t *testing.T) {
 	t.Run("negative_max_tokens", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
 			Model:     "claude-sonnet-4-20250929",
-			MaxTokens: -100, // Invalid
+			MaxTokens: -100, // invalid
 			Messages: []AnthropicMessage{
 				{Role: "user", Content: "Hello"},
 			},
@@ -88,7 +86,7 @@ func TestRequestValidation_ParameterRanges(t *testing.T) {
 	t.Run("zero_max_tokens", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
 			Model:     "claude-sonnet-4-20250929",
-			MaxTokens: 0, // Invalid - must be at least 1
+			MaxTokens: 0, // invalid - must be at least 1
 			Messages: []AnthropicMessage{
 				{Role: "user", Content: "Hello"},
 			},
@@ -222,13 +220,12 @@ func TestRequestValidation_ParameterRanges(t *testing.T) {
 	})
 }
 
-// TestRequestValidation_ValidParameters tests that valid parameters pass validation
 func TestRequestValidation_ValidParameters(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("valid_temperature_boundary", func(t *testing.T) {
-		temp := 2.0 // Exactly 2.0 should be valid
+		temp := 2.0 // exactly 2.0 should be valid
 		anthropicReq := AnthropicRequest{
 			Model:       "claude-sonnet-4-20250929",
 			MaxTokens:   1024,
@@ -250,7 +247,7 @@ func TestRequestValidation_ValidParameters(t *testing.T) {
 	})
 
 	t.Run("valid_top_p_boundary", func(t *testing.T) {
-		topP := 1.0 // Exactly 1.0 should be valid
+		topP := 1.0 // exactly 1.0 should be valid
 		anthropicReq := AnthropicRequest{
 			Model:     "claude-sonnet-4-20250929",
 			MaxTokens: 1024,
@@ -272,7 +269,7 @@ func TestRequestValidation_ValidParameters(t *testing.T) {
 	})
 
 	t.Run("valid_zero_top_k", func(t *testing.T) {
-		topK := 0 // Zero should be valid
+		topK := 0 // zero should be valid
 		anthropicReq := AnthropicRequest{
 			Model:     "claude-sonnet-4-20250929",
 			MaxTokens: 1024,
@@ -294,14 +291,13 @@ func TestRequestValidation_ValidParameters(t *testing.T) {
 	})
 }
 
-// TestRequestSizeLimit tests that large requests are rejected
 func TestRequestSizeLimit(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("request_exceeding_10MB", func(t *testing.T) {
 		// Create a request that exceeds 10MB
-		largeContent := strings.Repeat("A", 11*1024*1024) // 11MB of 'A's
+		largeContent := strings.Repeat("A", 11*1024*1024) // 11mb of 'a's
 
 		anthropicReq := AnthropicRequest{
 			Model:     "claude-sonnet-4-20250929",
@@ -325,9 +321,9 @@ func TestRequestSizeLimit(t *testing.T) {
 	})
 
 	t.Run("request_just_under_10MB", func(t *testing.T) {
-		// Create a request just under 10MB (should succeed)
+		// Create a request just under 10mb (should succeed)
 		// Account for JSON overhead
-		safeContent := strings.Repeat("A", 9*1024*1024) // 9MB should be safe
+		safeContent := strings.Repeat("A", 9*1024*1024) // 9mb should be safe
 
 		anthropicReq := AnthropicRequest{
 			Model:     "claude-sonnet-4-20250929",
@@ -349,7 +345,6 @@ func TestRequestSizeLimit(t *testing.T) {
 	})
 }
 
-// TestUnknownFieldsRejection tests that requests with unknown fields are rejected
 func TestUnknownFieldsRejection(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
@@ -393,7 +388,6 @@ func TestUnknownFieldsRejection(t *testing.T) {
 	})
 }
 
-// TestSecurityFeaturesCombined tests multiple security features together
 func TestSecurityFeaturesCombined(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()

@@ -9,16 +9,12 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
-// createTestLogger creates a logger for testing
 func createResponseTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
 	return logger.NewPlainStyledLogger(log)
 }
 
-// TestTransformResponse_SimpleText tests basic text response conversion
-// Validates that a simple OpenAI text response is correctly transformed
-// to Anthropic format with proper type, role, and content structure
 func TestTransformResponse_SimpleText(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -60,9 +56,6 @@ func TestTransformResponse_SimpleText(t *testing.T) {
 	assert.Equal(t, 8, anthropicResp.Usage.OutputTokens)
 }
 
-// TestTransformResponse_WithToolCalls tests response with text and single tool call
-// Validates that OpenAI tool_calls are converted to Anthropic tool_use blocks
-// and that tool arguments are correctly parsed from JSON string to object
 func TestTransformResponse_WithToolCalls(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -103,11 +96,9 @@ func TestTransformResponse_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "tool_use", anthropicResp.StopReason)
 	require.Len(t, anthropicResp.Content, 2)
 
-	// First block should be text
 	assert.Equal(t, "text", anthropicResp.Content[0].Type)
 	assert.Equal(t, "Let me check that for you.", anthropicResp.Content[0].Text)
 
-	// Second block should be tool_use
 	assert.Equal(t, "tool_use", anthropicResp.Content[1].Type)
 	assert.Equal(t, "call_abc123", anthropicResp.Content[1].ID)
 	assert.Equal(t, "get_weather", anthropicResp.Content[1].Name)
@@ -117,9 +108,6 @@ func TestTransformResponse_WithToolCalls(t *testing.T) {
 	assert.Equal(t, "celsius", anthropicResp.Content[1].Input["unit"])
 }
 
-// TestTransformResponse_MultipleToolCalls tests response with multiple tool calls
-// Validates that multiple OpenAI tool_calls are converted to multiple
-// Anthropic tool_use content blocks in the correct order
 func TestTransformResponse_MultipleToolCalls(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -169,8 +157,6 @@ func TestTransformResponse_MultipleToolCalls(t *testing.T) {
 	assert.Equal(t, "get_time", anthropicResp.Content[1].Name)
 }
 
-// TestTransformResponse_EmptyResponse tests handling of empty or minimal responses
-// Validates that the translator handles edge cases gracefully
 func TestTransformResponse_EmptyResponse(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -200,8 +186,6 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Empty content should still create a content block
-		// This maintains consistency with Anthropic API behaviour
 		assert.Equal(t, "end_turn", anthropicResp.StopReason)
 		assert.GreaterOrEqual(t, len(anthropicResp.Content), 0)
 	})
@@ -239,15 +223,12 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Should only have tool_use block, no text block
 		require.Len(t, anthropicResp.Content, 1)
 		assert.Equal(t, "tool_use", anthropicResp.Content[0].Type)
 		assert.Equal(t, "search", anthropicResp.Content[0].Name)
 	})
 }
 
-// TestTransformResponse_MissingUsage tests handling of missing usage statistics
-// Validates that the translator handles responses without usage data gracefully
 func TestTransformResponse_MissingUsage(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -273,7 +254,6 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Usage should be zero values when not provided
 		assert.Equal(t, 0, anthropicResp.Usage.InputTokens)
 		assert.Equal(t, 0, anthropicResp.Usage.OutputTokens)
 	})
@@ -303,14 +283,11 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Should handle partial usage data
 		assert.Equal(t, 15, anthropicResp.Usage.InputTokens)
 		assert.Equal(t, 0, anthropicResp.Usage.OutputTokens)
 	})
 }
 
-// TestTransformResponse_InvalidToolArguments tests handling of malformed tool call arguments
-// Validates that the translator handles invalid JSON in tool arguments gracefully
 func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -342,16 +319,12 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 
 		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
 
-		// Should either return error or handle gracefully with empty/null input
 		if err != nil {
-			// Error handling is acceptable
 			assert.Contains(t, err.Error(), "json", "Error should mention JSON parsing issue")
 		} else {
-			// Or should create tool_use with empty/null input
 			anthropicResp, ok := result.(AnthropicResponse)
 			require.True(t, ok)
 
-			// Find the tool_use block
 			var toolBlock *ContentBlock
 			for i := range anthropicResp.Content {
 				if anthropicResp.Content[i].Type == "tool_use" {
@@ -360,7 +333,6 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 				}
 			}
 			require.NotNil(t, toolBlock, "Should have tool_use block")
-			// Input should be empty or nil when JSON is invalid
 		}
 	})
 
@@ -396,7 +368,6 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Should handle empty JSON object correctly
 		require.Len(t, anthropicResp.Content, 2) // text + tool_use
 		assert.Equal(t, "tool_use", anthropicResp.Content[1].Type)
 		assert.NotNil(t, anthropicResp.Content[1].Input)
@@ -404,8 +375,6 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 	})
 }
 
-// TestTransformResponse_OnlyToolCalls tests response with only tool calls, no text
-// Validates that responses can have tool_use blocks without preceding text
 func TestTransformResponse_OnlyToolCalls(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -445,7 +414,6 @@ func TestTransformResponse_OnlyToolCalls(t *testing.T) {
 
 	assert.Equal(t, "tool_use", anthropicResp.StopReason)
 
-	// Should only have tool_use block(s), no empty text blocks
 	require.Len(t, anthropicResp.Content, 1)
 	assert.Equal(t, "tool_use", anthropicResp.Content[0].Type)
 	assert.Equal(t, "web_search", anthropicResp.Content[0].Name)
@@ -454,10 +422,6 @@ func TestTransformResponse_OnlyToolCalls(t *testing.T) {
 	assert.Equal(t, float64(5), anthropicResp.Content[0].Input["max_results"]) // JSON numbers are float64
 }
 
-// TestTransformResponse_FinishReasonMapping tests all finish_reason conversions
-// Validates the mapping table from OpenAI to Anthropic stop reasons
-// NOTE: Current implementation only checks for presence of tool_calls, not finish_reason
-// TODO: Implementation should check finish_reason field for proper length/max_tokens mapping
 func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -547,8 +511,6 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	})
 
 	t.Run("explicit_stop_reason", func(t *testing.T) {
-		// Test that explicit finish_reason is respected even when tool_calls are present
-		// This validates that finish_reason takes precedence in the mapping logic
 		openaiResp := map[string]interface{}{
 			"id":    "chatcmpl-explicit",
 			"model": "claude-3-5-sonnet-20241022",
@@ -599,8 +561,6 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	})
 }
 
-// TestTransformResponse_MessageIDGeneration tests message ID handling
-// Validates that message IDs are correctly generated in Anthropic's format
 func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -626,7 +586,6 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// Should generate an ID in Anthropic format
 		assert.NotEmpty(t, anthropicResp.ID)
 		assert.Contains(t, anthropicResp.ID, "msg_01", "Message ID should start with msg_01 prefix")
 
@@ -651,7 +610,6 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 			"usage": map[string]interface{}{},
 		}
 
-		// Generate multiple IDs and ensure they're unique
 		ids := make(map[string]bool)
 		for i := 0; i < 100; i++ {
 			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
@@ -660,12 +618,10 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 			anthropicResp, ok := result.(AnthropicResponse)
 			require.True(t, ok)
 
-			// Check for duplicates
 			assert.False(t, ids[anthropicResp.ID], "Generated duplicate ID: %s", anthropicResp.ID)
 			ids[anthropicResp.ID] = true
 		}
 
-		// Should have generated 100 unique IDs
 		assert.Len(t, ids, 100)
 	})
 
@@ -689,7 +645,6 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
-
 		// After the msg_01 prefix, should only contain base58 characters
 		// Base58: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 		// (excludes 0, O, I, l)
@@ -702,7 +657,6 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 				"ID suffix should only contain base58 characters, found: %c", char)
 		}
 
-		// Ensure ambiguous characters are NOT present
 		assert.NotContains(t, suffix, "0", "ID should not contain digit 0")
 		assert.NotContains(t, suffix, "O", "ID should not contain uppercase O")
 		assert.NotContains(t, suffix, "I", "ID should not contain uppercase I")
@@ -710,8 +664,6 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 	})
 }
 
-// TestTransformResponse_ComplexToolArguments tests tool calls with nested objects
-// Validates that complex JSON structures in tool arguments are correctly parsed
 func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -753,7 +705,6 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 	anthropicResp, ok := result.(AnthropicResponse)
 	require.True(t, ok)
 
-	// Find tool_use block
 	var toolBlock *ContentBlock
 	for i := range anthropicResp.Content {
 		if anthropicResp.Content[i].Type == "tool_use" {
@@ -763,7 +714,6 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 	}
 	require.NotNil(t, toolBlock)
 
-	// Validate nested structure is preserved
 	assert.NotNil(t, toolBlock.Input["filters"])
 	filters, ok := toolBlock.Input["filters"].(map[string]interface{})
 	require.True(t, ok)
@@ -774,7 +724,6 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 	assert.Equal(t, float64(100), priceRange["min"])
 	assert.Equal(t, float64(500), priceRange["max"])
 
-	// Validate array is preserved
 	tags, ok := toolBlock.Input["tags"].([]interface{})
 	require.True(t, ok)
 	assert.Len(t, tags, 2)
@@ -782,8 +731,6 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 	assert.Equal(t, "featured", tags[1])
 }
 
-// TestTransformResponse_InvalidFormat tests handling of malformed OpenAI responses
-// Validates that the translator handles invalid response structures gracefully
 func TestTransformResponse_InvalidFormat(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -844,14 +791,10 @@ func TestTransformResponse_InvalidFormat(t *testing.T) {
 	})
 }
 
-// TestTransformResponse_StopSequenceHandling tests stop_sequence field handling
-// Validates that custom stop sequences are correctly handled
 func TestTransformResponse_StopSequenceHandling(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("with_stop_sequence", func(t *testing.T) {
-		// OpenAI doesn't have a standard stop_sequence field in responses
-		// but we should handle it if present for completeness
 		openaiResp := map[string]interface{}{
 			"id":    "chatcmpl-stopseq",
 			"model": "claude-3-5-sonnet-20241022",
@@ -873,13 +816,10 @@ func TestTransformResponse_StopSequenceHandling(t *testing.T) {
 		anthropicResp, ok := result.(AnthropicResponse)
 		require.True(t, ok)
 
-		// stop_sequence should be null for normal stop
 		assert.Nil(t, anthropicResp.StopSequence)
 	})
 }
 
-// TestTransformResponse_ModelFieldPreservation tests model name preservation
-// Validates that the model name is correctly passed through
 func TestTransformResponse_ModelFieldPreservation(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -929,8 +869,6 @@ func TestTransformResponse_ModelFieldPreservation(t *testing.T) {
 	}
 }
 
-// TestTransformResponse_TypeAndRoleFields tests constant field values
-// Validates that type and role fields are set correctly
 func TestTransformResponse_TypeAndRoleFields(t *testing.T) {
 	translator := NewTranslator(createResponseTestLogger(), createTestConfig())
 
@@ -955,9 +893,7 @@ func TestTransformResponse_TypeAndRoleFields(t *testing.T) {
 	anthropicResp, ok := result.(AnthropicResponse)
 	require.True(t, ok)
 
-	// Type should always be "message" for Anthropic responses
 	assert.Equal(t, "message", anthropicResp.Type)
 
-	// Role should always be "assistant" for Anthropic responses
 	assert.Equal(t, "assistant", anthropicResp.Role)
 }

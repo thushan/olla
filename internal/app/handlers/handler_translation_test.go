@@ -72,7 +72,6 @@ func (m *mockTranslator) TransformStreamingResponse(ctx context.Context, openaiS
 	if m.transformStreamingFunc != nil {
 		return m.transformStreamingFunc(ctx, openaiStream, w, original)
 	}
-	// Default: copy stream through
 	w.Header().Set(constants.HeaderContentType, "text/event-stream")
 	_, err := io.Copy(w, openaiStream)
 	return err
@@ -109,7 +108,6 @@ func (m *mockProxyService) ProxyRequestToEndpoints(
 	if m.proxyFunc != nil {
 		return m.proxyFunc(ctx, w, r, endpoints, stats, logger)
 	}
-	// Default: write a simple OpenAI response
 	response := map[string]interface{}{
 		"id":      "chatcmpl-123",
 		"object":  "chat.completion",
@@ -139,15 +137,26 @@ func (m *mockProxyService) ProxyRequestToEndpoints(
 func TestTranslationHandler_NonStreaming(t *testing.T) {
 	mockLogger := &mockStyledLogger{}
 	trans := &mockTranslator{
-		name: "test-translator",
+		name:                  "test-translator",
+		implementsErrorWriter: true,
+		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(statusCode)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": err.Error(),
+			})
+		},
 	}
 
 	app := &Application{
 		logger:           mockLogger,
 		proxyService:     &mockProxyService{},
-		Config:           &config.Config{},
+		statsCollector:   &mockStatsCollector{},
+		repository:       &mockEndpointRepository{},
 		inspectorChain:   inspector.NewChain(mockLogger),
-		discoveryService: &mockDiscoveryService{},
+		profileFactory:   &mockProfileFactory{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
+		Config:           &config.Config{},
 	}
 
 	handler := app.translationHandler(trans)
@@ -186,7 +195,15 @@ func TestTranslationHandler_Streaming(t *testing.T) {
 	mockLogger := &mockStyledLogger{}
 
 	streamingTrans := &mockTranslator{
-		name: "streaming-translator",
+		name:                  "streaming-translator",
+		implementsErrorWriter: true,
+		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(statusCode)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": err.Error(),
+			})
+		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
 				OpenAIRequest: map[string]interface{}{
@@ -230,7 +247,7 @@ func TestTranslationHandler_Streaming(t *testing.T) {
 		inspectorChain:   inspector.NewChain(mockLogger),
 		profileFactory:   &mockProfileFactory{},
 		converterFactory: nil,
-		discoveryService: &mockDiscoveryService{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
 		Config:           &config.Config{},
 	}
 
@@ -284,9 +301,12 @@ func TestTranslationHandler_TransformRequestError(t *testing.T) {
 	app := &Application{
 		logger:           mockLogger,
 		proxyService:     &mockProxyService{},
-		Config:           &config.Config{},
+		statsCollector:   &mockStatsCollector{},
+		repository:       &mockEndpointRepository{},
 		inspectorChain:   inspector.NewChain(mockLogger),
-		discoveryService: &mockDiscoveryService{},
+		profileFactory:   &mockProfileFactory{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
+		Config:           &config.Config{},
 	}
 
 	handler := app.translationHandler(trans)
@@ -321,7 +341,6 @@ func TestTranslationHandler_NoHealthyEndpoints(t *testing.T) {
 		},
 	}
 
-	// Mock discovery service that returns an error indicating no healthy endpoints
 	noEndpointsDiscovery := &mockDiscoveryServiceWithFunc{
 		getHealthyEndpointsFunc: func(ctx context.Context) ([]*domain.Endpoint, error) {
 			return nil, fmt.Errorf("no healthy endpoints available")
@@ -387,7 +406,7 @@ func TestTranslationHandler_HeaderPreservation(t *testing.T) {
 		inspectorChain:   inspector.NewChain(mockLogger),
 		profileFactory:   &mockProfileFactory{},
 		converterFactory: nil,
-		discoveryService: &mockDiscoveryService{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
 		Config:           &config.Config{},
 	}
 
@@ -451,7 +470,6 @@ func TestWriteTranslatorError_WithErrorWriter(t *testing.T) {
 func TestWriteTranslatorError_WithoutErrorWriter(t *testing.T) {
 	mockLogger := &mockStyledLogger{}
 
-	// Use a translator that doesn't implement ErrorWriter interface at all
 	trans := &mockTranslatorWithoutErrorWriter{
 		name: "test-translator",
 	}
@@ -479,8 +497,6 @@ func TestWriteTranslatorError_WithoutErrorWriter(t *testing.T) {
 	assert.Equal(t, "test error", errorObj["message"])
 	assert.Equal(t, "translation_error", errorObj["type"])
 }
-
-// Mock implementations for testing
 
 func (m *mockProxyService) GetStats(ctx context.Context) (ports.ProxyStats, error) {
 	return ports.ProxyStats{}, nil
@@ -588,7 +604,34 @@ func (m *mockEndpointRepository) GetHealthy(ctx context.Context) ([]*domain.Endp
 	}, nil
 }
 
-// mockDiscoveryServiceWithFunc allows customising discovery service behaviour
+// provides discovery service that returns healthy endpoints for translation tests
+type mockDiscoveryServiceForTranslation struct{}
+
+func (m *mockDiscoveryServiceForTranslation) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	u, _ := url.Parse("http://localhost:8080")
+	return []*domain.Endpoint{
+		{
+			Name:      "test-endpoint",
+			URL:       u,
+			URLString: "http://localhost:8080",
+			Type:      "openai",
+			Status:    domain.StatusHealthy,
+		},
+	}, nil
+}
+
+func (m *mockDiscoveryServiceForTranslation) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
+	return m.GetEndpoints(ctx)
+}
+
+func (m *mockDiscoveryServiceForTranslation) RefreshEndpoints(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockDiscoveryServiceForTranslation) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
+	return nil
+}
+
 type mockDiscoveryServiceWithFunc struct {
 	getEndpointsFunc        func(ctx context.Context) ([]*domain.Endpoint, error)
 	getHealthyEndpointsFunc func(ctx context.Context) ([]*domain.Endpoint, error)
@@ -616,8 +659,7 @@ func (m *mockDiscoveryServiceWithFunc) UpdateEndpointStatus(ctx context.Context,
 	return nil
 }
 
-// mockTranslatorWithoutErrorWriter is a translator that DOES NOT implement ErrorWriter interface
-// This allows testing the fallback error handling path
+// translator that doesn't implement ErrorWriter interface
 type mockTranslatorWithoutErrorWriter struct {
 	name string
 }
@@ -655,14 +697,19 @@ func (m *mockTranslatorWithoutErrorWriter) TransformStreamingResponse(ctx contex
 	return err
 }
 
-// Note: This type intentionally does NOT implement WriteError to test fallback behaviour
-
 func TestTranslationHandler_StreamingPanicRecovery(t *testing.T) {
 	mockLogger := &mockStyledLogger{}
 
-	// Create a mock translator that panics during stream transformation
 	panicTrans := &mockTranslator{
-		name: "panic-translator",
+		name:                  "panic-translator",
+		implementsErrorWriter: true,
+		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(statusCode)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"error": err.Error(),
+			})
+		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
 				OpenAIRequest: map[string]interface{}{
@@ -684,20 +731,17 @@ func TestTranslationHandler_StreamingPanicRecovery(t *testing.T) {
 		},
 	}
 
-	// Mock proxy service that writes headers and simulates a streaming response
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, logger logger.StyledLogger) error {
 			w.Header().Set(constants.HeaderContentType, "text/event-stream")
 			w.Header().Set(constants.HeaderXOllaRequestID, "panic-test-id")
 			w.WriteHeader(http.StatusOK)
 
-			// Simulate streaming data
 			_, err := w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"test\"}}]}\n\n"))
 			if err != nil {
 				return err
 			}
 
-			// Small delay to ensure goroutine is running
 			time.Sleep(10 * time.Millisecond)
 			return nil
 		},
@@ -711,7 +755,7 @@ func TestTranslationHandler_StreamingPanicRecovery(t *testing.T) {
 		inspectorChain:   inspector.NewChain(mockLogger),
 		profileFactory:   &mockProfileFactory{},
 		converterFactory: nil,
-		discoveryService: &mockDiscoveryService{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
 		Config:           &config.Config{},
 	}
 
@@ -731,34 +775,22 @@ func TestTranslationHandler_StreamingPanicRecovery(t *testing.T) {
 	req := httptest.NewRequest("POST", "/test", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
 
-	// Should recover from panic, not hang
 	defer func() {
 		r := recover()
 		if r == nil {
 			t.Fatal("Expected panic to be propagated after cleanup")
 		}
 
-		// Verify panic was properly propagated
 		panicMsg := fmt.Sprintf("%v", r)
 		assert.Contains(t, panicMsg, "simulated panic during stream transformation",
 			"Panic message should contain original panic text")
 	}()
 
-	// This should panic but clean up properly (no goroutine leak)
-	// The panic recovery should:
-	// 1. Close both pipe ends
-	// 2. Drain error channel
-	// 3. Log error
-	// 4. Re-panic
 	handler.ServeHTTP(rec, req)
 }
 
-// TestTranslationHandler_BackendErrorTranslation tests backend error translation flow
 // Verifies that:
 // 1. Backend errors (404, 500, 429, etc.) are correctly translated to Anthropic format
-// 2. OpenAI error responses are converted to Anthropic error schema
-// 3. X-Olla observability headers are preserved during error responses
-// 4. Error type mapping follows Anthropic's error schema
 func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -924,7 +956,7 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 				repository:       &mockEndpointRepository{},
 				inspectorChain:   inspector.NewChain(mockLogger),
 				profileFactory:   &mockProfileFactory{},
-				discoveryService: &mockDiscoveryService{},
+				discoveryService: &mockDiscoveryServiceForTranslation{},
 				Config:           &config.Config{},
 			}
 
@@ -946,8 +978,6 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 			// Execute translation handler
 			handler := app.translationHandler(trans)
 			handler.ServeHTTP(rec, req)
-
-			// ASSERTIONS
 
 			// 1. Check status code matches backend error
 			assert.Equal(t, tt.expectedStatusCode, rec.Code, "Status code should match backend error")
@@ -982,11 +1012,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 	}
 }
 
-// TestTranslationHandler_StreamingErrorTranslation tests streaming error scenarios
 // Verifies that:
 // 1. Streaming errors from backend are handled correctly
-// 2. TransformStreamingResponse receives error stream and handles appropriately
-// 3. X-Olla headers are preserved even during streaming errors
 func TestTranslationHandler_StreamingErrorTranslation(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1020,7 +1047,15 @@ func TestTranslationHandler_StreamingErrorTranslation(t *testing.T) {
 
 			// Create Anthropic translator with streaming support
 			trans := &mockTranslator{
-				name: "anthropic",
+				name:                  "anthropic",
+				implementsErrorWriter: true,
+				writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
+					w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+					w.WriteHeader(statusCode)
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"error": err.Error(),
+					})
+				},
 				transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 					return &translator.TransformedRequest{
 						OpenAIRequest: map[string]interface{}{
@@ -1079,7 +1114,7 @@ func TestTranslationHandler_StreamingErrorTranslation(t *testing.T) {
 				repository:       &mockEndpointRepository{},
 				inspectorChain:   inspector.NewChain(mockLogger),
 				profileFactory:   &mockProfileFactory{},
-				discoveryService: &mockDiscoveryService{},
+				discoveryService: &mockDiscoveryServiceForTranslation{},
 				Config:           &config.Config{},
 			}
 
@@ -1102,8 +1137,6 @@ func TestTranslationHandler_StreamingErrorTranslation(t *testing.T) {
 			handler := app.translationHandler(trans)
 			handler.ServeHTTP(rec, req)
 
-			// ASSERTIONS
-
 			// 1. Verify TransformStreamingResponse was called
 			assert.True(t, transformStreamingCalled, "TransformStreamingResponse should be called")
 
@@ -1122,16 +1155,12 @@ func TestTranslationHandler_StreamingErrorTranslation(t *testing.T) {
 	}
 }
 
-// TestTranslationHandler_PathValidationLogging tests the path translation logging
 // Verifies that:
 // 1. Debug log is emitted when TargetPath is set
-// 2. Warn log is emitted when TargetPath is not set (except for passthrough translator)
-// 3. No warn log for passthrough translator without TargetPath
 func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 	t.Run("with_target_path", func(t *testing.T) {
 		mockLogger := &mockStyledLogger{}
 
-		// Create translator that sets TargetPath
 		trans := &mockTranslator{
 			name: "test-translator-with-path",
 			transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
@@ -1159,7 +1188,7 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 			repository:       &mockEndpointRepository{},
 			inspectorChain:   inspector.NewChain(mockLogger),
 			profileFactory:   &mockProfileFactory{},
-			discoveryService: &mockDiscoveryService{},
+			discoveryService: &mockDiscoveryServiceForTranslation{},
 			Config:           &config.Config{},
 		}
 
@@ -1174,14 +1203,12 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		// Note: In production, we would verify Debug log was called with path translation details
 		// For this test, we're verifying the handler completes successfully with TargetPath set
 	})
 
 	t.Run("without_target_path_non_passthrough", func(t *testing.T) {
 		mockLogger := &mockStyledLogger{}
 
-		// Create translator that does NOT set TargetPath (should trigger warning)
 		trans := &mockTranslator{
 			name: "test-translator-no-path",
 			transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
@@ -1209,7 +1236,7 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 			repository:       &mockEndpointRepository{},
 			inspectorChain:   inspector.NewChain(mockLogger),
 			profileFactory:   &mockProfileFactory{},
-			discoveryService: &mockDiscoveryService{},
+			discoveryService: &mockDiscoveryServiceForTranslation{},
 			Config:           &config.Config{},
 		}
 
@@ -1224,14 +1251,12 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		// Note: In production, we would verify Warn log was called about missing TargetPath
 		// For this test, we're verifying the handler completes successfully despite missing TargetPath
 	})
 
 	t.Run("passthrough_without_target_path_no_warning", func(t *testing.T) {
 		mockLogger := &mockStyledLogger{}
 
-		// Create passthrough translator without TargetPath (should NOT trigger warning)
 		trans := &mockTranslator{
 			name: "passthrough",
 			transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
@@ -1259,7 +1284,7 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 			repository:       &mockEndpointRepository{},
 			inspectorChain:   inspector.NewChain(mockLogger),
 			profileFactory:   &mockProfileFactory{},
-			discoveryService: &mockDiscoveryService{},
+			discoveryService: &mockDiscoveryServiceForTranslation{},
 			Config:           &config.Config{},
 		}
 
@@ -1274,15 +1299,11 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 		handler.ServeHTTP(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		// Note: passthrough translator should NOT trigger warning about missing TargetPath
 	})
 }
 
-// TestTranslationHandler_TargetPathPrefixStripping tests the defensive /olla prefix stripping
 // Verifies that:
 // 1. Correct paths without /olla prefix are unchanged
-// 2. Incorrect paths with /olla prefix are corrected
-// 3. Warning is logged when prefix is stripped
 func TestTranslationHandler_TargetPathPrefixStripping(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -1322,8 +1343,6 @@ func TestTranslationHandler_TargetPathPrefixStripping(t *testing.T) {
 
 			// Track the actual path received by the proxy
 			var receivedPath string
-
-			// Create mock translator that returns the test TargetPath
 			mockTrans := &mockTranslator{
 				name: "test-translator",
 				transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
@@ -1339,7 +1358,6 @@ func TestTranslationHandler_TargetPathPrefixStripping(t *testing.T) {
 				},
 			}
 
-			// Create mock proxy service that records the path
 			mockProxy := &mockProxyService{
 				proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, logger logger.StyledLogger) error {
 					receivedPath = r.URL.Path
@@ -1354,7 +1372,6 @@ func TestTranslationHandler_TargetPathPrefixStripping(t *testing.T) {
 				},
 			}
 
-			// Create test app
 			app := &Application{
 				proxyService:     mockProxy,
 				logger:           mockLogger,
@@ -1362,37 +1379,30 @@ func TestTranslationHandler_TargetPathPrefixStripping(t *testing.T) {
 				repository:       &mockEndpointRepository{},
 				inspectorChain:   inspector.NewChain(mockLogger),
 				profileFactory:   &mockProfileFactory{},
-				discoveryService: &mockDiscoveryService{},
+				discoveryService: &mockDiscoveryServiceForTranslation{},
 				Config:           &config.Config{},
 			}
 
-			// Create test request
 			reqBody := []byte(`{"model": "test", "messages": []}`)
 			req := httptest.NewRequest("POST", "/olla/test/v1/messages", bytes.NewReader(reqBody))
 			req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 
 			w := httptest.NewRecorder()
 
-			// Execute handler
 			handler := app.translationHandler(mockTrans)
 			handler.ServeHTTP(w, req)
 
-			// Verify the path was set correctly
 			if tt.targetPath != "" {
-				// The mock proxy should have received the corrected path
 				assert.Equal(t, tt.expectedFinalPath, receivedPath,
 					"Path should be corrected to remove /olla prefix")
 			}
 
-			// For now, we can't easily verify warning logs without a more sophisticated mock
-			// In a real implementation, you'd verify the logger was called with Warn when shouldWarn is true
 			assert.Equal(t, http.StatusOK, w.Code)
 		})
 	}
 }
 
-// TestStripPrefixBehavior verifies that util.StripPrefix handles edge cases correctly
-// This ensures the utility function behaves as expected when used in the translation handler
+// ensures utility function behaves as expected
 func TestStripPrefixBehavior(t *testing.T) {
 	// Import util package
 	utilTests := []struct {
@@ -1429,11 +1439,7 @@ func TestStripPrefixBehavior(t *testing.T) {
 
 	for _, tt := range utilTests {
 		t.Run(tt.name, func(t *testing.T) {
-			// We can't directly import util here without causing circular dependency
-			// But we can test the behavior through the translation handler
-			// This test documents expected behavior
 
-			// For now, just verify the constant value is what we expect
 			assert.Equal(t, "/olla/", constants.DefaultOllaProxyPathPrefix, "Constant should match expected value")
 		})
 	}

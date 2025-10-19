@@ -12,34 +12,27 @@ import (
 	"github.com/thushan/olla/internal/core/constants"
 )
 
-// StreamingState tracks the current streaming state
-// Maintains message ID, content blocks being built, and buffers for partial data
+// tracks state while streaming - buffers partial data, blocks in progress
 type StreamingState struct {
 	currentBlock     *ContentBlock
-	toolCallBuffers  map[string]*strings.Builder // buffer for partial tool args
+	toolCallBuffers  map[string]*strings.Builder
 	messageID        string
 	model            string
-	lastFinishReason string // track the finish_reason from OpenAI
+	lastFinishReason string
 	contentBlocks    []ContentBlock
 	currentIndex     int
 	inputTokens      int
 	outputTokens     int
-	messageStartSent bool // track if message_start has been sent
+	messageStartSent bool
 }
 
-// TransformStreamingResponse converts OpenAI SSE stream to Anthropic format
-// Orchestrates the entire streaming process from OpenAI format to Anthropic SSE events
-// Handles context cancellation and ensures proper cleanup
-// Uses synchronous streaming mode (blocking Scanner) which is reliable for all use cases
+// convert openai sse stream to anthropic format
 func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error {
-	// Set headers for SSE
-	// Anthropic uses text/event-stream with no caching for real-time streaming
+	// text/event-stream, no caching
 	w.Header().Set(constants.HeaderContentType, "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	// Use http.ResponseController for modern flush handling (Go 1.20+)
-	// Provides better error handling and cleaner API than type assertion
 	rc := http.NewResponseController(w)
 
 	state := &StreamingState{
@@ -48,15 +41,14 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 		toolCallBuffers: make(map[string]*strings.Builder),
 	}
 
-	// Use synchronous streaming (reliable, works correctly with all clients)
+	// sync streaming for now (async needs more work for agent workflows)
 	streamErr := t.transformStreamingSync(ctx, openaiStream, w, rc, state)
 
 	if streamErr != nil {
 		return streamErr
 	}
 
-	// Ensure message_start is sent even if we had no chunks with model
-	// This handles edge cases like empty streams
+	// send message_start even if stream was empty
 	if !state.messageStartSent {
 		if err := t.writeEvent(w, "message_start", t.createMessageStart(state)); err != nil {
 			return err
@@ -67,8 +59,7 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 		state.messageStartSent = true
 	}
 
-	// Send final events
-	// Completes the stream with stop reason and final token counts
+	// send final events (stop reason + token counts)
 	if err := t.finalizeStream(state, w, rc); err != nil {
 		return err
 	}
@@ -76,14 +67,10 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 	return nil
 }
 
-// transformStreamingSync processes the stream using synchronous Scanner
-// This is the safer default that blocks until data is available
-// Matches the original implementation behaviour
+// process stream using blocking scanner, safer and simpler
 func (t *Translator) transformStreamingSync(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, rc *http.ResponseController, state *StreamingState) error {
 	scanner := bufio.NewScanner(openaiStream)
 	for scanner.Scan() {
-		// Check for cancellation
-		// Allows graceful shutdown if client disconnects
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -93,7 +80,7 @@ func (t *Translator) transformStreamingSync(ctx context.Context, openaiStream io
 		line := scanner.Text()
 		if err := t.processStreamLine(line, state, w, rc); err != nil {
 			t.logger.Error("Error processing stream line", "error", err)
-			continue // Continue processing, don't fail entire stream
+			continue // keep going, don't fail entire stream on one bad line
 		}
 	}
 
@@ -104,10 +91,8 @@ func (t *Translator) transformStreamingSync(ctx context.Context, openaiStream io
 	return nil
 }
 
-// processStreamLine processes a single SSE line from OpenAI
-// Parses the OpenAI chunk and routes to appropriate handlers for content or tool calls
+// process single sse line from openai, route to content or tool handlers
 func (t *Translator) processStreamLine(line string, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
-	// OpenAI format: "data: {...}"
 	if !strings.HasPrefix(line, "data: ") {
 		return nil
 	}
@@ -119,21 +104,18 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 
 	var chunk map[string]interface{}
 	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-		// Log malformed chunks but don't fail the stream - graceful degradation
-		// This allows partial responses to be delivered even if some chunks are corrupted
+		// log bad chunks but keep going, partial responses better than nothing
 		t.logger.Warn("Malformed chunk encountered, skipping", "error", err, "data", data)
 		return nil
 	}
 
-	// Extract model if not set
-	// Model name is needed for the message_start event
+	// grab model name for message_start event
 	if state.model == "" {
 		if model, ok := chunk["model"].(string); ok {
 			state.model = model
 		}
 	}
 
-	// Process choices
 	choices, ok := chunk["choices"].([]interface{})
 	if !ok || len(choices) == 0 {
 		return nil
@@ -144,14 +126,12 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 		return nil
 	}
 
-	// Capture finish_reason when present
-	// This is used to determine the final stop_reason in Anthropic format
+	// capture finish_reason for later stop_reason mapping
 	if finishReason, finishOk := choice["finish_reason"].(string); finishOk && finishReason != "" {
 		state.lastFinishReason = finishReason
 	}
 
-	// Extract usage information if present in the chunk
-	// OpenAI may include usage statistics at the chunk level, typically in the final chunk
+	// grab usage stats if present (usually in final chunk)
 	if usage, usageOk := chunk["usage"].(map[string]interface{}); usageOk {
 		if promptTokens, promptOk := usage["prompt_tokens"].(float64); promptOk {
 			state.inputTokens = int(promptTokens)
@@ -166,12 +146,10 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 		return nil
 	}
 
-	// Handle content delta
 	if content, ok := delta["content"].(string); ok && content != "" {
 		return t.handleContentDelta(content, state, w, rc)
 	}
 
-	// Handle tool calls delta
 	if toolCalls, ok := delta["tool_calls"].([]interface{}); ok {
 		return t.handleToolCallsDelta(toolCalls, state, w, rc)
 	}
@@ -179,8 +157,7 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 	return nil
 }
 
-// ensureMessageStartSent sends message_start if not already sent
-// This ensures message_start is always the first event before any content events
+// send message_start if we haven't already, needs to be first event
 func (t *Translator) ensureMessageStartSent(state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
 	if !state.messageStartSent {
 		if err := t.writeEvent(w, "message_start", t.createMessageStart(state)); err != nil {
@@ -194,18 +171,15 @@ func (t *Translator) ensureMessageStartSent(state *StreamingState, w http.Respon
 	return nil
 }
 
-// handleContentDelta processes text content delta
-// Starts a new content block if needed and sends appropriate Anthropic events
+// process text delta, starts new block if needed
 func (t *Translator) handleContentDelta(content string, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
-	// Ensure message_start is sent before any content events
 	if err := t.ensureMessageStartSent(state, w, rc); err != nil {
 		return err
 	}
 
-	// Start new content block if needed
-	// Anthropic requires content_block_start before any deltas
+	// start new text block if needed (anthropic wants block_start before deltas)
 	if state.currentBlock == nil || state.currentBlock.Type != contentTypeText {
-		// Close previous block if it exists and is a different type
+		// close previous block if different type
 		if state.currentBlock != nil && state.currentBlock.Type != contentTypeText {
 			if err := t.writeEvent(w, "content_block_stop", map[string]interface{}{
 				"type":  "content_block_stop",
@@ -225,7 +199,6 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 		state.currentIndex = len(state.contentBlocks)
 		state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
 
-		// Send content_block_start
 		if err := t.writeEvent(w, "content_block_start", map[string]interface{}{
 			"type":  "content_block_start",
 			"index": state.currentIndex,
@@ -241,8 +214,7 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 		}
 	}
 
-	// Send content_block_delta
-	// Each chunk of text is sent as a separate delta event for low latency
+	// send delta event for each chunk
 	if err := t.writeEvent(w, "content_block_delta", map[string]interface{}{
 		"type":  "content_block_delta",
 		"index": state.currentIndex,
@@ -257,18 +229,15 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 		return fmt.Errorf("flush failed: %w", err)
 	}
 
-	// Update state
-	// Track the accumulated text for debugging and validation
+	// track accumulated text
 	state.currentBlock.Text += content
 	state.contentBlocks[state.currentIndex] = *state.currentBlock
 
 	return nil
 }
 
-// handleToolCallsDelta processes tool calls delta
-// Buffers partial JSON arguments and sends Anthropic tool_use events
+// process tool call deltas, buffers partial json args
 func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
-	// Ensure message_start is sent before any content events
 	if err := t.ensureMessageStartSent(state, w, rc); err != nil {
 		return err
 	}
@@ -282,8 +251,7 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 		index, _ := toolCall["index"].(float64)
 		toolIndex := int(index)
 
-		// Get or create tool call buffer
-		// Buffer is needed because arguments stream in chunks and must be complete JSON
+		// need buffer since args come in chunks but need complete json eventually
 		toolID := fmt.Sprintf("tool_%d", toolIndex)
 		if _, exists := state.toolCallBuffers[toolID]; !exists {
 			state.toolCallBuffers[toolID] = &strings.Builder{}
@@ -294,11 +262,9 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 			continue
 		}
 
-		// Handle tool call start
-		// When we first see a tool call with ID and name, start the block
+		// start block when we get id + name
 		if id, ok := toolCall["id"].(string); ok {
 			if name, ok := function["name"].(string); ok {
-				// Start new tool use block
 				state.currentBlock = &ContentBlock{
 					Type: contentTypeToolUse,
 					ID:   id,
@@ -307,7 +273,6 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 				state.currentIndex = len(state.contentBlocks)
 				state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
 
-				// Send content_block_start
 				if err := t.writeEvent(w, "content_block_start", map[string]interface{}{
 					"type":  "content_block_start",
 					"index": state.currentIndex,
@@ -325,13 +290,10 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 			}
 		}
 
-		// Handle arguments delta
-		// Arguments come as JSON string chunks that must be buffered and sent as partial_json
+		// buffer args chunks and send as partial_json
 		if args, ok := function["arguments"].(string); ok && args != "" {
 			state.toolCallBuffers[toolID].WriteString(args)
 
-			// Send content_block_delta with partial JSON
-			// Anthropic expects input_json_delta for streaming tool arguments
 			if err := t.writeEvent(w, "content_block_delta", map[string]interface{}{
 				"type":  "content_block_delta",
 				"index": state.currentIndex,
@@ -351,11 +313,9 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 	return nil
 }
 
-// finalizeStream sends final events and completes the stream
-// Processes buffered tool arguments and determines stop_reason from OpenAI finish_reason
+// send final events, parse tool buffers, determine stop_reason
 func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
-	// Send content_block_stop for current block if active
-	// Anthropic requires explicit stop event for each block
+	// close current block if still open
 	if state.currentBlock != nil {
 		if err := t.writeEvent(w, "content_block_stop", map[string]interface{}{
 			"type":  "content_block_stop",
@@ -368,15 +328,13 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 		}
 	}
 
-	// Parse tool call buffers into input objects
-	// Convert accumulated JSON strings into structured objects
+	// parse buffered json args into objects
 	for toolID, builder := range state.toolCallBuffers {
 		argsJSON := builder.String()
 		if argsJSON != "" {
 			var input map[string]interface{}
 			if err := json.Unmarshal([]byte(argsJSON), &input); err == nil {
-				// Find the corresponding tool use block and update it
-				// This updates the state for debugging/validation purposes
+				// find matching tool block and update it
 				for i := range state.contentBlocks {
 					if state.contentBlocks[i].Type == contentTypeToolUse &&
 						fmt.Sprintf("tool_%d", i) == toolID {
@@ -388,12 +346,10 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 		}
 	}
 
-	// Determine stop reason using the centralised mapping function
-	// This ensures consistency with non-streaming responses
+	// map finish_reason to stop_reason (same logic as non-streaming)
 	stopReason := mapFinishReasonToStopReason(state.lastFinishReason)
 
-	// Send message_delta
-	// Contains the final stop_reason and cumulative token usage
+	// send delta with stop_reason + usage
 	if err := t.writeEvent(w, "message_delta", map[string]interface{}{
 		"type": "message_delta",
 		"delta": map[string]interface{}{
@@ -411,8 +367,7 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 		return fmt.Errorf("flush failed: %w", err)
 	}
 
-	// Send message_stop
-	// Final event to indicate stream completion
+	// final event
 	if err := t.writeEvent(w, "message_stop", map[string]interface{}{
 		"type": "message_stop",
 	}); err != nil {
@@ -425,8 +380,7 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 	return nil
 }
 
-// createMessageStart creates the initial message_start event
-// Contains the message metadata and initial (empty) content array
+// create initial message_start event with metadata
 func (t *Translator) createMessageStart(state *StreamingState) map[string]interface{} {
 	return map[string]interface{}{
 		"type": "message_start",
@@ -444,8 +398,7 @@ func (t *Translator) createMessageStart(state *StreamingState) map[string]interf
 	}
 }
 
-// writeEvent writes an SSE event in Anthropic format
-// Format: event: <name>\ndata: <json>\n\n
+// write sse event: event: <name>\ndata: <json>\n\n
 func (t *Translator) writeEvent(w http.ResponseWriter, event string, data interface{}) error {
 	dataJSON, err := json.Marshal(data)
 	if err != nil {

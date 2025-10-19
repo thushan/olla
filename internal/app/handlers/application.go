@@ -139,9 +139,7 @@ func NewApplication(
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	// Create translator registry and register translators
-	// Registry pattern enables unlimited translators (Gemini, Bedrock, etc.)
-	// without bloating the Application struct with individual fields
+	// translator registry avoids bloating app struct
 	translatorRegistry := translator.NewRegistry(logger)
 
 	// Register Anthropic translator if enabled
@@ -196,8 +194,7 @@ func (a *Application) GetServer() *http.Server {
 	return a.server
 }
 
-// GetTranslatorRegistry returns the translator registry for accessing registered translators
-// Used by handlers and route registration to retrieve translators dynamically
+// get translator registry for handlers/routes
 func (a *Application) GetTranslatorRegistry() *translator.Registry {
 	return a.translatorRegistry
 }

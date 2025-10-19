@@ -6,27 +6,27 @@ import (
 	"net/http"
 )
 
-// RequestTranslator converts between API formats (e.g., Anthropic → OpenAI)
-// This enables Olla to accept multiple API formats while using OpenAI format internally
+// converts between api formats (e.g., anthropic → openai)
+// lets olla accept multiple formats while using openai internally
 type RequestTranslator interface {
-	// TransformRequest converts an incoming request to OpenAI format
-	// Returns the transformed request with metadata needed for response translation
+	// converts incoming request to openai format
+	// returns transformed request with metadata for response translation
 	TransformRequest(ctx context.Context, r *http.Request) (*TransformedRequest, error)
 
-	// TransformResponse converts an OpenAI response back to the original format
-	// Uses the original request to maintain context (e.g., model name, metadata)
+	// converts openai response back to original format
+	// uses original request to keep context (model, metadata)
 	TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error)
 
-	// TransformStreamingResponse handles streaming response conversion
-	// Reads OpenAI SSE stream and writes in the target format (e.g., Anthropic SSE)
+	// handles streaming response conversion
+	// reads openai sse stream and writes target format
 	TransformStreamingResponse(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error
 
-	// Name returns the translator identifier (e.g., "anthropic")
+	// returns translator name (eg "anthropic")
 	Name() string
 }
 
-// TransformedRequest holds the converted request and metadata
-// This preserves information needed to translate the response back to the original format
+// holds converted request and metadata
+// preserving info for response translation
 type TransformedRequest struct {
 	OpenAIRequest map[string]interface{} // Converted OpenAI format request body
 	Metadata      map[string]interface{} // Additional context for response translation
@@ -36,37 +36,33 @@ type TransformedRequest struct {
 	IsStreaming   bool                   // Whether response should stream
 }
 
-// PathProvider is an optional interface that translators can implement to define
-// their API endpoints. This enables dynamic route registration without hardcoding
-// paths in the application layer. If not implemented, routes must be registered manually.
+// optional interface for translators to define their api endpoints
+// if not implemented, routes need manual registration
 type PathProvider interface {
 	GetAPIPath() string // Returns the API path (e.g., "/olla/anthropic/v1/messages")
 }
 
-// ErrorWriter is an optional interface that translators can implement to format
-// errors according to their API's error schema. This ensures error responses match
-// the expected format for each translator (e.g., Anthropic's error structure).
-// If not implemented, generic JSON errors are used as a fallback.
+// optional interface for custom error formatting per translator (eg anthropic error structure)
+// falls back to generic json if not implemented
 type ErrorWriter interface {
 	WriteError(w http.ResponseWriter, err error, statusCode int)
 }
 
-// TokenCounter is an optional interface for translators that support token counting
-// This enables API compatibility with services that require token estimation endpoints
+// optional interface for translators that support token counting
+// enables api compatibility with token estimation endpoints
 type TokenCounter interface {
 	CountTokens(ctx context.Context, r *http.Request) (*TokenCountResponse, error)
 }
 
-// TokenCountResponse represents the token count result
-// Used by translators that implement token counting (e.g., Anthropic's count_tokens endpoint)
+// represents token count result
 type TokenCountResponse struct {
 	InputTokens  int `json:"input_tokens"`
 	OutputTokens int `json:"output_tokens"`
 	TotalTokens  int `json:"total_tokens"`
 }
 
-// ModelsProvider is an optional interface for translators that provide model listings
-// This enables translators to expose available models in their native API format
+// optional interface for translators that provide model listings
+// exposes available models in their native api format
 type ModelsProvider interface {
 	GetModels(ctx context.Context) (interface{}, error)
 }

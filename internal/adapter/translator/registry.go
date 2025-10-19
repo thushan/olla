@@ -8,10 +8,7 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
-// Registry manages registered message format translators, enabling dynamic
-// discovery and retrieval without hardcoding dependencies. This design scales
-// to unlimited translators (Anthropic, Gemini, Bedrock, etc.) while keeping
-// the application struct clean and maintainable.
+// manages registered translators, scales to unlimited formats without hardcoded deps
 type Registry struct {
 	translators map[string]RequestTranslator
 	logger      logger.StyledLogger
@@ -27,7 +24,7 @@ func NewRegistry(logger logger.StyledLogger) *Registry {
 }
 
 // Register adds a translator to the registry
-// The name is typically the translator's Name() method result, ensuring consistency
+// uses format name (from Name()) to keep things consistent
 func (r *Registry) Register(name string, translator RequestTranslator) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -50,7 +47,7 @@ func (r *Registry) Register(name string, translator RequestTranslator) {
 }
 
 // Get retrieves a translator by name
-// Returns an error if the translator doesn't exist, rather than nil, following Go conventions
+// returns error if not found (go convention)
 func (r *Registry) Get(name string) (RequestTranslator, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -64,7 +61,7 @@ func (r *Registry) Get(name string) (RequestTranslator, error) {
 }
 
 // GetAll returns all registered translators as a map
-// The returned map is a copy to prevent external modification
+// returns copy to prevent modification
 func (r *Registry) GetAll() map[string]RequestTranslator {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -79,7 +76,7 @@ func (r *Registry) GetAll() map[string]RequestTranslator {
 }
 
 // GetAvailableNames returns sorted list of registered translator names
-// Useful for error messages and debugging
+// helpful for error messages and debugging
 func (r *Registry) GetAvailableNames() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -88,6 +85,7 @@ func (r *Registry) GetAvailableNames() []string {
 }
 
 // getAvailableNames is the internal version without locking
+// avoids extra lock calls for internal use
 func (r *Registry) getAvailableNames() []string {
 	names := make([]string, 0, len(r.translators))
 	for name := range r.translators {

@@ -314,7 +314,7 @@ func applyEnvOverrides(config *Config) {
 		}
 	}
 
-	// Translator configuration
+	// config for request size limits + streaming
 	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_ENABLED"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
 			config.Translators.Anthropic.Enabled = enabled

@@ -20,7 +20,6 @@ func createTestLogger() logger.StyledLogger {
 	return logger.NewPlainStyledLogger(log)
 }
 
-// TestTransformRequest_SimpleMessage tests basic string content conversion
 func TestTransformRequest_SimpleMessage(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -60,7 +59,6 @@ func TestTransformRequest_SimpleMessage(t *testing.T) {
 	assert.Equal(t, "Hello, world!", messages[0]["content"])
 }
 
-// TestTransformRequest_WithSystemPrompt tests system prompt injection as first message
 func TestTransformRequest_WithSystemPrompt(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -99,7 +97,6 @@ func TestTransformRequest_WithSystemPrompt(t *testing.T) {
 	assert.Equal(t, "Hello", messages[1]["content"])
 }
 
-// TestTransformRequest_WithTools tests tool definitions conversion
 func TestTransformRequest_WithTools(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -159,7 +156,6 @@ func TestTransformRequest_WithTools(t *testing.T) {
 	assert.Equal(t, "auto", toolChoice)
 }
 
-// TestTransformRequest_MultipleTools tests conversion of multiple tool definitions
 func TestTransformRequest_MultipleTools(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -206,7 +202,6 @@ func TestTransformRequest_MultipleTools(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, tools, 2)
 
-	// Verify both tools are correctly converted
 	assert.Equal(t, "function", tools[0]["type"])
 	function0 := tools[0]["function"].(map[string]interface{})
 	assert.Equal(t, "get_weather", function0["name"])
@@ -216,7 +211,6 @@ func TestTransformRequest_MultipleTools(t *testing.T) {
 	assert.Equal(t, "get_time", function1["name"])
 }
 
-// TestConvertToolChoice tests all tool_choice variations
 func TestConvertToolChoice(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -281,7 +275,6 @@ func TestConvertToolChoice(t *testing.T) {
 	}
 }
 
-// TestConvertToolChoice_EdgeCases tests error handling for tool_choice
 func TestConvertToolChoice_EdgeCases(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -315,7 +308,6 @@ func TestConvertToolChoice_EdgeCases(t *testing.T) {
 	})
 }
 
-// TestConvertMessages_ToolUseAndResult tests full tool calling round-trip
 func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -407,7 +399,6 @@ func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 	assert.Equal(t, "Temperature is 18°C, partly cloudy", messages[2]["content"])
 }
 
-// TestTransformRequest_ComplexContent tests content blocks with text
 func TestTransformRequest_ComplexContent(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -445,12 +436,11 @@ func TestTransformRequest_ComplexContent(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
-	// Multiple text blocks should be concatenated
+	// text blocks get concatenated
 	assert.Equal(t, "user", messages[0]["role"])
 	assert.Equal(t, "First part second part", messages[0]["content"])
 }
 
-// TestTransformRequest_MultipleMessages tests conversation history
 func TestTransformRequest_MultipleMessages(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -486,9 +476,8 @@ func TestTransformRequest_MultipleMessages(t *testing.T) {
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
 	require.True(t, ok)
-	require.Len(t, messages, 4) // system + 3 messages
+	require.Len(t, messages, 4)
 
-	// Verify order and content
 	assert.Equal(t, "system", messages[0]["role"])
 	assert.Equal(t, "You are a helpful assistant", messages[0]["content"])
 
@@ -502,7 +491,6 @@ func TestTransformRequest_MultipleMessages(t *testing.T) {
 	assert.Equal(t, "Tell me about Go", messages[3]["content"])
 }
 
-// TestTransformRequest_EmptyContent tests edge case handling
 func TestTransformRequest_EmptyContent(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -530,8 +518,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 
 		messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
 		require.True(t, ok)
-		// Empty string content should be filtered out
-		assert.Len(t, messages, 0)
+		assert.Len(t, messages, 0) // empty content gets filtered
 	})
 
 	t.Run("empty_text_blocks", func(t *testing.T) {
@@ -563,12 +550,10 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 
 		messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
 		require.True(t, ok)
-		// Empty text blocks should be filtered out
-		assert.Len(t, messages, 0)
+		assert.Len(t, messages, 0) // empty blocks get filtered
 	})
 }
 
-// TestTransformRequest_InvalidJSON tests error handling
 func TestTransformRequest_InvalidJSON(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -592,7 +577,6 @@ func TestTransformRequest_InvalidJSON(t *testing.T) {
 	})
 }
 
-// TestTransformRequest_OptionalParameters tests parameter mapping
 func TestTransformRequest_OptionalParameters(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -636,7 +620,6 @@ func TestTransformRequest_OptionalParameters(t *testing.T) {
 	assert.Equal(t, []string{"END", "STOP"}, stopSeqs)
 }
 
-// TestTransformRequest_AssistantWithOnlyToolCalls tests assistant message with no text
 func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -674,7 +657,7 @@ func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
-	// Assistant message with only tool calls should have null content
+	// tool calls only = null content
 	assert.Equal(t, "assistant", messages[0]["role"])
 	assert.Nil(t, messages[0]["content"])
 
@@ -684,7 +667,6 @@ func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 	assert.Equal(t, "toolu_456", toolCalls[0]["id"])
 }
 
-// TestTransformRequest_UserWithOnlyToolResults tests user message with only tool results
 func TestTransformRequest_UserWithOnlyToolResults(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -719,13 +701,12 @@ func TestTransformRequest_UserWithOnlyToolResults(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
-	// User message with only tool results should produce only tool message
+	// tool results only = tool message
 	assert.Equal(t, "tool", messages[0]["role"])
 	assert.Equal(t, "toolu_789", messages[0]["tool_call_id"])
 	assert.Equal(t, "Result data here", messages[0]["content"])
 }
 
-// TestTransformRequest_ToolResultWithStructuredContent tests tool result with non-string content
 func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -766,7 +747,7 @@ func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 	assert.Equal(t, "tool", messages[0]["role"])
 	assert.Equal(t, "toolu_struct", messages[0]["tool_call_id"])
 
-	// Structured content should be serialized to JSON
+	// structured content becomes json string
 	contentStr, ok := messages[0]["content"].(string)
 	require.True(t, ok)
 
@@ -777,7 +758,6 @@ func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 	assert.Equal(t, "partly cloudy", parsedContent["conditions"])
 }
 
-// TestTransformRequest_MultipleToolCalls tests assistant message with multiple tool calls
 func TestTransformRequest_MultipleToolCalls(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -834,18 +814,15 @@ func TestTransformRequest_MultipleToolCalls(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, toolCalls, 2)
 
-	// Verify first tool call
 	assert.Equal(t, "tool_1", toolCalls[0]["id"])
 	func0 := toolCalls[0]["function"].(map[string]interface{})
 	assert.Equal(t, "get_weather", func0["name"])
 
-	// Verify second tool call
 	assert.Equal(t, "tool_2", toolCalls[1]["id"])
 	func1 := toolCalls[1]["function"].(map[string]interface{})
 	assert.Equal(t, "get_time", func1["name"])
 }
 
-// TestConvertToolUse_InvalidData tests tool use conversion with missing fields
 func TestConvertToolUse_InvalidData(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -878,20 +855,18 @@ func TestConvertToolUse_InvalidData(t *testing.T) {
 		}
 		result := translator.convertToolUse(block)
 		require.NotNil(t, result)
-		// When input is nil, json.Marshal produces "null"
 		function := result["function"].(map[string]interface{})
 		assert.Equal(t, "null", function["arguments"])
 	})
 }
 
-// TestTransformRequest_NoMessages tests request with no messages
 func TestTransformRequest_NoMessages(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		Messages:  []AnthropicMessage{}, // Empty messages
+		Messages:  []AnthropicMessage{},
 	}
 
 	body, err := json.Marshal(anthropicReq)
@@ -906,7 +881,6 @@ func TestTransformRequest_NoMessages(t *testing.T) {
 	assert.Contains(t, err.Error(), "at least one message is required")
 }
 
-// TestTransformRequest_ToolChoiceObjectForm tests tool_choice with object form
 func TestTransformRequest_ToolChoiceObjectForm(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -954,7 +928,6 @@ func TestTransformRequest_ToolChoiceObjectForm(t *testing.T) {
 	assert.Equal(t, "get_weather", function["name"])
 }
 
-// TestTransformRequest_MixedTextAndToolResults tests user message with both text and tool results
 func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
@@ -991,36 +964,30 @@ func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
 	require.True(t, ok)
-	require.Len(t, messages, 2) // user message with text, then tool message
+	require.Len(t, messages, 2)
 
-	// First should be user message with text
 	assert.Equal(t, "user", messages[0]["role"])
 	assert.Equal(t, "Here's the result:", messages[0]["content"])
 
-	// Second should be tool message
 	assert.Equal(t, "tool", messages[1]["role"])
 	assert.Equal(t, "tool_mixed", messages[1]["tool_call_id"])
 	assert.Equal(t, "Data from tool", messages[1]["content"])
 }
 
-// TestConvertSystemPrompt_AllFormats tests all three system prompt formats
 func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
 	t.Run("string_format", func(t *testing.T) {
-		// Test simple string format
 		result := translator.convertSystemPrompt("You are a helpful assistant")
 		assert.Equal(t, "You are a helpful assistant", result)
 	})
 
 	t.Run("empty_string", func(t *testing.T) {
-		// Empty string should return nil
 		result := translator.convertSystemPrompt("")
 		assert.Nil(t, result)
 	})
 
 	t.Run("interface_array_format", func(t *testing.T) {
-		// Test []interface{} with content blocks
 		systemBlocks := []interface{}{
 			map[string]interface{}{
 				"type": "text",
@@ -1036,7 +1003,6 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	})
 
 	t.Run("interface_array_with_empty_blocks", func(t *testing.T) {
-		// Test []interface{} with empty text blocks
 		systemBlocks := []interface{}{
 			map[string]interface{}{
 				"type": "text",
@@ -1048,7 +1014,6 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	})
 
 	t.Run("strongly_typed_contentblock_array", func(t *testing.T) {
-		// Test []ContentBlock format (strongly-typed)
 		contentBlocks := []ContentBlock{
 			{
 				Type: "text",
@@ -1064,7 +1029,6 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	})
 
 	t.Run("strongly_typed_contentblock_with_empty_text", func(t *testing.T) {
-		// Test []ContentBlock with empty text
 		contentBlocks := []ContentBlock{
 			{
 				Type: "text",
@@ -1076,7 +1040,6 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	})
 
 	t.Run("strongly_typed_contentblock_mixed_types", func(t *testing.T) {
-		// Test []ContentBlock with non-text blocks (should be ignored)
 		contentBlocks := []ContentBlock{
 			{
 				Type: "image",
@@ -1096,23 +1059,19 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	})
 
 	t.Run("nil_system_prompt", func(t *testing.T) {
-		// Test nil
 		result := translator.convertSystemPrompt(nil)
 		assert.Nil(t, result)
 	})
 
 	t.Run("unsupported_type", func(t *testing.T) {
-		// Test unsupported type
 		result := translator.convertSystemPrompt(42)
 		assert.Nil(t, result)
 	})
 }
 
-// TestTransformRequest_SystemPromptWithContentBlocks tests system prompt as content blocks via JSON
 func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
-	// Simulate a request with system prompt as content blocks ([]interface{} format)
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
@@ -1148,7 +1107,6 @@ func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
 	require.True(t, ok)
 	require.Len(t, messages, 2)
 
-	// System message should concatenate all text blocks
 	assert.Equal(t, "system", messages[0]["role"])
 	assert.Equal(t, "You are a helpful AI assistant.", messages[0]["content"])
 
@@ -1156,12 +1114,9 @@ func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
 	assert.Equal(t, "Hello", messages[1]["content"])
 }
 
-// TestTransformRequest_StronglyTypedSystemPrompt tests strongly-typed ContentBlock system prompt
 func TestTransformRequest_StronglyTypedSystemPrompt(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 
-	// Create a request with strongly-typed system prompt
-	// This simulates what happens when System field is unmarshalled as []ContentBlock
 	req := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
@@ -1173,7 +1128,6 @@ func TestTransformRequest_StronglyTypedSystemPrompt(t *testing.T) {
 		},
 	}
 
-	// Manually set System to strongly-typed ContentBlock array
 	req.System = []ContentBlock{
 		{
 			Type: "text",
@@ -1185,17 +1139,14 @@ func TestTransformRequest_StronglyTypedSystemPrompt(t *testing.T) {
 		},
 	}
 
-	// We need to test the convertMessages directly since JSON marshalling
-	// would convert the strongly-typed array to []interface{}
+	// test convertMessages directly since json marshalling would convert to []interface{}
 	messages, err := translator.convertMessages(req.Messages, req.System)
 	require.NoError(t, err)
 	require.Len(t, messages, 2)
 
-	// System message should be first
 	assert.Equal(t, "system", messages[0]["role"])
 	assert.Equal(t, "You are a mathematics expert. Provide precise answers.", messages[0]["content"])
 
-	// User message should be second
 	assert.Equal(t, "user", messages[1]["role"])
 	assert.Equal(t, "What's 2+2?", messages[1]["content"])
 }

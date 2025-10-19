@@ -11,18 +11,16 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-// translatorModelsHandler returns a handler for listing models in translator-specific format
-// This enables translators to expose available models compatible with their API format
-// (e.g., Anthropic models endpoint at /olla/anthropic/v1/models)
+// list models in translator format (eg /olla/anthropic/v1/models)
 func (a *Application) translatorModelsHandler(trans translator.RequestTranslator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		// Get unified models from registry - try type assertion or interface check
+		// fetch available models from registry
 		var unifiedModels []*domain.UnifiedModel
 		var err error
 
-		// Check if registry supports GetUnifiedModels method
+		// check if registry supports getting unified models
 		type unifiedModelsGetter interface {
 			GetUnifiedModels(ctx context.Context) ([]*domain.UnifiedModel, error)
 		}
@@ -38,14 +36,13 @@ func (a *Application) translatorModelsHandler(trans translator.RequestTranslator
 			return
 		}
 
-		// Filter to only show healthy models
+		// skip unhealthy models for endpoint response
 		healthyModels, err := a.filterModelsByHealth(ctx, unifiedModels)
 		if err != nil {
 			a.writeTranslatorModelsError(w, trans, "failed to filter models by health", http.StatusInternalServerError)
 			return
 		}
 
-		// Convert to translator-specific format
 		// Anthropic format matches the Python reference: {data: [{id, name, created, description, type}]}
 		response := a.convertModelsToAnthropicFormat(healthyModels)
 
@@ -55,19 +52,18 @@ func (a *Application) translatorModelsHandler(trans translator.RequestTranslator
 	}
 }
 
-// convertModelsToAnthropicFormat converts unified models to Anthropic API format
-// Matches the Python reference implementation format from research/anthropic-proxy.py
+// convert to anthropic format (matches python reference)
 func (a *Application) convertModelsToAnthropicFormat(models []*domain.UnifiedModel) map[string]interface{} {
 	data := make([]map[string]interface{}, 0, len(models))
 
 	for _, model := range models {
-		// Use the first alias as the model ID, or fall back to the unified ID
+		// use first alias or fallback to default id
 		modelID := model.ID
 		if len(model.Aliases) > 0 {
 			modelID = model.Aliases[0].Name
 		}
 
-		// Build model entry in Anthropic format
+		// map model fields to human-readable fields
 		entry := map[string]interface{}{
 			"id":          modelID,
 			"name":        modelID,
@@ -84,20 +80,19 @@ func (a *Application) convertModelsToAnthropicFormat(models []*domain.UnifiedMod
 	}
 }
 
-// writeTranslatorModelsError writes error response for models endpoint
+// send error response for models endpoint
 func (a *Application) writeTranslatorModelsError(w http.ResponseWriter, trans translator.RequestTranslator, message string, statusCode int) {
 	a.logger.Error("Translator models request failed",
 		"translator", trans.Name(),
 		"error", message,
 		"status", statusCode)
 
-	// Use translator's custom error formatting if available
+	// use custom error format or fallback to generic
 	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
 		errorWriter.WriteError(w, err{message: message}, statusCode)
 		return
 	}
 
-	// Fallback to generic JSON error
 	errorResp := map[string]interface{}{
 		"error": map[string]interface{}{
 			"message": message,
@@ -110,7 +105,7 @@ func (a *Application) writeTranslatorModelsError(w http.ResponseWriter, trans tr
 	json.NewEncoder(w).Encode(errorResp)
 }
 
-// err is a simple error implementation for error responses
+// minimal error type for response handling
 type err struct {
 	message string
 }

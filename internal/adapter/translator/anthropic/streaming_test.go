@@ -14,15 +14,12 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
-// createStreamingTestLogger creates a logger for streaming tests
 func createStreamingTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
 	return logger.NewPlainStyledLogger(log)
 }
 
-// createMockOpenAIStream creates a mock OpenAI SSE stream from chunks
-// Simulates the OpenAI streaming format for testing purposes
 func createMockOpenAIStream(chunks []string) io.Reader {
 	var buf bytes.Buffer
 	for _, chunk := range chunks {
@@ -31,8 +28,6 @@ func createMockOpenAIStream(chunks []string) io.Reader {
 	return &buf
 }
 
-// parseAnthropicEvents parses SSE events from Anthropic-format response
-// Extracts event types and data payloads for validation
 func parseAnthropicEvents(body string) ([]map[string]interface{}, error) {
 	var events []map[string]interface{}
 	lines := strings.Split(body, "\n")
@@ -55,8 +50,6 @@ func parseAnthropicEvents(body string) ([]map[string]interface{}, error) {
 	return events, nil
 }
 
-// verifyEventSequence validates that events appear in the expected order
-// Ensures the Anthropic streaming protocol is followed correctly
 func verifyEventSequence(t *testing.T, events []map[string]interface{}, expectedSequence []string) {
 	t.Helper()
 
@@ -70,12 +63,10 @@ func verifyEventSequence(t *testing.T, events []map[string]interface{}, expected
 	assert.Equal(t, expectedSequence, actualSequence, "Event sequence should match expected order")
 }
 
-// TestTransformStreamingResponse_SimpleText tests basic text streaming
-// Validates that OpenAI text deltas are converted to Anthropic events correctly
 func TestTransformStreamingResponse_SimpleText(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
-	// Simulate OpenAI streaming response with text chunks
+	// simulate openai streaming response with text chunks
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-123\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
 		"data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\" world\"},\"index\":0}]}\n\n",
@@ -90,7 +81,7 @@ func TestTransformStreamingResponse_SimpleText(t *testing.T) {
 
 	body := recorder.Body.String()
 
-	// Verify all required Anthropic events are present
+	// verify all required anthropic events are present
 	assert.Contains(t, body, "event: message_start")
 	assert.Contains(t, body, "event: content_block_start")
 	assert.Contains(t, body, "event: content_block_delta")
@@ -98,15 +89,15 @@ func TestTransformStreamingResponse_SimpleText(t *testing.T) {
 	assert.Contains(t, body, "event: message_delta")
 	assert.Contains(t, body, "event: message_stop")
 
-	// Verify text content is present
+	// verify text content is present
 	assert.Contains(t, body, `"text":"Hello"`)
 	assert.Contains(t, body, `"text":" world"`)
 	assert.Contains(t, body, `"text":"!"`)
 
-	// Verify message_start includes model
+	// verify message_start includes model
 	assert.Contains(t, body, `"model":"claude-3-5-sonnet-20241022"`)
 
-	// Verify stop_reason in message_delta
+	// verify stop_reason in message_delta
 	assert.Contains(t, body, `"stop_reason":"end_turn"`)
 
 	// Parse and validate event sequence
@@ -114,10 +105,10 @@ func TestTransformStreamingResponse_SimpleText(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, events)
 
-	// Note: Implementation sends content_block_start first, then message_start when model is known
+	// note: implementation sends content_block_start first, then message_start when model is known
 	// This is a valid streaming pattern - events don't have to be in strict order
 	// as long as all required events are present
-	// Verify all event types are present
+	// verify all event types are present
 	eventTypes := make(map[string]bool)
 	for _, event := range events {
 		if eventType, ok := event["_event_type"].(string); ok {
@@ -133,12 +124,10 @@ func TestTransformStreamingResponse_SimpleText(t *testing.T) {
 	assert.True(t, eventTypes["message_stop"], "Should have message_stop event")
 }
 
-// TestTransformStreamingResponse_WithToolCalls tests tool call streaming
-// Validates that tool calls are streamed with proper input_json_delta events
 func TestTransformStreamingResponse_WithToolCalls(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
-	// Simulate OpenAI streaming with text followed by tool call
+	// simulate openai streaming with text followed by tool call
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-456\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Let me check that for you.\"},\"index\":0}]}\n\n",
 		"data: {\"id\":\"chatcmpl-456\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_abc123\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
@@ -156,7 +145,7 @@ func TestTransformStreamingResponse_WithToolCalls(t *testing.T) {
 
 	body := recorder.Body.String()
 
-	// Verify text content block events
+	// verify text content block events
 	assert.Contains(t, body, `"text":"Let me check that for you."`)
 
 	// Verify tool_use block is created
@@ -164,19 +153,19 @@ func TestTransformStreamingResponse_WithToolCalls(t *testing.T) {
 	assert.Contains(t, body, `"id":"call_abc123"`)
 	assert.Contains(t, body, `"name":"get_weather"`)
 
-	// Verify input_json_delta events for streaming tool arguments
+	// verify input_json_delta events for streaming tool arguments
 	assert.Contains(t, body, `"type":"input_json_delta"`)
 	assert.Contains(t, body, `"partial_json"`)
 
-	// Verify stop_reason is tool_use
+	// verify stop_reason is tool_use
 	assert.Contains(t, body, `"stop_reason":"tool_use"`)
 
 	// Parse events to verify structure
 	events, err := parseAnthropicEvents(body)
 	require.NoError(t, err)
 
-	// Should have two content blocks: text and tool_use
-	// Verify we have content_block_start events for both
+	// should have two content blocks: text and tool_use
+	// verify we have content_block_start events for both
 	contentBlockStarts := 0
 	for _, event := range events {
 		if event["_event_type"] == "content_block_start" {
@@ -186,8 +175,6 @@ func TestTransformStreamingResponse_WithToolCalls(t *testing.T) {
 	assert.Equal(t, 2, contentBlockStarts, "Should have content_block_start for text and tool_use")
 }
 
-// TestTransformStreamingResponse_MultipleToolCalls tests multiple tool calls in one response
-// Validates that multiple tools are handled correctly in streaming mode
 func TestTransformStreamingResponse_MultipleToolCalls(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -229,8 +216,6 @@ func TestTransformStreamingResponse_MultipleToolCalls(t *testing.T) {
 	assert.Equal(t, 2, contentBlockStarts, "Should have content_block_start for both tools")
 }
 
-// TestTransformStreamingResponse_ToolCallsOnly tests response with only tool calls, no text
-// Validates that tool-only responses work correctly without preceding text
 func TestTransformStreamingResponse_ToolCallsOnly(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -252,11 +237,11 @@ func TestTransformStreamingResponse_ToolCallsOnly(t *testing.T) {
 	assert.Contains(t, body, `"id":"call_only"`)
 	assert.Contains(t, body, `"name":"search"`)
 
-	// Verify no text content block
+	// verify no text content block
 	events, err := parseAnthropicEvents(body)
 	require.NoError(t, err)
 
-	// Count content blocks - should only be 1 for tool_use
+	// count content blocks - should only be 1 for tool_use
 	contentBlockStarts := 0
 	for _, event := range events {
 		if event["_event_type"] == "content_block_start" {
@@ -266,8 +251,6 @@ func TestTransformStreamingResponse_ToolCallsOnly(t *testing.T) {
 	assert.Equal(t, 1, contentBlockStarts, "Should only have content_block_start for tool_use")
 }
 
-// TestTransformStreamingResponse_ContextCancellation tests cancellation handling
-// Validates that context cancellation is properly handled during streaming
 func TestTransformStreamingResponse_ContextCancellation(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -288,7 +271,7 @@ func TestTransformStreamingResponse_ContextCancellation(t *testing.T) {
 	assert.Contains(t, err.Error(), "context")
 }
 
-// slowReader is a helper for testing context cancellation
+// slow reader is a helper for testing context cancellation
 type slowReader struct {
 	data   []byte
 	pos    int
@@ -307,9 +290,6 @@ func (r *slowReader) Read(p []byte) (n int, err error) {
 	return n, nil
 }
 
-// TestTransformStreamingResponse_MalformedChunk tests error handling for malformed data
-// Validates graceful handling of invalid JSON in streaming chunks
-// Per spec: malformed chunks are logged and processing continues without failing the stream
 func TestTransformStreamingResponse_MalformedChunk(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -323,19 +303,17 @@ func TestTransformStreamingResponse_MalformedChunk(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
 
-	// Should NOT fail the stream - malformed chunks are logged and skipped
+	// should not fail the stream - malformed chunks are logged and skipped
 	require.NoError(t, err)
 
 	body := recorder.Body.String()
 
-	// Stream should complete successfully with valid chunks processed
+	// stream should complete successfully with valid chunks processed
 	assert.Contains(t, body, "event: message_start")
 	assert.Contains(t, body, "event: message_stop")
 	assert.Contains(t, body, `"text":"Hello"`)
 }
 
-// TestTransformStreamingResponse_EmptyStream tests handling of empty/minimal streams
-// Validates that streams with only [DONE] marker are handled gracefully
 func TestTransformStreamingResponse_EmptyStream(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -346,18 +324,16 @@ func TestTransformStreamingResponse_EmptyStream(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
 
-	// Should complete without error but produce minimal output
+	// should complete without error but produce minimal output
 	require.NoError(t, err)
 
 	body := recorder.Body.String()
 
-	// Should still have message_start and message_stop even for empty content
+	// should still have message_start and message_stop even for empty content
 	assert.Contains(t, body, "event: message_start")
 	assert.Contains(t, body, "event: message_stop")
 }
 
-// TestTransformStreamingResponse_ModelExtraction tests model field extraction
-// Validates that model name is correctly captured from first chunk and included in message_start
 func TestTransformStreamingResponse_ModelExtraction(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -397,8 +373,6 @@ func TestTransformStreamingResponse_ModelExtraction(t *testing.T) {
 	}
 }
 
-// TestTransformStreamingResponse_UsageTokens tests usage token tracking
-// Validates that token usage is properly tracked and included in message_delta
 func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -414,11 +388,11 @@ func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 
 	body := recorder.Body.String()
 
-	// Parse events to verify token usage in message_delta
+	// parse events to verify token usage in message_delta
 	events, err := parseAnthropicEvents(body)
 	require.NoError(t, err)
 
-	// Find the message_delta event
+	// find the message_delta event
 	var messageDeltaEvent map[string]interface{}
 	for _, event := range events {
 		if event["_event_type"] == "message_delta" {
@@ -429,7 +403,7 @@ func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 
 	require.NotNil(t, messageDeltaEvent, "message_delta event should exist")
 
-	// Verify usage is present and correct
+	// verify usage is present and correct
 	usage, ok := messageDeltaEvent["usage"].(map[string]interface{})
 	require.True(t, ok, "message_delta should have usage field")
 
@@ -458,15 +432,13 @@ func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 	startUsage, ok := message["usage"].(map[string]interface{})
 	require.True(t, ok, "message_start.message should have usage field")
 
-	// OpenAI provides usage at the end of the stream, so message_start will have 0 tokens
-	// This is different from native Anthropic which provides input_tokens in message_start
+	// openai provides usage at the end of the stream, so message_start will have 0 tokens
+	// this is different from native anthropic which provides input_tokens in message_start
 	startInputTokens, ok := startUsage["input_tokens"].(float64)
 	require.True(t, ok, "message_start usage should have input_tokens field")
 	assert.Equal(t, float64(0), startInputTokens, "message_start input_tokens should be 0 (usage comes at end in OpenAI)")
 }
 
-// TestTransformStreamingResponse_SSEFormat tests SSE event format compliance
-// Validates that output conforms to Server-Sent Events specification
 func TestTransformStreamingResponse_SSEFormat(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -489,11 +461,11 @@ func TestTransformStreamingResponse_SSEFormat(t *testing.T) {
 	for i, line := range lines {
 		if strings.HasPrefix(line, "event: ") {
 			eventFound = true
-			// Next non-empty line should be data:
+			// next non-empty line should be data:
 			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "data: ") {
 				dataFound = true
 
-				// Validate JSON in data field
+				// validate json in data field
 				dataStr := strings.TrimPrefix(lines[i+1], "data: ")
 				var data map[string]interface{}
 				err := json.Unmarshal([]byte(dataStr), &data)
@@ -505,12 +477,10 @@ func TestTransformStreamingResponse_SSEFormat(t *testing.T) {
 	assert.True(t, eventFound, "Should have event: lines")
 	assert.True(t, dataFound, "Should have data: lines following event: lines")
 
-	// Verify Content-Type header
+	// verify content-type header
 	assert.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 }
 
-// TestTransformStreamingResponse_FinishReasonMapping tests finish_reason mapping in streaming
-// Validates that OpenAI finish_reason values map to correct Anthropic stop_reason
 func TestTransformStreamingResponse_FinishReasonMapping(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -568,8 +538,6 @@ func TestTransformStreamingResponse_FinishReasonMapping(t *testing.T) {
 	}
 }
 
-// TestTransformStreamingResponse_EmptyContent tests handling of empty content deltas
-// Validates that empty deltas are handled gracefully without creating unnecessary events
 func TestTransformStreamingResponse_EmptyContent(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
@@ -586,7 +554,7 @@ func TestTransformStreamingResponse_EmptyContent(t *testing.T) {
 
 	body := recorder.Body.String()
 
-	// Empty content should not create delta events, only non-empty content
+	// empty content should not create delta events, only non-empty content
 	events, err := parseAnthropicEvents(body)
 	require.NoError(t, err)
 
@@ -597,16 +565,14 @@ func TestTransformStreamingResponse_EmptyContent(t *testing.T) {
 		}
 	}
 
-	// Should only have 1 delta for "Hello", not for empty string
+	// should only have 1 delta for "hello", not for empty string
 	assert.Equal(t, 1, deltaCount, "Should only create deltas for non-empty content")
 }
 
-// TestTransformStreamingResponse_PartialJSONAccumulation tests tool argument accumulation
-// Validates that partial JSON chunks are correctly accumulated and streamed
 func TestTransformStreamingResponse_PartialJSONAccumulation(t *testing.T) {
 	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
 
-	// Test with complex nested JSON arguments streamed in small chunks
+	// test with complex nested json arguments streamed in small chunks
 	openaiStream := createMockOpenAIStream([]string{
 		"data: {\"id\":\"chatcmpl-json\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_complex\",\"type\":\"function\",\"function\":{\"name\":\"process\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
 		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\"}}]},\"index\":0}]}\n\n",
@@ -625,11 +591,11 @@ func TestTransformStreamingResponse_PartialJSONAccumulation(t *testing.T) {
 
 	body := recorder.Body.String()
 
-	// Verify input_json_delta events contain the partial JSON
+	// verify input_json_delta events contain the partial json
 	assert.Contains(t, body, `"type":"input_json_delta"`)
 	assert.Contains(t, body, `"partial_json"`)
 
-	// Verify the partial JSON chunks are present in sequence
+	// verify the partial json chunks are present in sequence
 	assert.Contains(t, body, `{`)
 	assert.Contains(t, body, `data`)
 	assert.Contains(t, body, `count`)

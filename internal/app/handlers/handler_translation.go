@@ -14,45 +14,34 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
-// translationHandler creates a generic HTTP handler for any RequestTranslator
-// This eliminates per-translator handler duplication by reusing the same proxy pipeline
-// for all message format conversions (Anthropic, Gemini, Bedrock, etc.)
+// generic handler for any translator (eg anthropic to openai and back)
 func (a *Application) translationHandler(trans translator.RequestTranslator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := a.initializeProxyRequest(r)
 		ctx, r := a.setupRequestContext(r, pr.stats)
 
-		// Transform incoming format (e.g., Anthropic) to OpenAI format
-		// Translator extracts model name and streaming flag during transformation
 		transformedReq, err := trans.TransformRequest(ctx, r)
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
 			return
 		}
 
-		// Use extracted metadata for routing and observability
 		pr.model = transformedReq.ModelName
 		pr.stats.Model = pr.model
 
-		// Serialize OpenAI request for proxy
+		// serialize for proxy
 		openaiBody, err := json.Marshal(transformedReq.OpenAIRequest)
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, fmt.Errorf("failed to serialize request"), http.StatusInternalServerError)
 			return
 		}
 
-		// Replace request body with OpenAI format
 		r.Body = io.NopCloser(bytes.NewReader(openaiBody))
 		r.ContentLength = int64(len(openaiBody))
 
-		// Update request path if translator specified a target path
-		// This enables path translation (e.g., Anthropic /v1/messages → OpenAI /v1/chat/completions)
 		if transformedReq.TargetPath != "" {
-			// Strip the proxy prefix if translator included it using the standard utility
-			// This ensures consistency with the rest of the proxy layer
 			targetPath := util.StripPrefix(transformedReq.TargetPath, constants.DefaultOllaProxyPathPrefix)
 
-			// Warn if translator incorrectly included the prefix
 			if targetPath != transformedReq.TargetPath {
 				pr.requestLogger.Warn("TargetPath included proxy prefix, stripped it",
 					"translator", trans.Name(),
@@ -67,15 +56,14 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 				"translator", trans.Name())
 			r.URL.Path = targetPath
 		} else if trans.Name() != "passthrough" {
-			// Warn if translator might need path translation
-			// Non-translating proxies (e.g., passthrough) can ignore this
+			// warn if translator might need path translation (passthrough can ignore)
 			pr.requestLogger.Warn("Translator did not set TargetPath, using original path",
 				"translator", trans.Name(),
 				"original_path", r.URL.Path,
 				"note", "This may cause routing issues if translation requires different endpoint")
 		}
 
-		// Run through standard proxy pipeline (inspector, security, endpoint selection)
+		// run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
 		// Get compatible endpoints for this request
@@ -85,10 +73,23 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			return
 		}
 
+		// OLLA-282: When no endpoints available, Olla hangs until timeout
+		// make shure that we have at least one endpoint available
+		// prevents hanging when model routing fails to find compatible backends
+		if len(endpoints) == 0 {
+			pr.requestLogger.Warn("No endpoints available for model",
+				"model", pr.model,
+				"translator", trans.Name())
+			a.writeTranslatorError(w, trans, pr,
+				fmt.Errorf("no healthy endpoints available for model: %s", pr.model),
+				http.StatusNotFound)
+			return
+		}
+
 		a.logRequestStart(pr, len(endpoints))
 
 		// Execute proxy request with appropriate response handling
-		// Streaming and non-streaming require different approaches
+		// streaming vs non-streaming need different handling
 		var proxyErr error
 		if transformedReq.IsStreaming {
 			proxyErr = a.executeTranslatedStreamingRequest(ctx, w, r, endpoints, pr, trans)
@@ -108,8 +109,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		a.logRequestResult(pr, proxyErr)
 
 		if proxyErr != nil {
-			// Only write error if response hasn't started
-			// Content-Type check prevents double-writing after partial stream
+			// only write error if response hasn't started
 			if w.Header().Get(constants.HeaderContentType) == "" {
 				a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", proxyErr), http.StatusBadGateway)
 			}
@@ -117,8 +117,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 	}
 }
 
-// executeTranslatedNonStreamingRequest handles non-streaming translation requests
-// Captures complete OpenAI response, transforms to target format, writes to client
+// handle non-streaming, capture full response then transform
 func (a *Application) executeTranslatedNonStreamingRequest(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -129,13 +128,11 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 ) error {
 	recorder := newResponseRecorder()
 
-	// Add model to context for routing
 	if pr.model != "" {
 		ctx = context.WithValue(ctx, "model", pr.model)
 		r = r.WithContext(ctx)
 	}
 
-	// Pass routing decision to stats for headers
 	if pr.profile != nil && pr.profile.RoutingDecision != nil {
 		pr.stats.RoutingDecision = pr.profile.RoutingDecision
 	}
@@ -152,15 +149,12 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 		return fmt.Errorf("failed to parse OpenAI response: %w", jerr)
 	}
 
-	// Check if backend returned an error status code
-	// If so, translate the error response to the target format using ErrorWriter
+	// backend returned error, translate to target format
 	if recorder.status >= 400 {
 		pr.requestLogger.Debug("Backend returned error, translating to target format",
 			"status_code", recorder.status,
 			"translator", trans.Name())
 
-		// Extract error details from OpenAI error response
-		// Preserve additional metadata for better debugging
 		errorMsg := "Backend error"
 		var errorType, errorParam, errorCode string
 
@@ -193,7 +187,7 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 				"translator", trans.Name())
 		}
 
-		// Copy observability headers before writing error
+		// copy observability headers before writing error
 		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		a.copyOllaHeaders(recorder, w)
 
@@ -203,7 +197,7 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 			return nil
 		}
 
-		// Fallback: write generic error in target format
+		// fallback to generic error
 		w.WriteHeader(recorder.status)
 		if _, werr := w.Write(recorder.body.Bytes()); werr != nil {
 			return fmt.Errorf("failed to write error response: %w", werr)
@@ -219,8 +213,7 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 
-	// Copy Olla observability headers from recorder
-	// These provide insight into routing decisions and backend selection
+	// copy olla headers for observability
 	a.copyOllaHeaders(recorder, w)
 
 	// Serialize and write response
@@ -237,8 +230,7 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 	return nil
 }
 
-// executeTranslatedStreamingRequest handles streaming translation requests
-// Uses io.Pipe to connect proxy output stream to translator input for real-time conversion
+// handle streaming via pipe, proxy writes to translator reads from
 func (a *Application) executeTranslatedStreamingRequest(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -247,17 +239,32 @@ func (a *Application) executeTranslatedStreamingRequest(
 	pr *proxyRequest,
 	trans translator.RequestTranslator,
 ) error {
-	// Create pipe connecting proxy output to translator input
-	// Proxy writes OpenAI SSE to pipe writer
-	// Translator reads from pipe reader and writes target format SSE to response
+	// safety check - should never trigger but prevents bugs
+	if len(endpoints) == 0 {
+		pr.requestLogger.Error("Streaming pipeline called with zero endpoints - this is a bug")
+		if errorWriter, ok := trans.(translator.ErrorWriter); ok {
+			errorWriter.WriteError(w, fmt.Errorf("no healthy endpoints available"), http.StatusServiceUnavailable)
+		} else {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"type": "error",
+				"error": map[string]interface{}{
+					"type":    "api_error",
+					"message": "No healthy endpoints available",
+				},
+			})
+		}
+		return nil
+	}
+
+	// pipe connects proxy output to translator input
 	pipeReader, pipeWriter := io.Pipe()
 
-	// Create recorder that writes to pipe and captures headers
-	// Headers needed for X-Olla-* observability even during streaming
+	// recorder writes to pipe + captures headers for X-Olla-* observability
 	streamRecorder := newStreamingResponseRecorder(pipeWriter)
 
-	// Start proxy request in background
-	// Runs concurrently with translation process
+	// run proxy in background while translation processes
 	proxyErrChan := make(chan error, 1)
 	go func() {
 		localCtx := ctx
@@ -272,15 +279,12 @@ func (a *Application) executeTranslatedStreamingRequest(
 		if pr.profile != nil && pr.profile.RoutingDecision != nil {
 			pr.stats.RoutingDecision = pr.profile.RoutingDecision
 		}
-
 		err := a.proxyService.ProxyRequestToEndpoints(localCtx, streamRecorder, localR, endpoints, pr.stats, pr.requestLogger)
 		pipeWriter.Close() // Signal end of stream
 		proxyErrChan <- err
 	}()
 
-	// Add panic recovery to prevent goroutine leak
-	// If transformation panics, we must close pipe and drain error channel
-	// to unblock the proxy goroutine before re-panicking
+	// panic recovery prevents goroutine leak, cleanup before re-panic
 	defer func() {
 		if r := recover(); r != nil {
 			// Close both ends of the pipe to unblock the goroutine
@@ -300,23 +304,66 @@ func (a *Application) executeTranslatedStreamingRequest(
 		}
 	}()
 
-	// Wait for headers to be set by proxy before copying them
-	// This avoids data race between header write (proxy) and header read (copy)
+	// wait for headers to avoid data race
 	<-streamRecorder.headersReady
 
-	// Copy Olla observability headers before starting stream
-	// Headers must be written before any body content
+	// handle backend errors before starting sse stream
+	if streamRecorder.status >= 400 {
+		pr.requestLogger.Debug("Backend returned error in streaming mode, translating to target format",
+			"status_code", streamRecorder.status,
+			"translator", trans.Name())
+
+		// Read error response from pipe
+		errorBody, _ := io.ReadAll(pipeReader)
+
+		// Parse OpenAI error format
+		var openaiResp map[string]interface{}
+		if err := json.Unmarshal(errorBody, &openaiResp); err == nil {
+			// Extract error message from OpenAI error structure
+			errorMsg := "Backend error"
+			if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
+				if msg, ok := errObj["message"].(string); ok && msg != "" {
+					errorMsg = msg
+				}
+			}
+
+			// Copy observability headers before writing error
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			a.copyOllaHeaders(streamRecorder, w)
+
+			// Use translator's error formatter if available
+			if errorWriter, ok := trans.(translator.ErrorWriter); ok {
+				errorWriter.WriteError(w, fmt.Errorf("%s", errorMsg), streamRecorder.status)
+				<-proxyErrChan // Wait for proxy goroutine to complete
+				return nil
+			}
+		}
+
+		// fallback to generic error
+		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+		a.copyOllaHeaders(streamRecorder, w)
+		w.WriteHeader(streamRecorder.status)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"type": "error",
+			"error": map[string]interface{}{
+				"type":    "api_error",
+				"message": "Backend returned an error",
+			},
+		})
+		<-proxyErrChan // Wait for proxy goroutine to complete
+		return nil
+	}
+
+	// copy olla headers before stream starts
 	a.copyOllaHeaders(streamRecorder, w)
 
-	// Transform streaming response
-	// Blocks until stream completes or errors
+	// transform stream (blocks until done)
 	transformErr := trans.TransformStreamingResponse(ctx, pipeReader, w, r)
 
 	// Wait for proxy to complete
 	proxyErr := <-proxyErrChan
 
-	// Return first error encountered
-	// Transform errors take precedence as they indicate client-visible issues
+	// return first error, transform errors take precedence
 	if transformErr != nil {
 		return fmt.Errorf("stream transformation failed: %w", transformErr)
 	}
@@ -327,8 +374,7 @@ func (a *Application) executeTranslatedStreamingRequest(
 	return nil
 }
 
-// writeTranslatorError writes error response using translator's error format if available
-// Falls back to generic JSON error if translator doesn't implement ErrorWriter interface
+// write error using translator format or fallback to generic json
 func (a *Application) writeTranslatorError(
 	w http.ResponseWriter,
 	trans translator.RequestTranslator,
@@ -341,14 +387,13 @@ func (a *Application) writeTranslatorError(
 		"error", err.Error(),
 		"status", statusCode)
 
-	// Check if translator implements custom error formatting
-	// This allows each translator to use its API's error schema
+	// use custom error format if translator implements it
 	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
 		errorWriter.WriteError(w, err, statusCode)
 		return
 	}
 
-	// Fallback to generic JSON error
+	// fallback to generic json
 	errorResp := map[string]interface{}{
 		"error": map[string]interface{}{
 			"message": err.Error(),
@@ -364,9 +409,7 @@ func (a *Application) writeTranslatorError(
 	}
 }
 
-// tokenCountHandler creates an HTTP handler for token counting endpoints
-// This enables translators to provide token estimation without proxy overhead
-// Only available for translators that implement the TokenCounter interface
+// token counting handler, only for translators that implement TokenCounter
 func (a *Application) tokenCountHandler(trans translator.RequestTranslator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Check if translator implements token counting
@@ -407,8 +450,7 @@ func (a *Application) tokenCountHandler(trans translator.RequestTranslator) http
 	}
 }
 
-// copyOllaHeaders copies observability headers from recorder to response
-// These headers provide insight into routing decisions and backend selection
+// copy olla observability headers
 func (a *Application) copyOllaHeaders(from headerGetter, to http.ResponseWriter) {
 	ollaHeaders := []string{
 		constants.HeaderXOllaRequestID,
@@ -428,13 +470,12 @@ func (a *Application) copyOllaHeaders(from headerGetter, to http.ResponseWriter)
 	}
 }
 
-// headerGetter abstracts header access for both response types
+// abstract header access for both response types
 type headerGetter interface {
 	Header() http.Header
 }
 
-// responseRecorder captures complete response for non-streaming requests
-// Used when we need to inspect/transform the entire response body
+// captures full response for non-streaming (when we need to inspect/transform)
 type responseRecorder struct {
 	headers http.Header
 	body    *bytes.Buffer
@@ -461,13 +502,13 @@ func (r *responseRecorder) WriteHeader(statusCode int) {
 	r.status = statusCode
 }
 
-// streamingResponseRecorder captures headers while forwarding body to a pipe
-// Used for streaming responses where we need headers but must forward body immediately
+// captures headers while forwarding body to pipe (for streaming)
 type streamingResponseRecorder struct {
 	writer       io.Writer
 	headers      http.Header
-	headersReady chan struct{} // Signals when headers have been written
+	headersReady chan struct{}
 	headerSent   bool
+	status       int
 }
 
 func newStreamingResponseRecorder(w io.Writer) *streamingResponseRecorder {
@@ -475,6 +516,7 @@ func newStreamingResponseRecorder(w io.Writer) *streamingResponseRecorder {
 		headers:      make(http.Header),
 		writer:       w,
 		headersReady: make(chan struct{}),
+		status:       200,
 	}
 }
 
@@ -491,9 +533,10 @@ func (r *streamingResponseRecorder) Write(data []byte) (int, error) {
 }
 
 func (r *streamingResponseRecorder) WriteHeader(statusCode int) {
+	r.status = statusCode // Capture status code to detect backend errors
 	if !r.headerSent {
 		r.headerSent = true
 		close(r.headersReady) // Signal headers are ready
 	}
-	// We don't write status for streaming, just mark headers sent
+	// don't write status for streaming, just mark headers sent
 }

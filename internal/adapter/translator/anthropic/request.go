@@ -11,29 +11,26 @@ import (
 	"github.com/thushan/olla/internal/adapter/translator"
 )
 
-// TransformRequest converts an Anthropic API request to OpenAI format
-// Reads the request body, parses it and transforms messages, tools and parameters
+// convert anthropic format to openai, handles messages/tools/params
 func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
-	// Limit request body size to prevent DoS attacks
-	// Uses configured max_message_size rather than hard-coded constant
+	// limit request body to prevent DOS, uses configured max size
 	limitedBody := io.LimitReader(r.Body, t.maxMessageSize)
 	defer r.Body.Close()
 
-	// Parse Anthropic request using decoder for better memory efficiency and strict validation
+	// use decoder for memory efficiency and strict validation
 	var anthropicReq AnthropicRequest
 	decoder := json.NewDecoder(limitedBody)
-	decoder.DisallowUnknownFields() // Reject requests with unknown fields
+	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&anthropicReq); err != nil {
 		return nil, fmt.Errorf("failed to parse Anthropic request: %w", err)
 	}
 
-	// Validate required fields and parameter ranges
 	if err := anthropicReq.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	// Re-marshal to get the body bytes for the original body
+	// re-marshal to get body bytes for passthrough
 	body, err := json.Marshal(anthropicReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
@@ -91,22 +88,18 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 		OriginalBody:  body,
 		ModelName:     anthropicReq.Model,
 		IsStreaming:   anthropicReq.Stream,
-		TargetPath:    "/v1/chat/completions", // Backend API endpoint (proxy layer handles /olla prefix)
+		TargetPath:    "/v1/chat/completions", // backend endpoint, proxy adds /olla prefix
 		Metadata: map[string]interface{}{
 			"format": "anthropic",
 		},
 	}, nil
 }
 
-// convertMessages transforms Anthropic messages to OpenAI format
-// Injects system prompt as the first message if present
+// convert messages + inject system prompt if present
 func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, systemPrompt interface{}) ([]map[string]interface{}, error) {
-	// Pre-allocate with space for system message
 	openaiMessages := make([]map[string]interface{}, 0, len(anthropicMessages)+1)
 
-	// Add system message first if present
-	// OpenAI expects system prompts as the first message with role="system"
-	// System can be either a string or an array of content blocks
+	// openai wants system as first message, can be string or content blocks
 	if systemPrompt != nil {
 		systemContent := t.convertSystemPrompt(systemPrompt)
 		if systemContent != nil {
@@ -117,7 +110,6 @@ func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, syste
 		}
 	}
 
-	// Convert each Anthropic message
 	for _, msg := range anthropicMessages {
 		converted, err := t.convertSingleMessage(msg)
 		if err != nil {
@@ -129,12 +121,10 @@ func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, syste
 	return openaiMessages, nil
 }
 
-// convertSingleMessage converts one Anthropic message to OpenAI format
-// May produce multiple OpenAI messages (e.g., user message + tool result messages)
+// convert single message, might produce multiple openai messages (eg user + tool results)
 func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]interface{}, error) {
 	result := make([]map[string]interface{}, 0, 2)
 
-	// Handle simple string content
 	if contentStr, ok := msg.Content.(string); ok {
 		if contentStr != "" {
 			result = append(result, map[string]interface{}{
@@ -145,11 +135,9 @@ func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]in
 		return result, nil
 	}
 
-	// Handle array content (complex case with blocks)
-	// Anthropic uses content blocks for rich messages (text, images, tools)
+	// anthropic uses content blocks for rich messages
 	contentBlocks, ok := msg.Content.([]interface{})
 	if !ok {
-		// Try to parse as JSON array if it's a single map
 		if contentMap, ok := msg.Content.(map[string]interface{}); ok {
 			contentBlocks = []interface{}{contentMap}
 		} else {
@@ -157,9 +145,7 @@ func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]in
 		}
 	}
 
-	// Process based on role
-	// User messages may contain text and tool_result blocks
-	// Assistant messages may contain text and tool_use blocks
+	// user msgs can have text + tool results, assistant msgs have text + tool uses
 	if msg.Role == "user" {
 		userMsg, toolMsgs := t.convertUserMessage(contentBlocks)
 		if userMsg != nil {
@@ -176,9 +162,7 @@ func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]in
 	return result, nil
 }
 
-// convertUserMessage processes user message content blocks
-// Separates text content from tool_result blocks
-// Returns a user message and separate tool messages (OpenAI requires separate messages for tool results)
+// split user message into text + tool results (openai needs tool results as separate messages)
 func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interface{}, []map[string]interface{}) {
 	var textParts []string
 	var toolResults []map[string]interface{}
@@ -196,16 +180,14 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 				textParts = append(textParts, text)
 			}
 		case contentTypeToolResult:
-			// Tool results become separate messages in OpenAI format
-			// Map tool_use_id --> tool_call_id
+			// map tool_use_id to tool_call_id
 			toolUseID, _ := blockMap["tool_use_id"].(string)
 
-			// Content can be string or structured - convert to string
+			// content can be string or structured, convert to string
 			content := ""
 			if contentStr, ok := blockMap["content"].(string); ok {
 				content = contentStr
 			} else if contentObj := blockMap["content"]; contentObj != nil {
-				// If content is structured, serialise to JSON
 				if contentBytes, err := json.Marshal(contentObj); err == nil {
 					content = string(contentBytes)
 				}
@@ -217,7 +199,7 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 				"content":      content,
 			})
 		case contentTypeImage:
-			// TODO: Phase 2 - Image support
+			// TODO: image support later
 			t.logger.Debug("Image content not yet supported in Phase 1")
 		}
 	}
@@ -233,8 +215,7 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 	return userMsg, toolResults
 }
 
-// convertAssistantMessage processes assistant message content blocks
-// Combines text content and tool_use blocks into a single OpenAI message
+// combine text + tool uses into single openai message
 func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]interface{} {
 	msg := map[string]interface{}{
 		"role": "assistant",
@@ -263,14 +244,13 @@ func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]in
 		}
 	}
 
-	// Set content - OpenAI expects null when only tool calls present
+	// openai wants null content when only tool calls present
 	if textContent != "" {
 		msg["content"] = textContent
 	} else if len(toolCalls) > 0 {
 		msg["content"] = nil
 	}
 
-	// Set tool calls
 	if len(toolCalls) > 0 {
 		msg["tool_calls"] = toolCalls
 	}
@@ -278,8 +258,7 @@ func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]in
 	return msg
 }
 
-// convertToolUse converts an Anthropic tool_use block to OpenAI tool_call format
-// Maps tool IDs and serialises input parameters to JSON string
+// convert tool_use to openai tool_call format
 func (t *Translator) convertToolUse(block map[string]interface{}) map[string]interface{} {
 	id, _ := block["id"].(string)
 	name, _ := block["name"].(string)
@@ -289,7 +268,7 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 		return nil
 	}
 
-	// Convert input to JSON string (OpenAI expects arguments as JSON string)
+	// openai wants args as json string
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
 		t.logger.Warn("Failed to marshal tool input", "error", err)
@@ -306,10 +285,8 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 	}
 }
 
-// convertSystemPrompt converts Anthropic system prompt to OpenAI format
-// Handles string, []interface{}, and []ContentBlock formats
+// convert system prompt, handles string or content blocks
 func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
-	// Handle string form (simple case)
 	if systemStr, ok := systemPrompt.(string); ok {
 		if systemStr == "" {
 			return nil
@@ -317,8 +294,7 @@ func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
 		return systemStr
 	}
 
-	// Handle strongly-typed []ContentBlock array
-	// This can happen when JSON is unmarshalled into a strongly-typed struct
+	// handle strongly-typed content blocks from json unmarshal
 	if contentBlocks, ok := systemPrompt.([]ContentBlock); ok {
 		var textParts []string
 		for _, block := range contentBlocks {
@@ -332,8 +308,7 @@ func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
 		}
 	}
 
-	// Handle []interface{} array form (content blocks)
-	// Anthropic supports system prompts as arrays of content blocks
+	// handle interface array form
 	if systemBlocks, ok := systemPrompt.([]interface{}); ok {
 		var textParts []string
 		for _, block := range systemBlocks {
@@ -355,6 +330,5 @@ func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
 		}
 	}
 
-	// No valid content found
 	return nil
 }

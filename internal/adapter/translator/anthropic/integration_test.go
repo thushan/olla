@@ -20,12 +20,14 @@ const (
 	ClaudeHaikuModel  = "claude-haiku-4-5-20251001"
 )
 
-// createIntegrationTestLogger creates a logger for integration tests
+// helper for tests to setup logger
 func createIntegrationTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
 	return logger.NewPlainStyledLogger(log)
 }
+
+// test config helper
 func createTestConfig() config.AnthropicTranslatorConfig {
 	return config.AnthropicTranslatorConfig{
 		Enabled:        true,
@@ -33,7 +35,7 @@ func createTestConfig() config.AnthropicTranslatorConfig {
 	}
 }
 
-// createHTTPRequest creates a mock HTTP request from an Anthropic request
+// setup test http request
 func createHTTPRequest(t *testing.T, anthropicReq AnthropicRequest) *http.Request {
 	t.Helper()
 
@@ -46,20 +48,20 @@ func createHTTPRequest(t *testing.T, anthropicReq AnthropicRequest) *http.Reques
 	return req
 }
 
-// simulateBackendResponse creates a mock OpenAI-format backend response
+// mock backend response
 func simulateBackendResponse(content string, toolCalls []map[string]interface{}, finishReason string) map[string]interface{} {
 	message := map[string]interface{}{
 		"role": "assistant",
 	}
 
-	// Set content - null if only tool calls
+	// set content - null if no text, only tool calls
 	if content != "" {
 		message["content"] = content
 	} else if len(toolCalls) > 0 {
 		message["content"] = nil
 	}
 
-	// Add tool calls if present - convert to []interface{} for proper type assertion
+	// convert tool calls to required interface format
 	if len(toolCalls) > 0 {
 		converted := make([]interface{}, len(toolCalls))
 		for i, tc := range toolCalls {
@@ -86,15 +88,12 @@ func simulateBackendResponse(content string, toolCalls []map[string]interface{},
 	}
 }
 
-// TestAnthropicToOpenAIToAnthropic_RoundTrip tests complete request-response cycle
-// Validates that data survives the full transformation pipeline:
-// Anthropic request → OpenAI format → backend response → Anthropic response
 func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("simple_text_conversation", func(t *testing.T) {
-		// 1. Create Anthropic request
+		// setup test request
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
 			MaxTokens: 1024,
@@ -106,12 +105,12 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 			},
 		}
 
-		// 2. Transform request to OpenAI format
+		// transform to openai for backend
 		httpReq := createHTTPRequest(t, anthropicReq)
 		transformed, err := translator.TransformRequest(ctx, httpReq)
 		require.NoError(t, err, "Request transformation should succeed")
 
-		// 3. Verify OpenAI request format
+		// verify backend request format
 		assert.Equal(t, ClaudeSonnetModel, transformed.ModelName)
 		assert.False(t, transformed.IsStreaming)
 		assert.Equal(t, MessageFormat, transformed.Metadata["format"])
@@ -371,9 +370,6 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 	})
 }
 
-// TestAnthropicToolCalling_RoundTrip tests complete tool calling workflow
-// Validates the full tool calling cycle:
-// Request with tools → OpenAI format → Response with tool_use → Final assistant reply
 func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
@@ -827,8 +823,6 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	})
 }
 
-// TestAnthropicEdgeCases_RoundTrip tests edge cases and error scenarios
-// Validates that the translator handles unusual inputs gracefully
 func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
@@ -1035,7 +1029,6 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 	})
 }
 
-// TestAnthropicModelPreservation tests that model names are preserved through the round-trip
 func TestAnthropicModelPreservation(t *testing.T) {
 	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
@@ -1077,7 +1070,6 @@ func TestAnthropicModelPreservation(t *testing.T) {
 	}
 }
 
-// TestAnthropicUsageTracking tests that token usage is correctly tracked
 func TestAnthropicUsageTracking(t *testing.T) {
 	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
 	ctx := context.Background()
