@@ -123,7 +123,7 @@ Before starting, ensure you have:
    - Verify: `crush --version`
 
 2. **Olla Running**
-   - Installed and configured (see [Installation Guide](../../installation.md))
+   - Installed and configured (see [Installation Guide](../../getting-started/installation.md))
    - Both OpenAI and Anthropic endpoints enabled (default)
 
 3. **At Least One Backend**
@@ -1077,8 +1077,8 @@ logging:
 
 ### Integration Examples
 
-- **[Crush CLI + vLLM Example](../../../../examples/crush-vllm/)** - High-performance backend setup
-- **[Claude Code + Ollama Example](../../../../examples/claude-code-ollama/)** - Alternative CLI assistant
+- **[Crush CLI + vLLM Example](https://github.com/thushan/olla/tree/main/examples/crush-vllm/)** - High-performance backend setup
+- **[Claude Code + Ollama Example](https://github.com/thushan/olla/tree/main/examples/claude-code-ollama/)** - Alternative CLI assistant
 - **[OpenCode Integration](opencode.md)** - Predecessor to Crush CLI
 
 ### Backend Guides
@@ -1090,8 +1090,8 @@ logging:
 ### Advanced Topics
 
 - **[Health Checking](../../concepts/health-checking.md)** - Endpoint monitoring
-- **[Circuit Breaking](../../concepts/circuit-breaking.md)** - Failure handling
-- **[Statistics Collection](../../concepts/statistics.md)** - Performance metrics
+- **[Circuit Breaking](../../development/circuit-breaker.md)** - Failure handling
+- **[Provider Metrics](../../concepts/provider-metrics.md)** - Performance metrics
 
 ---
 

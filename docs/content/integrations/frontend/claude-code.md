@@ -124,7 +124,7 @@ Before starting, ensure you have:
 
 2. **Olla Running**
 
-      * Installed and configured (see [Installation Guide](../../installation.md))
+      * Installed and configured (see [Installation Guide](../../getting-started/installation.md))
       * Anthropic translation enabled (see `config.yaml`)
 
 3. **At Least One Backend**
@@ -872,8 +872,8 @@ logging:
 
 ### Integration Examples
 
-- **[Claude Code + Ollama Example](../../../../examples/claude-code-ollama/)** - Complete Docker setup
-- **[Claude Code + llama.cpp Example](../../../../examples/claude-code-llamacpp/)** - Lightweight backend
+- **[Claude Code + Ollama Example](https://github.com/thushan/olla/tree/main/examples/claude-code-ollama/)** - Complete Docker setup
+- **[Claude Code + llama.cpp Example](https://github.com/thushan/olla/tree/main/examples/claude-code-llamacpp/)** - Lightweight backend
 - **[OpenCode Integration](opencode.md)** - Alternative AI coding assistant
 - **[Crush CLI Integration](crush-cli.md)** - Terminal AI assistant
 
@@ -886,8 +886,8 @@ logging:
 ### Advanced Topics
 
 - **[Health Checking](../../concepts/health-checking.md)** - Endpoint monitoring
-- **[Circuit Breaking](../../concepts/circuit-breaking.md)** - Failure handling
-- **[Statistics Collection](../../concepts/statistics.md)** - Performance metrics
+- **[Circuit Breaking](../../development/circuit-breaker.md)** - Failure handling
+- **[Provider Metrics](../../concepts/provider-metrics.md)** - Performance metrics
 
 ---
 

@@ -126,7 +126,7 @@ Before starting, ensure you have:
    - Install via: `npm install -g @sst/opencode` (check SST documentation for current method)
 
 2. **Olla Running**
-   - Installed and configured (see [Installation Guide](../../installation.md))
+   - Installed and configured (see [Installation Guide](../../getting-started/installation.md))
    - Both OpenAI and Anthropic endpoints available (default configuration)
 
 3. **At Least One Backend**
@@ -183,7 +183,7 @@ volumes:
     driver: local
 ```
 
-> **Note**: LM Studio may not have an official Docker image. See the [example directory](../../../../examples/opencode-lmstudio/) for alternative setup methods, or substitute with Ollama if preferred.
+> **Note**: LM Studio may not have an official Docker image. See the [example directory](https://github.com/thushan/olla/tree/main/examples/opencode-lmstudio/) for alternative setup methods, or substitute with Ollama if preferred.
 
 Create **`olla.yaml`**:
 
@@ -973,8 +973,8 @@ logging:
 
 ### Integration Examples
 
-- **[OpenCode + LM Studio Example](../../../../examples/opencode-lmstudio/)** - Complete setup (if available)
-- **[Claude Code + Ollama Example](../../../../examples/claude-code-ollama/)** - Similar setup pattern
+- **[OpenCode + LM Studio Example](https://github.com/thushan/olla/tree/main/examples/opencode-lmstudio/)** - Complete setup (if available)
+- **[Claude Code + Ollama Example](https://github.com/thushan/olla/tree/main/examples/claude-code-ollama/)** - Similar setup pattern
 - **[Claude Code Integration](claude-code.md)** - Official Anthropic CLI
 - **[Crush CLI Integration](crush-cli.md)** - Modern terminal assistant
 
@@ -987,8 +987,8 @@ logging:
 ### Advanced Topics
 
 - **[Health Checking](../../concepts/health-checking.md)** - Endpoint monitoring
-- **[Circuit Breaking](../../concepts/circuit-breaking.md)** - Failure handling
-- **[Statistics Collection](../../concepts/statistics.md)** - Performance metrics
+- **[Circuit Breaking](../../development/circuit-breaker.md)** - Failure handling
+- **[Provider Metrics](../../concepts/provider-metrics.md)** - Performance metrics
 
 ---
 
