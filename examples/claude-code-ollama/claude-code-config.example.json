@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.claude.com/schema/config.json",
+  "api": {
+    "baseURL": "http://localhost:40114/olla/anthropic/v1",
+    "apiKey": "not-required"
+  },
+  "models": {
+    "default": "llama3.2:latest"
+  },
+  "system": {
+    "prompt": "You are a helpful coding assistant. Provide clear, concise, and correct code examples."
+  }
+}

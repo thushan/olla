@@ -1,0 +1,100 @@
+# Olla Configuration for OpenCode + LM Studio Integration
+# This configuration enables both OpenAI and Anthropic API formats
+# for use with OpenCode via LM Studio running on the host machine.
+
+server:
+  host: "0.0.0.0"
+  port: 40114
+  read_timeout: 30s
+  write_timeout: 0s # For LLM streaming, leave this as 0s
+  shutdown_timeout: 10s
+  request_logging: true
+  request_limits:
+    max_body_size: 52428800  # 50MB
+    max_header_size: 524288  # 512KB
+  rate_limits:
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 100
+    health_requests_per_minute: 1000
+    burst_size: 50
+    per_endpoint:
+      default_requests_per_minute: 200
+    cleanup_interval: 5m
+    trust_proxy_headers: false
+    trusted_proxy_cidrs: [
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16"
+    ]
+
+proxy:
+  engine: "sherpa" # Available: sherpa, olla
+  connection_timeout: 40s
+  response_timeout: 900s  # 15 minutes for longer generations
+  read_timeout: 300s
+  max_retries: 3
+  retry_backoff: 500ms
+  load_balancer: "priority" # Available: round-robin, least-connections, priority
+  stream_buffer_size: 8192
+
+discovery:
+  type: "static"
+  refresh_interval: 30s
+  static:
+    endpoints:
+      # LM Studio endpoint - adjust URL based on your platform
+      #
+      # Windows/Mac: Use host.docker.internal
+      - url: "http://host.docker.internal:1234"
+        name: "lm-studio"
+        type: "lmstudio"
+        priority: 100
+        model_url: "/api/v0/models"
+        health_check_url: "/v1/models"
+        check_interval: 2s
+        check_timeout: 1s
+
+      # Linux: Use Docker bridge IP (uncomment and comment above if on Linux)
+      # - url: "http://172.17.0.1:1234"
+      #   name: "lm-studio"
+      #   type: "lmstudio"
+      #   priority: 100
+      #   model_url: "/api/v0/models"
+      #   health_check_url: "/v1/models"
+      #   check_interval: 2s
+      #   check_timeout: 1s
+
+      # Note: LM Studio typically runs on port 1234
+      # Ensure LM Studio server is enabled in Settings → Server → Start Server
+
+  model_discovery:
+    enabled: true
+    interval: 5m
+    timeout: 30s
+    concurrent_workers: 5
+    retry_attempts: 3
+    retry_backoff: 1s
+
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  unification:
+    enabled: true
+    stale_threshold: 24h  # How long to keep models in memory after last seen
+    cleanup_interval: 10m  # How often to check for stale models
+
+# Anthropic translator configuration
+# This enables OpenCode to use the Anthropic Messages API format
+translators:
+  anthropic:
+    enabled: true
+    max_message_size: 10485760  # 10MB - Anthropic API limit
+
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json"  # json, text
+  output: "stdout"  # stdout, file
+
+engineering:
+  show_nerdstats: false

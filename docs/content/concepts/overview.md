@@ -82,6 +82,28 @@ Real-time performance metrics extraction:
 
 Provider metrics give insights into model performance and resource usage.
 
+## [API Translation](api-translation.md)
+
+Format translation between different LLM APIs.
+
+### What You'll Learn
+
+- How Olla translates between API formats
+- Request and response transformation
+- Streaming translation
+- Performance characteristics
+
+### Key Concepts
+
+- **Format Bridging**: Enable clients and backends with different APIs to work together
+- **Transparent Translation**: Automatic request/response conversion
+- **Full Feature Support**: Streaming, tool use, vision support
+- **Minimal Overhead**: <5ms translation latency
+
+API translation allows Claude-compatible clients like Claude Code to work with any OpenAI-compatible backend through Olla.
+
+**Related**: [Anthropic Messages API](../api-reference/anthropic.md), [Anthropic Translation Setup](../integrations/api-translation/anthropic.md)
+
 ## How Components Work Together
 
 ```mermaid

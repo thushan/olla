@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -147,15 +148,13 @@ func (s *HTTPService) Start(ctx context.Context) error {
 			"writeTimeout", writeTimeout,
 			"idleTimeout", idleTimeout)
 
-		if err := s.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("HTTP server error", "error", err)
+		if serr := s.server.ListenAndServe(); serr != nil && !errors.Is(serr, http.ErrServerClosed) {
+			s.logger.Error("HTTP server error", "error", serr)
 		}
 	}()
 
-	// Brief pause ensures the listener is established before returning
 	time.Sleep(100 * time.Millisecond)
 
-	// Signal readiness - critical for operations teams monitoring startup
 	s.logger.Info("Olla started, waiting for requests...", "bind", s.server.Addr)
 
 	return nil

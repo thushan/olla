@@ -11,15 +11,16 @@ import (
 )
 
 type VersionResponse struct {
-	API               APIInfo           `json:"api"`
-	Links             map[string]string `json:"links"`
-	Build             BuildInfo         `json:"build"`
-	Name              string            `json:"name"`
-	Version           string            `json:"version"`
-	Edition           string            `json:"edition"`
-	Description       string            `json:"description"`
-	Capabilities      []string          `json:"capabilities"`
-	SupportedBackends []string          `json:"supported_backends"`
+	API                      APIInfo           `json:"api"`
+	Links                    map[string]string `json:"links"`
+	Build                    BuildInfo         `json:"build"`
+	Name                     string            `json:"name"`
+	Version                  string            `json:"version"`
+	Edition                  string            `json:"edition"`
+	Description              string            `json:"description"`
+	Capabilities             []string          `json:"capabilities"`
+	ExperimentalCapabilities []string          `json:"capabilities_experimental"`
+	SupportedBackends        []string          `json:"supported_backends"`
 }
 
 type BuildInfo struct {
@@ -47,8 +48,9 @@ func (a *Application) versionHandler(w http.ResponseWriter, r *http.Request) {
 			GoVersion: version.Runtime,
 			Platform:  runtime.GOOS + "/" + runtime.GOARCH,
 		},
-		Capabilities:      version.Capabilities,
-		SupportedBackends: version.SupportedBackends,
+		Capabilities:             version.Capabilities,
+		SupportedBackends:        version.SupportedBackends,
+		ExperimentalCapabilities: version.ExperimentalCapabilities,
 		API: APIInfo{
 			Version: "v1",
 			Endpoints: map[string]string{

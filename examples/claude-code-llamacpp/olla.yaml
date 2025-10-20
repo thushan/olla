@@ -1,0 +1,45 @@
+# Olla Configuration for Claude Code + llama.cpp Integration
+
+server:
+  host: 0.0.0.0
+  port: 40114
+
+proxy:
+  engine: olla              # High-performance engine
+  load_balancer: priority
+  stream_buffer_size: 8192
+  response_timeout: 300s
+  read_timeout: 60s
+
+# Enable Anthropic Messages API translation
+translators:
+  anthropic:
+    enabled: true
+    max_message_size: 10485760
+
+# llama.cpp backend discovery
+discovery:
+  type: static
+  static:
+    endpoints:
+      - url: "http://llama-cpp:8080"
+        name: "local-llamacpp"
+        type: "llamacpp"
+        priority: 100
+        model_url: "/v1/models"      # OpenAI-compatible endpoint
+        health_check_url: "/health"  # llama.cpp health endpoint
+        check_interval: 2s
+        check_timeout: 1s
+
+model_registry:
+  enable_unifier: true
+
+security:
+  rate_limit:
+    enabled: true
+    requests_per_minute: 100
+    burst: 50
+
+logging:
+  level: "info"
+  format: "json"
