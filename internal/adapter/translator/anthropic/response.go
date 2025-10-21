@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
+
+	"github.com/thushan/olla/internal/util"
 )
 
 // convert openai response to anthropic format
@@ -144,7 +146,8 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 			"tool", name,
 			"tool_id", id,
 			"error", err,
-			"raw_arguments", argsStr)
+			"raw_arguments", util.TruncateString(argsStr, util.DefaultTruncateLengthPII),
+			"raw_arguments_len", len(argsStr))
 		input = make(map[string]interface{})
 	}
 

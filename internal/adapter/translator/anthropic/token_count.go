@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,11 +13,24 @@ import (
 
 // token estimation for claude code compatibility
 func (t *Translator) CountTokens(ctx context.Context, r *http.Request) (*translator.TokenCountResponse, error) {
-	// read and parse body
-	body, err := io.ReadAll(r.Body)
+	// bounded read to prevent OOM attacks
+	// read up to maxMessageSize + 1 to detect oversized requests
+	limitedReader := io.LimitReader(r.Body, t.maxMessageSize+1)
+	body, err := io.ReadAll(limitedReader)
 	if err != nil {
+		// close the original body even on error
+		_ = r.Body.Close()
 		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
+
+	// detect oversized requests
+	if int64(len(body)) > t.maxMessageSize {
+		_ = r.Body.Close()
+		return nil, fmt.Errorf("request body exceeds maximum size of %d bytes", t.maxMessageSize)
+	}
+
+	// reset body for downstream handlers to re-read
+	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	var req AnthropicRequest
 	if err := json.Unmarshal(body, &req); err != nil {
@@ -68,7 +82,28 @@ func countSystemChars(system interface{}) int {
 		return len(systemStr)
 	}
 
-	// content block array handling
+	// typed content block array handling
+	if systemBlocks, ok := system.([]ContentBlock); ok {
+		totalChars := 0
+		for _, block := range systemBlocks {
+			totalChars += countTypedContentBlockChars(&block)
+		}
+		return totalChars
+	}
+
+	// pointer to typed content block array handling
+	if systemBlocksPtr, ok := system.(*[]ContentBlock); ok {
+		if systemBlocksPtr != nil {
+			totalChars := 0
+			for _, block := range *systemBlocksPtr {
+				totalChars += countTypedContentBlockChars(&block)
+			}
+			return totalChars
+		}
+		return 0
+	}
+
+	// untyped content block array handling
 	if systemBlocks, ok := system.([]interface{}); ok {
 		totalChars := 0
 		for _, block := range systemBlocks {
@@ -167,6 +202,18 @@ func countTypedContentBlockChars(block *ContentBlock) int {
 		// content as string or nested blocks
 		if content, ok := block.Content.(string); ok {
 			totalChars += len(content)
+		} else if contentBlocks, ok := block.Content.([]ContentBlock); ok {
+			// typed content block array
+			for _, nestedBlock := range contentBlocks {
+				totalChars += countTypedContentBlockChars(&nestedBlock)
+			}
+		} else if contentBlocksPtr, ok := block.Content.(*[]ContentBlock); ok {
+			// pointer to typed content block array
+			if contentBlocksPtr != nil {
+				for _, nestedBlock := range *contentBlocksPtr {
+					totalChars += countTypedContentBlockChars(&nestedBlock)
+				}
+			}
 		}
 
 	case contentTypeToolUse:

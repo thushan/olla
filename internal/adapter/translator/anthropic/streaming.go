@@ -10,12 +10,14 @@ import (
 	"strings"
 
 	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/util"
 )
 
 // tracks state while streaming - buffers partial data, blocks in progress
 type StreamingState struct {
 	currentBlock     *ContentBlock
-	toolCallBuffers  map[string]*strings.Builder
+	toolCallBuffers  map[int]*strings.Builder // keyed by tool index, avoids string formatting overhead
+	toolIndexToBlock map[int]int              // maps tool index to content block index for finalisation
 	messageID        string
 	model            string
 	lastFinishReason string
@@ -36,9 +38,10 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 	rc := http.NewResponseController(w)
 
 	state := &StreamingState{
-		messageID:       t.generateMessageID(),
-		contentBlocks:   make([]ContentBlock, 0, 4),
-		toolCallBuffers: make(map[string]*strings.Builder),
+		messageID:        t.generateMessageID(),
+		contentBlocks:    make([]ContentBlock, 0, 4),
+		toolCallBuffers:  make(map[int]*strings.Builder),
+		toolIndexToBlock: make(map[int]int),
 	}
 
 	// sync streaming for now (async needs more work for agent workflows)
@@ -70,6 +73,11 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 // process stream using blocking scanner, safer and simpler
 func (t *Translator) transformStreamingSync(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, rc *http.ResponseController, state *StreamingState) error {
 	scanner := bufio.NewScanner(openaiStream)
+	// allow large deltas and tool arg chunks, prevents "token too long" errors
+	// initial buffer 64 KiB, max 1 MiB per SSE line (handles large tool arguments)
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1<<20)
+
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
@@ -105,7 +113,8 @@ func (t *Translator) processStreamLine(line string, state *StreamingState, w htt
 	var chunk map[string]interface{}
 	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
 		// log bad chunks but keep going, partial responses better than nothing
-		t.logger.Warn("Malformed chunk encountered, skipping", "error", err, "data", data)
+		t.logger.Warn("Malformed chunk encountered, skipping", "error", err,
+			"data", util.TruncateString(data, util.DefaultTruncateLengthPII), "data_len", len(data))
 		return nil
 	}
 
@@ -236,6 +245,114 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 	return nil
 }
 
+// toolCallData holds extracted and validated tool call information
+type toolCallData struct {
+	id        string
+	name      string
+	arguments string
+	toolIndex int
+}
+
+// extractToolCallData validates and extracts data from a tool call delta
+func extractToolCallData(tc interface{}) (*toolCallData, bool) {
+	toolCall, ok := tc.(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+
+	index, _ := toolCall["index"].(float64)
+	toolIndex := int(index)
+
+	function, ok := toolCall["function"].(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
+
+	data := &toolCallData{
+		toolIndex: toolIndex,
+	}
+
+	// extract optional fields
+	if id, ok := toolCall["id"].(string); ok {
+		data.id = id
+	}
+	if name, ok := function["name"].(string); ok {
+		data.name = name
+	}
+	if args, ok := function["arguments"].(string); ok {
+		data.arguments = args
+	}
+
+	return data, true
+}
+
+// closeCurrentBlockIfNeeded closes the current block if it exists and matches the given type
+func (t *Translator) closeCurrentBlockIfNeeded(state *StreamingState, blockType string, w http.ResponseWriter, rc *http.ResponseController) error {
+	if state.currentBlock != nil && state.currentBlock.Type == blockType {
+		if err := t.writeEvent(w, "content_block_stop", map[string]interface{}{
+			"type":  "content_block_stop",
+			"index": state.currentIndex,
+		}); err != nil {
+			return err
+		}
+		if err := rc.Flush(); err != nil {
+			return fmt.Errorf("flush failed: %w", err)
+		}
+	}
+	return nil
+}
+
+// initializeToolBlock creates and sends a new tool_use block start event
+func (t *Translator) initializeToolBlock(id, name string, toolIndex int, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
+	// close current text block before starting tool block, anthropic requires this
+	if err := t.closeCurrentBlockIfNeeded(state, contentTypeText, w, rc); err != nil {
+		return err
+	}
+
+	state.currentBlock = &ContentBlock{
+		Type: contentTypeToolUse,
+		ID:   id,
+		Name: name,
+	}
+	state.currentIndex = len(state.contentBlocks)
+	state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
+
+	// track which content block this tool index maps to for finalisation
+	state.toolIndexToBlock[toolIndex] = state.currentIndex
+
+	if err := t.writeEvent(w, "content_block_start", map[string]interface{}{
+		"type":  "content_block_start",
+		"index": state.currentIndex,
+		"content_block": map[string]interface{}{
+			"type": contentTypeToolUse,
+			"id":   id,
+			"name": name,
+		},
+	}); err != nil {
+		return err
+	}
+
+	return rc.Flush()
+}
+
+// sendToolArgumentsDelta buffers and sends a partial_json delta for tool arguments
+func (t *Translator) sendToolArgumentsDelta(args string, toolIndex int, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
+	state.toolCallBuffers[toolIndex].WriteString(args)
+
+	if err := t.writeEvent(w, "content_block_delta", map[string]interface{}{
+		"type":  "content_block_delta",
+		"index": state.currentIndex,
+		"delta": map[string]interface{}{
+			"type":         "input_json_delta",
+			"partial_json": args,
+		},
+	}); err != nil {
+		return err
+	}
+
+	return rc.Flush()
+}
+
 // process tool call deltas, buffers partial json args
 func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
 	if err := t.ensureMessageStartSent(state, w, rc); err != nil {
@@ -243,69 +360,27 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 	}
 
 	for _, tc := range toolCalls {
-		toolCall, ok := tc.(map[string]interface{})
+		data, ok := extractToolCallData(tc)
 		if !ok {
 			continue
 		}
 
-		index, _ := toolCall["index"].(float64)
-		toolIndex := int(index)
-
-		// need buffer since args come in chunks but need complete json eventually
-		toolID := fmt.Sprintf("tool_%d", toolIndex)
-		if _, exists := state.toolCallBuffers[toolID]; !exists {
-			state.toolCallBuffers[toolID] = &strings.Builder{}
-		}
-
-		function, ok := toolCall["function"].(map[string]interface{})
-		if !ok {
-			continue
+		// initialise buffer if first time seeing this tool index
+		if _, exists := state.toolCallBuffers[data.toolIndex]; !exists {
+			state.toolCallBuffers[data.toolIndex] = &strings.Builder{}
 		}
 
 		// start block when we get id + name
-		if id, ok := toolCall["id"].(string); ok {
-			if name, ok := function["name"].(string); ok {
-				state.currentBlock = &ContentBlock{
-					Type: contentTypeToolUse,
-					ID:   id,
-					Name: name,
-				}
-				state.currentIndex = len(state.contentBlocks)
-				state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
-
-				if err := t.writeEvent(w, "content_block_start", map[string]interface{}{
-					"type":  "content_block_start",
-					"index": state.currentIndex,
-					"content_block": map[string]interface{}{
-						"type": contentTypeToolUse,
-						"id":   id,
-						"name": name,
-					},
-				}); err != nil {
-					return err
-				}
-				if err := rc.Flush(); err != nil {
-					return fmt.Errorf("flush failed: %w", err)
-				}
+		if data.id != "" && data.name != "" {
+			if err := t.initializeToolBlock(data.id, data.name, data.toolIndex, state, w, rc); err != nil {
+				return err
 			}
 		}
 
 		// buffer args chunks and send as partial_json
-		if args, ok := function["arguments"].(string); ok && args != "" {
-			state.toolCallBuffers[toolID].WriteString(args)
-
-			if err := t.writeEvent(w, "content_block_delta", map[string]interface{}{
-				"type":  "content_block_delta",
-				"index": state.currentIndex,
-				"delta": map[string]interface{}{
-					"type":         "input_json_delta",
-					"partial_json": args,
-				},
-			}); err != nil {
+		if data.arguments != "" {
+			if err := t.sendToolArgumentsDelta(data.arguments, data.toolIndex, state, w, rc); err != nil {
 				return err
-			}
-			if err := rc.Flush(); err != nil {
-				return fmt.Errorf("flush failed: %w", err)
 			}
 		}
 	}
@@ -328,19 +403,28 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 		}
 	}
 
-	// parse buffered json args into objects
-	for toolID, builder := range state.toolCallBuffers {
+	// parse buffered json args into objects using the tool index mapping
+	for toolIndex, builder := range state.toolCallBuffers {
 		argsJSON := builder.String()
 		if argsJSON != "" {
 			var input map[string]interface{}
 			if err := json.Unmarshal([]byte(argsJSON), &input); err == nil {
-				// find matching tool block and update it
-				for i := range state.contentBlocks {
-					if state.contentBlocks[i].Type == contentTypeToolUse &&
-						fmt.Sprintf("tool_%d", i) == toolID {
-						state.contentBlocks[i].Input = input
-						break
+				// use mapping to find the correct block, avoids linear search
+				if blockIndex, found := state.toolIndexToBlock[toolIndex]; found {
+					// validate block type before updating to catch any state inconsistencies
+					if state.contentBlocks[blockIndex].Type != contentTypeToolUse {
+						t.logger.Error("Tool index maps to non-tool block",
+							"tool_index", toolIndex,
+							"block_index", blockIndex,
+							"block_type", state.contentBlocks[blockIndex].Type)
+						continue
 					}
+					state.contentBlocks[blockIndex].Input = input
+				} else {
+					// shouldn't happen if state is consistent, log for debugging
+					t.logger.Error("Tool index not found in mapping",
+						"tool_index", toolIndex,
+						"available_mappings", len(state.toolIndexToBlock))
 				}
 			}
 		}

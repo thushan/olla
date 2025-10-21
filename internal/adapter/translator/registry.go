@@ -29,9 +29,18 @@ func (r *Registry) Register(name string, translator RequestTranslator) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if translator == nil {
+		r.logger.Error("Attempted to register nil translator, ignoring")
+		return
+	}
+
 	if name == "" {
 		r.logger.Warn("Attempted to register translator with empty name, using translator.Name() instead")
 		name = translator.Name()
+		if name == "" {
+			r.logger.Error("Translator has empty name, cannot register")
+			return
+		}
 	}
 
 	// Log if we're overwriting an existing translator - might indicate a config issue

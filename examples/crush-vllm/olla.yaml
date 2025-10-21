@@ -42,12 +42,7 @@ proxy:
 translators:
   anthropic:
     enabled: true
-    # Anthropic-specific configuration
-    version: "2023-06-01"
-    # Map Anthropic system messages to OpenAI format
-    system_message_handling: "prepend"  # Options: prepend, append, merge
-    # Handle max_tokens requirement (Anthropic requires it)
-    default_max_tokens: 4096
+    max_message_size: 10485760      # 10MB max request size
 
 discovery:
   type: "static"

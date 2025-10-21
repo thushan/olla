@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/thushan/olla/internal/config"
+	"io"
 	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/logger"
 )
 
@@ -1143,5 +1144,455 @@ func TestAnthropicUsageTracking(t *testing.T) {
 		resp := anthropicResp.(AnthropicResponse)
 		assert.Equal(t, 0, resp.Usage.InputTokens)
 		assert.Equal(t, 0, resp.Usage.OutputTokens)
+	})
+}
+
+// BenchmarkTransformRequest measures the performance of transforming Anthropic requests to OpenAI format.
+func BenchmarkTransformRequest(b *testing.B) {
+	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
+	ctx := context.Background()
+
+	b.Run("simple_text_request", func(b *testing.B) {
+		// Setup: Create a representative simple text request
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages: []AnthropicMessage{
+				{
+					Role:    "user",
+					Content: "Hello, how are you?",
+				},
+			},
+		}
+
+		body, _ := json.Marshal(anthropicReq)
+		req, _ := http.NewRequest("POST", "/v1/messages", nil)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			_, err := translator.TransformRequest(ctx, req)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("multi_turn_conversation", func(b *testing.B) {
+		// Setup: Create a multi-turn conversation request
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeOpusModel,
+			MaxTokens: 2048,
+			Messages: []AnthropicMessage{
+				{
+					Role:    "user",
+					Content: "What is the capital of France?",
+				},
+				{
+					Role:    "assistant",
+					Content: "The capital of France is Paris.",
+				},
+				{
+					Role:    "user",
+					Content: "What about Germany?",
+				},
+			},
+		}
+
+		body, _ := json.Marshal(anthropicReq)
+		req, _ := http.NewRequest("POST", "/v1/messages", nil)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			_, err := translator.TransformRequest(ctx, req)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("with_system_prompt_and_params", func(b *testing.B) {
+		// Setup: Create request with system prompt and optional parameters
+		temp := 0.7
+		topP := 0.9
+
+		anthropicReq := AnthropicRequest{
+			Model:         ClaudeSonnetModel,
+			MaxTokens:     2048,
+			System:        "You are a helpful assistant that speaks like a pirate.",
+			Temperature:   &temp,
+			TopP:          &topP,
+			StopSequences: []string{"END", "STOP"},
+			Messages: []AnthropicMessage{
+				{
+					Role:    "user",
+					Content: "Count to 5",
+				},
+			},
+		}
+
+		body, _ := json.Marshal(anthropicReq)
+		req, _ := http.NewRequest("POST", "/v1/messages", nil)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			_, err := translator.TransformRequest(ctx, req)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("with_tool_definitions", func(b *testing.B) {
+		// Setup: Create request with tool definitions
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages: []AnthropicMessage{
+				{
+					Role:    "user",
+					Content: "What's the weather in Melbourne?",
+				},
+			},
+			Tools: []AnthropicTool{
+				{
+					Name:        "get_weather",
+					Description: "Get current weather for a location",
+					InputSchema: map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"location": map[string]interface{}{
+								"type":        "string",
+								"description": "City name",
+							},
+							"unit": map[string]interface{}{
+								"type": "string",
+								"enum": []string{"celsius", "fahrenheit"},
+							},
+						},
+						"required": []string{"location"},
+					},
+				},
+			},
+			ToolChoice: "auto",
+		}
+
+		body, _ := json.Marshal(anthropicReq)
+		req, _ := http.NewRequest("POST", "/v1/messages", nil)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			_, err := translator.TransformRequest(ctx, req)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("complex_content_blocks", func(b *testing.B) {
+		// Setup: Create request with multiple content blocks
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages: []AnthropicMessage{
+				{
+					Role: "user",
+					Content: []interface{}{
+						map[string]interface{}{
+							"type": "text",
+							"text": "First part ",
+						},
+						map[string]interface{}{
+							"type": "text",
+							"text": "second part",
+						},
+					},
+				},
+			},
+		}
+
+		body, _ := json.Marshal(anthropicReq)
+		req, _ := http.NewRequest("POST", "/v1/messages", nil)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			_, err := translator.TransformRequest(ctx, req)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+// BenchmarkTransformResponse measures the performance of transforming OpenAI responses to Anthropic format.
+func BenchmarkTransformResponse(b *testing.B) {
+	translator := NewTranslator(createIntegrationTestLogger(), createTestConfig())
+	ctx := context.Background()
+
+	b.Run("simple_text_response", func(b *testing.B) {
+		// Setup: Create a simple request and response
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages:  []AnthropicMessage{{Role: "user", Content: "Hello"}},
+		}
+
+		httpReq, _ := http.NewRequest("POST", "/v1/messages", nil)
+		body, _ := json.Marshal(anthropicReq)
+		httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+		backendResp := simulateBackendResponse(
+			"I'm doing well, thank you for asking! How can I help you today?",
+			nil,
+			"stop",
+		)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("response_with_single_tool_call", func(b *testing.B) {
+		// Setup: Create request and response with tool call
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages:  []AnthropicMessage{{Role: "user", Content: "Get weather"}},
+		}
+
+		httpReq, _ := http.NewRequest("POST", "/v1/messages", nil)
+		body, _ := json.Marshal(anthropicReq)
+		httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+		toolCall := map[string]interface{}{
+			"id":   "call_weather_123",
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":      "get_weather",
+				"arguments": `{"location":"Melbourne","unit":"celsius"}`,
+			},
+		}
+
+		backendResp := simulateBackendResponse(
+			"Let me check the weather for you.",
+			[]map[string]interface{}{toolCall},
+			"tool_calls",
+		)
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("response_with_multiple_tool_calls", func(b *testing.B) {
+		// Setup: Create response with multiple simultaneous tool calls
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages:  []AnthropicMessage{{Role: "user", Content: "Get info"}},
+		}
+
+		httpReq, _ := http.NewRequest("POST", "/v1/messages", nil)
+		body, _ := json.Marshal(anthropicReq)
+		httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+		toolCalls := []map[string]interface{}{
+			{
+				"id":   "call_1",
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":      "get_weather",
+					"arguments": `{"location":"NYC"}`,
+				},
+			},
+			{
+				"id":   "call_2",
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":      "get_time",
+					"arguments": `{"timezone":"EST"}`,
+				},
+			},
+		}
+
+		backendResp := simulateBackendResponse("Gathering information.", toolCalls, "tool_calls")
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("response_with_complex_tool_arguments", func(b *testing.B) {
+		// Setup: Create response with complex nested tool arguments
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages:  []AnthropicMessage{{Role: "user", Content: "Process data"}},
+		}
+
+		httpReq, _ := http.NewRequest("POST", "/v1/messages", nil)
+		body, _ := json.Marshal(anthropicReq)
+		httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+		complexArgs := map[string]interface{}{
+			"filters": map[string]interface{}{
+				"category": "electronics",
+				"price_range": map[string]interface{}{
+					"min": 100,
+					"max": 500,
+				},
+			},
+			"sort": "price_asc",
+			"tags": []string{"sale", "featured"},
+		}
+		argsJSON, _ := json.Marshal(complexArgs)
+
+		toolCall := map[string]interface{}{
+			"id":   "call_complex",
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":      "process_data",
+				"arguments": string(argsJSON),
+			},
+		}
+
+		backendResp := simulateBackendResponse("Processing", []map[string]interface{}{toolCall}, "tool_calls")
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("response_with_usage_tracking", func(b *testing.B) {
+		// Setup: Create response with usage data
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages:  []AnthropicMessage{{Role: "user", Content: "Count tokens"}},
+		}
+
+		httpReq, _ := http.NewRequest("POST", "/v1/messages", nil)
+		body, _ := json.Marshal(anthropicReq)
+		httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+		backendResp := map[string]interface{}{
+			"id":    "chatcmpl-usage",
+			"model": ClaudeSonnetModel,
+			"choices": []interface{}{
+				map[string]interface{}{
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "This is a longer response to generate more token usage",
+					},
+					"finish_reason": "stop",
+					"index":         0,
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     float64(150),
+				"completion_tokens": float64(75),
+				"total_tokens":      float64(225),
+			},
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+
+	b.Run("tool_only_response", func(b *testing.B) {
+		// Setup: Create response with tool calls but no text content
+		anthropicReq := AnthropicRequest{
+			Model:     ClaudeSonnetModel,
+			MaxTokens: 1024,
+			Messages:  []AnthropicMessage{{Role: "user", Content: "Search"}},
+		}
+
+		httpReq, _ := http.NewRequest("POST", "/v1/messages", nil)
+		body, _ := json.Marshal(anthropicReq)
+		httpReq.Body = io.NopCloser(bytes.NewReader(body))
+
+		toolCall := map[string]interface{}{
+			"id":   "call_search",
+			"type": "function",
+			"function": map[string]interface{}{
+				"name":      "web_search",
+				"arguments": `{"query":"test"}`,
+			},
+		}
+
+		backendResp := map[string]interface{}{
+			"id":    "chatcmpl-test",
+			"model": ClaudeSonnetModel,
+			"choices": []interface{}{
+				map[string]interface{}{
+					"message": map[string]interface{}{
+						"role":       "assistant",
+						"content":    nil,
+						"tool_calls": []interface{}{toolCall},
+					},
+					"finish_reason": "tool_calls",
+					"index":         0,
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     float64(10),
+				"completion_tokens": float64(5),
+			},
+		}
+
+		b.ReportAllocs()
+		b.ResetTimer()
+
+		for i := 0; i < b.N; i++ {
+			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
 	})
 }

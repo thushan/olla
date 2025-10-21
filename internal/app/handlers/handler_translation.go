@@ -128,16 +128,8 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 ) error {
 	recorder := newResponseRecorder()
 
-	if pr.model != "" {
-		ctx = context.WithValue(ctx, "model", pr.model)
-		r = r.WithContext(ctx)
-	}
-
-	if pr.profile != nil && pr.profile.RoutingDecision != nil {
-		pr.stats.RoutingDecision = pr.profile.RoutingDecision
-	}
-
-	// Execute proxy request, capturing response
+	// prepare context and execute proxy request
+	ctx, r = a.prepareProxyContext(ctx, r, pr)
 	err := a.proxyService.ProxyRequestToEndpoints(ctx, recorder, r, endpoints, pr.stats, pr.requestLogger)
 	if err != nil {
 		return fmt.Errorf("proxy request failed: %w", err)
@@ -149,62 +141,116 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 		return fmt.Errorf("failed to parse OpenAI response: %w", jerr)
 	}
 
-	// backend returned error, translate to target format
+	// handle backend errors
 	if recorder.status >= 400 {
-		pr.requestLogger.Debug("Backend returned error, translating to target format",
-			"status_code", recorder.status,
-			"translator", trans.Name())
+		return a.handleNonStreamingBackendError(w, recorder, openaiResp, pr, trans)
+	}
 
-		errorMsg := "Backend error"
-		var errorType, errorParam, errorCode string
+	// transform and write successful response
+	return a.writeTranslatedSuccessResponse(w, ctx, r, recorder, openaiResp, trans)
+}
 
-		if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
-			if msg, ok := errObj["message"].(string); ok && msg != "" {
-				errorMsg = msg
-			}
-			if typ, ok := errObj["type"].(string); ok {
-				errorType = typ
-			}
-			if param, ok := errObj["param"].(string); ok {
-				errorParam = param
-			}
-			if code, ok := errObj["code"].(string); ok {
-				errorCode = code
-			}
+// prepareProxyContext sets up context with model and routing decision
+func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, pr *proxyRequest) (context.Context, *http.Request) {
+	if pr.model != "" {
+		ctx = context.WithValue(ctx, "model", pr.model)
+		r = r.WithContext(ctx)
+	}
 
-			// Log full error details for debugging
-			pr.requestLogger.Info("Translating backend error response",
-				"status_code", recorder.status,
-				"error_message", errorMsg,
-				"error_type", errorType,
-				"error_param", errorParam,
-				"error_code", errorCode,
-				"translator", trans.Name())
-		} else {
-			pr.requestLogger.Info("Translating backend error response",
-				"status_code", recorder.status,
-				"error_message", errorMsg,
-				"translator", trans.Name())
-		}
+	if pr.profile != nil && pr.profile.RoutingDecision != nil {
+		pr.stats.RoutingDecision = pr.profile.RoutingDecision
+	}
 
-		// copy observability headers before writing error
-		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-		a.copyOllaHeaders(recorder, w)
+	return ctx, r
+}
 
-		// Use translator's error formatter if available
-		if errorWriter, ok := trans.(translator.ErrorWriter); ok {
-			errorWriter.WriteError(w, fmt.Errorf("%s", errorMsg), recorder.status)
-			return nil
-		}
+// handleNonStreamingBackendError processes backend errors and writes translated error response
+func (a *Application) handleNonStreamingBackendError(
+	w http.ResponseWriter,
+	recorder *responseRecorder,
+	openaiResp map[string]interface{},
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+) error {
+	pr.requestLogger.Debug("Backend returned error, translating to target format",
+		"status_code", recorder.status,
+		"translator", trans.Name())
 
-		// fallback to generic error
-		w.WriteHeader(recorder.status)
-		if _, werr := w.Write(recorder.body.Bytes()); werr != nil {
-			return fmt.Errorf("failed to write error response: %w", werr)
-		}
+	errorMsg := a.extractAndLogBackendError(openaiResp, recorder.status, pr, trans)
+
+	// copy observability headers before writing error
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	a.copyOllaHeaders(recorder, w)
+	a.setModelHeaderIfMissing(w, pr.model)
+
+	// Use translator's error formatter if available
+	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
+		errorWriter.WriteError(w, fmt.Errorf("%s", errorMsg), recorder.status)
 		return nil
 	}
 
+	// fallback to generic error
+	w.WriteHeader(recorder.status)
+	if _, werr := w.Write(recorder.body.Bytes()); werr != nil {
+		return fmt.Errorf("failed to write error response: %w", werr)
+	}
+	return nil
+}
+
+// extractAndLogBackendError extracts error details from OpenAI response and logs them
+func (a *Application) extractAndLogBackendError(
+	openaiResp map[string]interface{},
+	statusCode int,
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+) string {
+	errorMsg := "Backend error"
+	var errorType, errorParam, errorCode string
+
+	errObj, ok := openaiResp["error"].(map[string]interface{})
+	if !ok {
+		pr.requestLogger.Info("Translating backend error response",
+			"status_code", statusCode,
+			"error_message", errorMsg,
+			"translator", trans.Name())
+		return errorMsg
+	}
+
+	// extract error fields
+	if msg, ok := errObj["message"].(string); ok && msg != "" {
+		errorMsg = msg
+	}
+	if typ, ok := errObj["type"].(string); ok {
+		errorType = typ
+	}
+	if param, ok := errObj["param"].(string); ok {
+		errorParam = param
+	}
+	if code, ok := errObj["code"].(string); ok {
+		errorCode = code
+	}
+
+	// log full error details for debugging
+	pr.requestLogger.Info("Translating backend error response",
+		"status_code", statusCode,
+		"error_message", errorMsg,
+		"error_type", errorType,
+		"error_param", errorParam,
+		"error_code", errorCode,
+		"translator", trans.Name())
+
+	return errorMsg
+}
+
+// writeTranslatedSuccessResponse transforms and writes successful response
+func (a *Application) writeTranslatedSuccessResponse(
+	w http.ResponseWriter,
+	ctx context.Context,
+	r *http.Request,
+	recorder *responseRecorder,
+	openaiResp map[string]interface{},
+	trans translator.RequestTranslator,
+) error {
 	// Transform successful OpenAI response back to target format
 	targetResp, err := trans.TransformResponse(ctx, openaiResp, r)
 	if err != nil {
@@ -212,8 +258,6 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 	}
 
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-
-	// copy olla headers for observability
 	a.copyOllaHeaders(recorder, w)
 
 	// Serialize and write response
@@ -230,6 +274,13 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 	return nil
 }
 
+// setModelHeaderIfMissing sets X-Olla-Model header if not already present
+func (a *Application) setModelHeaderIfMissing(w http.ResponseWriter, model string) {
+	if w.Header().Get(constants.HeaderXOllaModel) == "" && model != "" {
+		w.Header().Set(constants.HeaderXOllaModel, model)
+	}
+}
+
 // handle streaming via pipe, proxy writes to translator reads from
 func (a *Application) executeTranslatedStreamingRequest(
 	ctx context.Context,
@@ -241,122 +292,179 @@ func (a *Application) executeTranslatedStreamingRequest(
 ) error {
 	// safety check - should never trigger but prevents bugs
 	if len(endpoints) == 0 {
-		pr.requestLogger.Error("Streaming pipeline called with zero endpoints - this is a bug")
-		if errorWriter, ok := trans.(translator.ErrorWriter); ok {
-			errorWriter.WriteError(w, fmt.Errorf("no healthy endpoints available"), http.StatusServiceUnavailable)
-		} else {
-			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-			w.WriteHeader(http.StatusServiceUnavailable)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"type": "error",
-				"error": map[string]interface{}{
-					"type":    "api_error",
-					"message": "No healthy endpoints available",
-				},
-			})
-		}
+		a.writeStreamingNoEndpointsError(w, pr, trans)
 		return nil
 	}
 
 	// pipe connects proxy output to translator input
 	pipeReader, pipeWriter := io.Pipe()
-
-	// recorder writes to pipe + captures headers for X-Olla-* observability
 	streamRecorder := newStreamingResponseRecorder(pipeWriter)
 
 	// run proxy in background while translation processes
-	proxyErrChan := make(chan error, 1)
-	go func() {
-		localCtx := ctx
-		localR := r
-
-		if pr.model != "" {
-			localCtx = context.WithValue(localCtx, "model", pr.model)
-			localR = localR.WithContext(localCtx)
-		}
-
-		// Pass routing decision to stats for headers
-		if pr.profile != nil && pr.profile.RoutingDecision != nil {
-			pr.stats.RoutingDecision = pr.profile.RoutingDecision
-		}
-		err := a.proxyService.ProxyRequestToEndpoints(localCtx, streamRecorder, localR, endpoints, pr.stats, pr.requestLogger)
-		pipeWriter.Close() // Signal end of stream
-		proxyErrChan <- err
-	}()
+	proxyErrChan := a.startProxyGoroutine(ctx, r, endpoints, pr, streamRecorder, pipeWriter)
 
 	// panic recovery prevents goroutine leak, cleanup before re-panic
-	defer func() {
-		if r := recover(); r != nil {
-			// Close both ends of the pipe to unblock the goroutine
-			pipeReader.Close()
-			pipeWriter.Close()
-
-			// Drain the error channel to prevent goroutine leak
-			<-proxyErrChan
-
-			a.logger.Error("Panic during stream transformation",
-				"panic", r,
-				"translator", trans.Name(),
-				"model", pr.model)
-
-			// Re-panic after cleanup to preserve the panic behavior
-			panic(r)
-		}
-	}()
+	defer a.handleStreamingPanic(pipeReader, pipeWriter, proxyErrChan, pr, trans)
 
 	// wait for headers to avoid data race
 	<-streamRecorder.headersReady
 
 	// handle backend errors before starting sse stream
 	if streamRecorder.status >= 400 {
-		pr.requestLogger.Debug("Backend returned error in streaming mode, translating to target format",
-			"status_code", streamRecorder.status,
-			"translator", trans.Name())
-
-		// Read error response from pipe
-		errorBody, _ := io.ReadAll(pipeReader)
-
-		// Parse OpenAI error format
-		var openaiResp map[string]interface{}
-		if err := json.Unmarshal(errorBody, &openaiResp); err == nil {
-			// Extract error message from OpenAI error structure
-			errorMsg := "Backend error"
-			if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
-				if msg, ok := errObj["message"].(string); ok && msg != "" {
-					errorMsg = msg
-				}
-			}
-
-			// Copy observability headers before writing error
-			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-			a.copyOllaHeaders(streamRecorder, w)
-
-			// Use translator's error formatter if available
-			if errorWriter, ok := trans.(translator.ErrorWriter); ok {
-				errorWriter.WriteError(w, fmt.Errorf("%s", errorMsg), streamRecorder.status)
-				<-proxyErrChan // Wait for proxy goroutine to complete
-				return nil
-			}
-		}
-
-		// fallback to generic error
-		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-		a.copyOllaHeaders(streamRecorder, w)
-		w.WriteHeader(streamRecorder.status)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"type": "error",
-			"error": map[string]interface{}{
-				"type":    "api_error",
-				"message": "Backend returned an error",
-			},
-		})
-		<-proxyErrChan // Wait for proxy goroutine to complete
+		a.handleStreamingBackendError(w, pipeReader, streamRecorder, proxyErrChan, pr, trans)
 		return nil
 	}
 
 	// copy olla headers before stream starts
 	a.copyOllaHeaders(streamRecorder, w)
+	a.setModelHeaderIfMissing(w, pr.model)
 
+	// transform stream (blocks until done) and wait for proxy
+	return a.transformStreamAndWaitForProxy(ctx, pipeReader, w, r, proxyErrChan, trans)
+}
+
+// writeStreamingNoEndpointsError writes error when no endpoints are available for streaming
+func (a *Application) writeStreamingNoEndpointsError(
+	w http.ResponseWriter,
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+) {
+	pr.requestLogger.Error("Streaming pipeline called with zero endpoints - this is a bug")
+	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
+		errorWriter.WriteError(w, fmt.Errorf("no healthy endpoints available"), http.StatusServiceUnavailable)
+		return
+	}
+
+	// fallback to generic error
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	w.WriteHeader(http.StatusServiceUnavailable)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"type": "error",
+		"error": map[string]interface{}{
+			"type":    "api_error",
+			"message": "No healthy endpoints available",
+		},
+	})
+}
+
+// startProxyGoroutine starts background goroutine to proxy request to endpoints
+func (a *Application) startProxyGoroutine(
+	ctx context.Context,
+	r *http.Request,
+	endpoints []*domain.Endpoint,
+	pr *proxyRequest,
+	streamRecorder *streamingResponseRecorder,
+	pipeWriter *io.PipeWriter,
+) chan error {
+	proxyErrChan := make(chan error, 1)
+	go func() {
+		localCtx, localR := a.prepareProxyContext(ctx, r, pr)
+		err := a.proxyService.ProxyRequestToEndpoints(localCtx, streamRecorder, localR, endpoints, pr.stats, pr.requestLogger)
+		pipeWriter.Close() // Signal end of stream
+		proxyErrChan <- err
+	}()
+	return proxyErrChan
+}
+
+// handleStreamingPanic recovers from panic during streaming to prevent goroutine leak
+func (a *Application) handleStreamingPanic(
+	pipeReader *io.PipeReader,
+	pipeWriter *io.PipeWriter,
+	proxyErrChan chan error,
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+) {
+	if r := recover(); r != nil {
+		// Close both ends of the pipe to unblock the goroutine
+		pipeReader.Close()
+		pipeWriter.Close()
+
+		// Drain the error channel to prevent goroutine leak
+		<-proxyErrChan
+
+		a.logger.Error("Panic during stream transformation",
+			"panic", r,
+			"translator", trans.Name(),
+			"model", pr.model)
+
+		// Re-panic after cleanup to preserve the panic behavior
+		panic(r)
+	}
+}
+
+// handleStreamingBackendError processes backend errors during streaming
+func (a *Application) handleStreamingBackendError(
+	w http.ResponseWriter,
+	pipeReader *io.PipeReader,
+	streamRecorder *streamingResponseRecorder,
+	proxyErrChan chan error,
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+) {
+	pr.requestLogger.Debug("Backend returned error in streaming mode, translating to target format",
+		"status_code", streamRecorder.status,
+		"translator", trans.Name())
+
+	// Read error response from pipe
+	errorBody, _ := io.ReadAll(pipeReader)
+
+	// try to parse OpenAI error format and extract message
+	errorMsg := a.parseStreamingErrorMessage(errorBody)
+
+	// Copy observability headers before writing error
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	a.copyOllaHeaders(streamRecorder, w)
+	a.setModelHeaderIfMissing(w, pr.model)
+
+	// Use translator's error formatter if available
+	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
+		errorWriter.WriteError(w, fmt.Errorf("%s", errorMsg), streamRecorder.status)
+		<-proxyErrChan // Wait for proxy goroutine to complete
+		return
+	}
+
+	// fallback to generic error
+	a.writeGenericStreamingError(w, streamRecorder.status)
+	<-proxyErrChan // Wait for proxy goroutine to complete
+}
+
+// parseStreamingErrorMessage extracts error message from streaming error response
+func (a *Application) parseStreamingErrorMessage(errorBody []byte) string {
+	errorMsg := "Backend error"
+
+	var openaiResp map[string]interface{}
+	if err := json.Unmarshal(errorBody, &openaiResp); err == nil {
+		if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
+			if msg, ok := errObj["message"].(string); ok && msg != "" {
+				errorMsg = msg
+			}
+		}
+	}
+
+	return errorMsg
+}
+
+// writeGenericStreamingError writes a generic streaming error response
+func (a *Application) writeGenericStreamingError(w http.ResponseWriter, statusCode int) {
+	w.WriteHeader(statusCode)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"type": "error",
+		"error": map[string]interface{}{
+			"type":    "api_error",
+			"message": "Backend returned an error",
+		},
+	})
+}
+
+// transformStreamAndWaitForProxy transforms stream and waits for proxy completion
+func (a *Application) transformStreamAndWaitForProxy(
+	ctx context.Context,
+	pipeReader *io.PipeReader,
+	w http.ResponseWriter,
+	r *http.Request,
+	proxyErrChan chan error,
+	trans translator.RequestTranslator,
+) error {
 	// transform stream (blocks until done)
 	transformErr := trans.TransformStreamingResponse(ctx, pipeReader, w, r)
 

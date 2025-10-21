@@ -897,3 +897,19 @@ func TestTransformResponse_TypeAndRoleFields(t *testing.T) {
 
 	assert.Equal(t, "assistant", anthropicResp.Role)
 }
+
+func BenchmarkTransformResponse_Simple(b *testing.B) {
+	tr := NewTranslator(createResponseTestLogger(), createTestConfig())
+	openaiResp := map[string]interface{}{
+		"id": "chatcmpl-123", "model": "claude-3-5-sonnet-20241022",
+		"choices": []interface{}{map[string]interface{}{
+			"message":       map[string]interface{}{"role": "assistant", "content": "hi"},
+			"finish_reason": "stop",
+		}},
+		"usage": map[string]interface{}{"prompt_tokens": float64(5), "completion_tokens": float64(2)},
+	}
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		_, _ = tr.TransformResponse(context.Background(), openaiResp, nil)
+	}
+}

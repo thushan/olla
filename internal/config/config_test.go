@@ -551,7 +551,7 @@ func TestAnthropicTranslatorConfig_Validate(t *testing.T) {
 				MaxMessageSize: 101 << 20, // 101MB
 			},
 			expectError: true,
-			errorMsg:    "max_message_size exceeds 100MB safety limit",
+			errorMsg:    "max_message_size exceeds 100 MiB safety limit",
 		},
 		{
 			name: "invalid config way over limit",
@@ -560,7 +560,7 @@ func TestAnthropicTranslatorConfig_Validate(t *testing.T) {
 				MaxMessageSize: 500 << 20, // 500MB
 			},
 			expectError: true,
-			errorMsg:    "max_message_size exceeds 100MB safety limit",
+			errorMsg:    "max_message_size exceeds 100 MiB safety limit",
 		},
 	}
 

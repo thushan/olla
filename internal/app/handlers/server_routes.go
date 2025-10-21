@@ -129,7 +129,11 @@ func (a *Application) registerTranslatorRoutes() {
 
 // extractBasePath extracts the base path from a translator's API path
 // For example: "/olla/anthropic/v1/messages" -> "/olla/anthropic/v1"
+// Handles trailing slashes: "/olla/anthropic/v1/messages/" -> "/olla/anthropic/v1"
 func extractBasePath(path string) string {
+	// Remove any trailing slashes first
+	path = strings.TrimRight(path, "/")
+
 	// Find the last slash and return everything before it
 	for i := len(path) - 1; i >= 0; i-- {
 		if path[i] == '/' {

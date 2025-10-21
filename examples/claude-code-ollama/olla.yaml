@@ -18,7 +18,7 @@ proxy:
 translators:
   anthropic:
     enabled: true                   # Enable Anthropic API translator
-    max_message_size: 10485760     # 10MB max request size
+    max_message_size: 10485760      # 10MB max request size
 
 # Backend discovery
 discovery:

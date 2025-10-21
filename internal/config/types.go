@@ -160,6 +160,18 @@ type TranslatorsConfig struct {
 	Anthropic AnthropicTranslatorConfig `yaml:"anthropic"`
 }
 
+// Validate validates all translator configurations
+// Provides defence-in-depth by ensuring all translator configs are valid
+func (c *TranslatorsConfig) Validate() error {
+	if err := c.Anthropic.Validate(); err != nil {
+		return fmt.Errorf("anthropic translator config invalid: %w", err)
+	}
+	return nil
+}
+
+// MaxAnthropicMessageSize is the maximum allowed message size for Anthropic API requests (100 MiB)
+const MaxAnthropicMessageSize = 100 << 20
+
 // AnthropicTranslatorConfig holds configuration for the Anthropic translator
 type AnthropicTranslatorConfig struct {
 	MaxMessageSize int64 `yaml:"max_message_size"`
@@ -172,8 +184,8 @@ func (c *AnthropicTranslatorConfig) Validate() error {
 	if c.MaxMessageSize < 0 {
 		return fmt.Errorf("max_message_size must be non-negative, got %d", c.MaxMessageSize)
 	}
-	if c.MaxMessageSize > 100<<20 {
-		return fmt.Errorf("max_message_size exceeds 100MB safety limit, got %d", c.MaxMessageSize)
+	if c.MaxMessageSize > MaxAnthropicMessageSize {
+		return fmt.Errorf("max_message_size exceeds 100 MiB safety limit, got %d", c.MaxMessageSize)
 	}
 	return nil
 }

@@ -1,272 +1,164 @@
 package anthropic
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"fmt"
 	"io"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/thushan/olla/internal/logger"
 )
 
-func createStreamingTestLogger() logger.StyledLogger {
-	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
-	log, _, _ := logger.New(loggerCfg)
-	return logger.NewPlainStyledLogger(log)
-}
-
-func createMockOpenAIStream(chunks []string) io.Reader {
-	var buf bytes.Buffer
-	for _, chunk := range chunks {
-		buf.WriteString(chunk)
-	}
-	return &buf
-}
-
-func parseAnthropicEvents(body string) ([]map[string]interface{}, error) {
-	var events []map[string]interface{}
-	lines := strings.Split(body, "\n")
-
-	var currentEvent string
-	for _, line := range lines {
-		if strings.HasPrefix(line, "event: ") {
-			currentEvent = strings.TrimPrefix(line, "event: ")
-		} else if strings.HasPrefix(line, "data: ") {
-			dataStr := strings.TrimPrefix(line, "data: ")
-			var data map[string]interface{}
-			if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
-				return nil, err
-			}
-			data["_event_type"] = currentEvent
-			events = append(events, data)
-		}
-	}
-
-	return events, nil
-}
-
-func verifyEventSequence(t *testing.T, events []map[string]interface{}, expectedSequence []string) {
-	t.Helper()
-
-	var actualSequence []string
-	for _, event := range events {
-		if eventType, ok := event["_event_type"].(string); ok {
-			actualSequence = append(actualSequence, eventType)
-		}
-	}
-
-	assert.Equal(t, expectedSequence, actualSequence, "Event sequence should match expected order")
-}
-
 func TestTransformStreamingResponse_SimpleText(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
 	// simulate openai streaming response with text chunks
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-123\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\" world\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{\"content\":\"!\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-123\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-123", "claude-3-5-sonnet-20241022", "Hello"),
+		textChunk("chatcmpl-123", "", " world"),
+		textChunk("chatcmpl-123", "", "!"),
+		finishChunk("chatcmpl-123", "stop"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
 	// verify all required anthropic events are present
-	assert.Contains(t, body, "event: message_start")
-	assert.Contains(t, body, "event: content_block_start")
-	assert.Contains(t, body, "event: content_block_delta")
-	assert.Contains(t, body, "event: content_block_stop")
-	assert.Contains(t, body, "event: message_delta")
-	assert.Contains(t, body, "event: message_stop")
+	assertContainsAll(t, body, []string{
+		"event: message_start",
+		"event: content_block_start",
+		"event: content_block_delta",
+		"event: content_block_stop",
+		"event: message_delta",
+		"event: message_stop",
+	})
 
 	// verify text content is present
-	assert.Contains(t, body, `"text":"Hello"`)
-	assert.Contains(t, body, `"text":" world"`)
-	assert.Contains(t, body, `"text":"!"`)
+	assertTextContent(t, body, "Hello")
+	assertTextContent(t, body, " world")
+	assertTextContent(t, body, "!")
 
 	// verify message_start includes model
 	assert.Contains(t, body, `"model":"claude-3-5-sonnet-20241022"`)
 
-	// verify stop_reason in message_delta
-	assert.Contains(t, body, `"stop_reason":"end_turn"`)
-
-	// Parse and validate event sequence
-	events, err := parseAnthropicEvents(body)
-	require.NoError(t, err)
+	// parse and validate event structure
+	events := parseAnthropicEvents(t, body)
 	require.NotEmpty(t, events)
 
 	// note: implementation sends content_block_start first, then message_start when model is known
 	// This is a valid streaming pattern - events don't have to be in strict order
 	// as long as all required events are present
-	// verify all event types are present
-	eventTypes := make(map[string]bool)
-	for _, event := range events {
-		if eventType, ok := event["_event_type"].(string); ok {
-			eventTypes[eventType] = true
-		}
-	}
-
-	assert.True(t, eventTypes["message_start"], "Should have message_start event")
-	assert.True(t, eventTypes["content_block_start"], "Should have content_block_start event")
-	assert.True(t, eventTypes["content_block_delta"], "Should have content_block_delta events")
-	assert.True(t, eventTypes["content_block_stop"], "Should have content_block_stop event")
-	assert.True(t, eventTypes["message_delta"], "Should have message_delta event")
-	assert.True(t, eventTypes["message_stop"], "Should have message_stop event")
+	assertRequiredEvents(t, events)
+	assertHasEventType(t, events, "content_block_start")
+	assertHasEventType(t, events, "content_block_delta")
+	assertHasEventType(t, events, "content_block_stop")
+	assertStopReason(t, events, "end_turn")
 }
 
 func TestTransformStreamingResponse_WithToolCalls(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
 	// simulate openai streaming with text followed by tool call
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-456\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Let me check that for you.\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-456\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_abc123\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-456\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"location\\\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-456\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-456\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"San Francisco\\\"}\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-456\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-456\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"tool_calls\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-456", "claude-3-5-sonnet-20241022", "Let me check that for you."),
+		toolStartChunk("chatcmpl-456", 0, "call_abc123", "get_weather"),
+		toolArgsChunk("chatcmpl-456", 0, `{\\\"location\\\"`),
+		toolArgsChunk("chatcmpl-456", 0, `:`),
+		toolArgsChunk("chatcmpl-456", 0, `\\\"San Francisco\\\"}`),
+		toolArgsChunk("chatcmpl-456", 0, `}`),
+		finishChunk("chatcmpl-456", "tool_calls"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
-	// verify text content block events
-	assert.Contains(t, body, `"text":"Let me check that for you."`)
+	// verify text and tool content
+	assertTextContent(t, body, "Let me check that for you.")
+	assertToolPresent(t, body, "call_abc123", "get_weather")
 
-	// Verify tool_use block is created
-	assert.Contains(t, body, `"type":"tool_use"`)
-	assert.Contains(t, body, `"id":"call_abc123"`)
-	assert.Contains(t, body, `"name":"get_weather"`)
+	// verify tool events and structure
+	assertContainsAll(t, body, []string{
+		`"type":"tool_use"`,
+		`"type":"input_json_delta"`,
+		`"partial_json"`,
+	})
 
-	// verify input_json_delta events for streaming tool arguments
-	assert.Contains(t, body, `"type":"input_json_delta"`)
-	assert.Contains(t, body, `"partial_json"`)
-
-	// verify stop_reason is tool_use
-	assert.Contains(t, body, `"stop_reason":"tool_use"`)
-
-	// Parse events to verify structure
-	events, err := parseAnthropicEvents(body)
-	require.NoError(t, err)
-
+	// parse events to verify structure
+	events := parseAnthropicEvents(t, body)
+	assertStopReason(t, events, "tool_use")
 	// should have two content blocks: text and tool_use
-	// verify we have content_block_start events for both
-	contentBlockStarts := 0
-	for _, event := range events {
-		if event["_event_type"] == "content_block_start" {
-			contentBlockStarts++
-		}
-	}
-	assert.Equal(t, 2, contentBlockStarts, "Should have content_block_start for text and tool_use")
+	assertContentBlockCount(t, events, 2)
 }
 
 func TestTransformStreamingResponse_MultipleToolCalls(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-789\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-789\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"location\\\":\\\"NYC\\\"}\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-789\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":1,\"id\":\"call_2\",\"type\":\"function\",\"function\":{\"name\":\"get_time\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-789\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":1,\"function\":{\"arguments\":\"{\\\"timezone\\\":\\\"EST\\\"}\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-789\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"tool_calls\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-789", 0, "call_1", "get_weather"),
+		toolArgsChunk("chatcmpl-789", 0, `{\\\"location\\\":\\\"NYC\\\"}`),
+		toolStartChunk("chatcmpl-789", 1, "call_2", "get_time"),
+		toolArgsChunk("chatcmpl-789", 1, `{\\\"timezone\\\":\\\"EST\\\"}`),
+		finishChunk("chatcmpl-789", "tool_calls"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
-	// Verify both tool calls are present
-	assert.Contains(t, body, `"id":"call_1"`)
-	assert.Contains(t, body, `"name":"get_weather"`)
-	assert.Contains(t, body, `"id":"call_2"`)
-	assert.Contains(t, body, `"name":"get_time"`)
+	// verify both tools are present
+	assertToolPresent(t, body, "call_1", "get_weather")
+	assertToolPresent(t, body, "call_2", "get_time")
 
-	// Verify arguments for both tools
+	// verify arguments for both tools
 	assert.Contains(t, body, `NYC`)
 	assert.Contains(t, body, `EST`)
 
-	// Should have content_block_start for both tool calls
-	events, err := parseAnthropicEvents(body)
-	require.NoError(t, err)
-
-	contentBlockStarts := 0
-	for _, event := range events {
-		if event["_event_type"] == "content_block_start" {
-			contentBlockStarts++
-		}
-	}
-	assert.Equal(t, 2, contentBlockStarts, "Should have content_block_start for both tools")
+	// should have content_block_start for both tool calls
+	events := parseAnthropicEvents(t, body)
+	assertContentBlockCount(t, events, 2)
 }
 
 func TestTransformStreamingResponse_ToolCallsOnly(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-tool-only\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_only\",\"type\":\"function\",\"function\":{\"name\":\"search\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-tool-only\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"query\\\":\\\"test\\\"}\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-tool-only\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"tool_calls\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-tool-only", 0, "call_only", "search"),
+		toolArgsChunk("chatcmpl-tool-only", 0, `{\\\"query\\\":\\\"test\\\"}`),
+		finishChunk("chatcmpl-tool-only", "tool_calls"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
-	// Verify tool_use block is created
+	// verify tool_use block is created
+	assertToolPresent(t, body, "call_only", "search")
 	assert.Contains(t, body, `"type":"tool_use"`)
-	assert.Contains(t, body, `"id":"call_only"`)
-	assert.Contains(t, body, `"name":"search"`)
 
-	// verify no text content block
-	events, err := parseAnthropicEvents(body)
-	require.NoError(t, err)
-
-	// count content blocks - should only be 1 for tool_use
-	contentBlockStarts := 0
-	for _, event := range events {
-		if event["_event_type"] == "content_block_start" {
-			contentBlockStarts++
-		}
-	}
-	assert.Equal(t, 1, contentBlockStarts, "Should only have content_block_start for tool_use")
+	// verify no text content block - only 1 block for tool_use
+	events := parseAnthropicEvents(t, body)
+	assertContentBlockCount(t, events, 1)
 }
 
 func TestTransformStreamingResponse_ContextCancellation(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	// Create a cancellable context
+	// create a cancellable context
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Create a slow stream that will be cancelled
+	// create a slow stream that will be cancelled
 	slowStream := &slowReader{
 		data:   []byte("data: {\"id\":\"chatcmpl-cancel\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n"),
 		cancel: cancel,
 	}
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(ctx, slowStream, recorder, nil)
+	_, err := executeTransformWithContext(t, translator, ctx, slowStream)
 
-	// Should return context cancelled error
+	// should return context cancelled error
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "context")
 }
@@ -291,82 +183,62 @@ func (r *slowReader) Read(p []byte) (n int, err error) {
 }
 
 func TestTransformStreamingResponse_MalformedChunk(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-bad\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
-		"data: {invalid json}\n\n", // Malformed chunk
-		"data: {\"id\":\"chatcmpl-bad\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-bad", "claude-3-5-sonnet-20241022", "Hello"),
+		"data: {invalid json}\n\n", // malformed chunk
+		finishChunk("chatcmpl-bad", "stop"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-
-	// should not fail the stream - malformed chunks are logged and skipped
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
 	// stream should complete successfully with valid chunks processed
-	assert.Contains(t, body, "event: message_start")
-	assert.Contains(t, body, "event: message_stop")
-	assert.Contains(t, body, `"text":"Hello"`)
+	assertContainsAll(t, body, []string{
+		"event: message_start",
+		"event: message_stop",
+	})
+	assertTextContent(t, body, "Hello")
 }
 
 func TestTransformStreamingResponse_EmptyStream(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	openaiStream := createMockOpenAIStream([]string{
-		"data: [DONE]\n\n",
-	})
+	stream := mockOpenAIStream([]string{doneChunk()})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-
-	// should complete without error but produce minimal output
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
 	// should still have message_start and message_stop even for empty content
-	assert.Contains(t, body, "event: message_start")
-	assert.Contains(t, body, "event: message_stop")
+	assertContainsAll(t, body, []string{
+		"event: message_start",
+		"event: message_stop",
+	})
 }
 
 func TestTransformStreamingResponse_ModelExtraction(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
 	testCases := []struct {
 		name      string
 		modelName string
 	}{
-		{
-			name:      "sonnet_3_5",
-			modelName: "claude-3-5-sonnet-20241022",
-		},
-		{
-			name:      "opus_3",
-			modelName: "claude-3-opus-20240229",
-		},
-		{
-			name:      "haiku_3",
-			modelName: "claude-3-haiku-20240307",
-		},
+		{name: "sonnet_3_5", modelName: "claude-3-5-sonnet-20241022"},
+		{name: "opus_3", modelName: "claude-3-opus-20240229"},
+		{name: "haiku_3", modelName: "claude-3-haiku-20240307"},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			openaiStream := createMockOpenAIStream([]string{
-				"data: {\"id\":\"chatcmpl-model\",\"model\":\"" + tc.modelName + "\",\"choices\":[{\"delta\":{\"content\":\"Test\"},\"index\":0}]}\n\n",
-				"data: {\"id\":\"chatcmpl-model\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}]}\n\n",
-				"data: [DONE]\n\n",
+			stream := mockOpenAIStream([]string{
+				textChunk("chatcmpl-model", tc.modelName, "Test"),
+				finishChunk("chatcmpl-model", "stop"),
+				doneChunk(),
 			})
 
-			recorder := httptest.NewRecorder()
-			err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-			require.NoError(t, err)
-
+			recorder := executeTransform(t, translator, stream)
 			body := recorder.Body.String()
 			assert.Contains(t, body, `"model":"`+tc.modelName+`"`, "Model should be in message_start")
 		})
@@ -374,164 +246,91 @@ func TestTransformStreamingResponse_ModelExtraction(t *testing.T) {
 }
 
 func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-usage\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-usage\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-usage", "claude-3-5-sonnet-20241022", "Hello"),
+		finishChunkWithUsage("chatcmpl-usage", "stop", 10, 5),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
 	// parse events to verify token usage in message_delta
-	events, err := parseAnthropicEvents(body)
-	require.NoError(t, err)
+	events := parseAnthropicEvents(t, body)
+	assertUsageTokens(t, events, 10, 5)
 
-	// find the message_delta event
-	var messageDeltaEvent map[string]interface{}
-	for _, event := range events {
-		if event["_event_type"] == "message_delta" {
-			messageDeltaEvent = event
-			break
-		}
-	}
-
-	require.NotNil(t, messageDeltaEvent, "message_delta event should exist")
-
-	// verify usage is present and correct
-	usage, ok := messageDeltaEvent["usage"].(map[string]interface{})
-	require.True(t, ok, "message_delta should have usage field")
-
-	inputTokens, ok := usage["input_tokens"].(float64)
-	require.True(t, ok, "usage should have input_tokens")
-	assert.Equal(t, float64(10), inputTokens, "input_tokens should be 10")
-
-	outputTokens, ok := usage["output_tokens"].(float64)
-	require.True(t, ok, "usage should have output_tokens")
-	assert.Equal(t, float64(5), outputTokens, "output_tokens should be 5")
-
-	// Verify message_start includes usage structure (values will be 0 initially)
-	// In OpenAI streaming, usage information comes at the end, so message_start will have 0 tokens
-	var messageStartEvent map[string]interface{}
-	for _, event := range events {
-		if event["_event_type"] == "message_start" {
-			messageStartEvent = event
-			break
-		}
-	}
-
-	require.NotNil(t, messageStartEvent, "message_start event should exist")
-	message, ok := messageStartEvent["message"].(map[string]interface{})
+	// verify message_start includes usage structure (values will be 0 initially)
+	messageStart := getEventByType(events, "message_start")
+	require.NotNil(t, messageStart, "message_start event should exist")
+	message, ok := messageStart["message"].(map[string]interface{})
 	require.True(t, ok, "message_start should have message field")
 
 	startUsage, ok := message["usage"].(map[string]interface{})
 	require.True(t, ok, "message_start.message should have usage field")
 
 	// openai provides usage at the end of the stream, so message_start will have 0 tokens
-	// this is different from native anthropic which provides input_tokens in message_start
 	startInputTokens, ok := startUsage["input_tokens"].(float64)
 	require.True(t, ok, "message_start usage should have input_tokens field")
 	assert.Equal(t, float64(0), startInputTokens, "message_start input_tokens should be 0 (usage comes at end in OpenAI)")
 }
 
 func TestTransformStreamingResponse_SSEFormat(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-sse\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Test\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-sse\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-sse", "claude-3-5-sonnet-20241022", "Test"),
+		finishChunk("chatcmpl-sse", "stop"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
-	// Verify SSE format: event: <name>\ndata: <json>\n\n
-	lines := strings.Split(body, "\n")
-
-	var eventFound, dataFound bool
-	for i, line := range lines {
-		if strings.HasPrefix(line, "event: ") {
-			eventFound = true
-			// next non-empty line should be data:
-			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "data: ") {
-				dataFound = true
-
-				// validate json in data field
-				dataStr := strings.TrimPrefix(lines[i+1], "data: ")
-				var data map[string]interface{}
-				err := json.Unmarshal([]byte(dataStr), &data)
-				assert.NoError(t, err, "Data field should contain valid JSON")
-			}
-		}
-	}
-
-	assert.True(t, eventFound, "Should have event: lines")
-	assert.True(t, dataFound, "Should have data: lines following event: lines")
-
-	// verify content-type header
+	// verify SSE format and content-type header
+	assertSSEFormat(t, body)
 	assert.Equal(t, "text/event-stream", recorder.Header().Get("Content-Type"))
 }
 
 func TestTransformStreamingResponse_FinishReasonMapping(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
 	testCases := []struct {
 		name               string
 		finishReason       string
 		expectedStopReason string
+		needsTool          bool
 	}{
-		{
-			name:               "stop_to_end_turn",
-			finishReason:       "stop",
-			expectedStopReason: "end_turn",
-		},
-		{
-			name:               "tool_calls_to_tool_use",
-			finishReason:       "tool_calls",
-			expectedStopReason: "tool_use",
-		},
-		{
-			name:               "length_to_max_tokens",
-			finishReason:       "length",
-			expectedStopReason: "max_tokens",
-		},
+		{name: "stop_to_end_turn", finishReason: "stop", expectedStopReason: "end_turn", needsTool: false},
+		{name: "tool_calls_to_tool_use", finishReason: "tool_calls", expectedStopReason: "tool_use", needsTool: true},
+		{name: "length_to_max_tokens", finishReason: "length", expectedStopReason: "max_tokens", needsTool: false},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var streamChunks []string
+			var chunks []string
 
-			// Build appropriate stream based on finish_reason
-			if tc.finishReason == "tool_calls" {
-				streamChunks = []string{
-					"data: {\"id\":\"chatcmpl-reason\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"test\",\"arguments\":\"{}\"}}]},\"index\":0}]}\n\n",
-					"data: {\"id\":\"chatcmpl-reason\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"" + tc.finishReason + "\"}]}\n\n",
-					"data: [DONE]\n\n",
+			// build appropriate stream based on finish_reason
+			if tc.needsTool {
+				chunks = []string{
+					toolStartChunk("chatcmpl-reason", 0, "call_1", "test"),
+					toolArgsChunk("chatcmpl-reason", 0, "{}"),
+					finishChunk("chatcmpl-reason", tc.finishReason),
+					doneChunk(),
 				}
 			} else {
-				streamChunks = []string{
-					"data: {\"id\":\"chatcmpl-reason\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"Test\"},\"index\":0}]}\n\n",
-					"data: {\"id\":\"chatcmpl-reason\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"" + tc.finishReason + "\"}]}\n\n",
-					"data: [DONE]\n\n",
+				chunks = []string{
+					textChunk("chatcmpl-reason", "claude-3-5-sonnet-20241022", "Test"),
+					finishChunk("chatcmpl-reason", tc.finishReason),
+					doneChunk(),
 				}
 			}
 
-			openaiStream := createMockOpenAIStream(streamChunks)
-			recorder := httptest.NewRecorder()
-
-			err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-			require.NoError(t, err)
-
+			stream := mockOpenAIStream(chunks)
+			recorder := executeTransform(t, translator, stream)
 			body := recorder.Body.String()
+
 			assert.Contains(t, body, `"stop_reason":"`+tc.expectedStopReason+`"`,
 				"finish_reason %s should map to stop_reason %s", tc.finishReason, tc.expectedStopReason)
 		})
@@ -539,64 +338,395 @@ func TestTransformStreamingResponse_FinishReasonMapping(t *testing.T) {
 }
 
 func TestTransformStreamingResponse_EmptyContent(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-empty\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"content\":\"\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-empty\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-empty\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"stop\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-empty", "claude-3-5-sonnet-20241022", ""),
+		textChunk("chatcmpl-empty", "", "Hello"),
+		finishChunk("chatcmpl-empty", "stop"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
 	// empty content should not create delta events, only non-empty content
-	events, err := parseAnthropicEvents(body)
-	require.NoError(t, err)
+	events := parseAnthropicEvents(t, body)
+	deltaCount := countEventsByType(events, "content_block_delta")
 
-	deltaCount := 0
-	for _, event := range events {
-		if event["_event_type"] == "content_block_delta" {
-			deltaCount++
-		}
-	}
-
-	// should only have 1 delta for "hello", not for empty string
+	// should only have 1 delta for "Hello", not for empty string
 	assert.Equal(t, 1, deltaCount, "Should only create deltas for non-empty content")
 }
 
 func TestTransformStreamingResponse_PartialJSONAccumulation(t *testing.T) {
-	translator := NewTranslator(createStreamingTestLogger(), createTestConfig())
+	translator := newTestTranslator()
 
 	// test with complex nested json arguments streamed in small chunks
-	openaiStream := createMockOpenAIStream([]string{
-		"data: {\"id\":\"chatcmpl-json\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_complex\",\"type\":\"function\",\"function\":{\"name\":\"process\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"data\\\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":{\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"count\\\"\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\":5\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"}}\"}}]},\"index\":0}]}\n\n",
-		"data: {\"id\":\"chatcmpl-json\",\"choices\":[{\"delta\":{},\"index\":0,\"finish_reason\":\"tool_calls\"}]}\n\n",
-		"data: [DONE]\n\n",
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-json", 0, "call_complex", "process"),
+		toolArgsChunk("chatcmpl-json", 0, `{`),
+		toolArgsChunk("chatcmpl-json", 0, `\\\"data\\\"`),
+		toolArgsChunk("chatcmpl-json", 0, `:{`),
+		toolArgsChunk("chatcmpl-json", 0, `\\\"count\\\"`),
+		toolArgsChunk("chatcmpl-json", 0, `:5`),
+		toolArgsChunk("chatcmpl-json", 0, `}}`),
+		finishChunk("chatcmpl-json", "tool_calls"),
+		doneChunk(),
 	})
 
-	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), openaiStream, recorder, nil)
-	require.NoError(t, err)
-
+	recorder := executeTransform(t, translator, stream)
 	body := recorder.Body.String()
 
 	// verify input_json_delta events contain the partial json
-	assert.Contains(t, body, `"type":"input_json_delta"`)
-	assert.Contains(t, body, `"partial_json"`)
+	assertContainsAll(t, body, []string{
+		`"type":"input_json_delta"`,
+		`"partial_json"`,
+		`{`,
+		`data`,
+		`count`,
+	})
+}
 
-	// verify the partial json chunks are present in sequence
-	assert.Contains(t, body, `{`)
-	assert.Contains(t, body, `data`)
-	assert.Contains(t, body, `count`)
+func TestTransformStreamingResponse_TextBeforeTool(t *testing.T) {
+	translator := newTestTranslator()
+
+	// regression test: text content followed by tool call requires proper block closing
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-textool", "claude-3-5-sonnet-20241022", "Let me "),
+		textChunk("chatcmpl-textool", "", "help you with that."),
+		toolStartChunk("chatcmpl-textool", 0, "call_search", "search_db"),
+		toolArgsChunk("chatcmpl-textool", 0, `{\\\"query\\\":\\\"anthropic\\\"}`),
+		finishChunk("chatcmpl-textool", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+	events := parseAnthropicEvents(t, body)
+
+	// verify we have correct sequence: text block start -> deltas -> stop, then tool block start -> deltas -> stop
+	assertContainsAll(t, body, []string{
+		`"text":"Let me "`,
+		`"text":"help you with that."`,
+	})
+	assertToolPresent(t, body, "call_search", "search_db")
+
+	// count content block events - should have 2 starts (text + tool) and 2 stops (text + tool)
+	assertContentBlockCount(t, events, 2)
+	assertBlocksClosed(t, events)
+
+	// verify the text block is stopped before tool block starts
+	assertBlockTransitionOrder(t, events)
+}
+
+func TestTransformStreamingResponse_MultipleToolsSequential(t *testing.T) {
+	translator := newTestTranslator()
+
+	// test multiple tools with indices 0, 1, 2 to verify mapping works correctly
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-seq", 0, "call_tool0", "search"),
+		toolArgsChunk("chatcmpl-seq", 0, `{\\\"q\\\":\\\"first\\\"}`),
+		toolStartChunk("chatcmpl-seq", 1, "call_tool1", "weather"),
+		toolArgsChunk("chatcmpl-seq", 1, `{\\\"city\\\":\\\"SF\\\"}`),
+		toolStartChunk("chatcmpl-seq", 2, "call_tool2", "calc"),
+		toolArgsChunk("chatcmpl-seq", 2, `{\\\"expr\\\":\\\"2+2\\\"}`),
+		finishChunk("chatcmpl-seq", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// verify all three tools are present with correct IDs and names
+	assertToolPresent(t, body, "call_tool0", "search")
+	assertToolPresent(t, body, "call_tool1", "weather")
+	assertToolPresent(t, body, "call_tool2", "calc")
+
+	// verify all tool arguments are present
+	assertContainsAll(t, body, []string{`first`, `SF`, `2+2`})
+
+	events := parseAnthropicEvents(t, body)
+	assertContentBlockCount(t, events, 3)
+}
+
+func TestTransformStreamingResponse_InterleavedToolArguments(t *testing.T) {
+	translator := newTestTranslator()
+
+	// simulate arguments arriving interleaved between tools (common in streaming)
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-int", 0, "call_A", "toolA"),
+		toolStartChunk("chatcmpl-int", 1, "call_B", "toolB"),
+		// interleave chunks
+		toolArgsChunk("chatcmpl-int", 0, `{\\\"data\\\"`),
+		toolArgsChunk("chatcmpl-int", 1, `{\\\"value\\\"`),
+		toolArgsChunk("chatcmpl-int", 0, `:123}`),
+		toolArgsChunk("chatcmpl-int", 1, `:456}`),
+		finishChunk("chatcmpl-int", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// verify both tools present with complete arguments despite interleaving
+	assertToolPresent(t, body, "call_A", "toolA")
+	assertToolPresent(t, body, "call_B", "toolB")
+	assertContainsAll(t, body, []string{`123`, `456`})
+}
+
+func TestTransformStreamingResponse_ToolTextToolTransitions(t *testing.T) {
+	translator := newTestTranslator()
+
+	// tool -> text -> tool sequence to test block closing
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-trans", 0, "call_first", "first_tool"),
+		toolArgsChunk("chatcmpl-trans", 0, `{\\\"arg\\\":\\\"val\\\"}`),
+		textChunk("chatcmpl-trans", "", "Here is some text"),
+		toolStartChunk("chatcmpl-trans", 1, "call_second", "second_tool"),
+		toolArgsChunk("chatcmpl-trans", 1, `{\\\"x\\\":1}`),
+		finishChunk("chatcmpl-trans", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+	events := parseAnthropicEvents(t, body)
+
+	// count blocks - should have 3 blocks (tool, text, tool)
+	assertContentBlockCount(t, events, 3)
+	assertBlocksClosed(t, events)
+
+	// verify all content is present
+	assertToolPresent(t, body, "call_first", "first_tool")
+	assertTextContent(t, body, "Here is some text")
+	assertToolPresent(t, body, "call_second", "second_tool")
+}
+
+func TestTransformStreamingResponse_ToolWithEmptyArguments(t *testing.T) {
+	translator := newTestTranslator()
+
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-empty", 0, "call_empty", "no_args_tool"),
+		toolArgsChunk("chatcmpl-empty", 0, "{}"),
+		finishChunk("chatcmpl-empty", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// verify tool is present with empty arguments
+	assertToolPresent(t, body, "call_empty", "no_args_tool")
+	assert.Contains(t, body, `"partial_json":"{}"`)
+}
+
+func TestTransformStreamingResponse_LargeSSELines(t *testing.T) {
+	translator := newTestTranslator()
+
+	// create a large argument string (near scanner buffer limit)
+	// 500 KiB of JSON data - should be well within 1 MiB limit
+	largeData := strings.Repeat("x", 500*1024)
+	largeArgsJSON := fmt.Sprintf("{\\\"data\\\":\\\"%s\\\"}", largeData)
+
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-large", 0, "call_large", "large_tool"),
+		toolArgsChunk("chatcmpl-large", 0, largeArgsJSON),
+		finishChunk("chatcmpl-large", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// verify tool was processed
+	assertToolPresent(t, body, "call_large", "large_tool")
+}
+
+func TestTransformStreamingResponse_ToolArgsMultipleSmallChunks(t *testing.T) {
+	translator := newTestTranslator()
+
+	// send JSON one character at a time to test buffering
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-chunks", 0, "call_chunky", "chunky"),
+		toolArgsChunk("chatcmpl-chunks", 0, `{`),
+		toolArgsChunk("chatcmpl-chunks", 0, `\\\"`),
+		toolArgsChunk("chatcmpl-chunks", 0, `a`),
+		toolArgsChunk("chatcmpl-chunks", 0, `\\\"`),
+		toolArgsChunk("chatcmpl-chunks", 0, `:`),
+		toolArgsChunk("chatcmpl-chunks", 0, `1`),
+		toolArgsChunk("chatcmpl-chunks", 0, `}`),
+		finishChunk("chatcmpl-chunks", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// verify all small chunks were accumulated
+	assertToolPresent(t, body, "call_chunky", "chunky")
+
+	events := parseAnthropicEvents(t, body)
+	deltaCount := countEventsByType(events, "content_block_delta")
+	// should have 7 delta events (one per argument chunk)
+	assert.Equal(t, 7, deltaCount, "Should have delta event for each small chunk")
+}
+
+func TestTransformStreamingResponse_ToolArgsOneLargeChunk(t *testing.T) {
+	translator := newTestTranslator()
+
+	// complex nested JSON arriving all at once
+	complexJSON := `{\\\"user\\\":{\\\"name\\\":\\\"Alice\\\",\\\"age\\\":30,\\\"address\\\":{\\\"city\\\":\\\"Sydney\\\",\\\"postcode\\\":2000}},\\\"items\\\":[1,2,3,4,5]}`
+
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-onechunk", 0, "call_onechunk", "process"),
+		toolArgsChunk("chatcmpl-onechunk", 0, complexJSON),
+		finishChunk("chatcmpl-onechunk", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// verify tool and complex arguments
+	assertToolPresent(t, body, "call_onechunk", "process")
+	assertContainsAll(t, body, []string{`Alice`, `Sydney`})
+}
+
+func TestTransformStreamingResponse_MalformedToolJSON(t *testing.T) {
+	translator := newTestTranslator()
+
+	// send malformed JSON in tool arguments
+	stream := mockOpenAIStream([]string{
+		toolStartChunk("chatcmpl-badjson", 0, "call_bad", "bad_tool"),
+		toolArgsChunk("chatcmpl-badjson", 0, "{invalid json here"),
+		finishChunk("chatcmpl-badjson", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// stream should still complete with tool metadata
+	assertToolPresent(t, body, "call_bad", "bad_tool")
+	// the malformed partial json should still be sent as delta events
+	assert.Contains(t, body, `invalid json`)
+}
+
+func TestTransformStreamingResponse_ToolWithMissingID(t *testing.T) {
+	translator := newTestTranslator()
+
+	// tool without ID field (shouldn't start block)
+	stream := mockOpenAIStream([]string{
+		"data: {\"id\":\"chatcmpl-noid\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"type\":\"function\",\"function\":{\"name\":\"no_id_tool\",\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
+		toolArgsChunk("chatcmpl-noid", 0, `{\\\"x\\\":1}`),
+		finishChunk("chatcmpl-noid", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	events := parseAnthropicEvents(t, recorder.Body.String())
+
+	// without ID, content_block_start should not be created for tool
+	assertEventCount(t, events, "content_block_start", 0)
+}
+
+func TestTransformStreamingResponse_ToolWithMissingName(t *testing.T) {
+	translator := newTestTranslator()
+
+	// tool without name field (shouldn't start block)
+	stream := mockOpenAIStream([]string{
+		"data: {\"id\":\"chatcmpl-noname\",\"model\":\"claude-3-5-sonnet-20241022\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_noname\",\"type\":\"function\",\"function\":{\"arguments\":\"\"}}]},\"index\":0}]}\n\n",
+		toolArgsChunk("chatcmpl-noname", 0, `{\\\"y\\\":2}`),
+		finishChunk("chatcmpl-noname", "tool_calls"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	events := parseAnthropicEvents(t, recorder.Body.String())
+
+	// without name, content_block_start should not be created
+	assertEventCount(t, events, "content_block_start", 0)
+}
+
+func TestTransformStreamingResponse_EmptyToolCallsArray(t *testing.T) {
+	translator := newTestTranslator()
+
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-emptyarray", "claude-3-5-sonnet-20241022", "Hello"),
+		"data: {\"id\":\"chatcmpl-emptyarray\",\"choices\":[{\"delta\":{\"tool_calls\":[]},\"index\":0}]}\n\n",
+		finishChunk("chatcmpl-emptyarray", "stop"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// should just have text content
+	assertTextContent(t, body, "Hello")
+	assert.Contains(t, body, `"stop_reason":"end_turn"`)
+}
+
+func TestTransformStreamingResponse_ManyTools(t *testing.T) {
+	translator := newTestTranslator()
+
+	// create stream with 15 tools
+	chunks := []string{
+		textChunk("chatcmpl-many", "claude-3-5-sonnet-20241022", "Processing many tools"),
+	}
+
+	// add 15 tools with interleaved arguments
+	for i := 0; i < 15; i++ {
+		chunks = append(chunks, toolStartChunk("chatcmpl-many", i, fmt.Sprintf("call_%d", i), fmt.Sprintf("tool_%d", i)))
+	}
+	for i := 0; i < 15; i++ {
+		chunks = append(chunks, toolArgsChunk("chatcmpl-many", i, fmt.Sprintf(`{\\\"n\\\":%d}`, i)))
+	}
+
+	chunks = append(chunks, finishChunk("chatcmpl-many", "tool_calls"))
+	chunks = append(chunks, doneChunk())
+
+	stream := mockOpenAIStream(chunks)
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+
+	// verify all 15 tools are present
+	for i := 0; i < 15; i++ {
+		assertToolPresent(t, body, fmt.Sprintf("call_%d", i), fmt.Sprintf("tool_%d", i))
+	}
+
+	events := parseAnthropicEvents(t, body)
+	// count blocks - should have text + 15 tools = 16 blocks
+	assertContentBlockCount(t, events, 16)
+}
+
+func TestTransformStreamingResponse_RapidBlockTypeSwitch(t *testing.T) {
+	translator := newTestTranslator()
+
+	// alternate between text and tools rapidly
+	stream := mockOpenAIStream([]string{
+		textChunk("chatcmpl-rapid", "claude-3-5-sonnet-20241022", "Text1"),
+		toolStartChunk("chatcmpl-rapid", 0, "call_1", "tool1"),
+		toolArgsChunk("chatcmpl-rapid", 0, `{\\\"a\\\":1}`),
+		textChunk("chatcmpl-rapid", "", "Text2"),
+		toolStartChunk("chatcmpl-rapid", 1, "call_2", "tool2"),
+		toolArgsChunk("chatcmpl-rapid", 1, `{\\\"b\\\":2}`),
+		textChunk("chatcmpl-rapid", "", "Text3"),
+		finishChunk("chatcmpl-rapid", "stop"),
+		doneChunk(),
+	})
+
+	recorder := executeTransform(t, translator, stream)
+	body := recorder.Body.String()
+	events := parseAnthropicEvents(t, body)
+
+	// verify all blocks are properly closed
+	assertContentBlockCount(t, events, 5) // text, tool, text, tool, text
+	assertBlocksClosed(t, events)
+
+	// verify content
+	assertTextContent(t, body, "Text1")
+	assertToolPresent(t, body, "call_1", "tool1")
+	assertTextContent(t, body, "Text2")
+	assertToolPresent(t, body, "call_2", "tool2")
+	assertTextContent(t, body, "Text3")
 }

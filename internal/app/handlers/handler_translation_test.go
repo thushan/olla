@@ -21,6 +21,7 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/util"
 )
 
 // mockTranslator implements RequestTranslator for testing
@@ -1439,8 +1440,19 @@ func TestStripPrefixBehavior(t *testing.T) {
 
 	for _, tt := range utilTests {
 		t.Run(tt.name, func(t *testing.T) {
-
-			assert.Equal(t, "/olla/", constants.DefaultOllaProxyPathPrefix, "Constant should match expected value")
+			result := util.StripPrefix(tt.path, tt.prefix)
+			assert.Equal(t, tt.expected, result, tt.name)
 		})
+	}
+}
+
+// BenchmarkStripPrefix measures the performance of util.StripPrefix
+func BenchmarkStripPrefix(b *testing.B) {
+	path := "/olla/v1/chat/completions"
+	prefix := constants.DefaultOllaProxyPathPrefix
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = util.StripPrefix(path, prefix)
 	}
 }

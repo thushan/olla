@@ -429,3 +429,48 @@ func TestCountTokensMatchesPythonReference(t *testing.T) {
 		t.Errorf("Expected %d tokens to match Python reference, got %d", expectedTokens, resp.InputTokens)
 	}
 }
+func BenchmarkCountTokens(b *testing.B) {
+	trans := NewTranslator(createTestLogger(), createTestConfig())
+
+	reqBody := []byte(`{
+		"model": "claude-3-5-sonnet-20241022",
+		"max_tokens": 1024,
+		"system": "You are a helpful assistant.",
+		"messages": [{"role": "user", "content": "Hello, world!"}]
+	}`)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		_, _ = trans.CountTokens(context.Background(), req)
+	}
+}
+
+func BenchmarkCountTokensLargeRequest(b *testing.B) {
+	trans := NewTranslator(createTestLogger(), createTestConfig())
+
+	// Large request with multiple messages and content blocks
+	messages := make([]map[string]interface{}, 50)
+	for i := range messages {
+		messages[i] = map[string]interface{}{
+			"role":    "user",
+			"content": "This is a test message with reasonable length to simulate real usage patterns.",
+		}
+	}
+
+	reqData := map[string]interface{}{
+		"model":      "claude-3-5-sonnet-20241022",
+		"max_tokens": 4096,
+		"system":     "You are a helpful assistant with detailed knowledge.",
+		"messages":   messages,
+	}
+	reqBody, _ := json.Marshal(reqData)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
+		req.Header.Set("Content-Type", "application/json")
+		_, _ = trans.CountTokens(context.Background(), req)
+	}
+}
