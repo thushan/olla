@@ -38,14 +38,7 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 
 	// Log request to inspector if enabled
 	if t.inspector.Enabled() {
-		sessionID := r.Header.Get(t.inspector.GetSessionHeader())
-		if sessionID == "" {
-			// Fall back to request ID if no session header
-			sessionID = r.Header.Get("X-Request-ID")
-			if sessionID == "" {
-				sessionID = defaultSessionID
-			}
-		}
+		sessionID := t.getSessionID(r)
 		if lerr := t.inspector.LogRequest(sessionID, anthropicReq.Model, body); lerr != nil {
 			t.logger.Warn("Failed to log request to inspector", "error", lerr)
 		}
@@ -302,48 +295,21 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 
 // convert system prompt, handles string or content blocks
 func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
-	if systemStr, ok := systemPrompt.(string); ok {
-		if systemStr == "" {
-			return nil
+	// use the iterator to extract text from all content blocks
+	var textParts []string
+
+	// iterator handles all type conversions (string, []ContentBlock, *[]ContentBlock, []interface{})
+	_ = t.forEachSystemContentBlock(systemPrompt, func(block ContentBlock) error {
+		if block.Type == contentTypeText && block.Text != "" {
+			textParts = append(textParts, block.Text)
 		}
-		return systemStr
+		return nil
+	})
+
+	if len(textParts) == 0 {
+		return nil
 	}
 
-	// handle strongly-typed content blocks from json unmarshal
-	if contentBlocks, ok := systemPrompt.([]ContentBlock); ok {
-		var textParts []string
-		for _, block := range contentBlocks {
-			if block.Type == contentTypeText && block.Text != "" {
-				textParts = append(textParts, block.Text)
-			}
-		}
-
-		if len(textParts) > 0 {
-			return strings.Join(textParts, "")
-		}
-	}
-
-	// handle interface array form
-	if systemBlocks, ok := systemPrompt.([]interface{}); ok {
-		var textParts []string
-		for _, block := range systemBlocks {
-			blockMap, ok := block.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			blockType, _ := blockMap["type"].(string)
-			if blockType == contentTypeText {
-				if text, ok := blockMap["text"].(string); ok && text != "" {
-					textParts = append(textParts, text)
-				}
-			}
-		}
-
-		if len(textParts) > 0 {
-			return strings.Join(textParts, "")
-		}
-	}
-
-	return nil
+	// join text blocks directly without separator
+	return strings.Join(textParts, "")
 }

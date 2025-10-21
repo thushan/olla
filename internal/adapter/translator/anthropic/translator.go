@@ -72,6 +72,33 @@ func (t *Translator) GetAPIPath() string {
 	return "/olla/anthropic/v1/messages"
 }
 
+// getSessionID extracts the session ID from the request using a fallback chain.
+// this ensures we always have a valid session id for request tracking:
+// 1. try the configured session header (for custom session management)
+// 2. if there's none, fall back to X-Request-ID (standard request correlation)
+// 3. if that's still no go we, use default constant
+// the chain exists because different callers may use different correlation mechanisms.
+func (t *Translator) getSessionID(r *http.Request) string {
+	const HeaderRequestId = "X-Request-ID"
+
+	sessionID := r.Header.Get(t.inspector.GetSessionHeader())
+	if sessionID == "" {
+		sessionID = r.Header.Get(HeaderRequestId)
+		if sessionID == "" {
+			sessionID = defaultSessionID
+		}
+	}
+
+	return sessionID
+}
+
+// forEachSystemContentBlock iterates over system prompt content blocks regardless of input format.
+// This is a convenience wrapper around the standalone forEachSystemBlock function.
+// See forEachSystemBlock in token_count.go for the implementation details.
+func (t *Translator) forEachSystemContentBlock(system interface{}, fn func(block ContentBlock) error) error {
+	return forEachSystemBlock(system, fn)
+}
+
 // WriteError implements ErrorWriter interface for Anthropic-specific error formatting
 // Formats errors according to Anthropic's error schema
 // See: https://docs.anthropic.com/claude/reference/errors

@@ -497,15 +497,9 @@ func (t *Translator) logStreamingResponse(state *StreamingState, original *http.
 
 	// Extract session ID from request header or fall back to defaults
 	// Uses same logic as non-streaming response logging
-	sessionID := ""
+	sessionID := defaultSessionID
 	if original != nil {
-		sessionID = original.Header.Get(t.inspector.GetSessionHeader())
-		if sessionID == "" {
-			sessionID = original.Header.Get("X-Request-ID")
-		}
-	}
-	if sessionID == "" {
-		sessionID = defaultSessionID
+		sessionID = t.getSessionID(original)
 	}
 
 	// Log the response

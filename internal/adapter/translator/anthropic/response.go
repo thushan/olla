@@ -69,13 +69,7 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 
 	// Log response to inspector if enabled
 	if t.inspector.Enabled() {
-		sessionID := original.Header.Get(t.inspector.GetSessionHeader())
-		if sessionID == "" {
-			sessionID = original.Header.Get("X-Request-ID")
-			if sessionID == "" {
-				sessionID = defaultSessionID
-			}
-		}
+		sessionID := t.getSessionID(original)
 		if respBytes, err := json.Marshal(anthropicResp); err == nil {
 			if err := t.inspector.LogResponse(sessionID, respBytes); err != nil {
 				t.logger.Warn("Failed to log response to inspector", "error", err)
