@@ -63,7 +63,7 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 	}
 
 	// send final events (stop reason + token counts)
-	if err := t.finalizeStream(state, w, rc); err != nil {
+	if err := t.finalizeStream(state, w, rc, original); err != nil {
 		return err
 	}
 
@@ -389,7 +389,7 @@ func (t *Translator) handleToolCallsDelta(toolCalls []interface{}, state *Stream
 }
 
 // send final events, parse tool buffers, determine stop_reason
-func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter, rc *http.ResponseController) error {
+func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter, rc *http.ResponseController, original *http.Request) error {
 	// close current block if still open
 	if state.currentBlock != nil {
 		if err := t.writeEvent(w, "content_block_stop", map[string]interface{}{
@@ -461,7 +461,57 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 		return fmt.Errorf("flush failed: %w", err)
 	}
 
+	// Log complete streaming response to inspector if enabled
+	// Reconstructs the final response from streaming state for debugging
+	if t.inspector.Enabled() {
+		t.logStreamingResponse(state, original)
+	}
+
 	return nil
+}
+
+// logStreamingResponse logs the complete streaming response to inspector
+// Reconstructs a complete Anthropic response from the streaming state
+func (t *Translator) logStreamingResponse(state *StreamingState, original *http.Request) {
+	// Build complete response matching the non-streaming format
+	response := AnthropicResponse{
+		ID:           state.messageID,
+		Type:         "message",
+		Role:         "assistant",
+		Model:        state.model,
+		Content:      state.contentBlocks,
+		StopReason:   mapFinishReasonToStopReason(state.lastFinishReason),
+		StopSequence: nil,
+		Usage: AnthropicUsage{
+			InputTokens:  state.inputTokens,
+			OutputTokens: state.outputTokens,
+		},
+	}
+
+	// Marshal to JSON for logging
+	respBytes, err := json.Marshal(response)
+	if err != nil {
+		t.logger.Warn("Failed to marshal streaming response for inspector", "error", err)
+		return
+	}
+
+	// Extract session ID from request header or fall back to defaults
+	// Uses same logic as non-streaming response logging
+	sessionID := ""
+	if original != nil {
+		sessionID = original.Header.Get(t.inspector.GetSessionHeader())
+		if sessionID == "" {
+			sessionID = original.Header.Get("X-Request-ID")
+		}
+	}
+	if sessionID == "" {
+		sessionID = defaultSessionID
+	}
+
+	// Log the response
+	if err := t.inspector.LogResponse(sessionID, respBytes); err != nil {
+		t.logger.Warn("Failed to log streaming response to inspector", "error", err)
+	}
 }
 
 // create initial message_start event with metadata

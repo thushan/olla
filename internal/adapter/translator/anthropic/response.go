@@ -73,7 +73,7 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 		if sessionID == "" {
 			sessionID = original.Header.Get("X-Request-ID")
 			if sessionID == "" {
-				sessionID = "default"
+				sessionID = defaultSessionID
 			}
 		}
 		if respBytes, err := json.Marshal(anthropicResp); err == nil {

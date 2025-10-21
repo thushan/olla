@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"net"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -186,6 +189,133 @@ type InspectorConfig struct {
 	Enabled       bool   `yaml:"enabled"`
 }
 
+// validHTTPHeaderPattern matches valid HTTP header names per RFC 7230
+// Header names must be tokens (alphanumeric and !#$%&'*+-.^_`|~)
+var validHTTPHeaderPattern = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+\-.^_` + "`" + `|~]+$`)
+
+// validateOutputPath checks if a path is dangerous system path
+// Prevents writing to critical system directories
+func validateOutputPath(cleanPath string) error {
+	// Convert to absolute path for checking
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return fmt.Errorf("invalid output_dir path: %w", err)
+	}
+
+	// Normalize for case-insensitive comparison on Windows
+	absPathLower := strings.ToLower(absPath)
+	cleanPathLower := strings.ToLower(cleanPath)
+
+	// Unix-specific dangerous paths (only check on Unix-like systems)
+	unixDangerousPaths := []string{
+		"/etc",
+		"/var",
+		"/usr",
+		"/bin",
+		"/sbin",
+		"/boot",
+		"/sys",
+		"/proc",
+		"/dev",
+		"/root",
+	}
+
+	// Windows-specific dangerous paths
+	windowsDangerousPaths := []string{
+		"c:\\windows",
+		"c:\\program files",
+		"c:\\program files (x86)",
+	}
+
+	// Universal dangerous paths (root directories)
+	universalDangerousPaths := []string{
+		"/",
+		"\\",
+		"c:\\",
+	}
+
+	// Check universal dangerous paths
+	for _, dangerous := range universalDangerousPaths {
+		dangerousLower := strings.ToLower(dangerous)
+		if cleanPathLower == dangerousLower || absPathLower == dangerousLower {
+			return fmt.Errorf("output_dir cannot be set to dangerous system path: %s", cleanPath)
+		}
+	}
+
+	// Check Unix paths only if the path starts with / (Unix-style)
+	if strings.HasPrefix(cleanPath, "/") {
+		for _, dangerous := range unixDangerousPaths {
+			dangerousWithSep := dangerous + "/"
+			if cleanPath == dangerous || strings.HasPrefix(cleanPath, dangerousWithSep) {
+				return fmt.Errorf("output_dir cannot be set to dangerous system path: %s", cleanPath)
+			}
+			// Also check absolute path
+			if absPath == dangerous || strings.HasPrefix(absPath, dangerousWithSep) {
+				return fmt.Errorf("output_dir resolves to dangerous system path: %s", absPath)
+			}
+		}
+	}
+
+	// Check Windows paths
+	for _, dangerous := range windowsDangerousPaths {
+		dangerousLower := strings.ToLower(dangerous)
+		dangerousWithSep := dangerousLower + "\\"
+		if absPathLower == dangerousLower || strings.HasPrefix(absPathLower, dangerousWithSep) {
+			return fmt.Errorf("output_dir cannot be set to dangerous system path: %s", cleanPath)
+		}
+	}
+
+	return nil
+}
+
+// Validate validates the inspector configuration
+// Prevents dangerous output paths and ensures session header is valid
+func (c *InspectorConfig) Validate() error {
+	if !c.Enabled {
+		return nil // Skip validation if disabled
+	}
+
+	// Validate output directory is not a dangerous path
+	if c.OutputDir == "" {
+		// Set sensible default
+		c.OutputDir = "./inspector-logs"
+	} else {
+		// Clean the path to normalize it
+		cleanPath := filepath.Clean(c.OutputDir)
+
+		// Check for dangerous paths based on platform
+		if err := validateOutputPath(cleanPath); err != nil {
+			return err
+		}
+
+		c.OutputDir = cleanPath
+	}
+
+	// Validate session header is a valid HTTP header name
+	if c.SessionHeader == "" {
+		// Set default
+		c.SessionHeader = "X-Session-ID"
+	} else {
+		// Remove any whitespace
+		c.SessionHeader = strings.TrimSpace(c.SessionHeader)
+
+		// Validate against HTTP header name rules (RFC 7230)
+		if !validHTTPHeaderPattern.MatchString(c.SessionHeader) {
+			return fmt.Errorf("session_header contains invalid characters (must be valid HTTP header name): %s", c.SessionHeader)
+		}
+
+		// Additional checks for common mistakes
+		if strings.Contains(c.SessionHeader, " ") {
+			return fmt.Errorf("session_header cannot contain spaces: %s", c.SessionHeader)
+		}
+		if strings.Contains(c.SessionHeader, ":") {
+			return fmt.Errorf("session_header cannot contain colons: %s", c.SessionHeader)
+		}
+	}
+
+	return nil
+}
+
 // Validate validates the Anthropic translator configuration
 // Ensures message size is within safe bounds to prevent DoS and API errors
 func (c *AnthropicTranslatorConfig) Validate() error {
@@ -195,5 +325,11 @@ func (c *AnthropicTranslatorConfig) Validate() error {
 	if c.MaxMessageSize > MaxAnthropicMessageSize {
 		return fmt.Errorf("max_message_size exceeds 100 MiB safety limit, got %d", c.MaxMessageSize)
 	}
+
+	// Validate inspector configuration
+	if err := c.Inspector.Validate(); err != nil {
+		return fmt.Errorf("inspector config invalid: %w", err)
+	}
+
 	return nil
 }

@@ -43,7 +43,7 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 			// Fall back to request ID if no session header
 			sessionID = r.Header.Get("X-Request-ID")
 			if sessionID == "" {
-				sessionID = "default"
+				sessionID = defaultSessionID
 			}
 		}
 		if lerr := t.inspector.LogRequest(sessionID, anthropicReq.Model, body); lerr != nil {
