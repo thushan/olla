@@ -46,8 +46,8 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 				sessionID = "default"
 			}
 		}
-		if err := t.inspector.LogRequest(sessionID, anthropicReq.Model, body); err != nil {
-			t.logger.Warn("Failed to log request to inspector", "error", err)
+		if lerr := t.inspector.LogRequest(sessionID, anthropicReq.Model, body); lerr != nil {
+			t.logger.Warn("Failed to log request to inspector", "error", lerr)
 		}
 	}
 
@@ -103,7 +103,7 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 		OriginalBody:  body,
 		ModelName:     anthropicReq.Model,
 		IsStreaming:   anthropicReq.Stream,
-		TargetPath:    "/v1/chat/completions", // backend endpoint, proxy adds /olla prefix
+		TargetPath:    "/v1/chat/completions",
 		Metadata: map[string]interface{}{
 			"format": "anthropic",
 		},

@@ -17,9 +17,9 @@ import (
 type Translator struct {
 	logger         logger.StyledLogger
 	bufferPool     *pool.Pool[*bytes.Buffer]
+	inspector      *inspector.Simple
 	config         config.AnthropicTranslatorConfig
 	maxMessageSize int64 // derived from config
-	inspector      *inspector.Simple
 }
 
 // NewTranslator creates a new Anthropic translator instance

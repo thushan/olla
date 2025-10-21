@@ -13,8 +13,8 @@ import (
 
 // Entry represents a single request or response entry in the inspector log
 type Entry struct {
-	Type      string          `json:"type"`      // "request" or "response"
-	Timestamp string          `json:"ts"`        // ISO8601 timestamp
+	Type      string          `json:"type"` // "request" or "response"
+	Timestamp string          `json:"ts"`   // ISO8601 timestamp
 	Model     string          `json:"model,omitempty"`
 	Body      json.RawMessage `json:"body"`
 }
@@ -22,11 +22,11 @@ type Entry struct {
 // Simple is a minimal inspector that dumps requests/responses to disk
 // Designed for quick debugging without fancy features
 type Simple struct {
-	enabled       bool
+	logger        logger.StyledLogger
 	outputDir     string
 	sessionHeader string
-	logger        logger.StyledLogger
 	mu            sync.Mutex // protects file operations
+	enabled       bool
 }
 
 // NewSimple creates a new simple inspector

@@ -10,14 +10,14 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	Filename      string              `yaml:"-"`
 	Logging       LoggingConfig       `yaml:"logging"`
+	Filename      string              `yaml:"-"`
+	Translators   TranslatorsConfig   `yaml:"translators"`
 	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
 	Proxy         ProxyConfig         `yaml:"proxy"`
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
 	Server        ServerConfig        `yaml:"server"`
 	Engineering   EngineeringConfig   `yaml:"engineering"`
-	Translators   TranslatorsConfig   `yaml:"translators"`
 }
 
 // ServerConfig holds HTTP server configuration
