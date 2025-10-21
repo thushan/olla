@@ -137,7 +137,13 @@ translators:
   anthropic:
     enabled: true
     max_message_size: 10485760  # 10MB - Anthropic API limit
-
+    # !! WARNING: Do not enable inspector in production without reviewing data privacy !!
+    #             Anthropic messages may contain sensitive user data.
+    #  This release is quite taxing and unoptimised, so use with caution & only for debug.
+    inspector:
+      enabled: false                          # Enable request/response logging
+      output_dir: "logs/inspector/anthropic"  # Where to write logs
+      session_header: "X-Session-ID"          # Header to use for session grouping
 logging:
   level: "info"  # debug, info, warn, error
   format: "json"  # json, text

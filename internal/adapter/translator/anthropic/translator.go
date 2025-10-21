@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
@@ -18,6 +19,7 @@ type Translator struct {
 	bufferPool     *pool.Pool[*bytes.Buffer]
 	config         config.AnthropicTranslatorConfig
 	maxMessageSize int64 // derived from config
+	inspector      *inspector.Simple
 }
 
 // NewTranslator creates a new Anthropic translator instance
@@ -42,11 +44,20 @@ func NewTranslator(log logger.StyledLogger, cfg config.AnthropicTranslatorConfig
 		log.Warn("Invalid or missing max_message_size, using default", "default", maxSize)
 	}
 
+	// Create inspector for debugging
+	insp := inspector.NewSimple(
+		cfg.Inspector.Enabled,
+		cfg.Inspector.OutputDir,
+		cfg.Inspector.SessionHeader,
+		log,
+	)
+
 	return &Translator{
 		logger:         log,
 		bufferPool:     bufferPool,
 		config:         cfg,
 		maxMessageSize: maxSize,
+		inspector:      insp,
 	}
 }
 

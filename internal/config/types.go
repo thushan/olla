@@ -174,8 +174,16 @@ const MaxAnthropicMessageSize = 100 << 20
 
 // AnthropicTranslatorConfig holds configuration for the Anthropic translator
 type AnthropicTranslatorConfig struct {
-	MaxMessageSize int64 `yaml:"max_message_size"`
-	Enabled        bool  `yaml:"enabled"`
+	Inspector      InspectorConfig `yaml:"inspector"`
+	MaxMessageSize int64           `yaml:"max_message_size"`
+	Enabled        bool            `yaml:"enabled"`
+}
+
+// InspectorConfig holds configuration for request/response inspection
+type InspectorConfig struct {
+	OutputDir     string `yaml:"output_dir"`
+	SessionHeader string `yaml:"session_header"`
+	Enabled       bool   `yaml:"enabled"`
 }
 
 // Validate validates the Anthropic translator configuration

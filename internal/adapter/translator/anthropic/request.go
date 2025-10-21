@@ -36,6 +36,21 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Log request to inspector if enabled
+	if t.inspector.Enabled() {
+		sessionID := r.Header.Get(t.inspector.GetSessionHeader())
+		if sessionID == "" {
+			// Fall back to request ID if no session header
+			sessionID = r.Header.Get("X-Request-ID")
+			if sessionID == "" {
+				sessionID = "default"
+			}
+		}
+		if err := t.inspector.LogRequest(sessionID, anthropicReq.Model, body); err != nil {
+			t.logger.Warn("Failed to log request to inspector", "error", err)
+		}
+	}
+
 	// Convert to OpenAI format
 	openaiReq := make(map[string]interface{})
 
