@@ -113,6 +113,7 @@ nav:
       - Overview: index.md
       - Demo: demo.md
       - FAQ: faq.md
+      - Notes: notes/overview.md
       - Usage: usage.md
       - About: about.md
       - Compare:
@@ -175,6 +176,8 @@ nav:
       - Contributing: development/contributing.md
       - Testing: development/testing.md
       - Benchmarking: development/benchmarking.md
+      - Notes:
+          - Anthropic Inspector: notes/anthropic-inspector.md
   - API Reference:
       - Overview: api-reference/overview.md
       - System Endpoints: api-reference/system.md

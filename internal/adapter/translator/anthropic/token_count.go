@@ -73,48 +73,72 @@ func estimateTokensFromRequest(req *AnthropicRequest) int {
 // system prompt char counting
 // handles string and content block formats
 func countSystemChars(system interface{}) int {
-	if system == nil {
-		return 0
-	}
+	totalChars := 0
 
-	// string form handling
-	if systemStr, ok := system.(string); ok {
-		return len(systemStr)
-	}
-
-	// typed content block array handling
-	if systemBlocks, ok := system.([]ContentBlock); ok {
-		totalChars := 0
-		for _, block := range systemBlocks {
-			totalChars += countTypedContentBlockChars(&block)
+	_ = forEachSystemBlock(system, func(block ContentBlock) error {
+		if block.Type == contentTypeText {
+			totalChars += len(block.Text)
 		}
-		return totalChars
+		// for other block types, convert to typed block and count
+		if block.Type != "" && block.Type != contentTypeText {
+			totalChars += countContentBlockChars(&block)
+		}
+		return nil
+	})
+
+	return totalChars
+}
+
+// forEachSystemBlock iterates over system prompt content blocks regardless of input format.
+// This is a standalone version of the iterator that doesn't require a Translator instance.
+// Handles: string, []ContentBlock, *[]ContentBlock, []interface{}
+func forEachSystemBlock(system interface{}, fn func(block ContentBlock) error) error {
+	if system == nil {
+		return nil
 	}
 
-	// pointer to typed content block array handling
+	if systemStr, ok := system.(string); ok {
+		if systemStr != "" {
+			return fn(ContentBlock{
+				Type: contentTypeText,
+				Text: systemStr,
+			})
+		}
+		return nil
+	}
+
+	if systemBlocks, ok := system.([]ContentBlock); ok {
+		for _, block := range systemBlocks {
+			if err := fn(block); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	if systemBlocksPtr, ok := system.(*[]ContentBlock); ok {
 		if systemBlocksPtr != nil {
-			totalChars := 0
 			for _, block := range *systemBlocksPtr {
-				totalChars += countTypedContentBlockChars(&block)
+				if err := fn(block); err != nil {
+					return err
+				}
 			}
-			return totalChars
 		}
-		return 0
+		return nil
 	}
 
-	// untyped content block array handling
 	if systemBlocks, ok := system.([]interface{}); ok {
-		totalChars := 0
 		for _, block := range systemBlocks {
-			if blockMap, ok := block.(map[string]interface{}); ok {
-				totalChars += countContentBlockChars(blockMap)
+			if normalised, nok := normaliseContentBlock(block); nok {
+				if err := fn(*normalised); err != nil {
+					return err
+				}
 			}
 		}
-		return totalChars
+		return nil
 	}
 
-	return 0
+	return nil
 }
 
 // message char counting
@@ -128,103 +152,158 @@ func countMessageChars(msg *AnthropicMessage) int {
 		totalChars += len(content)
 
 	case []interface{}:
-		// untyped block arrays
+		// untyped block arrays - normalise then count
 		for _, block := range content {
-			if blockMap, ok := block.(map[string]interface{}); ok {
-				totalChars += countContentBlockChars(blockMap)
+			if normalised, ok := normaliseContentBlock(block); ok {
+				totalChars += countContentBlockChars(normalised)
 			}
 		}
 
 	case []ContentBlock:
 		// typed block arrays
-		for _, block := range content {
-			totalChars += countTypedContentBlockChars(&block)
+		for i := range content {
+			totalChars += countContentBlockChars(&content[i])
 		}
 	}
 
 	return totalChars
 }
 
-// untyped content block handling
-// handles json block types
-func countContentBlockChars(block map[string]interface{}) int {
-	totalChars := 0
+// normaliseContentBlock converts various content block representations to a typed ContentBlock.
+// This centralises the type conversion logic so character counting can work with a single type.
+// Returns the normalised block and true on success, or an empty block and false on failure.
+func normaliseContentBlock(block interface{}) (*ContentBlock, bool) {
+	// already a typed ContentBlock pointer, return as-is
+	if typedBlock, ok := block.(*ContentBlock); ok {
+		return typedBlock, true
+	}
 
-	blockType, _ := block["type"].(string)
+	// already a typed ContentBlock value, return pointer
+	if typedBlock, ok := block.(ContentBlock); ok {
+		return &typedBlock, true
+	}
 
-	switch blockType {
-	case contentTypeText:
-		// text blocks have text field
-		if text, ok := block["text"].(string); ok {
-			totalChars += len(text)
-		}
+	// untyped map needs conversion to ContentBlock
+	blockMap, ok := block.(map[string]interface{})
+	if !ok {
+		return nil, false
+	}
 
-	case contentTypeToolResult:
-		// tool results with content field
-		if content, ok := block["content"].(string); ok {
-			totalChars += len(content)
-		} else if contentArray, ok := block["content"].([]interface{}); ok {
-			// nested blocks in tool results
-			for _, nestedBlock := range contentArray {
-				if nestedMap, ok := nestedBlock.(map[string]interface{}); ok {
-					totalChars += countContentBlockChars(nestedMap)
-				}
-			}
-		}
+	// extract common fields from the map
+	normalised := &ContentBlock{
+		Type: extractString(blockMap, "type"),
+		Text: extractString(blockMap, "text"),
+		Name: extractString(blockMap, "name"),
+	}
 
-	case contentTypeToolUse:
-		// tool use blocks with name and input
-		// count name in token estimate
-		if name, ok := block["name"].(string); ok {
-			totalChars += len(name)
-		}
-		// json input as serialized string
-		if input, ok := block["input"].(map[string]interface{}); ok {
-			if inputJSON, err := json.Marshal(input); err == nil {
-				totalChars += len(inputJSON)
-			}
+	// extract content field (can be string or nested structure)
+	if content, exists := blockMap["content"]; exists {
+		normalised.Content = content
+	}
+
+	// extract input field for tool_use blocks
+	if input, exists := blockMap["input"]; exists {
+		if inputMap, iok := input.(map[string]interface{}); iok {
+			normalised.Input = inputMap
 		}
 	}
 
-	return totalChars
+	return normalised, true
 }
 
-// typed content block handling
-// handles typed contentblock structs
-func countTypedContentBlockChars(block *ContentBlock) int {
-	totalChars := 0
+// extractString safely extracts a string value from a map, returning empty string if not found or wrong type
+func extractString(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+// countContentBlockChars calculates character count for a single content block.
+// This is the single source of truth for character counting logic across all content block types.
+// Handles text, tool_use, tool_result, and image blocks consistently.
+func countContentBlockChars(block *ContentBlock) int {
+	if block == nil {
+		return 0
+	}
 
 	switch block.Type {
 	case contentTypeText:
-		totalChars += len(block.Text)
+		// text blocks contribute their text length
+		return len(block.Text)
 
 	case contentTypeToolResult:
-		// content as string or nested blocks
-		if content, ok := block.Content.(string); ok {
-			totalChars += len(content)
-		} else if contentBlocks, ok := block.Content.([]ContentBlock); ok {
-			// typed content block array
-			for _, nestedBlock := range contentBlocks {
-				totalChars += countTypedContentBlockChars(&nestedBlock)
-			}
-		} else if contentBlocksPtr, ok := block.Content.(*[]ContentBlock); ok {
-			// pointer to typed content block array
-			if contentBlocksPtr != nil {
-				for _, nestedBlock := range *contentBlocksPtr {
-					totalChars += countTypedContentBlockChars(&nestedBlock)
-				}
-			}
-		}
+		// tool results can have content as string or nested blocks
+		return countToolResultContent(block.Content)
 
 	case contentTypeToolUse:
-		totalChars += len(block.Name)
-		// count input parameters
-		if block.Input != nil {
-			if inputJSON, err := json.Marshal(block.Input); err == nil {
-				totalChars += len(inputJSON)
+		// tool use blocks contribute name length plus serialised input
+		return len(block.Name) + countToolInput(block.Input)
+
+	case contentTypeImage:
+		// image blocks don't contribute to character count
+		return 0
+
+	default:
+		return 0
+	}
+}
+
+// countToolResultContent handles the various content formats in tool_result blocks.
+// Content can be a string, []interface{}, []ContentBlock, or *[]ContentBlock.
+func countToolResultContent(content interface{}) int {
+	if content == nil {
+		return 0
+	}
+
+	if contentStr, ok := content.(string); ok {
+		return len(contentStr)
+	}
+
+	// untyped block array
+	if contentArray, ok := content.([]interface{}); ok {
+		totalChars := 0
+		for _, nestedBlock := range contentArray {
+			if normalized, ok := normaliseContentBlock(nestedBlock); ok {
+				totalChars += countContentBlockChars(normalized)
 			}
+		}
+		return totalChars
+	}
+
+	// typed block array
+	if contentBlocks, ok := content.([]ContentBlock); ok {
+		totalChars := 0
+		for i := range contentBlocks {
+			totalChars += countContentBlockChars(&contentBlocks[i])
+		}
+		return totalChars
+	}
+
+	// pointer to typed block array
+	if contentBlocksPtr, ok := content.(*[]ContentBlock); ok {
+		if contentBlocksPtr != nil {
+			totalChars := 0
+			for i := range *contentBlocksPtr {
+				totalChars += countContentBlockChars(&(*contentBlocksPtr)[i])
+			}
+			return totalChars
 		}
 	}
 
-	return totalChars
+	return 0
+}
+
+// countToolInput counts characters in tool input by marshalling to JSON.
+// Returns 0 if input is nil or marshalling fails.
+func countToolInput(input map[string]interface{}) int {
+	if input == nil {
+		return 0
+	}
+
+	if inputJSON, err := json.Marshal(input); err == nil {
+		return len(inputJSON)
+	}
+
+	return 0
 }

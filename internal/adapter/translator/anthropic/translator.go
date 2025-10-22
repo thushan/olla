@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
@@ -16,6 +17,7 @@ import (
 type Translator struct {
 	logger         logger.StyledLogger
 	bufferPool     *pool.Pool[*bytes.Buffer]
+	inspector      *inspector.Simple
 	config         config.AnthropicTranslatorConfig
 	maxMessageSize int64 // derived from config
 }
@@ -42,11 +44,20 @@ func NewTranslator(log logger.StyledLogger, cfg config.AnthropicTranslatorConfig
 		log.Warn("Invalid or missing max_message_size, using default", "default", maxSize)
 	}
 
+	// Create inspector for debugging
+	insp := inspector.NewSimple(
+		cfg.Inspector.Enabled,
+		cfg.Inspector.OutputDir,
+		cfg.Inspector.SessionHeader,
+		log,
+	)
+
 	return &Translator{
 		logger:         log,
 		bufferPool:     bufferPool,
 		config:         cfg,
 		maxMessageSize: maxSize,
+		inspector:      insp,
 	}
 }
 
@@ -59,6 +70,33 @@ func (t *Translator) Name() string {
 // Returns the Anthropic Messages API endpoint path
 func (t *Translator) GetAPIPath() string {
 	return "/olla/anthropic/v1/messages"
+}
+
+// getSessionID extracts the session ID from the request using a fallback chain.
+// this ensures we always have a valid session id for request tracking:
+// 1. try the configured session header (for custom session management)
+// 2. if there's none, fall back to X-Request-ID (standard request correlation)
+// 3. if that's still no go we, use default constant
+// the chain exists because different callers may use different correlation mechanisms.
+func (t *Translator) getSessionID(r *http.Request) string {
+	const HeaderRequestId = "X-Request-ID"
+
+	sessionID := r.Header.Get(t.inspector.GetSessionHeader())
+	if sessionID == "" {
+		sessionID = r.Header.Get(HeaderRequestId)
+		if sessionID == "" {
+			sessionID = defaultSessionID
+		}
+	}
+
+	return sessionID
+}
+
+// forEachSystemContentBlock iterates over system prompt content blocks regardless of input format.
+// This is a convenience wrapper around the standalone forEachSystemBlock function.
+// See forEachSystemBlock in token_count.go for the implementation details.
+func (t *Translator) forEachSystemContentBlock(system interface{}, fn func(block ContentBlock) error) error {
+	return forEachSystemBlock(system, fn)
 }
 
 // WriteError implements ErrorWriter interface for Anthropic-specific error formatting

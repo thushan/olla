@@ -157,7 +157,14 @@ func (s *HTTPService) Start(ctx context.Context) error {
 
 	s.logger.Info("Olla started, waiting for requests...", "bind", s.server.Addr)
 
+	s.printWarnings()
 	return nil
+}
+
+func (s *HTTPService) printWarnings() {
+	if s.fullConfig.Translators.Anthropic.Inspector.Enabled {
+		s.logger.Warn("Anthropic Inspector is ENABLED. DO NOT USE IN PROD.", "more_info", "https://thushan.github.io/olla/notes/anthropic-inspector/")
+	}
 }
 
 // Stop gracefully shuts down the HTTP server
