@@ -26,6 +26,9 @@ server:
     ]
 
 proxy:
+  # NOTE: From v0.1.0+ we'll switch to Olla as the default proxy engine
+  #       Sherpa will continue to be maintained and supported for the
+  #       foreseeable future
   engine: "sherpa" # Available: sherpa, olla
   # Profile controls proxy engine (http) transport buffer behaviour
   # - "auto": Dynamically selects based on request size, type and other factors (default)
@@ -125,6 +128,22 @@ model_registry:
       discovery_timeout: 2s  # Timeout for discovery refresh
       discovery_refresh_on_miss: false  # Refresh discovery when model not found
 
+translators:
+  #####
+  # !Experimental! v0.0.20+
+  # Anthropic translation is very early stages of development, so please let us know
+  # if you come across issues or have feedback.
+  #####
+  anthropic:
+    enabled: false
+    max_message_size: 10485760  # 10MB - Anthropic API limit
+    # !! WARNING: Do not enable inspector in production without reviewing data privacy !!
+    #             Anthropic messages may contain sensitive user data.
+    #  This release is quite taxing and unoptimised, so use with caution & only for debug.
+    inspector:
+      enabled: false                          # Enable request/response logging
+      output_dir: "logs/inspector/anthropic"  # Where to write logs
+      session_header: "X-Session-ID"          # Header to use for session grouping
 logging:
   level: "info"  # debug, info, warn, error
   format: "json"  # json, text

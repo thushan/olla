@@ -28,6 +28,7 @@ var (
 		"rate_limiting",
 		"model_unification",
 		"endpoint_discovery",
+		"message_translation",
 	}
 	SupportedBackends = []string{
 		"ollama",
@@ -37,6 +38,9 @@ var (
 		"sglang",
 		"vllm",
 		"openai_compatible",
+	}
+	ExperimentalCapabilities = []string{
+		"translation_anthropic",
 	}
 )
 

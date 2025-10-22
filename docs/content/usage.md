@@ -193,3 +193,84 @@ Junie supports Ollama, LMStudio and OpenAI compatible API for local-ai.
 ![Configure OpenAI](assets/images/jetbrains-junie-openai.png)
 
 This way, if you're at home (and considering you can't access `corp-*.acmecorp.com`) Olla will route you through to your local endpoints, at work it will automatically prioritise those endpoints.
+
+## 🤖 Claude-Compatible Clients
+
+Use Claude Code, OpenCode, and Crush CLI with local models through Anthropic API translation.
+
+### Quick Setup
+
+**1. Enable Translation**
+
+```yaml
+# config.yaml
+translators:
+  anthropic:
+    enabled: true
+    max_message_size: 10485760  # 10MB
+
+discovery:
+  static:
+    endpoints:
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100
+```
+
+**2. Start Olla**
+
+```bash
+olla --config config.yaml
+```
+
+**3. Configure Claude Code**
+
+```bash
+export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic/v1"
+claude-code
+```
+
+### Features
+
+- ✅ **Full API Compatibility**: Complete Anthropic Messages API v1 support
+- ✅ **Streaming**: Real-time responses with Server-Sent Events
+- ✅ **Tool Use**: Function calling and tool integration
+- ✅ **Vision**: Multi-modal image input support
+- ✅ **Local Models**: Use Ollama, LM Studio, vLLM, llama.cpp
+- ✅ **Load Balancing**: Automatic failover across backends
+
+### Integration Guides
+
+- **[Claude Code](integrations/frontend/claude-code.md)** - Complete Claude Code setup
+- **[OpenCode](integrations/frontend/opencode.md)** - OpenCode integration
+- **[Crush CLI](integrations/frontend/crush-cli.md)** - Crush CLI setup
+- **[API Translation](concepts/api-translation.md)** - How translation works
+- **[API Reference](api-reference/anthropic.md)** - Full API documentation
+
+### Example: Test with curl
+
+```bash
+curl -X POST http://localhost:40114/olla/anthropic/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "llama3.2:latest",
+    "max_tokens": 1024,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Explain quantum computing in one sentence."
+      }
+    ]
+  }'
+```
+
+### Complete Examples
+
+Ready-to-use Docker Compose examples:
+
+- `examples/claude-code-ollama/` - Claude Code with Ollama
+- `examples/claude-code-llamacpp/` - Claude Code with llama.cpp
+- `examples/opencode-lmstudio/` - OpenCode with LM Studio
+- `examples/crush-vllm/` - Crush CLI with vLLM
