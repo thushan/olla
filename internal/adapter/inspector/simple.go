@@ -104,9 +104,9 @@ func sanitiseSessionID(sessionID string, outputDir string) (string, error) {
 // logSecurityWarning logs a prominent warning about inspector usage (once)
 // Warns users that sensitive data is being written to disk
 func (s *Simple) logSecurityWarning() {
+	// for tests only - indicates warning was logged
+	s.warningLogged = true
 	s.warnOnce.Do(func() {
-		// for tests only - indicates warning was logged
-		s.warningLogged = true
 		s.logger.Warn("Anthropic Inspector Enabled, may log sensitive data to disk - DO NOT use in production",
 			"output_directory", s.outputDir,
 			"session_header", s.sessionHeader)
