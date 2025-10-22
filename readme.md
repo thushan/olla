@@ -143,6 +143,21 @@ Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla
 
 You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/olla/integrations/frontend/openwebui/) or see [OpenWebUI OpenAI with Olla](https://thushan.github.io/olla/integrations/frontend/openwebui-openai/).
 
+### 🤖 **Anthropic Message API / CLI Tools - Claude Code, OpenCode, Crush**
+
+> [!CAUTION]
+> Introduced in v0.0.20+, the Anthropic implementation is *experimental* and should be used with caution.
+
+You can use CLI tools with Olla by using the new Anthropic Message API at `/olla/anthropic` to run Claude Code with Local AI models you have on your machine.
+
+We have examples for:
+
+* [Claude Code](https://thushan.github.io/olla/integrations/frontend/claude-code/)
+* [OpenCode](https://thushan.github.io/olla/integrations/frontend/opencode/)
+* [Crush](https://thushan.github.io/olla/integrations/frontend/crush-cli/)
+
+Learn more about [Anthropic API Translation](https://thushan.github.io/olla/integrations/api-translation/anthropic/).
+
 ## Documentation
 
 Full documentation is available at **[https://thushan.github.io/olla/](https://thushan.github.io/olla/)**
