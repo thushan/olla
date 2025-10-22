@@ -121,8 +121,13 @@ func DefaultConfig() *Config {
 		},
 		Translators: TranslatorsConfig{
 			Anthropic: AnthropicTranslatorConfig{
-				Enabled:        true,
-				MaxMessageSize: 10 << 20, // 10MB - Anthropic API limit
+				Enabled:        false,
+				MaxMessageSize: 10 << 20, // 10MB - Anthropic API limit,
+				Inspector: InspectorConfig{
+					Enabled:       false,
+					OutputDir:     "logs/inspector/anthropic",
+					SessionHeader: "X-Session-ID",
+				},
 			},
 		},
 	}

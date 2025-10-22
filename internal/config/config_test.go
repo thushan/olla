@@ -623,9 +623,14 @@ func TestDefaultConfig_Translators(t *testing.T) {
 	cfg := DefaultConfig()
 
 	// Test Anthropic translator defaults
-	if !cfg.Translators.Anthropic.Enabled {
-		t.Error("Expected Anthropic translator enabled by default")
+	if cfg.Translators.Anthropic.Enabled {
+		t.Error("Expected Anthropic translator disabled by default")
 	}
+
+	if cfg.Translators.Anthropic.Inspector.Enabled {
+		t.Error("Expected Anthropic translator inspector disabled by default")
+	}
+
 	expectedSize := int64(10 << 20) // 10MB
 	if cfg.Translators.Anthropic.MaxMessageSize != expectedSize {
 		t.Errorf("Expected default max message size %d, got %d",

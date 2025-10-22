@@ -31,8 +31,8 @@ You can of course customise individual model choices too.
 
 **What you get via Olla**
 
-* One stable Anthropic API base URL for all local OpenAI backends
-* Priority/least-connections load-balancing and health checks
+* Consistent Anthropic Messages API at `/olla/anthropic/v1/*`
+* Load-balancing and health checks
 * Streaming passthrough
 * Unified `/v1/models` across providers
 * Seamless Anthropic-to-OpenAI format translation
@@ -129,7 +129,7 @@ Before starting, ensure you have:
 
 3. **At Least One Backend**
    
-      * Ollama, LM Studio, vLLM, llama.cpp, or any OpenAI-compatible endpoint
+      * Ollama, LM Studio, vLLM, SGLang, llama.cpp or any OpenAI-compatible endpoint
       * With at least one model loaded/available
 
 4. **Docker & Docker Compose** (for examples)
@@ -200,7 +200,7 @@ proxy:
   response_timeout: 1800s  # 30 min for long generations
   read_timeout: 600s
 
-# Anthropic API translation (enabled by default)
+# Anthropic API translation (disabled by default)
 translators:
   anthropic:
     enabled: true

@@ -135,7 +135,7 @@ translators:
   # if you come across issues or have feedback.
   #####
   anthropic:
-    enabled: true
+    enabled: false
     max_message_size: 10485760  # 10MB - Anthropic API limit
     # !! WARNING: Do not enable inspector in production without reviewing data privacy !!
     #             Anthropic messages may contain sensitive user data.
