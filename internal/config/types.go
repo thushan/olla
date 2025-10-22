@@ -257,10 +257,14 @@ func validateOutputPath(cleanPath string) error {
 	}
 
 	// Check Windows paths
+	// Normalise both clean and absolute paths to Windows-style separators for matching
+	cleanWin := strings.ReplaceAll(cleanPathLower, "/", "\\")
+	absWin := strings.ReplaceAll(absPathLower, "/", "\\")
 	for _, dangerous := range windowsDangerousPaths {
 		dangerousLower := strings.ToLower(dangerous)
 		dangerousWithSep := dangerousLower + "\\"
-		if absPathLower == dangerousLower || strings.HasPrefix(absPathLower, dangerousWithSep) {
+		if cleanWin == dangerousLower || strings.HasPrefix(cleanWin, dangerousWithSep) ||
+			absWin == dangerousLower || strings.HasPrefix(absWin, dangerousWithSep) {
 			return fmt.Errorf("output_dir cannot be set to dangerous system path: %s", cleanPath)
 		}
 	}
