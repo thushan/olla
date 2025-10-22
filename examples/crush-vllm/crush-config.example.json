@@ -1,0 +1,190 @@
+{
+  "$schema": "https://charm.land/crush/config.json",
+  "version": "1.0",
+
+  "providers": {
+    "olla-openai": {
+      "type": "openai",
+      "base_url": "http://localhost:40114/olla/openai/v1",
+      "api_key": "not-required",
+      "description": "Local vLLM via Olla (OpenAI format)",
+      "models": {
+        "meta-llama/Meta-Llama-3.1-8B-Instruct": {
+          "name": "Meta-Llama-3.1-8B-Instruct",
+          "display_name": "Llama 3.1 8B Instruct",
+          "description": "Meta's Llama 3.1 8B instruction-tuned model via vLLM",
+          "context_window": 131072,
+          "max_output_tokens": 8192,
+          "capabilities": ["chat", "code", "reasoning"],
+          "cost_per_million_tokens": {
+            "input": 0.0,
+            "output": 0.0
+          },
+          "metadata": {
+            "backend": "vllm",
+            "gpu_optimised": true,
+            "local": true,
+            "streaming": true
+          }
+        },
+        "meta-llama/Meta-Llama-3.2-3B-Instruct": {
+          "name": "Meta-Llama-3.2-3B-Instruct",
+          "display_name": "Llama 3.2 3B Instruct",
+          "description": "Meta's smaller Llama 3.2 3B instruction-tuned model",
+          "context_window": 8192,
+          "max_output_tokens": 4096,
+          "capabilities": ["chat", "code"],
+          "cost_per_million_tokens": {
+            "input": 0.0,
+            "output": 0.0
+          },
+          "metadata": {
+            "backend": "vllm",
+            "gpu_optimised": true,
+            "local": true,
+            "streaming": true,
+            "note": "Faster and more memory-efficient than 8B variant"
+          }
+        }
+      },
+      "default_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "default_parameters": {
+        "temperature": 0.7,
+        "max_tokens": 4096,
+        "top_p": 0.9,
+        "stream": true
+      }
+    },
+
+    "olla-anthropic": {
+      "type": "anthropic",
+      "base_url": "http://localhost:40114/olla/anthropic/v1",
+      "api_key": "not-required",
+      "description": "Local vLLM via Olla (Anthropic format)",
+      "models": {
+        "meta-llama/Meta-Llama-3.1-8B-Instruct": {
+          "name": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+          "display_name": "Llama 3.1 8B Instruct (Anthropic API)",
+          "description": "Meta's Llama 3.1 8B via Anthropic Messages API translation",
+          "context_window": 131072,
+          "max_output_tokens": 8192,
+          "capabilities": ["chat", "code", "reasoning", "tool_use"],
+          "cost_per_million_tokens": {
+            "input": 0.0,
+            "output": 0.0
+          },
+          "metadata": {
+            "backend": "vllm",
+            "api_format": "anthropic",
+            "translation": "olla",
+            "gpu_optimised": true,
+            "local": true,
+            "streaming": true
+          }
+        },
+        "meta-llama/Meta-Llama-3.2-3B-Instruct": {
+          "name": "meta-llama/Meta-Llama-3.2-3B-Instruct",
+          "display_name": "Llama 3.2 3B Instruct (Anthropic API)",
+          "description": "Meta's Llama 3.2 3B via Anthropic Messages API translation",
+          "context_window": 8192,
+          "max_output_tokens": 4096,
+          "capabilities": ["chat", "code"],
+          "cost_per_million_tokens": {
+            "input": 0.0,
+            "output": 0.0
+          },
+          "metadata": {
+            "backend": "vllm",
+            "api_format": "anthropic",
+            "translation": "olla",
+            "gpu_optimised": true,
+            "local": true,
+            "streaming": true,
+            "note": "Faster and more memory-efficient than 8B variant"
+          }
+        }
+      },
+      "default_model": "meta-llama/Meta-Llama-3.1-8B-Instruct",
+      "default_parameters": {
+        "temperature": 0.7,
+        "max_tokens": 4096,
+        "top_p": 0.9,
+        "stream": true
+      }
+    }
+  },
+
+  "settings": {
+    "default_provider": "olla-openai",
+    "auto_save_conversations": true,
+    "conversation_history_limit": 100,
+    "display": {
+      "theme": "auto",
+      "show_token_usage": true,
+      "show_model_info": true,
+      "show_response_time": true,
+      "streaming_animation": true
+    },
+    "behaviour": {
+      "auto_copy_code_blocks": false,
+      "confirm_before_exit": true,
+      "save_on_exit": true
+    }
+  },
+
+  "aliases": {
+    "llama8b": {
+      "provider": "olla-openai",
+      "model": "meta-llama/Meta-Llama-3.1-8B-Instruct"
+    },
+    "llama3b": {
+      "provider": "olla-openai",
+      "model": "meta-llama/Meta-Llama-3.2-3B-Instruct"
+    },
+    "llama8b-anthropic": {
+      "provider": "olla-anthropic",
+      "model": "meta-llama/Meta-Llama-3.1-8B-Instruct"
+    }
+  },
+
+  "prompts": {
+    "coding": {
+      "system": "You are an expert software engineer. Provide clear, well-commented code with explanations. Consider edge cases and best practices.",
+      "aliases": ["code", "dev"]
+    },
+    "explain": {
+      "system": "You are a patient teacher. Explain concepts clearly with examples and analogies. Break down complex topics into digestible parts.",
+      "aliases": ["teach", "learn"]
+    },
+    "debug": {
+      "system": "You are a debugging expert. Analyse code issues systematically, identify root causes, and suggest fixes with explanations.",
+      "aliases": ["fix", "troubleshoot"]
+    },
+    "review": {
+      "system": "You are a code reviewer. Evaluate code quality, suggest improvements, identify bugs, and recommend best practices.",
+      "aliases": ["audit", "analyse"]
+    }
+  },
+
+  "keyboard_shortcuts": {
+    "switch_provider": "ctrl+p",
+    "switch_model": "ctrl+m",
+    "clear_conversation": "ctrl+l",
+    "copy_last_response": "ctrl+c",
+    "toggle_streaming": "ctrl+s"
+  },
+
+  "metadata": {
+    "created_at": "2025-01-20",
+    "description": "Crush CLI configuration for vLLM + Olla integration",
+    "backend": "vLLM high-performance inference",
+    "proxy": "Olla with API translation",
+    "notes": [
+      "Both providers connect to the same vLLM backend",
+      "Switch between OpenAI and Anthropic formats seamlessly",
+      "All costs are zero as this runs locally",
+      "Requires GPU with CUDA support for vLLM",
+      "Update model names if you change the vLLM model in compose.yaml"
+    ]
+  }
+}

@@ -617,7 +617,10 @@ Don't update versions in natively supported profiles however.
 |---------|------------|----------|-------------------|
 | ollama | `ollama` | `ollama` | `/api/tags`, `/v1/models` |
 | lmstudio | `lm-studio` | `lmstudio`, `lm-studio`, `lm_studio` | `/v1/models` |
+| lemonade | `lemonade` | `lemonade` | `/v1/models` |
+| llamacpp | `llamacpp` | `llamacpp`, `llama-cpp`, `llama_cpp` | None |
 | vllm | `vllm` | `vllm` | None |
+| sglang | `sglang` | `sglang` | None |
 | openai-compatible | `openai` | `openai`, `openai-compatible` | None |
 
 ### Required Fields

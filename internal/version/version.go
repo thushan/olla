@@ -28,14 +28,19 @@ var (
 		"rate_limiting",
 		"model_unification",
 		"endpoint_discovery",
+		"message_translation",
 	}
 	SupportedBackends = []string{
 		"ollama",
 		"lemonade",
+		"llamacpp",
 		"lm_studio",
 		"sglang",
 		"vllm",
 		"openai_compatible",
+	}
+	ExperimentalCapabilities = []string{
+		"translation_anthropic",
 	}
 )
 

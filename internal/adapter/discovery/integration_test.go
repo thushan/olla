@@ -287,6 +287,80 @@ func TestEnhancedModelDiscoveryIntegration(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:               "llama.cpp Platform GGUF Metadata",
+			platformType:       domain.ProfileLlamaCpp,
+			expectedModelCount: 1,
+			response: `{
+				"object": "list",
+				"data": [
+					{
+						"id": "TinyLlama-1.1B-Chat-v1.0-Q4_K_M.gguf",
+						"object": "model",
+						"created": 1736693550,
+						"owned_by": "tinyllama",
+						"meta": {
+							"vocab_size": 32000,
+							"n_ctx_train": 2048,
+							"n_embd": 2048,
+							"n_params": 1100048384
+						}
+					}
+				]
+			}`,
+			validateMetadata: func(t *testing.T, models []*domain.ModelInfo) {
+				var tinyllama *domain.ModelInfo
+				for _, model := range models {
+					if model.Name == "TinyLlama-1.1B-Chat-v1.0-Q4_K_M.gguf" {
+						tinyllama = model
+						break
+					}
+				}
+
+				if tinyllama == nil {
+					t.Fatal("Expected to find TinyLlama model")
+				}
+
+				// Type is set to "llamacpp" by parser
+				if tinyllama.Type != "llamacpp" {
+					t.Errorf("Expected type to be 'llamacpp', got %s", tinyllama.Type)
+				}
+
+				// llama.cpp always returns GGUF format
+				if tinyllama.Details == nil {
+					t.Fatal("Expected llamacpp model to have details")
+				}
+
+				if tinyllama.Details.Format == nil || *tinyllama.Details.Format != "gguf" {
+					t.Error("Expected format to be 'gguf' (always set by llamacpp parser)")
+				}
+
+				// Publisher extracted from owned_by field
+				if tinyllama.Details.Publisher == nil || *tinyllama.Details.Publisher != "tinyllama" {
+					t.Error("Expected publisher to be extracted from owned_by")
+				}
+
+				// Check created timestamp is converted to ModifiedAt
+				if tinyllama.Details.ModifiedAt == nil {
+					t.Error("Expected modified_at to be set from created timestamp")
+				} else {
+					expectedTime := time.Unix(1736693550, 0)
+					if !tinyllama.Details.ModifiedAt.Equal(expectedTime) {
+						t.Errorf("Expected created time to match, got %v", tinyllama.Details.ModifiedAt)
+					}
+				}
+
+				// LastSeen should be recent
+				if time.Since(tinyllama.LastSeen) > time.Second {
+					t.Error("Expected LastSeen to be recent")
+				}
+
+				t.Logf("llama.cpp model validated: %s (format: %s, publisher: %s)",
+					tinyllama.Name,
+					*tinyllama.Details.Format,
+					*tinyllama.Details.Publisher)
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -235,7 +235,7 @@ discovery:
 |-------|------|----------|-------------|
 | `static.endpoints[].url` | string | Yes | Endpoint base URL |
 | `static.endpoints[].name` | string | Yes | Unique endpoint name |
-| `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `vllm`, `openai`) |
+| `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`) |
 | `static.endpoints[].priority` | int | No | Selection priority (higher=preferred) |
 | `static.endpoints[].health_check_url` | string | No | Health check path |
 | `static.endpoints[].model_url` | string | No | Model discovery path |

@@ -40,15 +40,19 @@ func (s *Service) handleClientDisconnect(state *streamState, rlog logger.StyledL
 }
 
 // writeStreamData writes data to the response and handles flushing
-func writeStreamData(w http.ResponseWriter, data []byte, canFlush bool, isStreaming bool, flusher http.Flusher) (int, error) {
+func writeStreamData(w http.ResponseWriter, data []byte, isStreaming bool, rc *http.ResponseController) (int, error) {
 	written, err := w.Write(data)
 	if err != nil {
 		return written, err
 	}
 
 	// Force data out for real-time streaming
-	if canFlush && isStreaming {
-		flusher.Flush()
+	// ResponseController provides better error handling than direct Flusher interface
+	if isStreaming {
+		if flushErr := rc.Flush(); flushErr != nil {
+			// Don't fail on flush errors - response may still succeed
+			// Flush errors are typically benign (e.g., client already disconnected)
+		}
 	}
 
 	return written, nil
@@ -77,7 +81,7 @@ func (s *Service) checkContexts(clientCtx, upstreamCtx context.Context, readDead
 }
 
 // processStreamData reads from upstream and writes to client
-func (s *Service) processStreamData(resp *http.Response, buffer []byte, state *streamState, w http.ResponseWriter, canFlush bool, isStreaming bool, flusher http.Flusher, rlog logger.StyledLogger) error {
+func (s *Service) processStreamData(resp *http.Response, buffer []byte, state *streamState, w http.ResponseWriter, isStreaming bool, rc *http.ResponseController, rlog logger.StyledLogger) error {
 	n, err := resp.Body.Read(buffer)
 	if n > 0 {
 		// Only keep last chunk when we hit EOF (for metrics extraction)
@@ -97,7 +101,7 @@ func (s *Service) processStreamData(resp *http.Response, buffer []byte, state *s
 
 		// Handle data write
 		if !state.clientDisconnected {
-			written, writeErr := writeStreamData(w, buffer[:n], canFlush, isStreaming, flusher)
+			written, writeErr := writeStreamData(w, buffer[:n], isStreaming, rc)
 			state.totalBytes += written
 
 			if writeErr != nil {

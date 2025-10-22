@@ -34,6 +34,8 @@ Olla is a high-performance, low-overhead, low-latency proxy and load balancer fo
 
 Olla works alongside API gateways like [LiteLLM](https://github.com/BerriAI/litellm) or orchestration platforms like [GPUStack](https://github.com/gpustack/gpustack), focusing on making your **existing** LLM infrastructure reliable through intelligent routing and failover. You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
+![Olla Single OpenAI](assets/diagrams/features.excalidraw.png)
+
 Single CLI application and config file is all you need to go Olla!
 
 ## Key Features

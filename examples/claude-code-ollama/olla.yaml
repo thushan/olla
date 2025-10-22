@@ -1,0 +1,56 @@
+# Olla Configuration for Claude Code + Ollama Integration
+# This configuration enables Anthropic Messages API translation
+# for use with Claude Code, OpenCode, and Crush CLI.
+
+server:
+  host: 0.0.0.0
+  port: 40114
+
+# Proxy configuration
+proxy:
+  engine: sherpa           # or "olla" for high-performance
+  load_balancer: priority  # Prefer higher priority endpoints first
+  stream_buffer_size: 8192
+  response_timeout: 300s   # 5 minutes for long generations
+  read_timeout: 60s
+
+# Enable Anthropic Messages API translation
+translators:
+  anthropic:
+    enabled: true                   # Enable Anthropic API translator
+    max_message_size: 10485760      # 10MB max request size
+
+# Backend discovery
+discovery:
+  type: static
+  static:
+    endpoints:
+      - url: "http://ollama:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100               # Highest priority
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 2s
+        check_timeout: 1s
+
+# Model registry configuration
+model_registry:
+  enable_unifier: true
+  routing_strategy:
+    type: "optimistic"              # Allow fallback to compatible models
+    options:
+      fallback_behavior: "compatible_only"
+
+# Security settings
+security:
+  rate_limit:
+    enabled: true
+    requests_per_minute: 100
+    burst: 50
+
+# Logging configuration
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"

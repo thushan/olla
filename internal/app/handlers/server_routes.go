@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -44,8 +45,102 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
 	a.routeRegistry.RegisterWithMethod("/olla/proxy/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
 
+	// Dynamic translator route registration
+	// Each translator that implements PathProvider gets its route automatically registered
+	// This scales to unlimited translators (Gemini, Bedrock, etc.) without code changes
+	a.registerTranslatorRoutes()
+
 	// Provider routes are built from YAML configs when available
 	a.registerProviderRoutes()
+}
+
+// registerTranslatorRoutes dynamically registers routes for all translators
+// Translators that implement PathProvider interface provide their own API paths
+// This enables adding new translators without modifying the routing code
+func (a *Application) registerTranslatorRoutes() {
+	if a.translatorRegistry == nil {
+		a.logger.Warn("Translator registry not available, skipping translator routes")
+		return
+	}
+
+	translators := a.translatorRegistry.GetAll()
+	a.logger.InfoWithCount("Starting registering translator routes", len(translators))
+
+	for name, trans := range translators {
+		// Check if translator implements PathProvider for dynamic route registration
+		// Translators without PathProvider must be registered manually
+		if pathProvider, ok := trans.(translator.PathProvider); ok {
+			path := pathProvider.GetAPIPath()
+			handler := a.translationHandler(trans)
+
+			a.routeRegistry.RegisterWithMethod(
+				path,
+				handler,
+				name+" Messages API",
+				"POST",
+			)
+
+			// Register models endpoint for translators
+			// Uses base path from translator + "/models" (e.g., /olla/anthropic/v1/models)
+			modelsPath := extractBasePath(path) + "/models"
+			modelsHandler := a.translatorModelsHandler(trans)
+
+			a.routeRegistry.RegisterWithMethod(
+				modelsPath,
+				modelsHandler,
+				name+" Models API",
+				"GET",
+			)
+
+			// Register token counting endpoint for translators that support it
+			// Uses message path + "_count_tokens" (e.g., /olla/anthropic/v1/messages/count_tokens)
+			if _, ok := trans.(translator.TokenCounter); ok {
+				tokenCountPath := path + "/count_tokens"
+				tokenCountHandler := a.tokenCountHandler(trans)
+
+				a.routeRegistry.RegisterWithMethod(
+					tokenCountPath,
+					tokenCountHandler,
+					name+" Token Count API",
+					"POST",
+				)
+
+				a.logger.Debug("Registered translator routes",
+					"translator", name,
+					"messages_path", path,
+					"models_path", modelsPath,
+					"token_count_path", tokenCountPath)
+
+				a.logger.InfoWithEndpoint(" ", name, "path", path)
+			} else {
+				a.logger.Debug("Registered translator routes",
+					"translator", name,
+					"messages_path", path,
+					"models_path", modelsPath)
+			}
+		} else {
+			a.logger.Debug("Translator does not implement PathProvider, skipping route registration",
+				"translator", name)
+		}
+	}
+
+	a.logger.InfoWithCount("Finished registering translator routes", len(translators))
+}
+
+// extractBasePath extracts the base path from a translator's API path
+// For example: "/olla/anthropic/v1/messages" -> "/olla/anthropic/v1"
+// Handles trailing slashes: "/olla/anthropic/v1/messages/" -> "/olla/anthropic/v1"
+func extractBasePath(path string) string {
+	// Remove any trailing slashes first
+	path = strings.TrimRight(path, "/")
+
+	// Find the last slash and return everything before it
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i] == '/' {
+			return path[:i]
+		}
+	}
+	return path
 }
 
 // registerProviderRoutes builds HTTP paths from provider YAML configurations.

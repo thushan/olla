@@ -4,6 +4,10 @@ import (
 	"time"
 )
 
+const (
+	DefaultTruncateLengthPII = 20
+)
+
 // ParseTime attempts to parse a time string in RFC3339 or RFC3339Nano format for LLM Frontend Profiles
 func ParseTime(timeStr string) *time.Time {
 	// Try RFC3339 format first (standard ISO format)
@@ -15,4 +19,16 @@ func ParseTime(timeStr string) *time.Time {
 		return &t
 	}
 	return nil
+}
+func TruncateString(s string, maxLength int) string {
+	const ellipsis = "..."
+	runes := []rune(s)
+	if len(runes) <= maxLength {
+		return s
+	}
+	// factor in the ellipsis length
+	if maxLength > 3 {
+		maxLength -= 3
+	}
+	return string(runes[:maxLength]) + ellipsis
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -494,4 +495,363 @@ func TestDefaultConfig_TrustedProxyCIDRs(t *testing.T) {
 			t.Errorf("Expected default CIDR %s at index %d, got %s", expected, i, cfg.Server.RateLimits.TrustedProxyCIDRs[i])
 		}
 	}
+}
+
+func TestAnthropicTranslatorConfig_Validate(t *testing.T) {
+	testCases := []struct {
+		name        string
+		config      AnthropicTranslatorConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid config with 10MB limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 10 << 20, // 10MB
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with 50MB limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 50 << 20, // 50MB
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config at upper bound (100MB)",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 100 << 20, // 100MB
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with zero size (will use default in translator)",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 0,
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid config with negative size",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: -1,
+			},
+			expectError: true,
+			errorMsg:    "max_message_size must be non-negative",
+		},
+		{
+			name: "invalid config exceeding 100MB limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 101 << 20, // 101MB
+			},
+			expectError: true,
+			errorMsg:    "max_message_size exceeds 100 MiB safety limit",
+		},
+		{
+			name: "invalid config way over limit",
+			config: AnthropicTranslatorConfig{
+				Enabled:        true,
+				MaxMessageSize: 500 << 20, // 500MB
+			},
+			expectError: true,
+			errorMsg:    "max_message_size exceeds 100 MiB safety limit",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.config.Validate()
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error containing %q, but got nil", tc.errorMsg)
+				} else if !contains(err.Error(), tc.errorMsg) {
+					t.Errorf("Expected error containing %q, got %q", tc.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, but got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadConfig_WithTranslatorConfig(t *testing.T) {
+	// Test environment variables for translator config
+	testEnvVars := map[string]string{
+		"OLLA_TRANSLATORS_ANTHROPIC_ENABLED":          "true",
+		"OLLA_TRANSLATORS_ANTHROPIC_MAX_MESSAGE_SIZE": "20971520", // 20MB
+	}
+
+	// Set env vars
+	for key, value := range testEnvVars {
+		os.Setenv(key, value)
+	}
+
+	// Clean up after test
+	defer func() {
+		for key := range testEnvVars {
+			os.Unsetenv(key)
+		}
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load with translator env vars failed: %v", err)
+	}
+
+	// Verify translator config overrides
+	if !cfg.Translators.Anthropic.Enabled {
+		t.Error("Expected Anthropic translator enabled from env var")
+	}
+	expectedSize := int64(20 << 20) // 20MB
+	if cfg.Translators.Anthropic.MaxMessageSize != expectedSize {
+		t.Errorf("Expected max message size %d from env var, got %d",
+			expectedSize, cfg.Translators.Anthropic.MaxMessageSize)
+	}
+}
+
+func TestDefaultConfig_Translators(t *testing.T) {
+	cfg := DefaultConfig()
+
+	// Test Anthropic translator defaults
+	if cfg.Translators.Anthropic.Enabled {
+		t.Error("Expected Anthropic translator disabled by default")
+	}
+
+	if cfg.Translators.Anthropic.Inspector.Enabled {
+		t.Error("Expected Anthropic translator inspector disabled by default")
+	}
+
+	expectedSize := int64(10 << 20) // 10MB
+	if cfg.Translators.Anthropic.MaxMessageSize != expectedSize {
+		t.Errorf("Expected default max message size %d, got %d",
+			expectedSize, cfg.Translators.Anthropic.MaxMessageSize)
+	}
+}
+
+// TestInspectorConfig_Validate tests inspector configuration validation
+func TestInspectorConfig_Validate(t *testing.T) {
+	testCases := []struct {
+		name        string
+		config      InspectorConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid config with custom path",
+			config: InspectorConfig{
+				Enabled:       true,
+				OutputDir:     "./inspector-logs",
+				SessionHeader: "X-Session-ID",
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with empty path (gets default)",
+			config: InspectorConfig{
+				Enabled:   true,
+				OutputDir: "",
+			},
+			expectError: false,
+		},
+		{
+			name: "valid config with custom header",
+			config: InspectorConfig{
+				Enabled:       true,
+				OutputDir:     "./logs",
+				SessionHeader: "X-Custom-Session",
+			},
+			expectError: false,
+		},
+		{
+			name: "disabled config skips validation",
+			config: InspectorConfig{
+				Enabled:       false,
+				OutputDir:     "/etc", // Would be invalid if enabled
+				SessionHeader: "invalid header!",
+			},
+			expectError: false,
+		},
+		// Note: Unix path tests are skipped on Windows as they're not dangerous there
+		{
+			name: "invalid config with root path",
+			config: InspectorConfig{
+				Enabled:   true,
+				OutputDir: "/",
+			},
+			expectError: true,
+			errorMsg:    "dangerous system path",
+		},
+		{
+			name: "invalid config with Windows system path",
+			config: InspectorConfig{
+				Enabled:   true,
+				OutputDir: "C:\\Windows",
+			},
+			expectError: true,
+			errorMsg:    "dangerous system path",
+		},
+		{
+			name: "invalid config with invalid header (spaces)",
+			config: InspectorConfig{
+				Enabled:       true,
+				OutputDir:     "./logs",
+				SessionHeader: "Invalid Header",
+			},
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name: "invalid config with invalid header (colon)",
+			config: InspectorConfig{
+				Enabled:       true,
+				OutputDir:     "./logs",
+				SessionHeader: "X-Session:ID",
+			},
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name: "invalid config with invalid header (special chars)",
+			config: InspectorConfig{
+				Enabled:       true,
+				OutputDir:     "./logs",
+				SessionHeader: "X-Session@ID",
+			},
+			expectError: true,
+			errorMsg:    "invalid characters",
+		},
+		{
+			name: "valid config with dashes and underscores in header",
+			config: InspectorConfig{
+				Enabled:       true,
+				OutputDir:     "./logs",
+				SessionHeader: "X-Custom_Session-ID",
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.config.Validate()
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error containing %q, but got nil", tc.errorMsg)
+				} else if !contains(err.Error(), tc.errorMsg) {
+					t.Errorf("Expected error containing %q, got %q", tc.errorMsg, err.Error())
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error, but got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// TestInspectorConfig_DefaultValues tests that validation sets sensible defaults
+func TestInspectorConfig_DefaultValues(t *testing.T) {
+	config := InspectorConfig{
+		Enabled: true,
+	}
+
+	err := config.Validate()
+	if err != nil {
+		t.Fatalf("Validation failed: %v", err)
+	}
+
+	// Check defaults were set
+	if config.OutputDir == "" {
+		t.Error("Expected OutputDir to be set to default")
+	}
+	if config.OutputDir != "./inspector-logs" {
+		t.Errorf("Expected default OutputDir './inspector-logs', got %s", config.OutputDir)
+	}
+	if config.SessionHeader == "" {
+		t.Error("Expected SessionHeader to be set to default")
+	}
+	if config.SessionHeader != "X-Session-ID" {
+		t.Errorf("Expected default SessionHeader 'X-Session-ID', got %s", config.SessionHeader)
+	}
+}
+
+// TestInspectorConfig_UnixPaths tests Unix-specific dangerous paths
+func TestInspectorConfig_UnixPaths(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping Unix path tests on Windows")
+	}
+
+	unixTests := []struct {
+		name        string
+		config      InspectorConfig
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name: "unix: invalid config with /etc path",
+			config: InspectorConfig{
+				Enabled:   true,
+				OutputDir: "/etc",
+			},
+			expectError: true,
+			errorMsg:    "dangerous system path",
+		},
+		{
+			name: "unix: invalid config with /var path",
+			config: InspectorConfig{
+				Enabled:   true,
+				OutputDir: "/var",
+			},
+			expectError: true,
+			errorMsg:    "dangerous system path",
+		},
+		{
+			name: "unix: invalid config with /usr path",
+			config: InspectorConfig{
+				Enabled:   true,
+				OutputDir: "/usr/local/olla",
+			},
+			expectError: true,
+			errorMsg:    "dangerous system path",
+		},
+	}
+
+	for _, tc := range unixTests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.config.Validate()
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("Expected error containing %q, but got nil", tc.errorMsg)
+				} else if !contains(err.Error(), tc.errorMsg) {
+					t.Errorf("Expected error containing %q, got %q", tc.errorMsg, err.Error())
+				}
+			}
+		})
+	}
+}
+
+// Helper function to check if a string contains a substring
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
+		(len(s) > 0 && len(substr) > 0 && stringContains(s, substr)))
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

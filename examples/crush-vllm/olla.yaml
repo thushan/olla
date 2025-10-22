@@ -1,0 +1,119 @@
+# Olla Configuration for Crush CLI + vLLM Integration
+# This configuration enables both OpenAI and Anthropic API formats
+# for use with Crush CLI and high-performance vLLM backends.
+
+server:
+  host: "0.0.0.0"
+  port: 40114
+  read_timeout: 30s
+  write_timeout: 0s  # For LLM streaming, leave this as 0s
+  shutdown_timeout: 10s
+  request_logging: true
+  request_limits:
+    max_body_size: 52428800  # 50MB
+    max_header_size: 524288  # 512KB
+  rate_limits:
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 200  # Higher for local development
+    health_requests_per_minute: 1000
+    burst_size: 100
+    per_endpoint:
+      default_requests_per_minute: 500
+    cleanup_interval: 5m
+    trust_proxy_headers: false
+    trusted_proxy_cidrs: [
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16"
+    ]
+
+proxy:
+  engine: "olla"  # High-performance engine for vLLM
+  connection_timeout: 60s
+  response_timeout: 1200s  # 20 minutes for long generations
+  read_timeout: 600s
+  max_retries: 2
+  retry_backoff: 1s
+  load_balancer: "priority"  # Priority-based balancing
+  stream_buffer_size: 16384  # Larger buffer for high-performance streaming
+
+# Enable Anthropic API translation for Crush CLI dual-provider support
+translators:
+  anthropic:
+    enabled: true
+    max_message_size: 10485760      # 10MB max request size
+
+discovery:
+  type: "static"
+  refresh_interval: 30s
+  static:
+    endpoints:
+      # vLLM instance - High-performance GPU-optimised inference
+      - url: "http://vllm:8000"
+        name: "vllm-primary"
+        type: "vllm"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/health"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # Example: Add more vLLM instances for load balancing
+      # - url: "http://vllm-secondary:8000"
+      #   name: "vllm-secondary"
+      #   type: "vllm"
+      #   priority: 75
+      #   model_url: "/v1/models"
+      #   health_check_url: "/health"
+      #   check_interval: 5s
+      #   check_timeout: 2s
+
+  model_discovery:
+    enabled: true
+    interval: 10m  # vLLM models don't change often
+    timeout: 30s
+    concurrent_workers: 5
+    retry_attempts: 3
+    retry_backoff: 2s
+
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  unification:
+    enabled: true
+    stale_threshold: 24h  # How long to keep models in memory after last seen
+    cleanup_interval: 10m  # How often to check for stale models
+
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json"  # json, text
+  output: "stdout"  # stdout, file
+
+engineering:
+  show_nerdstats: false
+
+# Profile-based configuration for vLLM optimisation
+# This uses the vLLM profile from config/profiles/vllm.yaml
+profiles:
+  # Override vLLM profile defaults if needed
+  vllm:
+    # High-performance streaming settings
+    streaming:
+      enabled: true
+      buffer_size: 16384
+      flush_interval: 10ms
+
+    # Connection pooling for high throughput
+    connection_pool:
+      max_idle_conns: 100
+      max_conns_per_host: 100
+      idle_conn_timeout: 90s
+
+    # Timeouts optimised for GPU inference
+    timeouts:
+      dial: 10s
+      tls_handshake: 10s
+      response_header: 30s
+      expect_continue: 1s
+      idle_conn: 90s

@@ -16,6 +16,7 @@ Olla natively supports the following backends:
 |---------|------|-------------|
 | [Ollama](./backend/ollama.md) | `ollama` | Native support for [Ollama](https://github.com/ollama/ollama), including model unification |
 | [LM Studio](./backend/lmstudio.md) | `lm-studio` | Native support for [LM Studio](https://lmstudio.ai/), including model unification |
+| [llama.cpp](./backend/llamacpp.md) | `llamacpp` | Native support for [llama.cpp](https://github.com/ggml-org/llama.cpp) lightweight C++ inference server with GGUF models, including slot management, code infill, and CPU-first design for edge deployment |
 | [vLLM](./backend/vllm.md) | `vllm` | Native support for [vLLM](https://github.com/vllm-project/vllm), including model unification |
 | [SGLang](./backend/sglang.md) | `sglang` | Native support for [SGLang](https://github.com/sgl-project/sglang) with RadixAttention and Frontend Language, including model unification and vision support |
 | [Lemonade SDK](./backend/lemonade.md) | `lemonade` | Native support for [Lemonade SDK](https://lemonade-server.ai/), AMD's local inference solution with Ryzen AI optimisation, including model unification |
@@ -32,6 +33,28 @@ Native support for [OpenWebUI](https://github.com/open-webui/open-webui) with Ol
 
 * [OpenWebUI with Ollama](./frontend/openwebui.md)
 * [OpenWebUI with OpenAI](./frontend/openwebui-openai.md)
+
+### Claude-Compatible Clients
+
+Olla provides Anthropic Messages API translation, enabling Claude-compatible clients to work with any OpenAI-compatible backend:
+
+| Client | Description | Integration Guide |
+|--------|-------------|-------------------|
+| [Claude Code](./frontend/claude-code.md) | Anthropic's official CLI coding assistant | Full Anthropic API support |
+| [OpenCode](./frontend/opencode.md) | Open-source AI coding assistant (SST fork) | OpenAI or Anthropic API |
+| [Crush CLI](./frontend/crush-cli.md) | Modern terminal AI assistant by Charmbracelet | Dual OpenAI/Anthropic support |
+
+These clients can use local models (Ollama, LM Studio, vLLM, llama.cpp) through Olla's API translation layer.
+
+### API Translation
+
+Olla can translate between different LLM API formats:
+
+| Translation | Status | Use Case |
+|-------------|--------|----------|
+| [Anthropic → OpenAI](./api-translation/anthropic.md) | ✅ Available | Use Claude Code with local models |
+
+See [API Translation concept](../concepts/api-translation.md) for how this works.
 
 ## Profiles
 

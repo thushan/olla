@@ -1,0 +1,50 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "olla-openai": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://localhost:40114/olla/openai/v1"
+      }
+    },
+    "olla-anthropic": {
+      "npm": "@ai-sdk/anthropic",
+      "options": {
+        "baseURL": "http://localhost:40114/olla/anthropic/v1",
+        "apiKey": "not-required"
+      }
+    }
+  },
+  "notes": [
+    "This configuration file provides two provider options for OpenCode:",
+    "",
+    "1. olla-openai: Uses OpenAI-compatible endpoint (recommended)",
+    "   - Direct passthrough to LM Studio",
+    "   - No translation overhead",
+    "   - Standard OpenAI format",
+    "",
+    "2. olla-anthropic: Uses Anthropic Messages API endpoint",
+    "   - Olla translates Anthropic format to OpenAI format",
+    "   - Useful if you want Claude-style API format",
+    "   - Slightly higher latency due to translation",
+    "",
+    "To use this configuration:",
+    "1. Copy this file to ~/.opencode/config.json (Linux/Mac)",
+    "   or %USERPROFILE%\\.opencode\\config.json (Windows)",
+    "2. Choose one provider by editing the file or using OpenCode CLI",
+    "3. Start OpenCode with: opencode --provider olla-openai",
+    "   or: opencode --provider olla-anthropic",
+    "",
+    "Model names:",
+    "- Use model names as they appear in LM Studio",
+    "- Example: 'qwen2.5-coder:7b' or 'llama3.2:latest'",
+    "- Check available models: curl http://localhost:40114/olla/openai/v1/models",
+    "",
+    "Requirements:",
+    "- LM Studio running on host machine (port 1234)",
+    "- Olla container running (docker compose up -d)",
+    "- A model loaded in LM Studio",
+    "",
+    "For more details, see README.md"
+  ]
+}
