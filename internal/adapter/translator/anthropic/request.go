@@ -263,6 +263,10 @@ func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]in
 		msg["tool_calls"] = toolCalls
 	}
 
+	// OLLA-287: skip empty assistant messages
+	if textContent == "" && len(toolCalls) == 0 {
+		return nil
+	}
 	return msg
 }
 

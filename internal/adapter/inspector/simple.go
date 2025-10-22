@@ -27,9 +27,10 @@ type Simple struct {
 	logger        logger.StyledLogger
 	outputDir     string
 	sessionHeader string
+	warnOnce      sync.Once  // ensures security warning is logged only once
 	mu            sync.Mutex // protects file operations
 	enabled       bool
-	warningLogged bool // tracks whether security warning has been logged
+	warningLogged bool // indicator for tests only; not used for control flow
 }
 
 const (
@@ -103,12 +104,13 @@ func sanitiseSessionID(sessionID string, outputDir string) (string, error) {
 // logSecurityWarning logs a prominent warning about inspector usage (once)
 // Warns users that sensitive data is being written to disk
 func (s *Simple) logSecurityWarning() {
-	if !s.warningLogged {
-		s.logger.Warn("⚠️  INSPECTOR ENABLED - Logging sensitive data to disk - DO NOT use in production",
+	// for tests only - indicates warning was logged
+	s.warningLogged = true
+	s.warnOnce.Do(func() {
+		s.logger.Warn("Anthropic Inspector Enabled, may log sensitive data to disk - DO NOT use in production",
 			"output_directory", s.outputDir,
 			"session_header", s.sessionHeader)
-		s.warningLogged = true
-	}
+	})
 }
 
 // LogRequest logs an incoming request
