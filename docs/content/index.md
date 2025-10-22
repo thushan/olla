@@ -12,24 +12,20 @@ keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, sglang, lemonade
     <a href="https://github.com/thushan/olla/actions/workflows/ci.yml"><img src="https://github.com/thushan/olla/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
     <a href="https://goreportcard.com/report/github.com/thushan/olla"><img src="https://goreportcard.com/badge/github.com/thushan/olla" alt="Go Report Card"></a>
     <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a> <br />
-    <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a>
-    <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a>
     <a href="https://github.com/ggerganov/llama.cpp"><img src="https://img.shields.io/badge/llama.cpp-native-lightgreen.svg" alt="llama.cpp: Native Support"></a>
     <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a>
     <a href="https://github.com/sgl-project/sglang"><img src="https://img.shields.io/badge/SGLang-native-lightgreen.svg" alt="SGLang: Native Support"></a>
     <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a>
-    <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/Lemonade-native-lightgreen.svg" alt="Lemonade AI: Native Support"></a>
-    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="Lemonade AI: OpenAI Compatible"></a> 
+    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="LM Deploy: OpenAI Compatible"></a> <br/>
+    <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a>
+    <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a>
+    <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/LemonadeSDK-native-lightgreen.svg" alt="LemonadeSDK: Native Support"></a>    
   </P>
 </div>
 
-Olla is a high-performance, low-overhead, low-latency proxy, model unifier and load balancer for managing LLM infrastructure. 
+Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes with a [wide variety](https://thushan.github.io/olla/integrations/overview/) of natively supported endpoints and extensible enough to support others. Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
-It intelligently routes LLM requests across local and remote inference nodes - including [LlamaCpp](https://github.com/ggerganov/llama.cpp) backends like [Ollama](https://github.com/ollama/ollama), [LM Studio](https://lmstudio.ai/) or [SGLang](https://github.com/sgl-project/sglang) (with RadixAttention), [vLLM](https://github.com/vllm-project/vllm), [Lemonade SDK](https://lemonade-server.ai) (AMD Ryzen AI), [LiteLLM](https://github.com/BerriAI/litellm) and other OpenAI-compatible endpoints.
-
-Olla provides model discovery and unified model catalogues across all providers, enabling seamless routing to available models on compatible endpoints.
-
-With native [LiteLLM support](integrations/backend/litellm.md), Olla bridges local and cloud infrastructure - use local models when available, automatically failover to cloud APIs when needed. Unlike orchestration platforms like [GPUStack](compare/gpustack.md), Olla focuses on making your existing LLM infrastructure reliable through intelligent routing and failover.
+Olla works alongside API gateways like [LiteLLM](https://github.com/BerriAI/litellm) or orchestration platforms like [GPUStack](https://github.com/gpustack/gpustack), focusing on making your **existing** LLM infrastructure reliable through intelligent routing and failover. You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
 ## Key Features
 
