@@ -40,9 +40,9 @@ Olla's Anthropic API Translation enables Claude-compatible clients (Claude Code,
         <th>Supported Clients</th>
         <td>
             <ul>
-                <li><a href="../frontend/claude-code.md">Claude Code</a></li>
-                <li><a href="../frontend/opencode.md">OpenCode</a></li>
-                <li><a href="../frontend/crush-cli.md">Crush CLI</a></li>
+                <li><a href="../../frontend/claude-code">Claude Code</a></li>
+                <li><a href="../../frontend/opencode">OpenCode</a></li>
+                <li><a href="../../frontend/crush-cli">Crush CLI</a></li>
                 <li>Any Anthropic API client</li>
             </ul>
         </td>

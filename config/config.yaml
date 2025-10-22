@@ -29,7 +29,7 @@ proxy:
   # NOTE: From v0.1.0+ we'll switch to Olla as the default proxy engine
   #       Sherpa will continue to be maintained and supported for the
   #       foreseeable future
-  engine: "sherpa" # Available: sherpa, olla
+  engine: "olla" # Available: sherpa, olla
   # Profile controls proxy engine (http) transport buffer behaviour
   # - "auto": Dynamically selects based on request size, type and other factors (default)
   # - "streaming": No buffering, tokens stream immediately, low latency & low memory usage
