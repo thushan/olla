@@ -25,6 +25,9 @@ dist/
 # Test results
 test/results/
 
+# Research and experimental code
+research/
+
 # Legacy directories (to be removed)
 config-dev/
 default.yml

@@ -1,0 +1,84 @@
+services:
+  # vLLM - High-performance GPU-optimised inference engine
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: vllm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Cache directory for downloaded models
+      - vllm_cache:/root/.cache/huggingface
+    environment:
+      # HuggingFace settings
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}  # Optional: for gated models
+      # vLLM configuration
+      - VLLM_LOGGING_LEVEL=INFO
+    command:
+      # Model configuration
+      - "--model"
+      - "meta-llama/Meta-Llama-3.1-8B-Instruct"  # UPDATE: Change model here
+
+      # Performance tuning
+      - "--max-model-len"
+      - "8192"                           # Context window size
+      - "--gpu-memory-utilization"
+      - "0.9"                            # Use 90% of GPU memory
+      - "--max-num-seqs"
+      - "256"                            # Max concurrent sequences
+
+      # API server configuration
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+
+      # Optimisations
+      - "--enable-prefix-caching"        # Enable prompt caching for repeated prompts
+      - "--disable-log-requests"         # Reduce logging overhead
+
+      # Optional: Tensor parallelism for multi-GPU (uncomment if you have multiple GPUs)
+      # - "--tensor-parallel-size"
+      # - "2"                            # Number of GPUs to use
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1                   # Number of GPUs (or 'all' for all GPUs)
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s                 # Give vLLM time to load model
+
+  # Olla - Proxy and load balancer with API translation
+  olla:
+    image: ghcr.io/thushan/olla:latest
+    container_name: olla
+    restart: unless-stopped
+    ports:
+      - "40114:40114"
+    volumes:
+      # Override the default with our custom configuration
+      - ./olla.yaml:/app/config.yaml:ro
+      - ./.container/olla/logs:/app/logs
+    depends_on:
+      vllm:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:40114/internal/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  vllm_cache:
+    driver: local
+
+networks:
+  default:
+    name: crush-vllm-network

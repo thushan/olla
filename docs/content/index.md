@@ -40,6 +40,7 @@ With native [LiteLLM support](integrations/backend/litellm.md), Olla bridges loc
 - **High Performance**: Connection pooling, object pooling, and lock-free statistics
 - **Security**: Built-in rate limiting and request validation
 - **Observability**: Comprehensive metrics and request tracing
+- **API Translation**: [Anthropic Messages API](concepts/api-translation.md) support for Claude-compatible clients
 
 ## Core Concepts
 

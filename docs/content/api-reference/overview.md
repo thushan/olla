@@ -77,6 +77,33 @@ Proxy endpoints for Lemonade SDK servers with AMD Ryzen AI support.
 - `/olla/lemonade/*` - Lemonade SDK API endpoints
 - Includes ONNX and GGUF model support with hardware acceleration
 
+## Translated APIs
+
+APIs that translate between different formats in real-time.
+
+### [Anthropic Messages API](anthropic.md)
+
+Anthropic-compatible API endpoints for Claude clients.
+
+**Endpoints**:
+- `POST /olla/anthropic/v1/messages` - Create a message (chat)
+- `GET /olla/anthropic/v1/models` - List available models
+
+**Features**:
+- Full Anthropic Messages API v1 support
+- Automatic translation to OpenAI format
+- Streaming with Server-Sent Events
+- Tool use (function calling)
+- Vision support (multi-modal)
+
+**Use With**:
+- Claude Code
+- OpenCode
+- Crush CLI
+- Any Anthropic API client
+
+See [API Translation](../concepts/api-translation.md) for how translation works.
+
 ## Authentication
 
 Currently, Olla does not implement authentication at the proxy level. Authentication should be handled by:

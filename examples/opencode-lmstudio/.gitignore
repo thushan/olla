@@ -1,0 +1,5 @@
+# Container data
+.container/
+
+# OpenCode user configuration (don't commit actual config)
+config.json

@@ -652,7 +652,9 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 // streamResponse performs buffered streaming with backpressure handling
 func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.ResponseWriter, resp *http.Response, buffer []byte, rlog logger.StyledLogger) (int, []byte, error) {
 	state := &streamState{}
-	flusher, canFlush := w.(http.Flusher)
+	// Use http.ResponseController for modern flush handling (Go 1.20+)
+	// Provides better error handling and cleaner API than type assertion
+	rc := http.NewResponseController(w)
 	isStreaming := core.AutoDetectStreamingMode(clientCtx, resp, s.configuration.GetProxyProfile())
 
 	// Pre-allocate timer to avoid allocations in hot path
@@ -678,7 +680,7 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 		readDeadline.Reset(s.configuration.GetReadTimeout())
 
 		// Read and process data
-		if err := s.processStreamData(resp, buffer, state, w, canFlush, isStreaming, flusher, rlog); err != nil {
+		if err := s.processStreamData(resp, buffer, state, w, isStreaming, rc, rlog); err != nil {
 			if errors.Is(err, io.EOF) {
 				return state.totalBytes, state.lastChunk, nil
 			}
