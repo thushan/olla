@@ -107,6 +107,7 @@ type EndpointConfig struct {
 	CheckInterval  time.Duration        `yaml:"check_interval"`
 	CheckTimeout   time.Duration        `yaml:"check_timeout"`
 	Priority       int                  `yaml:"priority"`
+	PreservePath   bool                 `yaml:"preserve_path"`
 }
 
 // LoggingConfig holds logging configuration
