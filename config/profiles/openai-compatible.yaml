@@ -1,15 +1,14 @@
-# OpenAI inference platform profile
-name: openai
+# OpenAI-compatible inference platform profile
+name: openai-compatible
 version: "1.0"
-display_name: "OpenAI Compatible Default"
-description: "OpenAI Compatible Endpoints"
+display_name: "OpenAI Compatible"
+description: "OpenAI-compatible API"
 
 # Routing configuration
 routing:
   prefixes:
     - openai
-    # Avoid the compatible prefix here
-    # we'll use openai-compatible.yaml
+    - openai-compatible
 
 # API compatibility
 api:
@@ -58,7 +57,6 @@ models:
     - pattern: "gpt-4*",            context: 8192     # legacy GPT-4
     - pattern: "gpt-3.5-turbo-16k*",context: 16384    # GPT-3.5 16k
     - pattern: "gpt-3.5-turbo*",     context: 4096     # GPT-3.5 base
-
 # Request/response handling
 request:
   model_field_paths:
@@ -87,12 +85,12 @@ resources:
     min_gpu_memory_gb: 0
     requires_gpu: false
     estimated_load_time_ms: 0
-  
+
   # Cloud services handle their own concurrency
   concurrency_limits:
     - min_memory_gb: 0
       max_concurrent: 20  # Reasonable default for cloud APIs
-  
+
   # No load time buffer needed for cloud services
   timeout_scaling:
     base_timeout_seconds: 120  # 2 minutes
@@ -109,7 +107,7 @@ metrics:
       model: "$.model"
       finish_reason: "$.choices[0].finish_reason"  # String value (e.g., "stop", "length", "function_call")
       input_tokens: "$.usage.prompt_tokens"
-      output_tokens: "$.usage.completion_tokens" 
+      output_tokens: "$.usage.completion_tokens"
       total_tokens: "$.usage.total_tokens"
       # Some providers include additional metrics
       ttft_ms: "$.metrics.time_to_first_token"
