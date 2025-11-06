@@ -20,7 +20,6 @@
     <img src="./docs/content/assets/demos/olla-v1.0.x-demo.gif" height="" width="" /><br/>
     <small>Recorded with <a href="https://vhs.charm.sh/">VHS</a> - see <a href="./docs/vhs/demo.tape">demo tape</a></small><br/><br/>
     </div>
-
     <div align="center">
         <img src="assets/diagrams/features.excalidraw.png" alt="Olla can be used to unify OpenAI backends for use by your favourite tools." />
     </div>
