@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/proxy/common"
@@ -15,7 +14,6 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/internal/util"
 )
 
 // ProxyRequestToEndpointsWithRetry handles request proxying with automatic failover
@@ -58,12 +56,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	s.Selector.IncrementConnections(endpoint)
 	defer s.Selector.DecrementConnections(endpoint)
 
-	// Strip route prefix from request path for upstream
-	targetPath := util.StripPrefix(r.URL.Path, s.configuration.GetProxyPrefix())
-	targetURL := endpoint.URL.ResolveReference(&url.URL{Path: targetPath})
-	if r.URL.RawQuery != "" {
-		targetURL.RawQuery = r.URL.RawQuery
-	}
+	targetURL := common.BuildTargetURL(r, endpoint, s.configuration.GetProxyPrefix())
 
 	stats.TargetUrl = targetURL.String()
 

@@ -347,6 +347,104 @@ model_registry:
     cleanup_interval: 15m
 ```
 
+## Path Preservation Examples
+
+Path Preservation allows Olla to maintain the existing paths when mapping proxied queries via the `preserve_path` configuration for endpoints. This is especially useful for inference platforms like [Docker Model Runner](https://docs.docker.com/ai/model-runner/).
+
+### Docker Model Runner
+
+Docker Model Runner endpoints often have base paths that need to be preserved:
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 40114
+
+proxy:
+  engine: "olla"
+  load_balancer: "priority"
+
+discovery:
+  type: "static"
+  static:
+    endpoints:
+      # Docker Model Runner with base path
+      - url: "http://docker-runner:8080/api/models/llama"
+        name: "docker-llama"
+        type: "openai"
+        preserve_path: true  # Preserves /api/models/llama
+        priority: 100
+        health_check_url: "/api/models/llama/health"
+
+      # Another model on the same server
+      - url: "http://docker-runner:8080/api/models/mistral"
+        name: "docker-mistral"
+        type: "openai"
+        preserve_path: true  # Preserves /api/models/mistral
+        priority: 90
+        health_check_url: "/api/models/mistral/health"
+```
+
+### Path-Based API Gateway
+
+When endpoints are behind an API gateway using path-based routing:
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      # API Gateway with path routing
+      - url: "https://api.company.com/llm/prod/v1"
+        name: "gateway-prod"
+        type: "openai"
+        preserve_path: true  # Keep /llm/prod/v1 prefix
+        priority: 100
+
+      # Development endpoint
+      - url: "https://api.company.com/llm/dev/v1"
+        name: "gateway-dev"
+        type: "openai"
+        preserve_path: true  # Keep /llm/dev/v1 prefix
+        priority: 50
+```
+
+### Microservices with Path Prefixes
+
+Different microservices exposed through path prefixes:
+
+```yaml
+discovery:
+  type: "static"
+  static:
+    endpoints:
+      # Chat service
+      - url: "http://services:8080/chat/api"
+        name: "chat-service"
+        type: "openai"
+        preserve_path: true
+        priority: 100
+        model_filter:
+          include: ["*chat*", "*instruct*"]
+
+      # Code generation service
+      - url: "http://services:8080/code/api"
+        name: "code-service"
+        type: "openai"
+        preserve_path: true
+        priority: 100
+        model_filter:
+          include: ["*code*", "deepseek-coder*"]
+
+      # Embedding service
+      - url: "http://services:8080/embeddings/api"
+        name: "embedding-service"
+        type: "openai"
+        preserve_path: true
+        priority: 100
+        model_filter:
+          include: ["*embed*", "bge-*", "e5-*"]
+```
+
 ## Rate-Limited Public API
 
 Configuration for exposing Olla as a public API:

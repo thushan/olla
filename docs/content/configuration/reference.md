@@ -237,6 +237,7 @@ discovery:
 | `static.endpoints[].name` | string | Yes | Unique endpoint name |
 | `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`) |
 | `static.endpoints[].priority` | int | No | Selection priority (higher=preferred) |
+| `static.endpoints[].preserve_path` | bool | No | Preserve base path in URL when proxying (default: `false`) |
 | `static.endpoints[].health_check_url` | string | No | Health check path |
 | `static.endpoints[].model_url` | string | No | Model discovery path |
 | `static.endpoints[].check_interval` | duration | No | Health check interval |
@@ -252,15 +253,48 @@ Filter models at the endpoint level during discovery. See [Filter Concepts](filt
 | `model_filter.include` | []string | Models to include (glob patterns) |
 | `model_filter.exclude` | []string | Models to exclude (glob patterns) |
 
+#### Path Preservation
+
+The `preserve_path` field controls how Olla handles base paths in endpoint URLs during proxying. This is particularly important for endpoints that serve multiple services or use path-based routing.
+
+**Default Behaviour (preserve_path: false)**
+When `preserve_path` is `false` (default), Olla strips the base path from the endpoint URL before proxying:
+
+- Endpoint URL: `http://localhost:8080/api/v1`
+- Request to Olla: `/v1/chat/completions`
+- Proxied to: `http://localhost:8080/v1/chat/completions` (base path `/api/v1` is replaced)
+
+**Path Preservation (preserve_path: true)**
+When `preserve_path` is `true`, Olla preserves the base path:
+
+- Endpoint URL: `http://localhost:8080/api/v1`
+- Request to Olla: `/v1/chat/completions`
+- Proxied to: `http://localhost:8080/api/v1/v1/chat/completions` (base path is preserved)
+
+**When to Use Path Preservation:**
+
+- Docker Model Runner endpoints with base paths
+- APIs deployed behind path-based routers
+- Services that require specific URL structures
+- Multi-service endpoints using path differentiation
+
 Example:
 
 ```yaml
 discovery:
   static:
     endpoints:
+      # Docker Model Runner with base path
+      - url: "http://localhost:8080/api/models/llama"
+        name: "docker-llama"
+        type: "openai"
+        preserve_path: true  # Keep /api/models/llama in requests
+
+      # Standard endpoint without base path
       - url: "http://localhost:11434"
         name: "local-ollama"
         type: "ollama"
+        preserve_path: false  # Default behaviour
         priority: 100
         health_check_url: "/"
         model_url: "/api/tags"

@@ -46,7 +46,6 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
-	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/pkg/pool"
 )
 
@@ -461,24 +460,7 @@ func (s *Service) selectEndpointWithCircuitBreaker(endpoints []*domain.Endpoint,
 
 // buildTargetURL builds the target URL for the proxy request
 func (s *Service) buildTargetURL(r *http.Request, endpoint *domain.Endpoint) *url.URL {
-	targetPath := util.StripPrefix(r.URL.Path, s.configuration.GetProxyPrefix())
-
-	// OLLA-224: Fast path: if endpoint URL has no path or only "/", avoid ResolveReference allocation
-	// This covers the majority of use cases (e.g., "http://localhost:11434") it seems
-	if endpoint.URL.Path == "" || endpoint.URL.Path == "/" {
-		targetURL := *endpoint.URL
-		targetURL.Path = targetPath
-		targetURL.RawQuery = r.URL.RawQuery
-		targetURL.Fragment = ""
-		return &targetURL
-	}
-
-	// complex URL resolution for endpoints with paths (rare)
-	targetURL := endpoint.URL.ResolveReference(&url.URL{Path: targetPath})
-	if r.URL.RawQuery != "" {
-		targetURL.RawQuery = r.URL.RawQuery
-	}
-	return targetURL
+	return common.BuildTargetURL(r, endpoint, s.configuration.GetProxyPrefix())
 }
 
 // prepareProxyRequest creates and prepares the proxy request with headers

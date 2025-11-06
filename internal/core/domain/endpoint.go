@@ -36,6 +36,7 @@ type Endpoint struct {
 	Priority              int
 	ConsecutiveFailures   int
 	BackoffMultiplier     int
+	PreservePath          bool
 }
 
 func (e *Endpoint) GetURLString() string {
