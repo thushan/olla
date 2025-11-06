@@ -20,6 +20,11 @@
     <img src="./docs/content/assets/demos/olla-v1.0.x-demo.gif" height="" width="" /><br/>
     <small>Recorded with <a href="https://vhs.charm.sh/">VHS</a> - see <a href="./docs/vhs/demo.tape">demo tape</a></small><br/><br/>
     </div>
+
+    <div align="center">
+        <img src="assets/diagrams/features.excalidraw.png" alt="Olla can be used to unify OpenAI backends for use by your favourite tools." />
+    </div>
+
     <a href="https://thushan.github.io/olla/"><img src="https://img.shields.io/badge/📖_Documentation-0078D4?style=for-the-badge&logoColor=white" height="32" alt="Documentation"></a>
     &nbsp;
     <a href="https://github.com/thushan/olla/issues"><img src="https://img.shields.io/badge/🐛_Issues-D73502?style=for-the-badge&logoColor=white" height="32" alt="Issues"></a>
@@ -35,10 +40,6 @@
 Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes with a [wide variety](https://thushan.github.io/olla/integrations/overview/) of natively supported endpoints and extensible enough to support others. Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
 Olla works alongside API gateways like [LiteLLM](https://github.com/BerriAI/litellm) or orchestration platforms like [GPUStack](https://github.com/gpustack/gpustack), focusing on making your **existing** LLM infrastructure reliable through intelligent routing and failover. You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
-
-![Olla Single OpenAI](assets/diagrams/features.excalidraw.png)
-
-Single CLI application and config file is all you need to go Olla!
 
 ## Key Features
 
