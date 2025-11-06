@@ -23,7 +23,6 @@
     <div align="center">
         <img src="assets/diagrams/features.excalidraw.png" alt="Olla can be used to unify OpenAI backends for use by your favourite tools." />
     </div>
-
     <a href="https://thushan.github.io/olla/"><img src="https://img.shields.io/badge/📖_Documentation-0078D4?style=for-the-badge&logoColor=white" height="32" alt="Documentation"></a>
     &nbsp;
     <a href="https://github.com/thushan/olla/issues"><img src="https://img.shields.io/badge/🐛_Issues-D73502?style=for-the-badge&logoColor=white" height="32" alt="Issues"></a>
