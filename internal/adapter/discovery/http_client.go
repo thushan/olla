@@ -138,7 +138,14 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 
 // discoverWithProfile performs discovery using a specific platform profile
 func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endpoint *domain.Endpoint, platformProfile domain.PlatformProfile, startTime time.Time) ([]*domain.ModelInfo, error) {
-	discoveryURL := platformProfile.GetModelDiscoveryURL(endpoint.URLString)
+	// Prefer the endpoint's explicitly configured model URL if set, otherwise
+	// fall back to the profile's default discovery path. This allows users to
+	// override discovery URLs for non-standard deployments.
+	// This allows backends like Llamacpp to have overridden discovery URLs (see https://github.com/thushan/olla/issues/86)
+	discoveryURL := endpoint.ModelURLString
+	if discoveryURL == "" {
+		discoveryURL = platformProfile.GetModelDiscoveryURL(endpoint.URLString)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, http.NoBody)
 	if err != nil {
