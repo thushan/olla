@@ -44,7 +44,7 @@ jobs:
           cache: true
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Verify dependencies
         run: go mod verify
@@ -82,7 +82,7 @@ jobs:
           cache: true
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
@@ -108,7 +108,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up QEMU for ARM64 emulation (Linux only)
         if: runner.os == 'Linux'
