@@ -1,4 +1,3 @@
-// Package util provides common utilities for the Olla application.
 package util
 
 import (
@@ -14,19 +13,6 @@ import (
 // This function uses url.Parse() and path.Join() from the standard library to handle
 // URL resolution correctly, avoiding the pitfalls of url.ResolveReference() which treats
 // paths starting with "/" as absolute references per RFC 3986 (replacing the entire path).
-//
-// Examples:
-//   - ResolveURLPath("http://localhost:12434/api/", "/v1/models") -> "http://localhost:12434/api/v1/models"
-//   - ResolveURLPath("http://localhost:12434/api/", "http://other:9000/models") -> "http://other:9000/models"
-//
-// ResolveURLPath resolves a path or absolute URL against a base URL.
-// This function exists because url.ResolveReference() follows RFC 3986 strictly,
-// treating paths with leading "/" as absolute references that replace the entire base path.
-// In our context, we want to preserve the base path prefix when joining with relative paths.
-//
-// We use url.Parse() and path.Join() to achieve the desired behaviour where:
-// - Absolute URLs (with scheme) are returned unchanged
-// - Relative paths are appended to the base URL's path, preserving the base path prefix
 //
 // Examples:
 //   - ResolveURLPath("http://localhost:12434/api/", "/v1/models") -> "http://localhost:12434/api/v1/models"
