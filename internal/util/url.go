@@ -18,6 +18,7 @@ import (
 // Examples:
 //   - ResolveURLPath("http://localhost:12434/api/", "/v1/models") -> "http://localhost:12434/api/v1/models"
 //   - ResolveURLPath("http://localhost:12434/api/", "http://other:9000/models") -> "http://other:9000/models"
+//
 // ResolveURLPath resolves a path or absolute URL against a base URL.
 // This function exists because url.ResolveReference() follows RFC 3986 strictly,
 // treating paths with leading "/" as absolute references that replace the entire base path.
