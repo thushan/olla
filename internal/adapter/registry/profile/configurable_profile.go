@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/internal/util/pattern"
 )
 
@@ -51,11 +52,7 @@ func (p *ConfigurableProfile) GetPath(index int) string {
 }
 
 func (p *ConfigurableProfile) GetModelDiscoveryURL(baseURL string) string {
-	// avoid http://localhost//v1/models nonsense
-	if baseURL != "" && baseURL[len(baseURL)-1] == '/' {
-		baseURL = baseURL[:len(baseURL)-1]
-	}
-	return baseURL + p.config.API.ModelDiscoveryPath
+	return util.JoinURLPath(baseURL, p.config.API.ModelDiscoveryPath)
 }
 
 func (p *ConfigurableProfile) GetHealthCheckPath() string {
