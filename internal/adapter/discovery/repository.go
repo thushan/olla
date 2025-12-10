@@ -140,23 +140,26 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			return fmt.Errorf("invalid endpoint URL %q: %w", cfg.URL, err)
 		}
 
-		healthCheckPath, err := url.Parse(cfg.HealthCheckURL)
-		if err != nil {
-			return fmt.Errorf("invalid health check URL %q: %w", cfg.HealthCheckURL, err)
-		}
-
-		modelPath, err := url.Parse(cfg.ModelURL)
-		if err != nil {
-			return fmt.Errorf("invalid model URL %q: %w", cfg.ModelURL, err)
-		}
-
-		healthCheckURL := endpointURL.ResolveReference(healthCheckPath)
-		modelURL := endpointURL.ResolveReference(modelPath)
-
 		urlString := endpointURL.String()
-		healthCheckPathString := healthCheckPath.String()
-		healthCheckURLString := healthCheckURL.String()
-		modelURLString := modelURL.String()
+
+		// Build health check and model URLs using string concatenation to preserve
+		// the base URL's path prefix. url.ResolveReference() with absolute paths
+		// (starting with /) replaces the entire path per RFC 3986, which breaks
+		// endpoints with nested paths like http://localhost:12434/engines/llama.cpp/
+		healthCheckURLString := joinURLPath(urlString, cfg.HealthCheckURL)
+		modelURLString := joinURLPath(urlString, cfg.ModelURL)
+
+		healthCheckURL, err := url.Parse(healthCheckURLString)
+		if err != nil {
+			return fmt.Errorf("invalid health check URL %q: %w", healthCheckURLString, err)
+		}
+
+		modelURL, err := url.Parse(modelURLString)
+		if err != nil {
+			return fmt.Errorf("invalid model URL %q: %w", modelURLString, err)
+		}
+
+		healthCheckPathString := cfg.HealthCheckURL
 
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
@@ -226,4 +229,31 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 	}
 
 	return nil
+}
+
+// joinURLPath concatenates a base URL with a path, handling trailing/leading slashes.
+// This uses string concatenation rather than url.ResolveReference() because
+// ResolveReference treats paths starting with "/" as absolute references per RFC 3986,
+// which replaces the entire path of the base URL instead of appending to it.
+// For example: "http://localhost/api/".ResolveReference("/v1/models") = "http://localhost/v1/models"
+// But we want: "http://localhost/api/" + "/v1/models" = "http://localhost/api/v1/models"
+func joinURLPath(baseURL, path string) string {
+	if baseURL == "" {
+		return path
+	}
+	if path == "" {
+		return baseURL
+	}
+
+	// Normalise: strip trailing slash from base, strip leading slash from path
+	baseHasSlash := baseURL[len(baseURL)-1] == '/'
+	pathHasSlash := path[0] == '/'
+
+	if baseHasSlash && pathHasSlash {
+		return baseURL + path[1:]
+	}
+	if !baseHasSlash && !pathHasSlash {
+		return baseURL + "/" + path
+	}
+	return baseURL + path
 }
