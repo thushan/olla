@@ -143,12 +143,11 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		urlString := endpointURL.String()
 
-		// Build health check and model URLs using string concatenation to preserve
-		// the base URL's path prefix. url.ResolveReference() with absolute paths
-		// (starting with /) replaces the entire path per RFC 3986, which breaks
-		// endpoints with nested paths like http://localhost:12434/engines/llama.cpp/
-		healthCheckURLString := util.JoinURLPath(urlString, cfg.HealthCheckURL)
-		modelURLString := util.JoinURLPath(urlString, cfg.ModelURL)
+		// Build health check and model URLs using ResolveURLPath to preserve
+		// the base URL's path prefix. This handles both relative paths and absolute URLs correctly,
+		// preserving nested paths like http://localhost:12434/engines/llama.cpp/
+		healthCheckURLString := util.ResolveURLPath(urlString, cfg.HealthCheckURL)
+		modelURLString := util.ResolveURLPath(urlString, cfg.ModelURL)
 
 		healthCheckURL, err := url.Parse(healthCheckURLString)
 		if err != nil {

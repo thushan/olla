@@ -52,7 +52,7 @@ func (p *ConfigurableProfile) GetPath(index int) string {
 }
 
 func (p *ConfigurableProfile) GetModelDiscoveryURL(baseURL string) string {
-	return util.JoinURLPath(baseURL, p.config.API.ModelDiscoveryPath)
+	return util.ResolveURLPath(baseURL, p.config.API.ModelDiscoveryPath)
 }
 
 func (p *ConfigurableProfile) GetHealthCheckPath() string {

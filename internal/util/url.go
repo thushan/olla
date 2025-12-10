@@ -1,29 +1,44 @@
 // Package util provides common utilities for the Olla application.
 package util
 
-// JoinURLPath concatenates a base URL with a path, handling trailing/leading slashes.
-// This uses string concatenation rather than url.ResolveReference() because
-// ResolveReference treats paths starting with "/" as absolute references per RFC 3986,
-// which replaces the entire path of the base URL instead of appending to it.
-// For example: "http://localhost/api/".ResolveReference("/v1/models") = "http://localhost/v1/models"
-// But we want: "http://localhost/api/" + "/v1/models" = "http://localhost/api/v1/models"
-func JoinURLPath(baseURL, path string) string {
+import (
+	"net/url"
+	"path"
+)
+
+// ResolveURLPath resolves a path or absolute URL against a base URL.
+// If pathOrURL is already an absolute URL (has a scheme like http://), it is returned as-is.
+// Otherwise, pathOrURL is treated as a relative path and joined with the base URL's path,
+// preserving any path prefix in the base URL.
+//
+// This function uses url.Parse() and path.Join() from the standard library to handle
+// URL resolution correctly, avoiding the pitfalls of url.ResolveReference() which treats
+// paths starting with "/" as absolute references per RFC 3986 (replacing the entire path).
+//
+// Examples:
+//   - ResolveURLPath("http://localhost:12434/api/", "/v1/models") -> "http://localhost:12434/api/v1/models"
+//   - ResolveURLPath("http://localhost:12434/api/", "http://other:9000/models") -> "http://other:9000/models"
+func ResolveURLPath(baseURL, pathOrURL string) string {
 	if baseURL == "" {
-		return path
+		return pathOrURL
 	}
-	if path == "" {
+	if pathOrURL == "" {
 		return baseURL
 	}
 
-	// Normalise: strip trailing slash from base, strip leading slash from path
-	baseHasSlash := baseURL[len(baseURL)-1] == '/'
-	pathHasSlash := path[0] == '/'
+	// Check if pathOrURL is already an absolute URL
+	if parsed, err := url.Parse(pathOrURL); err == nil && parsed.IsAbs() {
+		return pathOrURL
+	}
 
-	if baseHasSlash && pathHasSlash {
-		return baseURL + path[1:]
+	// Parse base URL
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		// If base URL is invalid, return pathOrURL as fallback
+		return pathOrURL
 	}
-	if !baseHasSlash && !pathHasSlash {
-		return baseURL + "/" + path
-	}
-	return baseURL + path
+
+	// Join paths using path.Join which handles slashes correctly
+	base.Path = path.Join(base.Path, pathOrURL)
+	return base.String()
 }
