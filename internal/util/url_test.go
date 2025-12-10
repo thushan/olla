@@ -111,6 +111,12 @@ func TestResolveURLPath(t *testing.T) {
 			pathOrURL: "/models",
 			expected:  "http://localhost:8080/api/models#section",
 		},
+		{
+			name:      "invalid base URL returns path",
+			baseURL:   "://invalid-url",
+			pathOrURL: "/v1/models",
+			expected:  "/v1/models",
+		},
 	}
 
 	for _, tc := range tests {

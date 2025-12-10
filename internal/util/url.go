@@ -18,6 +18,18 @@ import (
 // Examples:
 //   - ResolveURLPath("http://localhost:12434/api/", "/v1/models") -> "http://localhost:12434/api/v1/models"
 //   - ResolveURLPath("http://localhost:12434/api/", "http://other:9000/models") -> "http://other:9000/models"
+// ResolveURLPath resolves a path or absolute URL against a base URL.
+// This function exists because url.ResolveReference() follows RFC 3986 strictly,
+// treating paths with leading "/" as absolute references that replace the entire base path.
+// In our context, we want to preserve the base path prefix when joining with relative paths.
+//
+// We use url.Parse() and path.Join() to achieve the desired behaviour where:
+// - Absolute URLs (with scheme) are returned unchanged
+// - Relative paths are appended to the base URL's path, preserving the base path prefix
+//
+// Examples:
+//   - ResolveURLPath("http://localhost:12434/api/", "/v1/models") -> "http://localhost:12434/api/v1/models"
+//   - ResolveURLPath("http://localhost:12434/api/", "http://other:9000/models") -> "http://other:9000/models"
 func ResolveURLPath(baseURL, pathOrURL string) string {
 	if baseURL == "" {
 		return pathOrURL
@@ -38,7 +50,8 @@ func ResolveURLPath(baseURL, pathOrURL string) string {
 		return pathOrURL
 	}
 
-	// Join paths using path.Join which handles slashes correctly
+	// Use path.Join to preserve the base path prefix when joining with relative paths
+	// and to normalise redundant slashes
 	base.Path = path.Join(base.Path, pathOrURL)
 	return base.String()
 }
