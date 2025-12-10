@@ -809,6 +809,88 @@ func TestModelURLFallbackToProfileDefault(t *testing.T) {
 	}
 }
 
+// TestOpenAICompatibleModelURLBehavior verifies special handling for OpenAI-compatible
+// profiles where /v1/models override is ignored to preserve existing configurations.
+func TestOpenAICompatibleModelURLBehavior(t *testing.T) {
+	tests := []struct {
+		name                 string
+		modelURLConfig       string // What user configures
+		expectProfileDefault bool   // Whether we expect the profile default to be used
+		expectedPath         string // Expected discovery path
+	}{
+		{
+			name:                 "OpenAI-compatible with /v1/models uses profile default",
+			modelURLConfig:       "/v1/models",
+			expectProfileDefault: true,
+			expectedPath:         "/v1/models",
+		},
+		{
+			name:                 "OpenAI-compatible with custom path uses override",
+			modelURLConfig:       "/api/v2/models", // Path, will be combined with server URL
+			expectProfileDefault: false,
+			expectedPath:         "/api/v2/models",
+		},
+		{
+			name:                 "OpenAI-compatible with /models ignored (Docker/OpenWebUI case)",
+			modelURLConfig:       "/models", // Often returns HTML, not JSON
+			expectProfileDefault: true,
+			expectedPath:         "/v1/models",
+		},
+		{
+			name:                 "OpenAI-compatible with empty model_url uses profile default",
+			modelURLConfig:       "",
+			expectProfileDefault: true,
+			expectedPath:         "/v1/models",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestedPath string
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestedPath = r.URL.Path
+				t.Logf("Server received request at path: %s", r.URL.Path)
+
+				// Only respond to the expected path
+				if r.URL.Path == tt.expectedPath {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(`{"object": "list", "data": [{"id": "test-model", "object": "model"}]}`))
+					return
+				}
+
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			// For the override test, we need to build the full URL first
+			modelURLString := tt.modelURLConfig
+			if tt.modelURLConfig == "/api/v2/models" {
+				modelURLString = server.URL + tt.modelURLConfig
+			}
+
+			// Create endpoint with configured model URL
+			endpoint := createTestEndpointWithModelURL(server.URL, domain.ProfileOpenAICompatible, modelURLString)
+
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
+
+			models, err := client.DiscoverModels(context.Background(), endpoint)
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if requestedPath != tt.expectedPath {
+				t.Errorf("Expected path %q to be used, but server received request at %q", tt.expectedPath, requestedPath)
+			}
+
+			if len(models) == 0 {
+				t.Errorf("Expected models to be discovered, got 0")
+			}
+		})
+	}
+}
+
 type serverResponse struct {
 	status int
 	body   string

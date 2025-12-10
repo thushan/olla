@@ -168,3 +168,51 @@ func TestStaticEndpointRepository_EmptyConfig(t *testing.T) {
 		t.Errorf("Expected 0 endpoints for empty config, got %d", len(endpoints))
 	}
 }
+
+func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
+	// Test that endpoints with nested paths (like Docker) correctly preserve
+	// the path prefix when building model discovery URLs
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "docker-llamacpp",
+			URL:            "http://localhost:12434/engines/llama.cpp/",
+			Type:           "openai-compatible",
+			HealthCheckURL: "/health",
+			ModelURL:       "/v1/models",
+			Priority:       100,
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Verify the model URL string preserves the path prefix
+	expectedModelURL := "http://localhost:12434/engines/llama.cpp/v1/models"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q", endpoint.ModelURLString, expectedModelURL)
+	}
+
+	// Verify the health check URL string preserves the path prefix
+	expectedHealthURL := "http://localhost:12434/engines/llama.cpp/health"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+}

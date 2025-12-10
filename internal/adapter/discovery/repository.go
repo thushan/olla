@@ -10,6 +10,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/util"
 )
 
 const (
@@ -140,23 +141,25 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			return fmt.Errorf("invalid endpoint URL %q: %w", cfg.URL, err)
 		}
 
-		healthCheckPath, err := url.Parse(cfg.HealthCheckURL)
-		if err != nil {
-			return fmt.Errorf("invalid health check URL %q: %w", cfg.HealthCheckURL, err)
-		}
-
-		modelPath, err := url.Parse(cfg.ModelURL)
-		if err != nil {
-			return fmt.Errorf("invalid model URL %q: %w", cfg.ModelURL, err)
-		}
-
-		healthCheckURL := endpointURL.ResolveReference(healthCheckPath)
-		modelURL := endpointURL.ResolveReference(modelPath)
-
 		urlString := endpointURL.String()
-		healthCheckPathString := healthCheckPath.String()
-		healthCheckURLString := healthCheckURL.String()
-		modelURLString := modelURL.String()
+
+		// Build health check and model URLs using ResolveURLPath to preserve
+		// the base URL's path prefix. This handles both relative paths and absolute URLs correctly,
+		// preserving nested paths like http://localhost:12434/engines/llama.cpp/
+		healthCheckURLString := util.ResolveURLPath(urlString, cfg.HealthCheckURL)
+		modelURLString := util.ResolveURLPath(urlString, cfg.ModelURL)
+
+		healthCheckURL, err := url.Parse(healthCheckURLString)
+		if err != nil {
+			return fmt.Errorf("invalid health check URL %q: %w", healthCheckURLString, err)
+		}
+
+		modelURL, err := url.Parse(modelURLString)
+		if err != nil {
+			return fmt.Errorf("invalid model URL %q: %w", modelURLString, err)
+		}
+
+		healthCheckPathString := cfg.HealthCheckURL
 
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
