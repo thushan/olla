@@ -212,10 +212,12 @@ Optional fields:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| **model_url** | Path for model discovery | Platform-specific |
-| **health_check_url** | Path for health checks | Platform-specific |
+| **model_url** | Path for model discovery (optional) | Profile-specific default |
+| **health_check_url** | Path for health checks (optional) | Profile-specific default |
 | **check_interval** | Time between health checks | `5s` |
 | **check_timeout** | Health check timeout | `2s` |
+
+**Note:** Both `model_url` and `health_check_url` are optional. When not specified, Olla uses profile-specific defaults based on the endpoint type (e.g., Ollama uses `/` for health checks and `/api/tags` for model discovery). These fields support both relative paths (joined with the endpoint base URL) and absolute URLs (used as-is for external services). See [Configuration Reference](reference.md#url-configuration) for details.
 
 ### Model Discovery
 

@@ -29,6 +29,8 @@ discovery:
         name: "local-ollama"
         type: "ollama"
         priority: 100
+        # health_check_url and model_url are optional
+        # Profile defaults: health_check_url="/", model_url="/api/tags"
 
 logging:
   level: "info"
@@ -443,6 +445,127 @@ discovery:
         priority: 100
         model_filter:
           include: ["*embed*", "bge-*", "e5-*"]
+```
+
+## URL Configuration Examples
+
+Showcase various URL configuration patterns using profile defaults, relative paths, and absolute URLs.
+
+### Minimal Configuration with Profile Defaults
+
+Simplest setup using automatic profile defaults:
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      # Ollama - uses default health_check_url="/" and model_url="/api/tags"
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100
+
+      # llama.cpp - uses default health_check_url="/health" and model_url="/v1/models"
+      - url: "http://localhost:8080"
+        name: "llamacpp-server"
+        type: "llamacpp"
+        priority: 90
+
+      # vLLM - uses default health_check_url="/health" and model_url="/v1/models"
+      - url: "http://localhost:8000"
+        name: "vllm-server"
+        type: "vllm"
+        priority: 85
+```
+
+### Endpoints with Base Paths
+
+Relative URL paths are automatically joined with the endpoint base URL:
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      # Endpoint with base path - URLs are preserved
+      - url: "http://localhost:8080/api/"
+        name: "api-gateway"
+        type: "vllm"
+        # health_check_url="/health" becomes http://localhost:8080/api/health
+        # model_url="/v1/models" becomes http://localhost:8080/api/v1/models
+
+      # Custom relative paths
+      - url: "http://backend:9000/inference/"
+        name: "custom-backend"
+        type: "openai"
+        health_check_url: "/status"      # -> http://backend:9000/inference/status
+        model_url: "/api/v1/models"      # -> http://backend:9000/inference/api/v1/models
+```
+
+### External Health Monitoring and Model Registry
+
+Use absolute URLs to point health checks or model discovery to different hosts:
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      # Health check on external monitoring service
+      - url: "http://localhost:11434"
+        name: "monitored-ollama"
+        type: "ollama"
+        health_check_url: "http://monitoring.local:9090/health/ollama"
+        # Model discovery still uses the endpoint URL with profile default
+        # model_url="/api/tags" becomes http://localhost:11434/api/tags
+
+      # Model registry on different host
+      - url: "http://llamacpp-1:8080"
+        name: "llamacpp-with-registry"
+        type: "llamacpp"
+        model_url: "http://model-registry.local/api/models/llamacpp-1"
+        # Health check uses profile default on the endpoint host
+        # health_check_url="/health" becomes http://llamacpp-1:8080/health
+
+      # Both on external services
+      - url: "http://ollama-node-1:11434"
+        name: "fully-external"
+        type: "ollama"
+        health_check_url: "http://health-service.local/check/ollama-1"
+        model_url: "http://registry.local/models/ollama-1"
+```
+
+### Mixed Configuration Patterns
+
+Combine minimal defaults with custom overrides as needed:
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      # Minimal - all defaults
+      - url: "http://localhost:11434"
+        name: "ollama-default"
+        type: "ollama"
+
+      # Override health check only
+      - url: "http://localhost:8080"
+        name: "llamacpp-custom-health"
+        type: "llamacpp"
+        health_check_url: "/api/health"  # Custom, relative
+        # model_url="/v1/models" (default)
+
+      # Override model discovery only
+      - url: "http://localhost:8000"
+        name: "vllm-custom-models"
+        type: "vllm"
+        # health_check_url="/health" (default)
+        model_url: "/api/v2/models"      # Custom, relative
+
+      # Override both with absolute URLs
+      - url: "http://localhost:1234"
+        name: "lmstudio-external"
+        type: "lm-studio"
+        health_check_url: "http://health.local/lmstudio"
+        model_url: "http://registry.local/lmstudio/models"
 ```
 
 ## Rate-Limited Public API

@@ -143,11 +143,38 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		urlString := endpointURL.String()
 
+		// Apply profile defaults for empty health check and model paths
+		healthCheckPath := cfg.HealthCheckURL
+		modelPath := cfg.ModelURL
+
+		if healthCheckPath == "" || modelPath == "" {
+			// Try to get defaults from the profile if a known type is specified
+			if cfg.Type != "" && cfg.Type != domain.ProfileAuto {
+				if profile, profileErr := r.profileFactory.GetProfile(cfg.Type); profileErr == nil {
+					if healthCheckPath == "" {
+						healthCheckPath = profile.GetHealthCheckPath()
+					}
+					if modelPath == "" {
+						if profileCfg := profile.GetConfig(); profileCfg != nil {
+							modelPath = profileCfg.API.ModelDiscoveryPath
+						}
+					}
+				}
+			}
+			// Apply sensible defaults for "auto" type or if profile lookup failed
+			if healthCheckPath == "" {
+				healthCheckPath = "/"
+			}
+			if modelPath == "" {
+				modelPath = "/v1/models"
+			}
+		}
+
 		// Build health check and model URLs using ResolveURLPath to preserve
 		// the base URL's path prefix. This handles both relative paths and absolute URLs correctly,
 		// preserving nested paths like http://localhost:12434/engines/llama.cpp/
-		healthCheckURLString := util.ResolveURLPath(urlString, cfg.HealthCheckURL)
-		modelURLString := util.ResolveURLPath(urlString, cfg.ModelURL)
+		healthCheckURLString := util.ResolveURLPath(urlString, healthCheckPath)
+		modelURLString := util.ResolveURLPath(urlString, modelPath)
 
 		healthCheckURL, err := url.Parse(healthCheckURLString)
 		if err != nil {
@@ -158,8 +185,6 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 		if err != nil {
 			return fmt.Errorf("invalid model URL %q: %w", modelURLString, err)
 		}
-
-		healthCheckPathString := cfg.HealthCheckURL
 
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
@@ -173,7 +198,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			CheckTimeout:          cfg.CheckTimeout,
 			Status:                domain.StatusUnknown,
 			URLString:             urlString,
-			HealthCheckPathString: healthCheckPathString,
+			HealthCheckPathString: healthCheckPath,
 			HealthCheckURLString:  healthCheckURLString,
 			ModelURLString:        modelURLString,
 			BackoffMultiplier:     1,
@@ -196,13 +221,8 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 		return fmt.Errorf("endpoint URL cannot be empty")
 	}
 
-	if cfg.HealthCheckURL == "" {
-		return fmt.Errorf("health check URL cannot be empty")
-	}
-
-	if cfg.ModelURL == "" {
-		return fmt.Errorf("model URL cannot be empty")
-	}
+	// Allow empty health check and model URLs - they will get defaults from profile or fallback values
+	// in LoadFromConfig. This enables simpler configuration when using known profile types.
 
 	if cfg.CheckInterval < MinHealthCheckInterval {
 		return fmt.Errorf("check_interval too short: minimum %v, got %v", MinHealthCheckInterval, cfg.CheckInterval)

@@ -216,3 +216,357 @@ func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
 		t.Errorf("HealthCheckURLString = %q, expected %q", endpoint.HealthCheckURLString, expectedHealthURL)
 	}
 }
+
+func TestEndpointConfigValidation_EmptyURLs(t *testing.T) {
+	// Test that validation accepts empty health_check_url and model_url when they can get defaults
+	testCases := []struct {
+		name      string
+		config    config.EndpointConfig
+		expectErr bool
+	}{
+		{
+			name: "empty health_check_url with known type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-ollama",
+				URL:            "http://localhost:11434",
+				Type:           "ollama",
+				HealthCheckURL: "",
+				ModelURL:       "/api/tags",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "empty model_url with known type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-ollama",
+				URL:            "http://localhost:11434",
+				Type:           "ollama",
+				HealthCheckURL: "/",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "both URLs empty with known type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-ollama",
+				URL:            "http://localhost:11434",
+				Type:           "ollama",
+				HealthCheckURL: "",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "both URLs empty with auto type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-auto",
+				URL:            "http://localhost:11434",
+				Type:           "auto",
+				HealthCheckURL: "",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "both URLs empty with empty type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-no-type",
+				URL:            "http://localhost:11434",
+				Type:           "",
+				HealthCheckURL: "",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := NewStaticEndpointRepository()
+			err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{tc.config})
+
+			if tc.expectErr && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tc.expectErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestStaticEndpointRepository_ProfileFallback_HealthCheckURL(t *testing.T) {
+	// Test that empty HealthCheckURL gets populated from profile defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "ollama-no-healthcheck",
+			URL:            "http://localhost:11434",
+			Type:           "ollama",
+			HealthCheckURL: "", // Empty - should fall back to profile default "/"
+			ModelURL:       "/api/tags",
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Ollama profile default health check path is "/"
+	expectedHealthURL := "http://localhost:11434/"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q (profile default for ollama)", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+}
+
+func TestStaticEndpointRepository_ProfileFallback_ModelURL(t *testing.T) {
+	// Test that empty ModelURL gets populated from profile defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "ollama-no-modelurl",
+			URL:            "http://localhost:11434",
+			Type:           "ollama",
+			HealthCheckURL: "/",
+			ModelURL:       "", // Empty - should fall back to profile default "/api/tags"
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Ollama profile default model discovery path is "/api/tags"
+	expectedModelURL := "http://localhost:11434/api/tags"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q (profile default for ollama)", endpoint.ModelURLString, expectedModelURL)
+	}
+}
+
+func TestStaticEndpointRepository_ProfileFallback_BothURLsEmpty(t *testing.T) {
+	// Test that both empty URLs get populated from profile defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "ollama-no-urls",
+			URL:            "http://localhost:11434",
+			Type:           "ollama",
+			HealthCheckURL: "", // Should fall back to "/"
+			ModelURL:       "", // Should fall back to "/api/tags"
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Verify both URLs got profile defaults
+	expectedHealthURL := "http://localhost:11434/"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+
+	expectedModelURL := "http://localhost:11434/api/tags"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q", endpoint.ModelURLString, expectedModelURL)
+	}
+}
+
+func TestStaticEndpointRepository_AutoType_EmptyURLs(t *testing.T) {
+	// Test that "auto" type with empty URLs gets sensible defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "auto-endpoint",
+			URL:            "http://localhost:8080",
+			Type:           "auto",
+			HealthCheckURL: "", // Should fall back to "/" (default)
+			ModelURL:       "", // Should fall back to "/v1/models" (default)
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// For "auto" type, should get sensible defaults since no specific profile
+	// Default health check path is "/"
+	expectedHealthURL := "http://localhost:8080/"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q (default fallback)", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+
+	// Default model URL is "/v1/models"
+	expectedModelURL := "http://localhost:8080/v1/models"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q (default fallback)", endpoint.ModelURLString, expectedModelURL)
+	}
+}
+
+func TestStaticEndpointRepository_LMStudio_ProfileFallback(t *testing.T) {
+	// Test that lm-studio profile defaults work correctly
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "lmstudio-no-urls",
+			URL:            "http://localhost:1234",
+			Type:           "lm-studio",
+			HealthCheckURL: "", // Should fall back to profile default "/v1/models"
+			ModelURL:       "", // Should fall back to profile default "/api/v0/models"
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// LM Studio profile uses /api/v0/models for model discovery (from lmstudio.yaml)
+	expectedModelURL := "http://localhost:1234/api/v0/models"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q (lm-studio profile default)", endpoint.ModelURLString, expectedModelURL)
+	}
+
+	// LM Studio profile uses /v1/models for health check
+	expectedHealthURL := "http://localhost:1234/v1/models"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q (lm-studio profile default)", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+}
+
+func TestStaticEndpointRepository_EmptyURLs_WithNestedPath(t *testing.T) {
+	// Test that empty URLs with nested base paths work correctly
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "nested-ollama",
+			URL:            "http://localhost:12434/engines/ollama/",
+			Type:           "ollama",
+			HealthCheckURL: "", // Should fall back to "/" (ollama default)
+			ModelURL:       "", // Should fall back to "/api/tags" (ollama default)
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Verify URLs preserve the nested path prefix from base URL
+	// Note: path.Join normalises paths and removes trailing slashes
+	// so "/" gets joined with "/engines/ollama/" to become "/engines/ollama"
+	expectedHealthURL := "http://localhost:12434/engines/ollama"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+
+	expectedModelURL := "http://localhost:12434/engines/ollama/api/tags"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q", endpoint.ModelURLString, expectedModelURL)
+	}
+}
