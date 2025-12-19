@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/docker/go-units v0.5.0
-	github.com/expr-lang/expr v1.17.6
+	github.com/expr-lang/expr v1.17.7
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.20
 	github.com/pterm/pterm v0.12.82
