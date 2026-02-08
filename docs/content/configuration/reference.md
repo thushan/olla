@@ -440,6 +440,35 @@ model_registry:
           "llama3": "meta-llama"
 ```
 
+## Model Aliases Configuration
+
+Define virtual model names that map to platform-specific model names across different backends.
+
+### Model Alias Mapping
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `model_aliases` | map[string][]string | `nil` | Map of alias name → list of actual model names |
+
+Each key is the virtual model name clients will use. Each value is a list of actual model names that backends may serve the model under. When a request matches an alias, Olla resolves endpoints for all listed model names and rewrites the request body to the correct name for the selected backend.
+
+Example:
+
+```yaml
+model_aliases:
+  my-llama:
+    - "llama3.1:8b"                          # Ollama
+    - llama-3.1-8b-instruct                  # LM Studio
+    - Meta-Llama-3.1-8B-Instruct.gguf        # llamacpp
+
+  my-codegen:
+    - "qwen2.5-coder:7b"                     # Ollama
+    - qwen2.5-coder-7b-instruct              # LM Studio
+```
+
+!!! note
+    Alias names take priority over standard model routing. If no endpoints are found for the alias, Olla falls back to standard routing using the alias name as a regular model name. See [Model Aliases](../concepts/model-aliases.md) for details.
+
 ## Routing Configuration
 
 Model routing strategy settings for handling requests when models aren't available on all endpoints.
