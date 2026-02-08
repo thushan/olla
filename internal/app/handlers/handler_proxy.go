@@ -413,9 +413,12 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 	// resolve the alias to find endpoint → actual model name mapping
 	endpointToModel, err := a.aliasResolver.ResolveEndpoints(ctx, aliasName, a.modelRegistry)
 	if err != nil || len(endpointToModel) == 0 {
+		logFields := []any{"alias", aliasName}
+		if err != nil {
+			logFields = append(logFields, "error", err)
+		}
 		logger.Warn("Model alias resolved to no endpoints, falling back to standard routing",
-			"alias", aliasName,
-			"error", err)
+			logFields...)
 
 		// fall through to standard routing in case the alias name itself is a known model
 		routableEndpoints, decision, routeErr := a.modelRegistry.GetRoutableEndpointsForModel(ctx, aliasName, candidates)

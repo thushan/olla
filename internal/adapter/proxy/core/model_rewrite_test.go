@@ -244,8 +244,8 @@ func TestRewriteModelForAlias_WithEmptyAliasMap(t *testing.T) {
 	}
 }
 
-// Ensure the http.Request's Body can be read multiple times after rewrite
-func TestRewriteModelForAlias_BodyRereadable(t *testing.T) {
+// Ensure the http.Request's Body can be read after rewrite
+func TestRewriteModelForAlias_BodyReadableAfterRewrite(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "rewritten-model",
 	}

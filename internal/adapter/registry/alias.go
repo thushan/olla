@@ -13,9 +13,7 @@ import (
 type AliasResolver struct {
 	// aliases maps a virtual model name to a list of actual model names
 	aliases map[string][]string
-	// reverseIndex maps an actual model name back to its alias (for fast lookup)
-	reverseIndex map[string]string
-	logger       logger.StyledLogger
+	logger  logger.StyledLogger
 }
 
 // NewAliasResolver creates a new AliasResolver from the configured alias map.
@@ -25,17 +23,9 @@ func NewAliasResolver(aliases map[string][]string, logger logger.StyledLogger) *
 		return nil
 	}
 
-	reverseIndex := make(map[string]string, len(aliases)*3) // rough estimate
-	for alias, models := range aliases {
-		for _, model := range models {
-			reverseIndex[model] = alias
-		}
-	}
-
 	return &AliasResolver{
-		aliases:      aliases,
-		reverseIndex: reverseIndex,
-		logger:       logger,
+		aliases: aliases,
+		logger:  logger,
 	}
 }
 
