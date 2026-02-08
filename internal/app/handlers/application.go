@@ -8,6 +8,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/inspector"
+	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/adapter/translator/anthropic"
@@ -82,6 +83,7 @@ type Application struct {
 	converterFactory   *converter.ConverterFactory
 	profileFactory     profile.ProfileFactory
 	translatorRegistry *translator.Registry
+	aliasResolver      *registry.AliasResolver
 	server             *http.Server
 	errCh              chan error
 	StartTime          time.Time
@@ -159,6 +161,12 @@ func NewApplication(
 		logger.Info("Anthropic translator disabled via configuration")
 	}
 
+	// Create alias resolver for model name aliasing (nil if no aliases configured)
+	aliasResolver := registry.NewAliasResolver(cfg.ModelAliases, logger)
+	if aliasResolver != nil {
+		logger.Info("Model aliases configured", "alias_count", len(cfg.ModelAliases))
+	}
+
 	return &Application{
 		Config:             cfg,
 		logger:             logger,
@@ -173,6 +181,7 @@ func NewApplication(
 		profileFactory:     profileFactory,
 		converterFactory:   converter.NewConverterFactory(),
 		translatorRegistry: translatorRegistry,
+		aliasResolver:      aliasResolver,
 		server:             server,
 		errCh:              make(chan error, 1),
 		StartTime:          time.Now(),

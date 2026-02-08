@@ -151,3 +151,14 @@ logging:
 
 engineering:
   show_nerdstats: false
+
+# Model aliases allow mapping a single virtual model name to multiple actual model names
+# across different backends. When a request arrives with an alias, olla finds endpoints
+# serving any of the listed actual models and rewrites the model name in the request to
+# match what the selected backend expects.
+# Example:
+#   model_aliases:
+#     gpt-oss-120b:             # The alias name used in API requests
+#       - gpt-oss:120b          # Ollama format
+#       - gpt-oss-120b-MLX      # LM Studio MLX format
+#       - gguf_gpt_oss_120b.gguf  # llamacpp GGUF file

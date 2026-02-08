@@ -21,6 +21,18 @@ type Config struct {
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
 	Server        ServerConfig        `yaml:"server"`
 	Engineering   EngineeringConfig   `yaml:"engineering"`
+
+	// ModelAliases maps a virtual model name (alias) to a list of actual model names
+	// that backends may know. When a request arrives with an alias model name, olla
+	// resolves it to all configured actual model names, finds endpoints that serve any
+	// of them, and rewrites the model name in the request to match the selected backend.
+	// Example:
+	//   model_aliases:
+	//     gpt-oss-120b:
+	//       - gpt-oss:120b
+	//       - gpt-oss-120b-MLX
+	//       - gguf_gpt_oss_120b.gguf
+	ModelAliases map[string][]string `yaml:"model_aliases,omitempty"`
 }
 
 // ServerConfig holds HTTP server configuration

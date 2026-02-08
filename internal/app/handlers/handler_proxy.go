@@ -136,6 +136,17 @@ func (a *Application) executeProxyRequest(ctx context.Context, w http.ResponseWr
 		pr.stats.RoutingDecision = pr.profile.RoutingDecision
 	}
 
+	// if a model alias was resolved, pass the endpoint→model rewrite map through context
+	// so the proxy can rewrite the model name in the request body for the selected backend
+	if pr.profile != nil {
+		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.ContextModelAliasMapKey); ok {
+			if aliasMap, ok := aliasMapRaw.(map[string]string); ok {
+				ctx = context.WithValue(ctx, constants.ContextModelAliasMapKey, aliasMap)
+				r = r.WithContext(ctx)
+			}
+		}
+	}
+
 	return a.proxyService.ProxyRequestToEndpoints(ctx, w, r, endpoints, pr.stats, pr.requestLogger)
 }
 
@@ -348,6 +359,11 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	if profile != nil && profile.ModelName != "" && a.modelRegistry != nil {
 		ctx := context.Background()
 
+		// check for model alias before standard routing
+		if a.aliasResolver != nil && a.aliasResolver.IsAlias(profile.ModelName) {
+			return a.resolveAliasEndpoints(ctx, profile, profileFiltered, logger)
+		}
+
 		// use new routing strategy method
 		routableEndpoints, decision, err := a.modelRegistry.GetRoutableEndpointsForModel(ctx, profile.ModelName, profileFiltered)
 
@@ -385,6 +401,57 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	}
 
 	return profileFiltered
+}
+
+// resolveAliasEndpoints handles model alias resolution. When a request uses an alias
+// model name, this finds all endpoints that serve any of the aliased actual model names
+// and stores a rewrite map in the profile so the proxy can replace the model name in
+// the request body with the one the selected backend recognises.
+func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain.RequestProfile, candidates []*domain.Endpoint, logger logger.StyledLogger) []*domain.Endpoint {
+	aliasName := profile.ModelName
+
+	// resolve the alias to find endpoint → actual model name mapping
+	endpointToModel, err := a.aliasResolver.ResolveEndpoints(ctx, aliasName, a.modelRegistry)
+	if err != nil || len(endpointToModel) == 0 {
+		logger.Warn("Model alias resolved to no endpoints, falling back to standard routing",
+			"alias", aliasName,
+			"error", err)
+
+		// fall through to standard routing in case the alias name itself is a known model
+		routableEndpoints, decision, routeErr := a.modelRegistry.GetRoutableEndpointsForModel(ctx, aliasName, candidates)
+		if decision != nil {
+			profile.RoutingDecision = decision
+		}
+		if routeErr != nil || len(routableEndpoints) == 0 {
+			return candidates
+		}
+		return routableEndpoints
+	}
+
+	// filter candidates to only those that have one of the aliased models
+	var aliasEndpoints []*domain.Endpoint
+	for _, endpoint := range candidates {
+		if _, ok := endpointToModel[endpoint.GetURLString()]; ok {
+			aliasEndpoints = append(aliasEndpoints, endpoint)
+		}
+	}
+
+	if len(aliasEndpoints) == 0 {
+		logger.Warn("No healthy endpoints found for model alias",
+			"alias", aliasName,
+			"resolved_endpoints", len(endpointToModel))
+		return []*domain.Endpoint{}
+	}
+
+	// store the rewrite map in the profile for use during request proxying
+	profile.SetInspectionMeta(constants.ContextModelAliasMapKey, endpointToModel)
+
+	logger.Info("Model alias resolved",
+		"alias", aliasName,
+		"matched_endpoints", len(aliasEndpoints),
+		"total_candidates", len(candidates))
+
+	return aliasEndpoints
 }
 
 func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {

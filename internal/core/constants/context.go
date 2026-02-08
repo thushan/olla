@@ -7,4 +7,9 @@ const (
 	ContextOriginalPathKey = "original_path" // original path before any modifications, useful for logging/debugging
 	ContextKeyStream       = "stream"        // indicates whether the response should be streamed or buffered
 	ContextProviderTypeKey = "provider_type" // the provider type for the request, used for routing and load balancing
+
+	// ContextModelAliasMapKey stores a map[string]string of endpoint URL → actual model name
+	// when a model alias is resolved, allowing the proxy to rewrite the model name in the
+	// request body to match what the selected backend expects
+	ContextModelAliasMapKey = "model_alias_map"
 )
