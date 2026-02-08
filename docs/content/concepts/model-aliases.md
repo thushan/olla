@@ -37,7 +37,7 @@ Without aliases, a client request for `llama3.1:8b` would only match the Ollama 
 
 When a request arrives with a model name that matches a configured alias:
 
-```
+```text
 Client request: "model": "my-llama"
          │
          ▼
@@ -193,12 +193,12 @@ A request for `"model": "llama3"` will:
 
 **Possible Causes**:
 
-- Endpoint URL in the alias mapping doesn't match the discovered endpoint
+- Actual model name in the alias list doesn't exactly match the model name reported by the backend
 - Request body is not JSON
 
 **Solutions**:
 
-1. Check endpoint URLs in `curl http://localhost:40114/internal/status/endpoints`
+1. Compare alias model names against discovered models: `curl http://localhost:40114/olla/models`
 2. Ensure requests use `Content-Type: application/json`
 
 ### Alias Overriding a Real Model
