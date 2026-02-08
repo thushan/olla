@@ -449,6 +449,10 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 	// store the rewrite map in the profile for use during request proxying
 	profile.SetInspectionMeta(constants.ContextModelAliasMapKey, endpointToModel)
 
+	// set routing decision so downstream headers/metrics stay consistent
+	profile.RoutingDecision = ports.NewRoutingDecision("alias", ports.RoutingActionRouted,
+		fmt.Sprintf("alias %q resolved to %d endpoint(s)", aliasName, len(aliasEndpoints)))
+
 	logger.Info("Model alias resolved",
 		"alias", aliasName,
 		"matched_endpoints", len(aliasEndpoints),
@@ -563,7 +567,7 @@ func (a *Application) filterEndpointsByCapableModels(endpoints []*domain.Endpoin
 
 	capableEndpoints := make([]*domain.Endpoint, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if capableModels[endpoint.URLString] {
+		if capableModels[endpoint.GetURLString()] {
 			capableEndpoints = append(capableEndpoints, endpoint)
 		}
 	}
