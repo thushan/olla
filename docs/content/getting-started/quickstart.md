@@ -16,8 +16,8 @@ Get Olla up and running with this quick start guide.
 
 !!! note "Configuration Examples"
 
-    Examples in this documentation show configuration snippets for clarity. For a complete working setup,
-    copy the shipped `config/config.yaml` to use as your starting point.
+    Olla merges your YAML file on top of built-in defaults, so you only need to specify what you want to override.
+    The shipped `config/config.yaml` shows all available options for reference.
 
 ## Basic Setup
 
@@ -27,16 +27,16 @@ Create a `config.yaml` for your setup.
 
 !!! tip "Configuration Best Practice"
 
-    Copy `config/config.yaml` to `config/config.local.yaml` for your local changes.
-    This file takes priority over `config.yaml` and won't be committed to version control,
-    future updates etc.
+    Create a `config/config.local.yaml` containing only the settings you need to change.
+    Built-in defaults cover everything else. This file takes priority over `config.yaml` and
+    won't be committed to version control.
 
     ```bash
     $ cp config/config.yaml config/config.local.yaml
-    $ vi config/config.local.yaml # local modifications for your setup
+    $ vi config/config.local.yaml # keep only the settings you need to override
     ```
-    
-    See the [configuration overview](../configuration/overview.md#configuration-file-location) for more information.
+
+    See the [configuration overview](../configuration/overview.md#configuration-file-resolution) for merge behaviour details.
 
 Here's a minimal configuration example, showing the most common changes users make:
 
@@ -65,6 +65,8 @@ logging:
   format: "json"
 ```
 
+The rest will be from the shipped defaults.
+
 ### 2. Start Olla
 
 Start Olla with your configuration:
@@ -74,7 +76,7 @@ Start Olla with your configuration:
 olla
 
 # Or specify a custom config
-olla --config config.yaml
+olla --config my-awesome-config.yaml
 ```
 
 On startup, you'll see which configuration was loaded:

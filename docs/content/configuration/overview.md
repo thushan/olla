@@ -6,35 +6,67 @@ keywords: olla configuration, proxy configuration, load balancer config, health 
 
 # Configuration Overview
 
-!!! note "Configuration Examples"
-
-    Examples in this documentation show configuration snippets for clarity. For a complete working setup,
-    copy the shipped `config/config.yaml` to use as your starting point.
-
 Olla uses a YAML configuration file to control all aspects of its behaviour. This page provides an overview of the configuration structure with links to detailed documentation for each section.
 
-## Configuration File Location
+## Configuration File Resolution
+
+!!! note "Configuration Merge Behaviour"
+
+    Olla starts with built-in defaults, then merges your YAML file on top of the defaults.
+    You only need to specify the settings you want to override - anything omitted keeps its default value.
+    
+    The shipped `config/config.yaml` shows all available options for reference.
 
 Olla searches for configuration in the following order:
 
 1. Path specified with `--config` or `-c` flag
-2. `OLLA_CONFIG_FILE` environment variable
+2. Environment variables:
+    - `OLLA_CONFIG_FILE` environment variable
+    - `OLLA_*` for specific configuration elements
 3. Search paths (first file found is used):
     - `config/config.local.yaml` (recommended for local development)
     - `config/config.yaml` (default shipped configuration)
     - `config.yaml` (alternative location)
     - `default.yaml` (fallback)
 
+The first file found is merged on top of the built-in defaults. Only one YAML file is loaded - they are not layered on top of each other.
+
 !!! tip "Configuration Best Practice"
 
-    Copy `config/config.yaml` to `config/config.local.yaml` for your local changes.
+    Create a `config/config.local.yaml` containing only the settings you want to change.
     This file takes priority over `config.yaml` and won't be committed to version control,
     future updates etc.
 
     ```bash
     $ cp config/config.yaml config/config.local.yaml
-    $ vi config/config.local.yaml # local modifications for your setup
+    $ vi config/config.local.yaml # keep only the settings you need to override
     ```
+
+    **Docker Deployments**: The container includes default configuration. Mount a `config.local.yaml` file which takes priority in the resolution order:
+
+    ```bash
+    # Create minimal config (only settings you want to change)
+    cat > config.local.yaml << 'EOF'
+    server:
+      host: "0.0.0.0"  # Required: bind to all interfaces in Docker
+
+    discovery:
+      type: "static"
+      static:
+        endpoints:
+          - url: "http://host.docker.internal:11434"
+            name: "local-ollama"
+            type: "ollama"
+            priority: 100
+    EOF
+
+    # Run with your config
+    docker run -v $(pwd)/config.local.yaml:/app/config/config.local.yaml \
+        -p 40114:40114 \
+        ghcr.io/thushan/olla:latest
+    ```
+
+    See **[Configuration Best Practices](practices/configuration.md)** for detailed Docker deployment patterns, networking options, and Docker Compose examples
 
 ## Configuration Structure
 
@@ -353,5 +385,6 @@ Olla validates configuration on startup:
 ### Next Steps
 - [Configuration Reference](reference.md) - Complete configuration options
 - [Configuration Examples](examples.md) - Common configuration scenarios
+- [Configuration Best Practices](practices/configuration.md) - Native and Docker configuration strategies
 - [Best Practices](practices/overview.md) - Production recommendations
 - [Profile System](../concepts/profile-system.md) - Customise backend behaviour

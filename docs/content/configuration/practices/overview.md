@@ -408,6 +408,7 @@ proxy:
 ```
 
 The automatic retry mechanism intelligently:
+
 - Only retries connection failures (not application errors)
 - Automatically tries different endpoints
 - Marks failed endpoints as unhealthy
@@ -427,6 +428,7 @@ discovery:
 
 ## Next Steps
 
+- [Configuration Best Practices](configuration.md) - Native and Docker configuration strategies
 - [Security Best Practices](security.md) - Secure your deployment
 - [Performance Tuning](performance.md) - Optimise for your workload
 - [Monitoring Guide](monitoring.md) - Track system health
