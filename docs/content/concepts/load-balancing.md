@@ -159,8 +159,8 @@ All strategies respect endpoint health status:
 | Status | Routable | Weight | Description |
 |--------|----------|--------|-------------|
 | Healthy | ✅ Yes | 1.0 | Fully operational |
-| Degraded | ✅ Yes | 0.7 | Slow but working |
-| Recovering | ✅ Yes | 0.3 | Coming back online |
+| Busy | ✅ Yes | 0.3 | Busy but working |
+| Warming | ✅ Yes | 0.1 | Coming back online |
 | Unhealthy | ❌ No | 0.0 | Failed health checks |
 | Unknown | ❌ No | 0.0 | Not yet checked |
 

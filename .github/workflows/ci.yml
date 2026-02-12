@@ -25,6 +25,7 @@ on:
 env:
   GO_VERSION: 1.24.x
   GOLANGCILINT_VERSION: "1.64.8"
+  BETTERALIGN_VERSION: "0.8.2"
 
 permissions:
   contents: read
@@ -44,7 +45,7 @@ jobs:
           cache: true
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Verify dependencies
         run: go mod verify
@@ -82,7 +83,7 @@ jobs:
           cache: true
 
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -92,7 +93,7 @@ jobs:
 
       - name: betteralign checks
         run: |
-          go install github.com/dkorunic/betteralign/cmd/betteralign@latest
+          go install github.com/dkorunic/betteralign/cmd/betteralign@v${{ env.BETTERALIGN_VERSION }}
           output=$(betteralign ./...)
           if [ -n "$output" ]; then
             echo "Struct alignment issues found:"
@@ -108,7 +109,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Set up QEMU for ARM64 emulation (Linux only)
         if: runner.os == 'Linux'

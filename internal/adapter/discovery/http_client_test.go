@@ -622,6 +622,275 @@ func TestMaxResponseSizeLimit(t *testing.T) {
 	}
 }
 
+// TestModelURLOverride verifies that when an endpoint has a custom ModelURLString
+// configured, discovery uses that URL instead of the profile's default path.
+// This is critical for non-standard deployments where model discovery lives
+// at a different path than the profile expects.
+func TestModelURLOverride(t *testing.T) {
+	tests := []struct {
+		name                 string
+		endpointType         string
+		customModelPath      string // Custom path for model discovery
+		profileDefaultPath   string // The profile's default discovery path
+		serverResponse       string
+		expectedModels       int
+		expectCustomPathUsed bool
+	}{
+		{
+			name:                 "Ollama with custom model URL uses override",
+			endpointType:         domain.ProfileOllama,
+			customModelPath:      "/custom/models/endpoint",
+			profileDefaultPath:   "/api/tags",
+			serverResponse:       `{"models": [{"name": "llama3:8b"}]}`,
+			expectedModels:       1,
+			expectCustomPathUsed: true,
+		},
+		{
+			name:                 "vLLM with custom model URL uses override",
+			endpointType:         domain.ProfileVLLM,
+			customModelPath:      "/internal/v2/model-list",
+			profileDefaultPath:   "/v1/models",
+			serverResponse:       `{"object": "list", "data": [{"id": "mistral-7b", "object": "model"}]}`,
+			expectedModels:       1,
+			expectCustomPathUsed: true,
+		},
+		{
+			name:                 "LlamaCpp with custom model URL uses override",
+			endpointType:         domain.ProfileLlamaCpp,
+			customModelPath:      "/api/internal/models",
+			profileDefaultPath:   "/v1/models",
+			serverResponse:       `{"object": "list", "data": [{"id": "phi-3-mini", "object": "model"}]}`,
+			expectedModels:       1,
+			expectCustomPathUsed: true,
+		},
+		{
+			name:                 "LM Studio with custom model URL uses override",
+			endpointType:         domain.ProfileLmStudio,
+			customModelPath:      "/special/discovery",
+			profileDefaultPath:   "/api/v0/models",
+			serverResponse:       `{"object": "list", "data": [{"id": "qwen2-7b", "object": "model"}]}`,
+			expectedModels:       1,
+			expectCustomPathUsed: true,
+		},
+		{
+			name:                 "OpenAI Compatible with custom model URL uses override",
+			endpointType:         domain.ProfileOpenAICompatible,
+			customModelPath:      "/proxy/models",
+			profileDefaultPath:   "/v1/models",
+			serverResponse:       `{"object": "list", "data": [{"id": "gpt-4-turbo", "object": "model"}]}`,
+			expectedModels:       1,
+			expectCustomPathUsed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestedPath string
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestedPath = r.URL.Path
+				t.Logf("Server received request at path: %s", r.URL.Path)
+
+				// Only respond successfully to the custom path
+				if r.URL.Path == tt.customModelPath {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(tt.serverResponse))
+					return
+				}
+
+				// Return 404 for any other path (including the profile default)
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(`{"error": "not found"}`))
+			}))
+			defer server.Close()
+
+			// Create endpoint with custom model URL
+			endpoint := createTestEndpointWithModelURL(server.URL, tt.endpointType, server.URL+tt.customModelPath)
+
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
+
+			models, err := client.DiscoverModels(context.Background(), endpoint)
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if tt.expectCustomPathUsed && requestedPath != tt.customModelPath {
+				t.Errorf("Expected custom path %q to be used, but server received request at %q", tt.customModelPath, requestedPath)
+			}
+
+			if len(models) != tt.expectedModels {
+				t.Errorf("Expected %d models, got %d", tt.expectedModels, len(models))
+			}
+		})
+	}
+}
+
+// TestModelURLFallbackToProfileDefault verifies that when ModelURLString is empty,
+// the profile's default discovery path is used. This ensures backwards compatibility.
+func TestModelURLFallbackToProfileDefault(t *testing.T) {
+	tests := []struct {
+		name               string
+		endpointType       string
+		profileDefaultPath string
+		serverResponse     string
+		expectedModels     int
+	}{
+		{
+			name:               "Ollama without custom URL uses profile default /api/tags",
+			endpointType:       domain.ProfileOllama,
+			profileDefaultPath: "/api/tags",
+			serverResponse:     `{"models": [{"name": "codellama:7b"}, {"name": "llama3:70b"}]}`,
+			expectedModels:     2,
+		},
+		{
+			name:               "vLLM without custom URL uses profile default /v1/models",
+			endpointType:       domain.ProfileVLLM,
+			profileDefaultPath: "/v1/models",
+			serverResponse:     `{"object": "list", "data": [{"id": "mixtral-8x7b", "object": "model"}]}`,
+			expectedModels:     1,
+		},
+		{
+			name:               "LM Studio without custom URL uses profile default /api/v0/models",
+			endpointType:       domain.ProfileLmStudio,
+			profileDefaultPath: "/api/v0/models",
+			serverResponse:     `{"object": "list", "data": [{"id": "gemma-2b", "object": "model"}]}`,
+			expectedModels:     1,
+		},
+		{
+			name:               "LlamaCpp without custom URL uses profile default /v1/models",
+			endpointType:       domain.ProfileLlamaCpp,
+			profileDefaultPath: "/v1/models",
+			serverResponse:     `{"object": "list", "data": [{"id": "tinyllama", "object": "model"}]}`,
+			expectedModels:     1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestedPath string
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestedPath = r.URL.Path
+				t.Logf("Server received request at path: %s", r.URL.Path)
+
+				// Respond successfully only to the expected default path
+				if r.URL.Path == tt.profileDefaultPath {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(tt.serverResponse))
+					return
+				}
+
+				// Return 404 for any other path
+				w.WriteHeader(http.StatusNotFound)
+				w.Write([]byte(`{"error": "not found"}`))
+			}))
+			defer server.Close()
+
+			// Create endpoint WITHOUT a custom model URL (empty string triggers fallback)
+			endpoint := createTestEndpointWithModelURL(server.URL, tt.endpointType, "")
+
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
+
+			models, err := client.DiscoverModels(context.Background(), endpoint)
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if requestedPath != tt.profileDefaultPath {
+				t.Errorf("Expected profile default path %q to be used, but server received request at %q", tt.profileDefaultPath, requestedPath)
+			}
+
+			if len(models) != tt.expectedModels {
+				t.Errorf("Expected %d models, got %d", tt.expectedModels, len(models))
+			}
+		})
+	}
+}
+
+// TestOpenAICompatibleModelURLBehavior verifies special handling for OpenAI-compatible
+// profiles where /v1/models override is ignored to preserve existing configurations.
+func TestOpenAICompatibleModelURLBehavior(t *testing.T) {
+	tests := []struct {
+		name                 string
+		modelURLConfig       string // What user configures
+		expectProfileDefault bool   // Whether we expect the profile default to be used
+		expectedPath         string // Expected discovery path
+	}{
+		{
+			name:                 "OpenAI-compatible with /v1/models uses profile default",
+			modelURLConfig:       "/v1/models",
+			expectProfileDefault: true,
+			expectedPath:         "/v1/models",
+		},
+		{
+			name:                 "OpenAI-compatible with custom path uses override",
+			modelURLConfig:       "/api/v2/models", // Path, will be combined with server URL
+			expectProfileDefault: false,
+			expectedPath:         "/api/v2/models",
+		},
+		{
+			name:                 "OpenAI-compatible with /models ignored (Docker/OpenWebUI case)",
+			modelURLConfig:       "/models", // Often returns HTML, not JSON
+			expectProfileDefault: true,
+			expectedPath:         "/v1/models",
+		},
+		{
+			name:                 "OpenAI-compatible with empty model_url uses profile default",
+			modelURLConfig:       "",
+			expectProfileDefault: true,
+			expectedPath:         "/v1/models",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var requestedPath string
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestedPath = r.URL.Path
+				t.Logf("Server received request at path: %s", r.URL.Path)
+
+				// Only respond to the expected path
+				if r.URL.Path == tt.expectedPath {
+					w.WriteHeader(http.StatusOK)
+					w.Write([]byte(`{"object": "list", "data": [{"id": "test-model", "object": "model"}]}`))
+					return
+				}
+
+				w.WriteHeader(http.StatusNotFound)
+			}))
+			defer server.Close()
+
+			// For the override test, we need to build the full URL first
+			modelURLString := tt.modelURLConfig
+			if tt.modelURLConfig == "/api/v2/models" {
+				modelURLString = server.URL + tt.modelURLConfig
+			}
+
+			// Create endpoint with configured model URL
+			endpoint := createTestEndpointWithModelURL(server.URL, domain.ProfileOpenAICompatible, modelURLString)
+
+			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
+
+			models, err := client.DiscoverModels(context.Background(), endpoint)
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if requestedPath != tt.expectedPath {
+				t.Errorf("Expected path %q to be used, but server received request at %q", tt.expectedPath, requestedPath)
+			}
+
+			if len(models) == 0 {
+				t.Errorf("Expected models to be discovered, got 0")
+			}
+		})
+	}
+}
+
 type serverResponse struct {
 	status int
 	body   string
@@ -631,7 +900,37 @@ func createTestEndpoint(baseURL, endpointType string) *domain.Endpoint {
 	parsedURL, _ := url.Parse(baseURL)
 
 	healthCheckURL, _ := url.Parse(baseURL + "/")
-	modelURL, _ := url.Parse(baseURL + "/api/tags") // This doesn't matter for auto-detection
+	modelURL, _ := url.Parse(baseURL + "/api/tags")
+
+	// Leave ModelURLString empty by default so the profile's default discovery
+	// path is used. Tests that need to verify the override behaviour should use
+	// createTestEndpointWithModelURL instead.
+	return &domain.Endpoint{
+		Name:                 "test-endpoint",
+		URL:                  parsedURL,
+		Type:                 endpointType,
+		Priority:             100,
+		HealthCheckURL:       healthCheckURL,
+		ModelUrl:             modelURL,
+		URLString:            baseURL,
+		HealthCheckURLString: baseURL + "/",
+		ModelURLString:       "", // Empty to use profile defaults
+		Status:               domain.StatusHealthy,
+		CheckInterval:        5 * time.Second,
+		CheckTimeout:         2 * time.Second,
+	}
+}
+
+// createTestEndpointWithModelURL creates an endpoint with an explicit model URL override.
+// Pass an empty string for modelURLString to test fallback to profile defaults.
+func createTestEndpointWithModelURL(baseURL, endpointType, modelURLString string) *domain.Endpoint {
+	parsedURL, _ := url.Parse(baseURL)
+	healthCheckURL, _ := url.Parse(baseURL + "/")
+
+	var modelURL *url.URL
+	if modelURLString != "" {
+		modelURL, _ = url.Parse(modelURLString)
+	}
 
 	return &domain.Endpoint{
 		Name:                 "test-endpoint",
@@ -642,7 +941,7 @@ func createTestEndpoint(baseURL, endpointType string) *domain.Endpoint {
 		ModelUrl:             modelURL,
 		URLString:            baseURL,
 		HealthCheckURLString: baseURL + "/",
-		ModelURLString:       baseURL + "/api/tags",
+		ModelURLString:       modelURLString, // Can be empty to test fallback behaviour
 		Status:               domain.StatusHealthy,
 		CheckInterval:        5 * time.Second,
 		CheckTimeout:         2 * time.Second,

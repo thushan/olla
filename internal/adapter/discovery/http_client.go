@@ -138,7 +138,34 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 
 // discoverWithProfile performs discovery using a specific platform profile
 func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endpoint *domain.Endpoint, platformProfile domain.PlatformProfile, startTime time.Time) ([]*domain.ModelInfo, error) {
-	discoveryURL := platformProfile.GetModelDiscoveryURL(endpoint.URLString)
+	// For specific profiles like OpenAI-compatible, skip model_url override by default
+	// to avoid breaking existing configurations that rely on profile defaults
+	// Issue #86 fix applies mainly to LlamaCpp, Ollama, etc. where users need custom paths
+	var discoveryURL string
+
+	// Skip model_url override for OpenAI-compatible unless it's a custom path
+	// This prevents issues with endpoints like Docker that have /models returning HTML
+	if platformProfile.GetName() == domain.ProfileOpenAICompatible {
+		if endpoint.ModelURLString != "" {
+			// Only use override if it's not a common problematic path
+			// /models often returns HTML in Docker/OpenWebUI setups, not model data
+			if endpoint.ModelURLString != "/v1/models" && endpoint.ModelURLString != "/models" {
+				discoveryURL = endpoint.ModelURLString
+			}
+			// If it's /models, use profile default (/v1/models) instead
+		}
+		// For all other cases, use profile default
+	} else {
+		// For other profiles (Ollama, LlamaCpp, etc.), respect the override
+		// This fixes Issue #86 where users need custom discovery paths
+		if endpoint.ModelURLString != "" {
+			discoveryURL = endpoint.ModelURLString
+		}
+	}
+
+	if discoveryURL == "" {
+		discoveryURL = platformProfile.GetModelDiscoveryURL(endpoint.URLString)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", discoveryURL, http.NoBody)
 	if err != nil {
@@ -169,7 +196,8 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 
 	models, err := platformProfile.ParseModelsResponse(body)
 	if err != nil {
-		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "parse_response", resp.StatusCode, duration, err)
+		// Include the actual discovery URL in the error for debugging
+		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "parse_response", resp.StatusCode, duration, err)
 	}
 
 	c.updateMetrics(func(m *DiscoveryMetrics) {
