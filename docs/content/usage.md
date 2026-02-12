@@ -227,8 +227,8 @@ olla --config config.yaml
 **3. Configure Claude Code**
 
 ```bash
-export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic/v1"
-claude-code
+export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"
+claude
 ```
 
 ### Features

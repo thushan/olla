@@ -140,7 +140,7 @@ All responses include:
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used (if applicable) |
-| `X-Olla-Backend-Type` | Provider type, examples: <br> `ollama/lmstudio/llamacpp/openai/vllm/sglang/lemonade/litellm` |
+| `X-Olla-Backend-Type` | Provider type, examples: <br> `ollama/lm-studio/llamacpp/openai/openai-compatible/vllm/sglang/lemonade` |
 | `X-Olla-Response-Time` | Total processing time |
 | `X-Olla-Routing-Strategy` | Routing strategy used (when model routing is active) |
 | `X-Olla-Routing-Decision` | Routing decision made (routed/fallback/rejected) |

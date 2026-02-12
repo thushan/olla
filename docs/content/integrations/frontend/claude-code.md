@@ -71,8 +71,8 @@ You can of course customise individual model choices too.
     <tr>
         <th>Configuration</th>
         <td>
-            Set <code>ANTHROPIC_API_BASE_URL</code> to Olla Anthropic endpoint <br/>
-            <pre>export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic"</pre>
+            Set <code>ANTHROPIC_BASE_URL</code> to Olla Anthropic endpoint <br/>
+            <pre>export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"</pre>
         </td>
     </tr>
     <tr>
@@ -120,7 +120,7 @@ Before starting, ensure you have:
 
 1. **Claude Code Installed**
       * Follow [Anthropic's installation guide](https://docs.claude.com/en/docs/claude-code/installation)
-      * Verify: `claude-code --version`
+      * Verify: `claude --version`
 
 2. **Olla Running**
 
@@ -275,7 +275,7 @@ curl -X POST http://localhost:40114/olla/anthropic/v1/messages \
 **Option A: Environment Variables (Recommended)**
 
 ```bash
-export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic"
+export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"
 export ANTHROPIC_API_KEY="not-required"  # Optional
 ... # Add others
 ```
@@ -283,7 +283,7 @@ export ANTHROPIC_API_KEY="not-required"  # Optional
 Add to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.) to make permanent:
 
 ```bash
-echo 'export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic"' >> ~/.bashrc
+echo 'export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
@@ -308,7 +308,7 @@ If Claude Code supports configuration files, create/edit the config:
 ### 7. Start Claude Code
 
 ```bash
-claude-code
+claude
 ```
 
 Try prompts like:
@@ -323,7 +323,7 @@ Try prompts like:
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ANTHROPIC_API_BASE_URL` | Yes | - | Olla's Anthropic endpoint URL |
+| `ANTHROPIC_BASE_URL` | Yes | - | Olla's Anthropic endpoint URL |
 | `ANTHROPIC_API_KEY` | No | - | API key (not enforced by Olla) |
 | `ANTHROPIC_VERSION` | No | `2023-06-01` | API version header |
 
@@ -565,7 +565,7 @@ docker exec ollama ollama rm <model-name>
 
 **Check environment variable**:
 ```bash
-echo $ANTHROPIC_API_BASE_URL
+echo $ANTHROPIC_BASE_URL
 # Should output: http://localhost:40114/olla/anthropic
 ```
 
@@ -782,13 +782,13 @@ jobs:
 
       - name: Configure for Olla
         env:
-          ANTHROPIC_API_BASE_URL: ${{ secrets.OLLA_URL }}
+          ANTHROPIC_BASE_URL: ${{ secrets.OLLA_URL }}
         run: |
           echo "Configured Olla endpoint"
 
       - name: Run AI Review
         run: |
-          claude-code review --diff="${{ github.event.pull_request.diff_url }}"
+          claude review --diff="${{ github.event.pull_request.diff_url }}"
 ```
 
 ### Monitoring and Observability

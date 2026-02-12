@@ -57,8 +57,9 @@ Endpoints can be in one of these states:
 | State | Description | Routable | Behaviour |
 |-------|-------------|----------|-----------|
 | **Healthy** | Passing health checks | ✅ Yes | Normal routing |
-| **Degraded** | Slow but responding | ✅ Yes | Reduced traffic weight |
-| **Recovering** | Coming back online | ✅ Yes | Limited test traffic |
+| **Busy** | Busy but responding | ✅ Yes | Reduced traffic weight |
+| **Warming** | Coming back online | ✅ Yes | Limited test traffic |
+| **Offline** | Network/connection errors | ❌ No | Awaiting recovery |
 | **Unhealthy** | Failing health checks | ❌ No | No traffic routed |
 | **Unknown** | Not yet checked | ❌ No | Awaiting first check |
 
@@ -141,7 +142,7 @@ This reduces load on failing endpoints while still detecting recovery quickly on
 When an unhealthy endpoint might be recovering:
 
 1. **Half-Open State**: Send limited test traffic
-2. **Success Threshold**: After 2 successful checks, mark healthy
+2. **Success Threshold**: On first successful check, mark healthy
 3. **Full Traffic**: Resume normal routing
 
 ### Automatic Model Discovery on Recovery
@@ -213,7 +214,7 @@ Health checks work with the circuit breaker to prevent cascade failures:
           │                        │
           │                        │ 30s timeout
           │                        ▼
-          └──── 2 successes ◀── Half-Open (Test Traffic)
+          └──── 1 success ◀── Half-Open (Test Traffic)
 ```
 
 - **Closed**: Normal operation, all requests pass through
