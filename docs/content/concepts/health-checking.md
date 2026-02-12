@@ -71,24 +71,57 @@ Endpoints can be in one of these states:
 discovery:
   static:
     endpoints:
+      # Minimal configuration - uses profile defaults
       - url: "http://localhost:11434"
         name: "local-ollama"
         type: "ollama"
-        health_check_url: "/"        # Health endpoint
         check_interval: 5s           # How often to check
         check_timeout: 2s            # Timeout per check
+        # health_check_url: "/" (automatically set based on type)
+
+      # Custom health check URL
+      - url: "http://localhost:8080"
+        name: "custom-endpoint"
+        type: "vllm"
+        health_check_url: "/health"  # Override profile default
+        check_interval: 10s
 ```
 
-### Health Check URLs by Platform
+### Health Check URL Configuration
 
-Different platforms use different health endpoints:
+The `health_check_url` field is **optional**. When not specified, Olla automatically uses profile-specific defaults based on the endpoint type.
 
-| Platform | Default Health URL | Expected Response |
-|----------|-------------------|-------------------|
-| Ollama | `/` | 200 with "Ollama is running" |
-| LM Studio | `/v1/models` | 200 with model list |
-| vLLM | `/health` | 200 with JSON status |
-| OpenAI-compatible | `/v1/models` | 200 with model list |
+**Profile Defaults:**
+
+| Platform | Default `health_check_url` | Default `model_url` | Expected Response |
+|----------|---------------------------|-------------------|-------------------|
+| Ollama | `/` | `/api/tags` | 200 with "Ollama is running" |
+| llama.cpp | `/health` | `/v1/models` | 200 with JSON status |
+| LM Studio | `/v1/models` | `/api/v0/models` | 200 with model list |
+| vLLM | `/health` | `/v1/models` | 200 with JSON status |
+| SGLang | `/health` | `/v1/models` | 200 with JSON status |
+| OpenAI-compatible | `/v1/models` | `/v1/models` | 200 with model list |
+| Auto (or unknown) | `/` | `/v1/models` | 200 OK |
+
+### URL Path Behaviour
+
+Both `health_check_url` and `model_url` support:
+
+1. **Relative paths** (recommended) - automatically joined with the endpoint base URL:
+   ```yaml
+   url: "http://localhost:8080/api/"
+   health_check_url: "/health"
+   # Results in: http://localhost:8080/api/health
+   ```
+
+2. **Absolute URLs** - used as-is for external health monitoring:
+   ```yaml
+   url: "http://localhost:11434"
+   health_check_url: "http://monitoring.local:9090/health/ollama"
+   # Health checks go to the monitoring service
+   ```
+
+When using relative paths, base path prefixes in the endpoint URL are **automatically preserved**.
 
 ### Check Intervals
 
@@ -172,14 +205,25 @@ endpoints:
 
 ### Model Discovery Health Checks
 
-For endpoints that support model listing:
+For endpoints that support model listing, the `model_url` field is also optional and uses profile defaults:
 
 ```yaml
 endpoints:
+  # Uses profile default model_url
   - url: "http://localhost:11434"
     type: "ollama"
-    model_url: "/api/tags"
-    # Health check also validates model availability
+    # model_url: "/api/tags" (automatically set)
+
+  # Custom model discovery URL
+  - url: "http://localhost:8080"
+    type: "llamacpp"
+    model_url: "/v1/models"  # Override if needed
+
+  # External model registry
+  - url: "http://localhost:11434"
+    type: "ollama"
+    model_url: "http://registry.local/models/ollama"
+    # Absolute URL to external registry
 ```
 
 ## Connection Failure Handling
@@ -444,11 +488,33 @@ endpoints:
   - url: "http://primary:11434"
     priority: 100
     check_interval: 5s
-    
+
   # Backup - check less often
   - url: "http://backup:11434"
     priority: 50
     check_interval: 15s
+```
+
+### 6. Leverage Profile Defaults
+
+Minimise configuration by relying on profile defaults:
+
+```yaml
+endpoints:
+  # Minimal - uses all profile defaults
+  - url: "http://localhost:11434"
+    name: "local-ollama"
+    type: "ollama"
+    # health_check_url: "/" (automatic)
+    # model_url: "/api/tags" (automatic)
+
+  # Only override what you need
+  - url: "http://localhost:8080"
+    name: "llamacpp"
+    type: "llamacpp"
+    check_interval: 10s  # Custom interval only
+    # health_check_url: "/health" (automatic)
+    # model_url: "/v1/models" (automatic)
 ```
 
 ## Advanced Configuration

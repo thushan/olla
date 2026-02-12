@@ -238,11 +238,45 @@ discovery:
 | `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`) |
 | `static.endpoints[].priority` | int | No | Selection priority (higher=preferred) |
 | `static.endpoints[].preserve_path` | bool | No | Preserve base path in URL when proxying (default: `false`) |
-| `static.endpoints[].health_check_url` | string | No | Health check path |
-| `static.endpoints[].model_url` | string | No | Model discovery path |
+| `static.endpoints[].health_check_url` | string | No | Health check path (optional, uses profile default if not specified) |
+| `static.endpoints[].model_url` | string | No | Model discovery path (optional, uses profile default if not specified) |
 | `static.endpoints[].check_interval` | duration | No | Health check interval |
 | `static.endpoints[].check_timeout` | duration | No | Health check timeout |
 | `static.endpoints[].model_filter` | object | No | Model filtering for this endpoint |
+
+#### URL Configuration
+
+The `health_check_url` and `model_url` fields are **optional**. When not specified, Olla uses profile-specific defaults based on the endpoint type:
+
+**Profile Defaults:**
+
+| Endpoint Type | Default `health_check_url` | Default `model_url` |
+|--------------|---------------------------|-------------------|
+| `ollama` | `/` | `/api/tags` |
+| `llamacpp` | `/health` | `/v1/models` |
+| `lm-studio` | `/v1/models` | `/api/v0/models` |
+| `vllm` | `/health` | `/v1/models` |
+| `sglang` | `/health` | `/v1/models` |
+| `openai` | `/v1/models` | `/v1/models` |
+| `auto` (or unknown) | `/` | `/v1/models` |
+
+**Both fields support:**
+
+1. **Relative paths** (recommended) - joined with the endpoint base URL:
+   ```yaml
+   url: "http://localhost:8080/api/"
+   health_check_url: "/health"     # Becomes: http://localhost:8080/api/health
+   model_url: "/v1/models"         # Becomes: http://localhost:8080/api/v1/models
+   ```
+
+2. **Absolute URLs** - used as-is for external services:
+   ```yaml
+   url: "http://localhost:11434"
+   health_check_url: "http://monitoring.local:9090/health"  # Different host
+   model_url: "http://registry.local/models"                # Different host
+   ```
+
+When using relative paths, any base path prefix in the endpoint URL is **automatically preserved** (e.g., `http://localhost:8080/api/` + `/v1/models` = `http://localhost:8080/api/v1/models`).
 
 #### Endpoint Model Filtering
 
@@ -284,28 +318,44 @@ Example:
 discovery:
   static:
     endpoints:
+      # Minimal configuration - uses profile defaults
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100
+        # health_check_url: "/" (default for ollama)
+        # model_url: "/api/tags" (default for ollama)
+
+      # Custom health check URL
+      - url: "http://localhost:8080"
+        name: "llamacpp-server"
+        type: "llamacpp"
+        priority: 90
+        health_check_url: "/health"
+        # model_url: "/v1/models" (default for llamacpp)
+
+      # Endpoint with base path - URLs are preserved
+      - url: "http://localhost:8080/api/"
+        name: "vllm-gateway"
+        type: "vllm"
+        priority: 80
+        # health_check_url: "/health" -> http://localhost:8080/api/health
+        # model_url: "/v1/models" -> http://localhost:8080/api/v1/models
+
+      # External health check on different host
+      - url: "http://localhost:11434"
+        name: "monitored-ollama"
+        type: "ollama"
+        health_check_url: "http://monitoring.local:9090/health/ollama"
+        # Absolute URL used as-is
+
       # Docker Model Runner with base path
       - url: "http://localhost:8080/api/models/llama"
         name: "docker-llama"
         type: "openai"
         preserve_path: true  # Keep /api/models/llama in requests
 
-      # Standard endpoint without base path
-      - url: "http://localhost:11434"
-        name: "local-ollama"
-        type: "ollama"
-        preserve_path: false  # Default behaviour
-        priority: 100
-        health_check_url: "/"
-        model_url: "/api/tags"
-        check_interval: 30s
-        check_timeout: 5s
-        model_filter:
-          exclude:
-            - "*embed*"         # No embedding models
-            - "*uncensored*"    # No uncensored models
-            - "nomic-*"         # No Nomic models
-        
+      # Endpoint with model filtering
       - url: "http://remote:11434"
         name: "remote-ollama"
         type: "ollama"
