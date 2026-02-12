@@ -3,11 +3,15 @@ package anthropic
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/thushan/olla/internal/adapter/inspector"
+	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/pkg/pool"
 )
@@ -139,4 +143,84 @@ func (t *Translator) WriteError(w http.ResponseWriter, err error, statusCode int
 	if encErr := json.NewEncoder(w).Encode(errorResp); encErr != nil {
 		t.logger.Error("Failed to write error response", "error", encErr)
 	}
+}
+
+// CanPassthrough implements PassthroughCapable interface
+// Determines whether the request can be forwarded directly to backends without translation.
+// Returns true only if passthrough is enabled and ALL endpoints declare native Anthropic support.
+func (t *Translator) CanPassthrough(endpoints []*domain.Endpoint, profileLookup translator.ProfileLookup) bool {
+	// Fast path: if passthrough is disabled, no need to check endpoints
+	if !t.config.PassthroughEnabled {
+		return false
+	}
+
+	// If we have no endpoints, cannot passthrough
+	if len(endpoints) == 0 {
+		return false
+	}
+
+	// Check all endpoints for native Anthropic support
+	// All endpoints must support passthrough - if any endpoint doesn't support it,
+	// we must fall back to translation to ensure the request can be routed to any backend
+	for _, ep := range endpoints {
+		support := profileLookup.GetAnthropicSupport(ep.Type)
+
+		// If support is nil or explicitly disabled, cannot passthrough
+		if support == nil || !support.Enabled {
+			t.logger.Debug("Endpoint does not support Anthropic passthrough",
+				"endpoint", ep.Name,
+				"type", ep.Type)
+			return false
+		}
+	}
+
+	t.logger.Debug("All endpoints support Anthropic passthrough", "count", len(endpoints))
+	return true
+}
+
+// PreparePassthrough implements PassthroughCapable interface
+// Reads and validates the request body for direct forwarding to backends.
+// Returns the original body bytes, target path, model name, and streaming flag.
+func (t *Translator) PreparePassthrough(r *http.Request, profileLookup translator.ProfileLookup) (*translator.PassthroughRequest, error) {
+	// Prevent DOS attacks by limiting request body size
+	limitedBody := io.LimitReader(r.Body, t.maxMessageSize)
+	defer r.Body.Close()
+
+	// Read the entire body into memory
+	// We need to do this anyway to validate the request and extract metadata
+	bodyBytes, err := io.ReadAll(limitedBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read request body: %w", err)
+	}
+
+	// Validate the request structure
+	var anthropicReq AnthropicRequest
+	if err := json.Unmarshal(bodyBytes, &anthropicReq); err != nil {
+		return nil, fmt.Errorf("invalid Anthropic request: %w", err)
+	}
+
+	// Validate required fields and constraints
+	if err := anthropicReq.Validate(); err != nil {
+		return nil, fmt.Errorf("request validation failed: %w", err)
+	}
+
+	// Log request to inspector if enabled
+	if t.inspector.Enabled() {
+		sessionID := t.getSessionID(r)
+		if lerr := t.inspector.LogRequest(sessionID, anthropicReq.Model, bodyBytes); lerr != nil {
+			t.logger.Warn("Failed to log request to inspector", "error", lerr)
+		}
+	}
+
+	t.logger.Debug("Prepared request for passthrough",
+		"model", anthropicReq.Model,
+		"streaming", anthropicReq.Stream,
+		"body_size", len(bodyBytes))
+
+	return &translator.PassthroughRequest{
+		Body:        bodyBytes,
+		TargetPath:  "/v1/messages",
+		ModelName:   anthropicReq.Model,
+		IsStreaming: anthropicReq.Stream,
+	}, nil
 }

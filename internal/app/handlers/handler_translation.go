@@ -14,12 +14,153 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
+// executePassthroughRequest handles requests that can be forwarded directly to backends
+// without translation (e.g. Anthropic API requests to vLLM with native Anthropic support)
+func (a *Application) executePassthroughRequest(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoints []*domain.Endpoint,
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+) {
+	// Get passthrough request details
+	passthroughTrans, ok := trans.(translator.PassthroughCapable)
+	if !ok {
+		// This should never happen since we checked the interface before calling this function
+		a.writeTranslatorError(w, trans, pr, fmt.Errorf("translator does not support passthrough"), http.StatusInternalServerError)
+		return
+	}
+
+	passthroughReq, err := passthroughTrans.PreparePassthrough(r, a.profileLookup)
+	if err != nil {
+		a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
+		return
+	}
+
+	// Update proxy request details
+	pr.requestLogger.Info("using passthrough mode (native Anthropic support)",
+		"model", passthroughReq.ModelName,
+		"streaming", passthroughReq.IsStreaming,
+		"endpoints", len(endpoints))
+
+	// Set request body and path
+	r.Body = io.NopCloser(bytes.NewReader(passthroughReq.Body))
+	r.ContentLength = int64(len(passthroughReq.Body))
+	r.URL.Path = passthroughReq.TargetPath
+
+	// Add passthrough mode header for observability
+	w.Header().Set("X-Olla-Mode", "passthrough")
+
+	// Prepare context
+	ctx, r = a.prepareProxyContext(ctx, r, pr)
+
+	// Log request start
+	a.logRequestStart(pr, len(endpoints))
+
+	// Execute proxy
+	err = a.proxyService.ProxyRequestToEndpoints(ctx, w, r, endpoints, pr.stats, pr.requestLogger)
+
+	a.logRequestResult(pr, err)
+
+	if err != nil {
+		// only write error if response hasn't started
+		if w.Header().Get(constants.HeaderContentType) == "" {
+			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
+		}
+	}
+}
+
+// executeTranslationRequest handles the translation path where requests are converted
+// from the translator's native format (e.g. Anthropic) to OpenAI format for the backend
+func (a *Application) executeTranslationRequest(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoints []*domain.Endpoint,
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+	transformedReq *translator.TransformedRequest,
+) {
+	// Serialize OpenAI request
+	openaiBody, err := json.Marshal(transformedReq.OpenAIRequest)
+	if err != nil {
+		a.writeTranslatorError(w, trans, pr, fmt.Errorf("failed to serialize request"), http.StatusInternalServerError)
+		return
+	}
+
+	r.Body = io.NopCloser(bytes.NewReader(openaiBody))
+	r.ContentLength = int64(len(openaiBody))
+
+	// Handle path translation if specified
+	if transformedReq.TargetPath != "" {
+		targetPath := util.StripPrefix(transformedReq.TargetPath, constants.DefaultOllaProxyPathPrefix)
+
+		if targetPath != transformedReq.TargetPath {
+			pr.requestLogger.Warn("TargetPath included proxy prefix, stripped it",
+				"translator", trans.Name(),
+				"proxy_prefix", constants.DefaultOllaProxyPathPrefix,
+				"original_target", transformedReq.TargetPath,
+				"corrected_target", targetPath)
+		}
+
+		pr.requestLogger.Debug("Path translation applied",
+			"original_path", r.URL.Path,
+			"target_path", targetPath,
+			"translator", trans.Name())
+		r.URL.Path = targetPath
+	} else if trans.Name() != "passthrough" {
+		// warn if translator might need path translation (passthrough can ignore)
+		pr.requestLogger.Warn("Translator did not set TargetPath, using original path",
+			"translator", trans.Name(),
+			"original_path", r.URL.Path,
+			"note", "This may cause routing issues if translation requires different endpoint")
+	}
+
+	a.logRequestStart(pr, len(endpoints))
+
+	// Execute proxy with appropriate response handling (streaming vs non-streaming)
+	var proxyErr error
+	if transformedReq.IsStreaming {
+		proxyErr = a.executeTranslatedStreamingRequest(ctx, w, r, endpoints, pr, trans)
+	} else {
+		proxyErr = a.executeTranslatedNonStreamingRequest(ctx, w, r, endpoints, pr, trans)
+	}
+
+	if proxyErr == nil {
+		pr.requestLogger.Debug("Translation request completed successfully",
+			"translator", trans.Name(),
+			"model", pr.model,
+			"path_translated", transformedReq.TargetPath != "",
+			"target_path", transformedReq.TargetPath,
+			"streaming", transformedReq.IsStreaming)
+	}
+
+	a.logRequestResult(pr, proxyErr)
+
+	if proxyErr != nil {
+		// only write error if response hasn't started
+		if w.Header().Get(constants.HeaderContentType) == "" {
+			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", proxyErr), http.StatusBadGateway)
+		}
+	}
+}
+
 // generic handler for any translator (eg anthropic to openai and back)
 func (a *Application) translationHandler(trans translator.RequestTranslator) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := a.initializeProxyRequest(r)
 		ctx, r := a.setupRequestContext(r, pr.stats)
 
+		// Buffer body once for both passthrough and translation
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB limit
+		if err != nil {
+			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
+			return
+		}
+
+		// Get model name from request for endpoint filtering
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		transformedReq, err := trans.TransformRequest(ctx, r)
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
@@ -28,40 +169,6 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 
 		pr.model = transformedReq.ModelName
 		pr.stats.Model = pr.model
-
-		// serialize for proxy
-		openaiBody, err := json.Marshal(transformedReq.OpenAIRequest)
-		if err != nil {
-			a.writeTranslatorError(w, trans, pr, fmt.Errorf("failed to serialize request"), http.StatusInternalServerError)
-			return
-		}
-
-		r.Body = io.NopCloser(bytes.NewReader(openaiBody))
-		r.ContentLength = int64(len(openaiBody))
-
-		if transformedReq.TargetPath != "" {
-			targetPath := util.StripPrefix(transformedReq.TargetPath, constants.DefaultOllaProxyPathPrefix)
-
-			if targetPath != transformedReq.TargetPath {
-				pr.requestLogger.Warn("TargetPath included proxy prefix, stripped it",
-					"translator", trans.Name(),
-					"proxy_prefix", constants.DefaultOllaProxyPathPrefix,
-					"original_target", transformedReq.TargetPath,
-					"corrected_target", targetPath)
-			}
-
-			pr.requestLogger.Debug("Path translation applied",
-				"original_path", r.URL.Path,
-				"target_path", targetPath,
-				"translator", trans.Name())
-			r.URL.Path = targetPath
-		} else if trans.Name() != "passthrough" {
-			// warn if translator might need path translation (passthrough can ignore)
-			pr.requestLogger.Warn("Translator did not set TargetPath, using original path",
-				"translator", trans.Name(),
-				"original_path", r.URL.Path,
-				"note", "This may cause routing issues if translation requires different endpoint")
-		}
 
 		// run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
@@ -74,7 +181,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		}
 
 		// OLLA-282: When no endpoints available, Olla hangs until timeout
-		// make shure that we have at least one endpoint available
+		// make sure that we have at least one endpoint available
 		// prevents hanging when model routing fails to find compatible backends
 		if len(endpoints) == 0 {
 			pr.requestLogger.Warn("No endpoints available for model",
@@ -86,34 +193,17 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			return
 		}
 
-		a.logRequestStart(pr, len(endpoints))
-
-		// Execute proxy request with appropriate response handling
-		// streaming vs non-streaming need different handling
-		var proxyErr error
-		if transformedReq.IsStreaming {
-			proxyErr = a.executeTranslatedStreamingRequest(ctx, w, r, endpoints, pr, trans)
-		} else {
-			proxyErr = a.executeTranslatedNonStreamingRequest(ctx, w, r, endpoints, pr, trans)
-		}
-
-		if proxyErr == nil {
-			pr.requestLogger.Debug("Translation request completed successfully",
-				"translator", trans.Name(),
-				"model", pr.model,
-				"path_translated", transformedReq.TargetPath != "",
-				"target_path", transformedReq.TargetPath,
-				"streaming", transformedReq.IsStreaming)
-		}
-
-		a.logRequestResult(pr, proxyErr)
-
-		if proxyErr != nil {
-			// only write error if response hasn't started
-			if w.Header().Get(constants.HeaderContentType) == "" {
-				a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", proxyErr), http.StatusBadGateway)
+		// Check for passthrough capability
+		if passthroughTrans, ok := trans.(translator.PassthroughCapable); ok {
+			if a.profileLookup != nil && passthroughTrans.CanPassthrough(endpoints, a.profileLookup) {
+				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				a.executePassthroughRequest(ctx, w, r, endpoints, pr, trans)
+				return
 			}
 		}
+
+		// Translation path - execute with format conversion
+		a.executeTranslationRequest(ctx, w, r, endpoints, pr, trans, transformedReq)
 	}
 }
 

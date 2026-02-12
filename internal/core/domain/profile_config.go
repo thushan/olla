@@ -46,10 +46,15 @@ type ProfileConfig struct {
 	} `yaml:"routing"`
 
 	API struct {
-		ModelDiscoveryPath string   `yaml:"model_discovery_path"`
-		HealthCheckPath    string   `yaml:"health_check_path"`
-		Paths              []string `yaml:"paths"`
-		OpenAICompatible   bool     `yaml:"openai_compatible"`
+		// AnthropicSupport declares whether this backend natively speaks the
+		// Anthropic Messages API. When present and enabled, the translator layer
+		// can skip the Anthropic-to-OpenAI conversion and forward requests directly.
+		// Nil means the backend has no native Anthropic support (the common case).
+		AnthropicSupport   *AnthropicSupportConfig `yaml:"anthropic_support,omitempty"`
+		ModelDiscoveryPath string                  `yaml:"model_discovery_path"`
+		HealthCheckPath    string                  `yaml:"health_check_path"`
+		Paths              []string                `yaml:"paths"`
+		OpenAICompatible   bool                    `yaml:"openai_compatible"`
 	} `yaml:"api"`
 
 	Resources struct {
@@ -104,4 +109,68 @@ type TimeoutScaling struct {
 type ContextPattern struct {
 	Pattern string `yaml:"pattern"`
 	Context int64  `yaml:"context"`
+}
+
+// AnthropicSupportConfig declares native Anthropic Messages API support for a
+// backend platform. This enables the passthrough optimisation: when a backend
+// natively understands the Anthropic wire format, requests can be forwarded
+// directly without the costly Anthropic-to-OpenAI-and-back translation.
+//
+// Example YAML (in a profile's api section):
+//
+//	api:
+//	  anthropic_support:
+//	    enabled: true
+//	    messages_path: "/v1/messages"
+//	    token_count: true
+//	    min_version: "2023-06-01"
+//	    limitations:
+//	      - "no_extended_thinking"
+//	      - "max_tokens_4096"
+type AnthropicSupportConfig struct {
+	// MessagesPath is the backend path that accepts Anthropic Messages API
+	// requests (e.g. "/v1/messages"). Required when Enabled is true.
+	MessagesPath string `yaml:"messages_path"`
+
+	// MinVersion is the minimum anthropic-version header value the backend
+	// requires. If the incoming request specifies an older version, the
+	// translator falls back to the translation path. Use the standard
+	// Anthropic version date format (e.g. "2023-06-01").
+	MinVersion string `yaml:"min_version,omitempty"`
+
+	// Limitations lists Anthropic features this backend does NOT support.
+	// Used by CanPassthrough to decide whether a particular request can be
+	// sent directly or must go through translation instead.
+	// Common values: "no_extended_thinking", "no_tool_use", "no_vision",
+	// "max_tokens_4096".
+	Limitations []string `yaml:"limitations,omitempty"`
+
+	// Enabled controls whether passthrough is active for this backend.
+	// Defaults to false so existing profiles remain unaffected.
+	Enabled bool `yaml:"enabled"`
+
+	// TokenCount indicates the backend supports the Anthropic token counting
+	// endpoint. When true, token count requests can also be passed through.
+	TokenCount bool `yaml:"token_count,omitempty"`
+}
+
+// HasLimitation reports whether the backend declares a specific limitation.
+// Callers use this to check whether a request feature (e.g. extended thinking)
+// is unsupported before attempting passthrough.
+func (c *AnthropicSupportConfig) HasLimitation(limitation string) bool {
+	if c == nil {
+		return false
+	}
+	for _, l := range c.Limitations {
+		if l == limitation {
+			return true
+		}
+	}
+	return false
+}
+
+// SupportsPassthrough is a convenience check that the config is non-nil and
+// explicitly enabled. Safe to call on a nil receiver.
+func (c *AnthropicSupportConfig) SupportsPassthrough() bool {
+	return c != nil && c.Enabled
 }
