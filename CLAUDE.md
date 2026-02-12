@@ -38,8 +38,8 @@ olla/
 │   │   ├── litellm.yaml    # LiteLLM gateway configuration
 │   │   ├── vllm.yaml       # vLLM configuration
 │   │   ├── sglang.yaml     # SGLang configuration
-│   │   ├── anthropic.yaml  # Anthropic Claude API configuration
-│   │   └── openai.yaml     # OpenAI-compatible generic profile
+│   │   ├── openai-compatible.yaml  # OpenAI-compatible generic profile
+│   │   └── openai.yaml     # OpenAI profile
 │   ├── models.yaml         # Model configurations
 │   └── config.local.yaml   # Local configuration overrides (user, not committed to git)
 ├── internal/
@@ -93,11 +93,11 @@ olla/
 │   └── profiler/          # Profiling support
 └── test/
     └── scripts/           # Test scripts
-        ├── anthropic/     # Anthropic API tests
+        ├── auth/          # Authentication tests
         ├── cases/         # Test cases
-        ├── inspector/     # Inspector tests
         ├── load/          # Load testing
         ├── logic/         # Logic & routing tests
+        ├── platform/      # Platform-specific tests
         ├── security/      # Security tests
         └── streaming/     # Streaming tests
 ```
@@ -138,7 +138,7 @@ Dynamically registered based on configured translators (e.g., Anthropic Messages
 ## Response Headers
 - `X-Olla-Endpoint`: Backend name
 - `X-Olla-Model`: Model used
-- `X-Olla-Backend-Type`: ollama/openai/lmstudio/vllm/litellm/sglang/llamacpp/lemonade/anthropic
+- `X-Olla-Backend-Type`: ollama/openai/openai-compatible/lm-studio/vllm/sglang/llamacpp/lemonade
 - `X-Olla-Request-ID`: Request ID
 - `X-Olla-Response-Time`: Total processing time
 

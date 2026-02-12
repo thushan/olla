@@ -6,6 +6,10 @@ DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 USER := $(shell git config user.name 2>/dev/null || whoami)
 TOOL := "make"
 
+# Tool versions (pinned)
+GOLANGCI_LINT_VERSION := v1.64.8
+BETTERALIGN_VERSION := v0.8.2
+
 LDFLAGS := -ldflags "\
 	-X '$(PKG).Version=$(VERSION)' \
 	-X '$(PKG).Runtime=$(RUNTIME)' \
@@ -14,7 +18,7 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps
 
 # Build the application with version info
 build:
@@ -239,14 +243,67 @@ fmt:
 # Run linter
 lint:
 	@echo "Running golangci-lint..."
-	@which golangci-lint > /dev/null && golangci-lint run --fix || echo "golangci-lint not installed, skipping..."
+	@if command -v golangci-lint > /dev/null 2>&1; then \
+		INSTALLED=$$(golangci-lint --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1); \
+		if [ "$$INSTALLED" = "$(GOLANGCI_LINT_VERSION)" ]; then \
+			printf "  Version: %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		else \
+			printf "  Version: %s [require: %s \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(GOLANGCI_LINT_VERSION)"; \
+		fi; \
+		golangci-lint run --fix; \
+	else \
+		echo "golangci-lint not installed. Run 'make install-deps' or 'make check-deps' for more info."; \
+	fi
 	@echo "Running golangci-lint...Done!"
 
 # Run betteralign
 align:
 	@echo "Running better-align..."
-	@which betteralign > /dev/null && betteralign -apply ./... || echo "betteralign not installed, skipping..."	
+	@if command -v betteralign > /dev/null 2>&1; then \
+		INSTALLED=$$(go version -m "$$(go env GOPATH)/bin/betteralign$$(go env GOEXE)" 2>/dev/null | grep -E '^\s+mod' | awk '{print $$3}'); \
+		if [ "$$INSTALLED" = "$(BETTERALIGN_VERSION)" ]; then \
+			printf "  Version: %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		else \
+			printf "  Version: %s [require: %s \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(BETTERALIGN_VERSION)"; \
+		fi; \
+		betteralign -apply ./...; \
+	else \
+		echo "betteralign not installed. Run 'make install-deps' or 'make check-deps' for more info."; \
+	fi
 	@echo "Running better-align...Done!"
+
+# Install dependencies at pinned versions
+install-deps:
+	@echo "Installing dependencies..."
+	@echo "  Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@echo "  Installing betteralign $(BETTERALIGN_VERSION)..."
+	@go install github.com/dkorunic/betteralign/cmd/betteralign@$(BETTERALIGN_VERSION)
+	@echo "Dependencies installed successfully!"
+
+# Check installed tool versions against requirements
+check-deps:
+	@echo "Checking dependencies..."
+	@if command -v golangci-lint > /dev/null 2>&1; then \
+		INSTALLED=$$(golangci-lint --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1); \
+		if [ "$$INSTALLED" = "$(GOLANGCI_LINT_VERSION)" ]; then \
+			printf "  golangci-lint: %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		else \
+			printf "  golangci-lint: %s [require: %s \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(GOLANGCI_LINT_VERSION)"; \
+		fi \
+	else \
+		printf "  golangci-lint: not installed [require: %s \033[31m(pinned)\033[0m]\n" "$(GOLANGCI_LINT_VERSION)"; \
+	fi
+	@if command -v betteralign > /dev/null 2>&1; then \
+		INSTALLED=$$(go version -m "$$(go env GOPATH)/bin/betteralign$$(go env GOEXE)" 2>/dev/null | grep -E '^\s+mod' | awk '{print $$3}'); \
+		if [ "$$INSTALLED" = "$(BETTERALIGN_VERSION)" ]; then \
+			printf "  betteralign: %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		else \
+			printf "  betteralign: %s [require: %s \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(BETTERALIGN_VERSION)"; \
+		fi \
+	else \
+		printf "  betteralign: not installed [require: %s \033[31m(pinned)\033[0m]\n" "$(BETTERALIGN_VERSION)"; \
+	fi
 
 # Development build (no optimisations)
 dev:
@@ -300,5 +357,7 @@ help:
 	@echo "  fmt             - Format code"
 	@echo "  lint            - Run linter (requires golangci-lint)"
 	@echo "  align           - Run alignment checker (requires betteralign)"
+	@echo "  install-deps    - Install dependencies at pinned versions"
+	@echo "  check-deps      - Check installed tool versions against requirements"
 	@echo "  ci              - Run full CI pipeline locally"
 	@echo "  help            - Show this help"

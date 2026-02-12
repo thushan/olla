@@ -146,6 +146,7 @@ nav:
       - Examples: configuration/examples.md
       - Best Practices:
           - Overview: configuration/practices/overview.md
+          - Configuration: configuration/practices/configuration.md
           - Security: configuration/practices/security.md
           - Performance: configuration/practices/performance.md
           - Monitoring: configuration/practices/monitoring.md

@@ -223,7 +223,7 @@ The translator uses a stateful streaming processor that:
 | Streaming | SSE events | SSE chunks | ✅ Full (synchronous) |
 | Tool use | `tools` array | `functions` array | ✅ Full |
 | Tool choice | `tool_choice` (`auto`/`any`/`tool`) | `tool_choice` (`auto`/`required`/object) | ✅ Full with semantic mapping |
-| Vision | Image content blocks | Multi-part content | ✅ Full |
+| Vision | Image content blocks | Multi-part content | ⚠️ Partial (backend dependent) |
 | Stop sequences | `stop_sequences` | `stop` | ✅ Direct |
 | Temperature | `temperature` | `temperature` | ✅ Direct |
 | Top P | `top_p` | `top_p` | ✅ Direct |
@@ -466,8 +466,8 @@ discovery:
 
 **Command**:
 ```bash
-export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic/v1"
-claude-code
+export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"
+claude
 ```
 
 See detailed [Claude Code Integration](../integrations/frontend/claude-code.md) guide.

@@ -13,11 +13,32 @@ Get Olla up and running with this quick start guide.
 - [Olla installed](installation.md) on your system
 - At least one [compatible LLM](../integrations/overview.md) endpoint running
 
+
+!!! note "Configuration Examples"
+
+    Olla merges your YAML file on top of built-in defaults, so you only need to specify what you want to override.
+    The shipped `config/config.yaml` shows all available options for reference.
+
 ## Basic Setup
 
 ### 1. Create Configuration
 
-Create a `config.yaml` file:
+Create a `config.yaml` for your setup.
+
+!!! tip "Configuration Best Practice"
+
+    Create a `config/config.local.yaml` containing only the settings you need to change.
+    Built-in defaults cover everything else. This file takes priority over `config.yaml` and
+    won't be committed to version control.
+
+    ```bash
+    $ cp config/config.yaml config/config.local.yaml
+    $ vi config/config.local.yaml # keep only the settings you need to override
+    ```
+
+    See the [configuration overview](../configuration/overview.md#configuration-file-resolution) for merge behaviour details.
+
+Here's a minimal configuration example, showing the most common changes users make:
 
 ```yaml
 server:
@@ -26,7 +47,7 @@ server:
   request_logging: true
 
 proxy:
-  engine: "sherpa"  # or "olla" for high-performance
+  engine: "olla"  # or "sherpa" for small instances
   load_balancer: "priority"
 
 discovery:
@@ -37,25 +58,35 @@ discovery:
         name: "local-ollama"
         type: "ollama"
         priority: 100
-        # health_check_url: "/"  # Optional, defaults to provider-specific path
+        health_check_url: "/"
 
 logging:
   level: "info"
   format: "json"
 ```
 
+The rest will be from the shipped defaults.
+
 ### 2. Start Olla
 
+Start Olla with your configuration:
+
 ```bash
-olla --config config.yaml
+# Uses config/config.local.yaml automatically (if present)
+olla
+
+# Or specify a custom config
+olla --config my-awesome-config.yaml
 ```
 
-You should see output similar to:
+On startup, you'll see which configuration was loaded:
 
 ```json
-{"level":"info","msg":"Starting Olla proxy server","port":40114}
-{"level":"info","msg":"Health check passed","endpoint":"local-ollama"}
-{"level":"info","msg":"Server ready","endpoints":1}
+{"level":"INFO","msg":"Initialising","version":"v0.x.x","pid":123456}
+{"level":"INFO","msg":"System Configuration","isContainerised":false,...}
+{"level":"INFO","msg":"Loaded configuration","config":"config/config.local.yaml"}
+{"level":"INFO","msg":"Initialising stats collector"}
+...
 ```
 
 ### 3. Test the Proxy
@@ -182,7 +213,7 @@ curl -I http://localhost:40114/olla/ollama/v1/models
 Look for these headers:
 
 - `X-Olla-Endpoint`: Which backend handled the request
-- `X-Olla-Backend-Type`: Type of backend (ollama/openai/lmstudio)
+- `X-Olla-Backend-Type`: Type of backend (ollama/openai/lm-studio)
 - `X-Olla-Request-ID`: Unique request identifier
 - `X-Olla-Response-Time`: Total processing time
 
