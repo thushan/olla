@@ -556,9 +556,9 @@ All OpenAI-compatible backends work through translation:
 Configure Claude Code to use Olla:
 
 ```bash
-export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic/v1"
+export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"
 export ANTHROPIC_API_KEY="not-required"  # Optional for local use
-claude-code
+claude
 ```
 
 See [Claude Code Integration](../frontend/claude-code.md) for complete setup.

@@ -72,13 +72,13 @@ Wait ~10-30 seconds for llama.cpp to load the model.
 ### 5. Configure Claude Code
 
 ```bash
-export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic/v1"
+export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"
 ```
 
 ### 6. Use Claude Code
 
 ```bash
-claude-code
+claude
 ```
 
 ## Files

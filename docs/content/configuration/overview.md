@@ -6,21 +6,10 @@ keywords: olla configuration, proxy configuration, load balancer config, health 
 
 # Configuration Overview
 
-> :memo: **Default Configuration**
-> ```yaml
-> server:
->   host: "localhost"
->   port: 40114
-> proxy:
->   engine: "sherpa"
->   profile: "auto"
-> discovery:
->   static:
->     endpoints: []
-> ```
-> **Quick Start**: Copy this minimal config to `config.yaml` and add your endpoints
-> 
-> **Environment Variables**: Most settings support `OLLA_SECTION_KEY` format
+!!! note "Configuration Examples"
+
+    Examples in this documentation show configuration snippets for clarity. For a complete working setup,
+    copy the shipped `config/config.yaml` to use as your starting point.
 
 Olla uses a YAML configuration file to control all aspects of its behaviour. This page provides an overview of the configuration structure with links to detailed documentation for each section.
 
@@ -30,8 +19,22 @@ Olla searches for configuration in the following order:
 
 1. Path specified with `--config` or `-c` flag
 2. `OLLA_CONFIG_FILE` environment variable
-3. `./config.yaml` in the current directory
-4. `./config/config.yaml` relative to the executable
+3. Search paths (first file found is used):
+    - `config/config.local.yaml` (recommended for local development)
+    - `config/config.yaml` (default shipped configuration)
+    - `config.yaml` (alternative location)
+    - `default.yaml` (fallback)
+
+!!! tip "Configuration Best Practice"
+
+    Copy `config/config.yaml` to `config/config.local.yaml` for your local changes.
+    This file takes priority over `config.yaml` and won't be committed to version control,
+    future updates etc.
+
+    ```bash
+    $ cp config/config.yaml config/config.local.yaml
+    $ vi config/config.local.yaml # local modifications for your setup
+    ```
 
 ## Configuration Structure
 

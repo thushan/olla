@@ -52,7 +52,7 @@ HTTP server and security settings.
 |-------|------|---------|-------------|
 | `host` | string | `"localhost"` | Network interface to bind |
 | `port` | int | `40114` | TCP port to listen on |
-| `request_logging` | bool | `false` | Enable request logging |
+| `request_logging` | bool | `true` | Enable request logging |
 
 Example:
 
@@ -67,9 +67,9 @@ server:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `read_timeout` | duration | `20s` | Time to read request |
+| `read_timeout` | duration | `30s` | Time to read request |
 | `write_timeout` | duration | `0s` | Response write timeout (must be 0 for streaming) |
-| `idle_timeout` | duration | `120s` | Keep-alive timeout |
+| `idle_timeout` | duration | `0s` | Keep-alive timeout (0 = use read_timeout) |
 | `shutdown_timeout` | duration | `10s` | Graceful shutdown timeout |
 
 Example:
@@ -86,8 +86,8 @@ server:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `request_limits.max_body_size` | int64 | `52428800` | Max request body (bytes) |
-| `request_limits.max_header_size` | int64 | `524288` | Max header size (bytes) |
+| `request_limits.max_body_size` | int64 | `104857600` | Max request body (100MB) |
+| `request_limits.max_header_size` | int64 | `1048576` | Max header size (1MB) |
 
 Example:
 
@@ -102,13 +102,13 @@ server:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `rate_limits.global_requests_per_minute` | int | `0` | Global rate limit (0=disabled) |
-| `rate_limits.per_ip_requests_per_minute` | int | `0` | Per-IP rate limit (0=disabled) |
-| `rate_limits.health_requests_per_minute` | int | `0` | Health endpoint limit |
+| `rate_limits.global_requests_per_minute` | int | `1000` | Global rate limit (0=disabled) |
+| `rate_limits.per_ip_requests_per_minute` | int | `100` | Per-IP rate limit (0=disabled) |
+| `rate_limits.health_requests_per_minute` | int | `1000` | Health endpoint limit |
 | `rate_limits.burst_size` | int | `50` | Token bucket burst size |
-| `rate_limits.cleanup_interval` | duration | `1m` | Rate limiter cleanup |
+| `rate_limits.cleanup_interval` | duration | `5m` | Rate limiter cleanup |
 | `rate_limits.trust_proxy_headers` | bool | `false` | Trust X-Forwarded-For |
-| `rate_limits.trusted_proxy_cidrs` | []string | `[]` | Trusted proxy CIDRs |
+| `rate_limits.trusted_proxy_cidrs` | []string | `["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]` | Trusted proxy CIDRs |
 
 Example:
 
@@ -119,7 +119,7 @@ server:
     per_ip_requests_per_minute: 100
     health_requests_per_minute: 5000
     burst_size: 50
-    cleanup_interval: 1m
+    cleanup_interval: 5m
     trust_proxy_headers: true
     trusted_proxy_cidrs:
       - "10.0.0.0/8"
@@ -152,8 +152,8 @@ proxy:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `connection_timeout` | duration | `30s` | Backend connection timeout |
-| `response_timeout` | duration | `0s` | Response timeout (0=disabled) |
-| `read_timeout` | duration | `0s` | Read timeout (0=disabled) |
+| `response_timeout` | duration | `10m` | Response timeout |
+| `read_timeout` | duration | `120s` | Read timeout |
 
 Example:
 
@@ -179,7 +179,7 @@ As of v0.0.16, the retry mechanism is automatic and built-in for connection fail
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `stream_buffer_size` | int | `4096` | Stream buffer size (bytes) |
+| `stream_buffer_size` | int | `8192` | Stream buffer size (bytes) |
 
 Example:
 
@@ -219,7 +219,7 @@ Endpoint discovery and health checking.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `type` | string | `"static"` | Discovery type (only `static` supported) |
-| `refresh_interval` | duration | `5m` | Discovery refresh interval |
+| `refresh_interval` | duration | `30s` | Discovery refresh interval |
 
 Example:
 
@@ -405,7 +405,7 @@ model_registry:
 | `unification.enabled` | bool | `true` | Enable unification |
 | `unification.stale_threshold` | duration | `24h` | Model retention time |
 | `unification.cleanup_interval` | duration | `10m` | Cleanup frequency |
-| `unification.cache_ttl` | duration | `5m` | Cache TTL |
+| `unification.cache_ttl` | duration | `10m` | Cache TTL |
 
 Example:
 
@@ -581,38 +581,42 @@ Complete default configuration:
 server:
   host: "localhost"
   port: 40114
-  read_timeout: 20s
+  read_timeout: 30s
   write_timeout: 0s
-  idle_timeout: 120s
+  # idle_timeout: 0s  # Optional (0 = use read_timeout)
   shutdown_timeout: 10s
-  request_logging: false
+  request_logging: true
   request_limits:
-    max_body_size: 52428800    # 50MB
-    max_header_size: 524288     # 512KB
+    max_body_size: 104857600   # 100MB
+    max_header_size: 1048576    # 1MB
   rate_limits:
-    global_requests_per_minute: 0
-    per_ip_requests_per_minute: 0
-    health_requests_per_minute: 0
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 100
+    health_requests_per_minute: 1000
     burst_size: 50
-    cleanup_interval: 1m
+    cleanup_interval: 5m
     trust_proxy_headers: false
-    trusted_proxy_cidrs: []
+    trusted_proxy_cidrs:
+      - "127.0.0.0/8"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
 
 proxy:
   engine: "sherpa"
   profile: "auto"
   load_balancer: "priority"
   connection_timeout: 30s
-  response_timeout: 0s
-  read_timeout: 0s
+  response_timeout: 10m
+  read_timeout: 120s
   # DEPRECATED as of v0.0.16 - retry is now automatic
   # max_retries: 3
   # retry_backoff: 1s
-  stream_buffer_size: 4096
+  stream_buffer_size: 8192
 
 discovery:
   type: "static"
-  refresh_interval: 5m
+  refresh_interval: 30s
   model_discovery:
     enabled: true
     interval: 5m
@@ -636,7 +640,7 @@ model_registry:
     enabled: true
     stale_threshold: 24h
     cleanup_interval: 10m
-    cache_ttl: 5m
+    cache_ttl: 10m
     custom_rules: []
 
 logging:
