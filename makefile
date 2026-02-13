@@ -18,7 +18,7 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet
 
 # Build the application with version info
 build:
@@ -183,11 +183,11 @@ clean:
 deps:
 	@go mod download && go mod tidy
 
-ready-tools: fmt lint align
+ready-tools: fmt vet lint align
 	@echo -e "\033[32mCode is clean for tests!\033[0m"
 
-# Make code ready for commit (test, test-race, fmt, lint, align)
-ready: test-short test-race fmt lint align
+# Make code ready for commit (test, test-race, fmt, vet, lint, align)
+ready: test-short test-race fmt vet lint align
 	@echo -e "\033[32mCode is ready for commit!\033[0m"
 
 # Build binaries only (no archives) to ./build directory
@@ -239,6 +239,12 @@ fmt:
 	@echo "Running go fmt..."
 	@go fmt ./...
 	@echo "Running go fmt...Done!"
+
+# Run go vet
+vet:
+	@echo "Running go vet..."
+	@go vet ./...
+	@echo "Running go vet...Done!"
 
 # Run linter
 lint:
@@ -311,7 +317,7 @@ dev:
 	@go build $(LDFLAGS) -gcflags="all=-N -l" -o bin/olla-dev .
 
 # Run full CI pipeline locally
-ci: deps fmt lint test-race test-cover build
+ci: deps fmt vet lint test-race test-cover build
 	@echo "CI pipeline completed successfully!"
 
 # Docker compose up with local config
@@ -341,8 +347,8 @@ help:
 	@echo "  dev             - Build development binary (with debug symbols)"
 	@echo "  clean           - Clean build artifacts and logs"
 	@echo "  deps            - Download and tidy dependencies"
-	@echo "  ready     		 - Make code ready for commit (test, fmt, lint, align)"
-	@echo "  ready-tools     - Check code is ready with tools (fmt, lint, align)"
+	@echo "  ready     		 - Make code ready for commit (test, fmt, vet, lint, align)"
+	@echo "  ready-tools     - Check code is ready with tools (fmt, vet, lint, align)"
 	@echo "  validate-linux  - Build and test Linux binaries (AMD64 + ARM64)"
 	@echo "  validate-darwin - Build and test macOS binaries (Intel + Apple Silicon)"
 	@echo "  validate-windows- Build and test Windows binaries (AMD64 + ARM64)"
@@ -355,6 +361,7 @@ help:
 	@echo "  release-test    - Test full release (binaries + docker + archives)"
 	@echo "  goreleaser-check- Check goreleaser configuration"
 	@echo "  fmt             - Format code"
+	@echo "  vet             - Run go vet static analysis"
 	@echo "  lint            - Run linter (requires golangci-lint)"
 	@echo "  align           - Run alignment checker (requires betteralign)"
 	@echo "  install-deps    - Install dependencies at pinned versions"
