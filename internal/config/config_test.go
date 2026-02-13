@@ -623,8 +623,12 @@ func TestDefaultConfig_Translators(t *testing.T) {
 	cfg := DefaultConfig()
 
 	// Test Anthropic translator defaults
-	if cfg.Translators.Anthropic.Enabled {
-		t.Error("Expected Anthropic translator disabled by default")
+	if !cfg.Translators.Anthropic.Enabled {
+		t.Error("Expected Anthropic translator enabled by default")
+	}
+
+	if !cfg.Translators.Anthropic.PassthroughEnabled {
+		t.Error("Expected Anthropic translator passthrough enabled by default")
 	}
 
 	if cfg.Translators.Anthropic.Inspector.Enabled {
