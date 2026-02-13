@@ -175,9 +175,19 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		ctx, r := a.setupRequestContext(r, pr.stats)
 
 		// Buffer body once -- both passthrough and translation paths need it.
-		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
+		// Read maxBodySize+1 to detect oversized requests before JSON parsing
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize+1))
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
+			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNone)
+			return
+		}
+
+		// Explicitly check for oversized body (return 413 instead of confusing JSON parse error)
+		if int64(len(bodyBytes)) > maxBodySize {
+			a.writeTranslatorError(w, trans, pr,
+				fmt.Errorf("request body exceeds maximum size (%d bytes)", maxBodySize),
+				http.StatusRequestEntityTooLarge)
 			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNone)
 			return
 		}

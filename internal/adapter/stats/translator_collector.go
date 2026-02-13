@@ -33,7 +33,7 @@ type translatorData struct {
 
 	// Performance metrics
 	totalLatency *xsync.Counter
-	name         string // translator name (placed first for optimal memory alignment)
+	name         string // translator name
 }
 
 // NewTranslatorCollector creates a new TranslatorCollector
@@ -50,6 +50,7 @@ func (tc *TranslatorCollector) Record(event ports.TranslatorRequestEvent) {
 	// Update total counts
 	data.totalRequests.Inc()
 	if event.Success {
+		data.totalLatency.Add(event.Latency.Milliseconds())
 		data.successfulRequests.Inc()
 	} else {
 		data.failedRequests.Inc()
@@ -83,9 +84,6 @@ func (tc *TranslatorCollector) Record(event ports.TranslatorRequestEvent) {
 			data.fallbackCannotPassthrough.Inc()
 		}
 	}
-
-	// Update latency
-	data.totalLatency.Add(event.Latency.Milliseconds())
 }
 
 // GetStats returns aggregated statistics for all translators

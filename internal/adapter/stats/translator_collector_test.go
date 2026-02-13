@@ -565,7 +565,7 @@ func TestTranslatorCollector_LatencyWithFailures(t *testing.T) {
 		collector.Record(event)
 	}
 
-	// Record failed request with higher latency (should still be included in total)
+	// Record failed request with higher latency (should NOT be included in total)
 	event := ports.TranslatorRequestEvent{
 		TranslatorName: "anthropic",
 		Model:          "claude-3-5-sonnet-20241022",
@@ -581,13 +581,13 @@ func TestTranslatorCollector_LatencyWithFailures(t *testing.T) {
 	stats := collector.GetStats()
 	anthropicStats := stats["anthropic"]
 
-	// Total latency includes all requests (3 * 100 + 1 * 500 = 800)
-	expectedTotal := int64(800)
+	// Total latency includes only successful requests (3 * 100 = 300)
+	expectedTotal := int64(300)
 	if anthropicStats.TotalLatency != expectedTotal {
 		t.Errorf("Expected total latency %dms, got %dms", expectedTotal, anthropicStats.TotalLatency)
 	}
 
-	// Average latency is calculated using successful requests only (800 / 3 = 266)
+	// Average latency is calculated using successful requests only (300 / 3 = 100)
 	expectedAvg := expectedTotal / 3
 	if anthropicStats.AverageLatency != expectedAvg {
 		t.Errorf("Expected average latency %dms, got %dms", expectedAvg, anthropicStats.AverageLatency)

@@ -84,7 +84,7 @@ type ModelsProvider interface {
 // passthrough decision is opt-in per translator.
 type PassthroughCapable interface {
 	// CanPassthrough inspects the available endpoints (via their profile
-	// configurations) and determines whether at least one backend can accept
+	// configurations) and determines whether all backends can accept
 	// the request in its native format without translation.
 	//
 	// The profileLookup parameter provides access to per-endpoint-type

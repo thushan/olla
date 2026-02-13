@@ -89,7 +89,7 @@ type TranslatorRequestEvent struct {
 	FallbackReason constants.TranslatorFallbackReason // why passthrough wasn't used
 	Success        bool                               // whether request succeeded
 	IsStreaming    bool                               // streaming vs non-streaming
-	Latency        time.Duration                      // end-to-end request duration (placed first for optimal alignment)
+	Latency        time.Duration                      // end-to-end request duration
 }
 
 // TranslatorStats aggregates metrics for a specific translator
