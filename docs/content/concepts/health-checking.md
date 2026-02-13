@@ -561,6 +561,7 @@ Olla provides health and status information through its internal endpoints:
 - `/internal/status` - Detailed status information
 - `/internal/status/endpoints` - Endpoint health details
 - `/internal/stats/models` - Model usage statistics
+- `/internal/stats/translators` - Translator usage and performance statistics
 
 These can be integrated with external monitoring systems to track:
 
@@ -568,6 +569,7 @@ These can be integrated with external monitoring systems to track:
 2. Health check latency trends
 3. Failure rates by endpoint
 4. Circuit breaker state changes
+5. Translator passthrough efficiency and fallback reasons
 
 ## Next Steps
 

@@ -15,7 +15,8 @@ This guide covers monitoring and observability for Olla deployments.
 > # /internal/status - Detailed status
 > # /internal/status/endpoints - Endpoint details
 > # /internal/stats/models - Model statistics
-> 
+> # /internal/stats/translators - Translator statistics
+>
 > logging:
 >   level: "info"
 >   format: "json"
@@ -278,9 +279,9 @@ Key panels for Grafana:
 5. **Success Rate**: `1 - (rate(errors) / rate(requests))`
 6. **Token Generation Speed**: `olla_tokens_per_second` (from provider metrics)
 7. **Token Usage**: `olla_prompt_tokens` + `olla_completion_tokens`
-8. **Translator Passthrough Rate**: `olla_translator_passthrough_requests / olla_translator_total_requests` (from translator metrics)
-9. **Translator Fallback Reasons**: Breakdown of `olla_translator_fallback_*` counters
-10. **Translator Latency**: `olla_translator_avg_latency_ms` per translator
+8. **Translator Passthrough Rate**: `olla_translator_passthrough_rate` per translator (from `/internal/stats/translators`)
+9. **Translator Fallback Reasons**: Breakdown of `fallback_*` counters per translator
+10. **Translator Latency**: `average_latency` per translator (from `/internal/stats/translators`)
 
 ## Provider Metrics
 
@@ -351,6 +352,115 @@ curl -sI -X POST http://localhost:40114/olla/anthropic/v1/messages \
   -d '{"model":"llama4:latest","max_tokens":10,"messages":[{"role":"user","content":"Hi"}]}' \
   | grep X-Olla-Mode
 ```
+
+### Translator Stats HTTP Endpoint
+
+The `/internal/stats/translators` endpoint exposes all translator metrics via HTTP, making them easy to query from scripts, monitoring tools, and dashboards.
+
+```bash
+# Query translator statistics
+curl -s http://localhost:40114/internal/stats/translators | jq .
+```
+
+The response includes per-translator statistics and an aggregate summary:
+
+```json
+{
+  "timestamp": "2026-02-13T10:30:00Z",
+  "translators": [
+    {
+      "translator_name": "anthropic",
+      "total_requests": 1500,
+      "successful_requests": 1450,
+      "failed_requests": 50,
+      "success_rate": "96.7%",
+      "passthrough_rate": "80.0%",
+      "passthrough_requests": 1200,
+      "translation_requests": 300,
+      "streaming_requests": 800,
+      "non_streaming_requests": 700,
+      "fallback_no_compatible_endpoints": 5,
+      "fallback_translator_does_not_support_passthrough": 0,
+      "fallback_cannot_passthrough": 295,
+      "average_latency": "245ms"
+    }
+  ],
+  "summary": {
+    "total_translators": 1,
+    "active_translators": 1,
+    "total_requests": 1500,
+    "overall_success_rate": "96.7%",
+    "total_passthrough": 1200,
+    "total_translations": 300,
+    "overall_passthrough_rate": "80.0%",
+    "total_streaming": 800,
+    "total_non_streaming": 700
+  }
+}
+```
+
+Translators are sorted by request count (most active first), and all rates and latencies use human-readable formatting.
+
+#### Monitoring with the Translator Stats Endpoint
+
+**Watch passthrough efficiency in real-time:**
+
+```bash
+watch -n 10 'curl -s http://localhost:40114/internal/stats/translators | jq ".summary.overall_passthrough_rate"'
+```
+
+**Check fallback reasons for a specific translator:**
+
+```bash
+curl -s http://localhost:40114/internal/stats/translators | \
+  jq '.translators[] | select(.translator_name == "anthropic") | {
+    passthrough_rate,
+    fallback_no_compatible_endpoints,
+    fallback_cannot_passthrough,
+    fallback_translator_does_not_support_passthrough
+  }'
+```
+
+**Alert on low success rate:**
+
+```bash
+#!/bin/bash
+# check_translator_health.sh
+STATS=$(curl -s http://localhost:40114/internal/stats/translators)
+SUCCESS_RATE=$(echo "$STATS" | jq -r '.summary.overall_success_rate' | tr -d '%')
+
+if (( $(echo "$SUCCESS_RATE < 95" | bc -l) )); then
+    echo "WARNING: Translator success rate is $SUCCESS_RATE%"
+    exit 1
+fi
+echo "OK: Translator success rate is $SUCCESS_RATE%"
+exit 0
+```
+
+**Scrape for Prometheus:**
+
+Add the translator stats endpoint to your Prometheus exporter alongside the status endpoint:
+
+```python
+# Add to prometheus_exporter.py
+translator_requests = Gauge('olla_translator_requests_total', 'Total translator requests', ['translator'])
+translator_passthrough_rate = Gauge('olla_translator_passthrough_rate', 'Passthrough rate', ['translator'])
+translator_success_rate = Gauge('olla_translator_success_rate', 'Success rate', ['translator'])
+
+def collect_translator_metrics():
+    resp = requests.get('http://localhost:40114/internal/stats/translators')
+    data = resp.json()
+    for t in data['translators']:
+        name = t['translator_name']
+        translator_requests.labels(translator=name).set(t['total_requests'])
+        # Parse percentage strings for numeric gauge values
+        pt_rate = float(t['passthrough_rate'].rstrip('%'))
+        translator_passthrough_rate.labels(translator=name).set(pt_rate)
+        sr = float(t['success_rate'].rstrip('%'))
+        translator_success_rate.labels(translator=name).set(sr)
+```
+
+See the [System Endpoints API Reference](../../api-reference/system.md#get-internalstatstranslators) for the complete response field reference.
 
 ### Implementation Details
 

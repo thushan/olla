@@ -19,10 +19,14 @@ If you ever need to remember the port, think - what's the port, 4 OLLA?!
 ## API Sections
 
 ### [System Endpoints](system.md)
-Internal endpoints for health monitoring and system status.
+Internal endpoints for health monitoring, system status, and statistics.
 
 - `/internal/health` - Health check endpoint
 - `/internal/status` - System status and statistics
+- `/internal/status/endpoints` - Endpoint status details
+- `/internal/status/models` - Model registry status
+- `/internal/stats/models` - Model usage statistics
+- `/internal/stats/translators` - Translator usage and performance statistics
 - `/internal/process` - Process information
 
 ### [Unified Models API](models.md)

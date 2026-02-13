@@ -633,6 +633,9 @@ All responses include standard Olla headers:
 !!! tip "Detecting Passthrough Mode"
     When passthrough mode is active, the `X-Olla-Mode: passthrough` header is included in the response. When translation mode is used, this header is absent. This allows monitoring and debugging to distinguish between the two modes.
 
+!!! info "Translator Statistics"
+    For aggregate translator metrics including passthrough rates, success rates, fallback reasons, and latency data, query the [`GET /internal/stats/translators`](system.md#get-internalstatstranslators) endpoint.
+
 
 ## Authentication
 

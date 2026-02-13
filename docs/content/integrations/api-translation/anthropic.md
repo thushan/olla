@@ -968,6 +968,21 @@ curl -s -D - http://localhost:40114/olla/anthropic/v1/messages \
 - **`X-Olla-Mode: passthrough`** -- request was forwarded directly to the backend
 - **Header absent** -- request went through the Anthropic-to-OpenAI translation pipeline
 
+For aggregate statistics across all requests, query the translator stats endpoint:
+
+```bash
+curl -s http://localhost:40114/internal/stats/translators | jq '.translators[] | {
+  translator_name,
+  passthrough_rate,
+  success_rate,
+  total_requests,
+  fallback_no_compatible_endpoints,
+  fallback_cannot_passthrough
+}'
+```
+
+See [Translator Stats API Reference](../../api-reference/system.md#get-internalstatstranslators) for full response details.
+
 ### High Latency
 
 **Symptom**: Slow response times compared to direct backend access

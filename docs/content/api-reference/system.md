@@ -12,6 +12,7 @@ Internal endpoints for health monitoring, system status, and process information
 | GET | `/internal/status/endpoints` | Detailed endpoint status |
 | GET | `/internal/status/models` | Model registry status |
 | GET | `/internal/stats/models` | Model usage statistics |
+| GET | `/internal/stats/translators` | Translator usage and performance statistics |
 | GET | `/internal/process` | Process information and metrics |
 
 ---
@@ -234,6 +235,110 @@ curl -X GET http://localhost:40114/internal/process
 | `cpu.cpu_percent` | float | CPU usage percentage |
 | `connections` | object | Connection pool stats |
 | `runtime` | object | Runtime information |
+
+## GET /internal/stats/translators
+
+Translator usage and performance statistics. Provides per-translator metrics and an aggregate summary, useful for monitoring API translation behaviour, passthrough efficiency, and fallback reasons.
+
+### Request
+
+```bash
+curl -X GET http://localhost:40114/internal/stats/translators
+```
+
+### Response
+
+```json
+{
+  "timestamp": "2026-02-13T10:30:00Z",
+  "translators": [
+    {
+      "translator_name": "anthropic",
+      "total_requests": 1500,
+      "successful_requests": 1450,
+      "failed_requests": 50,
+      "success_rate": "96.7%",
+      "passthrough_rate": "80.0%",
+      "passthrough_requests": 1200,
+      "translation_requests": 300,
+      "streaming_requests": 800,
+      "non_streaming_requests": 700,
+      "fallback_no_compatible_endpoints": 5,
+      "fallback_translator_does_not_support_passthrough": 0,
+      "fallback_cannot_passthrough": 295,
+      "average_latency": "245ms"
+    }
+  ],
+  "summary": {
+    "total_translators": 1,
+    "active_translators": 1,
+    "total_requests": 1500,
+    "overall_success_rate": "96.7%",
+    "total_passthrough": 1200,
+    "total_translations": 300,
+    "overall_passthrough_rate": "80.0%",
+    "total_streaming": 800,
+    "total_non_streaming": 700
+  }
+}
+```
+
+### Response Fields
+
+#### Top-level
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `timestamp` | string | Current timestamp in RFC3339 format |
+| `translators` | array | Per-translator statistics, sorted by request count (most active first) |
+| `summary` | object | Aggregate statistics across all translators |
+
+#### Translator Entry (`translators[]`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `translator_name` | string | Translator identifier (e.g., "anthropic") |
+| `total_requests` | integer | Total requests processed by this translator |
+| `successful_requests` | integer | Requests that completed successfully |
+| `failed_requests` | integer | Requests that failed |
+| `success_rate` | string | Human-readable success percentage |
+| `passthrough_rate` | string | Human-readable passthrough percentage |
+| `passthrough_requests` | integer | Requests forwarded directly in native format |
+| `translation_requests` | integer | Requests that required format conversion |
+| `streaming_requests` | integer | Streaming (SSE) requests |
+| `non_streaming_requests` | integer | Non-streaming requests |
+| `fallback_no_compatible_endpoints` | integer | Fallbacks due to no healthy endpoints available |
+| `fallback_translator_does_not_support_passthrough` | integer | Fallbacks because the translator lacks passthrough capability |
+| `fallback_cannot_passthrough` | integer | Fallbacks because no backend declares native support |
+| `average_latency` | string | Human-readable average request latency |
+
+#### Summary
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_translators` | integer | Total number of registered translators |
+| `active_translators` | integer | Translators that have processed at least one request |
+| `total_requests` | integer | Total requests across all translators |
+| `overall_success_rate` | string | Aggregate success percentage |
+| `total_passthrough` | integer | Total passthrough requests across all translators |
+| `total_translations` | integer | Total translation requests across all translators |
+| `overall_passthrough_rate` | string | Aggregate passthrough percentage |
+| `total_streaming` | integer | Total streaming requests across all translators |
+| `total_non_streaming` | integer | Total non-streaming requests across all translators |
+
+### Key Metrics for Monitoring
+
+**Passthrough Rate**: A high `passthrough_rate` indicates backends are being used optimally in their native format, avoiding translation overhead.
+
+**Fallback Reasons**: The three `fallback_*` fields help diagnose why passthrough is not being used:
+
+- `fallback_no_compatible_endpoints` -- No healthy endpoints available (operational issue, check health endpoint)
+- `fallback_cannot_passthrough` -- Backends do not declare native support for the translator's format (configuration issue)
+- `fallback_translator_does_not_support_passthrough` -- Expected for translators without passthrough capability
+
+**Success Rate**: A declining `success_rate` may indicate backend issues or incompatible request formats.
+
+---
 
 ## Rate Limits
 

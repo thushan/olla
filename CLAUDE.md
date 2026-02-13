@@ -129,6 +129,7 @@ olla/
 - `/internal/status/endpoints` - Endpoints status details
 - `/internal/status/models` - Models status details
 - `/internal/stats/models` - Model statistics
+- `/internal/stats/translators` - Translator statistics
 - `/internal/process` - Process statistics
 - `/version` - Version information
 

@@ -338,7 +338,7 @@ When passthrough is not possible, Olla falls back to translation mode automatica
 Passthrough mode is observable through:
 
 - **Response header**: `X-Olla-Mode: passthrough` (only set when passthrough is used)
-- **Translator metrics**: Passthrough vs translation request counts, fallback reason breakdowns
+- **Translator stats endpoint**: `GET /internal/stats/translators` exposes passthrough vs translation request counts, success rates, fallback reason breakdowns, and latency data per translator (see [System Endpoints](../api-reference/system.md#get-internalstatstranslators))
 - **Debug logs**: Log entries indicate which mode was selected and why
 
 ---
