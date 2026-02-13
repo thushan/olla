@@ -1118,6 +1118,8 @@ func (m *mockStatsCollectorWithCapture) getRecordedEvents() []ports.TranslatorRe
 func TestTranslationHandler_MetricsRecordedForPassthrough(t *testing.T) {
 	// Setup mock backend
 	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add small delay to ensure measurable latency
+		time.Sleep(1 * time.Millisecond)
 		response := map[string]interface{}{
 			"id":      "msg_01XFDUDYJgAACzvnptvVoYEL",
 			"type":    "message",
@@ -1162,7 +1164,10 @@ func TestTranslationHandler_MetricsRecordedForPassthrough(t *testing.T) {
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			client := &http.Client{Timeout: 5 * time.Second}
 			backendReq, _ := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
-			resp, _ := client.Do(backendReq)
+			resp, err := client.Do(backendReq)
+			if err != nil {
+				return err
+			}
 			defer resp.Body.Close()
 			for k, v := range resp.Header {
 				w.Header()[k] = v
@@ -1414,6 +1419,8 @@ func TestTranslationHandler_MetricsRecordedForFallback(t *testing.T) {
 // TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming verifies streaming flag is tracked
 func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing.T) {
 	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add small delay to ensure measurable latency
+		time.Sleep(1 * time.Millisecond)
 		// Check if request is streaming based on request body
 		body, _ := io.ReadAll(r.Body)
 		var req map[string]interface{}
@@ -1423,8 +1430,8 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 			// Return SSE stream
 			w.Header().Set(constants.HeaderContentType, "text/event-stream")
 			w.WriteHeader(http.StatusOK)
-			fmt.Fprint(w, "event: message_start\ndata: {\"type\":\"message_start\"}\n\n")
-			fmt.Fprint(w, "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+			fmt.Fprint(w, "event: message_start\ndata: {\\\"type\\\":\\\"message_start\\\"}\n\n")
+			fmt.Fprint(w, "event: message_stop\ndata: {\\\"type\\\":\\\"message_stop\\\"}\n\n")
 		} else {
 			// Return JSON response
 			response := map[string]interface{}{"id": "msg_123", "type": "message"}
@@ -1483,7 +1490,10 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			client := &http.Client{Timeout: 5 * time.Second}
 			backendReq, _ := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
-			resp, _ := client.Do(backendReq)
+			resp, err := client.Do(backendReq)
+			if err != nil {
+				return err
+			}
 			defer resp.Body.Close()
 			for k, v := range resp.Header {
 				w.Header()[k] = v
@@ -1558,6 +1568,8 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 // TestTranslationHandler_MetricsRecordedForSuccessVsError verifies success/failure tracking
 func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 	successBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Add small delay to ensure measurable latency
+		time.Sleep(1 * time.Millisecond)
 		response := map[string]interface{}{"id": "msg_123", "type": "message"}
 		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
@@ -1606,7 +1618,10 @@ func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			client := &http.Client{Timeout: 5 * time.Second}
 			backendReq, _ := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
-			resp, _ := client.Do(backendReq)
+			resp, err := client.Do(backendReq)
+			if err != nil {
+				return err
+			}
 			defer resp.Body.Close()
 			for k, v := range resp.Header {
 				w.Header()[k] = v
