@@ -9,8 +9,8 @@ Full documentation available at: https://thushan.github.io/olla/
 
 ## Commands
 ```bash
-make ready           # Run before commit (test-short + test-race + fmt + lint + align)
-make ready-tools     # Check code with tools only (fmt + lint + align)
+make ready           # Run before commit (test-short + test-race + fmt + vet + lint + align)
+make ready-tools     # Check code with tools only (fmt + vet + lint + align)
 make test            # Run all tests
 make test-race       # Run tests with race detection
 make test-stress     # Run comprehensive stress tests

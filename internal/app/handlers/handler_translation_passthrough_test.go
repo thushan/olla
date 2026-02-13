@@ -1163,7 +1163,10 @@ func TestTranslationHandler_MetricsRecordedForPassthrough(t *testing.T) {
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			client := &http.Client{Timeout: 5 * time.Second}
-			backendReq, _ := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
+			backendReq, err := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
+			if err != nil {
+				return err
+			}
 			resp, err := client.Do(backendReq)
 			if err != nil {
 				return err
@@ -1489,7 +1492,11 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			client := &http.Client{Timeout: 5 * time.Second}
-			backendReq, _ := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
+			backendReq, err := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
+			if err != nil {
+				return err
+			}
+
 			resp, err := client.Do(backendReq)
 			if err != nil {
 				return err
@@ -1500,11 +1507,6 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 			}
 			w.WriteHeader(resp.StatusCode)
 			io.Copy(w, resp.Body)
-
-			// Record streaming in stats if it's a streaming response
-			if resp.Header.Get("Content-Type") == "text/event-stream" {
-				stats.StreamingMs = 100 // Indicate streaming
-			}
 
 			return nil
 		},
@@ -1617,7 +1619,10 @@ func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			client := &http.Client{Timeout: 5 * time.Second}
-			backendReq, _ := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
+			backendReq, err := http.NewRequest(r.Method, eps[0].URLString+r.URL.Path, r.Body)
+			if err != nil {
+				return err
+			}
 			resp, err := client.Do(backendReq)
 			if err != nil {
 				return err

@@ -28,6 +28,7 @@ type proxyRequest struct {
 	userAgent     string
 	contentLength int64
 	hadError      bool
+	isStreaming   bool
 }
 
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {

@@ -331,6 +331,11 @@ func applyEnvOverrides(config *Config) {
 			config.Translators.Anthropic.MaxMessageSize = size
 		}
 	}
+	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Translators.Anthropic.PassthroughEnabled = enabled
+		}
+	}
 }
 
 // parseByteSize parses human-readable byte sizes like "100MB", "1GB"

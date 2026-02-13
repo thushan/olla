@@ -40,7 +40,10 @@ func (a *Application) executePassthroughRequest(
 		return
 	}
 
-	// Update proxy request details
+	// Update proxy request details - capture streaming flag for accurate metrics
+	// (StreamingMs isn't populated in passthrough mode since we don't intercept the stream)
+	pr.isStreaming = passthroughReq.IsStreaming
+
 	pr.requestLogger.Info("using passthrough mode (native Anthropic support)",
 		"model", passthroughReq.ModelName,
 		"streaming", passthroughReq.IsStreaming,
@@ -86,6 +89,9 @@ func (a *Application) executeTranslationRequest(
 	trans translator.RequestTranslator,
 	transformedReq *translator.TransformedRequest,
 ) {
+	// Capture streaming flag for metrics before proxying
+	pr.isStreaming = transformedReq.IsStreaming
+
 	// Serialize OpenAI request
 	openaiBody, err := json.Marshal(transformedReq.OpenAIRequest)
 	if err != nil {
@@ -713,9 +719,9 @@ func (a *Application) recordTranslatorMetrics(
 	// Determine if request was successful (no error flag set)
 	success := !pr.hadError
 
-	// Determine streaming mode from the request
-	// We check if the request has streaming metrics recorded
-	isStreaming := pr.stats.StreamingMs > 0
+	// Use the streaming flag captured during request preparation rather than
+	// inferring from StreamingMs, which isn't populated in passthrough mode
+	isStreaming := pr.isStreaming
 
 	// Record the event
 	event := ports.TranslatorRequestEvent{

@@ -181,7 +181,8 @@ func (t *Translator) CanPassthrough(endpoints []*domain.Endpoint, profileLookup 
 // PreparePassthrough implements PassthroughCapable interface
 // Reads and validates the request body for direct forwarding to backends.
 // Returns the original body bytes, target path, model name, and streaming flag.
-func (t *Translator) PreparePassthrough(r *http.Request, profileLookup translator.ProfileLookup) (*translator.PassthroughRequest, error) {
+// profileLookup is reserved for future per-endpoint path customisation.
+func (t *Translator) PreparePassthrough(r *http.Request, _ translator.ProfileLookup) (*translator.PassthroughRequest, error) {
 	// Prevent DOS attacks by limiting request body size
 	limitedBody := io.LimitReader(r.Body, t.maxMessageSize)
 	defer r.Body.Close()

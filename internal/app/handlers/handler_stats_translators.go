@@ -66,7 +66,9 @@ func (a *Application) translatorStatsHandler(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		a.logger.Error("Failed to encode translator stats response", "error", err)
+	}
 }
 
 func (a *Application) buildTranslatorStats(translatorStats map[string]ports.TranslatorStats) []TranslatorStatsEntry {

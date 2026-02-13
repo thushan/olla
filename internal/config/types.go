@@ -184,10 +184,7 @@ type AnthropicTranslatorConfig struct {
 
 	// PassthroughEnabled controls whether requests can be forwarded directly
 	// to backends that natively support the Anthropic Messages API, bypassing
-	// the Anthropic-to-OpenAI translation pipeline. When false (the default),
-	// all requests go through the existing translation path regardless of
-	// backend capabilities. This acts as a global kill-switch for passthrough;
-	// individual backends must also declare anthropic_support in their profile.
+	// the Anthropic-to-OpenAI translation pipeline (olla v0.0.23+).
 	PassthroughEnabled bool `yaml:"passthrough_enabled"`
 }
 
