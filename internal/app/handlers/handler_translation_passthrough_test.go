@@ -1009,14 +1009,9 @@ func (m *mockPassthroughTranslator) CanPassthrough(endpoints []*domain.Endpoint,
 }
 
 // PreparePassthrough implements PassthroughCapable
-func (m *mockPassthroughTranslator) PreparePassthrough(r *http.Request, profileLookup translator.ProfileLookup) (*translator.PassthroughRequest, error) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read request body: %w", err)
-	}
-
+func (m *mockPassthroughTranslator) PreparePassthrough(bodyBytes []byte, r *http.Request, profileLookup translator.ProfileLookup) (*translator.PassthroughRequest, error) {
 	var req map[string]interface{}
-	if err := json.Unmarshal(body, &req); err != nil {
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
 
@@ -1031,7 +1026,7 @@ func (m *mockPassthroughTranslator) PreparePassthrough(r *http.Request, profileL
 	}
 
 	return &translator.PassthroughRequest{
-		Body:        body,
+		Body:        bodyBytes,
 		TargetPath:  "/v1/messages",
 		ModelName:   modelName,
 		IsStreaming: isStreaming,

@@ -95,20 +95,20 @@ type PassthroughCapable interface {
 	// Thread-safe: implementations must not mutate the endpoints slice.
 	CanPassthrough(endpoints []*domain.Endpoint, profileLookup ProfileLookup) bool
 
-	// PreparePassthrough reads the incoming request body, validates it for
-	// passthrough eligibility, and returns the target backend path and the
-	// (potentially re-read) request body bytes.
+	// PreparePassthrough validates the already-buffered request body for
+	// passthrough eligibility and returns the target backend path, model
+	// name, and streaming flag.
+	//
+	// bodyBytes is the raw request body already read by the handler. This
+	// avoids a redundant io.ReadAll inside the implementation -- the handler
+	// buffers the body once for model extraction and reuses it here.
 	//
 	// The returned targetPath is the backend-relative path (e.g.
 	// "/v1/messages") that the proxy layer should use when forwarding.
 	//
-	// The returned body is the original request body, unmodified. It is
-	// returned as []byte so the caller can reset r.Body for the proxy
-	// pipeline (the original body will have been consumed by reading).
-	//
-	// Returns an error if the request body cannot be read or is invalid
-	// for passthrough (e.g. uses features the backend doesn't support).
-	PreparePassthrough(r *http.Request, profileLookup ProfileLookup) (*PassthroughRequest, error)
+	// Returns an error if the body is invalid for passthrough (e.g.
+	// exceeds size limits or uses features the backend doesn't support).
+	PreparePassthrough(bodyBytes []byte, r *http.Request, profileLookup ProfileLookup) (*PassthroughRequest, error)
 }
 
 // PassthroughRequest holds the result of preparing a request for direct
@@ -133,6 +133,15 @@ type PassthroughRequest struct {
 	// IsStreaming indicates whether the request has stream:true set,
 	// so the handler can select the appropriate response pipeline.
 	IsStreaming bool
+}
+
+// BodySizeLimiter is an optional interface for translators that declare their
+// maximum acceptable request body size. The handler uses this to apply a
+// per-translator limit when reading the body, rather than hardcoding a value.
+// If a translator does not implement this interface, the handler falls back
+// to a sensible default (10 MiB).
+type BodySizeLimiter interface {
+	MaxBodySize() int64
 }
 
 // ProfileLookup provides access to backend AnthropicSupportConfig without

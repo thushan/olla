@@ -17,11 +17,13 @@ import (
 )
 
 // executePassthroughRequest handles requests that can be forwarded directly to backends
-// without translation (e.g. Anthropic API requests to vLLM with native Anthropic support)
+// without translation (e.g. Anthropic API requests to vLLM with native Anthropic support).
+// bodyBytes is the pre-buffered request body from the handler, passed through to avoid re-reading.
 func (a *Application) executePassthroughRequest(
 	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
+	bodyBytes []byte,
 	endpoints []*domain.Endpoint,
 	pr *proxyRequest,
 	trans translator.RequestTranslator,
@@ -34,7 +36,7 @@ func (a *Application) executePassthroughRequest(
 		return
 	}
 
-	passthroughReq, err := passthroughTrans.PreparePassthrough(r, a.profileLookup)
+	passthroughReq, err := passthroughTrans.PreparePassthrough(bodyBytes, r, a.profileLookup)
 	if err != nil {
 		a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
 		return
@@ -160,31 +162,40 @@ func (a *Application) executeTranslationRequest(
 
 // generic handler for any translator (eg anthropic to openai and back)
 func (a *Application) translationHandler(trans translator.RequestTranslator) http.HandlerFunc {
+	// Resolve body size limit once at registration time, not per-request.
+	// Translators that implement BodySizeLimiter declare their own max;
+	// others get a safe default.
+	var maxBodySize int64 = 10 << 20 // 10 MiB default
+	if limiter, ok := trans.(translator.BodySizeLimiter); ok {
+		maxBodySize = limiter.MaxBodySize()
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := a.initializeProxyRequest(r)
 		ctx, r := a.setupRequestContext(r, pr.stats)
 
-		// Buffer body once for both passthrough and translation
-		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB limit
+		// Buffer body once -- both passthrough and translation paths need it.
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
 			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNone)
 			return
 		}
 
-		// Get model name from request for endpoint filtering
-		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		transformedReq, err := trans.TransformRequest(ctx, r)
+		// Lightweight model extraction via gjson -- avoids a full TransformRequest
+		// parse on the passthrough path where the body would be parsed twice
+		// (once here for the model name, once in PreparePassthrough for validation).
+		modelName, err := translator.ExtractModelName(bodyBytes)
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
 			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNone)
 			return
 		}
 
-		pr.model = transformedReq.ModelName
+		pr.model = modelName
 		pr.stats.Model = pr.model
 
-		// run through proxy pipeline (inspector, security, routing)
+		// Run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
 		// Get compatible endpoints for this request
@@ -216,12 +227,12 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Check for passthrough capability
 		if passthroughTrans, ok := trans.(translator.PassthroughCapable); ok {
 			if a.profileLookup != nil && passthroughTrans.CanPassthrough(endpoints, a.profileLookup) {
-				// Passthrough mode
+				// Passthrough mode -- bodyBytes goes directly to PreparePassthrough
+				// which validates without re-reading. No TransformRequest needed.
 				mode = constants.TranslatorModePassthrough
 				fallbackReason = constants.FallbackReasonNone
 
-				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-				a.executePassthroughRequest(ctx, w, r, endpoints, pr, trans)
+				a.executePassthroughRequest(ctx, w, r, bodyBytes, endpoints, pr, trans)
 				a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
 				return
 			}
@@ -234,7 +245,16 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			fallbackReason = constants.FallbackReasonTranslatorDoesNotSupportPassthrough
 		}
 
-		// Translation path - execute with format conversion
+		// Translation path only -- perform the full parse and format conversion.
+		// This is deferred to here so passthrough requests never pay the cost.
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		transformedReq, err := trans.TransformRequest(ctx, r)
+		if err != nil {
+			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
+			a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
+			return
+		}
+
 		a.executeTranslationRequest(ctx, w, r, endpoints, pr, trans, transformedReq)
 		a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
 	}

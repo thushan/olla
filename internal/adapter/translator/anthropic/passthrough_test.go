@@ -1,9 +1,7 @@
 package anthropic
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"testing"
 
@@ -278,9 +276,9 @@ func TestPreparePassthrough(t *testing.T) {
 					{"role": "user", "content": "This is a test message"}
 				]
 			}`,
-			maxMsgSize:  50, // Very small limit - causes truncated JSON
+			maxMsgSize:  50, // Very small limit
 			wantErr:     true,
-			errContains: "invalid Anthropic request", // LimitReader causes truncated JSON
+			errContains: "request body exceeds maximum size",
 			description: "should return error when request exceeds max_message_size",
 		},
 		{
@@ -474,15 +472,19 @@ func TestPreparePassthrough(t *testing.T) {
 
 			translator := NewTranslator(createTestLogger(), cfg)
 
-			// Create HTTP request
-			req, err := http.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader([]byte(tt.requestBody)))
+			// Pre-buffer the body bytes (as the handler does in production)
+			bodyBytes := []byte(tt.requestBody)
+
+			// Create HTTP request -- body is no longer read by PreparePassthrough
+			// but the request is still passed for header access (inspector, session ID)
+			req, err := http.NewRequest("POST", "/olla/anthropic/v1/messages", http.NoBody)
 			require.NoError(t, err)
 
 			// Create a minimal mock ProfileLookup (not used by PreparePassthrough but required by interface)
 			mockLookup := newMockProfileLookup()
 
-			// Execute PreparePassthrough
-			result, err := translator.PreparePassthrough(req, mockLookup)
+			// Execute PreparePassthrough with pre-buffered body
+			result, err := translator.PreparePassthrough(bodyBytes, req, mockLookup)
 
 			if tt.wantErr {
 				assert.Error(t, err, tt.description)
@@ -501,26 +503,34 @@ func TestPreparePassthrough(t *testing.T) {
 	}
 }
 
-// TestPreparePassthrough_ReadError tests error handling when reading request body fails
-func TestPreparePassthrough_ReadError(t *testing.T) {
+// TestPreparePassthrough_OversizedBody tests that PreparePassthrough rejects bodies exceeding the configured limit.
+// With bodyBytes passed directly, the translator enforces its own size cap rather than relying on LimitReader.
+func TestPreparePassthrough_OversizedBody(t *testing.T) {
+	const maxSize = 100
+
 	cfg := config.AnthropicTranslatorConfig{
 		Enabled:            true,
-		MaxMessageSize:     10 << 20,
+		MaxMessageSize:     maxSize,
 		PassthroughEnabled: true,
 	}
 
 	translator := NewTranslator(createTestLogger(), cfg)
 
-	// Create a request with a body that will error on read
-	req, err := http.NewRequest("POST", "/olla/anthropic/v1/messages", io.NopCloser(&errorReader{}))
+	// Build a body that exceeds maxSize
+	oversizedBody := make([]byte, maxSize+1)
+	for i := range oversizedBody {
+		oversizedBody[i] = 'x'
+	}
+
+	req, err := http.NewRequest("POST", "/olla/anthropic/v1/messages", http.NoBody)
 	require.NoError(t, err)
 
 	mockLookup := newMockProfileLookup()
 
-	result, err := translator.PreparePassthrough(req, mockLookup)
+	result, err := translator.PreparePassthrough(oversizedBody, req, mockLookup)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to read request body")
+	assert.Contains(t, err.Error(), "request body exceeds maximum size")
 	assert.Nil(t, result)
 }
 
@@ -542,33 +552,26 @@ func TestPreparePassthrough_WithInspector(t *testing.T) {
 
 	translator := NewTranslator(createTestLogger(), cfg)
 
-	requestBody := `{
+	bodyBytes := []byte(`{
 		"model": "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
 		"messages": [
 			{"role": "user", "content": "Test with inspector"}
 		]
-	}`
+	}`)
 
-	req, err := http.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader([]byte(requestBody)))
+	req, err := http.NewRequest("POST", "/olla/anthropic/v1/messages", http.NoBody)
 	require.NoError(t, err)
 	req.Header.Set("X-Session-ID", "test-session-123")
 
 	mockLookup := newMockProfileLookup()
 
-	result, err := translator.PreparePassthrough(req, mockLookup)
+	result, err := translator.PreparePassthrough(bodyBytes, req, mockLookup)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 	// Note: We don't verify file creation here as that's an implementation detail
 	// The important thing is that PreparePassthrough succeeds with inspector enabled
-}
-
-// errorReader is a test helper that always returns an error when Read is called
-type errorReader struct{}
-
-func (e *errorReader) Read(p []byte) (n int, err error) {
-	return 0, io.ErrUnexpectedEOF
 }
 
 // TestCanPassthrough_Integration tests the integration between CanPassthrough and realistic endpoint scenarios

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/thushan/olla/internal/adapter/inspector"
@@ -74,6 +73,13 @@ func (t *Translator) Name() string {
 // Returns the Anthropic Messages API endpoint path
 func (t *Translator) GetAPIPath() string {
 	return "/olla/anthropic/v1/messages"
+}
+
+// MaxBodySize implements BodySizeLimiter so the handler can apply the
+// translator's configured limit when reading the request body, rather
+// than hardcoding a value.
+func (t *Translator) MaxBodySize() int64 {
+	return t.maxMessageSize
 }
 
 // getSessionID extracts the session ID from the request using a fallback chain.
@@ -178,20 +184,16 @@ func (t *Translator) CanPassthrough(endpoints []*domain.Endpoint, profileLookup 
 	return true
 }
 
-// PreparePassthrough implements PassthroughCapable interface
-// Reads and validates the request body for direct forwarding to backends.
+// PreparePassthrough implements PassthroughCapable interface.
+// Validates the already-buffered request body for direct forwarding to backends.
 // Returns the original body bytes, target path, model name, and streaming flag.
 // profileLookup is reserved for future per-endpoint path customisation.
-func (t *Translator) PreparePassthrough(r *http.Request, _ translator.ProfileLookup) (*translator.PassthroughRequest, error) {
-	// Prevent DOS attacks by limiting request body size
-	limitedBody := io.LimitReader(r.Body, t.maxMessageSize)
-	defer r.Body.Close()
-
-	// Read the entire body into memory
-	// We need to do this anyway to validate the request and extract metadata
-	bodyBytes, err := io.ReadAll(limitedBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read request body: %w", err)
+func (t *Translator) PreparePassthrough(bodyBytes []byte, r *http.Request, _ translator.ProfileLookup) (*translator.PassthroughRequest, error) {
+	// Enforce the translator's size limit on the pre-buffered body.
+	// The handler applies its own LimitReader when reading, but we guard
+	// here as well so the translator's configured limit is authoritative.
+	if int64(len(bodyBytes)) > t.maxMessageSize {
+		return nil, fmt.Errorf("request body exceeds maximum size (%d bytes)", t.maxMessageSize)
 	}
 
 	// Validate the request structure

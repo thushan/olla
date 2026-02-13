@@ -211,3 +211,14 @@ Always run `make ready` before committing changes.
 - Comment on **why** rather than **what**
 - Always run `make ready` before committing
 - Use `make help` to see all available commands
+
+## SUB-AGENT DELEGATION
+
+CRITICAL: Always delegate tasks to the appropriate subagent. Do NOT perform work directly in the main context.
+
+- Code Review → Use the appropriate language subagent (Eg. Go Architect) or reviewer subagent
+- Code changes → Use the appropriate language subagent (Eg. Go Architect) or implementer subagent
+- Research/exploration → Use the explore subagent
+- Testing → Use the test subagent
+
+Only use the main context for orchestration and task decomposition.
