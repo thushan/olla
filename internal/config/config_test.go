@@ -855,3 +855,59 @@ func stringContains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestLoadConfig_WithModelAliases(t *testing.T) {
+	configYAML := `
+model_aliases:
+  gpt-oss-120b:
+    - "gpt-oss:120b"
+    - gpt-oss-120b-MLX
+    - gguf_gpt_oss_120b.gguf
+  my-llama:
+    - "llama3.1:8b"
+    - llama-3.1-8b
+`
+	tmpFile, err := os.CreateTemp("", "olla-config-*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configYAML); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if cfg.ModelAliases == nil {
+		t.Fatal("expected ModelAliases to be set")
+	}
+
+	if len(cfg.ModelAliases) != 2 {
+		t.Errorf("expected 2 aliases, got %d", len(cfg.ModelAliases))
+	}
+
+	gptModels := cfg.ModelAliases["gpt-oss-120b"]
+	if len(gptModels) != 3 {
+		t.Errorf("expected 3 models for gpt-oss-120b alias, got %d", len(gptModels))
+	}
+	if gptModels[0] != "gpt-oss:120b" {
+		t.Errorf("expected first model to be gpt-oss:120b, got %s", gptModels[0])
+	}
+
+	llamaModels := cfg.ModelAliases["my-llama"]
+	if len(llamaModels) != 2 {
+		t.Errorf("expected 2 models for my-llama alias, got %d", len(llamaModels))
+	}
+}
+
+func TestDefaultConfig_NoModelAliases(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.ModelAliases != nil {
+		t.Error("expected nil ModelAliases in default config")
+	}
+}

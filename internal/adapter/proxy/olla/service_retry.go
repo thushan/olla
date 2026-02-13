@@ -83,6 +83,9 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	pool := s.getOrCreateEndpointPool(endpoint.Name)
 	transport := pool.transport
 
+	// Rewrite model name in request body if this is an alias-resolved request
+	core.RewriteModelForAlias(ctx, r, endpoint)
+
 	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, stats)
 	if err != nil {
 		if cb != nil {
