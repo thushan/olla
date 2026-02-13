@@ -107,9 +107,17 @@ olla/
 - `config.yaml` - Main configuration
 - `internal/app/handlers/server_routes.go` - Route registration & API setup
 - `internal/app/handlers/handler_proxy.go` - Request routing logic
+- `internal/app/handlers/handler_translation.go` - Translation handler with passthrough logic
 - `internal/adapter/proxy/sherpa/service.go` - Sherpa proxy implementation
 - `internal/adapter/proxy/olla/service.go` - Olla proxy implementation
 - `internal/adapter/translator/` - API translation layer (OpenAI ↔ Provider formats)
+- `internal/adapter/translator/types.go` - PassthroughCapable interface and translator types
+- `internal/adapter/translator/anthropic/` - Anthropic translator implementation
+- `internal/adapter/stats/translator_collector.go` - Translator metrics collector
+- `internal/core/constants/translator.go` - TranslatorMode and FallbackReason constants
+- `internal/core/ports/stats.go` - StatsCollector interface with translator tracking
+- `internal/core/domain/profile_config.go` - AnthropicSupportConfig for backend profiles
+- `config/profiles/*.yaml` - Backend profiles with `anthropic_support` sections
 - `internal/version/version.go` - Version information embedded at build time
 - `/test/scripts/logic/test-model-routing.sh` - Test routing & headers
 
@@ -135,12 +143,20 @@ olla/
 ### Translator Endpoints
 Dynamically registered based on configured translators (e.g., Anthropic Messages API)
 
+- `/olla/anthropic/v1/messages` - Anthropic Messages API (POST) - supports passthrough and translation modes
+- `/olla/anthropic/v1/models` - List models in Anthropic format (GET)
+- `/olla/anthropic/v1/messages/count_tokens` - Token count estimation (POST)
+
 ## Response Headers
 - `X-Olla-Endpoint`: Backend name
 - `X-Olla-Model`: Model used
 - `X-Olla-Backend-Type`: ollama/openai/openai-compatible/lm-studio/vllm/sglang/llamacpp/lemonade
 - `X-Olla-Request-ID`: Request ID
 - `X-Olla-Response-Time`: Total processing time
+- `X-Olla-Mode`: Translator mode used (`passthrough` or absent for translation) - set on Anthropic translator requests
+- `X-Olla-Routing-Strategy`: Routing strategy used (when model routing is active)
+- `X-Olla-Routing-Decision`: Routing decision made (routed/fallback/rejected)
+- `X-Olla-Routing-Reason`: Human-readable reason for routing decision
 
 ## Testing
 
@@ -181,7 +197,9 @@ Always run `make ready` before committing changes.
 - **Application Layer** (`internal/app`): HTTP handlers, middleware, and services
 
 ### Key Components
-- **Translator Layer**: Enables API format translation (e.g., OpenAI ↔ Anthropic)
+- **Translator Layer**: Enables API format translation (e.g., OpenAI ↔ Anthropic) with passthrough optimisation for backends with native support
+- **Passthrough Mode**: When a backend natively supports the Anthropic Messages API (vLLM, llama.cpp, LM Studio, Ollama), requests bypass translation entirely
+- **Translator Metrics**: Thread-safe per-translator statistics tracking passthrough/translation rates, fallback reasons, latency, and streaming breakdown (`internal/adapter/stats/translator_collector.go`)
 - **Proxy Engines**: Choose Sherpa (simple) or Olla (high-performance)
 - **Load Balancing**: Priority-based recommended for production
 - **Version Management**: Build-time version injection via `internal/version`

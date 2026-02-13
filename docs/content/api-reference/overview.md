@@ -88,13 +88,16 @@ Anthropic-compatible API endpoints for Claude clients.
 **Endpoints**:
 - `POST /olla/anthropic/v1/messages` - Create a message (chat)
 - `GET /olla/anthropic/v1/models` - List available models
+- `POST /olla/anthropic/v1/messages/count_tokens` - Estimate token count
 
 **Features**:
 - Full Anthropic Messages API v1 support
-- Automatic translation to OpenAI format
+- **Passthrough mode** for backends with native Anthropic support (vLLM, llama.cpp, LM Studio, Ollama)
+- Automatic fallback to translation mode when needed
 - Streaming with Server-Sent Events
 - Tool use (function calling)
 - Vision support (multi-modal)
+- Translator metrics for observability
 
 **Use With**:
 - Claude Code
@@ -102,7 +105,7 @@ Anthropic-compatible API endpoints for Claude clients.
 - Crush CLI
 - Any Anthropic API client
 
-See [API Translation](../concepts/api-translation.md) for how translation works.
+See [API Translation](../concepts/api-translation.md) for how passthrough and translation modes work.
 
 ## Authentication
 
@@ -145,6 +148,7 @@ All responses include:
 | `X-Olla-Routing-Strategy` | Routing strategy used (when model routing is active) |
 | `X-Olla-Routing-Decision` | Routing decision made (routed/fallback/rejected) |
 | `X-Olla-Routing-Reason` | Human-readable reason for routing decision |
+| `X-Olla-Mode` | Translator mode (`passthrough` when native format used; absent for translation mode) |
 
 ### Provider Metrics (Debug Logs)
 

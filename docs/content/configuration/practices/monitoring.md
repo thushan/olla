@@ -278,6 +278,9 @@ Key panels for Grafana:
 5. **Success Rate**: `1 - (rate(errors) / rate(requests))`
 6. **Token Generation Speed**: `olla_tokens_per_second` (from provider metrics)
 7. **Token Usage**: `olla_prompt_tokens` + `olla_completion_tokens`
+8. **Translator Passthrough Rate**: `olla_translator_passthrough_requests / olla_translator_total_requests` (from translator metrics)
+9. **Translator Fallback Reasons**: Breakdown of `olla_translator_fallback_*` counters
+10. **Translator Latency**: `olla_translator_avg_latency_ms` per translator
 
 ## Provider Metrics
 
@@ -301,6 +304,63 @@ Olla automatically extracts performance metrics from LLM provider responses:
 3. **Custom Extraction**: Parse from debug logs
 
 See [Provider Metrics Documentation](../../concepts/provider-metrics.md) for configuration details.
+
+## Translator Metrics
+
+Olla tracks comprehensive metrics for API translation requests, providing visibility into passthrough vs translation usage, fallback behaviour, and performance.
+
+### Available Translator Metrics
+
+Translator metrics are collected per-translator (e.g., "anthropic") and include:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `total_requests` | Counter | Total requests processed |
+| `successful_requests` | Counter | Requests that completed successfully |
+| `failed_requests` | Counter | Requests that failed |
+| `passthrough_requests` | Counter | Requests forwarded directly (native format) |
+| `translation_requests` | Counter | Requests that required format conversion |
+| `streaming_requests` | Counter | Streaming (SSE) requests |
+| `non_streaming_requests` | Counter | Non-streaming requests |
+| `fallback_no_compatible_endpoints` | Counter | Fallbacks due to no healthy endpoints |
+| `fallback_translator_does_not_support_passthrough` | Counter | Fallbacks due to translator lacking passthrough |
+| `fallback_cannot_passthrough` | Counter | Fallbacks due to no backends with native support |
+| `avg_latency_ms` | Gauge | Average request latency in milliseconds |
+| `total_latency_ms` | Counter | Cumulative latency across all requests |
+
+### Key Metrics to Track
+
+**Passthrough Efficiency**: Monitor the ratio of `passthrough_requests` to `translation_requests`. A high passthrough rate indicates backends are being used optimally.
+
+**Fallback Reasons**: Track `fallback_*` counters to understand why passthrough isn't being used:
+
+- `fallback_no_compatible_endpoints` - No healthy endpoints available (operational issue)
+- `fallback_cannot_passthrough` - Backends don't declare native Anthropic support (configuration issue)
+- `fallback_translator_does_not_support_passthrough` - Expected for translators without passthrough capability
+
+**Success Rate**: Compare `successful_requests` vs `failed_requests` to detect translation issues.
+
+### Response Header Observability
+
+The `X-Olla-Mode: passthrough` response header is included when passthrough mode is active. This allows external monitoring tools to track mode usage:
+
+```bash
+# Check which mode was used for a request
+curl -sI -X POST http://localhost:40114/olla/anthropic/v1/messages \
+  -H "Content-Type: application/json" \
+  -d '{"model":"llama4:latest","max_tokens":10,"messages":[{"role":"user","content":"Hi"}]}' \
+  | grep X-Olla-Mode
+```
+
+### Implementation Details
+
+Translator metrics are collected using thread-safe `xsync` counters in `internal/adapter/stats/translator_collector.go`. Metrics are recorded at all decision points in the translation handler (`internal/app/handlers/handler_translation.go`), including:
+
+- Early exits (body read errors, transform errors)
+- Endpoint lookup failures
+- Passthrough mode selection
+- Translation mode fallback with reason tracking
+- Request completion (success or failure)
 
 ## Health Monitoring
 
@@ -580,6 +640,8 @@ Production monitoring setup:
 - [ ] Resource monitoring
 - [ ] Circuit breaker alerts
 - [ ] Capacity planning metrics
+- [ ] Translator metrics tracking (passthrough/translation rates, fallback reasons)
+- [ ] `X-Olla-Mode` header monitoring for passthrough efficiency
 
 ## Next Steps
 

@@ -973,6 +973,79 @@ discovery:
             - "*-72b*"
 ```
 
+## Anthropic Translation with Passthrough
+
+Configuration for Anthropic API translation with passthrough mode for backends with native Anthropic support:
+
+```yaml
+server:
+  host: "localhost"
+  port: 40114
+
+proxy:
+  engine: "olla"
+  profile: "streaming"
+  load_balancer: "priority"
+
+# Enable Anthropic translator with passthrough optimisation
+translators:
+  anthropic:
+    enabled: true
+    # passthrough_enabled only applies when enabled=true
+    # When true: Forwards requests directly to backends with native Anthropic support (optimal performance)
+    # When false: Always translates Anthropic ↔ OpenAI format (useful for debugging/testing)
+    passthrough_enabled: true
+    max_message_size: 10485760   # 10MB
+
+discovery:
+  type: "static"
+  static:
+    endpoints:
+      # Ollama v0.14.0+ supports native Anthropic API (passthrough eligible)
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100
+
+      # vLLM v0.11.1+ supports native Anthropic API (passthrough eligible)
+      - url: "http://vllm-server:8000"
+        name: "vllm-prod"
+        type: "vllm"
+        priority: 80
+
+logging:
+  level: "info"
+  format: "json"
+```
+
+### Anthropic Translation Only (No Passthrough)
+
+Force all Anthropic requests through the translation pipeline, useful for debugging or when backends do not have native Anthropic support:
+
+```yaml
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: false    # Force translation mode for all requests
+    max_message_size: 10485760
+
+discovery:
+  type: "static"
+  static:
+    endpoints:
+      # SGLang does not have native Anthropic support - uses translation
+      - url: "http://localhost:30000"
+        name: "sglang-server"
+        type: "sglang"
+        priority: 100
+
+      # LiteLLM gateway - uses translation
+      - url: "http://localhost:4000"
+        name: "litellm-gateway"
+        type: "litellm"
+        priority: 50
+```
+
 ## Environment Variables Override
 
 Example showing environment variable overrides:
