@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/util"
 )
 
@@ -69,6 +71,8 @@ func (a *Application) executePassthroughRequest(
 			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
 		}
 	}
+
+	pr.stats.EndTime = time.Now()
 }
 
 // executeTranslationRequest handles the translation path where requests are converted
@@ -144,6 +148,8 @@ func (a *Application) executeTranslationRequest(
 			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", proxyErr), http.StatusBadGateway)
 		}
 	}
+
+	pr.stats.EndTime = time.Now()
 }
 
 // generic handler for any translator (eg anthropic to openai and back)
@@ -156,6 +162,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB limit
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
+			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNone)
 			return
 		}
 
@@ -164,6 +171,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		transformedReq, err := trans.TransformRequest(ctx, r)
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, err, http.StatusBadRequest)
+			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNone)
 			return
 		}
 
@@ -177,6 +185,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		endpoints, err := a.getCompatibleEndpoints(ctx, pr)
 		if err != nil {
 			a.writeTranslatorError(w, trans, pr, fmt.Errorf("no healthy endpoints available"), http.StatusServiceUnavailable)
+			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNoCompatibleEndpoints)
 			return
 		}
 
@@ -190,20 +199,38 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			a.writeTranslatorError(w, trans, pr,
 				fmt.Errorf("no healthy endpoints available for model: %s", pr.model),
 				http.StatusNotFound)
+			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNoCompatibleEndpoints)
 			return
 		}
+
+		// Determine mode and fallback reason
+		var mode constants.TranslatorMode
+		var fallbackReason constants.TranslatorFallbackReason
 
 		// Check for passthrough capability
 		if passthroughTrans, ok := trans.(translator.PassthroughCapable); ok {
 			if a.profileLookup != nil && passthroughTrans.CanPassthrough(endpoints, a.profileLookup) {
+				// Passthrough mode
+				mode = constants.TranslatorModePassthrough
+				fallbackReason = constants.FallbackReasonNone
+
 				r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 				a.executePassthroughRequest(ctx, w, r, endpoints, pr, trans)
+				a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
 				return
 			}
+			// Translation mode with fallback reason
+			mode = constants.TranslatorModeTranslation
+			fallbackReason = constants.FallbackReasonCannotPassthrough
+		} else {
+			// Translator doesn't support passthrough
+			mode = constants.TranslatorModeTranslation
+			fallbackReason = constants.FallbackReasonTranslatorDoesNotSupportPassthrough
 		}
 
 		// Translation path - execute with format conversion
 		a.executeTranslationRequest(ctx, w, r, endpoints, pr, trans, transformedReq)
+		a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
 	}
 }
 
@@ -580,6 +607,8 @@ func (a *Application) writeTranslatorError(
 	err error,
 	statusCode int,
 ) {
+	pr.hadError = true
+
 	pr.requestLogger.Error("Translation request failed",
 		"translator", trans.Name(),
 		"error", err.Error(),
@@ -666,6 +695,40 @@ func (a *Application) copyOllaHeaders(from headerGetter, to http.ResponseWriter)
 			to.Header().Set(header, value)
 		}
 	}
+}
+
+// recordTranslatorMetrics records metrics for translator requests
+func (a *Application) recordTranslatorMetrics(
+	trans translator.RequestTranslator,
+	pr *proxyRequest,
+	mode constants.TranslatorMode,
+	fallbackReason constants.TranslatorFallbackReason,
+) {
+	// Calculate latency from request stats
+	latency := time.Since(pr.stats.StartTime)
+	if !pr.stats.EndTime.IsZero() {
+		latency = pr.stats.EndTime.Sub(pr.stats.StartTime)
+	}
+
+	// Determine if request was successful (no error flag set)
+	success := !pr.hadError
+
+	// Determine streaming mode from the request
+	// We check if the request has streaming metrics recorded
+	isStreaming := pr.stats.StreamingMs > 0
+
+	// Record the event
+	event := ports.TranslatorRequestEvent{
+		TranslatorName: trans.Name(),
+		Model:          pr.model,
+		Mode:           mode,
+		FallbackReason: fallbackReason,
+		Success:        success,
+		Latency:        latency,
+		IsStreaming:    isStreaming,
+	}
+
+	a.statsCollector.RecordTranslatorRequest(event)
 }
 
 // abstract header access for both response types

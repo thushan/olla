@@ -55,6 +55,9 @@ type Collector struct {
 	// Model statistics tracking
 	modelCollector *ModelCollector
 
+	// Translator statistics tracking
+	translatorCollector *TranslatorCollector
+
 	// Using xsync.Counter for better performance under high contention
 	totalRequests      *xsync.Counter
 	successfulRequests *xsync.Counter
@@ -99,6 +102,7 @@ func NewCollectorWithConfig(logger logger.StyledLogger, modelConfig *ModelCollec
 		endpoints:            xsync.NewMap[string, *endpointData](),
 		lastCleanup:          time.Now().UnixNano(),
 		modelCollector:       NewModelCollectorWithConfig(modelConfig),
+		translatorCollector:  NewTranslatorCollector(),
 		totalRequests:        xsync.NewCounter(),
 		successfulRequests:   xsync.NewCounter(),
 		failedRequests:       xsync.NewCounter(),
@@ -398,4 +402,14 @@ func (c *Collector) GetModelStats() map[string]ports.ModelStats {
 
 func (c *Collector) GetModelEndpointStats() map[string]map[string]ports.EndpointModelStats {
 	return c.modelCollector.GetModelEndpointStats()
+}
+
+// Translator-specific tracking methods
+
+func (c *Collector) RecordTranslatorRequest(event ports.TranslatorRequestEvent) {
+	c.translatorCollector.Record(event)
+}
+
+func (c *Collector) GetTranslatorStats() map[string]ports.TranslatorStats {
+	return c.translatorCollector.GetStats()
 }
