@@ -13,14 +13,6 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	Logging       LoggingConfig       `yaml:"logging"`
-	Filename      string              `yaml:"-"`
-	Translators   TranslatorsConfig   `yaml:"translators"`
-	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
-	Proxy         ProxyConfig         `yaml:"proxy"`
-	Discovery     DiscoveryConfig     `yaml:"discovery"`
-	Server        ServerConfig        `yaml:"server"`
-	Engineering   EngineeringConfig   `yaml:"engineering"`
 
 	// ModelAliases maps a virtual model name (alias) to a list of actual model names
 	// that backends may know. When a request arrives with an alias model name, olla
@@ -32,7 +24,15 @@ type Config struct {
 	//       - gpt-oss:120b
 	//       - gpt-oss-120b-MLX
 	//       - gguf_gpt_oss_120b.gguf
-	ModelAliases map[string][]string `yaml:"model_aliases,omitempty"`
+	ModelAliases  map[string][]string `yaml:"model_aliases,omitempty"`
+	Logging       LoggingConfig       `yaml:"logging"`
+	Filename      string              `yaml:"-"`
+	Translators   TranslatorsConfig   `yaml:"translators"`
+	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
+	Proxy         ProxyConfig         `yaml:"proxy"`
+	Discovery     DiscoveryConfig     `yaml:"discovery"`
+	Server        ServerConfig        `yaml:"server"`
+	Engineering   EngineeringConfig   `yaml:"engineering"`
 }
 
 // ServerConfig holds HTTP server configuration
