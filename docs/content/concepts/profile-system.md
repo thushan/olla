@@ -274,6 +274,42 @@ models:
 - First match sets context size
 - No match uses platform default
 
+### Anthropic Support {#anthropic-support}
+
+The `api.anthropic_support` section declares native Anthropic Messages API support for a backend. When present and enabled, the translator layer can skip the Anthropic-to-OpenAI conversion and forward requests directly (passthrough mode).
+
+```yaml
+api:
+  anthropic_support:
+    enabled: true              # Backend natively supports Anthropic Messages API
+    messages_path: /v1/messages # Path for the Messages API on the backend
+    token_count: false          # Whether /v1/messages/count_tokens is supported
+    min_version: "0.11.1"      # Minimum backend version required
+    limitations:               # Known limitations
+      - no_token_counting
+```
+
+**Configuration Fields**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `enabled` | boolean | Yes | Whether the backend supports native Anthropic format |
+| `messages_path` | string | Yes | Backend path for the Anthropic Messages API (e.g., `/v1/messages`) |
+| `token_count` | boolean | No | Whether the backend supports the token counting endpoint |
+| `min_version` | string | No | Minimum backend version with Anthropic support |
+| `limitations` | list | No | Known limitations (e.g., `no_token_counting`, `token_counting_404`) |
+
+**Backends with native Anthropic support**:
+
+| Backend | Min Version | Token Counting | Notes |
+|---------|-------------|----------------|-------|
+| vLLM | v0.11.1+ | No | High-performance inference |
+| llama.cpp | b4847+ | Yes | Only backend with full token counting |
+| LM Studio | v0.4.1+ | No | Desktop inference |
+| Ollama | v0.14.0+ | No | Popular local inference |
+
+When a client sends a request to `/olla/anthropic/v1/messages` and a backend has `anthropic_support.enabled: true`, Olla will bypass format translation and forward the request directly. This is referred to as **passthrough mode** and has near-zero overhead. See [API Translation](api-translation.md#passthrough-mode) for details.
+
 ## Complete Profile Structure
 
 ```yaml
@@ -292,6 +328,14 @@ routing:
 # API configuration
 api:
   openai_compatible: true        # Supports OpenAI API format
+
+  # Native Anthropic Messages API support (optional)
+  anthropic_support:
+    enabled: true                # Enable passthrough for Anthropic requests
+    messages_path: /v1/messages  # Backend path for Messages API
+    token_count: false           # Token counting support
+    min_version: "0.14.0"       # Minimum version required
+
   paths:                          # Allowed API paths (allowlist)
     - /
     - /api/generate

@@ -200,15 +200,10 @@ Use Claude Code, OpenCode, and Crush CLI with local models through Anthropic API
 
 ### Quick Setup
 
-**1. Enable Translation**
+**1. Configure Backends** (Translation is enabled by default)
 
 ```yaml
-# config.yaml
-translators:
-  anthropic:
-    enabled: true
-    max_message_size: 10485760  # 10MB
-
+# config.yaml - Anthropic translation is enabled by default
 discovery:
   static:
     endpoints:

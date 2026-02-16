@@ -121,8 +121,9 @@ func DefaultConfig() *Config {
 		},
 		Translators: TranslatorsConfig{
 			Anthropic: AnthropicTranslatorConfig{
-				Enabled:        false,
-				MaxMessageSize: 10 << 20, // 10MB - Anthropic API limit,
+				Enabled:            true,
+				PassthroughEnabled: true,
+				MaxMessageSize:     10 << 20, // 10MB - Anthropic API limit,
 				Inspector: InspectorConfig{
 					Enabled:       false,
 					OutputDir:     "logs/inspector/anthropic",
@@ -328,6 +329,11 @@ func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_MAX_MESSAGE_SIZE"); val != "" {
 		if size, err := strconv.ParseInt(val, 10, 64); err == nil {
 			config.Translators.Anthropic.MaxMessageSize = size
+		}
+	}
+	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Translators.Anthropic.PassthroughEnabled = enabled
 		}
 	}
 }

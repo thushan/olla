@@ -81,6 +81,7 @@ type Application struct {
 	routeRegistry      *router.RouteRegistry
 	converterFactory   *converter.ConverterFactory
 	profileFactory     profile.ProfileFactory
+	profileLookup      translator.ProfileLookup
 	translatorRegistry *translator.Registry
 	server             *http.Server
 	errCh              chan error
@@ -159,6 +160,10 @@ func NewApplication(
 		logger.Info("Anthropic translator disabled via configuration")
 	}
 
+	// Use profile factory directly as it implements the ProfileLookup interface
+	// The Factory.GetAnthropicSupport method provides the required functionality
+	profileLookup := profileFactory
+
 	return &Application{
 		Config:             cfg,
 		logger:             logger,
@@ -171,6 +176,7 @@ func NewApplication(
 		securityAdapters:   securityAdapters,
 		routeRegistry:      routeRegistry,
 		profileFactory:     profileFactory,
+		profileLookup:      profileLookup,
 		converterFactory:   converter.NewConverterFactory(),
 		translatorRegistry: translatorRegistry,
 		server:             server,
@@ -197,6 +203,11 @@ func (a *Application) GetServer() *http.Server {
 // get translator registry for handlers/routes
 func (a *Application) GetTranslatorRegistry() *translator.Registry {
 	return a.translatorRegistry
+}
+
+// GetProfileLookup returns the profile lookup adapter for accessing backend profiles
+func (a *Application) GetProfileLookup() translator.ProfileLookup {
+	return a.profileLookup
 }
 
 func (a *Application) RegisterRoutes() {

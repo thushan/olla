@@ -12,6 +12,19 @@ routing:
 # API compatibility
 api:
   openai_compatible: true
+
+  # Anthropic Messages API support (v0.14.0+)
+  # UNSUPPORTED:
+  #           - /v1/messages/count_tokens
+  #             [11-01-2026]: https://docs.ollama.com/api/anthropic-compatibility#not-supported
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: false
+    min_version: "0.14.0"
+    limitations:
+      - token_counting_404
+
   paths:
     - /                    # 0: health check
     - /api/generate        # 1: text completion

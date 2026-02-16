@@ -181,6 +181,11 @@ type AnthropicTranslatorConfig struct {
 	Inspector      InspectorConfig `yaml:"inspector"`
 	MaxMessageSize int64           `yaml:"max_message_size"`
 	Enabled        bool            `yaml:"enabled"`
+
+	// PassthroughEnabled controls whether requests can be forwarded directly
+	// to backends that natively support the Anthropic Messages API, bypassing
+	// the Anthropic-to-OpenAI translation pipeline (olla v0.0.23+).
+	PassthroughEnabled bool `yaml:"passthrough_enabled"`
 }
 
 // InspectorConfig holds configuration for request/response inspection

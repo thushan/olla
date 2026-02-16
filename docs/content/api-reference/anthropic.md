@@ -15,10 +15,14 @@ The Anthropic translator accepts requests in Anthropic Messages API format at `/
 **Key Features**:
 
 - ✅ Full Anthropic Messages API compatibility
+- ✅ **Passthrough mode** for backends with native Anthropic support (vLLM, llama.cpp, LM Studio, Ollama)
+- ✅ **Translation mode** for OpenAI-compatible backends without native support
+- ✅ Automatic fallback from passthrough to translation when needed
 - ✅ Streaming via Server-Sent Events (SSE)
 - ✅ Tool use (function calling)
 - ✅ Works with all OpenAI-compatible backends
 - ✅ Zero backend changes required
+- ✅ Translator metrics for observability (passthrough/translation rates, latency, fallback tracking)
 - ⚠️ **Vision Support**: Image content blocks accepted but not yet processed
 - ⛔ **Async Support**: Asynchronous workflows are not supported
 
@@ -30,6 +34,37 @@ The Anthropic translator accepts requests in Anthropic Messages API format at `/
 - Any client using Anthropic Messages API format
 
 ## How it Works
+
+Olla supports two modes for handling Anthropic API requests:
+
+### Passthrough Mode (Preferred)
+
+When a backend natively supports the Anthropic Messages API, requests are forwarded directly without any translation overhead.
+
+```mermaid
+sequenceDiagram
+    participant Client as Claude Code
+    participant Olla as Olla (Passthrough)
+    participant Backend as Anthropic-Compatible Backend
+
+    Client->>Olla: POST /olla/anthropic/v1/messages<br/>(Anthropic format)
+
+    Note over Olla: 1. Detect native Anthropic support
+    Note over Olla: 2. Forward request as-is
+
+    Olla->>Backend: POST /v1/messages<br/>(Anthropic format - unchanged)
+    Backend->>Olla: Response (Anthropic format)
+
+    Olla->>Client: Response (Anthropic format - unchanged)
+```
+
+**Compatible backends**: vLLM (v0.11.1+), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+)
+
+**Observability**: Responses include `X-Olla-Mode: passthrough` header.
+
+### Translation Mode (Fallback)
+
+When no backend supports native Anthropic format, requests are translated to OpenAI format and responses are translated back.
 
 ```mermaid
 sequenceDiagram
@@ -51,16 +86,9 @@ sequenceDiagram
     Olla->>Client: Response (Anthropic format)
 ```
 
-**Translation Process**:
+**Mode Selection**: Olla automatically selects the best mode based on available backend capabilities. No client-side configuration is required.
 
-1. Client sends Anthropic-formatted request
-2. Olla translates request to OpenAI format
-3. Request routed through standard Olla pipeline (load balancing, health checks)
-4. Backend processes request (unaware of original format)
-5. Olla translates OpenAI response back to Anthropic format
-6. Client receives Anthropic-formatted response
-
-For detailed explanation, see [API Translation Concept](../concepts/api-translation.md).
+For detailed explanation of both modes, see [API Translation Concept](../concepts/api-translation.md).
 
 ## Endpoints Overview
 
@@ -600,6 +628,13 @@ All responses include standard Olla headers:
 | `X-Olla-Model` | Actual model used | `llama4:latest` |
 | `X-Olla-Backend-Type` | Backend type | `ollama` |
 | `X-Olla-Response-Time` | Total processing time | `1.234s` |
+| `X-Olla-Mode` | Translator mode (only present for passthrough) | `passthrough` |
+
+!!! tip "Detecting Passthrough Mode"
+    When passthrough mode is active, the `X-Olla-Mode: passthrough` header is included in the response. When translation mode is used, this header is absent. This allows monitoring and debugging to distinguish between the two modes.
+
+!!! info "Translator Statistics"
+    For aggregate translator metrics including passthrough rates, success rates, fallback reasons, and latency data, query the [`GET /internal/stats/translators`](system.md#get-internalstatstranslators) endpoint.
 
 
 ## Authentication
@@ -681,6 +716,7 @@ Errors follow Anthropic API format:
 - Stop sequences
 - Temperature, top_p, top_k parameters
 - Content blocks (text, tool_use, tool_result)
+- **Passthrough mode** for backends with native Anthropic support (zero translation overhead)
 
 **Tool Choice Mapping**:
 
@@ -707,12 +743,13 @@ Errors follow Anthropic API format:
 
 ## Configuration
 
-Enable Anthropic translation in `config.yaml`:
+Anthropic translation is enabled by default. To customise, edit `config.yaml`:
 
 ```yaml
 translators:
   anthropic:
-    enabled: true                   # Enable Anthropic API translator
+    enabled: true                   # Enabled by default
+    passthrough_enabled: true       # Forward directly to backends with native Anthropic support (default)
     max_message_size: 10485760     # Max request size (10MB)
 
 # Standard Olla configuration
@@ -730,8 +767,43 @@ discovery:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable Anthropic translator |
+| `enabled` | boolean | `true` | Enable Anthropic translator (enabled by default) |
 | `max_message_size` | integer | `10485760` | Max request size in bytes (10MB) |
+| `passthrough_enabled` | boolean | `true` | Passthrough optimisation mode. When `true` (default), requests are forwarded directly to backends with native Anthropic support for zero translation overhead. When `false`, all requests go through translation regardless of backend capabilities. Only applies when `enabled: true`. Individual backends must also declare `anthropic_support` in their profile. |
+
+### Passthrough Configuration
+
+Passthrough mode requires two things to be active:
+
+1. The `passthrough_enabled` field must be set to `true` in the translator configuration
+2. Backend profiles must declare native Anthropic support via `anthropic_support.enabled: true`
+
+```yaml
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: true  # Required to enable passthrough mode
+```
+
+When `passthrough_enabled` is `true` (the default), Olla forwards requests directly to backends with native Anthropic support. Set `passthrough_enabled` to `false` to force all requests through the translation pipeline regardless of backend capabilities, which can be useful for debugging or testing the translation layer.
+
+**Backends with native Anthropic support**:
+
+| Backend | Profile | Min Version | Notes |
+|---------|---------|-------------|-------|
+| vLLM | `config/profiles/vllm.yaml` | v0.11.1+ | No token counting |
+| llama.cpp | `config/profiles/llamacpp.yaml` | b4847+ | Supports token counting |
+| LM Studio | `config/profiles/lmstudio.yaml` | v0.4.1+ | No token counting |
+| Ollama | `config/profiles/ollama.yaml` | v0.14.0+ | No token counting |
+
+To disable passthrough for a specific backend, set `anthropic_support.enabled: false` in the profile:
+
+```yaml
+# config/profiles/vllm.yaml (custom override)
+api:
+  anthropic_support:
+    enabled: false  # Force translation mode for this backend
+```
 
 
 ## Performance Considerations

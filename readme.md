@@ -145,10 +145,7 @@ You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/
 
 ### 🤖 **Anthropic Message API / CLI Tools - Claude Code, OpenCode, Crush**
 
-> [!CAUTION]
-> Introduced in v0.0.20+, the Anthropic implementation is *experimental* and should be used with caution.
-
-You can use CLI tools with Olla by using the new Anthropic Message API at `/olla/anthropic` to run Claude Code with Local AI models you have on your machine.
+Olla's Anthropic Messages API translation (v0.0.20+) is **enabled by default**, allowing you to use CLI tools like Claude Code with local AI models on your machine via `/olla/anthropic`. Still actively being improved -- please report any issues or feedback.
 
 We have examples for:
 

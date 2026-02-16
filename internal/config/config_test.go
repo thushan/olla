@@ -619,12 +619,47 @@ func TestLoadConfig_WithTranslatorConfig(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_WithPassthroughEnabledEnvVar(t *testing.T) {
+	// Test that OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED overrides config
+	testCases := []struct {
+		name     string
+		envValue string
+		expected bool
+	}{
+		{"disable passthrough via env var", "false", false},
+		{"enable passthrough via env var", "true", true},
+		{"disable passthrough via 0", "0", false},
+		{"enable passthrough via 1", "1", true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			os.Setenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED", tc.envValue)
+			defer os.Unsetenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED")
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load failed: %v", err)
+			}
+
+			if cfg.Translators.Anthropic.PassthroughEnabled != tc.expected {
+				t.Errorf("Expected PassthroughEnabled=%v from env var %q, got %v",
+					tc.expected, tc.envValue, cfg.Translators.Anthropic.PassthroughEnabled)
+			}
+		})
+	}
+}
+
 func TestDefaultConfig_Translators(t *testing.T) {
 	cfg := DefaultConfig()
 
 	// Test Anthropic translator defaults
-	if cfg.Translators.Anthropic.Enabled {
-		t.Error("Expected Anthropic translator disabled by default")
+	if !cfg.Translators.Anthropic.Enabled {
+		t.Error("Expected Anthropic translator enabled by default")
+	}
+
+	if !cfg.Translators.Anthropic.PassthroughEnabled {
+		t.Error("Expected Anthropic translator passthrough enabled by default")
 	}
 
 	if cfg.Translators.Anthropic.Inspector.Enabled {

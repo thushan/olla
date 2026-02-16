@@ -357,6 +357,10 @@ func (m *mockStatsCollector) GetModelStats() map[string]ports.ModelStats { retur
 func (m *mockStatsCollector) GetModelEndpointStats() map[string]map[string]ports.EndpointModelStats {
 	return nil
 }
+func (m *mockStatsCollector) RecordTranslatorRequest(event ports.TranslatorRequestEvent) {}
+func (m *mockStatsCollector) GetTranslatorStats() map[string]ports.TranslatorStats {
+	return nil
+}
 func (m *mockStatsCollector) GetProxyStats() ports.ProxyStats                  { return ports.ProxyStats{} }
 func (m *mockStatsCollector) GetEndpointStats() map[string]ports.EndpointStats { return nil }
 func (m *mockStatsCollector) GetSecurityStats() ports.SecurityStats            { return ports.SecurityStats{} }

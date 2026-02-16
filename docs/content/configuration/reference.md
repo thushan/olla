@@ -38,6 +38,7 @@ server:         # HTTP server configuration
 proxy:          # Proxy engine settings
 discovery:      # Endpoint discovery
 model_registry: # Model management
+translators:    # API translation (e.g., Anthropic ↔ OpenAI)
 logging:        # Logging configuration
 engineering:    # Debug features
 ```
@@ -531,6 +532,96 @@ Routing decisions are exposed via response headers:
 | `X-Olla-Routing-Decision` | Action taken (routed/fallback/rejected) |
 | `X-Olla-Routing-Reason` | Human-readable reason for decision |
 
+## Translators Configuration
+
+API translation settings. Translators enable clients designed for one API format to work with backends that use a different format.
+
+> :memo: **Anthropic Translation** (v0.0.20+)
+> Enabled by default. Still actively being improved -- please report any issues or feedback.
+
+### Anthropic Translator
+
+The Anthropic translator enables Claude-compatible clients (Claude Code, OpenCode, Crush CLI) to work with OpenAI-compatible backends.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Master switch for the Anthropic translator. When `false`, the `/olla/anthropic/v1/*` endpoints do not exist. |
+| `passthrough_enabled` | bool | `true` | Optimisation mode (only applies when `enabled: true`). When `true`, requests are forwarded directly to backends with native Anthropic support for zero translation overhead. When `false`, all requests go through the Anthropic-to-OpenAI translation pipeline regardless of backend capabilities. |
+| `max_message_size` | int | `10485760` | Maximum request body size in bytes (10MB default). |
+
+#### Two-Level Control: `enabled` + `passthrough_enabled`
+
+The Anthropic translator uses a two-level configuration model:
+
+1. **`enabled`** is the master switch. When `false`, the translator is completely disabled and the `passthrough_enabled` setting has no effect. It is `true` by default.
+2. **`passthrough_enabled`** is the optimisation flag. It only takes effect when `enabled: true`.
+
+When both are active, passthrough mode also requires that the backend profile declares native Anthropic support via `api.anthropic_support.enabled: true`. Both conditions must be true for passthrough to activate:
+
+- `translators.anthropic.passthrough_enabled: true` (global configuration)
+- Backend profile has `api.anthropic_support.enabled: true` (per-backend profile)
+
+If either condition is false, Olla falls back to translation mode automatically.
+
+#### Examples
+
+**Enable translator with passthrough (recommended for production)**:
+
+```yaml
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: true       # Forward directly to backends with native Anthropic support
+    max_message_size: 10485760      # 10MB
+```
+
+**Enable translator with translation only (useful for debugging/testing)**:
+
+```yaml
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: false      # Always translate Anthropic ↔ OpenAI format
+    max_message_size: 10485760
+```
+
+**Disable translator entirely**:
+
+```yaml
+translators:
+  anthropic:
+    enabled: false
+    # passthrough_enabled has no effect when enabled=false
+    passthrough_enabled: true
+```
+
+#### Performance Implications
+
+| Mode | Overhead | When Used |
+|------|----------|-----------|
+| **Passthrough** | Near-zero (~0ms) | `passthrough_enabled: true` and backend has native Anthropic support |
+| **Translation** | ~1-5ms per request | `passthrough_enabled: false`, or backend lacks native Anthropic support |
+| **Disabled** | N/A | `enabled: false` -- endpoints return 404 |
+
+#### Detecting the Active Mode
+
+Check the `X-Olla-Mode` response header:
+
+- `X-Olla-Mode: passthrough` -- passthrough mode was used
+- Header absent -- translation mode was used
+
+#### Inspector (Development Only)
+
+> :no_entry: **Do not enable in production** -- logs full request/response bodies including potentially sensitive user data.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `inspector.enabled` | bool | `false` | Enable request/response logging |
+| `inspector.output_dir` | string | `"logs/inspector/anthropic"` | Directory for log output |
+| `inspector.session_header` | string | `"X-Session-ID"` | Header for session grouping |
+
+See [Anthropic Inspector](../notes/anthropic-inspector.md) for details.
+
 ## Logging Configuration
 
 Application logging settings.
@@ -692,6 +783,16 @@ model_registry:
     cleanup_interval: 10m
     cache_ttl: 10m
     custom_rules: []
+
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: true
+    max_message_size: 10485760   # 10MB
+    inspector:
+      enabled: false
+      output_dir: "logs/inspector/anthropic"
+      session_header: "X-Session-ID"
 
 logging:
   level: "info"

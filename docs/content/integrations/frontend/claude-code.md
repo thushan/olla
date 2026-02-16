@@ -200,7 +200,7 @@ proxy:
   response_timeout: 1800s  # 30 min for long generations
   read_timeout: 600s
 
-# Anthropic API translation (disabled by default)
+# Anthropic Messages API Translation (enabled by default)
 translators:
   anthropic:
     enabled: true
