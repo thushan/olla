@@ -199,6 +199,54 @@ func TestRewriteModelField(t *testing.T) {
 	}
 }
 
+func TestRewriteModelField_PreservesKeyOrder(t *testing.T) {
+	// The body has keys in a specific order with specific formatting
+	body := `{"messages": [{"role": "user", "content": "hello"}], "model": "gpt-oss-120b", "temperature": 0.7, "stream": true}`
+	expected := `{"messages": [{"role": "user", "content": "hello"}], "model": "gpt-oss:120b", "temperature": 0.7, "stream": true}`
+
+	result := rewriteModelField([]byte(body), "gpt-oss:120b")
+
+	if string(result) != expected {
+		t.Errorf("expected byte-identical output except model name:\n  got:  %s\n  want: %s", string(result), expected)
+	}
+}
+
+func TestRewriteModelField_PreservesWhitespace(t *testing.T) {
+	// Pretty-printed JSON should stay pretty-printed
+	body := `{
+  "model": "original-model",
+  "messages": [
+    {"role": "user", "content": "hello"}
+  ],
+  "temperature": 0.7
+}`
+	expected := `{
+  "model": "rewritten-model",
+  "messages": [
+    {"role": "user", "content": "hello"}
+  ],
+  "temperature": 0.7
+}`
+
+	result := rewriteModelField([]byte(body), "rewritten-model")
+
+	if string(result) != expected {
+		t.Errorf("expected whitespace-preserved output:\n  got:  %s\n  want: %s", string(result), expected)
+	}
+}
+
+func TestRewriteModelField_PreservesExactBytes(t *testing.T) {
+	// Verify that the output is byte-identical to input except for the model name
+	body := `{"model":"alias-name","messages":[{"role":"user","content":"hello world"}],"temperature":0.7,"max_tokens":100,"stream":true}`
+	expected := `{"model":"actual-model","messages":[{"role":"user","content":"hello world"}],"temperature":0.7,"max_tokens":100,"stream":true}`
+
+	result := rewriteModelField([]byte(body), "actual-model")
+
+	if string(result) != expected {
+		t.Errorf("output should be byte-identical except model name:\n  got:  %s\n  want: %s", string(result), expected)
+	}
+}
+
 func TestRewriteModelField_InvalidJSON(t *testing.T) {
 	body := []byte("not json")
 	result := rewriteModelField(body, "new-model")

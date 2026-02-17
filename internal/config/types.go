@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"path/filepath"
 	"regexp"
@@ -346,6 +347,50 @@ func (c *AnthropicTranslatorConfig) Validate() error {
 	// Validate inspector configuration
 	if err := c.Inspector.Validate(); err != nil {
 		return fmt.Errorf("inspector config invalid: %w", err)
+	}
+
+	return nil
+}
+
+// ValidateModelAliases validates the model alias configuration.
+// Returns an error for invalid configurations that would cause runtime failures.
+// Logs warnings for non-fatal issues like duplicate model names.
+func (c *Config) ValidateModelAliases() error {
+	if len(c.ModelAliases) == 0 {
+		return nil // no aliases configured, nothing to validate
+	}
+
+	for aliasName, actualModels := range c.ModelAliases {
+		// Empty alias name
+		if aliasName == "" {
+			return fmt.Errorf("model alias name cannot be empty")
+		}
+
+		// Whitespace in alias name
+		if strings.TrimSpace(aliasName) != aliasName {
+			return fmt.Errorf("model alias %q contains leading/trailing whitespace", aliasName)
+		}
+
+		// Empty model list
+		if len(actualModels) == 0 {
+			return fmt.Errorf("model alias %q has no actual models configured", aliasName)
+		}
+
+		// Check each model name in the list
+		seen := make(map[string]bool)
+		for i, modelName := range actualModels {
+			if modelName == "" {
+				return fmt.Errorf("model alias %q has empty model name at position %d", aliasName, i)
+			}
+
+			// Duplicate model names (warning, not a fatal error)
+			if seen[modelName] {
+				slog.Warn("Duplicate model name in alias configuration",
+					"alias", aliasName,
+					"model", modelName)
+			}
+			seen[modelName] = true
+		}
 	}
 
 	return nil
