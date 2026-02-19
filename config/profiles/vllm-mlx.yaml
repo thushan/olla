@@ -1,0 +1,259 @@
+# vLLM-MLX inference platform profile
+# Apple Silicon-only inference server using the MLX framework.
+# API surface is intentionally vLLM-compatible; only the hardware and model
+# format assumptions differ materially from the standard vLLM profile.
+name: vllm-mlx
+home: "https://github.com/waybarrios/vllm-mlx"
+version: "1.0"
+display_name: "vLLM-MLX"
+description: "vLLM inference server optimised for Apple Silicon using the MLX framework"
+
+# Routing configuration
+routing:
+  prefixes:
+    - vllm-mlx
+
+# API compatibility
+api:
+  openai_compatible: true
+
+  # Anthropic Messages API support
+  # vLLM-MLX inherits the vLLM API surface, which includes native Anthropic Messages
+  # API support. Token counting is available via /v1/messages/count_tokens.
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: true
+
+  paths:
+    # Health and system endpoints
+    - /health              # 0: dedicated health check endpoint
+
+    # Model management
+    - /v1/models           # 1: list models (OpenAI-compatible)
+
+    # Text generation endpoints (OpenAI-compatible)
+    - /v1/chat/completions # 2: chat completions
+    - /v1/completions      # 3: text completions
+
+    # Embeddings
+    - /v1/embeddings       # 4: embeddings API
+
+  model_discovery_path: /v1/models
+  health_check_path: /health   # dedicated endpoint — do not fall back to /v1/models
+
+# Platform characteristics
+characteristics:
+  timeout: 2m
+  max_concurrent_requests: 20
+  default_priority: 85
+  streaming_support: true
+  single_model_server: true    # One model per instance, loaded at startup
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/v1/models"
+    - "/health"
+    - "/v1/chat/completions"
+  default_ports:
+    - 8000
+  response_headers:
+    # None we can detect right now
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "vllm-mlx"
+  parsing_rules:
+    chat_completions_path: "/v1/chat/completions"
+    completions_path: "/v1/completions"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions
+path_indices:
+  health: 0
+  models: 1
+  chat_completions: 2
+  completions: 3
+  embeddings: 4
+
+# Model handling
+# MLX models are distributed via HuggingFace under the mlx-community namespace,
+# typically in the format: mlx-community/Llama-3.2-3B-Instruct-4bit
+models:
+  name_format: "{{.Name}}"
+  capability_patterns:
+    chat:
+      - "*-Instruct*"
+      - "*-instruct*"
+      - "*-Chat*"
+      - "*-chat-*"
+    embeddings:
+      - "*embed*"
+      - "*-embed-*"
+      - "*embedding*"
+    vision:
+      - "*vision*"
+      - "*llava*"
+      - "*vlm*"
+    code:
+      - "*code*"
+      - "*Code*"
+      - "*coder*"
+  # Context window patterns for common MLX model families
+  context_patterns:
+    - pattern: "*llama-3.1*"
+      context: 131072
+    - pattern: "*llama-3.2*"
+      context: 131072
+    - pattern: "*llama-3*"
+      context: 8192
+    - pattern: "*mistral*"
+      context: 32768
+    - pattern: "*mixtral*"
+      context: 32768
+    - pattern: "*qwen*"
+      context: 32768
+    - pattern: "*gemma-2*"
+      context: 8192
+    - pattern: "*gemma*"
+      context: 8192
+    - pattern: "*phi-3*"
+      context: 4096
+
+# Resource management
+# Apple Silicon uses unified memory — there is no discrete GPU VRAM budget.
+# The same physical RAM serves both CPU and GPU workloads, so memory figures
+# reflect total system RAM rather than a separate GPU pool.
+# MLX quantised models (e.g. 4bit) are roughly comparable to GGUF Q4 footprints.
+resources:
+  model_sizes:
+    - patterns: ["*70b*", "*72b*"]
+      min_memory_gb: 40
+      recommended_memory_gb: 48
+      min_gpu_memory_gb: 0      # unified memory — no discrete GPU
+      estimated_load_time_ms: 120000
+    - patterns: ["*34b*", "*33b*", "*30b*"]
+      min_memory_gb: 20
+      recommended_memory_gb: 24
+      min_gpu_memory_gb: 0
+      estimated_load_time_ms: 60000
+    - patterns: ["*13b*", "*14b*"]
+      min_memory_gb: 10
+      recommended_memory_gb: 16
+      min_gpu_memory_gb: 0
+      estimated_load_time_ms: 30000
+    - patterns: ["*7b*", "*8b*"]
+      min_memory_gb: 6
+      recommended_memory_gb: 8
+      min_gpu_memory_gb: 0
+      estimated_load_time_ms: 20000
+    - patterns: ["*3b*"]
+      min_memory_gb: 3
+      recommended_memory_gb: 4
+      min_gpu_memory_gb: 0
+      estimated_load_time_ms: 15000
+    - patterns: ["*1b*", "*1.1b*", "*1.5b*"]
+      min_memory_gb: 2
+      recommended_memory_gb: 3
+      min_gpu_memory_gb: 0
+      estimated_load_time_ms: 10000
+
+  # MLX quantisation levels map loosely to these memory multipliers.
+  # Naming convention differs from GGUF (e.g. "4bit" rather than "Q4_K_M"),
+  # but the effective compression ratios are broadly similar.
+  quantization:
+    multipliers:
+      2bit: 0.35
+      3bit: 0.45
+      4bit: 0.50   # Most common MLX distribution format
+      6bit: 0.75
+      8bit: 0.875
+
+  defaults:
+    min_memory_gb: 4
+    recommended_memory_gb: 8
+    min_gpu_memory_gb: 0       # unified memory — not applicable
+    requires_gpu: false        # MLX runs on Apple Silicon Neural Engine / GPU cores
+    estimated_load_time_ms: 20000
+
+  # Single-model architecture; concurrency is bounded by the MLX runtime scheduler
+  concurrency_limits:
+    - min_memory_gb: 30        # 70B+ models
+      max_concurrent: 2
+    - min_memory_gb: 15        # 30B+ models
+      max_concurrent: 5
+    - min_memory_gb: 8         # 13B+ models
+      max_concurrent: 10
+    - min_memory_gb: 0         # smaller models
+      max_concurrent: 20
+
+  timeout_scaling:
+    base_timeout_seconds: 120
+    load_time_buffer: true
+
+# vLLM-MLX-specific features
+features:
+  # Single model per server instance
+  single_model_server:
+    enabled: true
+    description: "Each vLLM-MLX instance serves a single MLX model loaded at startup"
+    implications:
+      - "No runtime model switching"
+      - "Model discovery returns single model"
+      - "Efficient use of unified memory for dedicated workloads"
+
+  # MLX framework acceleration
+  mlx_acceleration:
+    enabled: true
+    description: "Hardware acceleration via Apple's MLX framework on Apple Silicon"
+    hardware:
+      - "Apple M1"
+      - "Apple M2"
+      - "Apple M3"
+      - "Apple M4"
+    notes: "Requires Apple Silicon — not compatible with Intel Macs or other platforms"
+
+  # MLX model format
+  model_format:
+    enabled: true
+    description: "MLX-format models distributed via HuggingFace (mlx-community)"
+    supported_formats:
+      - "MLX"       # Native MLX tensors
+      - "safetensors" # Common source format before MLX conversion
+    quantization_levels:
+      - "2bit"
+      - "3bit"
+      - "4bit"      # Most common; good quality/performance trade-off
+      - "6bit"
+      - "8bit"
+      - "bf16"      # BFloat16 — high quality, higher memory usage
+
+  # Streaming support
+  streaming:
+    enabled: true
+    description: "Token streaming via server-sent events (SSE)"
+
+# Metrics extraction — same OpenAI-compatible response format as standard vLLM
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"  # String value (e.g. "stop", "length")
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+      # vLLM-MLX may surface timing metrics in the same field as upstream vLLM
+      ttft_ms: "$.metrics.time_to_first_token_ms"
+      generation_time_ms: "$.metrics.generation_time_ms"
+    calculations:
+      # Derive IsComplete from finish_reason presence
+      is_complete: 'len(finish_reason) > 0'
+      # Safe division: guard against zero generation_time_ms
+      tokens_per_second: "generation_time_ms > 0 ? (output_tokens * 1000.0) / generation_time_ms : 0"
