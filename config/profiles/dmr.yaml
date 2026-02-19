@@ -1,0 +1,235 @@
+# Docker Model Runner inference platform profile
+# Requires Docker Desktop 4.40+ (macOS Apple Silicon or Linux x86_64 with NVIDIA)
+#
+# LAZY MODEL LOADING: Models are loaded into memory on the first inference request, not at
+# startup. The /engines/v1/models endpoint returns 200 with an empty data array when no
+# models have been pulled yet - this is normal and does not indicate an unhealthy endpoint.
+name: docker-model-runner
+home: "https://docs.docker.com/ai/model-runner/"
+version: "1.0"
+display_name: "Docker Model Runner"
+description: "Docker's built-in LLM inference server powered by llama.cpp and vLLM"
+
+# Routing configuration
+routing:
+  prefixes:
+    - dmr
+
+# API compatibility
+api:
+  openai_compatible: true
+
+  # Anthropic Messages API support
+  # DMR exposes the Anthropic Messages API natively, enabling direct passthrough
+  # without translation overhead for Claude-format requests.
+  anthropic_support:
+    enabled: true
+    messages_path: /anthropic/v1/messages
+    token_count: true
+
+  # preserve_path is not required here. The proxy strips its own prefix (e.g. /olla/proxy)
+  # and forwards the remainder verbatim. Because DMR endpoint base URLs carry no path
+  # (e.g. http://localhost:12434), the /engines/... paths reach the backend unchanged.
+  paths:
+    # Simplified engine-routed paths (DMR selects the appropriate engine automatically)
+    - /engines/v1/models                # 0: model discovery and health check
+    - /engines/v1/chat/completions      # 1: chat completions
+    - /engines/v1/completions           # 2: text completions
+    - /engines/v1/embeddings            # 3: embeddings
+
+    # Explicit llama.cpp engine paths (for GGUF models)
+    - /engines/llama.cpp/v1/models              # 4: list models (llama.cpp)
+    - /engines/llama.cpp/v1/chat/completions    # 5: chat completions (llama.cpp)
+    - /engines/llama.cpp/v1/completions         # 6: text completions (llama.cpp)
+    - /engines/llama.cpp/v1/embeddings          # 7: embeddings (llama.cpp)
+
+    # Explicit vLLM engine paths (for safetensors models)
+    - /engines/vllm/v1/models              # 8: list models (vLLM)
+    - /engines/vllm/v1/chat/completions    # 9: chat completions (vLLM)
+    - /engines/vllm/v1/completions         # 10: text completions (vLLM)
+    - /engines/vllm/v1/embeddings          # 11: embeddings (vLLM)
+
+  model_discovery_path: /engines/v1/models
+  health_check_path: /engines/v1/models
+
+# Platform characteristics
+characteristics:
+  timeout: 5m
+  max_concurrent_requests: 8
+  default_priority: 95        # High priority — local, built-in Docker feature
+  streaming_support: true
+  single_model_server: false  # DMR can serve multiple models concurrently
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/engines/v1/models"
+    - "/engines/llama.cpp/v1/models"
+  default_ports:
+    - 12434
+  response_headers:
+    - "X-Docker-Model-Runner"  # Future-proofing if DMR adds this header
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "docker-model-runner"
+  parsing_rules:
+    chat_completions_path: "/engines/v1/chat/completions"
+    completions_path: "/engines/v1/completions"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions
+path_indices:
+  health: 0
+  models: 0
+  chat_completions: 1
+  completions: 2
+  embeddings: 3
+
+# Model handling
+models:
+  name_format: "{{.Name}}"  # DMR uses "namespace/name" format (e.g., "ai/smollm2")
+  capability_patterns:
+    chat:
+      - "*-Instruct*"
+      - "*-Chat*"
+      - "*-chat-*"
+      - "*-instruct*"
+    embeddings:
+      - "*embed*"
+      - "*embedding*"
+    vision:
+      - "*vision*"
+      - "*llava*"
+      - "*bakllava*"
+    code:
+      - "*code*"
+      - "*Code*"
+      - "*coder*"
+  # Context window patterns for common Docker Hub models
+  context_patterns:
+    - pattern: "*llama-3.1*"
+      context: 131072
+    - pattern: "*llama-3*"
+      context: 8192
+    - pattern: "*smollm2*"
+      context: 8192
+    - pattern: "*gemma-2*"
+      context: 8192
+    - pattern: "*phi-3*"
+      context: 4096
+    - pattern: "*qwen*"
+      context: 32768
+    - pattern: "*mistral*"
+      context: 32768
+
+# Resource management — DMR uses llama.cpp/vLLM under the hood;
+# memory requirements mirror llama.cpp for GGUF models
+resources:
+  model_sizes:
+    - patterns: ["*70b*", "*72b*"]
+      min_memory_gb: 40
+      recommended_memory_gb: 48
+      min_gpu_memory_gb: 40
+      estimated_load_time_ms: 300000
+    - patterns: ["*34b*", "*33b*", "*30b*"]
+      min_memory_gb: 20
+      recommended_memory_gb: 24
+      min_gpu_memory_gb: 20
+      estimated_load_time_ms: 120000
+    - patterns: ["*13b*", "*14b*"]
+      min_memory_gb: 10
+      recommended_memory_gb: 16
+      min_gpu_memory_gb: 10
+      estimated_load_time_ms: 60000
+    - patterns: ["*7b*", "*8b*"]
+      min_memory_gb: 6
+      recommended_memory_gb: 8
+      min_gpu_memory_gb: 6
+      estimated_load_time_ms: 30000
+    - patterns: ["*3b*"]
+      min_memory_gb: 3
+      recommended_memory_gb: 4
+      min_gpu_memory_gb: 3
+      estimated_load_time_ms: 15000
+    - patterns: ["*1b*", "*1.5b*", "*1.7b*"]
+      min_memory_gb: 2
+      recommended_memory_gb: 3
+      min_gpu_memory_gb: 2
+      estimated_load_time_ms: 10000
+
+  # Quantization multipliers (same as llama.cpp for GGUF models)
+  quantization:
+    multipliers:
+      q2: 0.35
+      q3: 0.45
+      q4: 0.50
+      q5: 0.625
+      q6: 0.75
+      q8: 0.875
+
+  defaults:
+    min_memory_gb: 4
+    recommended_memory_gb: 8
+    min_gpu_memory_gb: 4
+    requires_gpu: false  # Can run on CPU (Apple Silicon Metal or NVIDIA CUDA)
+    estimated_load_time_ms: 15000
+
+  concurrency_limits:
+    - min_memory_gb: 30
+      max_concurrent: 2
+    - min_memory_gb: 15
+      max_concurrent: 4
+    - min_memory_gb: 8
+      max_concurrent: 8
+    - min_memory_gb: 0
+      max_concurrent: 10
+
+  timeout_scaling:
+    base_timeout_seconds: 120
+    load_time_buffer: true
+
+# DMR-specific features
+features:
+  # Multi-engine support — DMR automatically routes GGUF models to llama.cpp
+  # and safetensors models to vLLM. Diffusers engine is available for image generation
+  # but not exposed via OpenAI-compatible paths.
+  multi_engine:
+    enabled: true
+    description: "Automatically routes GGUF to llama.cpp, safetensors to vLLM"
+    engines:
+      - llama.cpp
+      - vllm
+      # diffusers: image generation engine — no OpenAI-compatible API paths
+
+  # OCI model distribution
+  oci_distribution:
+    enabled: true
+    description: "Models distributed as OCI artifacts via Docker Hub"
+
+  # Hardware acceleration
+  hardware_acceleration:
+    enabled: true
+    backends:
+      - "Metal"   # Apple Silicon
+      - "CUDA"    # NVIDIA GPUs
+    description: "Automatic GPU acceleration when available"
+
+# Metrics extraction
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+    calculations:
+      is_complete: 'len(finish_reason) > 0'
+      tokens_per_second: "total_ms > 0 ? (output_tokens * 1000.0) / total_ms : 0"
