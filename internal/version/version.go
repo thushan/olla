@@ -29,18 +29,23 @@ var (
 		"model_unification",
 		"endpoint_discovery",
 		"message_translation",
+		"translation_anthropic",
+		"passthrough_anthropic",
 	}
 	SupportedBackends = []string{
 		"ollama",
 		"lemonade",
+		"litellm",
 		"llamacpp",
 		"lm_studio",
 		"sglang",
 		"vllm",
 		"openai_compatible",
+		"docker-model-runner",
 	}
 	ExperimentalCapabilities = []string{
 		"translation_anthropic",
+		"passthrough_anthropic",
 	}
 )
 
