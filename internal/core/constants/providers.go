@@ -9,6 +9,7 @@ const (
 	ProviderTypeOpenAICompat = "openai-compatible"
 	ProviderTypeSGLang       = "sglang"
 	ProviderTypeVLLM         = "vllm"
+	ProviderTypeDockerMR     = "docker-model-runner"
 
 	// Provider display names
 	ProviderDisplayOllama   = "Ollama"
@@ -18,6 +19,7 @@ const (
 	ProviderDisplayOpenAI   = "OpenAI"
 	ProviderDisplaySGLang   = "SGLang"
 	ProviderDisplayVLLM     = "vLLM"
+	ProviderDisplayDockerMR = "Docker Model Runner"
 
 	// Common provider prefixes
 	// llama.cpp provider prefixes
@@ -27,4 +29,6 @@ const (
 	ProviderPrefixLMStudio1 = "lmstudio"
 	ProviderPrefixLMStudio2 = "lm-studio"
 	ProviderPrefixLMStudio3 = "lm_studio"
+	// Docker Model Runner provider prefix
+	ProviderPrefixDockerMR = "dmr"
 )

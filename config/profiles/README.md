@@ -15,6 +15,7 @@ These profiles control:
 
 ## Built-in Profiles
 
+- `dmr.yaml` - Docker Model Runner (DMR) local inference server
 - `ollama.yaml` - Ollama local inference server (GGUF models with management layer)
 - `llamacpp.yaml` - llama.cpp lightweight C++ inference server (GGUF models, single model per instance)
 - `lmstudio.yaml` - LM Studio local inference server

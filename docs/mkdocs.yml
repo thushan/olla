@@ -160,6 +160,7 @@ nav:
             - Lemonade SDK: integrations/backend/lemonade.md
             - LiteLLM: integrations/backend/litellm.md
             - llama.cpp: integrations/backend/llamacpp.md
+            - Docker Model Runner: integrations/backend/docker-model-runner.md
         - Frontends:
             - OpenWebUI + Ollama: integrations/frontend/openwebui.md
             - OpenWebUI + OpenAI: integrations/frontend/openwebui-openai.md
@@ -191,6 +192,7 @@ nav:
           - Lemonade SDK: api-reference/lemonade.md
           - LiteLLM: api-reference/litellm.md
           - llama.cpp: api-reference/llamacpp.md
+          - Docker Model Runner: api-reference/docker-model-runner.md
           - OpenAI: api-reference/openai.md
       - Translated APIs:
           - Anthropic Messages: api-reference/anthropic.md
