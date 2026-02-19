@@ -32,6 +32,8 @@ func getParserForFormat(format string) ModelResponseParser {
 		return &llamaCppParser{}
 	case constants.ProviderTypeOpenAI:
 		return &openAIParser{}
+	case constants.ProviderTypeDockerMR:
+		return &dockerModelRunnerParser{}
 	default:
 		// openai format is the de facto standard
 		return &openAIParser{}
