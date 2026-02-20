@@ -40,6 +40,7 @@ var (
 		"lm_studio",
 		"sglang",
 		"vllm",
+		"vllm-mlx",
 		"openai_compatible",
 		"docker-model-runner",
 	}

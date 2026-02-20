@@ -28,6 +28,8 @@ func getParserForFormat(format string) ModelResponseParser {
 		return &sglangParser{}
 	case constants.ProviderTypeVLLM:
 		return &vllmParser{}
+	case constants.ProviderTypeVLLMMLX:
+		return &vllmMLXParser{}
 	case constants.ProviderTypeLlamaCpp:
 		return &llamaCppParser{}
 	case constants.ProviderTypeOpenAI:

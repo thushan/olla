@@ -27,6 +27,7 @@ func NewConverterFactory() *ConverterFactory {
 	factory.RegisterConverter(NewVLLMConverter())
 	factory.RegisterConverter(NewLlamaCppConverter())
 	factory.RegisterConverter(NewDockerModelRunnerConverter())
+	factory.RegisterConverter(NewVLLMMLXConverter())
 
 	return factory
 }
