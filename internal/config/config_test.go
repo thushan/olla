@@ -890,3 +890,177 @@ func stringContains(s, substr string) bool {
 	}
 	return false
 }
+
+// TestDefaultConfig_ModelDiscovery verifies the ModelDiscovery block is
+// populated with safe, non-zero defaults so the ticker and errgroup won't panic
+// on a fresh install.
+func TestDefaultConfig_ModelDiscovery(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	md := cfg.Discovery.ModelDiscovery
+
+	if !md.Enabled {
+		t.Error("Expected ModelDiscovery.Enabled to be true by default")
+	}
+	if md.Interval != 5*time.Minute {
+		t.Errorf("Expected Interval 5m, got %v", md.Interval)
+	}
+	if md.Timeout != 30*time.Second {
+		t.Errorf("Expected Timeout 30s, got %v", md.Timeout)
+	}
+	if md.ConcurrentWorkers != 5 {
+		t.Errorf("Expected ConcurrentWorkers 5, got %d", md.ConcurrentWorkers)
+	}
+	if md.RetryAttempts != 3 {
+		t.Errorf("Expected RetryAttempts 3, got %d", md.RetryAttempts)
+	}
+	if md.RetryBackoff != 1*time.Second {
+		t.Errorf("Expected RetryBackoff 1s, got %v", md.RetryBackoff)
+	}
+}
+
+// TestConfigValidate_DefaultConfigIsValid confirms that an out-of-the-box
+// DefaultConfig passes Validate() without modification.
+func TestConfigValidate_DefaultConfigIsValid(t *testing.T) {
+	t.Parallel()
+
+	if err := DefaultConfig().Validate(); err != nil {
+		t.Errorf("DefaultConfig().Validate() returned unexpected error: %v", err)
+	}
+}
+
+// TestConfigValidate_RejectsEmptyFields covers each field that Validate()
+// checks individually so a regression in any single guard is caught cleanly.
+func TestConfigValidate_RejectsEmptyFields(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		modify      func(*Config)
+		errContains string
+	}{
+		{
+			name:        "empty discovery.type",
+			modify:      func(c *Config) { c.Discovery.Type = "" },
+			errContains: "discovery.type",
+		},
+		{
+			name:        "empty proxy.engine",
+			modify:      func(c *Config) { c.Proxy.Engine = "" },
+			errContains: "proxy.engine",
+		},
+		{
+			name:        "empty proxy.load_balancer",
+			modify:      func(c *Config) { c.Proxy.LoadBalancer = "" },
+			errContains: "proxy.load_balancer",
+		},
+		{
+			name:        "server.port zero",
+			modify:      func(c *Config) { c.Server.Port = 0 },
+			errContains: "server.port",
+		},
+		{
+			name:        "server.port negative",
+			modify:      func(c *Config) { c.Server.Port = -1 },
+			errContains: "server.port",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := DefaultConfig()
+			tc.modify(cfg)
+
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatalf("Expected error containing %q, got nil", tc.errContains)
+			}
+			if !contains(err.Error(), tc.errContains) {
+				t.Errorf("Expected error containing %q, got: %v", tc.errContains, err)
+			}
+		})
+	}
+}
+
+// TestConfigValidate_ModelDiscoveryEnabled checks that Validate() rejects
+// zero values for interval, workers, and timeout when model discovery is on,
+// since those would cause a ticker panic or immediate context expiry at runtime.
+func TestConfigValidate_ModelDiscoveryEnabled(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		modify      func(*ModelDiscoveryConfig)
+		errContains string
+	}{
+		{
+			name:        "zero interval",
+			modify:      func(md *ModelDiscoveryConfig) { md.Interval = 0 },
+			errContains: "interval",
+		},
+		{
+			name:        "zero concurrent_workers",
+			modify:      func(md *ModelDiscoveryConfig) { md.ConcurrentWorkers = 0 },
+			errContains: "concurrent_workers",
+		},
+		{
+			name:        "zero timeout",
+			modify:      func(md *ModelDiscoveryConfig) { md.Timeout = 0 },
+			errContains: "timeout",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := DefaultConfig()
+			cfg.Discovery.ModelDiscovery.Enabled = true
+			tc.modify(&cfg.Discovery.ModelDiscovery)
+
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatalf("Expected error containing %q, got nil", tc.errContains)
+			}
+			if !contains(err.Error(), tc.errContains) {
+				t.Errorf("Expected error containing %q, got: %v", tc.errContains, err)
+			}
+		})
+	}
+}
+
+// TestConfigValidate_ModelDiscoveryDisabled confirms that zero values for
+// interval, workers, and timeout are accepted when model discovery is off —
+// operators may disable discovery entirely in production.
+func TestConfigValidate_ModelDiscoveryDisabled(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	cfg.Discovery.ModelDiscovery = ModelDiscoveryConfig{
+		Enabled:           false,
+		Interval:          0,
+		Timeout:           0,
+		ConcurrentWorkers: 0,
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Expected no error when model discovery is disabled with zero values, got: %v", err)
+	}
+}
+
+// TestConfigValidate_WriteTimeoutZeroAllowed confirms that WriteTimeout == 0
+// is intentionally accepted. The default is zero to support long-running
+// streaming responses, and Validate() must not block that use case.
+func TestConfigValidate_WriteTimeoutZeroAllowed(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	cfg.Server.WriteTimeout = 0
+
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("Expected no error for WriteTimeout == 0 (valid streaming config), got: %v", err)
+	}
+}
