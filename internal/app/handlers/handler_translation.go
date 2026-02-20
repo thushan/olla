@@ -160,6 +160,50 @@ func (a *Application) executeTranslationRequest(
 	pr.stats.EndTime = time.Now()
 }
 
+// tryPassthrough attempts to serve the request via passthrough mode if the translator
+// and at least one backend support it. Returns true if the request was handled.
+func (a *Application) tryPassthrough(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	bodyBytes []byte,
+	endpoints []*domain.Endpoint,
+	pr *proxyRequest,
+	trans translator.RequestTranslator,
+) bool {
+	passthroughTrans, ok := trans.(translator.PassthroughCapable)
+	if !ok || a.profileLookup == nil {
+		return false
+	}
+
+	// Only pass endpoints whose backend natively supports the wire format.
+	// Mixed deployments (e.g. ollama + vllm) must not block passthrough for
+	// the capable subset — the proxy will route within that filtered list.
+	passthroughEndpoints := make([]*domain.Endpoint, 0, len(endpoints))
+	for _, ep := range endpoints {
+		support := a.profileLookup.GetAnthropicSupport(ep.Type)
+		if support != nil && support.Enabled {
+			passthroughEndpoints = append(passthroughEndpoints, ep)
+		}
+	}
+
+	if !passthroughTrans.CanPassthrough(passthroughEndpoints, a.profileLookup) {
+		return false
+	}
+
+	a.executePassthroughRequest(ctx, w, r, bodyBytes, passthroughEndpoints, pr, trans)
+	a.recordTranslatorMetrics(trans, pr, constants.TranslatorModePassthrough, constants.FallbackReasonNone)
+	return true
+}
+
+// resolveTranslationFallback determines why passthrough was not used.
+func (a *Application) resolveTranslationFallback(trans translator.RequestTranslator) constants.TranslatorFallbackReason {
+	if _, ok := trans.(translator.PassthroughCapable); ok {
+		return constants.FallbackReasonCannotPassthrough
+	}
+	return constants.FallbackReasonTranslatorDoesNotSupportPassthrough
+}
+
 // generic handler for any translator (eg anthropic to openai and back)
 func (a *Application) translationHandler(trans translator.RequestTranslator) http.HandlerFunc {
 	// Resolve body size limit once at registration time, not per-request.
@@ -236,43 +280,15 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			return
 		}
 
-		// Determine mode and fallback reason
-		var mode constants.TranslatorMode
-		var fallbackReason constants.TranslatorFallbackReason
-
-		// Check for passthrough capability
-		if passthroughTrans, ok := trans.(translator.PassthroughCapable); ok {
-			if a.profileLookup != nil {
-				// Only pass endpoints whose backend natively supports the wire format.
-				// Mixed deployments (e.g. ollama + vllm) must not block passthrough for
-				// the capable subset — the proxy will route within that filtered list.
-				passthroughEndpoints := make([]*domain.Endpoint, 0, len(endpoints))
-				for _, ep := range endpoints {
-					support := a.profileLookup.GetAnthropicSupport(ep.Type)
-					if support != nil && support.Enabled {
-						passthroughEndpoints = append(passthroughEndpoints, ep)
-					}
-				}
-
-				if passthroughTrans.CanPassthrough(passthroughEndpoints, a.profileLookup) {
-					// Passthrough mode -- bodyBytes goes directly to PreparePassthrough
-					// which validates without re-reading. No TransformRequest needed.
-					mode = constants.TranslatorModePassthrough
-					fallbackReason = constants.FallbackReasonNone
-
-					a.executePassthroughRequest(ctx, w, r, bodyBytes, passthroughEndpoints, pr, trans)
-					a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
-					return
-				}
-			}
-			// Translation mode with fallback reason
-			mode = constants.TranslatorModeTranslation
-			fallbackReason = constants.FallbackReasonCannotPassthrough
-		} else {
-			// Translator doesn't support passthrough
-			mode = constants.TranslatorModeTranslation
-			fallbackReason = constants.FallbackReasonTranslatorDoesNotSupportPassthrough
+		// Attempt passthrough if the translator and backends support it.
+		// Returns true when passthrough was used and the request is complete.
+		if a.tryPassthrough(ctx, w, r, bodyBytes, endpoints, pr, trans) {
+			return
 		}
+
+		// Passthrough was not used — fall back to full translation.
+		mode := constants.TranslatorModeTranslation
+		fallbackReason := a.resolveTranslationFallback(trans)
 
 		// Translation path only -- perform the full parse and format conversion.
 		// This is deferred to here so passthrough requests never pay the cost.
