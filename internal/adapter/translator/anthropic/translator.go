@@ -151,36 +151,23 @@ func (t *Translator) WriteError(w http.ResponseWriter, err error, statusCode int
 	}
 }
 
-// CanPassthrough implements PassthroughCapable interface
-// Determines whether the request can be forwarded directly to backends without translation.
-// Returns true only if passthrough is enabled and ALL endpoints declare native Anthropic support.
-func (t *Translator) CanPassthrough(endpoints []*domain.Endpoint, profileLookup translator.ProfileLookup) bool {
-	// Fast path: if passthrough is disabled, no need to check endpoints
+// CanPassthrough implements PassthroughCapable interface.
+// The caller is responsible for pre-filtering the endpoint list to only those
+// backends with native Anthropic support (AnthropicSupportConfig.Enabled == true).
+// This method simply confirms passthrough is configured and at least one capable
+// endpoint is available. The profileLookup parameter is accepted to satisfy the
+// interface contract; it is unused here because the filtering has already happened.
+func (t *Translator) CanPassthrough(endpoints []*domain.Endpoint, _ translator.ProfileLookup) bool {
 	if !t.config.PassthroughEnabled {
 		return false
 	}
 
-	// If we have no endpoints, cannot passthrough
 	if len(endpoints) == 0 {
+		t.logger.Debug("No Anthropic-capable endpoints available for passthrough")
 		return false
 	}
 
-	// Check all endpoints for native Anthropic support
-	// All endpoints must support passthrough - if any endpoint doesn't support it,
-	// we must fall back to translation to ensure the request can be routed to any backend
-	for _, ep := range endpoints {
-		support := profileLookup.GetAnthropicSupport(ep.Type)
-
-		// If support is nil or explicitly disabled, cannot passthrough
-		if support == nil || !support.Enabled {
-			t.logger.Debug("Endpoint does not support Anthropic passthrough",
-				"endpoint", ep.Name,
-				"type", ep.Type)
-			return false
-		}
-	}
-
-	t.logger.Debug("All endpoints support Anthropic passthrough", "count", len(endpoints))
+	t.logger.Debug("Anthropic passthrough available", "capable_endpoints", len(endpoints))
 	return true
 }
 
