@@ -142,11 +142,11 @@ detection:
 
 # Only these 5 keys are consumed by code; others are silently ignored
 path_indices:
-  health: 0
-  models: 1
+  models: 0
+  chat_completions: 1
   completions: 2
-  chat_completions: 3
-  embeddings: 4
+  embeddings: 3
+  health: 4
 
 models:
   name_format: "{{.Name}}"

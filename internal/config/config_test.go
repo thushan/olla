@@ -148,7 +148,7 @@ func TestConfigValidation(t *testing.T) {
 						Name:           "test",
 						URL:            "http://localhost:11434",
 						Type:           "ollama",
-						Priority:       100,
+						Priority:       ptrInt(100),
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
 						CheckInterval:  5 * time.Second,
@@ -202,7 +202,7 @@ func TestConfigTypes(t *testing.T) {
 		if endpoint.CheckTimeout.String() == "" {
 			t.Error("CheckTimeout should be a valid duration")
 		}
-		if endpoint.Priority < 0 {
+		if endpoint.Priority != nil && *endpoint.Priority < 0 {
 			t.Error("Priority should be non-negative")
 		}
 		if endpoint.Type == "" {
@@ -963,6 +963,11 @@ func TestConfigValidate_RejectsEmptyFields(t *testing.T) {
 		{
 			name:        "server.port negative",
 			modify:      func(c *Config) { c.Server.Port = -1 },
+			errContains: "server.port",
+		},
+		{
+			name:        "server.port above 65535",
+			modify:      func(c *Config) { c.Server.Port = 99999 },
 			errContains: "server.port",
 		},
 	}

@@ -8,6 +8,9 @@ import (
 	"github.com/thushan/olla/internal/config"
 )
 
+// ptrInt is a test helper to construct *int literals inline.
+func ptrInt(v int) *int { return &v }
+
 // TestApplyEndpointDefaults_SetsZeroValues verifies that zero-value timing and priority
 // fields are filled with the package defaults, ensuring a minimal YAML config can
 // pass validation without requiring explicit timing fields.
@@ -17,7 +20,7 @@ func TestApplyEndpointDefaults_SetsZeroValues(t *testing.T) {
 	cfg := &config.EndpointConfig{
 		Name: "test",
 		URL:  "http://localhost:11434",
-		// CheckInterval, CheckTimeout and Priority are intentionally left at zero
+		// CheckInterval, CheckTimeout and Priority are intentionally omitted (nil/zero)
 	}
 
 	applyEndpointDefaults(cfg)
@@ -28,8 +31,8 @@ func TestApplyEndpointDefaults_SetsZeroValues(t *testing.T) {
 	if cfg.CheckTimeout != DefaultCheckTimeout {
 		t.Errorf("CheckTimeout = %v, want %v", cfg.CheckTimeout, DefaultCheckTimeout)
 	}
-	if cfg.Priority != DefaultPriority {
-		t.Errorf("Priority = %d, want %d", cfg.Priority, DefaultPriority)
+	if cfg.Priority == nil || *cfg.Priority != DefaultPriority {
+		t.Errorf("Priority = %v, want %d", cfg.Priority, DefaultPriority)
 	}
 }
 
@@ -43,7 +46,7 @@ func TestApplyEndpointDefaults_PreservesExplicitValues(t *testing.T) {
 		URL:           "http://localhost:11434",
 		CheckInterval: 10 * time.Second,
 		CheckTimeout:  3 * time.Second,
-		Priority:      50,
+		Priority:      ptrInt(50),
 	}
 
 	applyEndpointDefaults(cfg)
@@ -54,8 +57,30 @@ func TestApplyEndpointDefaults_PreservesExplicitValues(t *testing.T) {
 	if cfg.CheckTimeout != 3*time.Second {
 		t.Errorf("CheckTimeout = %v, want %v (should not be overwritten)", cfg.CheckTimeout, 3*time.Second)
 	}
-	if cfg.Priority != 50 {
-		t.Errorf("Priority = %d, want %d (should not be overwritten)", cfg.Priority, 50)
+	if cfg.Priority == nil || *cfg.Priority != 50 {
+		t.Errorf("Priority = %v, want 50 (should not be overwritten)", cfg.Priority)
+	}
+}
+
+// TestApplyEndpointDefaults_PreservesExplicitZeroPriority is a regression test for the
+// silent override bug: priority: 0 in YAML was indistinguishable from "omitted" when the
+// field was a plain int, causing the default (100) to silently replace a user-set 0.
+// With Priority as *int, nil means "omitted" and a pointer-to-zero means "explicitly 0".
+func TestApplyEndpointDefaults_PreservesExplicitZeroPriority(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.EndpointConfig{
+		Name:          "lowest-priority",
+		URL:           "http://localhost:11434",
+		CheckInterval: 5 * time.Second,
+		CheckTimeout:  2 * time.Second,
+		Priority:      ptrInt(0),
+	}
+
+	applyEndpointDefaults(cfg)
+
+	if cfg.Priority == nil || *cfg.Priority != 0 {
+		t.Errorf("Priority = %v, want 0 — explicit zero must not be replaced with the default", cfg.Priority)
 	}
 }
 
@@ -94,7 +119,7 @@ func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
 		{
 			name: "only Priority set",
 			cfg: config.EndpointConfig{
-				Priority: 200,
+				Priority: ptrInt(200),
 				// CheckInterval and CheckTimeout are zero
 			},
 			wantInterval: DefaultCheckInterval,
@@ -105,7 +130,7 @@ func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
 			name: "CheckInterval and Priority set, CheckTimeout zero",
 			cfg: config.EndpointConfig{
 				CheckInterval: 20 * time.Second,
-				Priority:      75,
+				Priority:      ptrInt(75),
 			},
 			wantInterval: 20 * time.Second,
 			wantTimeout:  DefaultCheckTimeout,
@@ -126,8 +151,8 @@ func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
 			if cfg.CheckTimeout != tc.wantTimeout {
 				t.Errorf("CheckTimeout = %v, want %v", cfg.CheckTimeout, tc.wantTimeout)
 			}
-			if cfg.Priority != tc.wantPriority {
-				t.Errorf("Priority = %d, want %d", cfg.Priority, tc.wantPriority)
+			if cfg.Priority == nil || *cfg.Priority != tc.wantPriority {
+				t.Errorf("Priority = %v, want %d", cfg.Priority, tc.wantPriority)
 			}
 		})
 	}
@@ -222,6 +247,39 @@ func TestLoadFromConfig_WithMinimalEndpoints(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestLoadFromConfig_ZeroPriorityRoundTrip is a regression test ensuring that an
+// endpoint configured with priority: 0 reaches the domain layer with Priority == 0,
+// not silently upgraded to the default (100).
+func TestLoadFromConfig_ZeroPriorityRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	repo := NewStaticEndpointRepository()
+	cfg := config.EndpointConfig{
+		Name:          "zero-priority",
+		URL:           "http://localhost:11434",
+		Type:          "ollama",
+		Priority:      ptrInt(0),
+		CheckInterval: 5 * time.Second,
+		CheckTimeout:  2 * time.Second,
+	}
+
+	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(context.Background())
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+	if len(endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(endpoints))
+	}
+	if endpoints[0].Priority != 0 {
+		t.Errorf("Priority = %d, want 0 — default must not override an explicit zero", endpoints[0].Priority)
 	}
 }
 
@@ -324,7 +382,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "ollama",
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       100,
+			Priority:       ptrInt(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},
@@ -334,7 +392,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "lm-studio",
 			HealthCheckURL: "/v1/models",
 			ModelURL:       "/v1/models",
-			Priority:       90,
+			Priority:       ptrInt(90),
 			CheckInterval:  10 * time.Second,
 			CheckTimeout:   3 * time.Second,
 		},
@@ -399,7 +457,7 @@ func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
 			Type:           "openai-compatible",
 			HealthCheckURL: "/health",
 			ModelURL:       "/v1/models",
-			Priority:       100,
+			Priority:       ptrInt(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},

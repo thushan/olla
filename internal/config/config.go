@@ -28,6 +28,10 @@ const (
 	DefaultDiscoveryType     = "static"
 )
 
+// ptrInt returns a pointer to the given int value.
+// Used for config fields where nil means "not set by the user".
+func ptrInt(v int) *int { return &v }
+
 var DefaultLocalNetworkTrustedCIDRs = []string{
 	"127.0.0.0/8",
 	"10.0.0.0/8",
@@ -79,7 +83,7 @@ func DefaultConfig() *Config {
 						URL:            "http://localhost:11434",
 						Name:           "localhost",
 						Type:           "ollama",
-						Priority:       100,
+						Priority:       ptrInt(100),
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
 						CheckInterval:  5 * time.Second,
@@ -156,8 +160,8 @@ func (c *Config) Validate() error {
 	if c.Proxy.LoadBalancer == "" {
 		return fmt.Errorf("proxy.load_balancer must not be empty (e.g. \"priority\")")
 	}
-	if c.Server.Port <= 0 {
-		return fmt.Errorf("server.port must be > 0, got %d", c.Server.Port)
+	if c.Server.Port <= 0 || c.Server.Port > 65535 {
+		return fmt.Errorf("server.port must be between 1 and 65535, got %d", c.Server.Port)
 	}
 
 	if c.Discovery.ModelDiscovery.Enabled {

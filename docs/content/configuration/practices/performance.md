@@ -162,7 +162,7 @@ Typical memory usage:
 # Memory-conscious configuration
 server:
   request_limits:
-    max_body_size: 5242880    # 5MB instead of 50MB
+    max_body_size: 5242880    # 5MB instead of default 100MB
     max_header_size: 65536    # 64KB instead of 512KB
 
 model_registry:

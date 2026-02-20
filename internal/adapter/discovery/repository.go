@@ -173,7 +173,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			Name:                  cfg.Name,
 			URL:                   endpointURL,
 			Type:                  cfg.Type,
-			Priority:              cfg.Priority,
+			Priority:              *cfg.Priority,
 			HealthCheckURL:        healthCheckURL,
 			ModelUrl:              modelURL,
 			ModelFilter:           cfg.ModelFilter,
@@ -248,8 +248,10 @@ func (r *StaticEndpointRepository) applyProfileDefaults(endpointType, healthChec
 	return healthCheckPath, modelPath
 }
 
-// applyEndpointDefaults fills in zero-value timing and priority fields so that
-// omitting them in YAML config is equivalent to specifying the defaults.
+// applyEndpointDefaults fills in zero-value timing fields and an absent priority
+// so that omitting them in YAML config is equivalent to specifying the defaults.
+// Priority is a pointer so we can distinguish "omitted" (nil) from "explicitly 0",
+// which is a valid lower-than-default value.
 func applyEndpointDefaults(cfg *config.EndpointConfig) {
 	if cfg.CheckInterval == 0 {
 		cfg.CheckInterval = DefaultCheckInterval
@@ -257,8 +259,9 @@ func applyEndpointDefaults(cfg *config.EndpointConfig) {
 	if cfg.CheckTimeout == 0 {
 		cfg.CheckTimeout = DefaultCheckTimeout
 	}
-	if cfg.Priority == 0 {
-		cfg.Priority = DefaultPriority
+	if cfg.Priority == nil {
+		p := DefaultPriority
+		cfg.Priority = &p
 	}
 }
 
@@ -282,8 +285,9 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 		return fmt.Errorf("check_timeout too long: maximum %v, got %v", MaxHealthCheckTimeout, cfg.CheckTimeout)
 	}
 
-	if cfg.Priority < 0 {
-		return fmt.Errorf("priority must be non-negative, got %d", cfg.Priority)
+	// Priority is guaranteed non-nil here: applyEndpointDefaults always runs before validation.
+	if cfg.Priority != nil && *cfg.Priority < 0 {
+		return fmt.Errorf("priority must be non-negative, got %d", *cfg.Priority)
 	}
 
 	if cfg.Type != "" {
