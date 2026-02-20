@@ -12,13 +12,13 @@ keywords: model unification, model catalogue, ollama models, lm studio models, m
 >   model_discovery:
 >     enabled: true
 >     interval: 5m
->     concurrent_workers: 3
+>     concurrent_workers: 5
 > ```
 > **Supported Settings**:
 > 
 > - `enabled` _(default: true)_ - Enable automatic model discovery
 > - `interval` _(default: 5m)_ - How often to refresh model lists
-> - `concurrent_workers` _(default: 3)_ - Parallel discovery workers
+> - `concurrent_workers` _(default: 5)_ - Parallel discovery workers
 > 
 > **Environment Variables**: 
 > - `OLLA_DISCOVERY_MODEL_DISCOVERY_ENABLED`

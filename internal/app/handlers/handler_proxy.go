@@ -46,6 +46,12 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	a.logRequestStart(pr, len(endpoints))
 
+	// Strip the route prefix before forwarding to the backend.
+	// Without this, BuildTargetURL receives the full /olla/proxy/... path and
+	// GetProxyPrefix() returns "route_prefix" (a context key name, not a URL path),
+	// so its StripPrefix is a no-op. This mirrors providerProxyHandler (line 100).
+	r.URL.Path = pr.targetPath
+
 	err = a.executeProxyRequest(ctx, w, r, endpoints, pr)
 
 	a.logRequestResult(pr, err)

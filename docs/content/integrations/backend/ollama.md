@@ -88,10 +88,10 @@ discovery:
         name: "local-ollama"
         type: "ollama"
         priority: 100
-        model_url: "/api/tags"
-        health_check_url: "/"
-        check_interval: 2s
-        check_timeout: 1s
+        model_url: "/api/tags"        # optional, profile default: /api/tags
+        health_check_url: "/"          # optional, profile default: /
+        check_interval: 2s             # optional, default: 5s
+        check_timeout: 1s              # optional, default: 2s
 ```
 
 ### Multiple Ollama Instances

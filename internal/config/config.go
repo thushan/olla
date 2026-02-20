@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"strconv"
@@ -26,6 +27,10 @@ const (
 	DefaultModelRegistryType = "memory"
 	DefaultDiscoveryType     = "static"
 )
+
+// ptrInt returns a pointer to the given int value.
+// Used for config fields where nil means "not set by the user".
+func ptrInt(v int) *int { return &v }
 
 var DefaultLocalNetworkTrustedCIDRs = []string{
 	"127.0.0.0/8",
@@ -78,13 +83,21 @@ func DefaultConfig() *Config {
 						URL:            "http://localhost:11434",
 						Name:           "localhost",
 						Type:           "ollama",
-						Priority:       100,
+						Priority:       ptrInt(100),
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
 						CheckInterval:  5 * time.Second,
 						CheckTimeout:   2 * time.Second,
 					},
 				},
+			},
+			ModelDiscovery: ModelDiscoveryConfig{
+				Enabled:           true,
+				Interval:          5 * time.Minute,
+				Timeout:           30 * time.Second,
+				ConcurrentWorkers: 5,
+				RetryAttempts:     3,
+				RetryBackoff:      1 * time.Second,
 			},
 		},
 		ModelRegistry: ModelRegistryConfig{
@@ -134,6 +147,49 @@ func DefaultConfig() *Config {
 	}
 }
 
+// Validate checks for dangerous zero/empty values that would cause panics or
+// silent failures at runtime. It is called after all config sources (file, env
+// overrides) have been applied, so the final merged state is what's checked.
+func (c *Config) Validate() error {
+	if c.Discovery.Type == "" {
+		return fmt.Errorf("discovery.type must not be empty (e.g. \"static\")")
+	}
+	if c.Proxy.Engine == "" {
+		return fmt.Errorf("proxy.engine must not be empty (e.g. \"sherpa\" or \"olla\")")
+	}
+	if c.Proxy.LoadBalancer == "" {
+		return fmt.Errorf("proxy.load_balancer must not be empty (e.g. \"priority\")")
+	}
+	if c.Server.Port <= 0 || c.Server.Port > 65535 {
+		return fmt.Errorf("server.port must be between 1 and 65535, got %d", c.Server.Port)
+	}
+
+	if c.Discovery.ModelDiscovery.Enabled {
+		md := c.Discovery.ModelDiscovery
+		if md.Interval <= 0 {
+			return fmt.Errorf("discovery.model_discovery.interval must be > 0 when model discovery is enabled (prevents ticker panic)")
+		}
+		if md.ConcurrentWorkers <= 0 {
+			return fmt.Errorf("discovery.model_discovery.concurrent_workers must be > 0 when model discovery is enabled (prevents errgroup panic)")
+		}
+		if md.Timeout <= 0 {
+			return fmt.Errorf("discovery.model_discovery.timeout must be > 0 when model discovery is enabled (prevents immediate context expiry)")
+		}
+	}
+
+	// A burst size of zero throttles all traffic immediately — warn rather than
+	// error since zero is technically valid in some rate-limiter implementations.
+	if c.Server.RateLimits.BurstSize == 0 {
+		log.Printf("WARNING: server.rate_limits.burst_size is 0 — all requests will be throttled immediately")
+	}
+
+	if err := c.Translators.Validate(); err != nil {
+		return fmt.Errorf("translators config invalid: %w", err)
+	}
+
+	return nil
+}
+
 func Load(flagConfigFile ...string) (*Config, error) {
 	config := DefaultConfig()
 
@@ -174,6 +230,11 @@ func Load(flagConfigFile ...string) (*Config, error) {
 	// Apply essential environment overrides only
 	applyEnvOverrides(config)
 	config.Filename = configFilename
+
+	if err := config.Validate(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
 	return config, nil
 }
 

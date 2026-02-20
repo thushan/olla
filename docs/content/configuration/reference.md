@@ -237,12 +237,12 @@ discovery:
 | `static.endpoints[].url` | string | Yes | Endpoint base URL |
 | `static.endpoints[].name` | string | Yes | Unique endpoint name |
 | `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`) |
-| `static.endpoints[].priority` | int | No | Selection priority (higher=preferred) |
+| `static.endpoints[].priority` | int | No | Selection priority (higher=preferred, default: `100`) |
 | `static.endpoints[].preserve_path` | bool | No | Preserve base path in URL when proxying (default: `false`) |
 | `static.endpoints[].health_check_url` | string | No | Health check path (optional, uses profile default if not specified) |
 | `static.endpoints[].model_url` | string | No | Model discovery path (optional, uses profile default if not specified) |
-| `static.endpoints[].check_interval` | duration | No | Health check interval |
-| `static.endpoints[].check_timeout` | duration | No | Health check timeout |
+| `static.endpoints[].check_interval` | duration | No | Health check interval (default: `5s`) |
+| `static.endpoints[].check_timeout` | duration | No | Health check timeout (default: `2s`) |
 | `static.endpoints[].model_filter` | object | No | Model filtering for this endpoint |
 
 #### URL Configuration
@@ -377,7 +377,7 @@ discovery:
 | `model_discovery.timeout` | duration | `30s` | Discovery timeout |
 | `model_discovery.concurrent_workers` | int | `5` | Parallel workers |
 | `model_discovery.retry_attempts` | int | `3` | Retry attempts |
-| `model_discovery.retry_backoff` | duration | `5s` | Retry backoff |
+| `model_discovery.retry_backoff` | duration | `1s` | Retry backoff |
 
 Example:
 
@@ -389,7 +389,7 @@ discovery:
     timeout: 30s
     concurrent_workers: 10
     retry_attempts: 3
-    retry_backoff: 5s
+    retry_backoff: 1s
 ```
 
 ## Model Registry Configuration
@@ -455,7 +455,7 @@ model_registry:
 |-------|------|---------|-------------|
 | `unification.enabled` | bool | `true` | Enable unification |
 | `unification.stale_threshold` | duration | `24h` | Model retention time |
-| `unification.cleanup_interval` | duration | `10m` | Cleanup frequency |
+| `unification.cleanup_interval` | duration | `5m` | Cleanup frequency |
 | `unification.cache_ttl` | duration | `10m` | Cache TTL |
 
 Example:
@@ -764,7 +764,7 @@ discovery:
     timeout: 30s
     concurrent_workers: 5
     retry_attempts: 3
-    retry_backoff: 5s
+    retry_backoff: 1s
   static:
     endpoints: []
 
@@ -780,7 +780,7 @@ model_registry:
   unification:
     enabled: true
     stale_threshold: 24h
-    cleanup_interval: 10m
+    cleanup_interval: 5m
     cache_ttl: 10m
     custom_rules: []
 
@@ -813,6 +813,14 @@ Olla validates configuration on startup:
 - Endpoints must have unique names
 - Ports must be in valid range (1-65535)
 - CIDR blocks must be valid
+
+Additionally, Olla's `Validate()` method catches dangerous zero or empty configuration values that would cause panics or silent failures at runtime. It runs after all config sources (file, environment overrides) have been merged, so the final state is what gets checked. The following conditions produce clear error messages at startup:
+
+- `proxy.engine` is empty
+- `proxy.load_balancer` is empty
+- `discovery.type` is empty
+- `server.port` is zero or negative
+- When `model_discovery.enabled` is `true`: `interval`, `concurrent_workers`, or `timeout` is zero
 
 ## Next Steps
 
