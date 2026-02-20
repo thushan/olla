@@ -13,7 +13,7 @@ keywords: [Docker Model Runner, DMR, Olla proxy, Docker Desktop, LLM inference, 
     </tr>
     <tr>
         <th>Since</th>
-        <td>Olla <code>v0.0.17</code></td>
+        <td>Olla <code>v0.0.23</code></td>
     </tr>
     <tr>
         <th>Type</th>

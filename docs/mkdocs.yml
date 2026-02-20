@@ -156,6 +156,7 @@ nav:
             - Ollama: integrations/backend/ollama.md
             - LM Studio: integrations/backend/lmstudio.md
             - vLLM: integrations/backend/vllm.md
+            - vLLM-MLX: integrations/backend/vllm-mlx.md
             - SGLang: integrations/backend/sglang.md
             - Lemonade SDK: integrations/backend/lemonade.md
             - LiteLLM: integrations/backend/litellm.md
@@ -188,6 +189,7 @@ nav:
           - Ollama: api-reference/ollama.md
           - LM Studio: api-reference/lmstudio.md
           - vLLM: api-reference/vllm.md
+          - vLLM-MLX: api-reference/vllm-mlx.md
           - SGLang: api-reference/sglang.md
           - Lemonade SDK: api-reference/lemonade.md
           - LiteLLM: api-reference/litellm.md

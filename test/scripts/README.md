@@ -57,6 +57,16 @@ Comprehensive test suites for automated validation.
 - Request size limits
 - Authentication and authorization
 
+### `/passthrough` - Anthropic Passthrough Tests
+Validates that the Anthropic Messages API translator correctly selects passthrough or translation mode based on backend capability.
+- Auto-discovers available backends and models
+- Verifies passthrough mode for natively supported backends (vLLM, LM Studio, Ollama, llama.cpp, Lemonade)
+- Verifies translation mode for backends without native support (OpenAI-compatible, LiteLLM)
+- Non-streaming and streaming response validation
+- OpenAI baseline comparison per backend
+- Edge cases: non-existent models, system parameters, multi-turn conversations
+- Translator statistics reporting
+
 ## Common Usage Patterns
 
 Most scripts support these common arguments:
