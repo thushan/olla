@@ -128,18 +128,18 @@ proxy:
 
 ### Health Check Optimisation
 
-Balance detection speed vs overhead:
+Balance detection speed vs overhead (the default `check_interval` is `5s`):
 
 ```yaml
 endpoints:
   - url: "http://localhost:11434"
-    check_interval: 30s    # Not too frequent
+    check_interval: 30s    # Increase from 5s default to reduce overhead
     check_timeout: 2s      # Fast failure detection
 ```
 
 Too frequent checks waste resources:
 
-- 5s interval = 12 checks/minute/endpoint
+- 5s interval (default) = 12 checks/minute/endpoint
 - 30s interval = 2 checks/minute/endpoint
 - With 10 endpoints, that's 120 vs 20 checks/minute
 

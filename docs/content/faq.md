@@ -117,18 +117,18 @@ proxy:
 
 server:
   request_limits:
-    max_body_size: 5242880  # 5MB instead of default 50MB
+    max_body_size: 5242880  # 5MB instead of default 100MB
 ```
 
 ### Models not appearing
 
-If models aren't being discovered:
+Model discovery is enabled by default. If models aren't being discovered:
 
-1. Check model discovery is enabled:
+1. Verify it hasn't been explicitly disabled in your configuration:
    ```yaml
    discovery:
      model_discovery:
-       enabled: true
+       enabled: false  # Remove this line or set to true
    ```
 
 2. Verify endpoints are healthy:
