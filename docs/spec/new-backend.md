@@ -1,6 +1,9 @@
 # Implementing a New Backend in Olla
 
----
+This guide is designed for AI tools like Claude Code or OpenCode to help create new backends. As they are reproducible,
+known integration points currently, it seems like the obvious choice for AI augmented backend development.
+
+Verified on Opus 4.5 | 4.6 / Sonnet 4.5 | 4.6.
 
 ## Overview
 
