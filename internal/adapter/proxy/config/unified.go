@@ -14,10 +14,11 @@ const (
 	DefaultKeepAlive        = 60 * time.Second
 
 	// Olla-specific defaults for high-performance
-	OllaDefaultStreamBufferSize = 64 * 1024 // Larger buffer for better streaming performance
-	OllaDefaultMaxIdleConns     = 100
-	OllaDefaultMaxConnsPerHost  = 50
-	OllaDefaultIdleConnTimeout  = 90 * time.Second
+	OllaDefaultStreamBufferSize    = 64 * 1024 // Larger buffer for better streaming performance
+	OllaDefaultMaxIdleConns        = 100
+	OllaDefaultMaxConnsPerHost     = 50
+	OllaDefaultMaxIdleConnsPerHost = 25 // Half of MaxConnsPerHost; idle slots rarely need to match total capacity
+	OllaDefaultIdleConnTimeout     = 90 * time.Second
 	// Olla uses 30s timeouts for faster failure detection in AI workloads
 	OllaDefaultTimeout     = 30 * time.Second
 	OllaDefaultKeepAlive   = 30 * time.Second
@@ -118,9 +119,10 @@ type OllaConfig struct {
 	BaseProxyConfig
 
 	// Olla-specific fields for advanced connection pooling
-	IdleConnTimeout time.Duration
-	MaxIdleConns    int
-	MaxConnsPerHost int
+	IdleConnTimeout     time.Duration
+	MaxIdleConns        int
+	MaxConnsPerHost     int
+	MaxIdleConnsPerHost int
 }
 
 // GetStreamBufferSize returns the stream buffer size, defaulting to OllaDefaultStreamBufferSize for better performance
@@ -153,6 +155,14 @@ func (c *OllaConfig) GetMaxConnsPerHost() int {
 		return OllaDefaultMaxConnsPerHost
 	}
 	return c.MaxConnsPerHost
+}
+
+// GetMaxIdleConnsPerHost returns the maximum idle connections per host, defaulting to OllaDefaultMaxIdleConnsPerHost
+func (c *OllaConfig) GetMaxIdleConnsPerHost() int {
+	if c.MaxIdleConnsPerHost == 0 {
+		return OllaDefaultMaxIdleConnsPerHost
+	}
+	return c.MaxIdleConnsPerHost
 }
 
 // GetConnectionTimeout returns the connection timeout, defaulting to OllaDefaultTimeout (30s for faster failure detection)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/translator"
@@ -494,8 +495,13 @@ func (a *Application) executeTranslatedStreamingRequest(
 	// panic recovery prevents goroutine leak, cleanup before re-panic
 	defer a.handleStreamingPanic(pipeReader, pipeWriter, proxyErrChan, pr, trans)
 
-	// wait for headers to avoid data race
-	<-streamRecorder.headersReady
+	// Wait for headers before inspecting status. The select also handles context
+	// cancellation so we don't block forever if the proxy errors without writing.
+	select {
+	case <-streamRecorder.headersReady:
+	case <-ctx.Done():
+		return fmt.Errorf("request cancelled while waiting for backend headers: %w", ctx.Err())
+	}
 
 	// handle backend errors before starting sse stream
 	if streamRecorder.status >= 400 {
@@ -548,6 +554,10 @@ func (a *Application) startProxyGoroutine(
 	go func() {
 		localCtx, localR := a.prepareProxyContext(ctx, r, pr)
 		err := a.proxyService.ProxyRequestToEndpoints(localCtx, streamRecorder, localR, endpoints, pr.stats, pr.requestLogger)
+		// If the proxy returned an error without ever calling Write or WriteHeader,
+		// headersReady is never closed and the main goroutine blocks forever.
+		// Ensure it is always signalled before closing the pipe.
+		streamRecorder.ensureHeadersReady()
 		pipeWriter.Close() // Signal end of stream
 		proxyErrChan <- err
 	}()
@@ -839,7 +849,7 @@ type streamingResponseRecorder struct {
 	writer       io.Writer
 	headers      http.Header
 	headersReady chan struct{}
-	headerSent   bool
+	closeOnce    sync.Once
 	status       int
 }
 
@@ -856,19 +866,19 @@ func (r *streamingResponseRecorder) Header() http.Header {
 	return r.headers
 }
 
+// ensureHeadersReady closes headersReady exactly once. It is safe to call from
+// multiple goroutines and is idempotent — subsequent calls are no-ops.
+func (r *streamingResponseRecorder) ensureHeadersReady() {
+	r.closeOnce.Do(func() { close(r.headersReady) })
+}
+
 func (r *streamingResponseRecorder) Write(data []byte) (int, error) {
-	if !r.headerSent {
-		r.headerSent = true
-		close(r.headersReady) // Signal headers are ready when first write occurs
-	}
+	r.ensureHeadersReady()
 	return r.writer.Write(data)
 }
 
 func (r *streamingResponseRecorder) WriteHeader(statusCode int) {
 	r.status = statusCode // Capture status code to detect backend errors
-	if !r.headerSent {
-		r.headerSent = true
-		close(r.headersReady) // Signal headers are ready
-	}
-	// don't write status for streaming, just mark headers sent
+	r.ensureHeadersReady()
+	// Don't propagate the status write for streaming; just mark headers sent.
 }
