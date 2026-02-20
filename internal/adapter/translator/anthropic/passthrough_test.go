@@ -64,31 +64,31 @@ func TestCanPassthrough(t *testing.T) {
 			description: "should return true when all endpoints support Anthropic passthrough",
 		},
 		{
+			// The handler pre-filters to only capable endpoints before calling CanPassthrough.
+			// By the time this method is called, non-capable backends are already excluded.
+			// A mixed vllm+ollama deployment arrives here as [vllm-1] — passthrough proceeds.
 			name:               "mixed_endpoints_some_support_some_dont",
 			passthroughEnabled: true,
 			endpoints: []*domain.Endpoint{
-				{Name: "vllm-1", Type: "vllm"},
-				{Name: "ollama-1", Type: "ollama"},
+				{Name: "vllm-1", Type: "vllm"}, // handler already stripped ollama
 			},
 			profileLookup: newMockProfileLookup().
 				withSupport("vllm", &domain.AnthropicSupportConfig{
 					Enabled:      true,
 					MessagesPath: "/v1/messages",
-				}).
-				withSupport("ollama", nil), // ollama doesn't support
-			want:        false,
-			description: "should return false when some endpoints don't support Anthropic",
+				}),
+			want:        true,
+			description: "should return true when handler pre-filtered to only capable endpoints",
 		},
 		{
+			// When no backends support Anthropic, the handler's filter produces an empty list.
+			// CanPassthrough returns false for an empty list regardless of config.
 			name:               "no_endpoints_support_anthropic",
 			passthroughEnabled: true,
-			endpoints: []*domain.Endpoint{
-				{Name: "ollama-1", Type: "ollama"},
-				{Name: "ollama-2", Type: "ollama"},
-			},
-			profileLookup: newMockProfileLookup().withSupport("ollama", nil),
-			want:          false,
-			description:   "should return false when no endpoints support Anthropic",
+			endpoints:          []*domain.Endpoint{}, // handler filtered all out
+			profileLookup:      newMockProfileLookup().withSupport("ollama", nil),
+			want:               false,
+			description:        "should return false when handler pre-filter yields no capable endpoints",
 		},
 		{
 			name:               "passthrough_disabled",
@@ -112,27 +112,27 @@ func TestCanPassthrough(t *testing.T) {
 			description:        "should return false when endpoints list is empty",
 		},
 		{
+			// Backend with no AnthropicSupportConfig is excluded by the handler filter.
+			// CanPassthrough receives an empty list and returns false.
 			name:               "nil_anthropic_support_config",
 			passthroughEnabled: true,
-			endpoints: []*domain.Endpoint{
-				{Name: "custom-1", Type: "custom"},
-			},
-			profileLookup: newMockProfileLookup(), // no config for "custom"
-			want:          false,
-			description:   "should return false when AnthropicSupportConfig is nil",
+			endpoints:          []*domain.Endpoint{}, // handler excluded the unsupported custom endpoint
+			profileLookup:      newMockProfileLookup(),
+			want:               false,
+			description:        "should return false when handler filter excludes unsupported backends",
 		},
 		{
+			// Backend with Enabled:false is excluded by the handler filter.
+			// CanPassthrough receives an empty list and returns false.
 			name:               "anthropic_support_disabled",
 			passthroughEnabled: true,
-			endpoints: []*domain.Endpoint{
-				{Name: "vllm-1", Type: "vllm"},
-			},
+			endpoints:          []*domain.Endpoint{}, // handler excluded the disabled endpoint
 			profileLookup: newMockProfileLookup().withSupport("vllm", &domain.AnthropicSupportConfig{
-				Enabled:      false, // explicitly disabled
+				Enabled:      false,
 				MessagesPath: "/v1/messages",
 			}),
 			want:        false,
-			description: "should return false when AnthropicSupport.Enabled is false",
+			description: "should return false when handler filter excludes explicitly-disabled backends",
 		},
 		{
 			name:               "multiple_endpoints_all_support",
@@ -160,22 +160,23 @@ func TestCanPassthrough(t *testing.T) {
 			description: "should return true when multiple different endpoint types all support Anthropic",
 		},
 		{
+			// The handler filters the unsupported backend before calling CanPassthrough.
+			// The three vllm endpoints survive the filter — passthrough proceeds.
 			name:               "single_endpoint_without_support",
 			passthroughEnabled: true,
 			endpoints: []*domain.Endpoint{
 				{Name: "vllm-1", Type: "vllm"},
 				{Name: "vllm-2", Type: "vllm"},
 				{Name: "vllm-3", Type: "vllm"},
-				{Name: "unsupported-1", Type: "unsupported"},
+				// unsupported-1 already removed by handler filter
 			},
 			profileLookup: newMockProfileLookup().
 				withSupport("vllm", &domain.AnthropicSupportConfig{
 					Enabled:      true,
 					MessagesPath: "/v1/messages",
 				}),
-			// "unsupported" type has no config (returns nil)
-			want:        false,
-			description: "should return false if even one endpoint doesn't support passthrough",
+			want:        true,
+			description: "should return true when handler pre-filter removes the unsupported endpoint",
 		},
 	}
 
@@ -607,10 +608,11 @@ func TestCanPassthrough_Integration(t *testing.T) {
 	})
 
 	t.Run("mixed_deployment_with_ollama", func(t *testing.T) {
-		// Simulate a mixed deployment where not all backends support Anthropic
+		// The handler filters to only Anthropic-capable backends before calling CanPassthrough.
+		// In a mixed vllm+ollama deployment, only vllm-gpu-1 survives the filter.
+		// CanPassthrough receives the already-filtered list and returns true.
 		endpoints := []*domain.Endpoint{
-			{Name: "vllm-gpu-1", Type: "vllm"},
-			{Name: "ollama-cpu-1", Type: "ollama"}, // Ollama doesn't support Anthropic
+			{Name: "vllm-gpu-1", Type: "vllm"}, // ollama-cpu-1 already removed by handler filter
 		}
 
 		profileLookup := newMockProfileLookup().
@@ -618,7 +620,6 @@ func TestCanPassthrough_Integration(t *testing.T) {
 				Enabled:      true,
 				MessagesPath: "/v1/messages",
 			})
-		// Ollama has no Anthropic support (returns nil)
 
 		cfg := config.AnthropicTranslatorConfig{
 			Enabled:            true,
@@ -629,6 +630,6 @@ func TestCanPassthrough_Integration(t *testing.T) {
 		translator := NewTranslator(createTestLogger(), cfg)
 		result := translator.CanPassthrough(endpoints, profileLookup)
 
-		assert.False(t, result, "should not support passthrough with mixed backend capabilities")
+		assert.True(t, result, "should support passthrough when handler pre-filtered to only capable backends")
 	})
 }

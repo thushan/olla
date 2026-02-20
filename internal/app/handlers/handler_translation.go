@@ -205,6 +205,12 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		pr.model = modelName
 		pr.stats.Model = pr.model
 
+		// Restore body so the inspector chain can read it for routing decisions.
+		// It was consumed by io.ReadAll above; model name is already captured via
+		// ExtractModelName, but analyzeRequest/inspectorChain.Inspect needs the
+		// body intact to build the routing profile (endpoint compatibility).
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
 		// Run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
@@ -236,15 +242,28 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 
 		// Check for passthrough capability
 		if passthroughTrans, ok := trans.(translator.PassthroughCapable); ok {
-			if a.profileLookup != nil && passthroughTrans.CanPassthrough(endpoints, a.profileLookup) {
-				// Passthrough mode -- bodyBytes goes directly to PreparePassthrough
-				// which validates without re-reading. No TransformRequest needed.
-				mode = constants.TranslatorModePassthrough
-				fallbackReason = constants.FallbackReasonNone
+			if a.profileLookup != nil {
+				// Only pass endpoints whose backend natively supports the wire format.
+				// Mixed deployments (e.g. ollama + vllm) must not block passthrough for
+				// the capable subset — the proxy will route within that filtered list.
+				passthroughEndpoints := make([]*domain.Endpoint, 0, len(endpoints))
+				for _, ep := range endpoints {
+					support := a.profileLookup.GetAnthropicSupport(ep.Type)
+					if support != nil && support.Enabled {
+						passthroughEndpoints = append(passthroughEndpoints, ep)
+					}
+				}
 
-				a.executePassthroughRequest(ctx, w, r, bodyBytes, endpoints, pr, trans)
-				a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
-				return
+				if passthroughTrans.CanPassthrough(passthroughEndpoints, a.profileLookup) {
+					// Passthrough mode -- bodyBytes goes directly to PreparePassthrough
+					// which validates without re-reading. No TransformRequest needed.
+					mode = constants.TranslatorModePassthrough
+					fallbackReason = constants.FallbackReasonNone
+
+					a.executePassthroughRequest(ctx, w, r, bodyBytes, passthroughEndpoints, pr, trans)
+					a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
+					return
+				}
 			}
 			// Translation mode with fallback reason
 			mode = constants.TranslatorModeTranslation

@@ -473,9 +473,12 @@ func TestTranslationHandler_PassthroughWithMultipleEndpoints(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
-// TestTranslationHandler_FallbackToTranslation_MixedEndpoints tests fallback when endpoints have mixed support
-func TestTranslationHandler_FallbackToTranslation_MixedEndpoints(t *testing.T) {
-	translationUsed := false
+// TestTranslationHandler_PassthroughUsed_MixedEndpoints tests that passthrough is used for the
+// capable subset when mixed backends are present (vllm supports Anthropic, ollama does not).
+// The handler filters to passthrough-capable endpoints before calling CanPassthrough, so the
+// ollama backend is excluded and the vllm backend receives the request directly.
+func TestTranslationHandler_PassthroughUsed_MixedEndpoints(t *testing.T) {
+	passthroughEndpointsReceived := []*domain.Endpoint{}
 
 	endpoints := []*domain.Endpoint{
 		{Name: "vllm-1", Type: "vllm", Status: domain.StatusHealthy},
@@ -496,32 +499,14 @@ func TestTranslationHandler_FallbackToTranslation_MixedEndpoints(t *testing.T) {
 		name:               "anthropic",
 		passthroughEnabled: true,
 		profileLookup:      profileLookup,
-		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
-			translationUsed = true
-			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
-					"model": "claude-3-5-sonnet-20241022",
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
-					},
-				},
-				ModelName:   "claude-3-5-sonnet-20241022",
-				IsStreaming: false,
-				TargetPath:  "/v1/chat/completions",
-			}, nil
-		},
 	}
 
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
-			response := map[string]interface{}{
-				"id":      "chatcmpl-123",
-				"object":  "chat.completion",
-				"choices": []interface{}{},
-			}
+			passthroughEndpointsReceived = eps
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(response)
+			return json.NewEncoder(w).Encode(map[string]interface{}{"id": "msg_123", "type": "message"})
 		},
 	}
 
@@ -556,10 +541,11 @@ func TestTranslationHandler_FallbackToTranslation_MixedEndpoints(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	// Verify translation mode was used (not passthrough)
-	assert.True(t, translationUsed, "Translation should be used when endpoints have mixed support")
+	// With the fix, handler filters to capable endpoints then uses passthrough for the vllm subset.
 	assert.Equal(t, http.StatusOK, rec.Code)
-	assert.NotEqual(t, "passthrough", rec.Header().Get("X-Olla-Mode"), "Should not use passthrough mode")
+	assert.Equal(t, "passthrough", rec.Header().Get("X-Olla-Mode"), "Should use passthrough for the capable subset")
+	require.Len(t, passthroughEndpointsReceived, 1, "Only the vllm endpoint should be proxied")
+	assert.Equal(t, "vllm-1", passthroughEndpointsReceived[0].Name, "vllm endpoint should be used")
 }
 
 // TestTranslationHandler_FallbackToTranslation_PassthroughDisabled tests fallback when passthrough is disabled
@@ -1324,9 +1310,11 @@ func TestTranslationHandler_MetricsRecordedForTranslation(t *testing.T) {
 	assert.False(t, event.IsStreaming)
 }
 
-// TestTranslationHandler_MetricsRecordedForFallback verifies metrics capture fallback scenarios
-func TestTranslationHandler_MetricsRecordedForFallback(t *testing.T) {
-	// Test case: mixed endpoint support (some support Anthropic, some don't)
+// TestTranslationHandler_MetricsRecordedForPassthrough_MixedEndpoints verifies that passthrough
+// mode metrics are recorded when the handler filters a mixed deployment to the capable subset.
+func TestTranslationHandler_MetricsRecordedForPassthrough_MixedEndpoints(t *testing.T) {
+	// Mixed deployment: vllm supports Anthropic natively, ollama does not.
+	// Handler filters to [vllm-1] and uses passthrough — metrics should reflect that.
 	endpoints := []*domain.Endpoint{
 		{Name: "vllm-1", Type: "vllm", Status: domain.StatusHealthy},
 		{Name: "ollama-1", Type: "ollama", Status: domain.StatusHealthy}, // No Anthropic support
@@ -1403,14 +1391,15 @@ func TestTranslationHandler_MetricsRecordedForFallback(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "passthrough", rec.Header().Get("X-Olla-Mode"), "Should use passthrough for the capable subset")
 
-	// Verify fallback reason is recorded
+	// Verify passthrough mode and no fallback reason are recorded
 	events := statsCollector.getRecordedEvents()
 	require.Len(t, events, 1)
 
 	event := events[0]
-	assert.Equal(t, constants.TranslatorModeTranslation, event.Mode)
-	assert.Equal(t, constants.FallbackReasonCannotPassthrough, event.FallbackReason)
+	assert.Equal(t, constants.TranslatorModePassthrough, event.Mode)
+	assert.Equal(t, constants.FallbackReasonNone, event.FallbackReason)
 	assert.True(t, event.Success)
 }
 
