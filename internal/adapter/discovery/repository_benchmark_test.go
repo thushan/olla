@@ -23,7 +23,7 @@ func BenchmarkRepository_GetAll(b *testing.B) {
 			URL:            fmt.Sprintf("http://localhost:%d", port),
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       100,
+			Priority:       ptrInt(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		}
@@ -63,7 +63,7 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 			URL:            fmt.Sprintf("http://localhost:%d", port),
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       100,
+			Priority:       ptrInt(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		}
@@ -98,7 +98,7 @@ func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 		URL:            "http://localhost:11434",
 		HealthCheckURL: "/health",
 		ModelURL:       "/api/tags",
-		Priority:       100,
+		Priority:       ptrInt(100),
 		CheckInterval:  5 * time.Second,
 		CheckTimeout:   2 * time.Second,
 	}
@@ -141,7 +141,7 @@ func BenchmarkRepository_LoadFromConfig(b *testing.B) {
 			URL:            fmt.Sprintf("http://localhost:%d", port),
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       100 + i*10,
+			Priority:       ptrInt(100 + i*10),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		}

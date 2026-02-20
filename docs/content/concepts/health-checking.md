@@ -10,15 +10,17 @@ keywords: ["health checking", "endpoint monitoring", "circuit breaker", "olla he
 > ```yaml
 > endpoints:
 >   - url: "http://localhost:11434"
->     check_interval: 30s
->     check_timeout: 5s
+>     check_interval: 5s
+>     check_timeout: 2s
 > ```
 > **Supported Settings**:
 > 
-> - `check_interval` _(default: 30s)_ - Time between health checks
-> - `check_timeout` _(default: 5s)_ - Maximum time to wait for response
+> - `check_interval` _(default: 5s)_ - Time between health checks
+> - `check_timeout` _(default: 2s)_ - Maximum time to wait for response
 > - `check_path` _(auto-detected)_ - Health check endpoint path
 > 
+> **Note**: Both `check_interval` and `check_timeout` are optional with sensible defaults (5s and 2s respectively), so you don't need to specify them for basic setups.
+>
 > **Environment Variables**: Per-endpoint settings not supported via env vars
 
 Olla continuously monitors the health of all configured endpoints to ensure requests are only routed to available backends. The health checking system is automatic and requires minimal configuration.

@@ -232,14 +232,14 @@ discovery:
 
 ### Endpoint Configuration
 
-Each endpoint requires:
+Each endpoint requires `url`, `name`, and `type`. The `priority` field is optional:
 
 | Field | Description | Example |
 |-------|-------------|---------|
 | **url** | Base URL of the endpoint | `http://localhost:11434` |
 | **name** | Unique identifier | `local-ollama` |
 | **type** | Platform type | `llamacpp`, `vllm`, `openai` (See [integrations](../integrations/overview.md#backend-endpoints)) |
-| **priority** | Selection priority (higher = preferred) | `100` |
+| **priority** | Selection priority (higher = preferred, default: `100`) | `100` |
 
 Current list of supported types can be found in [integrations](../integrations/overview.md#backend-endpoints).
 

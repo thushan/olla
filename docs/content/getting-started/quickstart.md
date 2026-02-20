@@ -58,12 +58,13 @@ discovery:
         name: "local-ollama"
         type: "ollama"
         priority: 100
-        health_check_url: "/"
 
 logging:
   level: "info"
   format: "json"
 ```
+
+Settings like `check_interval`, `check_timeout`, and `priority` are optional -- Olla provides sensible defaults for each backend type via its profile system.
 
 The rest will be from the shipped defaults.
 
