@@ -124,21 +124,24 @@ Olla exposes multiple API paths depending on your use case:
 | Path | Format | Use Case |
 |------|--------|----------|
 | `/olla/proxy/` | OpenAI | Routes to any backend — universal endpoint |
+| `/olla/openai/` | OpenAI | Routes to any backend — universal endpoint |
 | `/olla/anthropic/` | Anthropic | Claude-compatible clients (passthrough or translated) |
 | `/olla/{provider}/` | OpenAI | Target a specific backend type (e.g. `/olla/vllm/`, `/olla/ollama/`) |
 
 #### OpenAI-Compatible (Universal Proxy)
 
+You can use `/olla/openai` or `/olla/proxy`
+
 ```bash
 # Chat completion (routes to best available backend)
 curl http://localhost:40114/olla/proxy/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
+  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 100}'
 
 # Streaming
 curl http://localhost:40114/olla/proxy/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100, "stream": true}'
+  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 100, "stream": true}'
 
 # List all models across backends
 curl http://localhost:40114/olla/proxy/v1/models
@@ -152,14 +155,14 @@ curl http://localhost:40114/olla/anthropic/v1/messages \
   -H "Content-Type: application/json" \
   -H "x-api-key: not-needed" \
   -H "anthropic-version: 2023-06-01" \
-  -d '{"model": "llama3.2", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello!"}]}'
+  -d '{"model": "llama3.2", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}'
 
 # Streaming
 curl http://localhost:40114/olla/anthropic/v1/messages \
   -H "Content-Type: application/json" \
   -H "x-api-key: not-needed" \
   -H "anthropic-version: 2023-06-01" \
-  -d '{"model": "llama3.2", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello!"}], "stream": true}'
+  -d '{"model": "llama3.2", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
 ```
 
 #### Provider-Specific Endpoints
@@ -168,7 +171,7 @@ curl http://localhost:40114/olla/anthropic/v1/messages \
 # Target a specific backend type directly
 curl http://localhost:40114/olla/ollama/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello!"}], "max_tokens": 100}'
+  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 100}'
 
 # Other providers: /olla/vllm/, /olla/vllm-mlx/, /olla/lm-studio/, /olla/llamacpp/, etc.
 ```
