@@ -57,6 +57,15 @@ Comprehensive test suites for automated validation.
 - Request size limits
 - Authentication and authorization
 
+### `/integration` - Comprehensive Integration Tests
+End-to-end validation of all major API endpoints against a running Olla instance.
+- Health checks and internal monitoring endpoints
+- Unified model endpoints and proxy (OpenAI format) endpoints
+- Anthropic translator endpoints with passthrough mode validation
+- Provider-specific route discovery and testing
+- Response header validation and error handling
+- Auto-discovers backends and models for dynamic test matrix
+
 ### `/passthrough` - Anthropic Passthrough Tests
 Validates that the Anthropic Messages API translator correctly selects passthrough or translation mode based on backend capability.
 - Auto-discovers available backends and models

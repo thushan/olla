@@ -18,7 +18,7 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration
 
 # Build the application with version info
 build:
@@ -325,6 +325,11 @@ docker-compose:
 	@echo "Starting with docker-compose..."
 	@docker-compose up
 
+# Run integration test scripts (requires running Olla instance)
+test-script-integration:
+	@echo "Running integration test scripts..."
+	@cd test/scripts && python integration/test-integration.py $(ARGS)
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -367,4 +372,5 @@ help:
 	@echo "  install-deps    - Install dependencies at pinned versions"
 	@echo "  check-deps      - Check installed tool versions against requirements"
 	@echo "  ci              - Run full CI pipeline locally"
+	@echo "  test-script-integration - Run integration test scripts (requires running Olla)"
 	@echo "  help            - Show this help"
