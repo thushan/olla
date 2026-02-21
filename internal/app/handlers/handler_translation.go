@@ -882,3 +882,8 @@ func (r *streamingResponseRecorder) WriteHeader(statusCode int) {
 	r.ensureHeadersReady()
 	// Don't propagate the status write for streaming; just mark headers sent.
 }
+
+// Flush implements http.Flusher. The underlying io.Pipe is unbuffered
+// (writes block until read), so there is nothing to flush — this is
+// intentionally a no-op to satisfy http.ResponseController in proxy engines.
+func (r *streamingResponseRecorder) Flush() {}
