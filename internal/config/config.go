@@ -22,7 +22,7 @@ const (
 	DefaultHost              = "localhost"
 	DefaultAllHost           = "0.0.0.0" // local dev may use this
 	DefaultProxyProfile      = constants.ConfigurationProxyProfileAuto
-	DefaultProxyEngine       = "sherpa"
+	DefaultProxyEngine       = "olla"
 	DefaultLoadBalancer      = "priority"
 	DefaultModelRegistryType = "memory"
 	DefaultDiscoveryType     = "static"
