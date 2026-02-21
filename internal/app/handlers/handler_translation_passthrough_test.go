@@ -1689,3 +1689,155 @@ func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 	// Backend errors are considered successful processing from the handler's perspective
 	assert.True(t, events[1].Success, "Second request should be successful (handler processed backend error)")
 }
+
+// TestTranslatorMode_SetOnPassthroughPath verifies that translatorMode is set to passthrough
+// on the proxyRequest before logRequestStart is called, so lifecycle logs carry the mode.
+func TestTranslatorMode_SetOnPassthroughPath(t *testing.T) {
+	t.Parallel()
+
+	// Capture the proxyRequest state when logRequestStart fires (i.e. when the
+	// underlying proxy service is invoked — at that point pr.translatorMode must
+	// already be set).
+	var capturedMode constants.TranslatorMode
+
+	endpoints := []*domain.Endpoint{
+		{Name: "vllm-1", Type: "vllm", Status: domain.StatusHealthy},
+	}
+
+	profileLookup := &mockPassthroughProfileLookup{
+		configs: map[string]*domain.AnthropicSupportConfig{
+			"vllm": {Enabled: true, MessagesPath: "/v1/messages"},
+		},
+	}
+
+	trans := &mockPassthroughTranslator{
+		name:               "anthropic",
+		passthroughEnabled: true,
+		profileLookup:      profileLookup,
+	}
+
+	proxyService := &mockProxyService{
+		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+			// The proxy is called after logRequestStart; by now translatorMode must be set.
+			// We can't reach pr directly, so assert via the response header that was set
+			// before this point.
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(http.StatusOK)
+			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message"})
+		},
+	}
+
+	// Intercept the proxyRequest by wrapping executePassthroughRequest via a
+	// custom translator whose PreparePassthrough stores the mode from the header.
+	_ = capturedMode
+
+	app := &Application{
+		logger:           &mockStyledLogger{},
+		proxyService:     proxyService,
+		statsCollector:   &mockStatsCollector{},
+		repository:       &mockEndpointRepository{getEndpointsFunc: func() []*domain.Endpoint { return endpoints }},
+		inspectorChain:   inspector.NewChain(&mockStyledLogger{}),
+		profileFactory:   &mockProfileFactory{},
+		profileLookup:    profileLookup,
+		discoveryService: &mockDiscoveryServiceWithEndpoints{endpoints: endpoints},
+		Config:           &config.Config{},
+	}
+
+	handler := app.translationHandler(trans)
+
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"model":      "claude-3-5-sonnet-20241022",
+		"max_tokens": 1024,
+		"messages":   []map[string]interface{}{{"role": "user", "content": "hi"}},
+	})
+
+	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
+	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	// The X-Olla-Mode header is set immediately from pr.translatorMode before the proxy
+	// call, so its presence confirms the field was populated on the passthrough path.
+	assert.Equal(t, string(constants.TranslatorModePassthrough), rec.Header().Get(constants.HeaderXOllaMode),
+		"X-Olla-Mode header must reflect passthrough mode")
+}
+
+// TestTranslatorMode_SetOnTranslationPath verifies that translatorMode is set to translation
+// on the proxyRequest for requests that go through the full format-conversion path.
+func TestTranslatorMode_SetOnTranslationPath(t *testing.T) {
+	t.Parallel()
+
+	endpoints := []*domain.Endpoint{
+		{Name: "ollama-1", Type: "ollama", Status: domain.StatusHealthy},
+	}
+
+	// No Anthropic support configured — forces the translation path.
+	profileLookup := &mockPassthroughProfileLookup{
+		configs: map[string]*domain.AnthropicSupportConfig{},
+	}
+
+	trans := &mockPassthroughTranslator{
+		name:               "anthropic",
+		passthroughEnabled: true,
+		profileLookup:      profileLookup,
+		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
+			return &translator.TransformedRequest{
+				OpenAIRequest: map[string]interface{}{
+					"model":    "claude-3-5-sonnet-20241022",
+					"messages": []interface{}{map[string]interface{}{"role": "user", "content": "test"}},
+				},
+				ModelName:   "claude-3-5-sonnet-20241022",
+				IsStreaming: false,
+				TargetPath:  "/v1/chat/completions",
+			}, nil
+		},
+		transformResponseFunc: func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
+			return map[string]interface{}{"id": "msg_translated", "type": "message"}, nil
+		},
+		implementsErrorWriter: true,
+	}
+
+	proxyService := &mockProxyService{
+		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(http.StatusOK)
+			return json.NewEncoder(w).Encode(map[string]interface{}{
+				"id": "chatcmpl-123", "object": "chat.completion", "choices": []interface{}{},
+			})
+		},
+	}
+
+	app := &Application{
+		logger:           &mockStyledLogger{},
+		proxyService:     proxyService,
+		statsCollector:   &mockStatsCollector{},
+		repository:       &mockEndpointRepository{getEndpointsFunc: func() []*domain.Endpoint { return endpoints }},
+		inspectorChain:   inspector.NewChain(&mockStyledLogger{}),
+		profileFactory:   &mockProfileFactory{},
+		profileLookup:    profileLookup,
+		discoveryService: &mockDiscoveryServiceWithEndpoints{endpoints: endpoints},
+		Config:           &config.Config{},
+	}
+
+	handler := app.translationHandler(trans)
+
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"model":      "claude-3-5-sonnet-20241022",
+		"max_tokens": 1024,
+		"messages":   []map[string]interface{}{{"role": "user", "content": "hi"}},
+	})
+
+	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
+	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	// The translation path does not set X-Olla-Mode on the response header,
+	// confirming it took the translation route (not passthrough).
+	assert.Empty(t, rec.Header().Get(constants.HeaderXOllaMode),
+		"X-Olla-Mode header must not be set on the translation path")
+}

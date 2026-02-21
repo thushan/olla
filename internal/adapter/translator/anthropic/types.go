@@ -5,9 +5,9 @@ import "fmt"
 // AnthropicRequest represents an Anthropic API request
 // Maps to the Anthropic Messages API format
 type AnthropicRequest struct {
-	ToolChoice    interface{}            `json:"tool_choice,omitempty"` // string or object
-	System        interface{}            `json:"system,omitempty"`      // string or []ContentBlock
-	Thinking      interface{}            `json:"thinking,omitempty"`    // Extended thinking configuration
+	ToolChoice    interface{}            `json:"tool_choice,omitempty"`   // string or object
+	System        interface{}            `json:"system,omitempty"`        // string or []ContentBlock
+	Thinking      interface{}            `json:"thinking,omitempty"`      // Extended thinking configuration
 	OutputConfig  interface{}            `json:"output_config,omitempty"` // Output configuration (effort, structured output format)
 	Temperature   *float64               `json:"temperature,omitempty"`
 	TopP          *float64               `json:"top_p,omitempty"`

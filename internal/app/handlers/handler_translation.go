@@ -47,7 +47,10 @@ func (a *Application) executePassthroughRequest(
 	// (StreamingMs isn't populated in passthrough mode since we don't intercept the stream)
 	pr.isStreaming = passthroughReq.IsStreaming
 
-	pr.requestLogger.Info("using passthrough mode (native Anthropic support)",
+	// Set mode before logRequestStart so it appears on the lifecycle log lines.
+	pr.translatorMode = constants.TranslatorModePassthrough
+
+	pr.requestLogger.Debug("using passthrough mode (native Anthropic support)",
 		"model", passthroughReq.ModelName,
 		"streaming", passthroughReq.IsStreaming,
 		"endpoints", len(endpoints))
@@ -58,7 +61,7 @@ func (a *Application) executePassthroughRequest(
 	r.URL.Path = passthroughReq.TargetPath
 
 	// Add passthrough mode header for observability
-	w.Header().Set("X-Olla-Mode", "passthrough")
+	w.Header().Set(constants.HeaderXOllaMode, string(constants.TranslatorModePassthrough))
 
 	// Prepare context
 	ctx, r = a.prepareProxyContext(ctx, r, pr)
@@ -94,6 +97,9 @@ func (a *Application) executeTranslationRequest(
 ) {
 	// Capture streaming flag for metrics before proxying
 	pr.isStreaming = transformedReq.IsStreaming
+
+	// Set mode before logRequestStart so it appears on the lifecycle log lines.
+	pr.translatorMode = constants.TranslatorModeTranslation
 
 	// Serialize OpenAI request
 	openaiBody, err := json.Marshal(transformedReq.OpenAIRequest)
@@ -138,15 +144,6 @@ func (a *Application) executeTranslationRequest(
 		proxyErr = a.executeTranslatedStreamingRequest(ctx, w, r, endpoints, pr, trans)
 	} else {
 		proxyErr = a.executeTranslatedNonStreamingRequest(ctx, w, r, endpoints, pr, trans)
-	}
-
-	if proxyErr == nil {
-		pr.requestLogger.Debug("Translation request completed successfully",
-			"translator", trans.Name(),
-			"model", pr.model,
-			"path_translated", transformedReq.TargetPath != "",
-			"target_path", transformedReq.TargetPath,
-			"streaming", transformedReq.IsStreaming)
 	}
 
 	a.logRequestResult(pr, proxyErr)
