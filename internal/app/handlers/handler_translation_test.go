@@ -1460,3 +1460,298 @@ func BenchmarkStripPrefix(b *testing.B) {
 		_ = util.StripPrefix(path, prefix)
 	}
 }
+
+// TestStreamingResponseRecorder_EnsureHeadersReady_IdemPotent verifies that
+// ensureHeadersReady can be called multiple times without panicking.
+func TestStreamingResponseRecorder_EnsureHeadersReady_IdemPotent(t *testing.T) {
+	t.Parallel()
+
+	pr, pw := io.Pipe()
+	defer pr.Close()
+	defer pw.Close()
+
+	rec := newStreamingResponseRecorder(pw)
+
+	// Calling multiple times must not panic (sync.Once guards the close).
+	rec.ensureHeadersReady()
+	rec.ensureHeadersReady()
+	rec.WriteHeader(http.StatusOK)
+	rec.ensureHeadersReady()
+
+	// Channel must already be closed.
+	select {
+	case <-rec.headersReady:
+	default:
+		t.Fatal("headersReady should be closed after ensureHeadersReady")
+	}
+}
+
+// TestExecuteTranslatedStreamingRequest_ProxyErrorBeforeWrite verifies that when the proxy
+// returns an error before ever writing headers, the handler does not deadlock and returns an
+// error within a reasonable time.
+func TestExecuteTranslatedStreamingRequest_ProxyErrorBeforeWrite(t *testing.T) {
+	t.Parallel()
+
+	mockLogger := &mockStyledLogger{}
+
+	trans := &mockTranslator{
+		name:                  "error-before-write-translator",
+		implementsErrorWriter: true,
+		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(statusCode)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+		},
+		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
+			return &translator.TransformedRequest{
+				OpenAIRequest: map[string]interface{}{
+					"model":  "test-model",
+					"stream": true,
+					"messages": []interface{}{
+						map[string]interface{}{"role": "user", "content": "test"},
+					},
+				},
+				ModelName:   "test-model",
+				IsStreaming: true,
+			}, nil
+		},
+		// TransformStreamingResponse should never be reached in the error path, but
+		// if it somehow is, copy the (empty) stream so the test can complete.
+		transformStreamingFunc: func(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error {
+			_, err := io.Copy(w, openaiStream)
+			return err
+		},
+	}
+
+	// Proxy that returns an error immediately without touching the ResponseWriter.
+	proxyService := &mockProxyService{
+		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+			return fmt.Errorf("connection refused")
+		},
+	}
+
+	app := &Application{
+		logger:           mockLogger,
+		proxyService:     proxyService,
+		statsCollector:   &mockStatsCollector{},
+		repository:       &mockEndpointRepository{},
+		inspectorChain:   inspector.NewChain(mockLogger),
+		profileFactory:   &mockProfileFactory{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
+		Config:           &config.Config{},
+	}
+
+	handler := app.translationHandler(trans)
+
+	reqBody := map[string]interface{}{
+		"model":  "test-model",
+		"stream": true,
+		"messages": []interface{}{
+			map[string]interface{}{"role": "user", "content": "Hello"},
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	// Use a context with a generous timeout so the test fails clearly rather than
+	// hanging the suite if the deadlock resurfaces.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "/test", bytes.NewReader(body))
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	rec := httptest.NewRecorder()
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Handler returned — no deadlock. The response status must indicate an error.
+		assert.GreaterOrEqual(t, rec.Code, http.StatusBadRequest,
+			"expected an error status when proxy fails before writing headers")
+	case <-ctx.Done():
+		t.Fatal("handler deadlocked: did not return within timeout after proxy error-before-write")
+	}
+}
+
+// TestExecuteTranslatedStreamingRequest_ContextCancellationUnblocks verifies that
+// cancelling the request context unblocks the headersReady wait even when the proxy
+// goroutine stalls indefinitely without writing.
+func TestExecuteTranslatedStreamingRequest_ContextCancellationUnblocks(t *testing.T) {
+	t.Parallel()
+
+	mockLogger := &mockStyledLogger{}
+
+	trans := &mockTranslator{
+		name:                  "stalled-translator",
+		implementsErrorWriter: true,
+		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(statusCode)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+		},
+		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
+			return &translator.TransformedRequest{
+				OpenAIRequest: map[string]interface{}{
+					"model":  "test-model",
+					"stream": true,
+					"messages": []interface{}{
+						map[string]interface{}{"role": "user", "content": "test"},
+					},
+				},
+				ModelName:   "test-model",
+				IsStreaming: true,
+			}, nil
+		},
+	}
+
+	// Proxy that blocks until its context is cancelled without writing anything.
+	proxyService := &mockProxyService{
+		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
+	}
+
+	app := &Application{
+		logger:           mockLogger,
+		proxyService:     proxyService,
+		statsCollector:   &mockStatsCollector{},
+		repository:       &mockEndpointRepository{},
+		inspectorChain:   inspector.NewChain(mockLogger),
+		profileFactory:   &mockProfileFactory{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
+		Config:           &config.Config{},
+	}
+
+	handler := app.translationHandler(trans)
+
+	reqBody := map[string]interface{}{
+		"model":  "test-model",
+		"stream": true,
+		"messages": []interface{}{
+			map[string]interface{}{"role": "user", "content": "Hello"},
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	// Cancel the context after a short delay to simulate client disconnect / server timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "/test", bytes.NewReader(body))
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	rec := httptest.NewRecorder()
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	// Give it a reasonable window beyond the context timeout; if context cancellation
+	// correctly unblocks the select, the handler returns well before this deadline.
+	select {
+	case <-done:
+		// Returned after cancellation — correct behaviour.
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler did not unblock after context cancellation")
+	}
+}
+
+// TestExecuteTranslatedStreamingRequest_SuccessfulFlow verifies that the happy path
+// (proxy writes headers then streams data) still works correctly after the fix.
+func TestExecuteTranslatedStreamingRequest_SuccessfulFlow(t *testing.T) {
+	t.Parallel()
+
+	mockLogger := &mockStyledLogger{}
+
+	trans := &mockTranslator{
+		name:                  "success-translator",
+		implementsErrorWriter: true,
+		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
+			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			w.WriteHeader(statusCode)
+			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+		},
+		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
+			return &translator.TransformedRequest{
+				OpenAIRequest: map[string]interface{}{
+					"model":  "test-model",
+					"stream": true,
+					"messages": []interface{}{
+						map[string]interface{}{"role": "user", "content": "test"},
+					},
+				},
+				ModelName:   "test-model",
+				IsStreaming: true,
+			}, nil
+		},
+		transformStreamingFunc: func(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error {
+			w.Header().Set(constants.HeaderContentType, "text/event-stream")
+			_, err := io.Copy(w, openaiStream)
+			return err
+		},
+	}
+
+	// Proxy that successfully writes a header then streams a single SSE event.
+	proxyService := &mockProxyService{
+		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+			w.Header().Set(constants.HeaderContentType, "text/event-stream")
+			w.Header().Set(constants.HeaderXOllaRequestID, "success-flow-id")
+			w.WriteHeader(http.StatusOK)
+			_, err := w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n"))
+			return err
+		},
+	}
+
+	app := &Application{
+		logger:           mockLogger,
+		proxyService:     proxyService,
+		statsCollector:   &mockStatsCollector{},
+		repository:       &mockEndpointRepository{},
+		inspectorChain:   inspector.NewChain(mockLogger),
+		profileFactory:   &mockProfileFactory{},
+		discoveryService: &mockDiscoveryServiceForTranslation{},
+		Config:           &config.Config{},
+	}
+
+	handler := app.translationHandler(trans)
+
+	reqBody := map[string]interface{}{
+		"model":  "test-model",
+		"stream": true,
+		"messages": []interface{}{
+			map[string]interface{}{"role": "user", "content": "Hello"},
+		},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "/test", bytes.NewReader(body))
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	rec := httptest.NewRecorder()
+	go func() {
+		handler.ServeHTTP(rec, req)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("handler deadlocked on the success path")
+	}
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "text/event-stream", rec.Header().Get(constants.HeaderContentType))
+	assert.Contains(t, rec.Body.String(), "Hello", "SSE payload should be forwarded")
+	assert.NotEmpty(t, rec.Header().Get(constants.HeaderXOllaRequestID),
+		"X-Olla-Request-ID should be copied to the client response")
+}

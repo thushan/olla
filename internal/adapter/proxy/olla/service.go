@@ -150,6 +150,9 @@ func NewService(
 	if configuration.MaxConnsPerHost == 0 {
 		configuration.MaxConnsPerHost = config.OllaDefaultMaxConnsPerHost
 	}
+	if configuration.MaxIdleConnsPerHost == 0 {
+		configuration.MaxIdleConnsPerHost = config.OllaDefaultMaxIdleConnsPerHost
+	}
 	if configuration.IdleConnTimeout == 0 {
 		configuration.IdleConnTimeout = config.OllaDefaultIdleConnTimeout
 	}
@@ -215,7 +218,8 @@ func NewService(
 func createOptimisedTransport(config *Configuration) *http.Transport {
 	return &http.Transport{
 		MaxIdleConns:        config.MaxIdleConns,
-		MaxIdleConnsPerHost: config.MaxConnsPerHost,
+		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
+		MaxConnsPerHost:     config.MaxConnsPerHost,
 		IdleConnTimeout:     config.IdleConnTimeout,
 		TLSHandshakeTimeout: DefaultTLSHandshakeTimeout,
 		DisableCompression:  true,
@@ -693,11 +697,13 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 		newConfig.MaxIdleConns = ollaConfig.MaxIdleConns
 		newConfig.IdleConnTimeout = ollaConfig.IdleConnTimeout
 		newConfig.MaxConnsPerHost = ollaConfig.MaxConnsPerHost
+		newConfig.MaxIdleConnsPerHost = ollaConfig.MaxIdleConnsPerHost
 	} else {
 		// fallback: preserve current Olla-specific settings for non-Olla configs
 		newConfig.MaxIdleConns = s.configuration.MaxIdleConns
 		newConfig.IdleConnTimeout = s.configuration.IdleConnTimeout
 		newConfig.MaxConnsPerHost = s.configuration.MaxConnsPerHost
+		newConfig.MaxIdleConnsPerHost = s.configuration.MaxIdleConnsPerHost
 	}
 
 	// Update configuration atomically

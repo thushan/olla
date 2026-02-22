@@ -61,9 +61,6 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		return fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
 	}
 
-	s.Selector.IncrementConnections(endpoint)
-	defer s.Selector.DecrementConnections(endpoint)
-
 	// Build target URL using common function that respects preserve_path
 	targetURL := common.BuildTargetURL(r, endpoint, s.configuration.GetProxyPrefix())
 	stats.TargetUrl = targetURL.String()

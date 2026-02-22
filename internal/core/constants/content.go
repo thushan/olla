@@ -106,4 +106,5 @@ const (
 	HeaderXOllaRoutingStrategy = "X-Olla-Routing-Strategy"
 	HeaderXOllaRoutingDecision = "X-Olla-Routing-Decision"
 	HeaderXOllaRoutingReason   = "X-Olla-Routing-Reason"
+	HeaderXOllaMode            = "X-Olla-Mode"
 )
