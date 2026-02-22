@@ -52,6 +52,7 @@ Single CLI application and config file is all you need to go Olla!
 - **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover
 - **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
+- **⚡🔄 Anthropic Messages API**: [Passthrough for backends with native support; automatic translation for others](https://thushan.github.io/olla/integrations/api-translation/anthropic/) — use Claude Code and similar tools with any local model
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
@@ -208,7 +209,12 @@ You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/
 
 ### 🤖 **Anthropic Message API / CLI Tools - Claude Code, OpenCode, Crush**
 
-Olla's Anthropic Messages API translation (v0.0.20+) is **enabled by default**, allowing you to use CLI tools like Claude Code with local AI models on your machine via `/olla/anthropic`. Still actively being improved -- please report any issues or feedback.
+Olla's Anthropic Messages API support (v0.0.20+) is **enabled by default**, allowing you to use CLI tools like Claude Code with local AI models on your machine via `/olla/anthropic`. It operates in two modes depending on your backend:
+
+- ⚡ **Passthrough**: requests are forwarded as-is for backends with native Anthropic support (vLLM, llama.cpp, Ollama, LM Studio, Lemonade)
+- 🔄 **Translation**: Anthropic ↔ OpenAI format conversion for backends that don't natively support the Anthropic Messages API
+
+Still actively being improved -- please report any issues or feedback.
 
 We have examples for:
 
