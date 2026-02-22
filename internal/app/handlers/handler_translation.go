@@ -497,6 +497,7 @@ func (a *Application) executeTranslatedStreamingRequest(
 	select {
 	case <-streamRecorder.headersReady:
 	case <-ctx.Done():
+		pipeReader.CloseWithError(ctx.Err()) // unblock any proxy goroutine stuck mid-write to pipeWriter
 		return fmt.Errorf("request cancelled while waiting for backend headers: %w", ctx.Err())
 	}
 
