@@ -106,6 +106,9 @@ func registerServices(manager *services.ServiceManager, cfg *config.Config, logg
 		}
 		if disc, err := registry.GetDiscovery(); err == nil {
 			proxy.SetDiscoveryService(disc)
+			// Wire sticky session purge so dead backends are evicted on health-check failure
+			// rather than waiting for the session TTL to expire.
+			disc.SetPurgeDeadEndpointsFn(proxy.PurgeDeadEndpoints)
 		}
 		if sec, err := registry.GetSecurity(); err == nil {
 			proxy.SetSecurityService(sec)

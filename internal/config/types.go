@@ -59,12 +59,28 @@ type ServerRateLimits struct {
 	TrustProxyHeaders       bool          `yaml:"trust_proxy_headers"`
 }
 
+// StickySessionConfig controls KV-cache affinity routing.
+// When enabled, the balancer wrapper remembers which backend handled a conversation
+// and routes subsequent turns to the same backend, maximising KV-cache reuse.
+type StickySessionConfig struct {
+	// KeySources lists the ordered cascade of strategies used to identify a conversation.
+	// The first match wins: session_header, prefix_hash, auth_header, ip.
+	KeySources     []string `yaml:"key_sources" mapstructure:"key_sources"`
+	MaxSessions    uint64   `yaml:"max_sessions" mapstructure:"max_sessions"`
+	IdleTTLSeconds int      `yaml:"idle_ttl_seconds" mapstructure:"idle_ttl_seconds"`
+	// PrefixHashBytes is how many leading bytes of the messages field to hash.
+	// Larger values increase hash uniqueness at the cost of slightly more CPU per request.
+	PrefixHashBytes int  `yaml:"prefix_hash_bytes" mapstructure:"prefix_hash_bytes"`
+	Enabled         bool `yaml:"enabled" mapstructure:"enabled"`
+}
+
 // ProxyConfig holds proxy-specific configuration
 type ProxyConfig struct {
 	ProfileFilter     *domain.FilterConfig `yaml:"profile_filter,omitempty"`
 	Engine            string               `yaml:"engine"`
 	LoadBalancer      string               `yaml:"load_balancer"`
 	Profile           string               `yaml:"profile"`
+	StickySessions    StickySessionConfig  `yaml:"sticky_sessions" mapstructure:"sticky_sessions"`
 	ConnectionTimeout time.Duration        `yaml:"connection_timeout"`
 	ResponseTimeout   time.Duration        `yaml:"response_timeout"`
 	ReadTimeout       time.Duration        `yaml:"read_timeout"`

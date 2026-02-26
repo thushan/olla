@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
@@ -38,6 +41,13 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, r := a.setupRequestContext(r, pr.stats)
 
 	a.analyzeRequest(ctx, r, pr)
+
+	// Sticky session key must be computed after analyzeRequest so the model
+	// name is available; inject into context before endpoint selection.
+	// The outcome pointer is stored in context; the proxy engine reads it before WriteHeader.
+	if a.Config.Proxy.StickySessions.Enabled {
+		ctx, r, _ = a.injectStickyKey(ctx, r, pr.model)
+	}
 
 	endpoints, err := a.getCompatibleEndpoints(ctx, pr)
 	if err != nil {
@@ -120,6 +130,76 @@ func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *p
 	}
 
 	pr.stats.PathResolutionMs = time.Since(pathResolutionStart).Milliseconds()
+}
+
+// injectStickyKey computes the affinity key for this request and injects it into the context.
+// It reads up to prefix_hash_bytes of the request body (for prefix hashing) then restores the
+// body so downstream handlers see it intact. The StickyOutcome pointer lets the wrapper report
+// its hit/miss/repin decision back to the handler without an extra context lookup.
+func (a *Application) injectStickyKey(ctx context.Context, r *http.Request, modelName string) (context.Context, *http.Request, *balancer.StickyOutcome) {
+	cfg := a.Config.Proxy.StickySessions
+
+	// Read a small prefix of the body for prefix_hash; restore it afterwards.
+	// We cap at cfg.PrefixHashBytes+1 to handle the case where the body is exactly
+	// that length without allocating an oversized buffer.
+	var bodySnap []byte
+	if r.Body != nil && r.ContentLength != 0 {
+		limit := cfg.PrefixHashBytes
+		if limit <= 0 {
+			limit = 512
+		}
+		snap, readErr := io.ReadAll(io.LimitReader(r.Body, int64(limit)+1))
+		if readErr == nil && len(snap) > 0 {
+			bodySnap = snap
+			// Restore body so the proxy engine can still read it.
+			r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(snap), r.Body))
+		}
+	}
+
+	return a.injectStickyKeyWithBody(ctx, r, modelName, bodySnap)
+}
+
+// injectStickyKeyWithBody is the core sticky key injection path when the body has
+// already been buffered by the caller (e.g. the translation handler reads the full
+// body to extract the model name before we reach this point). Passing the bytes in
+// avoids a second read/restore cycle on the same reader.
+func (a *Application) injectStickyKeyWithBody(ctx context.Context, r *http.Request, modelName string, body []byte) (context.Context, *http.Request, *balancer.StickyOutcome) {
+	cfg := a.Config.Proxy.StickySessions
+	stickyKey, stickySource := balancer.ComputeStickyKey(r, modelName, cfg, body)
+
+	outcome := &balancer.StickyOutcome{}
+	ctx = context.WithValue(ctx, constants.ContextStickyKeyKey, stickyKey)
+	ctx = context.WithValue(ctx, constants.ContextStickyKeySourceKey, stickySource)
+	ctx = context.WithValue(ctx, constants.ContextStickyOutcomeKey, outcome)
+	r = r.WithContext(ctx)
+
+	return ctx, r, outcome
+}
+
+// setStickyResponseHeadersFromRequest reads the StickyOutcome from the request context
+// and writes the sticky session headers. Used by sub-handlers that have *http.Request
+// but not the outcome pointer directly. Must be called before w.WriteHeader().
+func (a *Application) setStickyResponseHeadersFromRequest(w http.ResponseWriter, r *http.Request) {
+	outcome, _ := r.Context().Value(constants.ContextStickyOutcomeKey).(*balancer.StickyOutcome)
+	a.setStickyResponseHeaders(w, r, outcome)
+}
+
+// setStickyResponseHeaders writes sticky session outcome headers so clients can observe
+// affinity routing decisions. When the client provided an explicit session ID header,
+// we echo it back so stateless clients can track their own session.
+func (a *Application) setStickyResponseHeaders(w http.ResponseWriter, r *http.Request, outcome *balancer.StickyOutcome) {
+	if outcome == nil {
+		return
+	}
+	w.Header().Set(constants.HeaderXOllaStickySession, outcome.Result)
+	if outcome.Source != "" && outcome.Source != "none" {
+		w.Header().Set(constants.HeaderXOllaStickyKeySource, outcome.Source)
+	}
+	if outcome.Source == "session_header" {
+		if sid := r.Header.Get(constants.HeaderXOllaSessionID); sid != "" {
+			w.Header().Set(constants.HeaderXOllaSessionID, sid)
+		}
+	}
 }
 
 func (a *Application) getCompatibleEndpoints(ctx context.Context, pr *proxyRequest) ([]*domain.Endpoint, error) {

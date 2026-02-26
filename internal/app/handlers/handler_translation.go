@@ -256,6 +256,13 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
+		// Inject sticky session key. bodyBytes is already buffered from the model-name
+		// extraction above, so pass it directly to avoid a second read/restore cycle.
+		// The outcome pointer is stored in context; sub-handlers read it before WriteHeader.
+		if a.Config.Proxy.StickySessions.Enabled {
+			ctx, r, _ = a.injectStickyKeyWithBody(ctx, r, pr.model, bodyBytes)
+		}
+
 		// Get compatible endpoints for this request
 		endpoints, err := a.getCompatibleEndpoints(ctx, pr)
 		if err != nil {
@@ -280,6 +287,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 
 		// Attempt passthrough if the translator and backends support it.
 		// Returns true when passthrough was used and the request is complete.
+		// Sticky headers are written by the proxy engine before WriteHeader in this path.
 		if a.tryPassthrough(ctx, w, r, bodyBytes, endpoints, pr, trans) {
 			return
 		}
@@ -298,6 +306,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			return
 		}
 
+		// Sticky headers are written inside executeTranslationRequest before WriteHeader.
 		a.executeTranslationRequest(ctx, w, r, endpoints, pr, trans, transformedReq)
 		a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
 	}
@@ -329,7 +338,7 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 
 	// handle backend errors
 	if recorder.status >= 400 {
-		return a.handleNonStreamingBackendError(w, recorder, openaiResp, pr, trans)
+		return a.handleNonStreamingBackendError(w, r, recorder, openaiResp, pr, trans)
 	}
 
 	// transform and write successful response
@@ -353,6 +362,7 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 // handleNonStreamingBackendError processes backend errors and writes translated error response
 func (a *Application) handleNonStreamingBackendError(
 	w http.ResponseWriter,
+	r *http.Request,
 	recorder *responseRecorder,
 	openaiResp map[string]interface{},
 	pr *proxyRequest,
@@ -368,6 +378,7 @@ func (a *Application) handleNonStreamingBackendError(
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	a.copyOllaHeaders(recorder, w)
 	a.setModelHeaderIfMissing(w, pr.model)
+	a.setStickyResponseHeadersFromRequest(w, r)
 
 	// Use translator's error formatter if available
 	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
@@ -445,6 +456,8 @@ func (a *Application) writeTranslatedSuccessResponse(
 
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	a.copyOllaHeaders(recorder, w)
+	// Write sticky headers before committing the response.
+	a.setStickyResponseHeadersFromRequest(w, r)
 
 	// Serialize and write response
 	respBody, err := json.Marshal(targetResp)
@@ -503,13 +516,15 @@ func (a *Application) executeTranslatedStreamingRequest(
 
 	// handle backend errors before starting sse stream
 	if streamRecorder.status >= 400 {
-		a.handleStreamingBackendError(w, pipeReader, streamRecorder, proxyErrChan, pr, trans)
+		a.handleStreamingBackendError(w, r, pipeReader, streamRecorder, proxyErrChan, pr, trans)
 		return nil
 	}
 
 	// copy olla headers before stream starts
 	a.copyOllaHeaders(streamRecorder, w)
 	a.setModelHeaderIfMissing(w, pr.model)
+	// Write sticky headers before the first write to w commits the response.
+	a.setStickyResponseHeadersFromRequest(w, r)
 
 	// transform stream (blocks until done) and wait for proxy
 	return a.transformStreamAndWaitForProxy(ctx, pipeReader, w, r, proxyErrChan, trans)
@@ -591,6 +606,7 @@ func (a *Application) handleStreamingPanic(
 // handleStreamingBackendError processes backend errors during streaming
 func (a *Application) handleStreamingBackendError(
 	w http.ResponseWriter,
+	r *http.Request,
 	pipeReader *io.PipeReader,
 	streamRecorder *streamingResponseRecorder,
 	proxyErrChan chan error,
@@ -611,6 +627,7 @@ func (a *Application) handleStreamingBackendError(
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	a.copyOllaHeaders(streamRecorder, w)
 	a.setModelHeaderIfMissing(w, pr.model)
+	a.setStickyResponseHeadersFromRequest(w, r)
 
 	// Use translator's error formatter if available
 	if errorWriter, ok := trans.(translator.ErrorWriter); ok {

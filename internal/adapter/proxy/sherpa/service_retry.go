@@ -112,6 +112,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	rlog.Debug("round-trip success", "status", resp.StatusCode)
 
 	core.SetResponseHeaders(w, stats, endpoint)
+	core.SetStickySessionHeaders(w, r)
 
 	// Copy response headers
 	for key, values := range resp.Header {

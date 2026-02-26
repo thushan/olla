@@ -212,6 +212,20 @@ Always run `make ready` before committing changes.
 - Always run `make ready` before committing
 - Use `make help` to see all available commands
 
+## Dependencies (Endorsed)
+
+```go
+"github.com/docker/go-units"     // Human-readable sizes
+"github.com/json-iterator/go"    // High-performance JSON encoding/decoding
+"github.com/puzpuzpuz/xsync/v4"  // Concurrent maps/counters
+"github.com/tidwall/gjson"       // Fast JSON parsing
+"github.com/jellydator/ttlcache" // Time-to-live cache
+"golang.org/x/sync"              // errgroup
+"golang.org/x/time"              // rate limiting
+```
+
+Do not add additional dependencies unless explicitly asked.
+
 ## SUB-AGENT DELEGATION
 
 CRITICAL: Always delegate tasks to the appropriate subagent. Do NOT perform work directly in the main context.

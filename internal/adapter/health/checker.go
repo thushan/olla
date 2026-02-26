@@ -23,13 +23,14 @@ const (
 )
 
 type HTTPHealthChecker struct {
-	repository       domain.EndpointRepository
-	logger           logger.StyledLogger
-	recoveryCallback RecoveryCallback
-	healthClient     *HealthClient
-	ticker           *time.Ticker
-	stopCh           chan struct{}
-	isRunning        atomic.Bool
+	repository        domain.EndpointRepository
+	logger            logger.StyledLogger
+	recoveryCallback  RecoveryCallback
+	unhealthyCallback UnhealthyCallback
+	healthClient      *HealthClient
+	ticker            *time.Ticker
+	stopCh            chan struct{}
+	isRunning         atomic.Bool
 }
 
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
@@ -49,6 +50,13 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.St
 func (c *HTTPHealthChecker) SetRecoveryCallback(callback RecoveryCallback) {
 	if callback != nil {
 		c.recoveryCallback = callback
+	}
+}
+
+// SetUnhealthyCallback sets the callback to be invoked when an endpoint transitions to an unhealthy state.
+func (c *HTTPHealthChecker) SetUnhealthyCallback(callback UnhealthyCallback) {
+	if callback != nil {
+		c.unhealthyCallback = callback
 	}
 }
 
@@ -269,6 +277,18 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 					c.logger.Debug("Recovery callback completed successfully",
 						"endpoint", ep.Name)
 				}
+			}(endpointCopy)
+		}
+	}
+
+	// Trigger unhealthy callback when an endpoint goes offline so callers can
+	// proactively clean up state tied to the dead backend (e.g. sticky sessions).
+	if statusChanged && newStatus != domain.StatusHealthy && oldStatus != domain.StatusUnknown {
+		if c.unhealthyCallback != nil {
+			go func(ep domain.Endpoint) {
+				callbackCtx, cancel := context.WithTimeout(context.Background(), DefaultRecoveryCallbackTimeout)
+				defer cancel()
+				c.unhealthyCallback.OnEndpointUnhealthy(callbackCtx, &ep)
 			}(endpointCopy)
 		}
 	}

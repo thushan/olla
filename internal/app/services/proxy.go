@@ -19,9 +19,12 @@ import (
 // model. It manages the creation of load balancers and proxy engines, ensuring they
 // receive validated endpoints from the discovery service.
 type ProxyServiceWrapper struct {
-	config           *config.ProxyConfig
-	proxyService     ports.ProxyService
-	loadBalancer     domain.EndpointSelector
+	config       *config.ProxyConfig
+	proxyService ports.ProxyService
+	loadBalancer domain.EndpointSelector
+	// stickyWrapper is non-nil when sticky sessions are enabled; held separately
+	// so Stop() can shut down its background goroutine.
+	stickyWrapper    *balancer.StickySessionWrapper
 	endpointRepo     domain.EndpointRepository
 	discoveryService ports.DiscoveryService
 	statsCollector   ports.StatsCollector
@@ -82,6 +85,8 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to create load balancer: %w", err)
 	}
 	s.logger.Info("Load balancer created", "type", s.config.LoadBalancer)
+
+	s.applyStickySessions()
 
 	// Create proxy configuration
 	proxyConfig := s.createProxyConfiguration()
@@ -144,8 +149,9 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 func (s *ProxyServiceWrapper) Stop(ctx context.Context) error {
 	s.logger.Info(" Stopping proxy service")
 
-	// Most proxy implementations don't need explicit cleanup
-	// but we provide the hook for future extensions
+	if s.stickyWrapper != nil {
+		s.stickyWrapper.Stop()
+	}
 
 	defer func() {
 		s.logger.ResetLine()
@@ -189,6 +195,24 @@ func (s *ProxyServiceWrapper) GetLoadBalancer() (domain.EndpointSelector, error)
 	return s.loadBalancer, nil
 }
 
+// StickyStats returns a point-in-time snapshot of sticky session metrics,
+// or nil when sticky sessions are disabled or not yet initialised.
+func (s *ProxyServiceWrapper) StickyStats() *balancer.StickyStats {
+	if s.stickyWrapper == nil {
+		return nil
+	}
+	stats := s.stickyWrapper.Stats()
+	return &stats
+}
+
+// PurgeDeadEndpoints removes sticky session entries that point to backends absent
+// from the routable set. It is a no-op when sticky sessions are disabled.
+func (s *ProxyServiceWrapper) PurgeDeadEndpoints(routable []*domain.Endpoint) {
+	if s.stickyWrapper != nil {
+		s.stickyWrapper.PurgeDeadEndpoints(routable)
+	}
+}
+
 // endpointRepositoryAdapter provides interface adaptation between the domain repository
 // and the discovery service interface expected by the proxy layer.
 type endpointRepositoryAdapter struct {
@@ -226,4 +250,20 @@ func (s *ProxyServiceWrapper) SetDiscoveryService(discoveryService *DiscoverySer
 // SetSecurityService sets the security service dependency
 func (s *ProxyServiceWrapper) SetSecurityService(securityService *SecurityService) {
 	s.securityService = securityService
+}
+
+// applyStickySessions wraps the current load balancer with KV-cache affinity routing
+// when sticky sessions are enabled.
+func (s *ProxyServiceWrapper) applyStickySessions() {
+	if !s.config.StickySessions.Enabled {
+		return
+	}
+	sw := balancer.NewStickySessionWrapper(s.loadBalancer, s.config.StickySessions)
+	sw.Start()
+	s.stickyWrapper = sw
+	s.loadBalancer = sw
+	s.logger.Info("Sticky session affinity enabled",
+		"idle_ttl_seconds", s.config.StickySessions.IdleTTLSeconds,
+		"max_sessions", s.config.StickySessions.MaxSessions,
+		"key_sources", s.config.StickySessions.KeySources)
 }
