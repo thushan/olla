@@ -237,7 +237,10 @@ func TestStickySessionWrapper_KeySources_SessionHeader(t *testing.T) {
 	req.Header.Set(constants.HeaderXOllaSessionID, "my-session-id")
 
 	key, source := ComputeStickyKey(req, "llama3", defaultStickyConfig(), nil)
-	assert.Equal(t, "my-session-id:llama3", key)
+	// Fix 1: session_header now hashes the raw value with FNV-64a, producing a
+	// 16-hex-char prefix. The raw string "my-session-id" must not appear in the key.
+	assert.Equal(t, "bd95cc3ab55faccc:llama3", key)
+	assert.NotContains(t, key, "my-session-id")
 	assert.Equal(t, "session_header", source)
 
 	// Verify it routes
@@ -396,4 +399,165 @@ func TestStickySessionWrapper_PurgeDeadEndpoints(t *testing.T) {
 	_, err = w.Select(ctx4, []*domain.Endpoint{ep1, ep2})
 	require.NoError(t, err)
 	assert.Equal(t, "hit", out4.Result, "session pinned to surviving backend should still hit")
+}
+
+// --- Fix 1: session_header hashing ---
+
+// TestComputeStickyKey_SessionHeader_IsHashed verifies that the raw session ID
+// value never appears in the computed key — only its FNV-64a hex digest does.
+func TestComputeStickyKey_SessionHeader_IsHashed(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "llama3"
+	req, _ := http.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set(constants.HeaderXOllaSessionID, "my-session-id")
+
+	cfg := config.StickySessionConfig{
+		KeySources:      []string{"session_header"},
+		PrefixHashBytes: 512,
+	}
+
+	key, source := ComputeStickyKey(req, modelName, cfg, nil)
+
+	assert.Equal(t, "session_header", source)
+	assert.NotContains(t, key, "my-session-id", "raw session ID must not appear in the key")
+	// 16 hex chars + ":" + modelName
+	assert.Equal(t, 16+1+len(modelName), len(key), "key must be exactly 16 hex chars + colon + model name")
+}
+
+// TestComputeStickyKey_SessionHeader_LargeValue_IsHashed confirms that arbitrarily
+// long session IDs are bounded to a fixed-length key after hashing.
+func TestComputeStickyKey_SessionHeader_LargeValue_IsHashed(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "llama3"
+	largeValue := string(make([]byte, 10000)) // 10 000 zero bytes → valid UTF-8
+	req, _ := http.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set(constants.HeaderXOllaSessionID, largeValue)
+
+	cfg := config.StickySessionConfig{
+		KeySources:      []string{"session_header"},
+		PrefixHashBytes: 512,
+	}
+
+	key, source := ComputeStickyKey(req, modelName, cfg, nil)
+
+	assert.Equal(t, "session_header", source)
+	// Regardless of input length, output is always 16 hex + ":" + model.
+	assert.Equal(t, 16+1+len(modelName), len(key), "unbounded input must produce a bounded key")
+}
+
+// TestComputeStickyKey_SessionHeader_SameValueSameKey verifies that hashing is
+// deterministic — two requests with identical session IDs produce identical keys.
+func TestComputeStickyKey_SessionHeader_SameValueSameKey(t *testing.T) {
+	t.Parallel()
+
+	const modelName = "llama3"
+	cfg := config.StickySessionConfig{
+		KeySources:      []string{"session_header"},
+		PrefixHashBytes: 512,
+	}
+
+	req1, _ := http.NewRequest(http.MethodPost, "/", nil)
+	req1.Header.Set(constants.HeaderXOllaSessionID, "deterministic-session")
+
+	req2, _ := http.NewRequest(http.MethodPost, "/", nil)
+	req2.Header.Set(constants.HeaderXOllaSessionID, "deterministic-session")
+
+	key1, _ := ComputeStickyKey(req1, modelName, cfg, nil)
+	key2, _ := ComputeStickyKey(req2, modelName, cfg, nil)
+
+	assert.Equal(t, key1, key2, "same session ID must always produce the same key")
+}
+
+// --- Fix 3: ip key source uses net.SplitHostPort ---
+
+// TestComputeStickyKey_IP_IPv6Loopback verifies that IPv6 addresses are handled
+// correctly — brackets and port are stripped, leaving only the clean host.
+func TestComputeStickyKey_IP_IPv6Loopback(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.StickySessionConfig{
+		KeySources:      []string{"ip"},
+		PrefixHashBytes: 512,
+	}
+	req, _ := http.NewRequest(http.MethodPost, "/", nil)
+	req.RemoteAddr = "[::1]:54321"
+
+	key, source := ComputeStickyKey(req, "llama3", cfg, nil)
+
+	assert.Equal(t, "ip", source)
+	assert.Contains(t, key, "::1", "clean IPv6 host must appear in key")
+	assert.NotContains(t, key, "54321", "port must be stripped from key")
+	assert.NotContains(t, key, "[", "opening bracket must be stripped by net.SplitHostPort")
+	assert.NotContains(t, key, "]", "closing bracket must be stripped by net.SplitHostPort")
+}
+
+// TestComputeStickyKey_IP_IPv4 verifies that IPv4 address:port is correctly split
+// and only the host is included in the key.
+func TestComputeStickyKey_IP_IPv4(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.StickySessionConfig{
+		KeySources:      []string{"ip"},
+		PrefixHashBytes: 512,
+	}
+	req, _ := http.NewRequest(http.MethodPost, "/", nil)
+	req.RemoteAddr = "192.168.1.42:12345"
+
+	key, source := ComputeStickyKey(req, "llama3", cfg, nil)
+
+	assert.Equal(t, "ip", source)
+	assert.Contains(t, key, "192.168.1.42", "IPv4 host must appear in key")
+	assert.NotContains(t, key, "12345", "port must be stripped from key")
+}
+
+// TestComputeStickyKey_IP_BareAddress verifies the fallback path where RemoteAddr
+// has no port (e.g. a custom listener that omits the port). The address must still
+// be usable as a key rather than being discarded.
+func TestComputeStickyKey_IP_BareAddress(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.StickySessionConfig{
+		KeySources:      []string{"ip"},
+		PrefixHashBytes: 512,
+	}
+	req, _ := http.NewRequest(http.MethodPost, "/", nil)
+	req.RemoteAddr = "10.0.0.1" // no port
+
+	key, source := ComputeStickyKey(req, "llama3", cfg, nil)
+
+	assert.Equal(t, "ip", source)
+	assert.NotEmpty(t, key, "bare address without port must still produce a key")
+	assert.Contains(t, key, "10.0.0.1", "bare host must appear in key")
+}
+
+// --- Fix 2: zero TTL warning ---
+
+// TestNewStickySessionWrapper_ZeroTTL_NoPanic verifies that constructing a wrapper
+// with IdleTTLSeconds == 0 does not panic. The warning is emitted to slog but
+// capturing structured log output in tests requires non-trivial plumbing; this
+// test focuses on the observable guarantee (no panic, wrapper is usable).
+func TestNewStickySessionWrapper_ZeroTTL_NoPanic(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.StickySessionConfig{
+		Enabled:         true,
+		IdleTTLSeconds:  0, // triggers the warning branch
+		MaxSessions:     10,
+		KeySources:      []string{"session_header"},
+		PrefixHashBytes: 512,
+	}
+
+	// Must not panic.
+	inner := NewRoundRobinSelector(nil)
+	w := NewStickySessionWrapper(inner, cfg)
+	w.Start()
+	t.Cleanup(w.Stop)
+
+	ep := makeEndpoint("ep1", "http://backend1:8080")
+	ctx, out := injectKey(context.Background(), "zero-ttl-key:llama3", "session_header")
+	_, err := w.Select(ctx, []*domain.Endpoint{ep})
+	require.NoError(t, err)
+	assert.Equal(t, "miss", out.Result, "wrapper with zero TTL must still route requests")
 }

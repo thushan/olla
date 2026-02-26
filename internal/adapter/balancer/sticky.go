@@ -3,6 +3,8 @@ package balancer
 import (
 	"context"
 	"hash/fnv"
+	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -37,6 +39,12 @@ type StickySessionWrapper struct {
 // Call Start() after construction and Stop() on shutdown.
 func NewStickySessionWrapper(inner domain.EndpointSelector, cfg config.StickySessionConfig) *StickySessionWrapper {
 	idleTTL := time.Duration(cfg.IdleTTLSeconds) * time.Second
+
+	if cfg.IdleTTLSeconds <= 0 {
+		// ttlcache treats a zero TTL as no expiration — sessions accumulate until
+		// capacity pressure forces eviction. Warn so operators notice the config.
+		slog.Warn("sticky sessions TTL is zero — sessions will never expire by TTL")
+	}
 
 	store := ttlcache.New[string, string](
 		ttlcache.WithTTL[string, string](idleTTL),
@@ -158,45 +166,84 @@ func (s *StickySessionWrapper) PurgeDeadEndpoints(routable []*domain.Endpoint) {
 // Exported so handlers can compute the key before invoking the balancer.
 func ComputeStickyKey(r *http.Request, modelName string, cfg config.StickySessionConfig, body []byte) (key, source string) {
 	for _, src := range cfg.KeySources {
+		var k, s string
 		switch src {
 		case "session_header":
-			if v := r.Header.Get(constants.HeaderXOllaSessionID); v != "" {
-				return v + ":" + modelName, "session_header"
-			}
-
+			k, s = stickyKeyFromSessionHeader(r, modelName)
 		case "prefix_hash":
-			if len(body) > 0 {
-				raw := gjson.GetBytes(body, "messages").Raw
-				if raw != "" {
-					limit := cfg.PrefixHashBytes
-					if limit <= 0 || limit > len(raw) {
-						limit = len(raw)
-					}
-					h := fnv.New64a()
-					h.Write([]byte(raw[:limit]))
-					return strings.ReplaceAll(modelName, ":", "_") + ":" + uint64ToHex(h.Sum64()), "prefix_hash"
-				}
-			}
-
+			k, s = stickyKeyFromPrefixHash(body, modelName, cfg.PrefixHashBytes)
 		case "auth_header":
-			if v := r.Header.Get("Authorization"); v != "" {
-				h := fnv.New64a()
-				h.Write([]byte(v))
-				return "auth:" + uint64ToHex(h.Sum64()) + ":" + modelName, "auth_header"
-			}
-
+			k, s = stickyKeyFromAuthHeader(r, modelName)
 		case "ip":
-			if ip := r.RemoteAddr; ip != "" {
-				// Strip port — RemoteAddr is host:port.
-				if idx := strings.LastIndex(ip, ":"); idx != -1 {
-					ip = ip[:idx]
-				}
-				return "ip:" + ip + ":" + modelName, "ip"
-			}
+			k, s = stickyKeyFromIP(r, modelName)
+		}
+		if k != "" {
+			return k, s
 		}
 	}
 
 	return "", ""
+}
+
+// stickyKeyFromSessionHeader hashes the session ID header with FNV-64a so that
+// unbounded client-supplied strings do not inflate cache key memory.
+func stickyKeyFromSessionHeader(r *http.Request, modelName string) (string, string) {
+	v := r.Header.Get(constants.HeaderXOllaSessionID)
+	if v == "" {
+		return "", ""
+	}
+	h := fnv.New64a()
+	h.Write([]byte(v))
+	return uint64ToHex(h.Sum64()) + ":" + modelName, "session_header"
+}
+
+// stickyKeyFromPrefixHash hashes the first prefixBytes bytes of the messages
+// JSON array so requests with identical conversation prefixes are routed together.
+func stickyKeyFromPrefixHash(body []byte, modelName string, prefixBytes int) (string, string) {
+	if len(body) == 0 {
+		return "", ""
+	}
+	raw := gjson.GetBytes(body, "messages").Raw
+	if raw == "" {
+		return "", ""
+	}
+	limit := prefixBytes
+	if limit <= 0 || limit > len(raw) {
+		limit = len(raw)
+	}
+	h := fnv.New64a()
+	h.Write([]byte(raw[:limit]))
+	return strings.ReplaceAll(modelName, ":", "_") + ":" + uint64ToHex(h.Sum64()), "prefix_hash"
+}
+
+// stickyKeyFromAuthHeader hashes the Authorization header value so that tokens
+// are never stored in plaintext inside the session store.
+func stickyKeyFromAuthHeader(r *http.Request, modelName string) (string, string) {
+	v := r.Header.Get("Authorization")
+	if v == "" {
+		return "", ""
+	}
+	h := fnv.New64a()
+	h.Write([]byte(v))
+	return "auth:" + uint64ToHex(h.Sum64()) + ":" + modelName, "auth_header"
+}
+
+// stickyKeyFromIP extracts the remote host using net.SplitHostPort, which
+// handles bracketed IPv6 addresses correctly (strings.LastIndex cannot).
+func stickyKeyFromIP(r *http.Request, modelName string) (string, string) {
+	addr := r.RemoteAddr
+	if addr == "" {
+		return "", ""
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		// Bare address with no port — use as-is.
+		host = addr
+	}
+	if host == "" {
+		return "", ""
+	}
+	return "ip:" + host + ":" + modelName, "ip"
 }
 
 // StickyStats holds a point-in-time snapshot of sticky session activity.
