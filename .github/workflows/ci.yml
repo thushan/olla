@@ -113,7 +113,7 @@ jobs:
 
       - name: Set up QEMU for ARM64 emulation (Linux only)
         if: runner.os == 'Linux'
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: linux/arm64
 
