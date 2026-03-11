@@ -125,6 +125,17 @@ func (s *HTTPService) Start(ctx context.Context) error {
 	}
 	s.application = app
 
+	// Wire per-request LLM metrics from proxy service to Application's collector
+	if mc := app.GetMetricsCollector(); mc != nil {
+		type metricsAware interface {
+			SetRequestMetricsRecorder(ports.RequestMetricsRecorder)
+		}
+		if ma, ok := s.proxyService.(metricsAware); ok {
+			ma.SetRequestMetricsRecorder(mc)
+			s.logger.Info("Per-request LLM metrics collector wired to proxy service")
+		}
+	}
+
 	s.application.RegisterRoutes()
 
 	// Wire routes with security middleware
