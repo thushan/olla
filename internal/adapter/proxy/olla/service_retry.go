@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/metrics"
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
@@ -133,6 +135,14 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	streamStart := time.Now()
 	stats.FirstDataMs = time.Since(stats.StartTime).Milliseconds()
 
+	// Inject StreamTap via TeeReader for passive TTFT measurement
+	// The tap observes bytes flowing through without blocking or copying
+	var streamTap *metrics.StreamTap
+	if s.RequestMetricsRecorder != nil {
+		streamTap = metrics.NewStreamTap(stats.StartTime)
+		resp.Body = io.NopCloser(io.TeeReader(resp.Body, streamTap))
+	}
+
 	buffer := s.bufferPool.Get()
 	defer s.bufferPool.Put(buffer)
 
@@ -177,6 +187,38 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	// Extract metrics from response if available
 	core.ExtractProviderMetrics(ctx, s.MetricsExtractor, lastChunk, endpoint, stats, rlog, "Olla")
+
+	// Record per-request LLM metrics (tokens, TTFT, throughput)
+	if s.RequestMetricsRecorder != nil {
+		event := ports.RequestMetricsEvent{
+			StartTime:        stats.StartTime,
+			EndTime:          stats.EndTime,
+			RequestID:        stats.RequestID,
+			Model:            stats.Model,
+			EndpointName:     endpoint.Name,
+			EndpointURL:      endpoint.URLString,
+			TotalDurationMs:  stats.Latency,
+			BackendLatencyMs: stats.BackendResponseMs,
+			StreamingMs:      stats.StreamingMs,
+			TotalBytes:       int64(stats.TotalBytes),
+			Success:          true,
+			IsStreaming:       true,
+		}
+		// Use real TTFT from StreamTap if available
+		if streamTap != nil && streamTap.HasReceivedData() {
+			event.FirstTokenAt = streamTap.FirstTokenTime()
+			event.TTFTMs = streamTap.TTFT()
+		}
+		// Merge provider metrics (tokens, throughput) if extracted
+		if stats.ProviderMetrics != nil {
+			pm := stats.ProviderMetrics
+			event.InputTokens = pm.InputTokens
+			event.OutputTokens = pm.OutputTokens
+			event.TotalTokens = pm.TotalTokens
+			event.TokensPerSecond = pm.TokensPerSecond
+		}
+		s.RequestMetricsRecorder.RecordRequestMetrics(event)
+	}
 
 	// Log detailed completion metrics at Debug level
 	logFields := []interface{}{

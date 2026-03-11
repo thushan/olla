@@ -8,6 +8,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/inspector"
+	"github.com/thushan/olla/internal/adapter/metrics"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/adapter/translator/anthropic"
@@ -73,6 +74,7 @@ type Application struct {
 	logger             logger.StyledLogger
 	proxyService       ports.ProxyService
 	statsCollector     ports.StatsCollector
+	metricsCollector   *metrics.RequestCollector // Per-request LLM metrics (tokens, TTFT)
 	modelRegistry      domain.ModelRegistry
 	discoveryService   ports.DiscoveryService
 	repository         domain.EndpointRepository
@@ -164,11 +166,15 @@ func NewApplication(
 	// The Factory.GetAnthropicSupport method provides the required functionality
 	profileLookup := profileFactory
 
+	// Create per-request LLM metrics collector (tokens, TTFT, throughput)
+	metricsCollector := metrics.NewRequestCollector()
+
 	return &Application{
 		Config:             cfg,
 		logger:             logger,
 		proxyService:       proxyService,
 		statsCollector:     statsCollector,
+		metricsCollector:   metricsCollector,
 		modelRegistry:      modelRegistry,
 		discoveryService:   discoveryService,
 		repository:         repository,
@@ -208,6 +214,11 @@ func (a *Application) GetTranslatorRegistry() *translator.Registry {
 // GetProfileLookup returns the profile lookup adapter for accessing backend profiles
 func (a *Application) GetProfileLookup() translator.ProfileLookup {
 	return a.profileLookup
+}
+
+// GetMetricsCollector returns the per-request LLM metrics collector
+func (a *Application) GetMetricsCollector() *metrics.RequestCollector {
+	return a.metricsCollector
 }
 
 func (a *Application) RegisterRoutes() {

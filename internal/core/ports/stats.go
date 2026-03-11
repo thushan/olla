@@ -81,6 +81,43 @@ type EndpointModelStats struct {
 	ConsecutiveErrors int       `json:"consecutive_errors"`
 }
 
+// RequestMetricsRecorder allows recording per-request LLM metrics (tokens, TTFT, etc.)
+// Optional — components should check for nil before calling.
+type RequestMetricsRecorder interface {
+	RecordRequestMetrics(event RequestMetricsEvent)
+}
+
+// RequestMetricsEvent captures per-request LLM observability data.
+// Sent asynchronously to avoid impacting the proxy hot path.
+type RequestMetricsEvent struct {
+	StartTime    time.Time
+	EndTime      time.Time
+	FirstTokenAt time.Time // Real TTFT measured from SSE stream
+
+	RequestID    string
+	Model        string
+	EndpointName string
+	EndpointURL  string
+
+	// Token counts (from provider response metadata)
+	InputTokens  int32
+	OutputTokens int32
+	TotalTokens  int32
+
+	// Timing in milliseconds
+	TTFTMs           int64 // Time to first token (measured)
+	TotalDurationMs  int64
+	BackendLatencyMs int64
+	StreamingMs      int64
+
+	// Throughput
+	TokensPerSecond float32
+	TotalBytes      int64
+
+	Success    bool
+	IsStreaming bool
+}
+
 // TranslatorRequestEvent captures metrics for a single translator request
 type TranslatorRequestEvent struct {
 	TranslatorName string                             // e.g. "anthropic"

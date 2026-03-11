@@ -35,6 +35,8 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterWithMethod("/internal/status/models", a.modelsStatusHandler, "Models status", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/stats/models", a.modelStatsHandler, "Model statistics", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/stats/translators", a.translatorStatsHandler, "Translator statistics", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/stats/requests", a.recentRequestsHandler, "Recent request metrics", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/stats/summary", a.requestSummaryHandler, "Aggregated request summary", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
 	a.routeRegistry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
 

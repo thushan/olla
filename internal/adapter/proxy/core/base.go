@@ -46,12 +46,13 @@ type ProxyEvent struct {
 
 // BaseProxyComponents contains shared components for proxy implementations
 type BaseProxyComponents struct {
-	DiscoveryService ports.DiscoveryService
-	Selector         domain.EndpointSelector
-	StatsCollector   ports.StatsCollector
-	MetricsExtractor ports.MetricsExtractor
-	Logger           logger.StyledLogger
-	EventBus         *eventbus.EventBus[ProxyEvent]
+	DiscoveryService       ports.DiscoveryService
+	Selector               domain.EndpointSelector
+	StatsCollector         ports.StatsCollector
+	MetricsExtractor       ports.MetricsExtractor
+	RequestMetricsRecorder ports.RequestMetricsRecorder // Optional per-request LLM metrics
+	Logger                 logger.StyledLogger
+	EventBus               *eventbus.EventBus[ProxyEvent]
 
 	Stats ProxyStats
 
@@ -133,6 +134,11 @@ func (b *BaseProxyComponents) PublishEvent(event ProxyEvent) {
 // GetProxyStats returns current proxy statistics
 func (b *BaseProxyComponents) GetProxyStats() ports.ProxyStats {
 	return b.Stats.GetStats()
+}
+
+// SetRequestMetricsRecorder sets an optional recorder for per-request LLM metrics
+func (b *BaseProxyComponents) SetRequestMetricsRecorder(recorder ports.RequestMetricsRecorder) {
+	b.RequestMetricsRecorder = recorder
 }
 
 // Shutdown gracefully shuts down the base components
