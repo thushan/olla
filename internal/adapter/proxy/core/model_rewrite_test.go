@@ -247,6 +247,83 @@ func TestRewriteModelField_PreservesExactBytes(t *testing.T) {
 	}
 }
 
+func TestRewriteModelField_ModelInNestedContent(t *testing.T) {
+	// The word "model" appears inside a message string — the rewriter must only
+	// touch the top-level "model" key, not text buried in nested values.
+	body := `{"messages": [{"role": "system", "content": "Use model: \"gpt-4\""}], "model": "alias-name"}`
+	expected := `{"messages": [{"role": "system", "content": "Use model: \"gpt-4\""}], "model": "actual-model"}`
+
+	result := rewriteModelField([]byte(body), "actual-model")
+
+	if string(result) != expected {
+		t.Errorf("nested model reference should not be touched:\n  got:  %s\n  want: %s", string(result), expected)
+	}
+}
+
+func TestRewriteModelField_ModelKeyInNestedObject(t *testing.T) {
+	// A nested object also has a "model" key — only the top-level one should change.
+	body := `{"config": {"model": "inner-model"}, "model": "alias-name"}`
+	result := rewriteModelField([]byte(body), "new-top-model")
+
+	var parsed map[string]json.RawMessage
+	if err := json.Unmarshal(result, &parsed); err != nil {
+		t.Fatalf("failed to parse result: %v", err)
+	}
+
+	var topModel string
+	if err := json.Unmarshal(parsed["model"], &topModel); err != nil {
+		t.Fatalf("failed to parse top-level model: %v", err)
+	}
+	if topModel != "new-top-model" {
+		t.Errorf("top-level model should be rewritten, got %q", topModel)
+	}
+
+	// The nested model must be untouched.
+	var cfg map[string]json.RawMessage
+	if err := json.Unmarshal(parsed["config"], &cfg); err != nil {
+		t.Fatalf("failed to parse config: %v", err)
+	}
+	var innerModel string
+	if err := json.Unmarshal(cfg["model"], &innerModel); err != nil {
+		t.Fatalf("failed to parse inner model: %v", err)
+	}
+	if innerModel != "inner-model" {
+		t.Errorf("nested model should be unchanged, got %q", innerModel)
+	}
+}
+
+func TestRewriteModelField_SpecialCharacters(t *testing.T) {
+	// Model names with characters that require JSON escaping must round-trip correctly.
+	tests := []struct {
+		name     string
+		newModel string
+	}{
+		{"backslash", `path\to\model`},
+		{"double-quote", `model"v2`},
+		{"unicode", "模型/llama3"},
+		{"tab and newline", "model\twith\nnewlines"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := `{"model": "original"}`
+			result := rewriteModelField([]byte(body), tt.newModel)
+
+			var parsed map[string]json.RawMessage
+			if err := json.Unmarshal(result, &parsed); err != nil {
+				t.Fatalf("result is not valid JSON: %v — body: %s", err, result)
+			}
+			var got string
+			if err := json.Unmarshal(parsed["model"], &got); err != nil {
+				t.Fatalf("failed to decode model field: %v", err)
+			}
+			if got != tt.newModel {
+				t.Errorf("want %q, got %q", tt.newModel, got)
+			}
+		})
+	}
+}
+
 func TestRewriteModelField_InvalidJSON(t *testing.T) {
 	body := []byte("not json")
 	result := rewriteModelField(body, "new-model")
