@@ -8,6 +8,281 @@ import (
 	"github.com/thushan/olla/internal/config"
 )
 
+// ptrInt is a test helper to construct *int literals inline.
+func ptrInt(v int) *int { return &v }
+
+// TestApplyEndpointDefaults_SetsZeroValues verifies that zero-value timing and priority
+// fields are filled with the package defaults, ensuring a minimal YAML config can
+// pass validation without requiring explicit timing fields.
+func TestApplyEndpointDefaults_SetsZeroValues(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.EndpointConfig{
+		Name: "test",
+		URL:  "http://localhost:11434",
+		// CheckInterval, CheckTimeout and Priority are intentionally omitted (nil/zero)
+	}
+
+	applyEndpointDefaults(cfg)
+
+	if cfg.CheckInterval != DefaultCheckInterval {
+		t.Errorf("CheckInterval = %v, want %v", cfg.CheckInterval, DefaultCheckInterval)
+	}
+	if cfg.CheckTimeout != DefaultCheckTimeout {
+		t.Errorf("CheckTimeout = %v, want %v", cfg.CheckTimeout, DefaultCheckTimeout)
+	}
+	if cfg.Priority == nil || *cfg.Priority != DefaultPriority {
+		t.Errorf("Priority = %v, want %d", cfg.Priority, DefaultPriority)
+	}
+}
+
+// TestApplyEndpointDefaults_PreservesExplicitValues confirms that explicitly configured
+// values are never overwritten by the defaults — the function must only fill gaps.
+func TestApplyEndpointDefaults_PreservesExplicitValues(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.EndpointConfig{
+		Name:          "test",
+		URL:           "http://localhost:11434",
+		CheckInterval: 10 * time.Second,
+		CheckTimeout:  3 * time.Second,
+		Priority:      ptrInt(50),
+	}
+
+	applyEndpointDefaults(cfg)
+
+	if cfg.CheckInterval != 10*time.Second {
+		t.Errorf("CheckInterval = %v, want %v (should not be overwritten)", cfg.CheckInterval, 10*time.Second)
+	}
+	if cfg.CheckTimeout != 3*time.Second {
+		t.Errorf("CheckTimeout = %v, want %v (should not be overwritten)", cfg.CheckTimeout, 3*time.Second)
+	}
+	if cfg.Priority == nil || *cfg.Priority != 50 {
+		t.Errorf("Priority = %v, want 50 (should not be overwritten)", cfg.Priority)
+	}
+}
+
+// TestApplyEndpointDefaults_PreservesExplicitZeroPriority is a regression test for the
+// silent override bug: priority: 0 in YAML was indistinguishable from "omitted" when the
+// field was a plain int, causing the default (100) to silently replace a user-set 0.
+// With Priority as *int, nil means "omitted" and a pointer-to-zero means "explicitly 0".
+func TestApplyEndpointDefaults_PreservesExplicitZeroPriority(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.EndpointConfig{
+		Name:          "lowest-priority",
+		URL:           "http://localhost:11434",
+		CheckInterval: 5 * time.Second,
+		CheckTimeout:  2 * time.Second,
+		Priority:      ptrInt(0),
+	}
+
+	applyEndpointDefaults(cfg)
+
+	if cfg.Priority == nil || *cfg.Priority != 0 {
+		t.Errorf("Priority = %v, want 0 — explicit zero must not be replaced with the default", cfg.Priority)
+	}
+}
+
+// TestApplyEndpointDefaults_PartialDefaults verifies that only the zero-value fields
+// receive defaults when the config is partially specified.
+func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		cfg          config.EndpointConfig
+		wantInterval time.Duration
+		wantTimeout  time.Duration
+		wantPriority int
+	}{
+		{
+			name: "only CheckInterval set",
+			cfg: config.EndpointConfig{
+				CheckInterval: 15 * time.Second,
+				// CheckTimeout and Priority are zero
+			},
+			wantInterval: 15 * time.Second,
+			wantTimeout:  DefaultCheckTimeout,
+			wantPriority: DefaultPriority,
+		},
+		{
+			name: "only CheckTimeout set",
+			cfg: config.EndpointConfig{
+				CheckTimeout: 1 * time.Second,
+				// CheckInterval and Priority are zero
+			},
+			wantInterval: DefaultCheckInterval,
+			wantTimeout:  1 * time.Second,
+			wantPriority: DefaultPriority,
+		},
+		{
+			name: "only Priority set",
+			cfg: config.EndpointConfig{
+				Priority: ptrInt(200),
+				// CheckInterval and CheckTimeout are zero
+			},
+			wantInterval: DefaultCheckInterval,
+			wantTimeout:  DefaultCheckTimeout,
+			wantPriority: 200,
+		},
+		{
+			name: "CheckInterval and Priority set, CheckTimeout zero",
+			cfg: config.EndpointConfig{
+				CheckInterval: 20 * time.Second,
+				Priority:      ptrInt(75),
+			},
+			wantInterval: 20 * time.Second,
+			wantTimeout:  DefaultCheckTimeout,
+			wantPriority: 75,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := tc.cfg // copy to avoid mutation across subtests
+			applyEndpointDefaults(&cfg)
+
+			if cfg.CheckInterval != tc.wantInterval {
+				t.Errorf("CheckInterval = %v, want %v", cfg.CheckInterval, tc.wantInterval)
+			}
+			if cfg.CheckTimeout != tc.wantTimeout {
+				t.Errorf("CheckTimeout = %v, want %v", cfg.CheckTimeout, tc.wantTimeout)
+			}
+			if cfg.Priority == nil || *cfg.Priority != tc.wantPriority {
+				t.Errorf("Priority = %v, want %d", cfg.Priority, tc.wantPriority)
+			}
+		})
+	}
+}
+
+// TestLoadFromConfig_WithMinimalEndpoints verifies that endpoints omitting timing fields
+// in YAML (which arrive as zero values) successfully load and pass validation.
+// This exercises the applyEndpointDefaults → validateEndpointConfig path end-to-end.
+func TestLoadFromConfig_WithMinimalEndpoints(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		cfg       config.EndpointConfig
+		expectErr bool
+	}{
+		{
+			name: "omitted check_interval and check_timeout receive defaults",
+			cfg: config.EndpointConfig{
+				Name: "minimal-ollama",
+				URL:  "http://localhost:11434",
+				Type: "ollama",
+				// CheckInterval and CheckTimeout left at zero — applyEndpointDefaults must fill them
+			},
+			expectErr: false,
+		},
+		{
+			name: "omitted priority receives default",
+			cfg: config.EndpointConfig{
+				Name:          "no-priority",
+				URL:           "http://localhost:11434",
+				Type:          "ollama",
+				CheckInterval: 5 * time.Second,
+				CheckTimeout:  2 * time.Second,
+				// Priority left at zero
+			},
+			expectErr: false,
+		},
+		{
+			name: "all timing fields omitted, auto type",
+			cfg: config.EndpointConfig{
+				Name: "bare-auto",
+				URL:  "http://localhost:8080",
+				Type: "auto",
+				// All timing/priority fields at zero
+			},
+			expectErr: false,
+		},
+		{
+			name: "all timing fields omitted, no type",
+			cfg: config.EndpointConfig{
+				Name: "bare-no-type",
+				URL:  "http://localhost:8080",
+				// All timing/priority fields and type at zero/empty
+			},
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			repo := NewStaticEndpointRepository()
+			err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{tc.cfg})
+
+			if tc.expectErr && err == nil {
+				t.Error("expected error but got none")
+			}
+			if !tc.expectErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			if !tc.expectErr && err == nil {
+				// Confirm the endpoint was actually registered with the default timing values
+				endpoints, getErr := repo.GetAll(context.Background())
+				if getErr != nil {
+					t.Fatalf("GetAll failed: %v", getErr)
+				}
+				if len(endpoints) != 1 {
+					t.Fatalf("expected 1 endpoint, got %d", len(endpoints))
+				}
+				ep := endpoints[0]
+				if ep.CheckInterval != DefaultCheckInterval {
+					t.Errorf("CheckInterval = %v, want default %v", ep.CheckInterval, DefaultCheckInterval)
+				}
+				if ep.CheckTimeout != DefaultCheckTimeout {
+					t.Errorf("CheckTimeout = %v, want default %v", ep.CheckTimeout, DefaultCheckTimeout)
+				}
+				if ep.Priority != DefaultPriority {
+					t.Errorf("Priority = %d, want default %d", ep.Priority, DefaultPriority)
+				}
+			}
+		})
+	}
+}
+
+// TestLoadFromConfig_ZeroPriorityRoundTrip is a regression test ensuring that an
+// endpoint configured with priority: 0 reaches the domain layer with Priority == 0,
+// not silently upgraded to the default (100).
+func TestLoadFromConfig_ZeroPriorityRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	repo := NewStaticEndpointRepository()
+	cfg := config.EndpointConfig{
+		Name:          "zero-priority",
+		URL:           "http://localhost:11434",
+		Type:          "ollama",
+		Priority:      ptrInt(0),
+		CheckInterval: 5 * time.Second,
+		CheckTimeout:  2 * time.Second,
+	}
+
+	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(context.Background())
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+	if len(endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(endpoints))
+	}
+	if endpoints[0].Priority != 0 {
+		t.Errorf("Priority = %d, want 0 — default must not override an explicit zero", endpoints[0].Priority)
+	}
+}
+
 func TestEndpointConfigValidation_WithType(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -107,7 +382,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "ollama",
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       100,
+			Priority:       ptrInt(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},
@@ -117,7 +392,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "lm-studio",
 			HealthCheckURL: "/v1/models",
 			ModelURL:       "/v1/models",
-			Priority:       90,
+			Priority:       ptrInt(90),
 			CheckInterval:  10 * time.Second,
 			CheckTimeout:   3 * time.Second,
 		},
@@ -182,7 +457,7 @@ func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
 			Type:           "openai-compatible",
 			HealthCheckURL: "/health",
 			ModelURL:       "/v1/models",
-			Priority:       100,
+			Priority:       ptrInt(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},
@@ -214,5 +489,359 @@ func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
 	expectedHealthURL := "http://localhost:12434/engines/llama.cpp/health"
 	if endpoint.HealthCheckURLString != expectedHealthURL {
 		t.Errorf("HealthCheckURLString = %q, expected %q", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+}
+
+func TestEndpointConfigValidation_EmptyURLs(t *testing.T) {
+	// Test that validation accepts empty health_check_url and model_url when they can get defaults
+	testCases := []struct {
+		name      string
+		config    config.EndpointConfig
+		expectErr bool
+	}{
+		{
+			name: "empty health_check_url with known type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-ollama",
+				URL:            "http://localhost:11434",
+				Type:           "ollama",
+				HealthCheckURL: "",
+				ModelURL:       "/api/tags",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "empty model_url with known type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-ollama",
+				URL:            "http://localhost:11434",
+				Type:           "ollama",
+				HealthCheckURL: "/",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "both URLs empty with known type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-ollama",
+				URL:            "http://localhost:11434",
+				Type:           "ollama",
+				HealthCheckURL: "",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "both URLs empty with auto type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-auto",
+				URL:            "http://localhost:11434",
+				Type:           "auto",
+				HealthCheckURL: "",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+		{
+			name: "both URLs empty with empty type is valid",
+			config: config.EndpointConfig{
+				Name:           "test-no-type",
+				URL:            "http://localhost:11434",
+				Type:           "",
+				HealthCheckURL: "",
+				ModelURL:       "",
+				CheckInterval:  5 * time.Second,
+				CheckTimeout:   2 * time.Second,
+			},
+			expectErr: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := NewStaticEndpointRepository()
+			err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{tc.config})
+
+			if tc.expectErr && err == nil {
+				t.Error("Expected error but got none")
+			}
+			if !tc.expectErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestStaticEndpointRepository_ProfileFallback_HealthCheckURL(t *testing.T) {
+	// Test that empty HealthCheckURL gets populated from profile defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "ollama-no-healthcheck",
+			URL:            "http://localhost:11434",
+			Type:           "ollama",
+			HealthCheckURL: "", // Empty - should fall back to profile default "/"
+			ModelURL:       "/api/tags",
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Ollama profile default health check path is "/"
+	expectedHealthURL := "http://localhost:11434/"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q (profile default for ollama)", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+}
+
+func TestStaticEndpointRepository_ProfileFallback_ModelURL(t *testing.T) {
+	// Test that empty ModelURL gets populated from profile defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "ollama-no-modelurl",
+			URL:            "http://localhost:11434",
+			Type:           "ollama",
+			HealthCheckURL: "/",
+			ModelURL:       "", // Empty - should fall back to profile default "/api/tags"
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Ollama profile default model discovery path is "/api/tags"
+	expectedModelURL := "http://localhost:11434/api/tags"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q (profile default for ollama)", endpoint.ModelURLString, expectedModelURL)
+	}
+}
+
+func TestStaticEndpointRepository_ProfileFallback_BothURLsEmpty(t *testing.T) {
+	// Test that both empty URLs get populated from profile defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "ollama-no-urls",
+			URL:            "http://localhost:11434",
+			Type:           "ollama",
+			HealthCheckURL: "", // Should fall back to "/"
+			ModelURL:       "", // Should fall back to "/api/tags"
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Verify both URLs got profile defaults
+	expectedHealthURL := "http://localhost:11434/"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+
+	expectedModelURL := "http://localhost:11434/api/tags"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q", endpoint.ModelURLString, expectedModelURL)
+	}
+}
+
+func TestStaticEndpointRepository_AutoType_EmptyURLs(t *testing.T) {
+	// Test that "auto" type with empty URLs gets sensible defaults
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "auto-endpoint",
+			URL:            "http://localhost:8080",
+			Type:           "auto",
+			HealthCheckURL: "", // Should fall back to "/" (default)
+			ModelURL:       "", // Should fall back to "/v1/models" (default)
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// For "auto" type, should get sensible defaults since no specific profile
+	// Default health check path is "/"
+	expectedHealthURL := "http://localhost:8080/"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q (default fallback)", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+
+	// Default model URL is "/v1/models"
+	expectedModelURL := "http://localhost:8080/v1/models"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q (default fallback)", endpoint.ModelURLString, expectedModelURL)
+	}
+}
+
+func TestStaticEndpointRepository_LMStudio_ProfileFallback(t *testing.T) {
+	// Test that lm-studio profile defaults work correctly
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "lmstudio-no-urls",
+			URL:            "http://localhost:1234",
+			Type:           "lm-studio",
+			HealthCheckURL: "", // Should fall back to profile default "/v1/models"
+			ModelURL:       "", // Should fall back to profile default "/api/v0/models"
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// LM Studio profile uses /api/v0/models for model discovery (from lmstudio.yaml)
+	expectedModelURL := "http://localhost:1234/api/v0/models"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q (lm-studio profile default)", endpoint.ModelURLString, expectedModelURL)
+	}
+
+	// LM Studio profile uses /v1/models for health check
+	expectedHealthURL := "http://localhost:1234/v1/models"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q (lm-studio profile default)", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+}
+
+func TestStaticEndpointRepository_EmptyURLs_WithNestedPath(t *testing.T) {
+	// Test that empty URLs with nested base paths work correctly
+	repo := NewStaticEndpointRepository()
+	ctx := context.Background()
+
+	configs := []config.EndpointConfig{
+		{
+			Name:           "nested-ollama",
+			URL:            "http://localhost:12434/engines/ollama/",
+			Type:           "ollama",
+			HealthCheckURL: "", // Should fall back to "/" (ollama default)
+			ModelURL:       "", // Should fall back to "/api/tags" (ollama default)
+			CheckInterval:  5 * time.Second,
+			CheckTimeout:   2 * time.Second,
+		},
+	}
+
+	err := repo.LoadFromConfig(ctx, configs)
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(ctx)
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+
+	if len(endpoints) != 1 {
+		t.Fatalf("Expected 1 endpoint, got %d", len(endpoints))
+	}
+
+	endpoint := endpoints[0]
+
+	// Verify URLs preserve the nested path prefix from base URL
+	// Note: path.Join normalises paths and removes trailing slashes
+	// so "/" gets joined with "/engines/ollama/" to become "/engines/ollama"
+	expectedHealthURL := "http://localhost:12434/engines/ollama"
+	if endpoint.HealthCheckURLString != expectedHealthURL {
+		t.Errorf("HealthCheckURLString = %q, expected %q", endpoint.HealthCheckURLString, expectedHealthURL)
+	}
+
+	expectedModelURL := "http://localhost:12434/engines/ollama/api/tags"
+	if endpoint.ModelURLString != expectedModelURL {
+		t.Errorf("ModelURLString = %q, expected %q", endpoint.ModelURLString, expectedModelURL)
 	}
 }

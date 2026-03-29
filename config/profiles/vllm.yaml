@@ -13,6 +13,18 @@ routing:
 # API compatibility
 api:
   openai_compatible: true
+
+  # Anthropic Messages API support (v0.11.1+)
+  # vLLM v0.11.1+ natively supports the Anthropic Messages API, allowing direct forwarding
+  # of Anthropic-format requests without translation overhead
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: false
+    min_version: "0.11.1"
+    limitations:
+      - no_token_counting
+
   paths:
     # Health and system endpoints
     - /health              # 0: health check (vLLM-specific endpoint)

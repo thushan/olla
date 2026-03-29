@@ -68,7 +68,7 @@ You should see:
 
 **Option A: Environment Variable** (Recommended)
 ```bash
-export ANTHROPIC_API_BASE_URL="http://localhost:40114/olla/anthropic/v1"
+export ANTHROPIC_BASE_URL="http://localhost:40114/olla/anthropic"
 export ANTHROPIC_API_KEY="not-required"  # Optional, Olla doesn't enforce this
 ```
 
@@ -98,7 +98,7 @@ Edit the config to point to Olla:
 
 ```bash
 # Start Claude Code
-claude-code
+claude
 
 # In Claude Code, try:
 # "Write a Python function to calculate factorial"
@@ -293,7 +293,7 @@ docker exec ollama ollama pull llama3.2:latest
 **Check Claude Code configuration**:
 ```bash
 # Verify environment variable
-echo $ANTHROPIC_API_BASE_URL
+echo $ANTHROPIC_BASE_URL
 
 # Should output:
 # http://localhost:40114/olla/anthropic/v1

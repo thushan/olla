@@ -18,9 +18,11 @@ Olla natively supports the following backends:
 | [LM Studio](./backend/lmstudio.md) | `lm-studio` | Native support for [LM Studio](https://lmstudio.ai/), including model unification |
 | [llama.cpp](./backend/llamacpp.md) | `llamacpp` | Native support for [llama.cpp](https://github.com/ggml-org/llama.cpp) lightweight C++ inference server with GGUF models, including slot management, code infill, and CPU-first design for edge deployment |
 | [vLLM](./backend/vllm.md) | `vllm` | Native support for [vLLM](https://github.com/vllm-project/vllm), including model unification |
+| [vLLM-MLX](./backend/vllm-mlx.md) | `vllm-mlx` | Native support for [vLLM-MLX](https://github.com/waybarrios/vllm-mlx), Apple Silicon inference using the MLX framework with native Anthropic Messages API |
 | [SGLang](./backend/sglang.md) | `sglang` | Native support for [SGLang](https://github.com/sgl-project/sglang) with RadixAttention and Frontend Language, including model unification and vision support |
 | [Lemonade SDK](./backend/lemonade.md) | `lemonade` | Native support for [Lemonade SDK](https://lemonade-server.ai/), AMD's local inference solution with Ryzen AI optimisation, including model unification |
 | [LiteLLM](./backend/litellm.md) | `litellm` | Native support for [LiteLLM](https://github.com/BerriAI/litellm), providing unified gateway to 100+ LLM providers |
+| [Docker Model Runner](./backend/docker-model-runner.md) | `docker-model-runner` | Native support for [Docker Model Runner](https://docs.docker.com/ai/model-runner/), Docker Desktop's built-in LLM inference server with multi-engine support (llama.cpp and vLLM), OCI model distribution, and native Anthropic Messages API |
 | [OpenAI Compatible](https://platform.openai.com/docs/overview) | `openai` | Generic support for any OpenAI-compatible API |
 
 You can use the `type` in [Endpoint Configurations](/olla/configuration/overview/#endpoint-configuration) when adding new endpoints.
@@ -44,7 +46,7 @@ Olla provides Anthropic Messages API translation, enabling Claude-compatible cli
 | [OpenCode](./frontend/opencode.md) | Open-source AI coding assistant (SST fork) | OpenAI or Anthropic API |
 | [Crush CLI](./frontend/crush-cli.md) | Modern terminal AI assistant by Charmbracelet | Dual OpenAI/Anthropic support |
 
-These clients can use local models (Ollama, LM Studio, vLLM, llama.cpp) through Olla's API translation layer.
+These clients can use local models (Ollama, LM Studio, vLLM, vLLM-MLX, llama.cpp) through Olla's API translation layer.
 
 ### API Translation
 

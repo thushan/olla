@@ -38,6 +38,7 @@ server:         # HTTP server configuration
 proxy:          # Proxy engine settings
 discovery:      # Endpoint discovery
 model_registry: # Model management
+translators:    # API translation (e.g., Anthropic ↔ OpenAI)
 logging:        # Logging configuration
 engineering:    # Debug features
 ```
@@ -52,7 +53,7 @@ HTTP server and security settings.
 |-------|------|---------|-------------|
 | `host` | string | `"localhost"` | Network interface to bind |
 | `port` | int | `40114` | TCP port to listen on |
-| `request_logging` | bool | `false` | Enable request logging |
+| `request_logging` | bool | `true` | Enable request logging |
 
 Example:
 
@@ -67,9 +68,9 @@ server:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `read_timeout` | duration | `20s` | Time to read request |
+| `read_timeout` | duration | `30s` | Time to read request |
 | `write_timeout` | duration | `0s` | Response write timeout (must be 0 for streaming) |
-| `idle_timeout` | duration | `120s` | Keep-alive timeout |
+| `idle_timeout` | duration | `0s` | Keep-alive timeout (0 = use read_timeout) |
 | `shutdown_timeout` | duration | `10s` | Graceful shutdown timeout |
 
 Example:
@@ -86,8 +87,8 @@ server:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `request_limits.max_body_size` | int64 | `52428800` | Max request body (bytes) |
-| `request_limits.max_header_size` | int64 | `524288` | Max header size (bytes) |
+| `request_limits.max_body_size` | int64 | `104857600` | Max request body (100MB) |
+| `request_limits.max_header_size` | int64 | `1048576` | Max header size (1MB) |
 
 Example:
 
@@ -102,13 +103,13 @@ server:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `rate_limits.global_requests_per_minute` | int | `0` | Global rate limit (0=disabled) |
-| `rate_limits.per_ip_requests_per_minute` | int | `0` | Per-IP rate limit (0=disabled) |
-| `rate_limits.health_requests_per_minute` | int | `0` | Health endpoint limit |
+| `rate_limits.global_requests_per_minute` | int | `1000` | Global rate limit (0=disabled) |
+| `rate_limits.per_ip_requests_per_minute` | int | `100` | Per-IP rate limit (0=disabled) |
+| `rate_limits.health_requests_per_minute` | int | `1000` | Health endpoint limit |
 | `rate_limits.burst_size` | int | `50` | Token bucket burst size |
-| `rate_limits.cleanup_interval` | duration | `1m` | Rate limiter cleanup |
+| `rate_limits.cleanup_interval` | duration | `5m` | Rate limiter cleanup |
 | `rate_limits.trust_proxy_headers` | bool | `false` | Trust X-Forwarded-For |
-| `rate_limits.trusted_proxy_cidrs` | []string | `[]` | Trusted proxy CIDRs |
+| `rate_limits.trusted_proxy_cidrs` | []string | `["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]` | Trusted proxy CIDRs |
 
 Example:
 
@@ -119,7 +120,7 @@ server:
     per_ip_requests_per_minute: 100
     health_requests_per_minute: 5000
     burst_size: 50
-    cleanup_interval: 1m
+    cleanup_interval: 5m
     trust_proxy_headers: true
     trusted_proxy_cidrs:
       - "10.0.0.0/8"
@@ -152,8 +153,8 @@ proxy:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `connection_timeout` | duration | `30s` | Backend connection timeout |
-| `response_timeout` | duration | `0s` | Response timeout (0=disabled) |
-| `read_timeout` | duration | `0s` | Read timeout (0=disabled) |
+| `response_timeout` | duration | `10m` | Response timeout |
+| `read_timeout` | duration | `120s` | Read timeout |
 
 Example:
 
@@ -179,7 +180,7 @@ As of v0.0.16, the retry mechanism is automatic and built-in for connection fail
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `stream_buffer_size` | int | `4096` | Stream buffer size (bytes) |
+| `stream_buffer_size` | int | `8192` | Stream buffer size (bytes) |
 
 Example:
 
@@ -219,7 +220,7 @@ Endpoint discovery and health checking.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `type` | string | `"static"` | Discovery type (only `static` supported) |
-| `refresh_interval` | duration | `5m` | Discovery refresh interval |
+| `refresh_interval` | duration | `30s` | Discovery refresh interval |
 
 Example:
 
@@ -236,13 +237,47 @@ discovery:
 | `static.endpoints[].url` | string | Yes | Endpoint base URL |
 | `static.endpoints[].name` | string | Yes | Unique endpoint name |
 | `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`) |
-| `static.endpoints[].priority` | int | No | Selection priority (higher=preferred) |
+| `static.endpoints[].priority` | int | No | Selection priority (higher=preferred, default: `100`) |
 | `static.endpoints[].preserve_path` | bool | No | Preserve base path in URL when proxying (default: `false`) |
-| `static.endpoints[].health_check_url` | string | No | Health check path |
-| `static.endpoints[].model_url` | string | No | Model discovery path |
-| `static.endpoints[].check_interval` | duration | No | Health check interval |
-| `static.endpoints[].check_timeout` | duration | No | Health check timeout |
+| `static.endpoints[].health_check_url` | string | No | Health check path (optional, uses profile default if not specified) |
+| `static.endpoints[].model_url` | string | No | Model discovery path (optional, uses profile default if not specified) |
+| `static.endpoints[].check_interval` | duration | No | Health check interval (default: `5s`) |
+| `static.endpoints[].check_timeout` | duration | No | Health check timeout (default: `2s`) |
 | `static.endpoints[].model_filter` | object | No | Model filtering for this endpoint |
+
+#### URL Configuration
+
+The `health_check_url` and `model_url` fields are **optional**. When not specified, Olla uses profile-specific defaults based on the endpoint type:
+
+**Profile Defaults:**
+
+| Endpoint Type | Default `health_check_url` | Default `model_url` |
+|--------------|---------------------------|-------------------|
+| `ollama` | `/` | `/api/tags` |
+| `llamacpp` | `/health` | `/v1/models` |
+| `lm-studio` | `/v1/models` | `/api/v0/models` |
+| `vllm` | `/health` | `/v1/models` |
+| `sglang` | `/health` | `/v1/models` |
+| `openai` | `/v1/models` | `/v1/models` |
+| `auto` (or unknown) | `/` | `/v1/models` |
+
+**Both fields support:**
+
+1. **Relative paths** (recommended) - joined with the endpoint base URL:
+   ```yaml
+   url: "http://localhost:8080/api/"
+   health_check_url: "/health"     # Becomes: http://localhost:8080/api/health
+   model_url: "/v1/models"         # Becomes: http://localhost:8080/api/v1/models
+   ```
+
+2. **Absolute URLs** - used as-is for external services:
+   ```yaml
+   url: "http://localhost:11434"
+   health_check_url: "http://monitoring.local:9090/health"  # Different host
+   model_url: "http://registry.local/models"                # Different host
+   ```
+
+When using relative paths, any base path prefix in the endpoint URL is **automatically preserved** (e.g., `http://localhost:8080/api/` + `/v1/models` = `http://localhost:8080/api/v1/models`).
 
 #### Endpoint Model Filtering
 
@@ -284,28 +319,44 @@ Example:
 discovery:
   static:
     endpoints:
+      # Minimal configuration - uses profile defaults
+      - url: "http://localhost:11434"
+        name: "local-ollama"
+        type: "ollama"
+        priority: 100
+        # health_check_url: "/" (default for ollama)
+        # model_url: "/api/tags" (default for ollama)
+
+      # Custom health check URL
+      - url: "http://localhost:8080"
+        name: "llamacpp-server"
+        type: "llamacpp"
+        priority: 90
+        health_check_url: "/health"
+        # model_url: "/v1/models" (default for llamacpp)
+
+      # Endpoint with base path - URLs are preserved
+      - url: "http://localhost:8080/api/"
+        name: "vllm-gateway"
+        type: "vllm"
+        priority: 80
+        # health_check_url: "/health" -> http://localhost:8080/api/health
+        # model_url: "/v1/models" -> http://localhost:8080/api/v1/models
+
+      # External health check on different host
+      - url: "http://localhost:11434"
+        name: "monitored-ollama"
+        type: "ollama"
+        health_check_url: "http://monitoring.local:9090/health/ollama"
+        # Absolute URL used as-is
+
       # Docker Model Runner with base path
       - url: "http://localhost:8080/api/models/llama"
         name: "docker-llama"
         type: "openai"
         preserve_path: true  # Keep /api/models/llama in requests
 
-      # Standard endpoint without base path
-      - url: "http://localhost:11434"
-        name: "local-ollama"
-        type: "ollama"
-        preserve_path: false  # Default behaviour
-        priority: 100
-        health_check_url: "/"
-        model_url: "/api/tags"
-        check_interval: 30s
-        check_timeout: 5s
-        model_filter:
-          exclude:
-            - "*embed*"         # No embedding models
-            - "*uncensored*"    # No uncensored models
-            - "nomic-*"         # No Nomic models
-        
+      # Endpoint with model filtering
       - url: "http://remote:11434"
         name: "remote-ollama"
         type: "ollama"
@@ -326,7 +377,7 @@ discovery:
 | `model_discovery.timeout` | duration | `30s` | Discovery timeout |
 | `model_discovery.concurrent_workers` | int | `5` | Parallel workers |
 | `model_discovery.retry_attempts` | int | `3` | Retry attempts |
-| `model_discovery.retry_backoff` | duration | `5s` | Retry backoff |
+| `model_discovery.retry_backoff` | duration | `1s` | Retry backoff |
 
 Example:
 
@@ -338,7 +389,7 @@ discovery:
     timeout: 30s
     concurrent_workers: 10
     retry_attempts: 3
-    retry_backoff: 5s
+    retry_backoff: 1s
 ```
 
 ## Model Registry Configuration
@@ -404,8 +455,8 @@ model_registry:
 |-------|------|---------|-------------|
 | `unification.enabled` | bool | `true` | Enable unification |
 | `unification.stale_threshold` | duration | `24h` | Model retention time |
-| `unification.cleanup_interval` | duration | `10m` | Cleanup frequency |
-| `unification.cache_ttl` | duration | `5m` | Cache TTL |
+| `unification.cleanup_interval` | duration | `5m` | Cleanup frequency |
+| `unification.cache_ttl` | duration | `10m` | Cache TTL |
 
 Example:
 
@@ -510,6 +561,96 @@ Routing decisions are exposed via response headers:
 | `X-Olla-Routing-Decision` | Action taken (routed/fallback/rejected) |
 | `X-Olla-Routing-Reason` | Human-readable reason for decision |
 
+## Translators Configuration
+
+API translation settings. Translators enable clients designed for one API format to work with backends that use a different format.
+
+> :memo: **Anthropic Translation** (v0.0.20+)
+> Enabled by default. Still actively being improved -- please report any issues or feedback.
+
+### Anthropic Translator
+
+The Anthropic translator enables Claude-compatible clients (Claude Code, OpenCode, Crush CLI) to work with OpenAI-compatible backends.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `enabled` | bool | `true` | Master switch for the Anthropic translator. When `false`, the `/olla/anthropic/v1/*` endpoints do not exist. |
+| `passthrough_enabled` | bool | `true` | Optimisation mode (only applies when `enabled: true`). When `true`, requests are forwarded directly to backends with native Anthropic support for zero translation overhead. When `false`, all requests go through the Anthropic-to-OpenAI translation pipeline regardless of backend capabilities. |
+| `max_message_size` | int | `10485760` | Maximum request body size in bytes (10MB default). |
+
+#### Two-Level Control: `enabled` + `passthrough_enabled`
+
+The Anthropic translator uses a two-level configuration model:
+
+1. **`enabled`** is the master switch. When `false`, the translator is completely disabled and the `passthrough_enabled` setting has no effect. It is `true` by default.
+2. **`passthrough_enabled`** is the optimisation flag. It only takes effect when `enabled: true`.
+
+When both are active, passthrough mode also requires that the backend profile declares native Anthropic support via `api.anthropic_support.enabled: true`. Both conditions must be true for passthrough to activate:
+
+- `translators.anthropic.passthrough_enabled: true` (global configuration)
+- Backend profile has `api.anthropic_support.enabled: true` (per-backend profile)
+
+If either condition is false, Olla falls back to translation mode automatically.
+
+#### Examples
+
+**Enable translator with passthrough (recommended for production)**:
+
+```yaml
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: true       # Forward directly to backends with native Anthropic support
+    max_message_size: 10485760      # 10MB
+```
+
+**Enable translator with translation only (useful for debugging/testing)**:
+
+```yaml
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: false      # Always translate Anthropic ↔ OpenAI format
+    max_message_size: 10485760
+```
+
+**Disable translator entirely**:
+
+```yaml
+translators:
+  anthropic:
+    enabled: false
+    # passthrough_enabled has no effect when enabled=false
+    passthrough_enabled: true
+```
+
+#### Performance Implications
+
+| Mode | Overhead | When Used |
+|------|----------|-----------|
+| **Passthrough** | Near-zero (~0ms) | `passthrough_enabled: true` and backend has native Anthropic support |
+| **Translation** | ~1-5ms per request | `passthrough_enabled: false`, or backend lacks native Anthropic support |
+| **Disabled** | N/A | `enabled: false` -- endpoints return 404 |
+
+#### Detecting the Active Mode
+
+Check the `X-Olla-Mode` response header:
+
+- `X-Olla-Mode: passthrough` -- passthrough mode was used
+- Header absent -- translation mode was used
+
+#### Inspector (Development Only)
+
+> :no_entry: **Do not enable in production** -- logs full request/response bodies including potentially sensitive user data.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `inspector.enabled` | bool | `false` | Enable request/response logging |
+| `inspector.output_dir` | string | `"logs/inspector/anthropic"` | Directory for log output |
+| `inspector.session_header` | string | `"X-Session-ID"` | Header for session grouping |
+
+See [Anthropic Inspector](../notes/anthropic-inspector.md) for details.
+
 ## Logging Configuration
 
 Application logging settings.
@@ -610,45 +751,49 @@ Complete default configuration:
 server:
   host: "localhost"
   port: 40114
-  read_timeout: 20s
+  read_timeout: 30s
   write_timeout: 0s
-  idle_timeout: 120s
+  # idle_timeout: 0s  # Optional (0 = use read_timeout)
   shutdown_timeout: 10s
-  request_logging: false
+  request_logging: true
   request_limits:
-    max_body_size: 52428800    # 50MB
-    max_header_size: 524288     # 512KB
+    max_body_size: 104857600   # 100MB
+    max_header_size: 1048576    # 1MB
   rate_limits:
-    global_requests_per_minute: 0
-    per_ip_requests_per_minute: 0
-    health_requests_per_minute: 0
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 100
+    health_requests_per_minute: 1000
     burst_size: 50
-    cleanup_interval: 1m
+    cleanup_interval: 5m
     trust_proxy_headers: false
-    trusted_proxy_cidrs: []
+    trusted_proxy_cidrs:
+      - "127.0.0.0/8"
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
 
 proxy:
   engine: "sherpa"
   profile: "auto"
   load_balancer: "priority"
   connection_timeout: 30s
-  response_timeout: 0s
-  read_timeout: 0s
+  response_timeout: 10m
+  read_timeout: 120s
   # DEPRECATED as of v0.0.16 - retry is now automatic
   # max_retries: 3
   # retry_backoff: 1s
-  stream_buffer_size: 4096
+  stream_buffer_size: 8192
 
 discovery:
   type: "static"
-  refresh_interval: 5m
+  refresh_interval: 30s
   model_discovery:
     enabled: true
     interval: 5m
     timeout: 30s
     concurrent_workers: 5
     retry_attempts: 3
-    retry_backoff: 5s
+    retry_backoff: 1s
   static:
     endpoints: []
 
@@ -664,9 +809,19 @@ model_registry:
   unification:
     enabled: true
     stale_threshold: 24h
-    cleanup_interval: 10m
-    cache_ttl: 5m
+    cleanup_interval: 5m
+    cache_ttl: 10m
     custom_rules: []
+
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: true
+    max_message_size: 10485760   # 10MB
+    inspector:
+      enabled: false
+      output_dir: "logs/inspector/anthropic"
+      session_header: "X-Session-ID"
 
 logging:
   level: "info"
@@ -687,6 +842,14 @@ Olla validates configuration on startup:
 - Endpoints must have unique names
 - Ports must be in valid range (1-65535)
 - CIDR blocks must be valid
+
+Additionally, Olla's `Validate()` method catches dangerous zero or empty configuration values that would cause panics or silent failures at runtime. It runs after all config sources (file, environment overrides) have been merged, so the final state is what gets checked. The following conditions produce clear error messages at startup:
+
+- `proxy.engine` is empty
+- `proxy.load_balancer` is empty
+- `discovery.type` is empty
+- `server.port` is zero or negative
+- When `model_discovery.enabled` is `true`: `interval`, `concurrent_workers`, or `timeout` is zero
 
 ## Next Steps
 

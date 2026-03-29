@@ -32,6 +32,7 @@ keywords: LM Studio, Olla, LLM proxy, local inference, OpenAI compatible, model 
                 <li>Model Unification</li>
                 <li>Model Detection & Normalisation</li>
                 <li>OpenAI API Compatibility</li>
+                <li>Native Anthropic Messages API (v0.4.1+)</li>
             </ul>
         </td>
     </tr>
@@ -117,6 +118,33 @@ discovery:
         type: "lm-studio"
         priority: 50
 ```
+
+## Anthropic Messages API Support
+
+LM Studio v0.4.1+ natively supports the Anthropic Messages API, enabling Olla to forward Anthropic-format requests directly without translation overhead (passthrough mode). This was added specifically for Claude Code integration, enabling native Anthropic API support without requiring translation middleware.
+
+When Olla detects that a LM Studio endpoint supports native Anthropic format (via the `anthropic_support` section in `config/profiles/lmstudio.yaml`), it will bypass the Anthropic-to-OpenAI translation pipeline and forward requests directly to `/v1/messages` on the backend.
+
+**Profile configuration** (from `config/profiles/lmstudio.yaml`):
+
+```yaml
+api:
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: false
+    min_version: "0.4.1"
+```
+
+**Key details**:
+
+- Minimum LM Studio version: **v0.4.1**
+- Token counting (`/v1/messages/count_tokens`): Not supported
+- Passthrough mode is automatic -- no client-side configuration needed
+- Responses include `X-Olla-Mode: passthrough` header when passthrough is active
+- Falls back to translation mode if passthrough conditions are not met
+
+For more information, see [API Translation](../../concepts/api-translation.md#passthrough-mode) and [Anthropic API Reference](../../api-reference/anthropic.md).
 
 ## Endpoints Supported
 

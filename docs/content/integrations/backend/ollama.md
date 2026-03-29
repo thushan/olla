@@ -33,6 +33,7 @@ keywords: ollama integration, ollama proxy, olla ollama, ollama configuration, o
                 <li>Model Detection & Normalisation</li>
                 <li>OpenAI API Compatibility</li>
                 <li>GGUF Model Support</li>
+                <li>Native Anthropic Messages API (v0.14.0+)</li>
             </ul>
         </td>
     </tr>
@@ -87,10 +88,10 @@ discovery:
         name: "local-ollama"
         type: "ollama"
         priority: 100
-        model_url: "/api/tags"
-        health_check_url: "/"
-        check_interval: 2s
-        check_timeout: 1s
+        model_url: "/api/tags"        # optional, profile default: /api/tags
+        health_check_url: "/"          # optional, profile default: /
+        check_interval: 2s             # optional, default: 5s
+        check_timeout: 1s              # optional, default: 2s
 ```
 
 ### Multiple Ollama Instances
@@ -138,6 +139,38 @@ discovery:
 
 !!! note "Authentication Not Supported"
     Olla does not currently support authentication headers for endpoints. If your Ollama server requires authentication, you'll need to use a reverse proxy or wait for this feature to be added.
+
+## Anthropic Messages API Support
+
+Ollama v0.14.0+ natively supports the Anthropic Messages API, enabling Olla to forward Anthropic-format requests directly without translation overhead (passthrough mode).
+
+When Olla detects that an Ollama endpoint supports native Anthropic format (via the `anthropic_support` section in `config/profiles/ollama.yaml`), it will bypass the Anthropic-to-OpenAI translation pipeline and forward requests directly to `/v1/messages` on the backend.
+
+**Profile configuration** (from `config/profiles/ollama.yaml`):
+
+```yaml
+api:
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: false
+    min_version: "0.14.0"
+    limitations:
+      - token_counting_404
+```
+
+**Key details**:
+
+- Minimum Ollama version: **v0.14.0**
+- Token counting (`/v1/messages/count_tokens`): Not supported (returns 404)
+- Passthrough mode is automatic -- no client-side configuration needed
+- Responses include `X-Olla-Mode: passthrough` header when passthrough is active
+- Falls back to translation mode if passthrough conditions are not met
+
+!!! note "Ollama Anthropic Compatibility"
+    For details on Ollama's Anthropic compatibility, see the [Ollama Anthropic compatibility documentation](https://docs.ollama.com/api/anthropic-compatibility).
+
+For more information, see [API Translation](../../concepts/api-translation.md#passthrough-mode) and [Anthropic API Reference](../../api-reference/anthropic.md).
 
 ## Endpoints Supported
 

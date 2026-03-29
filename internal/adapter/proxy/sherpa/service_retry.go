@@ -50,11 +50,10 @@ func (s *Service) ProxyRequestToEndpointsWithRetry(ctx context.Context, w http.R
 }
 
 // proxyToSingleEndpoint executes the proxy request to a specific endpoint
+// Note: Connection increment/decrement is handled by RetryHandler.executeProxyAttempt
+// to avoid double-counting (see proxy_olla_connection_counting_test.go for context).
 func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	stats.EndpointName = endpoint.Name
-
-	s.Selector.IncrementConnections(endpoint)
-	defer s.Selector.DecrementConnections(endpoint)
 
 	targetURL := common.BuildTargetURL(r, endpoint, s.configuration.GetProxyPrefix())
 

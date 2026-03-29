@@ -7,7 +7,9 @@ const (
 	ProfileLmStudio         = "lm-studio"
 	ProfileSGLang           = "sglang"
 	ProfileVLLM             = "vllm"
+	ProfileVLLMMLX          = "vllm-mlx"
 	ProfileOpenAICompatible = "openai-compatible"
+	ProfileDockerMR         = "docker-model-runner"
 	ProfileAuto             = "auto"
 )
 

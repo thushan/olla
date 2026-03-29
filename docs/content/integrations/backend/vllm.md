@@ -35,6 +35,7 @@ keywords: vLLM, Olla proxy, LLM inference, GPU optimization, PagedAttention, ten
                 <li>Prometheus Metrics</li>
                 <li>Tokenisation API</li>
                 <li>Reranking API</li>
+                <li>Native Anthropic Messages API (v0.11.1+)</li>
             </ul>
         </td>
     </tr>
@@ -123,6 +124,35 @@ proxy:
   engine: "olla"  # Use high-performance engine
   load_balancer: "least-connections"
 ```
+
+## Anthropic Messages API Support
+
+vLLM v0.11.1+ natively supports the Anthropic Messages API, enabling Olla to forward Anthropic-format requests directly without translation overhead (passthrough mode).
+
+When Olla detects that a vLLM endpoint supports native Anthropic format (via the `anthropic_support` section in `config/profiles/vllm.yaml`), it will bypass the Anthropic-to-OpenAI translation pipeline and forward requests directly to `/v1/messages` on the backend.
+
+**Profile configuration** (from `config/profiles/vllm.yaml`):
+
+```yaml
+api:
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: false
+    min_version: "0.11.1"
+    limitations:
+      - no_token_counting
+```
+
+**Key details**:
+
+- Minimum vLLM version: **v0.11.1**
+- Token counting (`/v1/messages/count_tokens`): Not supported
+- Passthrough mode is automatic -- no client-side configuration needed
+- Responses include `X-Olla-Mode: passthrough` header when passthrough is active
+- Falls back to translation mode if passthrough conditions are not met
+
+For more information, see [API Translation](../../concepts/api-translation.md#passthrough-mode) and [Anthropic API Reference](../../api-reference/anthropic.md).
 
 ## Endpoints Supported
 

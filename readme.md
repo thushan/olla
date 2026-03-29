@@ -10,7 +10,9 @@
     <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a>
     <a href="https://github.com/sgl-project/sglang"><img src="https://img.shields.io/badge/SGLang-native-lightgreen.svg" alt="SGLang: Native Support"></a>
     <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a>
-    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="LM Deploy: OpenAI Compatible"></a> <br/>
+    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightblue.svg" alt="LM Deploy: OpenAI Compatible"></a> <br/> 
+    <a href="https://github.com/waybarrios/vllm-mlx/"><img src="https://img.shields.io/badge/vLLM--MLX-native-lightgreen.svg" alt="vLLM-MLX: Native Support"></a>
+    <a href="https://docs.docker.com/ai/model-runner/"><img src="https://img.shields.io/badge/Docker Model Runner-native-lightgreen.svg" alt="Docker Model Runner: Native Support"></a><br/>
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a>
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a>
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/LemonadeSDK-native-lightgreen.svg" alt="LemonadeSDK: Native Support"></a>    
@@ -50,6 +52,7 @@ Single CLI application and config file is all you need to go Olla!
 - **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover
 - **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
+- **⚡🔄 Anthropic Messages API**: [Passthrough for backends with native support; automatic translation for others](https://thushan.github.io/olla/integrations/api-translation/anthropic/)
 - **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
@@ -98,6 +101,8 @@ git clone https://github.com/thushan/olla.git && cd olla && make build-release
 ./bin/olla
 ```
 
+### Verification
+
 When you have everything running, you can check it's all working with:
 
 ```bash
@@ -112,6 +117,65 @@ curl http://localhost:40114/internal/status/models
 ```
 
 For detailed installation and deployment options, see [Getting Started Guide](https://thushan.github.io/olla/getting-started/quickstart/).
+
+### Querying Olla
+
+Olla exposes multiple API paths depending on your use case:
+
+| Path | Format | Use Case |
+|------|--------|----------|
+| `/olla/proxy/` | OpenAI | Routes to any backend — universal endpoint |
+| `/olla/openai/` | OpenAI | Routes to any backend — universal endpoint |
+| `/olla/anthropic/` | Anthropic | Claude-compatible clients (passthrough or translated) |
+| `/olla/{provider}/` | OpenAI | Target a specific backend type (e.g. `/olla/vllm/`, `/olla/ollama/`) |
+
+#### OpenAI-Compatible (Universal Proxy)
+
+You can use `/olla/openai` or `/olla/proxy`
+
+```bash
+# Chat completion (routes to best available backend)
+curl http://localhost:40114/olla/proxy/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 100}'
+
+# Streaming
+curl http://localhost:40114/olla/proxy/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 100, "stream": true}'
+
+# List all models across backends
+curl http://localhost:40114/olla/proxy/v1/models
+```
+
+#### Anthropic Messages API
+
+```bash
+# Chat completion (passthrough for supported backends, translated for others)
+curl http://localhost:40114/olla/anthropic/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: not-needed" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model": "llama3.2", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}'
+
+# Streaming
+curl http://localhost:40114/olla/anthropic/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: not-needed" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{"model": "llama3.2", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+```
+
+#### Provider-Specific Endpoints
+
+```bash
+# Target a specific backend type directly
+curl http://localhost:40114/olla/ollama/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "llama3.2", "messages": [{"role": "user", "content": "Hello"}], "max_tokens": 100}'
+
+# Other providers: /olla/vllm/, /olla/vllm-mlx/, /olla/lm-studio/, /olla/llamacpp/, etc.
+```
 
 ## Examples
 
@@ -145,10 +209,12 @@ You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/
 
 ### 🤖 **Anthropic Message API / CLI Tools - Claude Code, OpenCode, Crush**
 
-> [!CAUTION]
-> Introduced in v0.0.20+, the Anthropic implementation is *experimental* and should be used with caution.
+Olla's Anthropic Messages API support (v0.0.20+) is **enabled by default**, allowing you to use CLI tools like Claude Code with local AI models on your machine via `/olla/anthropic`. It operates in two modes depending on your backend:
 
-You can use CLI tools with Olla by using the new Anthropic Message API at `/olla/anthropic` to run Claude Code with Local AI models you have on your machine.
+- ⚡ **Passthrough**: requests are forwarded as-is for backends with native Anthropic support (vLLM, llama.cpp, Ollama, LM Studio, Lemonade)
+- 🔄 **Translation**: Anthropic ↔ OpenAI format conversion for backends that don't natively support the Anthropic Messages API
+
+Still actively being improved -- please report any issues or feedback.
 
 We have examples for:
 

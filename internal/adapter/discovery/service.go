@@ -66,6 +66,12 @@ func (s *ModelDiscoveryService) Start(ctx context.Context) error {
 		return fmt.Errorf("discovery service is already running")
 	}
 
+	// Guard against a zero interval from user config overrides — time.NewTicker panics on <= 0.
+	if s.config.Interval <= 0 {
+		s.logger.Warn("Discovery interval is zero or negative, defaulting to 5 minutes", "configured", s.config.Interval)
+		s.config.Interval = 5 * time.Minute
+	}
+
 	s.logger.Info("Initialising model discovery service", "interval", s.config.Interval)
 
 	s.ticker = time.NewTicker(s.config.Interval)
@@ -194,6 +200,11 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 
 func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoints []*domain.Endpoint) error {
 	workerCount := s.config.ConcurrentWorkers
+	// Guard against zero from user config overrides — errgroup.SetLimit panics on <= 0.
+	if workerCount <= 0 {
+		s.logger.Warn("ConcurrentWorkers is zero or negative, defaulting to 1", "configured", workerCount)
+		workerCount = 1
+	}
 	if workerCount > len(endpoints) {
 		workerCount = len(endpoints)
 	}

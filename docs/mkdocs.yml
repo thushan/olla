@@ -147,6 +147,7 @@ nav:
       - Examples: configuration/examples.md
       - Best Practices:
           - Overview: configuration/practices/overview.md
+          - Configuration: configuration/practices/configuration.md
           - Security: configuration/practices/security.md
           - Performance: configuration/practices/performance.md
           - Monitoring: configuration/practices/monitoring.md
@@ -156,10 +157,12 @@ nav:
             - Ollama: integrations/backend/ollama.md
             - LM Studio: integrations/backend/lmstudio.md
             - vLLM: integrations/backend/vllm.md
+            - vLLM-MLX: integrations/backend/vllm-mlx.md
             - SGLang: integrations/backend/sglang.md
             - Lemonade SDK: integrations/backend/lemonade.md
             - LiteLLM: integrations/backend/litellm.md
             - llama.cpp: integrations/backend/llamacpp.md
+            - Docker Model Runner: integrations/backend/docker-model-runner.md
         - Frontends:
             - OpenWebUI + Ollama: integrations/frontend/openwebui.md
             - OpenWebUI + OpenAI: integrations/frontend/openwebui-openai.md
@@ -187,10 +190,12 @@ nav:
           - Ollama: api-reference/ollama.md
           - LM Studio: api-reference/lmstudio.md
           - vLLM: api-reference/vllm.md
+          - vLLM-MLX: api-reference/vllm-mlx.md
           - SGLang: api-reference/sglang.md
           - Lemonade SDK: api-reference/lemonade.md
           - LiteLLM: api-reference/litellm.md
           - llama.cpp: api-reference/llamacpp.md
+          - Docker Model Runner: api-reference/docker-model-runner.md
           - OpenAI: api-reference/openai.md
       - Translated APIs:
           - Anthropic Messages: api-reference/anthropic.md

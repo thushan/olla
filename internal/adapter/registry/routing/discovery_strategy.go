@@ -87,12 +87,19 @@ func (s *DiscoveryStrategy) GetRoutableEndpoints(
 			)
 	}
 
+	discoveryTimeout := s.options.DiscoveryTimeout
+	// Guard against a zero timeout from user config overrides — context.WithTimeout(ctx, 0) expires immediately.
+	if discoveryTimeout <= 0 {
+		s.logger.Warn("DiscoveryTimeout is zero or negative, defaulting to 2 seconds", "configured", discoveryTimeout)
+		discoveryTimeout = 2 * time.Second
+	}
+
 	s.logger.Info("Triggering discovery refresh for model",
 		"model", modelName,
-		"timeout", s.options.DiscoveryTimeout)
+		"timeout", discoveryTimeout)
 
 	// create timeout context for discovery
-	discoveryCtx, cancel := context.WithTimeout(ctx, s.options.DiscoveryTimeout)
+	discoveryCtx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 
 	// trigger discovery refresh

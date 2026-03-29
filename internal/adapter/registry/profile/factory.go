@@ -165,3 +165,23 @@ func (f *Factory) buildPrefixLookup() {
 func (f *Factory) GetLoader() *ProfileLoader {
 	return f.loader
 }
+
+// GetAnthropicSupport implements translator.ProfileLookup interface.
+// Returns the Anthropic support configuration for the given endpoint type,
+// or nil if the profile doesn't exist or doesn't declare Anthropic support.
+func (f *Factory) GetAnthropicSupport(endpointType string) *domain.AnthropicSupportConfig {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	profile, exists := f.loader.GetProfile(endpointType)
+	if !exists {
+		return nil
+	}
+
+	config := profile.GetConfig()
+	if config == nil || config.API.AnthropicSupport == nil {
+		return nil
+	}
+
+	return config.API.AnthropicSupport
+}

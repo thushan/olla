@@ -15,18 +15,21 @@ import (
 )
 
 type proxyRequest struct {
-	requestLogger logger.StyledLogger
-	stats         *ports.RequestStats
-	profile       *domain.RequestProfile
-	clientIP      string
-	targetPath    string
-	model         string
-	contentType   string
-	method        string
-	path          string
-	query         string
-	userAgent     string
-	contentLength int64
+	requestLogger  logger.StyledLogger
+	stats          *ports.RequestStats
+	profile        *domain.RequestProfile
+	clientIP       string
+	targetPath     string
+	model          string
+	contentType    string
+	method         string
+	path           string
+	query          string
+	userAgent      string
+	translatorMode constants.TranslatorMode
+	contentLength  int64
+	hadError       bool
+	isStreaming    bool
 }
 
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -43,6 +46,12 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	a.logRequestStart(pr, len(endpoints))
+
+	// Strip the route prefix before forwarding to the backend.
+	// Without this, BuildTargetURL receives the full /olla/proxy/... path and
+	// GetProxyPrefix() returns "route_prefix" (a context key name, not a URL path),
+	// so its StripPrefix is a no-op. This mirrors providerProxyHandler (line 100).
+	r.URL.Path = pr.targetPath
 
 	err = a.executeProxyRequest(ctx, w, r, endpoints, pr)
 
@@ -174,6 +183,11 @@ func (a *Application) logRequestStart(pr *proxyRequest, endpointCount int) {
 		logFields = append(logFields, "content_length", pr.contentLength)
 	}
 
+	// translator_mode is only set on translation handler requests
+	if pr.translatorMode != "" {
+		logFields = append(logFields, "translator_mode", string(pr.translatorMode))
+	}
+
 	pr.requestLogger.Info("Request received", logFields...)
 
 	// Log additional details at DEBUG level
@@ -207,6 +221,11 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 
 		if pr.stats.TotalBytes > 0 {
 			infoFields = append(infoFields, "total_bytes", pr.stats.TotalBytes)
+		}
+
+		// translator_mode is only set on translation handler requests
+		if pr.translatorMode != "" {
+			infoFields = append(infoFields, "translator_mode", string(pr.translatorMode))
 		}
 
 		// Add provider metrics if available

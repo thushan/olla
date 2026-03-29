@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/expr-lang/expr"
 	"github.com/expr-lang/expr/vm"
@@ -17,11 +16,6 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/util"
-)
-
-const (
-	// maxExtractionTimeout limits extraction time to prevent blocking
-	maxExtractionTimeout = 10 * time.Millisecond
 )
 
 // ProfileFactory provides access to provider profiles
@@ -120,36 +114,26 @@ func (e *Extractor) ValidateProfile(profile domain.InferenceProfile) error {
 	return nil
 }
 
-// ExtractMetrics extracts metrics from response data and headers
+// ExtractMetrics extracts metrics from response data and headers.
+// gjson parsing is synchronous and sub-millisecond for typical payloads,
+// so we call doExtract directly rather than racing against a goroutine timeout,
+// which is unreliable under scheduler pressure and causes spurious nil returns.
 func (e *Extractor) ExtractMetrics(ctx context.Context, data []byte, headers http.Header, providerName string) *domain.ProviderMetrics {
 	if len(data) == 0 && headers == nil {
 		return nil
 	}
 
-	e.extractionCount.Add(1)
-
-	// Create extraction context with timeout
-	extractCtx, cancel := context.WithTimeout(ctx, maxExtractionTimeout)
-	defer cancel()
-
-	done := make(chan *domain.ProviderMetrics, 1)
-
-	go func() {
-		metrics := e.doExtract(data, headers, providerName)
-		select {
-		case done <- metrics:
-		case <-extractCtx.Done():
-		}
-	}()
-
+	// Bail early if the caller's context is already done.
 	select {
-	case metrics := <-done:
-		return metrics
-	case <-extractCtx.Done():
+	case <-ctx.Done():
 		e.failures.Add(1)
-		e.logger.Debug("Metrics extraction timeout", "provider", providerName)
+		e.logger.Debug("Metrics extraction skipped: context cancelled", "provider", providerName)
 		return nil
+	default:
 	}
+
+	e.extractionCount.Add(1)
+	return e.doExtract(data, headers, providerName)
 }
 
 // ExtractFromChunk extracts metrics from a response chunk
@@ -164,7 +148,7 @@ func (e *Extractor) doExtract(data []byte, headers http.Header, providerName str
 	}
 
 	profile, err := e.profileFactory.GetProfile(providerName)
-	if err != nil {
+	if err != nil || profile == nil {
 		return nil
 	}
 

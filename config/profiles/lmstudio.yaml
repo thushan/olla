@@ -14,6 +14,16 @@ routing:
 # API compatibility
 api:
   openai_compatible: true
+
+  # Anthropic Messages API support (v0.4.1+)
+  # Added specifically for Claude Code integration, enabling native Anthropic API support
+  # without requiring translation middleware
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: false
+    min_version: "0.4.1"
+
   paths:
     - /v1/models          # 0: health check & models
     - /v1/chat/completions # 1: chat completions

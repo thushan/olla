@@ -83,8 +83,7 @@ make dev
 |---------|-------------|
 | `make fmt` | Format code with gofmt |
 | `make lint` | Run golangci-lint |
-| `make vet` | Run go vet |
-| `make ready` | Run all checks (fmt, lint, test) |
+| `make ready` | Run all checks (test-short, test-race, fmt, lint, align) |
 
 ## Configuration
 
@@ -182,15 +181,6 @@ Run with hot reload:
 
 ```bash
 air
-```
-
-### Using Make
-
-Alternative using make:
-
-```bash
-# Watches for changes and rebuilds
-make dev-watch
 ```
 
 ## IDE Configuration

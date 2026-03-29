@@ -37,6 +37,8 @@ keywords: [llamacpp, llama.cpp, Olla proxy, GGUF models, CPU inference, slot man
                 <li>Tokenisation API</li>
                 <li>Code Infill (FIM Support)</li>
                 <li>GGUF Exclusive Format</li>
+                <li>Native Anthropic Messages API (b4847+)</li>
+                <li>Anthropic Token Counting (b4847+)</li>
             </ul>
         </td>
     </tr>
@@ -153,6 +155,33 @@ discovery:
         type: "llamacpp"
         priority: 60
 ```
+
+## Anthropic Messages API Support
+
+llama.cpp b4847+ natively supports the Anthropic Messages API, enabling Olla to forward Anthropic-format requests directly without translation overhead (passthrough mode). Notably, llama.cpp is the **only backend that supports full token counting** via `/v1/messages/count_tokens`, enabling accurate prompt token estimation without making actual inference requests.
+
+When Olla detects that a llama.cpp endpoint supports native Anthropic format (via the `anthropic_support` section in `config/profiles/llamacpp.yaml`), it will bypass the Anthropic-to-OpenAI translation pipeline and forward requests directly to `/v1/messages` on the backend.
+
+**Profile configuration** (from `config/profiles/llamacpp.yaml`):
+
+```yaml
+api:
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: true
+    min_version: "b4847"
+```
+
+**Key details**:
+
+- Minimum llama.cpp version: **b4847**
+- Token counting (`/v1/messages/count_tokens`): **Supported** (unique among backends)
+- Passthrough mode is automatic -- no client-side configuration needed
+- Responses include `X-Olla-Mode: passthrough` header when passthrough is active
+- Falls back to translation mode if passthrough conditions are not met
+
+For more information, see [API Translation](../../concepts/api-translation.md#passthrough-mode) and [Anthropic API Reference](../../api-reference/anthropic.md).
 
 ## Endpoints Supported
 

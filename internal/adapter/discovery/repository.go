@@ -16,6 +16,12 @@ import (
 const (
 	MinHealthCheckInterval = 1 * time.Second
 	MaxHealthCheckTimeout  = 30 * time.Second
+
+	// Defaults applied when the user omits timing fields in their endpoint config.
+	// Without these, a zero value would fail the minimum-interval validator on startup.
+	DefaultCheckInterval = 5 * time.Second
+	DefaultCheckTimeout  = 2 * time.Second
+	DefaultPriority      = 100
 )
 
 type StaticEndpointRepository struct {
@@ -132,6 +138,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 	newEndpoints := make(map[string]*domain.Endpoint, len(configs))
 
 	for _, cfg := range configs {
+		applyEndpointDefaults(&cfg)
 		if err := r.validateEndpointConfig(cfg); err != nil {
 			return fmt.Errorf("invalid endpoint config for %q: %w", cfg.Name, err)
 		}
@@ -143,11 +150,14 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		urlString := endpointURL.String()
 
+		// Resolve URL defaults using fallback hierarchy: explicit config → profile defaults → universal defaults
+		healthCheckPath, modelPath := r.resolveURLDefaults(cfg)
+
 		// Build health check and model URLs using ResolveURLPath to preserve
 		// the base URL's path prefix. This handles both relative paths and absolute URLs correctly,
 		// preserving nested paths like http://localhost:12434/engines/llama.cpp/
-		healthCheckURLString := util.ResolveURLPath(urlString, cfg.HealthCheckURL)
-		modelURLString := util.ResolveURLPath(urlString, cfg.ModelURL)
+		healthCheckURLString := util.ResolveURLPath(urlString, healthCheckPath)
+		modelURLString := util.ResolveURLPath(urlString, modelPath)
 
 		healthCheckURL, err := url.Parse(healthCheckURLString)
 		if err != nil {
@@ -159,13 +169,11 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			return fmt.Errorf("invalid model URL %q: %w", modelURLString, err)
 		}
 
-		healthCheckPathString := cfg.HealthCheckURL
-
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
 			URL:                   endpointURL,
 			Type:                  cfg.Type,
-			Priority:              cfg.Priority,
+			Priority:              *cfg.Priority,
 			HealthCheckURL:        healthCheckURL,
 			ModelUrl:              modelURL,
 			ModelFilter:           cfg.ModelFilter,
@@ -173,7 +181,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			CheckTimeout:          cfg.CheckTimeout,
 			Status:                domain.StatusUnknown,
 			URLString:             urlString,
-			HealthCheckPathString: healthCheckPathString,
+			HealthCheckPathString: healthCheckPath,
 			HealthCheckURLString:  healthCheckURLString,
 			ModelURLString:        modelURLString,
 			BackoffMultiplier:     1,
@@ -191,18 +199,79 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 	return nil
 }
 
+// resolveURLDefaults determines health check and model paths using fallback hierarchy:
+// explicit config > profile defaults > universal defaults ("/", "/v1/models")
+func (r *StaticEndpointRepository) resolveURLDefaults(cfg config.EndpointConfig) (healthCheckPath, modelPath string) {
+	healthCheckPath = cfg.HealthCheckURL
+	modelPath = cfg.ModelURL
+
+	if healthCheckPath == "" || modelPath == "" {
+		profileHealthPath, profileModelPath := r.applyProfileDefaults(cfg.Type, healthCheckPath, modelPath)
+		if healthCheckPath == "" {
+			healthCheckPath = profileHealthPath
+		}
+		if modelPath == "" {
+			modelPath = profileModelPath
+		}
+	}
+
+	return healthCheckPath, modelPath
+}
+
+// applyProfileDefaults retrieves defaults from profile configuration or returns universal fallbacks.
+// Returns health check path (default "/") and model path (default "/v1/models").
+func (r *StaticEndpointRepository) applyProfileDefaults(endpointType, healthCheckPath, modelPath string) (string, string) {
+	// Try to get defaults from profile if a known type is specified (not empty or "auto")
+	if endpointType != "" && endpointType != domain.ProfileAuto {
+		profile, err := r.profileFactory.GetProfile(endpointType)
+		if err == nil {
+			if healthCheckPath == "" {
+				healthCheckPath = profile.GetHealthCheckPath()
+			}
+			if modelPath == "" {
+				if profileCfg := profile.GetConfig(); profileCfg != nil {
+					modelPath = profileCfg.API.ModelDiscoveryPath
+				}
+			}
+		}
+	}
+
+	// apply universal defaults for any remaining empty paths
+	// (for "auto" type, unknown types, or if profile lookup failed)
+	if healthCheckPath == "" {
+		healthCheckPath = "/"
+	}
+	if modelPath == "" {
+		modelPath = "/v1/models"
+	}
+
+	return healthCheckPath, modelPath
+}
+
+// applyEndpointDefaults fills in zero-value timing fields and an absent priority
+// so that omitting them in YAML config is equivalent to specifying the defaults.
+// Priority is a pointer so we can distinguish "omitted" (nil) from "explicitly 0",
+// which is a valid lower-than-default value.
+func applyEndpointDefaults(cfg *config.EndpointConfig) {
+	if cfg.CheckInterval == 0 {
+		cfg.CheckInterval = DefaultCheckInterval
+	}
+	if cfg.CheckTimeout == 0 {
+		cfg.CheckTimeout = DefaultCheckTimeout
+	}
+	if cfg.Priority == nil {
+		p := DefaultPriority
+		cfg.Priority = &p
+	}
+}
+
 func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointConfig) error {
 	if cfg.URL == "" {
 		return fmt.Errorf("endpoint URL cannot be empty")
 	}
 
-	if cfg.HealthCheckURL == "" {
-		return fmt.Errorf("health check URL cannot be empty")
-	}
-
-	if cfg.ModelURL == "" {
-		return fmt.Errorf("model URL cannot be empty")
-	}
+	// Allow empty health check and model URLs - they will get defaults from profile or fallback values
+	// in LoadFromConfig. This enables simpler configuration when using known profile types.
 
 	if cfg.CheckInterval < MinHealthCheckInterval {
 		return fmt.Errorf("check_interval too short: minimum %v, got %v", MinHealthCheckInterval, cfg.CheckInterval)
@@ -216,8 +285,9 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 		return fmt.Errorf("check_timeout too long: maximum %v, got %v", MaxHealthCheckTimeout, cfg.CheckTimeout)
 	}
 
-	if cfg.Priority < 0 {
-		return fmt.Errorf("priority must be non-negative, got %d", cfg.Priority)
+	// Priority is guaranteed non-nil here: applyEndpointDefaults always runs before validation.
+	if cfg.Priority != nil && *cfg.Priority < 0 {
+		return fmt.Errorf("priority must be non-negative, got %d", *cfg.Priority)
 	}
 
 	if cfg.Type != "" {

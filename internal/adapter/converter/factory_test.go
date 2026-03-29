@@ -25,6 +25,8 @@ func TestConverterFactory(t *testing.T) {
 			{"lmstudio", "*converter.LMStudioConverter"},
 			{"sglang", "*converter.SGLangConverter"},
 			{"vllm", "*converter.VLLMConverter"},
+			{"vllm-mlx", "*converter.VLLMMLXConverter"},
+			{"docker-model-runner", "*converter.DockerModelRunnerConverter"},
 			{"", "*converter.UnifiedConverter"}, // Default
 		}
 
@@ -55,11 +57,13 @@ func TestConverterFactory(t *testing.T) {
 		assert.Contains(t, qpErr.Reason, "lmstudio")
 		assert.Contains(t, qpErr.Reason, "sglang")
 		assert.Contains(t, qpErr.Reason, "vllm")
+		assert.Contains(t, qpErr.Reason, "vllm-mlx")
+		assert.Contains(t, qpErr.Reason, "docker-model-runner")
 	})
 
 	t.Run("GetSupportedFormats returns all formats", func(t *testing.T) {
 		formats := factory.GetSupportedFormats()
-		assert.Len(t, formats, 8)
+		assert.Len(t, formats, 10)
 
 		// Check all expected formats are present
 		formatMap := make(map[string]bool)
@@ -74,7 +78,9 @@ func TestConverterFactory(t *testing.T) {
 		assert.True(t, formatMap["llamacpp"])
 		assert.True(t, formatMap["sglang"])
 		assert.True(t, formatMap["vllm"])
+		assert.True(t, formatMap["vllm-mlx"])
 		assert.True(t, formatMap["lmstudio"])
+		assert.True(t, formatMap["docker-model-runner"])
 	})
 
 	t.Run("RegisterConverter adds new converter", func(t *testing.T) {

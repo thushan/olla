@@ -28,10 +28,14 @@ func getParserForFormat(format string) ModelResponseParser {
 		return &sglangParser{}
 	case constants.ProviderTypeVLLM:
 		return &vllmParser{}
+	case constants.ProviderTypeVLLMMLX:
+		return &vllmMLXParser{}
 	case constants.ProviderTypeLlamaCpp:
 		return &llamaCppParser{}
 	case constants.ProviderTypeOpenAI:
 		return &openAIParser{}
+	case constants.ProviderTypeDockerMR:
+		return &dockerModelRunnerParser{}
 	default:
 		// openai format is the de facto standard
 		return &openAIParser{}
