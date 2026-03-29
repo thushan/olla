@@ -29,7 +29,7 @@ When running multiple LLM backends (Ollama, LM Studio, llamacpp, vLLM, etc.), th
 - `llama-3.1-8b-instruct` on LM Studio
 - `Meta-Llama-3.1-8B-Instruct.gguf` on llamacpp
 
-Without aliases, a client request for `llama3.1:8b` would only match the Ollama endpoint — even though the other backends have the exact same model.
+Without aliases, a client request for `llama3.1:8b` would only match the Ollama endpoint — even though the other backends have the same model.
 
 **Model aliases** let you define a single virtual model name that maps to all of these variants, so any backend that has the model can serve the request.
 

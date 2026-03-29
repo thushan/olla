@@ -359,7 +359,8 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	if profile != nil && profile.ModelName != "" && a.modelRegistry != nil {
 		ctx := context.Background()
 
-		// check for model alias before standard routing
+		// aliases map one name to multiple backend-specific models, so they
+		// need dedicated resolution rather than the standard single-model path
 		if a.aliasResolver != nil && a.aliasResolver.IsAlias(profile.ModelName) {
 			return a.resolveAliasEndpoints(ctx, profile, profileFiltered, logger)
 		}
