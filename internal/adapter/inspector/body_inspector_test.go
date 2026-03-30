@@ -150,8 +150,10 @@ func TestBodyInspector_LargeBody(t *testing.T) {
 		t.Fatalf("Failed to create body inspector: %v", err)
 	}
 
-	// Create a large body that exceeds max size
-	largeBody := strings.Repeat("a", MaxBodySize+1000)
+	// Build a large JSON body that mimics a vision request: the model field is at the very
+	// start (well within modelScanSize), while the bulk of the body is a large base64 image.
+	imagePayload := strings.Repeat("A", MaxBodySize+1000)
+	largeBody := `{"model":"vision-model","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,` + imagePayload + `"}}]}]}`
 
 	req := &http.Request{
 		Body:          io.NopCloser(strings.NewReader(largeBody)),
@@ -162,10 +164,16 @@ func TestBodyInspector_LargeBody(t *testing.T) {
 
 	profile := domain.NewRequestProfile("/v1/chat/completions")
 
-	// Should skip inspection for large body
+	// Large body: model name must still be extracted from the prefix scan so routing works.
+	// Capability detection is intentionally skipped (no full parse) for large requests.
 	err = inspector.Inspect(ctx, req, profile)
 	assert.NoError(t, err)
-	assert.Empty(t, profile.ModelName)
+	assert.Equal(t, "vision-model", profile.ModelName, "model name must be extracted even from large vision requests")
+
+	// The full body must be restored intact for downstream proxy handlers.
+	restored, readErr := io.ReadAll(req.Body)
+	assert.NoError(t, readErr)
+	assert.Equal(t, largeBody, string(restored), "full body must be restored after prefix scan")
 }
 
 func TestBodyInspector_NoBody(t *testing.T) {

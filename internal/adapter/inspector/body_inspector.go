@@ -18,7 +18,13 @@ import (
 
 const (
 	BodyInspectorName = "body"
-	MaxBodySize       = 1024 * 1024 // 1MB max body size for inspection
+	MaxBodySize       = 1024 * 1024 // 1MB max body size for full body inspection (capabilities etc.)
+
+	// modelScanSize is the maximum number of bytes scanned when extracting only the top-level
+	// "model" field from large requests (e.g. vision requests with base64 image payloads).
+	// The model field is always near the start of the JSON object, so 64 KB is more than enough
+	// while keeping memory pressure negligible even for multi-megabyte bodies.
+	modelScanSize = 64 * 1024
 )
 
 type modelRequest struct {
@@ -62,8 +68,32 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		return nil
 	}
 
+	// For large requests (e.g. vision with base64 images) we still need the model name for
+	// routing, but buffering the full body just to parse JSON is wasteful and would OOM for
+	// multi-megabyte payloads. Instead, read a small prefix sufficient to find the top-level
+	// "model" key, restore the full body for downstream handlers, and skip capability detection
+	// (which requires the full body and is only used for optional capability-based filtering).
 	if r.ContentLength > bi.maxBodySize {
-		bi.logger.Debug("Skipping body inspection for large request", "content_length", r.ContentLength)
+		prefix := make([]byte, modelScanSize)
+		n, err := io.ReadFull(r.Body, prefix)
+		if err != nil && err != io.ErrUnexpectedEOF {
+			bi.logger.Debug("Failed to read request body prefix", "error", err)
+			return nil
+		}
+		prefix = prefix[:n]
+
+		// Restore the full body: prefix bytes already consumed + remainder still in original body
+		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(prefix), r.Body))
+
+		modelName := bi.extractModelName(prefix)
+		if modelName != "" {
+			profile.ModelName = modelName
+			bi.logger.Debug("Extracted model name from large request body prefix",
+				"model", modelName, "content_length", r.ContentLength)
+		} else {
+			bi.logger.Debug("Could not extract model name from large request body",
+				"content_length", r.ContentLength)
+		}
 		return nil
 	}
 
@@ -114,12 +144,21 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 		return ""
 	}
 
+	// Fast path: complete JSON — unmarshal directly.
 	var req modelRequest
 	if err := json.Unmarshal(body, &req); err == nil && req.Model != "" {
 		return bi.normalizeModelName(req.Model)
 	}
 
-	// Fall back to flexible map-based extraction to handle non-standard formats
+	// Streaming path: works on both complete and truncated JSON (e.g. a 64 KB prefix of a
+	// multi-megabyte vision request). Scan only top-level tokens so we never descend into
+	// the large base64 image string embedded in the messages array.
+	if model := extractTopLevelModelField(body); model != "" {
+		return bi.normalizeModelName(model)
+	}
+
+	// Fall back to flexible map-based extraction to handle non-standard formats.
+	// This only succeeds for complete, valid JSON bodies.
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
 		return ""
@@ -138,6 +177,63 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 		if firstMsg, ok := messages[0].(map[string]interface{}); ok {
 			if model, ok := firstMsg["model"].(string); ok && model != "" {
 				return bi.normalizeModelName(model)
+			}
+		}
+	}
+
+	return ""
+}
+
+// extractTopLevelModelField scans a JSON byte slice (which may be truncated) with a
+// streaming decoder and returns the value of the first top-level "model" string key.
+// It never descends into nested objects or arrays, so it is safe to call on multi-megabyte
+// bodies as well as short prefix slices.
+func extractTopLevelModelField(body []byte) string {
+	dec := json.NewDecoder(bytes.NewReader(body))
+
+	// Consume the opening '{' of the top-level object.
+	tok, err := dec.Token()
+	if err != nil {
+		return ""
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != '{' {
+		return ""
+	}
+
+	depth := 1
+	for dec.More() {
+		// Read the key token.
+		keyTok, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+
+		switch v := keyTok.(type) {
+		case json.Delim:
+			if v == '{' || v == '[' {
+				depth++
+			} else {
+				depth--
+			}
+			continue
+		case string:
+			if depth == 1 && strings.EqualFold(v, "model") {
+				// Read the value token.
+				valTok, err := dec.Token()
+				if err != nil {
+					return ""
+				}
+				if modelStr, ok := valTok.(string); ok && modelStr != "" {
+					return modelStr
+				}
+				// Value wasn't a string — keep scanning.
+				continue
+			}
+			// Skip the value for this key by decoding it into a discard target.
+			var discard json.RawMessage
+			if err := dec.Decode(&discard); err != nil {
+				// Likely truncated JSON — stop scanning.
+				return ""
 			}
 		}
 	}
