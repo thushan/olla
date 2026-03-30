@@ -112,6 +112,11 @@ func main() {
 		logger.FatalWithLogger(logInstance, "Failed to load configuration", "error", err)
 	}
 
+	// Validate model alias configuration at startup
+	if err = cfg.ValidateModelAliases(); err != nil {
+		logger.FatalWithLogger(logInstance, "Invalid model alias configuration", "error", err)
+	}
+
 	styledLogger.Info("Loaded configuration", "config", cfg.Filename)
 
 	// Create and start service manager

@@ -8,6 +8,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/inspector"
+	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/adapter/translator/anthropic"
@@ -83,6 +84,7 @@ type Application struct {
 	profileFactory     profile.ProfileFactory
 	profileLookup      translator.ProfileLookup
 	translatorRegistry *translator.Registry
+	aliasResolver      *registry.AliasResolver
 	server             *http.Server
 	errCh              chan error
 	StartTime          time.Time
@@ -160,6 +162,12 @@ func NewApplication(
 		logger.Info("Anthropic translator disabled via configuration")
 	}
 
+	// Create alias resolver for model name aliasing (nil if no aliases configured)
+	aliasResolver := registry.NewAliasResolver(cfg.ModelAliases, logger)
+	if aliasResolver != nil {
+		logger.Info("Model aliases configured", "alias_count", len(cfg.ModelAliases))
+	}
+
 	// Use profile factory directly as it implements the ProfileLookup interface
 	// The Factory.GetAnthropicSupport method provides the required functionality
 	profileLookup := profileFactory
@@ -179,6 +187,7 @@ func NewApplication(
 		profileLookup:      profileLookup,
 		converterFactory:   converter.NewConverterFactory(),
 		translatorRegistry: translatorRegistry,
+		aliasResolver:      aliasResolver,
 		server:             server,
 		errCh:              make(chan error, 1),
 		StartTime:          time.Now(),
