@@ -100,7 +100,6 @@ func TestPerformTimedRead_ConcurrentStress(t *testing.T) {
 		}(),
 	}
 
-	state := &streamState{}
 	logger := createTestLogger()
 
 	// Run MANY concurrent reads
@@ -109,21 +108,25 @@ func TestPerformTimedRead_ConcurrentStress(t *testing.T) {
 
 	for i := 0; i < numConcurrent; i++ {
 		wg.Add(1)
-		go func() {
+		go func(idx int) {
 			defer wg.Done()
 			ctx := context.Background()
 
+			// Each goroutine needs its own streamState to avoid data races —
+			// in production, each streaming response has its own state.
+			localState := &streamState{}
+
 			// Mix of timeout and successful reads
-			if i%2 == 0 {
+			if idx%2 == 0 {
 				reader := &delayedReader{delay: 100 * time.Millisecond}
 				localBuffer := make([]byte, 1024)
-				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, state, logger)
+				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, localState, logger)
 			} else {
 				reader := strings.NewReader("quick data")
 				localBuffer := make([]byte, 1024)
-				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, state, logger)
+				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, localState, logger)
 			}
-		}()
+		}(i)
 	}
 
 	wg.Wait()
