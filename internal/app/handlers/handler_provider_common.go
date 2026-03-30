@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -186,7 +187,7 @@ func (a *Application) filterModelsByProvider(ctx context.Context, models []*doma
 func (a *Application) getProviderModels(ctx context.Context, providerType string) ([]*domain.UnifiedModel, error) {
 	unifiedRegistry, ok := a.modelRegistry.(*registry.UnifiedMemoryModelRegistry)
 	if !ok {
-		return nil, fmt.Errorf("unified models not supported")
+		return nil, errors.New("unified models not supported")
 	}
 
 	unifiedModels, err := unifiedRegistry.GetUnifiedModels(ctx)

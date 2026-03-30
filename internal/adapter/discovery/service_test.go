@@ -266,7 +266,7 @@ func TestEndpointDisabling(t *testing.T) {
 			service := NewModelDiscoveryService(client, endpointRepo, modelRegistry, config, createTestLogger())
 
 			// Simulate previous failures if needed
-			for i := 0; i < tt.consecutiveFailures; i++ {
+			for range tt.consecutiveFailures {
 				service.incrementFailureCount(endpoint.URLString)
 			}
 
@@ -305,7 +305,7 @@ func TestEndpointDisabledAfterMaxFailures(t *testing.T) {
 	service := NewModelDiscoveryService(client, endpointRepo, modelRegistry, config, createTestLogger())
 
 	// Fail discovery MaxConsecutiveFailures times
-	for i := 0; i < MaxConsecutiveFailures; i++ {
+	for i := range MaxConsecutiveFailures {
 		_ = service.DiscoverEndpoint(context.Background(), endpoint)
 
 		// Should not be disabled until we hit the limit

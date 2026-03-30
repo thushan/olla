@@ -1,11 +1,12 @@
 package stats
 
 import (
-	"github.com/thushan/olla/internal/core/domain"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/core/domain"
 
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
@@ -199,18 +200,18 @@ func TestCollector_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrent request recording
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < requestsPerGoroutine; j++ {
+			for range requestsPerGoroutine {
 				collector.RecordRequest(endpoint, StatusSuccess, 100*time.Millisecond, 1024)
 			}
 		}(i)
 	}
 
 	// Concurrent connection tracking
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -220,7 +221,7 @@ func TestCollector_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent security violations
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -269,7 +270,7 @@ func TestCollector_MultipleEndpoints(t *testing.T) {
 
 	// Record requests for different endpoints
 	for i, endpoint := range endpoints {
-		for j := 0; j < i+1; j++ { // endpoint 0 gets 1 request, endpoint 1 gets 2, etc.
+		for range i + 1 { // endpoint 0 gets 1 request, endpoint 1 gets 2, etc.
 			collector.RecordRequest(endpoint, StatusSuccess, time.Duration(100*(i+1))*time.Millisecond, 1024)
 		}
 	}

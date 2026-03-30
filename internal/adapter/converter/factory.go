@@ -2,6 +2,7 @@ package converter
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -68,12 +69,12 @@ func (f *ConverterFactory) GetSupportedFormats() []string {
 // getSupportedFormats returns a comma-separated string of supported formats
 func (f *ConverterFactory) getSupportedFormats() string {
 	formats := f.GetSupportedFormats()
-	result := ""
+	var sb strings.Builder
 	for i, format := range formats {
 		if i > 0 {
-			result += ", "
+			sb.WriteString(", ")
 		}
-		result += format
+		sb.WriteString(format)
 	}
-	return result
+	return sb.String()
 }

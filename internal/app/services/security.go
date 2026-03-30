@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/thushan/olla/internal/adapter/security"
@@ -87,7 +88,7 @@ func (s *SecurityService) Dependencies() []string {
 // GetSecurityChain returns the security chain for middleware
 func (s *SecurityService) GetSecurityChain() (*ports.SecurityChain, error) {
 	if s.services == nil || s.services.Chain == nil {
-		return nil, fmt.Errorf("security chain not initialised")
+		return nil, errors.New("security chain not initialised")
 	}
 	return s.services.Chain, nil
 }
@@ -95,7 +96,7 @@ func (s *SecurityService) GetSecurityChain() (*ports.SecurityChain, error) {
 // GetAdapters returns the security adapters
 func (s *SecurityService) GetAdapters() (*security.Adapters, error) {
 	if s.adapters == nil {
-		return nil, fmt.Errorf("security adapters not initialised")
+		return nil, errors.New("security adapters not initialised")
 	}
 	return s.adapters, nil
 }
@@ -103,7 +104,7 @@ func (s *SecurityService) GetAdapters() (*security.Adapters, error) {
 // GetMetrics returns the security metrics service
 func (s *SecurityService) GetMetrics() (ports.SecurityMetricsService, error) {
 	if s.services == nil || s.services.Metrics == nil {
-		return nil, fmt.Errorf("security metrics not initialised")
+		return nil, errors.New("security metrics not initialised")
 	}
 	return s.services.Metrics, nil
 }

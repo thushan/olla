@@ -231,7 +231,7 @@ func TestProxyImplementationParity(t *testing.T) {
 					w.Header().Set("Content-Type", "text/plain")
 					w.WriteHeader(http.StatusOK)
 					flusher := w.(http.Flusher)
-					for i := 0; i < 5; i++ {
+					for i := range 5 {
 						fmt.Fprintf(w, "chunk %d\n", i)
 						flusher.Flush()
 						time.Sleep(10 * time.Millisecond)
@@ -351,7 +351,7 @@ func TestStatsCollectorIntegration(t *testing.T) {
 
 			// Make several requests
 			const numRequests = 5
-			for i := 0; i < numRequests; i++ {
+			for i := range numRequests {
 				req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 				w := httptest.NewRecorder()
 				err := proxy.ProxyRequest(req.Context(), w, req, stats, rlog)
@@ -443,7 +443,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 		}
 
 		// Make some failing requests
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 			w := httptest.NewRecorder()
 			proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
@@ -476,7 +476,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 		}
 
 		// Sherpa doesn't have circuit breakers, just traditional error handling
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 			w := httptest.NewRecorder()
 			proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
@@ -524,7 +524,7 @@ func TestPerformanceCharacteristics(t *testing.T) {
 			var wg sync.WaitGroup
 			errors := make(chan error, numRequests)
 
-			for i := 0; i < numRequests; i++ {
+			for range numRequests {
 				wg.Add(1)
 				go func() {
 					defer wg.Done()

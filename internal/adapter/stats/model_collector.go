@@ -368,7 +368,7 @@ func (mc *ModelCollector) cleanupClientIPs(data *modelData, cutoff int64) {
 
 		// Delete the oldest IPs
 		toRemove := len(allIPs) - mc.config.MaxUniqueClientsPerModel
-		for i := 0; i < toRemove; i++ {
+		for i := range toRemove {
 			data.uniqueClients.Delete(allIPs[i].ip)
 		}
 	}

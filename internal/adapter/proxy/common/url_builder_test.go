@@ -485,7 +485,7 @@ func TestBuildTargetURL_QueryString(t *testing.T) {
 
 			assert.Equal(t, tt.expectedPath, targetURL.Path, tt.description)
 			assert.Equal(t, tt.expectedQuery, targetURL.RawQuery, "Query string: "+tt.description)
-			assert.Equal(t, "", targetURL.Fragment, "Fragment should be empty")
+			assert.Empty(t, targetURL.Fragment, "Fragment should be empty")
 		})
 	}
 }
@@ -756,7 +756,7 @@ func BenchmarkBuildTargetURL(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = BuildTargetURL(req, scenario.endpoint, scenario.proxyPrefix)
 			}
 		})

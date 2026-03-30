@@ -2,6 +2,7 @@ package unifier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -53,7 +54,7 @@ func (u *LifecycleUnifier) SetDiscoveryClient(client DiscoveryClient) {
 
 func (u *LifecycleUnifier) Start(ctx context.Context) error {
 	if !u.isRunning.CompareAndSwap(false, true) {
-		return fmt.Errorf("unifier is already running")
+		return errors.New("unifier is already running")
 	}
 
 	u.cleanupCtx, u.cleanupCancel = context.WithCancel(ctx)
@@ -325,7 +326,7 @@ func (u *LifecycleUnifier) RecordEndpointFailure(endpointURL string, err error) 
 
 func (u *LifecycleUnifier) ForceEndpointCheck(ctx context.Context, endpointURL string) error {
 	if u.discoveryClient == nil {
-		return fmt.Errorf("discovery client not configured")
+		return errors.New("discovery client not configured")
 	}
 
 	var endpoint *domain.Endpoint

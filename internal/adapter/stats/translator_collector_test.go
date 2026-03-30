@@ -14,7 +14,7 @@ func TestTranslatorCollector_RecordPassthrough(t *testing.T) {
 	collector := NewTranslatorCollector()
 
 	// Record multiple passthrough requests
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		event := ports.TranslatorRequestEvent{
 			TranslatorName: "anthropic",
 			Model:          "claude-3-5-sonnet-20241022",
@@ -95,7 +95,7 @@ func TestTranslatorCollector_RecordTranslationWithFallback(t *testing.T) {
 
 	totalTranslations := 0
 	for _, tc := range testCases {
-		for i := 0; i < tc.count; i++ {
+		for range tc.count {
 			event := ports.TranslatorRequestEvent{
 				TranslatorName: "anthropic",
 				Model:          "claude-3-5-sonnet-20241022",
@@ -146,11 +146,11 @@ func TestTranslatorCollector_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Launch goroutines recording passthrough events
-	for i := 0; i < numGoroutines/2; i++ {
+	for range numGoroutines / 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < requestsPerGoroutine; j++ {
+			for range requestsPerGoroutine {
 				event := ports.TranslatorRequestEvent{
 					TranslatorName: "anthropic",
 					Model:          "claude-3-5-sonnet-20241022",
@@ -166,11 +166,11 @@ func TestTranslatorCollector_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Launch goroutines recording translation events with fallback
-	for i := 0; i < numGoroutines/2; i++ {
+	for range numGoroutines / 2 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < requestsPerGoroutine; j++ {
+			for range requestsPerGoroutine {
 				event := ports.TranslatorRequestEvent{
 					TranslatorName: "anthropic",
 					Model:          "claude-3-5-sonnet-20241022",
@@ -267,7 +267,7 @@ func TestTranslatorCollector_PassthroughRate(t *testing.T) {
 			collector := NewTranslatorCollector()
 
 			// Record passthrough requests
-			for i := 0; i < tc.passthroughCount; i++ {
+			for range tc.passthroughCount {
 				event := ports.TranslatorRequestEvent{
 					TranslatorName: "anthropic",
 					Model:          "claude-3-5-sonnet-20241022",
@@ -281,7 +281,7 @@ func TestTranslatorCollector_PassthroughRate(t *testing.T) {
 			}
 
 			// Record translation requests
-			for i := 0; i < tc.translationCount; i++ {
+			for range tc.translationCount {
 				event := ports.TranslatorRequestEvent{
 					TranslatorName: "anthropic",
 					Model:          "claude-3-5-sonnet-20241022",
@@ -350,7 +350,7 @@ func TestTranslatorCollector_MultipleTranslators(t *testing.T) {
 	// Record events for each translator
 	for _, translator := range translators {
 		// Passthrough requests
-		for i := 0; i < translator.passthroughReqs; i++ {
+		for range translator.passthroughReqs {
 			event := ports.TranslatorRequestEvent{
 				TranslatorName: translator.name,
 				Model:          "test-model",
@@ -364,7 +364,7 @@ func TestTranslatorCollector_MultipleTranslators(t *testing.T) {
 		}
 
 		// Translation requests
-		for i := 0; i < translator.translationReqs; i++ {
+		for range translator.translationReqs {
 			event := ports.TranslatorRequestEvent{
 				TranslatorName: translator.name,
 				Model:          "test-model",
@@ -417,7 +417,7 @@ func TestTranslatorCollector_StreamingVsNonStreaming(t *testing.T) {
 	collector := NewTranslatorCollector()
 
 	// Record streaming requests
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		event := ports.TranslatorRequestEvent{
 			TranslatorName: "anthropic",
 			Model:          "claude-3-5-sonnet-20241022",
@@ -431,7 +431,7 @@ func TestTranslatorCollector_StreamingVsNonStreaming(t *testing.T) {
 	}
 
 	// Record non-streaming requests
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		event := ports.TranslatorRequestEvent{
 			TranslatorName: "anthropic",
 			Model:          "claude-3-5-sonnet-20241022",
@@ -464,7 +464,7 @@ func TestTranslatorCollector_SuccessVsError(t *testing.T) {
 	collector := NewTranslatorCollector()
 
 	// Record successful requests
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		event := ports.TranslatorRequestEvent{
 			TranslatorName: "anthropic",
 			Model:          "claude-3-5-sonnet-20241022",
@@ -478,7 +478,7 @@ func TestTranslatorCollector_SuccessVsError(t *testing.T) {
 	}
 
 	// Record failed requests
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		event := ports.TranslatorRequestEvent{
 			TranslatorName: "anthropic",
 			Model:          "claude-3-5-sonnet-20241022",
@@ -552,7 +552,7 @@ func TestTranslatorCollector_LatencyWithFailures(t *testing.T) {
 	collector := NewTranslatorCollector()
 
 	// Record successful requests
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		event := ports.TranslatorRequestEvent{
 			TranslatorName: "anthropic",
 			Model:          "claude-3-5-sonnet-20241022",
@@ -627,7 +627,7 @@ func TestTranslatorCollector_ZeroSuccessfulRequests(t *testing.T) {
 	collector := NewTranslatorCollector()
 
 	// Record only failed requests
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		event := ports.TranslatorRequestEvent{
 			TranslatorName: "anthropic",
 			Model:          "claude-3-5-sonnet-20241022",
@@ -740,11 +740,11 @@ func TestTranslatorCollector_MixedModesConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Launch goroutines with mixed modes, streaming states, and success states
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < requestsPerGoroutine; j++ {
+			for j := range requestsPerGoroutine {
 				mode := constants.TranslatorModePassthrough
 				fallback := constants.FallbackReasonNone
 				if (id+j)%2 == 0 {

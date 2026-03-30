@@ -2,6 +2,7 @@ package olla
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime"
 	"sync/atomic"
@@ -44,7 +45,7 @@ func TestEndpointPoolCleanup_NoMemoryLeak(t *testing.T) {
 	}()
 
 	// Create many endpoint pools
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		endpoint := fmt.Sprintf("endpoint-%d", i)
 		pool := s.getOrCreateEndpointPool(endpoint)
 
@@ -104,7 +105,7 @@ func TestCircuitBreakerCleanup_NoMemoryLeak(t *testing.T) {
 	}()
 
 	// Create circuit breakers without corresponding pools
-	for i := 0; i < 30; i++ {
+	for i := range 30 {
 		endpoint := fmt.Sprintf("endpoint-%d", i)
 		cb := s.GetCircuitBreaker(endpoint)
 		// Set as closed with no recent failures
@@ -144,7 +145,7 @@ func TestCleanupLoop_ExitsCleanly(t *testing.T) {
 	initialGoroutines := runtime.NumGoroutine()
 
 	// Create and start multiple services
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		s := &Service{
 			BaseProxyComponents: &core.BaseProxyComponents{
 				Logger: createTestLogger(),
@@ -228,7 +229,7 @@ func TestErrorContextPool_Reset(t *testing.T) {
 
 	// Get a context and set fields
 	ctx := errorPool.Get()
-	ctx.err = fmt.Errorf("test error")
+	ctx.err = errors.New("test error")
 	ctx.context = "test context"
 	ctx.duration = 5 * time.Second
 	ctx.code = 500
@@ -329,7 +330,7 @@ type mockEndpointSelector struct{}
 
 func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
 	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints")
+		return nil, errors.New("no endpoints")
 	}
 	return endpoints[0], nil
 }

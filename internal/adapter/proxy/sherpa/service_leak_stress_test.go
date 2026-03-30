@@ -32,7 +32,7 @@ func TestPerformTimedRead_NoGoroutineLeak_Stress(t *testing.T) {
 	logger := createTestLogger()
 
 	// Run many reads that will timeout (original 50 iterations)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		ctx := context.Background()
 
 		// Use a reader that delays then returns data
@@ -49,7 +49,7 @@ func TestPerformTimedRead_NoGoroutineLeak_Stress(t *testing.T) {
 	}
 
 	// Also test context cancellation with non-blocking reader
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		ctx, cancel := context.WithCancel(context.Background())
 
 		// Use a reader that returns data immediately
@@ -100,30 +100,33 @@ func TestPerformTimedRead_ConcurrentStress(t *testing.T) {
 		}(),
 	}
 
-	state := &streamState{}
 	logger := createTestLogger()
 
 	// Run MANY concurrent reads
 	var wg sync.WaitGroup
 	const numConcurrent = 100
 
-	for i := 0; i < numConcurrent; i++ {
+	for i := range numConcurrent {
 		wg.Add(1)
-		go func() {
+		go func(idx int) {
 			defer wg.Done()
 			ctx := context.Background()
 
+			// Each goroutine needs its own streamState to avoid data races —
+			// in production, each streaming response has its own state.
+			localState := &streamState{}
+
 			// Mix of timeout and successful reads
-			if i%2 == 0 {
+			if idx%2 == 0 {
 				reader := &delayedReader{delay: 100 * time.Millisecond}
 				localBuffer := make([]byte, 1024)
-				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, state, logger)
+				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, localState, logger)
 			} else {
 				reader := strings.NewReader("quick data")
 				localBuffer := make([]byte, 1024)
-				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, state, logger)
+				s.performTimedRead(ctx, reader, localBuffer, 50*time.Millisecond, localState, logger)
 			}
-		}()
+		}(i)
 	}
 
 	wg.Wait()

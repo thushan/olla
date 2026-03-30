@@ -217,9 +217,9 @@ func TestRequestProfile_ThreadSafety(t *testing.T) {
 	// testing concurrent access to metadata (xsync.Map should handle this)
 	done := make(chan bool, 10)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		go func(id int) {
-			for j := 0; j < 100; j++ {
+			for j := range 100 {
 				key := fmt.Sprintf("key_%d_%d", id, j)
 				value := fmt.Sprintf("value_%d_%d", id, j)
 				profile.SetInspectionMeta(key, value)
@@ -228,9 +228,9 @@ func TestRequestProfile_ThreadSafety(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		go func(id int) {
-			for j := 0; j < 100; j++ {
+			for j := range 100 {
 				key := fmt.Sprintf("key_%d_%d", id%5, j)
 				profile.InspectionMeta.Load(key)
 			}
@@ -238,7 +238,7 @@ func TestRequestProfile_ThreadSafety(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 

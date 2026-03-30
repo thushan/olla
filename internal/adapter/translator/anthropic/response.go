@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -23,17 +24,17 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 	// Extract choices
 	choices, ok := respMap["choices"].([]interface{})
 	if !ok || len(choices) == 0 {
-		return nil, fmt.Errorf("no choices in OpenAI response")
+		return nil, errors.New("no choices in OpenAI response")
 	}
 
 	choice, ok := choices[0].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("invalid choice format")
+		return nil, errors.New("invalid choice format")
 	}
 
 	message, ok := choice["message"].(map[string]interface{})
 	if !ok {
-		return nil, fmt.Errorf("no message in choice")
+		return nil, errors.New("no message in choice")
 	}
 
 	// grab finish_reason for stop_reason mapping

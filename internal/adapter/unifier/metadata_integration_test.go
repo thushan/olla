@@ -41,7 +41,7 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
 				assert.Equal(t, "gemma3", model.Family)
-				assert.Equal(t, "", model.Variant)
+				assert.Empty(t, model.Variant)
 				assert.Equal(t, "12.2b", model.ParameterSize)
 				assert.Equal(t, int64(12200000000), model.ParameterCount)
 				assert.Equal(t, "q4km", model.Quantization)
@@ -71,7 +71,7 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			endpoint: createTestEndpoint("http://localhost:1234", "LM Studio"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
 				assert.Equal(t, "phi", model.Family)
-				assert.Equal(t, "", model.Variant) // Variant suppressed for metadata-sourced family
+				assert.Empty(t, model.Variant) // Variant suppressed for metadata-sourced family
 				assert.Equal(t, "q4km", model.Quantization)
 				assert.Equal(t, int64(131072), *model.MaxContextLength)
 				assert.Contains(t, model.Capabilities, "text-generation")
@@ -243,13 +243,13 @@ func TestDefaultUnifier_MetadataMerging(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "llama", model.Family)
-	assert.Equal(t, "", model.Variant)
+	assert.Empty(t, model.Variant)
 	assert.Equal(t, "1.2b", model.ParameterSize)
 	assert.Equal(t, "q4km", model.Quantization)
 	assert.Equal(t, int64(128000), *model.MaxContextLength)
 	assert.Contains(t, model.Capabilities, "long-context")
 	assert.Equal(t, "meta", model.Metadata["publisher"])
-	assert.Equal(t, 2, len(model.SourceEndpoints))
+	assert.Len(t, model.SourceEndpoints, 2)
 
 	// Platform diversity and publisher information preserved through merging
 	assert.Contains(t, model.Metadata, "platform")

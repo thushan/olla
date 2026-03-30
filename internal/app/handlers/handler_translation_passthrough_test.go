@@ -466,7 +466,7 @@ func TestTranslationHandler_PassthroughWithMultipleEndpoints(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	// Verify one backend was called
-	assert.True(t, len(backendsCalled) > 0, "At least one backend should be called")
+	assert.Positive(t, len(backendsCalled), "At least one backend should be called")
 
 	// Verify passthrough mode
 	assert.Equal(t, "passthrough", rec.Header().Get("X-Olla-Mode"))

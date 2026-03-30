@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -563,17 +564,19 @@ func TestLlamaCppParser_PerformanceConsiderations(t *testing.T) {
 		// parser must handle multiple models efficiently
 		modelCount := 50
 		modelsJSON := ""
-		for i := 0; i < modelCount; i++ {
+		var modelsJSONSb566 strings.Builder
+		for i := range modelCount {
 			if i > 0 {
-				modelsJSON += ","
+				modelsJSONSb566.WriteString(",")
 			}
-			modelsJSON += fmt.Sprintf(`{
+			modelsJSONSb566.WriteString(fmt.Sprintf(`{
 				"id": "model-%d.gguf",
 				"object": "model",
 				"created": %d,
 				"owned_by": "publisher-%d"
-			}`, i, 1704067200+i, i%5)
+			}`, i, 1704067200+i, i%5))
 		}
+		modelsJSON += modelsJSONSb566.String()
 
 		response := fmt.Sprintf(`{
 			"object": "list",

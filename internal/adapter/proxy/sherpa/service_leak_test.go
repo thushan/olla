@@ -23,7 +23,7 @@ func TestCreateCombinedContext_NoGoroutineLeak(t *testing.T) {
 	s := &Service{}
 
 	// Create many contexts and ensure goroutines are cleaned up
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		ctx1, cancel1 := context.WithCancel(context.Background())
 		ctx2, cancel2 := context.WithCancel(context.Background())
 
@@ -81,7 +81,7 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 	var wg sync.WaitGroup
 	const numTimeoutTests = 20 // Reduced from 50
 
-	for i := 0; i < numTimeoutTests; i++ {
+	for range numTimeoutTests {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -106,7 +106,7 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 
 	// Test context cancellation concurrently too
 	const numCancelTests = 20 // Reduced from 50
-	for i := 0; i < numCancelTests; i++ {
+	for range numCancelTests {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -168,7 +168,7 @@ func TestStreamResponseWithTimeout_ClientDisconnect(t *testing.T) {
 	logger := createTestLogger()
 
 	// Simulate multiple client disconnections
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		clientCtx, clientCancel := context.WithCancel(context.Background())
 		upstreamCtx := context.Background()
 		writer := &mockWriter{}

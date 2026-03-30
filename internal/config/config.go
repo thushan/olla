@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -152,13 +153,13 @@ func DefaultConfig() *Config {
 // overrides) have been applied, so the final merged state is what's checked.
 func (c *Config) Validate() error {
 	if c.Discovery.Type == "" {
-		return fmt.Errorf("discovery.type must not be empty (e.g. \"static\")")
+		return errors.New("discovery.type must not be empty (e.g. \"static\")")
 	}
 	if c.Proxy.Engine == "" {
-		return fmt.Errorf("proxy.engine must not be empty (e.g. \"sherpa\" or \"olla\")")
+		return errors.New("proxy.engine must not be empty (e.g. \"sherpa\" or \"olla\")")
 	}
 	if c.Proxy.LoadBalancer == "" {
-		return fmt.Errorf("proxy.load_balancer must not be empty (e.g. \"priority\")")
+		return errors.New("proxy.load_balancer must not be empty (e.g. \"priority\")")
 	}
 	if c.Server.Port <= 0 || c.Server.Port > 65535 {
 		return fmt.Errorf("server.port must be between 1 and 65535, got %d", c.Server.Port)
@@ -167,13 +168,13 @@ func (c *Config) Validate() error {
 	if c.Discovery.ModelDiscovery.Enabled {
 		md := c.Discovery.ModelDiscovery
 		if md.Interval <= 0 {
-			return fmt.Errorf("discovery.model_discovery.interval must be > 0 when model discovery is enabled (prevents ticker panic)")
+			return errors.New("discovery.model_discovery.interval must be > 0 when model discovery is enabled (prevents ticker panic)")
 		}
 		if md.ConcurrentWorkers <= 0 {
-			return fmt.Errorf("discovery.model_discovery.concurrent_workers must be > 0 when model discovery is enabled (prevents errgroup panic)")
+			return errors.New("discovery.model_discovery.concurrent_workers must be > 0 when model discovery is enabled (prevents errgroup panic)")
 		}
 		if md.Timeout <= 0 {
-			return fmt.Errorf("discovery.model_discovery.timeout must be > 0 when model discovery is enabled (prevents immediate context expiry)")
+			return errors.New("discovery.model_discovery.timeout must be > 0 when model discovery is enabled (prevents immediate context expiry)")
 		}
 	}
 
@@ -403,7 +404,7 @@ func applyEnvOverrides(config *Config) {
 // Uses binary units (1KB = 1024 bytes) for consistency with memory/storage
 func parseByteSize(s string) (int64, error) {
 	if s == "" {
-		return 0, fmt.Errorf("empty byte size")
+		return 0, errors.New("empty byte size")
 	}
 
 	s = strings.TrimSpace(s)

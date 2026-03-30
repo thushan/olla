@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -78,30 +79,30 @@ func (fc *FilterConfig) Validate() error {
 // validatePattern checks if a glob pattern is valid
 func validatePattern(pattern string) error {
 	if strings.TrimSpace(pattern) == "" {
-		return fmt.Errorf("empty or whitespace-only pattern")
+		return errors.New("empty or whitespace-only pattern")
 	}
 
 	// Check for invalid characters or patterns
 	// We support simple glob patterns with * wildcard
 	if strings.Contains(pattern, "**") {
-		return fmt.Errorf("double asterisk not supported")
+		return errors.New("double asterisk not supported")
 	}
 
 	// Count asterisks - we support at most one at start and/or end
 	asteriskCount := strings.Count(pattern, "*")
 	if asteriskCount > 2 {
-		return fmt.Errorf("too many wildcards")
+		return errors.New("too many wildcards")
 	}
 
 	if asteriskCount == 1 {
 		// Single wildcard should be at start or end
 		if !strings.HasPrefix(pattern, "*") && !strings.HasSuffix(pattern, "*") {
-			return fmt.Errorf("wildcards only supported at start and/or end")
+			return errors.New("wildcards only supported at start and/or end")
 		}
 	} else if asteriskCount == 2 {
 		// Two wildcards should only be at start and end for *text* pattern
 		if !strings.HasPrefix(pattern, "*") || !strings.HasSuffix(pattern, "*") {
-			return fmt.Errorf("wildcards only supported at start and/or end")
+			return errors.New("wildcards only supported at start and/or end")
 		}
 	}
 

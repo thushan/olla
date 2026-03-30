@@ -124,7 +124,7 @@ func formatPlainBanner() string {
 	var b strings.Builder
 
 	t := centerLine(fmt.Sprintf("%s %s", Name, Version))
-	g := centerLine(fmt.Sprintf("%s", GithubHomeText))
+	g := centerLine(GithubHomeText)
 
 	b.WriteString("┌" + strings.Repeat("─", BoxWidth-2) + "┐\n")
 

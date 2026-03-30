@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -36,7 +37,7 @@ func (r *ServiceRegistry) GetStats() (*StatsService, error) {
 	}
 	stats, ok := service.(*StatsService)
 	if !ok {
-		return nil, fmt.Errorf("service stats is not a StatsService")
+		return nil, errors.New("service stats is not a StatsService")
 	}
 	return stats, nil
 }
@@ -48,7 +49,7 @@ func (r *ServiceRegistry) GetSecurity() (*SecurityService, error) {
 	}
 	security, ok := service.(*SecurityService)
 	if !ok {
-		return nil, fmt.Errorf("service security is not a SecurityService")
+		return nil, errors.New("service security is not a SecurityService")
 	}
 	return security, nil
 }
@@ -60,7 +61,7 @@ func (r *ServiceRegistry) GetDiscovery() (*DiscoveryService, error) {
 	}
 	discovery, ok := service.(*DiscoveryService)
 	if !ok {
-		return nil, fmt.Errorf("service discovery is not a DiscoveryService")
+		return nil, errors.New("service discovery is not a DiscoveryService")
 	}
 	return discovery, nil
 }
@@ -72,7 +73,7 @@ func (r *ServiceRegistry) GetProxy() (*ProxyServiceWrapper, error) {
 	}
 	proxy, ok := service.(*ProxyServiceWrapper)
 	if !ok {
-		return nil, fmt.Errorf("service proxy is not a ProxyServiceWrapper")
+		return nil, errors.New("service proxy is not a ProxyServiceWrapper")
 	}
 	return proxy, nil
 }
@@ -84,7 +85,7 @@ func (r *ServiceRegistry) GetHTTP() (*HTTPService, error) {
 	}
 	http, ok := service.(*HTTPService)
 	if !ok {
-		return nil, fmt.Errorf("service http is not a HTTPService")
+		return nil, errors.New("service http is not a HTTPService")
 	}
 	return http, nil
 }

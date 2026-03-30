@@ -386,7 +386,7 @@ func TestGlobFilter_CachePerformance(t *testing.T) {
 	filter.cacheMu.RLock()
 	cacheSize := len(filter.patternCache)
 	filter.cacheMu.RUnlock()
-	assert.Greater(t, cacheSize, 0, "Cache should contain entries")
+	assert.Positive(t, cacheSize, "Cache should contain entries")
 
 	// Clear cache and verify
 	filter.ClearCache()

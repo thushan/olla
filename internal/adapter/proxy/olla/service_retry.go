@@ -57,7 +57,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	cb := s.GetCircuitBreaker(endpoint.Name)
 	if cb != nil && cb.IsOpen() {
 		rlog.Warn("Circuit breaker is open for endpoint", "endpoint", endpoint.Name)
-		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), fmt.Errorf("circuit breaker open"))
+		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), errors.New("circuit breaker open"))
 		return fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
 	}
 

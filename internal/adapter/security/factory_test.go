@@ -2,9 +2,10 @@ package security
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/adapter/stats"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/adapter/stats"
 
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
@@ -150,7 +151,7 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 
 	// Subsequent rapid requests should be rate limited
 	rateLimited := false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result, err := services.Chain.Validate(ctx, req)
 		if err != nil {
 			t.Fatalf("Chain validation failed on iteration %d: %v", i, err)
@@ -218,7 +219,7 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 	}
 
 	// Make multiple requests to potentially trigger rate limiting
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		result, err := services.Chain.Validate(ctx, req)
 		if err != nil {
 			t.Fatalf("Chain validation failed on iteration %d: %v", i, err)

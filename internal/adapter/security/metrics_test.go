@@ -3,10 +3,11 @@ package security
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/core/constants"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -136,7 +137,7 @@ func TestSecurityMetricsAdapter_RecordViolation_DuplicateIP(t *testing.T) {
 
 	ip := "192.168.1.100"
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		violation := ports.SecurityViolation{
 			ClientID:      ip,
 			ViolationType: "rate_limit",
@@ -201,12 +202,12 @@ func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, 100)
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				violation := ports.SecurityViolation{
 					ClientID:      fmt.Sprintf("192.168.1.%d", 100+id),
 					ViolationType: "rate_limit",
@@ -223,12 +224,12 @@ func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 
-			for j := 0; j < 3; j++ {
+			for range 3 {
 				violation := ports.SecurityViolation{
 					ClientID:      fmt.Sprintf("192.168.2.%d", 100+id),
 					ViolationType: "size_limit",
@@ -245,12 +246,12 @@ func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				_, err := adapter.GetMetrics(ctx)
 				if err != nil {
 					errors <- err

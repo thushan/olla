@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -142,7 +143,7 @@ func (l *ProfileLoader) loadProfile(path string) (domain.InferenceProfile, error
 	}
 
 	if config.Name == "" {
-		return nil, fmt.Errorf("profile name is required")
+		return nil, errors.New("profile name is required")
 	}
 	if config.Version == "" {
 		config.Version = "1.0"

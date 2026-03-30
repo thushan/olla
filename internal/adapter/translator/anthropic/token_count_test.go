@@ -440,7 +440,7 @@ func BenchmarkCountTokens(b *testing.B) {
 	}`)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 		_, _ = trans.CountTokens(context.Background(), req)
@@ -468,7 +468,7 @@ func BenchmarkCountTokensLargeRequest(b *testing.B) {
 	reqBody, _ := json.Marshal(reqData)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 		_, _ = trans.CountTokens(context.Background(), req)

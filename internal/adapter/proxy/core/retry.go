@@ -46,7 +46,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 	proxyFunc ProxyFunc,
 ) error {
 	if len(endpoints) == 0 {
-		return fmt.Errorf("no endpoints available")
+		return errors.New("no endpoints available")
 	}
 
 	// Work with a copy to avoid modifying the original slice
@@ -168,7 +168,7 @@ func (h *RetryHandler) handleConnectionFailure(ctx context.Context, endpoint *do
 
 // removeFailedEndpoint removes the failed endpoint from the available list
 func (h *RetryHandler) removeFailedEndpoint(endpoints []*domain.Endpoint, failedEndpoint *domain.Endpoint) []*domain.Endpoint {
-	for i := 0; i < len(endpoints); i++ {
+	for i := range endpoints {
 		if endpoints[i].Name == failedEndpoint.Name {
 			// Remove element at index i by copying subsequent elements
 			copy(endpoints[i:], endpoints[i+1:])

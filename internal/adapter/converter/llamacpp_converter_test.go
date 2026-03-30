@@ -384,7 +384,7 @@ func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
 		}
 
 		result := converter.findLlamaCppNativeName(model)
-		assert.Equal(t, "", result, "Should return empty string when no llamacpp alias exists")
+		assert.Empty(t, result, "Should return empty string when no llamacpp alias exists")
 	})
 
 	t.Run("ignores names from other providers", func(t *testing.T) {
@@ -401,7 +401,7 @@ func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
 		}
 
 		result := converter.findLlamaCppNativeName(model)
-		assert.Equal(t, "", result, "Should not pick up names from non-llamacpp sources")
+		assert.Empty(t, result, "Should not pick up names from non-llamacpp sources")
 	})
 
 	t.Run("returns first llamacpp alias when multiple exist", func(t *testing.T) {

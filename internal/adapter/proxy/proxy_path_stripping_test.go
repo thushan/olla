@@ -421,7 +421,7 @@ func benchmarkPathStripping(b *testing.B, proxyType, prefix, requestPath string)
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req := httptest.NewRequest("GET", requestPath, nil)
 		w := httptest.NewRecorder()
 		stats := &ports.RequestStats{

@@ -2,6 +2,7 @@ package filter
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -39,7 +40,7 @@ func (r *MemoryFilterRepository) GetFilterConfig(ctx context.Context, key string
 // SetFilterConfig stores a filter configuration
 func (r *MemoryFilterRepository) SetFilterConfig(ctx context.Context, key string, config *domain.FilterConfig) error {
 	if key == "" {
-		return fmt.Errorf("filter configuration key cannot be empty")
+		return errors.New("filter configuration key cannot be empty")
 	}
 
 	r.mu.Lock()
@@ -79,7 +80,7 @@ func (r *MemoryFilterRepository) DeleteFilterConfig(ctx context.Context, key str
 // ValidateAndStore validates and stores a filter configuration
 func (r *MemoryFilterRepository) ValidateAndStore(ctx context.Context, key string, config *domain.FilterConfig) error {
 	if config == nil {
-		return fmt.Errorf("filter configuration cannot be nil")
+		return errors.New("filter configuration cannot be nil")
 	}
 
 	if err := config.Validate(); err != nil {

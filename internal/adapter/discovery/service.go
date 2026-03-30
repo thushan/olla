@@ -63,7 +63,7 @@ func NewModelDiscoveryService(client ModelDiscoveryClient, endpointRepo domain.E
 
 func (s *ModelDiscoveryService) Start(ctx context.Context) error {
 	if !s.isRunning.CompareAndSwap(false, true) {
-		return fmt.Errorf("discovery service is already running")
+		return errors.New("discovery service is already running")
 	}
 
 	// Guard against a zero interval from user config overrides — time.NewTicker panics on <= 0.

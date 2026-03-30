@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -136,7 +137,7 @@ func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.E
 	if len(endpoints) > 0 {
 		return endpoints[0], nil
 	}
-	return nil, fmt.Errorf("no endpoints available")
+	return nil, errors.New("no endpoints available")
 }
 
 func (m *mockEndpointSelector) Name() string {
@@ -396,7 +397,7 @@ func testProxyRequestNoEndpoints(t *testing.T, suite ProxyTestSuite) {
 }
 
 func testProxyRequestDiscoveryError(t *testing.T, suite ProxyTestSuite) {
-	proxy, _, _ := createTestProxyWithError(suite, fmt.Errorf("discovery failed"), nil)
+	proxy, _, _ := createTestProxyWithError(suite, errors.New("discovery failed"), nil)
 
 	req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 	_, err := executeProxyRequest(proxy, req, stats, rlog)
@@ -405,7 +406,7 @@ func testProxyRequestDiscoveryError(t *testing.T, suite ProxyTestSuite) {
 }
 
 func testProxyRequestSelectorError(t *testing.T, suite ProxyTestSuite) {
-	proxy, _, _ := createTestProxyWithError(suite, nil, fmt.Errorf("selection failed"))
+	proxy, _, _ := createTestProxyWithError(suite, nil, errors.New("selection failed"))
 
 	// The proxy implementations are now internal and we can't modify the discovery service after creation
 	// This test case setup needs to be adjusted - the proxy already has a discovery service
@@ -472,7 +473,7 @@ func testProxyRequestStreamingResponse(t *testing.T, suite ProxyTestSuite) {
 		w.WriteHeader(http.StatusOK)
 
 		flusher := w.(http.Flusher)
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			fmt.Fprintf(w, "chunk %d\n", i)
 			flusher.Flush()
 			time.Sleep(10 * time.Millisecond)
@@ -602,7 +603,7 @@ func testConcurrentRequests(t *testing.T, suite ProxyTestSuite) {
 	var wg sync.WaitGroup
 	errors := make(chan error, numRequests)
 
-	for i := 0; i < numRequests; i++ {
+	for i := range numRequests {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -660,7 +661,7 @@ func testLargePayloadHandling(t *testing.T, suite ProxyTestSuite) {
 		w.WriteHeader(http.StatusOK)
 
 		flusher := w.(http.Flusher)
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			chunk := fmt.Sprintf(`{"chunk": %d, "data": "%s"}`, i, strings.Repeat("x", 1000))
 			w.Write([]byte(chunk))
 			flusher.Flush()
@@ -891,7 +892,7 @@ func testConnectionPooling(t *testing.T, suite ProxyTestSuite) {
 	var wg sync.WaitGroup
 	responses := make([]string, numRequests)
 
-	for i := 0; i < numRequests; i++ {
+	for i := range numRequests {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()

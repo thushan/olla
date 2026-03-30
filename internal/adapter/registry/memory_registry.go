@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -99,7 +100,7 @@ func (r *MemoryModelRegistry) RegisterModel(ctx context.Context, endpointURL str
 
 func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL string, models []*domain.ModelInfo) error {
 	if endpointURL == "" {
-		return domain.NewModelRegistryError("register_models", endpointURL, "", fmt.Errorf("endpoint URL cannot be empty"))
+		return domain.NewModelRegistryError("register_models", endpointURL, "", errors.New("endpoint URL cannot be empty"))
 	}
 
 	parsedURL, err := url.Parse(endpointURL)
@@ -108,7 +109,7 @@ func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL st
 	}
 
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return domain.NewModelRegistryError("register_models", endpointURL, "", fmt.Errorf("endpoint URL must have scheme and host"))
+		return domain.NewModelRegistryError("register_models", endpointURL, "", errors.New("endpoint URL must have scheme and host"))
 	}
 
 	select {
@@ -134,7 +135,7 @@ func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL st
 			continue // Skip nil models
 		}
 		if model.Name == "" {
-			return domain.NewModelRegistryError("register_models", endpointURL, model.Name, fmt.Errorf("model name cannot be empty"))
+			return domain.NewModelRegistryError("register_models", endpointURL, model.Name, errors.New("model name cannot be empty"))
 		}
 
 		modelsCopy = append(modelsCopy, &domain.ModelInfo{
@@ -164,7 +165,7 @@ func (r *MemoryModelRegistry) RegisterModels(ctx context.Context, endpointURL st
 
 func (r *MemoryModelRegistry) GetModelsForEndpoint(ctx context.Context, endpointURL string) ([]*domain.ModelInfo, error) {
 	if endpointURL == "" {
-		return nil, domain.NewModelRegistryError("get_models_for_endpoint", endpointURL, "", fmt.Errorf("endpoint URL cannot be empty"))
+		return nil, domain.NewModelRegistryError("get_models_for_endpoint", endpointURL, "", errors.New("endpoint URL cannot be empty"))
 	}
 
 	select {
@@ -198,7 +199,7 @@ func (r *MemoryModelRegistry) GetModelsForEndpoint(ctx context.Context, endpoint
 
 func (r *MemoryModelRegistry) GetEndpointsForModel(ctx context.Context, modelName string) ([]string, error) {
 	if modelName == "" {
-		return nil, domain.NewModelRegistryError("get_endpoints_for_model", "", modelName, fmt.Errorf("model name cannot be empty"))
+		return nil, domain.NewModelRegistryError("get_endpoints_for_model", "", modelName, errors.New("model name cannot be empty"))
 	}
 
 	select {
@@ -308,7 +309,7 @@ func (r *MemoryModelRegistry) GetEndpointModelMap(ctx context.Context) (map[stri
 
 func (r *MemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpointURL string) error {
 	if endpointURL == "" {
-		return domain.NewModelRegistryError("remove_endpoint", endpointURL, "", fmt.Errorf("endpoint URL cannot be empty"))
+		return domain.NewModelRegistryError("remove_endpoint", endpointURL, "", errors.New("endpoint URL cannot be empty"))
 	}
 
 	select {
@@ -352,19 +353,19 @@ func (r *MemoryModelRegistry) GetStats(ctx context.Context) (domain.RegistryStat
 
 func (r *MemoryModelRegistry) validateInputs(endpointURL, modelName string) error {
 	if endpointURL == "" {
-		return fmt.Errorf("endpoint URL cannot be empty")
+		return errors.New("endpoint URL cannot be empty")
 	}
 
 	if modelName == "" {
-		return fmt.Errorf("model name cannot be empty")
+		return errors.New("model name cannot be empty")
 	}
 
 	if strings.TrimSpace(endpointURL) == "" {
-		return fmt.Errorf("endpoint URL cannot be whitespace only")
+		return errors.New("endpoint URL cannot be whitespace only")
 	}
 
 	if strings.TrimSpace(modelName) == "" {
-		return fmt.Errorf("model name cannot be whitespace only")
+		return errors.New("model name cannot be whitespace only")
 	}
 
 	parsedURL, err := url.Parse(endpointURL)
@@ -373,7 +374,7 @@ func (r *MemoryModelRegistry) validateInputs(endpointURL, modelName string) erro
 	}
 
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
-		return fmt.Errorf("endpoint URL must have scheme and host")
+		return errors.New("endpoint URL must have scheme and host")
 	}
 
 	return nil

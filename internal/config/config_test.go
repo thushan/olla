@@ -902,7 +902,7 @@ model_aliases:
     - "llama3.1:8b"
     - llama-3.1-8b
 `
-	tmpFile, err := os.CreateTemp("", "olla-config-*.yaml")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "olla-config-*.yaml")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}

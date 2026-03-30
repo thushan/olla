@@ -27,7 +27,7 @@ func TestWorkerPool_NoGoroutineLeaks(t *testing.T) {
 
 	// Publish many events asynchronously
 	const numEvents = 10000
-	for i := 0; i < numEvents; i++ {
+	for i := range numEvents {
 		eb.PublishAsync(i)
 	}
 
@@ -92,7 +92,7 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 
 	// Publish many events rapidly
 	go func() {
-		for i := 0; i < 1000; i++ {
+		for i := range 1000 {
 			eb.PublishAsync(i)
 			published.Add(1)
 		}
@@ -156,11 +156,11 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 
 	// Publish events with small delays to ensure delivery
 	var wg sync.WaitGroup
-	for p := 0; p < numPublishers; p++ {
+	for p := range numPublishers {
 		wg.Add(1)
 		go func(publisherID int) {
 			defer wg.Done()
-			for i := 0; i < eventsPerPublisher; i++ {
+			for i := range eventsPerPublisher {
 				event := string(rune('A'+publisherID)) + string(rune('0'+i))
 				eb.PublishAsync(event)
 				published.Add(1)

@@ -2,11 +2,13 @@ package balancer
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/thushan/olla/internal/core/ports"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/core/ports"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -165,7 +167,7 @@ func TestFactory_ConcurrentAccess(t *testing.T) {
 	routines := 10
 	done := make(chan bool, routines)
 
-	for i := 0; i < routines; i++ {
+	for i := range routines {
 		go func(id int) {
 			defer func() { done <- true }()
 
@@ -187,7 +189,7 @@ func TestFactory_ConcurrentAccess(t *testing.T) {
 	}
 
 	// wait for all goroutines to finito!
-	for i := 0; i < routines; i++ {
+	for range routines {
 		<-done
 	}
 }
@@ -198,7 +200,7 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 	routines := 10
 	done := make(chan bool, routines*2)
 
-	for i := 0; i < routines; i++ {
+	for i := range routines {
 		go func(id int) {
 			defer func() { done <- true }()
 
@@ -213,7 +215,7 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < routines; i++ {
+	for i := range routines {
 		go func(id int) {
 			defer func() { done <- true }()
 
@@ -225,7 +227,7 @@ func TestFactory_ConcurrentRegistration(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < routines*2; i++ {
+	for range routines * 2 {
 		<-done
 	}
 
@@ -253,7 +255,7 @@ func (m *mockEndpointSelector) Name() string {
 
 func (m *mockEndpointSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
 	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints available")
+		return nil, errors.New("no endpoints available")
 	}
 	return endpoints[0], nil
 }
@@ -273,7 +275,7 @@ func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
 // Helper function to create test endpoints
 func createTestEndpoints(count int, status domain.EndpointStatus) []*domain.Endpoint {
 	endpoints := make([]*domain.Endpoint, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		port := 11434 + i
 		testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
 		healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))

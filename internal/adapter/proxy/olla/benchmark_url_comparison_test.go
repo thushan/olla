@@ -56,7 +56,7 @@ func BenchmarkBuildTargetURL_Comparison(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := buildTargetURL_Old(req, endpoint, proxyPrefix)
 			if targetURL.Path != "/v1/chat/completions" {
 				b.Fatalf("unexpected path: %s", targetURL.Path)
@@ -69,7 +69,7 @@ func BenchmarkBuildTargetURL_Comparison(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := buildTargetURL_New(req, endpoint, proxyPrefix)
 			if targetURL.Path != "/v1/chat/completions" {
 				b.Fatalf("unexpected path: %s", targetURL.Path)
@@ -82,7 +82,7 @@ func BenchmarkBuildTargetURL_Comparison(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := buildTargetURL_Old(req, endpoint, proxyPrefix)
 			if targetURL.Path != "/api/tags" {
 				b.Fatalf("unexpected path: %s", targetURL.Path)
@@ -98,7 +98,7 @@ func BenchmarkBuildTargetURL_Comparison(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := buildTargetURL_New(req, endpoint, proxyPrefix)
 			if targetURL.Path != "/api/tags" {
 				b.Fatalf("unexpected path: %s", targetURL.Path)
@@ -121,7 +121,7 @@ func BenchmarkBuildTargetURL_Comparison(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := buildTargetURL_Old(req, complexEndpoint, proxyPrefix)
 			_ = targetURL
 		}
@@ -132,7 +132,7 @@ func BenchmarkBuildTargetURL_Comparison(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := buildTargetURL_New(req, complexEndpoint, proxyPrefix)
 			_ = targetURL
 		}

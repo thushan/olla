@@ -83,7 +83,7 @@ func BenchmarkExtractor(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = extractor.ExtractFromChunk(ctx, ollamaResponse, "ollama")
 	}
 }
@@ -91,7 +91,7 @@ func BenchmarkExtractor(b *testing.B) {
 // Benchmark just the JSON parsing
 func BenchmarkJSONParsing_EncodingJSON(b *testing.B) {
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		var data interface{}
 		_ = json.Unmarshal(ollamaResponse, &data)
 	}
@@ -99,7 +99,7 @@ func BenchmarkJSONParsing_EncodingJSON(b *testing.B) {
 
 func BenchmarkJSONParsing_Gjson(b *testing.B) {
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result := gjson.ParseBytes(ollamaResponse)
 		_ = result.Get("model").String()
 		_ = result.Get("eval_duration").Int()

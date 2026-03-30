@@ -172,7 +172,7 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 			t.Logf("Response for %s: %s", tt.name, w.Body.String())
 
 			// Check model count
-			assert.Equal(t, tt.expectedModelCount, len(response.Data), tt.description)
+			assert.Len(t, response.Data, tt.expectedModelCount, tt.description)
 
 			// If include_unavailable=true, check that availability info shows endpoint states
 			if tt.query == "?include_unavailable=true" {

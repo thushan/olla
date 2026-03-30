@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -47,7 +48,7 @@ func (r *LifecycleUnifiedRegistry) Name() string {
 
 func (r *LifecycleUnifiedRegistry) Start(ctx context.Context) error {
 	if !r.isRunning.CompareAndSwap(false, true) {
-		return fmt.Errorf("registry is already running")
+		return errors.New("registry is already running")
 	}
 
 	if lifecycleUnifier, ok := r.unifier.(*unifier.LifecycleUnifier); ok {
@@ -143,7 +144,7 @@ func (r *LifecycleUnifiedRegistry) ForceEndpointCheck(ctx context.Context, endpo
 	if lifecycleUnifier, ok := r.unifier.(*unifier.LifecycleUnifier); ok {
 		return lifecycleUnifier.ForceEndpointCheck(ctx, endpointURL)
 	}
-	return fmt.Errorf("unifier does not support endpoint checks")
+	return errors.New("unifier does not support endpoint checks")
 }
 
 func (r *LifecycleUnifiedRegistry) GetLifecycleStats(ctx context.Context) (LifecycleRegistryStats, error) {

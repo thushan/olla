@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -283,7 +284,7 @@ func TestTranslationHandler_TransformRequestError(t *testing.T) {
 	trans := &mockTranslator{
 		name: "error-translator",
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
-			return nil, fmt.Errorf("invalid request format")
+			return nil, errors.New("invalid request format")
 		},
 		implementsErrorWriter: true,
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
@@ -344,7 +345,7 @@ func TestTranslationHandler_NoHealthyEndpoints(t *testing.T) {
 
 	noEndpointsDiscovery := &mockDiscoveryServiceWithFunc{
 		getHealthyEndpointsFunc: func(ctx context.Context) ([]*domain.Endpoint, error) {
-			return nil, fmt.Errorf("no healthy endpoints available")
+			return nil, errors.New("no healthy endpoints available")
 		},
 	}
 
@@ -458,7 +459,7 @@ func TestWriteTranslatorError_WithErrorWriter(t *testing.T) {
 		requestLogger: mockLogger,
 	}
 
-	app.writeTranslatorError(rec, trans, pr, fmt.Errorf("test error"), http.StatusBadRequest)
+	app.writeTranslatorError(rec, trans, pr, errors.New("test error"), http.StatusBadRequest)
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
@@ -485,7 +486,7 @@ func TestWriteTranslatorError_WithoutErrorWriter(t *testing.T) {
 		requestLogger: mockLogger,
 	}
 
-	app.writeTranslatorError(rec, trans, pr, fmt.Errorf("test error"), http.StatusInternalServerError)
+	app.writeTranslatorError(rec, trans, pr, errors.New("test error"), http.StatusInternalServerError)
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
@@ -1456,7 +1457,7 @@ func BenchmarkStripPrefix(b *testing.B) {
 	prefix := constants.DefaultOllaProxyPathPrefix
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_ = util.StripPrefix(path, prefix)
 	}
 }
@@ -1526,7 +1527,7 @@ func TestExecuteTranslatedStreamingRequest_ProxyErrorBeforeWrite(t *testing.T) {
 	// Proxy that returns an error immediately without touching the ResponseWriter.
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
-			return fmt.Errorf("connection refused")
+			return errors.New("connection refused")
 		},
 	}
 

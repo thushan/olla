@@ -90,7 +90,7 @@ func TestPrioritySelector_Select_HighestPriority(t *testing.T) {
 	}
 
 	// Should always select hightest priority
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -116,7 +116,7 @@ func TestPrioritySelector_Select_SamePriorityWeightedSelection(t *testing.T) {
 	totalSelections := 1000
 
 	// Run many selections to test weighted distribution
-	for i := 0; i < totalSelections; i++ {
+	for range totalSelections {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -152,7 +152,7 @@ func TestPrioritySelector_Select_PriorityOverridesWeight(t *testing.T) {
 	}
 
 	// High priority endpoint should always be selected despite less weight
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -174,7 +174,7 @@ func TestPrioritySelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 	}
 
 	// Should select healthy endpoint despite lower priority
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -266,7 +266,7 @@ func TestPrioritySelector_WeightedSelect_ZeroWeight(t *testing.T) {
 
 	// Should still work, but fallback to random selection
 	// We just verify no panic or error occurs
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, err := selector.Select(ctx, endpoints)
 		if err == nil {
 			t.Error("Expected error for offline endpoints")
@@ -282,7 +282,7 @@ func TestPrioritySelector_WeightedSelect_SingleEndpointSamePriority(t *testing.T
 		createPriorityEndpoint("single", 11434, domain.StatusHealthy, 100),
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -307,11 +307,11 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 	errors := make(chan error, 100)
 
 	// probably a bit lame way to test concurrency
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				_, err := selector.Select(ctx, endpoints)
 				if err != nil {
 					errors <- err
@@ -320,23 +320,23 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			endpoint := endpoints[id%len(endpoints)]
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				selector.IncrementConnections(endpoint)
 				selector.DecrementConnections(endpoint)
 			}
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				stats := selector.statsCollector.GetConnectionStats()
 				if stats == nil {
 					errors <- fmt.Errorf("got nil stats")
@@ -371,7 +371,7 @@ func TestPrioritySelector_MultiTierPriority(t *testing.T) {
 
 	selections := make(map[string]int)
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -406,7 +406,7 @@ func TestPrioritySelector_FallbackToLowerTier(t *testing.T) {
 
 	selections := make(map[string]int)
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -443,7 +443,7 @@ func TestPrioritySelector_TrafficWeightDistribution(t *testing.T) {
 	selections := make(map[string]int)
 	totalSelections := 1000
 
-	for i := 0; i < totalSelections; i++ {
+	for range totalSelections {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -488,7 +488,7 @@ func TestPrioritySelector_SeedingConsistency(t *testing.T) {
 	// Run multiple times to see if we get some variation
 	results := make([]string, 20)
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		selector := NewPrioritySelector(NewTestStatsCollector())
 		endpoint, _ := selector.Select(context.Background(), endpoints)
 		results[i] = endpoint.Name

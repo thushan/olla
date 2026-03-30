@@ -46,7 +46,7 @@ func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, ite
 	accepted := make([]interface{}, 0)
 	rejected := make([]interface{}, 0)
 
-	for i := 0; i < itemsValue.Len(); i++ {
+	for i := range itemsValue.Len() {
 		item := itemsValue.Index(i).Interface()
 		itemName := nameExtractor(item)
 
@@ -161,7 +161,7 @@ func (f *GlobFilter) createResultFromItems(items interface{}, rejected []interfa
 	itemsValue := reflect.ValueOf(items)
 	accepted := make([]interface{}, 0, itemsValue.Len())
 
-	for i := 0; i < itemsValue.Len(); i++ {
+	for i := range itemsValue.Len() {
 		accepted = append(accepted, itemsValue.Index(i).Interface())
 	}
 

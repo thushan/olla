@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -142,14 +143,14 @@ func TestIntegration_PerformanceRegression(t *testing.T) {
 	ctx := context.Background()
 
 	// Warm up
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		_ = extractor.ExtractFromChunk(ctx, ollamaResponse, "ollama")
 	}
 
 	// Measure performance
 	start := time.Now()
 	iterations := 10000
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		metrics := extractor.ExtractFromChunk(ctx, ollamaResponse, "ollama")
 		if metrics == nil {
 			t.Fatal("Expected metrics to be extracted")
@@ -215,11 +216,13 @@ func TestIntegration_LargeChunkHandling(t *testing.T) {
 
 func generateLargeArray(size int) string {
 	result := ""
-	for i := 0; i < size; i++ {
+	var resultSb218 strings.Builder
+	for i := range size {
 		if i > 0 {
-			result += ","
+			resultSb218.WriteString(",")
 		}
-		result += "1"
+		resultSb218.WriteString("1")
 	}
+	result += resultSb218.String()
 	return result
 }

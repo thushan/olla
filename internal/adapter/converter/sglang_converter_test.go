@@ -26,7 +26,7 @@ func TestSGLangConverter_ConvertToFormat_EmptyModels(t *testing.T) {
 	require.True(t, ok)
 
 	assert.Equal(t, "list", response.Object)
-	assert.Len(t, response.Data, 0)
+	assert.Empty(t, response.Data)
 }
 
 func TestSGLangConverter_ConvertToFormat_SingleModel(t *testing.T) {
@@ -334,7 +334,7 @@ func BenchmarkSGLangConverter_ConvertToFormat(b *testing.B) {
 
 	// Create a large number of models to test performance
 	models := make([]*domain.UnifiedModel, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		models[i] = &domain.UnifiedModel{
 			ID:               "performance-test-model-" + string(rune(i)),
 			MaxContextLength: func() *int64 { v := int64(8192); return &v }(),
@@ -348,7 +348,7 @@ func BenchmarkSGLangConverter_ConvertToFormat(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := converter.ConvertToFormat(models, ports.ModelFilters{})
 		if err != nil {
 			b.Fatalf("ConvertToFormat failed: %v", err)

@@ -190,6 +190,8 @@ We've also got ready-to-use Docker Compose setups for common scenarios:
 
 See [integration patterns](https://thushan.github.io/olla/compare/integration-patterns/) for detailed architectures.
 
+For a robust enterprise setup, consider [TensorFoundry FoundryOS](https://tensorfoundry.io/products/foundryos).
+
 ### 🌐 **OpenWebUI Integration**
 
 Complete setup with [OpenWebUI](https://github.com/open-webui/open-webui) + Olla load balancing multiple [Ollama instances](https://thushan.github.io/olla/integrations/frontend/openwebui/) or unify all [OpenAI compatible models](https://thushan.github.io/olla/integrations/frontend/openwebui-openai/).
@@ -244,7 +246,9 @@ We welcome contributions! Please open an issue first to discuss major changes.
 
 This project has been built with the assistance of AI tools for documentation, test refinement, and code reviews.
 
-We've utilised GitHub Copilot, Anthropic Claude, Jetbrains Junie and OpenAI ChatGPT for documentation, code reviews, test refinement and troubleshooting.
+We've utilised GitHub Copilot, Anthropic Claude, Jetbrains Junie, Codex & TensorFoundry Kaizen for documentation, code reviews, test refinement and troubleshooting.
+
+We also utilise [CodeRabbit](https://www.coderabbit.ai/) for AI-driven code reviews for PRs prior to human review.
 
 ## 🙏 Acknowledgements
 
@@ -256,25 +260,6 @@ We've utilised GitHub Copilot, Anthropic Claude, Jetbrains Junie and OpenAI Chat
 ## 📄 License
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
-
-## 🎯 Roadmap
-
-- [x] **Circuit breakers**: Advanced fault tolerance (Olla engine)
-- [x] **Connection pooling**: Per-endpoint connection management (Olla engine)
-- [x] **Object pooling**: Reduced GC pressure for high throughput (Olla engine)
-- [X] **Model routing**: Route based on model requested
-- [ ] **Authenticated Endpoints**: Support calling authenticated endpoints (bearer) like OpenAI/Groq/OpenRouter as endpoints
-- [ ] **Auto endpoint discovery**: Add endpoints, let Olla determine the type
-- [ ] **Model benchmarking**: Benchmark models across multiple endpoints easily
-- [ ] **Metrics export**: Prometheus/OpenTelemetry integration
-- [ ] **Dynamic configuration**: API-driven endpoint management
-- [ ] **TLS termination**: Built-in SSL support
-- [ ] **Olla Admin Panel**: View Olla metrics easily within the browser
-- [ ] **Model caching**: Intelligent model preloading
-- [ ] **Advanced Connection Management**: Authenticated endpoints (via SSH tunnels, OAuth, Tokens)
-- [ ] **OpenRouter Support**: Support OpenRouter calls within Olla (divert to free models on OpenRouter etc)
-
-Let us know what you want to see!
 
 ---
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -33,7 +34,7 @@ func (a *Application) executePassthroughRequest(
 	passthroughTrans, ok := trans.(translator.PassthroughCapable)
 	if !ok {
 		// This should never happen since we checked the interface before calling this function
-		a.writeTranslatorError(w, trans, pr, fmt.Errorf("translator does not support passthrough"), http.StatusInternalServerError)
+		a.writeTranslatorError(w, trans, pr, errors.New("translator does not support passthrough"), http.StatusInternalServerError)
 		return
 	}
 
@@ -104,7 +105,7 @@ func (a *Application) executeTranslationRequest(
 	// Serialize OpenAI request
 	openaiBody, err := json.Marshal(transformedReq.OpenAIRequest)
 	if err != nil {
-		a.writeTranslatorError(w, trans, pr, fmt.Errorf("failed to serialize request"), http.StatusInternalServerError)
+		a.writeTranslatorError(w, trans, pr, errors.New("failed to serialize request"), http.StatusInternalServerError)
 		return
 	}
 
@@ -259,7 +260,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Get compatible endpoints for this request
 		endpoints, err := a.getCompatibleEndpoints(ctx, pr)
 		if err != nil {
-			a.writeTranslatorError(w, trans, pr, fmt.Errorf("no healthy endpoints available"), http.StatusServiceUnavailable)
+			a.writeTranslatorError(w, trans, pr, errors.New("no healthy endpoints available"), http.StatusServiceUnavailable)
 			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNoCompatibleEndpoints)
 			return
 		}
@@ -523,7 +524,7 @@ func (a *Application) writeStreamingNoEndpointsError(
 ) {
 	pr.requestLogger.Error("Streaming pipeline called with zero endpoints - this is a bug")
 	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
-		errorWriter.WriteError(w, fmt.Errorf("no healthy endpoints available"), http.StatusServiceUnavailable)
+		errorWriter.WriteError(w, errors.New("no healthy endpoints available"), http.StatusServiceUnavailable)
 		return
 	}
 
