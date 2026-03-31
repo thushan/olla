@@ -76,14 +76,14 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 	if r.ContentLength > bi.maxBodySize {
 		prefix := make([]byte, modelScanSize)
 		n, err := io.ReadFull(r.Body, prefix)
+		// Always restore whatever bytes we read so downstream handlers are not starved,
+		// regardless of whether the read succeeded or partially failed.
+		prefix = prefix[:n]
+		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(prefix), r.Body))
 		if err != nil && err != io.ErrUnexpectedEOF {
 			bi.logger.Debug("Failed to read request body prefix", "error", err)
 			return nil
 		}
-		prefix = prefix[:n]
-
-		// Restore the full body: prefix bytes already consumed + remainder still in original body
-		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(prefix), r.Body))
 
 		modelName := bi.extractModelName(prefix)
 		if modelName != "" {
@@ -200,41 +200,39 @@ func extractTopLevelModelField(body []byte) string {
 		return ""
 	}
 
-	depth := 1
 	for dec.More() {
-		// Read the key token.
+		// Read the key token. At this position the decoder always yields a string key.
 		keyTok, err := dec.Token()
 		if err != nil {
 			return ""
 		}
 
-		switch v := keyTok.(type) {
-		case json.Delim:
-			if v == '{' || v == '[' {
-				depth++
-			} else {
-				depth--
-			}
-			continue
-		case string:
-			if depth == 1 && strings.EqualFold(v, "model") {
-				// Read the value token.
-				valTok, err := dec.Token()
-				if err != nil {
-					return ""
-				}
-				if modelStr, ok := valTok.(string); ok && modelStr != "" {
-					return modelStr
-				}
-				// Value wasn't a string — keep scanning.
-				continue
-			}
-			// Skip the value for this key by decoding it into a discard target.
-			var discard json.RawMessage
-			if err := dec.Decode(&discard); err != nil {
-				// Likely truncated JSON — stop scanning.
+		key, ok := keyTok.(string)
+		if !ok {
+			// Malformed JSON — key position must be a string.
+			return ""
+		}
+
+		if strings.EqualFold(key, "model") {
+			// Decode the full value so the decoder is always left in a consistent state,
+			// even when the value is a non-string type (object, array, number, etc.).
+			var val json.RawMessage
+			if err := dec.Decode(&val); err != nil {
 				return ""
 			}
+			var modelStr string
+			if err := json.Unmarshal(val, &modelStr); err == nil && modelStr != "" {
+				return modelStr
+			}
+			// Value wasn't a string — keep scanning.
+			continue
+		}
+
+		// Skip the value for this key by decoding it into a discard target.
+		var discard json.RawMessage
+		if err := dec.Decode(&discard); err != nil {
+			// Likely truncated JSON — stop scanning.
+			return ""
 		}
 	}
 
