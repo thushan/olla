@@ -83,23 +83,35 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 func formatAsciiBanner() string {
 	var b strings.Builder
 
-	// When we use GoReleaser, for internal builds, we get:
-	// Version = "v0.0.6-d4f9eb5eb"
-	// For releases, we get:
-	// Version = "v0.0.6"
-	// so for internal builds, we'll show a truncated commit hash
 	availableSpace := 33
 	version := Version
+
+	// Truncate long dev versions (e.g. "v0.0.24-15-g94c1784-dirty") to fit the banner.
+	// Keep the semver prefix (e.g. "v0.0.24") and append "-dev" as a short indicator.
+	const devSuffix = "-dev"
+	maxVersionLen := availableSpace - len(GithubHomeText) - 2
+	if len(version) > maxVersionLen {
+		// Find the end of the semver portion (up to the first hyphen after the patch number)
+		trimAt := maxVersionLen - len(devSuffix)
+		if idx := strings.Index(version[1:], "-"); idx > 0 && idx+1 < trimAt {
+			trimAt = idx + 1
+		}
+		if trimAt > 0 {
+			version = version[:trimAt] + devSuffix
+		}
+	}
 
 	githubUri := theme.Hyperlink(GithubHomeUri, GithubHomeText)
 	latestUri := theme.Hyperlink(GithubLatestUri, version)
 	llamaArt := "   ⢸⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡿  │"
 
-	// Calculate the content lengths
 	githubTextLen := len(GithubHomeText)
 	versionLen := len(version)
 
 	bufferSpace := availableSpace - githubTextLen - versionLen
+	if bufferSpace < 1 {
+		bufferSpace = 1
+	}
 
 	b.WriteString(theme.ColourSplash(`╔─────────────────────────────────────────────────────╗
 │                                      ⠀⠀⣀⣀⠀⠀⠀⠀⠀⣀⣀⠀⠀  │
