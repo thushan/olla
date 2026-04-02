@@ -114,11 +114,16 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		return nil
 	}
 
+	// Copy the buffer bytes before the deferred Reset()/Put() invalidates the slice.
+	// buffer.Bytes() aliases the pool buffer's internal array; once Reset() runs the
+	// underlying array can be reused for another request, corrupting r.Body reads.
+	restored := append([]byte(nil), buffer.Bytes()...)
+
 	// Restore the body for downstream handlers by creating a new reader that combines
 	// what we've already read with any remaining unread content
 	origBody := r.Body
 	r.Body = readCloser{
-		Reader: io.MultiReader(bytes.NewReader(buffer.Bytes()), origBody),
+		Reader: io.MultiReader(bytes.NewReader(restored), origBody),
 		Closer: origBody,
 	}
 
