@@ -79,7 +79,11 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		// Always restore whatever bytes we read so downstream handlers are not starved,
 		// regardless of whether the read succeeded or partially failed.
 		prefix = prefix[:n]
-		r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(prefix), r.Body))
+		origBody := r.Body
+		r.Body = readCloser{
+			Reader: io.MultiReader(bytes.NewReader(prefix), origBody),
+			Closer: origBody,
+		}
 		if err != nil && err != io.ErrUnexpectedEOF {
 			bi.logger.Debug("Failed to read request body prefix", "error", err)
 			return nil
@@ -112,7 +116,11 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 
 	// Restore the body for downstream handlers by creating a new reader that combines
 	// what we've already read with any remaining unread content
-	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buffer.Bytes()), r.Body))
+	origBody := r.Body
+	r.Body = readCloser{
+		Reader: io.MultiReader(bytes.NewReader(buffer.Bytes()), origBody),
+		Closer: origBody,
+	}
 
 	modelName := bi.extractModelName(buffer.Bytes())
 	if modelName != "" {
@@ -244,6 +252,13 @@ func (bi *BodyInspector) normalizeModelName(model string) string {
 	model = strings.ToLower(model)
 	// Model aliasing and tag handling is delegated to the registry layer
 	return model
+}
+
+// readCloser combines a reader (e.g. io.MultiReader) with the original body's Closer so that
+// Close properly drains/releases the underlying connection rather than becoming a no-op.
+type readCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // detectRequiredCapabilities analyzes the request body to determine what capabilities are needed
