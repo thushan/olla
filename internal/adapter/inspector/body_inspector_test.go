@@ -176,6 +176,46 @@ func TestBodyInspector_LargeBody(t *testing.T) {
 	assert.Equal(t, largeBody, string(restored), "full body must be restored after prefix scan")
 }
 
+// TestBodyInspector_LargeBodyModelAfterMessages verifies that model extraction works
+// correctly when the "model" field appears after a large "messages" array (containing
+// base64 image payloads) in a request body exceeding MaxBodySize.
+// This is the field-order case that the fixed 64 KB prefix approach would silently miss.
+func TestBodyInspector_LargeBodyModelAfterMessages(t *testing.T) {
+	ctx := context.Background()
+	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
+	log, _, err := logger.New(logCfg)
+	require.NoError(t, err)
+	styledLog := &mockStyledLogger{underlying: log}
+	inspector, err := NewBodyInspector(styledLog)
+	require.NoError(t, err)
+
+	// Build a large JSON body where "messages" (with a base64 image payload) appears
+	// before "model". The model field is beyond the first 64 KB of the body, which
+	// would have caused extraction to fail with the old fixed-prefix approach.
+	imagePayload := strings.Repeat("B", MaxBodySize+1000)
+	largeBody := `{"messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,` +
+		imagePayload + `"}}]}],"model":"vision-model-late"}`
+
+	req := &http.Request{
+		Body:          io.NopCloser(strings.NewReader(largeBody)),
+		Header:        make(http.Header),
+		ContentLength: int64(len(largeBody)),
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	profile := domain.NewRequestProfile("/v1/chat/completions")
+
+	err = inspector.Inspect(ctx, req, profile)
+	assert.NoError(t, err)
+	assert.Equal(t, "vision-model-late", profile.ModelName,
+		"model name must be extracted even when 'model' field appears after large 'messages'")
+
+	// The full body must be restored intact for downstream proxy handlers.
+	restored, readErr := io.ReadAll(req.Body)
+	assert.NoError(t, readErr)
+	assert.Equal(t, largeBody, string(restored), "full body must be restored after incremental scan")
+}
+
 func TestBodyInspector_NoBody(t *testing.T) {
 	ctx := context.Background()
 	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}

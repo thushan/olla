@@ -20,11 +20,15 @@ const (
 	BodyInspectorName = "body"
 	MaxBodySize       = 1024 * 1024 // 1MB max body size for full body inspection (capabilities etc.)
 
-	// modelScanSize is the maximum number of bytes scanned when extracting only the top-level
-	// "model" field from large requests (e.g. vision requests with base64 image payloads).
-	// The model field is always near the start of the JSON object, so 64 KB is more than enough
-	// while keeping memory pressure negligible even for multi-megabyte bodies.
-	modelScanSize = 64 * 1024
+	// modelScanSize is the hard ceiling on bytes read when scanning for the top-level "model"
+	// field in large requests (e.g. vision requests with base64 image payloads). The scan
+	// stops as soon as the field is found, so for the common case where "model" appears near
+	// the start only a handful of bytes are consumed. The ceiling exists to bound memory use
+	// when "model" appears after large fields (e.g. a multi-megabyte "messages" array);
+	// 8 MB accommodates typical vision payloads while staying well within practical limits.
+	// Requests where "model" is absent or appears beyond this ceiling will not be routed by
+	// model name — capability-based or default routing applies instead.
+	modelScanSize = 8 * 1024 * 1024
 )
 
 type modelRequest struct {
@@ -70,30 +74,29 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 
 	// For large requests (e.g. vision with base64 images) we still need the model name for
 	// routing, but buffering the full body just to parse JSON is wasteful and would OOM for
-	// multi-megabyte payloads. Instead, read a small prefix sufficient to find the top-level
-	// "model" key, restore the full body for downstream handlers, and skip capability detection
-	// (which requires the full body and is only used for optional capability-based filtering).
+	// multi-megabyte payloads. Instead, stream-scan up to modelScanSize bytes using a
+	// TeeReader so all bytes read are captured for body restoration, and locate the top-level
+	// "model" key using token-level iteration that skips large nested values without buffering
+	// them. This handles the case where "messages" (with large base64 images) precedes "model".
 	if r.ContentLength > bi.maxBodySize {
-		prefix := make([]byte, modelScanSize)
-		n, err := io.ReadFull(r.Body, prefix)
-		// Always restore whatever bytes we read so downstream handlers are not starved,
-		// regardless of whether the read succeeded or partially failed.
-		prefix = prefix[:n]
+		captured := &bytes.Buffer{}
 		origBody := r.Body
+		tee := io.TeeReader(io.LimitReader(origBody, modelScanSize), captured)
+
+		modelName := extractTopLevelModelFieldFromReader(tee)
+
+		// Restore body: bytes the decoder read (captured via TeeReader) + remaining original body.
+		// The decoder may have stopped before the limit, so origBody still holds the unconsumed tail.
+		// Use readCloser so Close() propagates to the original body and drains the connection.
 		r.Body = readCloser{
-			Reader: io.MultiReader(bytes.NewReader(prefix), origBody),
+			Reader: io.MultiReader(bytes.NewReader(captured.Bytes()), origBody),
 			Closer: origBody,
 		}
-		if err != nil && err != io.ErrUnexpectedEOF {
-			bi.logger.Debug("Failed to read request body prefix", "error", err)
-			return nil
-		}
 
-		modelName := bi.extractModelName(prefix)
 		if modelName != "" {
-			profile.ModelName = modelName
-			bi.logger.Debug("Extracted model name from large request body prefix",
-				"model", modelName, "content_length", r.ContentLength)
+			profile.ModelName = bi.normalizeModelName(modelName)
+			bi.logger.Debug("Extracted model name from large request body scan",
+				"model", profile.ModelName, "content_length", r.ContentLength)
 		} else {
 			bi.logger.Debug("Could not extract model name from large request body",
 				"content_length", r.ContentLength)
@@ -166,7 +169,7 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 	// Streaming path: works on both complete and truncated JSON (e.g. a 64 KB prefix of a
 	// multi-megabyte vision request). Scan only top-level tokens so we never descend into
 	// the large base64 image string embedded in the messages array.
-	if model := extractTopLevelModelField(body); model != "" {
+	if model := extractTopLevelModelFieldFromReader(bytes.NewReader(body)); model != "" {
 		return bi.normalizeModelName(model)
 	}
 
@@ -197,12 +200,13 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 	return ""
 }
 
-// extractTopLevelModelField scans a JSON byte slice (which may be truncated) with a
-// streaming decoder and returns the value of the first top-level "model" string key.
-// It never descends into nested objects or arrays, so it is safe to call on multi-megabyte
-// bodies as well as short prefix slices.
-func extractTopLevelModelField(body []byte) string {
-	dec := json.NewDecoder(bytes.NewReader(body))
+// extractTopLevelModelFieldFromReader scans JSON from r (which may be a truncated stream)
+// with a streaming decoder and returns the value of the first top-level "model" string key.
+// Non-model field values are skipped using token-level iteration so large nested values
+// (e.g. base64 image payloads in "messages") are never buffered into memory.
+// This allows correct extraction even when "model" appears after large fields.
+func extractTopLevelModelFieldFromReader(r io.Reader) string {
+	dec := json.NewDecoder(r)
 
 	// Consume the opening '{' of the top-level object.
 	tok, err := dec.Token()
@@ -227,8 +231,7 @@ func extractTopLevelModelField(body []byte) string {
 		}
 
 		if strings.EqualFold(key, "model") {
-			// Decode the full value so the decoder is always left in a consistent state,
-			// even when the value is a non-string type (object, array, number, etc.).
+			// Read the value as a raw message; the value is small so allocation is fine.
 			var val json.RawMessage
 			if err := dec.Decode(&val); err != nil {
 				return ""
@@ -241,15 +244,51 @@ func extractTopLevelModelField(body []byte) string {
 			continue
 		}
 
-		// Skip the value for this key by decoding it into a discard target.
-		var discard json.RawMessage
-		if err := dec.Decode(&discard); err != nil {
-			// Likely truncated JSON — stop scanning.
+		// Skip the value for this key using token-level iteration so we never buffer
+		// a large nested value (e.g. a messages array containing base64 images).
+		if err := skipValueTokens(dec); err != nil {
+			// Truncated JSON or I/O error — stop scanning.
 			return ""
 		}
 	}
 
 	return ""
+}
+
+// skipValueTokens advances dec past the next JSON value at the current read position.
+// It uses token-level iteration to avoid allocating a buffer for the entire value,
+// which is important when skipping large nested arrays or objects (e.g. vision payloads).
+func skipValueTokens(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := tok.(json.Delim)
+	if !ok {
+		// Scalar value (string, number, bool, null) — already consumed.
+		return nil
+	}
+	if delim != '{' && delim != '[' {
+		// Unexpected closing delimiter at value position — treat as error.
+		return fmt.Errorf("unexpected closing delimiter %v", delim)
+	}
+	// Track open/close depth to handle arbitrarily nested structures.
+	depth := 1
+	for depth > 0 {
+		tok, err = dec.Token()
+		if err != nil {
+			return err
+		}
+		if d, ok := tok.(json.Delim); ok {
+			switch d {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+	}
+	return nil
 }
 
 func (bi *BodyInspector) normalizeModelName(model string) string {
