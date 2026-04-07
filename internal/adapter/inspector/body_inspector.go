@@ -79,6 +79,10 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 	// "model" key using token-level iteration that skips large nested values without buffering
 	// them. This handles the case where "messages" (with large base64 images) precedes "model".
 	if r.ContentLength > bi.maxBodySize {
+		// captured is a locally-allocated bytes.Buffer (not from a sync.Pool), so
+		// captured.Bytes() is safe to use directly without an extra copy — unlike the
+		// small-body path below which must copy buffer.Bytes() to avoid pool aliasing
+		// once the deferred Reset()/Put() runs.
 		captured := &bytes.Buffer{}
 		origBody := r.Body
 		tee := io.TeeReader(io.LimitReader(origBody, modelScanSize), captured)
@@ -87,7 +91,7 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 
 		// Restore body: bytes the decoder read (captured via TeeReader) + remaining original body.
 		// The decoder may have stopped before the limit, so origBody still holds the unconsumed tail.
-		// Use readCloser so Close() propagates to the original body and drains the connection.
+		// readCloser ensures Close() propagates to origBody to drain the connection and avoid leaks.
 		r.Body = readCloser{
 			Reader: io.MultiReader(bytes.NewReader(captured.Bytes()), origBody),
 			Closer: origBody,

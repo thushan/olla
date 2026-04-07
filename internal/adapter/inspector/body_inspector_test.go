@@ -169,6 +169,7 @@ func TestBodyInspector_LargeBody(t *testing.T) {
 	err = inspector.Inspect(ctx, req, profile)
 	assert.NoError(t, err)
 	assert.Equal(t, "vision-model", profile.ModelName, "model name must be extracted even from large vision requests")
+	assert.Nil(t, profile.ModelCapabilities, "capability detection must be skipped for large requests")
 
 	// The full body must be restored intact for downstream proxy handlers.
 	restored, readErr := io.ReadAll(req.Body)
