@@ -43,6 +43,10 @@ func (r *MemoryFilterRepository) SetFilterConfig(ctx context.Context, key string
 		return errors.New("filter configuration key cannot be empty")
 	}
 
+	if config == nil {
+		return errors.New("filter configuration cannot be nil")
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

@@ -30,17 +30,15 @@
   </p>
 </div>
 
-> [!IMPORTANT]  
-> Olla is currently **in active-development**. While it is usable, we are still finalising some features and optimisations. 
-> Your feedback is invaluable! Open <a href="https://github.com/thushan/olla/issues">an issue</a> and let us know features you'd like to see in the future.
-
-Olla is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes with a [wide variety](https://thushan.github.io/olla/integrations/overview/) of natively supported endpoints and extensible enough to support others. Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
+[Olla](https://tensorfoundry.io/products/olla) is a high-performance, low-overhead, low-latency proxy and load balancer for managing LLM infrastructure. It intelligently routes LLM requests across local and remote inference nodes with a [wide variety](https://thushan.github.io/olla/integrations/overview/) of natively supported endpoints and extensible enough to support others. Olla provides model discovery and unified model catalogues within each provider, enabling seamless routing to available models on compatible endpoints.
 
 Olla works alongside API gateways like [LiteLLM](https://github.com/BerriAI/litellm) or orchestration platforms like [GPUStack](https://github.com/gpustack/gpustack), focusing on making your **existing** LLM infrastructure reliable through intelligent routing and failover. You can choose between two proxy engines: **Sherpa** for simplicity and maintainability or **Olla** for maximum performance with advanced features like circuit breakers and connection pooling.
 
 ![Olla Single OpenAI](assets/diagrams/features.excalidraw.png)
 
-Single CLI application and config file is all you need to go Olla!
+Single CLI application and config file is all you need to go [Olla](https://tensorfoundry.io/products/olla)!
+
+For Large GPU deployments, Enterprise & Data-Centre use, see [TensorFoundry FoundryOS](https://tensorfoundry.io/products/foundryos).
 
 ## Key Features
 
@@ -246,7 +244,7 @@ We welcome contributions! Please open an issue first to discuss major changes.
 
 This project has been built with the assistance of AI tools for documentation, test refinement, and code reviews.
 
-We've utilised GitHub Copilot, Anthropic Claude, Jetbrains Junie, Codex & TensorFoundry Kaizen for documentation, code reviews, test refinement and troubleshooting.
+We've utilised GitHub Copilot, Anthropic Claude, JetBrains Junie, Codex & [TensorFoundry Kaizen](https://tensorfoundry.io/products/kaizen) for documentation, code reviews, test refinement and troubleshooting.
 
 We also utilise [CodeRabbit](https://www.coderabbit.ai/) for AI-driven code reviews for PRs prior to human review.
 
