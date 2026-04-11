@@ -32,7 +32,7 @@ func TestLemonadeConverter_ConvertToFormat_EmptyModels(t *testing.T) {
 	require.True(t, ok)
 
 	assert.Equal(t, "list", response.Object)
-	assert.Len(t, response.Data, 0)
+	assert.Empty(t, response.Data)
 }
 
 func TestLemonadeConverter_ConvertToFormat_SingleModel(t *testing.T) {
@@ -372,7 +372,7 @@ func TestLemonadeConverter_FindLemonadeNativeName(t *testing.T) {
 		}
 
 		result := converter.findLemonadeNativeName(model)
-		assert.Equal(t, "", result)
+		assert.Empty(t, result)
 	})
 
 	t.Run("only finds lemonade name from correct source", func(t *testing.T) {
@@ -387,7 +387,7 @@ func TestLemonadeConverter_FindLemonadeNativeName(t *testing.T) {
 		}
 
 		result := converter.findLemonadeNativeName(model)
-		assert.Equal(t, "", result, "Should not pick up names from non-Lemonade sources")
+		assert.Empty(t, result, "Should not pick up names from non-Lemonade sources")
 	})
 }
 
@@ -465,7 +465,7 @@ func BenchmarkLemonadeConverter_ConvertToFormat(b *testing.B) {
 
 	// Create a large number of models to test performance
 	models := make([]*domain.UnifiedModel, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		models[i] = &domain.UnifiedModel{
 			ID: "performance-test-model-" + strconv.Itoa(i),
 			Metadata: map[string]interface{}{
@@ -482,7 +482,7 @@ func BenchmarkLemonadeConverter_ConvertToFormat(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		result, err := converter.ConvertToFormat(models, ports.ModelFilters{})
 		if err != nil {
 			b.Fatalf("ConvertToFormat failed: %v", err)

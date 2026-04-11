@@ -102,7 +102,7 @@ func TestRateLimitValidator_Validate_Disabled(t *testing.T) {
 		IsHealthCheck: false,
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result, err := validator.Validate(context.Background(), req)
 		if err != nil {
 			t.Fatalf("Validate failed: %v", err)
@@ -185,7 +185,7 @@ func TestRateLimitValidator_Validate_BurstCapacity(t *testing.T) {
 	successCount := 0
 	rateLimitedCount := 0
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		result, err := validator.Validate(ctx, req)
 		if err != nil {
 			t.Fatalf("Validate failed: %v", err)
@@ -237,7 +237,7 @@ func TestRateLimitValidator_Validate_PerIPIsolation(t *testing.T) {
 	}
 
 	ip1Blocked := false
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		result, err := validator.Validate(ctx, req1)
 		if err != nil {
 			t.Fatalf("IP1 validation failed: %v", err)
@@ -275,7 +275,7 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 	ips := []string{"192.168.1.100", "192.168.1.101", "192.168.1.102"}
 	globalBlocked := false
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		ip := ips[i%len(ips)]
 		req := ports.SecurityRequest{
 			ClientID:      ip,
@@ -317,7 +317,7 @@ func TestRateLimitValidator_Validate_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, 100)
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -329,7 +329,7 @@ func TestRateLimitValidator_Validate_ConcurrentAccess(t *testing.T) {
 				IsHealthCheck: false,
 			}
 
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				_, err := validator.Validate(ctx, req)
 				if err != nil {
 					errors <- err
@@ -359,7 +359,7 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 
 	ctx := context.Background()
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		req := ports.SecurityRequest{
 			ClientID:      fmt.Sprintf("192.168.1.%d", 100+i),
 			Endpoint:      "/api/test",

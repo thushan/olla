@@ -629,7 +629,7 @@ func TestCopyHeaders_MapPreSizingOptimization(t *testing.T) {
 		req := httptest.NewRequest("GET", "http://example.com/test", nil)
 
 		assert.NotNil(t, req.Header, "http.Request.Header should not be nil")
-		assert.Equal(t, 0, len(req.Header), "http.Request.Header should be empty (len=0)")
+		assert.Empty(t, req.Header, "http.Request.Header should be empty (len=0)")
 
 		// Since len=0 but Header != nil, our current optimization won't apply
 		// But this is fine because an empty map doesn't cause rehashing issues
@@ -664,7 +664,7 @@ func BenchmarkCopyHeaders(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		proxyReq := httptest.NewRequest("GET", "http://backend.com/proxy", nil)
 		CopyHeaders(proxyReq, originalReq)
 	}
@@ -682,7 +682,7 @@ func BenchmarkCopyHeaders_WithExistingHeaders(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		proxyReq := httptest.NewRequest("GET", "http://backend.com/proxy", nil)
 		// Pre-populate with some headers (edge case)
 		proxyReq.Header.Set("X-Pre-Existing-1", "value1")
@@ -705,7 +705,7 @@ func BenchmarkSetResponseHeaders(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		w := httptest.NewRecorder()
 		SetResponseHeaders(w, stats, endpoint)
 	}

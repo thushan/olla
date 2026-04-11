@@ -236,7 +236,7 @@ func TestCircuitBreaker_BasicOperation(t *testing.T) {
 	}
 
 	// Record failures until it opens
-	for i := 0; i < DefaultCircuitBreakerThreshold; i++ {
+	for range DefaultCircuitBreakerThreshold {
 		cb.RecordFailure(url)
 	}
 
@@ -360,7 +360,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	ctx := context.Background()
 
 	configs := make([]config.EndpointConfig, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		configs[i] = config.EndpointConfig{
 			Name:           fmt.Sprintf("endpoint-%d", i),
 			URL:            fmt.Sprintf("http://localhost:%d", 11434+i),
@@ -379,7 +379,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, 20)
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -450,7 +450,7 @@ func TestHTTPHealthChecker_ConcurrentHealthChecks(t *testing.T) {
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, slowClient)
 
 	configs := make([]config.EndpointConfig, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		configs[i] = config.EndpointConfig{
 			Name:           fmt.Sprintf("endpoint-%d", i),
 			URL:            fmt.Sprintf("http://localhost:%d", 11434+i),

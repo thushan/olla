@@ -288,7 +288,7 @@ func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 		}
 
 		result := converter.findVLLMNativeName(model)
-		assert.Equal(t, "", result)
+		assert.Empty(t, result)
 	})
 
 	t.Run("ignores slash-based names from other providers", func(t *testing.T) {
@@ -305,6 +305,6 @@ func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 		}
 
 		result := converter.findVLLMNativeName(model)
-		assert.Equal(t, "", result, "Should not pick up slash-based names from non-vLLM sources")
+		assert.Empty(t, result, "Should not pick up slash-based names from non-vLLM sources")
 	})
 }

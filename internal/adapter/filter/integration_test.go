@@ -177,7 +177,7 @@ func TestModelFilteringIntegration(t *testing.T) {
 			require.NoError(t, err)
 
 			// Check count
-			assert.Equal(t, tt.expectedCount, len(result.Accepted))
+			assert.Len(t, result.Accepted, tt.expectedCount)
 
 			// Extract filtered model names
 			var filteredNames []string
@@ -245,7 +245,7 @@ func TestFilterRepositoryIntegration(t *testing.T) {
 
 		// Writer goroutine
 		go func() {
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				config := &domain.FilterConfig{
 					Include: []string{"pattern" + string(rune(i))},
 				}
@@ -257,7 +257,7 @@ func TestFilterRepositoryIntegration(t *testing.T) {
 
 		// Reader goroutine
 		go func() {
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				_, _ = repo.GetFilterConfig(ctx, "concurrent-test")
 				time.Sleep(time.Microsecond)
 			}
@@ -372,7 +372,7 @@ func TestEndToEndFiltering(t *testing.T) {
 
 		// Should include: ollama, openai
 		// Should exclude: openai-test (contains "test"), debug-server (contains "debug"), lmstudio (not in include)
-		assert.Equal(t, 2, len(filteredProfiles))
+		assert.Len(t, filteredProfiles, 2)
 		assert.Contains(t, filteredProfiles, "ollama")
 		assert.Contains(t, filteredProfiles, "openai")
 
@@ -396,8 +396,8 @@ func TestEndToEndFiltering(t *testing.T) {
 		require.NoError(t, err)
 
 		// Should exclude models with uncensored/adult/nsfw in name
-		assert.Equal(t, 2, len(result.Accepted))
-		assert.Equal(t, 2, len(result.Rejected))
+		assert.Len(t, result.Accepted, 2)
+		assert.Len(t, result.Rejected, 2)
 
 		// Verify accepted models
 		acceptedNames := make([]string, 0)
@@ -421,7 +421,7 @@ func BenchmarkFilterOperations(b *testing.B) {
 
 	// Create a large set of models
 	models := make([]*domain.ModelInfo, 1000)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		models[i] = &domain.ModelInfo{
 			Name: generateModelName(i),
 		}
@@ -430,7 +430,7 @@ func BenchmarkFilterOperations(b *testing.B) {
 	b.ResetTimer()
 
 	b.Run("filter_1000_models", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = f.Apply(ctx, config, models, func(item interface{}) string {
 				if model, ok := item.(*domain.ModelInfo); ok {
 					return model.Name
@@ -445,13 +445,13 @@ func BenchmarkFilterOperations(b *testing.B) {
 		f.Matches(config, "llama3-8b")
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			f.Matches(config, "llama3-8b")
 		}
 	})
 
 	b.Run("pattern_matching_without_cache", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			// Use different names to avoid cache hits
 			f.Matches(config, generateModelName(i))
 		}

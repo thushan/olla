@@ -2,6 +2,7 @@ package inspector
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,12 +72,12 @@ func sanitiseSessionID(sessionID string, outputDir string) (string, error) {
 
 	// checks for null bytes (common attack vector)
 	if strings.Contains(sessionID, "\x00") {
-		return "", fmt.Errorf("session ID contains null bytes")
+		return "", errors.New("session ID contains null bytes")
 	}
 
 	// only allow safe characters - blocks path traversal attempts
 	if !validSessionIDPattern.MatchString(sessionID) {
-		return "", fmt.Errorf("session ID contains invalid characters (only alphanumeric, dash, underscore allowed)")
+		return "", errors.New("session ID contains invalid characters (only alphanumeric, dash, underscore allowed)")
 	}
 
 	// additional defence: verify resolved path stays within outputDir
@@ -95,7 +96,7 @@ func sanitiseSessionID(sessionID string, outputDir string) (string, error) {
 	// try and ensure the resolved path is within the output directory
 	// uses Clean to normalise paths and prevent ../ bypasses
 	if !strings.HasPrefix(filepath.Clean(absTestPath), filepath.Clean(absOutputDir)) {
-		return "", fmt.Errorf("session ID would escape output directory")
+		return "", errors.New("session ID would escape output directory")
 	}
 
 	return sessionID, nil

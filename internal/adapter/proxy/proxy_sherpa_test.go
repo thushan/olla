@@ -120,7 +120,7 @@ func TestProxyService_ClientDisconnectHandling(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 
 		// Stream data slowly
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			_, err := w.Write([]byte(fmt.Sprintf("chunk %d\n", i)))
 			if err != nil {
 				return
@@ -276,7 +276,7 @@ func TestSherpaProxyService_BufferPooling(t *testing.T) {
 	endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
 
 	// Make multiple requests to test buffer reuse
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		req, stats, rlog := createTestRequestWithStats("GET", "/api/test", "")
 		w := httptest.NewRecorder()
 		err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
@@ -366,7 +366,7 @@ func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 	selector.endpoint = endpoint
 
 	// Make some successful requests
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		req, stats, rlog := createTestRequestWithStats("GET", "/api/test", "")
 		w := httptest.NewRecorder()
 		err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
@@ -495,7 +495,7 @@ func TestSherpaProxyService_ProxyRequestToEndpoints_LoadBalancing(t *testing.T) 
 	proxy, selector, _ := createTestSherpaProxy(endpoints)
 	backendHits := make(map[string]int)
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		// selector will return endpoints in rotation for predictable testing
 		selector.endpoint = endpoints[i%len(endpoints)]
 

@@ -512,7 +512,7 @@ func TestService_buildTargetURL_QueryString(t *testing.T) {
 
 			assert.Equal(t, tt.expectedPath, targetURL.Path, tt.description)
 			assert.Equal(t, tt.expectedQuery, targetURL.RawQuery, "Query string: "+tt.description)
-			assert.Equal(t, "", targetURL.Fragment, "Fragment should be empty")
+			assert.Empty(t, targetURL.Fragment, "Fragment should be empty")
 		})
 	}
 }
@@ -731,7 +731,7 @@ func BenchmarkService_buildTargetURL(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_ = s.buildTargetURL(req, scenario.endpoint)
 			}
 		})

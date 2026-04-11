@@ -239,7 +239,7 @@ func TestEndpointsStatusHandler_Concurrent(t *testing.T) {
 	errors := make(chan error, numRequests)
 	results := make(chan int, numRequests)
 
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

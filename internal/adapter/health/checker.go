@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -400,7 +401,7 @@ func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
 func (c *HTTPHealthChecker) RunHealthCheck(ctx context.Context, initial bool) error {
 	if !c.isRunning.Load() {
 		return domain.NewEndpointError("run_health_check", "health_checker",
-			fmt.Errorf("health checker is not running"))
+			errors.New("health checker is not running"))
 	}
 
 	endpoints, err := c.repository.GetAll(ctx)
@@ -481,7 +482,7 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 
 	for _, entry := range entries {
 		tableData = append(tableData, []string{
-			fmt.Sprintf("%d", entry.priority),
+			strconv.Itoa(entry.priority),
 			entry.name,
 			entry.kind,
 			entry.url,

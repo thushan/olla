@@ -1,6 +1,9 @@
 package anthropic
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // AnthropicRequest represents an Anthropic API request
 // Maps to the Anthropic Messages API format
@@ -26,10 +29,10 @@ type AnthropicRequest struct {
 func (r *AnthropicRequest) Validate() error {
 	// Validate required fields
 	if r.Model == "" {
-		return fmt.Errorf("model field is required")
+		return errors.New("model field is required")
 	}
 	if len(r.Messages) == 0 {
-		return fmt.Errorf("at least one message is required")
+		return errors.New("at least one message is required")
 	}
 
 	// Validate optional fields have acceptable values

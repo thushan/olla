@@ -16,7 +16,7 @@ func BenchmarkRepository_GetAll(b *testing.B) {
 
 	// Setup test endpoints via config
 	configs := make([]config.EndpointConfig, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		port := 11434 + i
 		configs[i] = config.EndpointConfig{
 			Name:           fmt.Sprintf("bench-%d", i),
@@ -34,7 +34,7 @@ func BenchmarkRepository_GetAll(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := repo.GetAll(ctx)
 		if err != nil {
 			b.Fatal(err)
@@ -56,7 +56,7 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 		domain.StatusUnhealthy,
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		port := 11434 + i
 		configs[i] = config.EndpointConfig{
 			Name:           fmt.Sprintf("bench-%d", i),
@@ -81,7 +81,7 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := repo.GetRoutable(ctx)
 		if err != nil {
 			b.Fatal(err)
@@ -116,7 +116,7 @@ func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		endpoint.Status = statuses[i%len(statuses)]
 		endpoint.LastChecked = time.Now()
 		endpoint.LastLatency = time.Duration(i%100) * time.Millisecond
@@ -134,7 +134,7 @@ func BenchmarkRepository_LoadFromConfig(b *testing.B) {
 
 	// Create realistic config with 10 endpoints
 	configs := make([]config.EndpointConfig, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		port := 11434 + i
 		configs[i] = config.EndpointConfig{
 			Name:           fmt.Sprintf("load-bench-%d", i),
@@ -150,7 +150,7 @@ func BenchmarkRepository_LoadFromConfig(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		err := repo.LoadFromConfig(ctx, configs)
 		if err != nil {
 			b.Fatal(err)

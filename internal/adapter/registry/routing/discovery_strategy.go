@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -188,7 +189,7 @@ func (s *DiscoveryStrategy) GetRoutableEndpoints(
 				"rejected",
 				0,
 				modelEndpoints,
-				fmt.Errorf("no healthy endpoints after discovery refresh"),
+				errors.New("no healthy endpoints after discovery refresh"),
 			)
 	}
 

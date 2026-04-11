@@ -21,10 +21,26 @@ before:
     - cp config/docker.yaml config.yaml
 
 release:
-  name_template: "{{.ProjectName}}-v{{.Version}}"
+  name_template: "Olla {{ .Tag }}"
   draft: false
   prerelease: auto
   make_latest: true
+  header: |
+    ## What's in this release
+
+    Olla is a high-performance proxy and load balancer for LLM infrastructure.
+
+    ### Quick Start
+    ```bash
+    # Docker
+    docker pull ghcr.io/thushan/olla:{{ .Tag }}
+
+    # Binary (see assets below)
+    ./olla --config config.yaml
+    ```
+  footer: |
+    ---
+    **Documentation:** [thushan.github.io/olla](https://thushan.github.io/olla/) | **Issues:** [github.com/thushan/olla/issues](https://github.com/thushan/olla/issues)
 
 snapshot:
   name_template: '{{ incpatch .Version }}-{{.ShortCommit}}'
@@ -168,6 +184,26 @@ archives:
 
 changelog:
   sort: asc
+  use: github
+  groups:
+    - title: "Features"
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: "Performance"
+      regexp: '^.*?perf(\(.+\))??!?:.+$'
+      order: 2
+    - title: "CI/CD"
+      regexp: '^.*?ci(\(.+\))??!?:.+$'
+      order: 3
+    - title: "Other"
+      order: 999
   filters:
     exclude:
       - "^Merge"
+      - "^docs:"
+      - "^test:"
+      - "^style:"
+      - "^chore:"

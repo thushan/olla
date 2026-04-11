@@ -23,7 +23,7 @@ func BenchmarkStreamingLastChunk(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			resp := &http.Response{
 				Body: io.NopCloser(bytes.NewReader(data)),
 			}
@@ -58,7 +58,7 @@ func BenchmarkStreamingLastChunk(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			resp := &http.Response{
 				Body: io.NopCloser(bytes.NewReader(data)),
 			}
@@ -92,7 +92,7 @@ func BenchmarkStreamingLastChunk(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			resp := &http.Response{
 				Body: io.NopCloser(bytes.NewReader(data)),
 			}
@@ -129,7 +129,7 @@ func BenchmarkStreamingLastChunk(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			resp := &http.Response{
 				Body: io.NopCloser(bytes.NewReader(data)),
 			}
@@ -162,7 +162,7 @@ func BenchmarkStreamingLastChunk(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			resp := &http.Response{
 				Body: io.NopCloser(bytes.NewReader(data)),
 			}

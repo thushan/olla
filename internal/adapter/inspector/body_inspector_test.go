@@ -273,7 +273,7 @@ func TestBodyInspector_BufferPoolReuse(t *testing.T) {
 	}
 
 	// Run multiple inspections to test buffer pool reuse
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		body := `{"model": "test-model"}`
 		req := &http.Request{
 			Body:          io.NopCloser(strings.NewReader(body)),
@@ -571,7 +571,7 @@ func BenchmarkBodyInspector_Inspect(b *testing.B) {
 	body := `{"model": "llama3.1:8b", "messages": [{"role": "user", "content": "Hello world"}]}`
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req := &http.Request{
 			Body:          io.NopCloser(bytes.NewReader([]byte(body))),
 			Header:        make(http.Header),
@@ -607,7 +607,7 @@ func BenchmarkBodyInspector_LargeBody(b *testing.B) {
 	body := `{"model": "gpt-4", "messages": [` + strings.Join(messages, ",") + `]}`
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req := &http.Request{
 			Body:          io.NopCloser(bytes.NewReader([]byte(body))),
 			Header:        make(http.Header),

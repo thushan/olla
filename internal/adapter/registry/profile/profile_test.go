@@ -683,7 +683,7 @@ func TestResponseParserConcurrency(t *testing.T) {
 	const numGoroutines = 10
 	results := make(chan error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			models, err := profile.ParseModelsResponse(responseBody)
 			if err != nil {
@@ -698,7 +698,7 @@ func TestResponseParserConcurrency(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		if err := <-results; err != nil {
 			t.Errorf("Concurrent parsing failed: %v", err)
 		}

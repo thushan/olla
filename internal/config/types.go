@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -371,7 +372,7 @@ func (c *Config) ValidateModelAliases() error {
 	for aliasName, actualModels := range c.ModelAliases {
 		// Empty alias name
 		if aliasName == "" {
-			return fmt.Errorf("model alias name cannot be empty")
+			return errors.New("model alias name cannot be empty")
 		}
 
 		// Whitespace in alias name

@@ -51,7 +51,7 @@ func TestReservoirSampler(t *testing.T) {
 	t.Run("Reset functionality", func(t *testing.T) {
 		rs := NewReservoirSampler(10)
 
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			rs.Add(int64(i))
 		}
 
@@ -115,7 +115,7 @@ func TestSimpleStatsTracker(t *testing.T) {
 	t.Run("Reset functionality", func(t *testing.T) {
 		st := NewSimpleStatsTracker()
 
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			st.Add(int64(i))
 		}
 
@@ -135,7 +135,7 @@ func BenchmarkReservoirSampler(b *testing.B) {
 	rs := NewReservoirSampler(100)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		rs.Add(int64(i % 1000))
 	}
 }
@@ -144,7 +144,7 @@ func BenchmarkSimpleStatsTracker(b *testing.B) {
 	st := NewSimpleStatsTracker()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		st.Add(int64(i % 1000))
 	}
 }
@@ -155,7 +155,7 @@ func BenchmarkArrayImplementation(b *testing.B) {
 	index := 0
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		latencies[index] = int64(i % 1000)
 		index = (index + 1) % 1000
 	}
@@ -166,7 +166,7 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 	b.Run("Current_1000_Array", func(b *testing.B) {
 		b.ReportAllocs()
 		var sink interface{}
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			sink = make([]int64, 1000)
 		}
 		_ = sink
@@ -175,7 +175,7 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 	b.Run("ReservoirSampler_100", func(b *testing.B) {
 		b.ReportAllocs()
 		var sink interface{}
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			sink = NewReservoirSampler(100)
 		}
 		_ = sink
@@ -184,7 +184,7 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 	b.Run("SimpleStatsTracker", func(b *testing.B) {
 		b.ReportAllocs()
 		var sink interface{}
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			sink = NewSimpleStatsTracker()
 		}
 		_ = sink

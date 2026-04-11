@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -426,18 +427,20 @@ func TestVLLMParser_PerformanceConsiderations(t *testing.T) {
 		// Generate a response with many models
 		modelCount := 100
 		modelsJSON := ""
-		for i := 0; i < modelCount; i++ {
+		var modelsJSONSb429 strings.Builder
+		for i := range modelCount {
 			if i > 0 {
-				modelsJSON += ","
+				modelsJSONSb429.WriteString(",")
 			}
-			modelsJSON += fmt.Sprintf(`{
+			modelsJSONSb429.WriteString(fmt.Sprintf(`{
 				"id": "model-%d",
 				"object": "model",
 				"created": %d,
 				"owned_by": "test",
 				"max_model_len": %d
-			}`, i, 1754535995+i, 1024*(i+1))
+			}`, i, 1754535995+i, 1024*(i+1)))
 		}
+		modelsJSON += modelsJSONSb429.String()
 
 		response := fmt.Sprintf(`{
 			"object": "list",

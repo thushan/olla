@@ -127,7 +127,7 @@ func TestOllaProxy_ConnectionCountReturnsToZero(t *testing.T) {
 	}
 
 	const requests = 5
-	for i := 0; i < requests; i++ {
+	for i := range requests {
 		req, stats, rlog := createTestRequestWithStats("POST", "/v1/chat/completions", `{"model":"test"}`)
 		w := httptest.NewRecorder()
 		if err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog); err != nil {

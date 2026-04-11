@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -176,7 +177,7 @@ func (s *ProxyServiceWrapper) createProxyConfiguration() *proxy.Configuration {
 // GetProxyService returns the underlying proxy service
 func (s *ProxyServiceWrapper) GetProxyService() (ports.ProxyService, error) {
 	if s.proxyService == nil {
-		return nil, fmt.Errorf("proxy service not initialised")
+		return nil, errors.New("proxy service not initialised")
 	}
 	return s.proxyService, nil
 }
@@ -184,7 +185,7 @@ func (s *ProxyServiceWrapper) GetProxyService() (ports.ProxyService, error) {
 // GetLoadBalancer returns the load balancer
 func (s *ProxyServiceWrapper) GetLoadBalancer() (domain.EndpointSelector, error) {
 	if s.loadBalancer == nil {
-		return nil, fmt.Errorf("load balancer not initialised")
+		return nil, errors.New("load balancer not initialised")
 	}
 	return s.loadBalancer, nil
 }

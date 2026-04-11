@@ -2,15 +2,16 @@ package handlers
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/adapter/inspector"
-	"github.com/thushan/olla/internal/config"
-	"github.com/thushan/olla/internal/core/constants"
-	"github.com/thushan/olla/internal/core/domain"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/thushan/olla/internal/adapter/inspector"
+	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/core/domain"
 )
 
 // mockDiscoveryService for testing

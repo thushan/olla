@@ -146,7 +146,7 @@ func TestFilteringOutOllamaProfile(t *testing.T) {
 		endpoints, err := repo.GetAll(context.Background())
 		assert.NoError(t, err)
 		assert.Len(t, endpoints, 1)
-		assert.Equal(t, "", endpoints[0].Type)
+		assert.Empty(t, endpoints[0].Type)
 	})
 }
 

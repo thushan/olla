@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func BenchmarkChain_WithAndWithoutBodyInspector(b *testing.B) {
 		chain.AddInspector(pathInspector)
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader([]byte(requestBody)))
 			req.Header.Set("Content-Type", "application/json")
 
@@ -59,7 +60,7 @@ func BenchmarkChain_WithAndWithoutBodyInspector(b *testing.B) {
 		chain.AddInspector(bodyInspector)
 
 		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader([]byte(requestBody)))
 			req.Header.Set("Content-Type", "application/json")
 
@@ -100,9 +101,11 @@ func BenchmarkBodyInspector_Overhead(b *testing.B) {
 		largeMessages[i] = `{"role": "user", "content": "This is message ` + string(rune(i+'0')) + ` in a multi-turn conversation"}`
 	}
 	largeBody := `{"model": "claude-3-opus", "messages": [` + bytes.NewBufferString(largeMessages[0]).String()
+	var largeBodySb103 strings.Builder
 	for i := 1; i < len(largeMessages); i++ {
-		largeBody += "," + largeMessages[i]
+		largeBodySb103.WriteString("," + largeMessages[i])
 	}
+	largeBody += largeBodySb103.String()
 	largeBody += `]}`
 
 	benchmarks := []struct {
@@ -126,7 +129,7 @@ func BenchmarkBodyInspector_Overhead(b *testing.B) {
 			chain.AddInspector(bodyInspector)
 
 			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader([]byte(bm.body)))
 				req.Header.Set("Content-Type", "application/json")
 

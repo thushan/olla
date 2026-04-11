@@ -14,7 +14,7 @@ func BenchmarkCatalogStore_GetModel(b *testing.B) {
 	store := NewCatalogStore(5 * time.Minute)
 
 	// Pre-populate store with test models
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		model := &domain.UnifiedModel{
 			ID:     fmt.Sprintf("model-%d", i),
 			Family: fmt.Sprintf("family-%d", i%10),
@@ -40,7 +40,7 @@ func BenchmarkCatalogStore_GetModel(b *testing.B) {
 	b.Run("Sequential", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			_, _ = store.GetModel(fmt.Sprintf("model-%d", i%100))
 		}
 	})
@@ -87,7 +87,7 @@ func BenchmarkCatalogStore_PutModel(b *testing.B) {
 	b.Run("Sequential", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			model := createModel(i)
 			store.PutModel(model)
 		}
@@ -116,7 +116,7 @@ func BenchmarkCatalogStore_GetAllModels(b *testing.B) {
 			store := NewCatalogStore(5 * time.Minute)
 
 			// Pre-populate
-			for i := 0; i < size; i++ {
+			for i := range size {
 				model := &domain.UnifiedModel{
 					ID:     fmt.Sprintf("model-%d", i),
 					Family: fmt.Sprintf("family-%d", i%10),
@@ -141,7 +141,7 @@ func BenchmarkCatalogStore_GetAllModels(b *testing.B) {
 
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				models := store.GetAllModels()
 				_ = models
 			}
@@ -154,7 +154,7 @@ func BenchmarkCatalogStore_ResolveByName(b *testing.B) {
 	store := NewCatalogStore(5 * time.Minute)
 
 	// Pre-populate with models
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		model := &domain.UnifiedModel{
 			ID:     fmt.Sprintf("model-%d", i),
 			Family: fmt.Sprintf("family-%d", i%10),
@@ -181,7 +181,7 @@ func BenchmarkCatalogStore_ResolveByName(b *testing.B) {
 	b.Run("DirectID", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			_, _ = store.ResolveByName(fmt.Sprintf("model-%d", i%100))
 		}
 	})
@@ -189,7 +189,7 @@ func BenchmarkCatalogStore_ResolveByName(b *testing.B) {
 	b.Run("ByAlias", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			_, _ = store.ResolveByName(fmt.Sprintf("alias-%d", i%100))
 		}
 	})
@@ -212,7 +212,7 @@ func BenchmarkCatalogStore_MixedWorkload(b *testing.B) {
 	store := NewCatalogStore(5 * time.Minute)
 
 	// Pre-populate
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		model := &domain.UnifiedModel{
 			ID:     fmt.Sprintf("model-%d", i),
 			Family: fmt.Sprintf("family-%d", i%10),
@@ -297,7 +297,7 @@ func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 
 	// Create realistic model data
 	models := make([]*domain.ModelInfo, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		digest := fmt.Sprintf("sha256:abc%d", i)
 		format := "gguf"
 		paramSize := "7B"
@@ -316,7 +316,7 @@ func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 	b.Run("FirstUnification", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			b.StopTimer()
 			unifier.Clear(ctx)
 			b.StartTimer()
@@ -330,7 +330,7 @@ func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, _ = unifier.UnifyModels(ctx, models, endpoint)
 		}
 	})

@@ -2,7 +2,7 @@ package balancer
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"math/rand"
 	"sort"
 
@@ -30,7 +30,7 @@ func (p *PrioritySelector) Name() string {
 // Select chooses the highest priority routable endpoint with weighted selection for non-healthy statuses
 func (p *PrioritySelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
 	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints available")
+		return nil, errors.New("no endpoints available")
 	}
 
 	// Filter only routable endpoints
@@ -42,7 +42,7 @@ func (p *PrioritySelector) Select(ctx context.Context, endpoints []*domain.Endpo
 	}
 
 	if len(routable) == 0 {
-		return nil, fmt.Errorf("no routable endpoints available")
+		return nil, errors.New("no routable endpoints available")
 	}
 
 	// Sort by priority (highest first)

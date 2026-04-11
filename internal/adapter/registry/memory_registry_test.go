@@ -541,14 +541,14 @@ func TestConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, 200)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			endpoint := fmt.Sprintf("http://localhost:%d", 11434+id)
 			model := createTestModel(fmt.Sprintf("model-%d", id))
 
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				if err := registry.RegisterModel(ctx, endpoint, model); err != nil {
 					errors <- err
 					return
@@ -557,11 +557,11 @@ func TestConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				_, err := registry.GetAllModels(ctx)
 				if err != nil {
 					errors <- err
@@ -577,12 +577,12 @@ func TestConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			modelName := fmt.Sprintf("model-%d", id%5)
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				registry.IsModelAvailable(ctx, modelName)
 				_, _ = registry.GetEndpointsForModel(ctx, modelName)
 			}
@@ -630,10 +630,10 @@ func BenchmarkModelLookup(b *testing.B) {
 	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		endpoint := fmt.Sprintf("http://localhost:%d", 11434+i)
 		models := make([]*domain.ModelInfo, 10)
-		for j := 0; j < 10; j++ {
+		for j := range 10 {
 			models[j] = createTestModel(fmt.Sprintf("model-%d-%d", i, j))
 		}
 		registry.RegisterModels(ctx, endpoint, models)
@@ -653,7 +653,7 @@ func BenchmarkModelRegistration(b *testing.B) {
 	ctx := context.Background()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		endpoint := fmt.Sprintf("http://localhost:%d", 11434+(i%10))
 		model := createTestModel(fmt.Sprintf("model-%d", i))
 		registry.RegisterModel(ctx, endpoint, model)
@@ -664,10 +664,10 @@ func BenchmarkConcurrentAccess(b *testing.B) {
 	registry := NewMemoryModelRegistry(createTestLogger())
 	ctx := context.Background()
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		endpoint := fmt.Sprintf("http://localhost:%d", 11434+i)
 		models := make([]*domain.ModelInfo, 5)
-		for j := 0; j < 5; j++ {
+		for j := range 5 {
 			models[j] = createTestModel(fmt.Sprintf("model-%d-%d", i, j))
 		}
 		registry.RegisterModels(ctx, endpoint, models)

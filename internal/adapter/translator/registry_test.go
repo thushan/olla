@@ -360,7 +360,7 @@ func TestRegistry_Concurrency(t *testing.T) {
 
 	// Concurrent writes
 	go func() {
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			registry.Register("writer1", &mockTranslator{name: "writer1"})
 		}
 		done <- true
@@ -368,7 +368,7 @@ func TestRegistry_Concurrency(t *testing.T) {
 
 	// Concurrent reads
 	go func() {
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			_, _ = registry.Get("base")
 		}
 		done <- true
@@ -376,7 +376,7 @@ func TestRegistry_Concurrency(t *testing.T) {
 
 	// Concurrent GetAll
 	go func() {
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			_ = registry.GetAll()
 		}
 		done <- true

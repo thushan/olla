@@ -2,7 +2,7 @@ package balancer
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -25,7 +25,7 @@ func (l *LeastConnectionsSelector) Name() string {
 
 func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
 	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints available")
+		return nil, errors.New("no endpoints available")
 	}
 
 	routable := make([]*domain.Endpoint, 0, len(endpoints))
@@ -36,7 +36,7 @@ func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*doma
 	}
 
 	if len(routable) == 0 {
-		return nil, fmt.Errorf("no routable endpoints available")
+		return nil, errors.New("no routable endpoints available")
 	}
 
 	// Get current connection counts from stats collector

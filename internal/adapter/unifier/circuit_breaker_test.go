@@ -35,7 +35,7 @@ func TestCircuitBreaker_OpenOnFailures(t *testing.T) {
 	cb := NewCircuitBreaker(config)
 
 	// Record failures
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		cb.RecordFailure()
 		assert.Equal(t, CircuitClosed, cb.GetState())
 		assert.True(t, cb.Allow())
@@ -140,7 +140,7 @@ func TestCircuitBreaker_Disabled(t *testing.T) {
 	cb := NewCircuitBreaker(config)
 
 	// Should always allow when disabled
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		cb.RecordFailure()
 		assert.True(t, cb.Allow())
 		assert.Equal(t, CircuitClosed, cb.GetState())
@@ -185,11 +185,11 @@ func TestCircuitBreaker_ConcurrentAccess(t *testing.T) {
 	var denied atomic.Int32
 
 	// Concurrent workers
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < 100; j++ {
+			for range 100 {
 				if cb.Allow() {
 					allowed.Add(1)
 					if id%2 == 0 {

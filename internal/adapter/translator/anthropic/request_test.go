@@ -518,7 +518,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 
 		messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
 		require.True(t, ok)
-		assert.Len(t, messages, 0) // empty content gets filtered
+		assert.Empty(t, messages) // empty content gets filtered
 	})
 
 	t.Run("empty_text_blocks", func(t *testing.T) {
@@ -550,7 +550,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 
 		messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
 		require.True(t, ok)
-		assert.Len(t, messages, 0) // empty blocks get filtered
+		assert.Empty(t, messages) // empty blocks get filtered
 	})
 }
 

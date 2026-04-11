@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,7 +45,8 @@ func TestConverterFactory(t *testing.T) {
 		assert.Nil(t, converter)
 		require.Error(t, err)
 
-		qpErr, ok := err.(*ports.QueryParameterError)
+		qpErr := &ports.QueryParameterError{}
+		ok := errors.As(err, &qpErr)
 		require.True(t, ok)
 		assert.Equal(t, "format", qpErr.Parameter)
 		assert.Equal(t, "unsupported", qpErr.Value)

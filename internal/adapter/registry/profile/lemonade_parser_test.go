@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -496,9 +497,10 @@ func TestLemonadeParser_PerformanceConsiderations(t *testing.T) {
 		// Generate a response with many models
 		modelCount := 100
 		modelsJSON := ""
-		for i := 0; i < modelCount; i++ {
+		var modelsJSONSb499 strings.Builder
+		for i := range modelCount {
 			if i > 0 {
-				modelsJSON += ","
+				modelsJSONSb499.WriteString(",")
 			}
 			recipe := "oga-cpu"
 			if i%3 == 0 {
@@ -506,15 +508,16 @@ func TestLemonadeParser_PerformanceConsiderations(t *testing.T) {
 			} else if i%3 == 1 {
 				recipe = "llamacpp"
 			}
-			modelsJSON += fmt.Sprintf(`{
+			modelsJSONSb499.WriteString(fmt.Sprintf(`{
 				"id": "model-%d",
 				"object": "model",
 				"created": %d,
 				"owned_by": "lemonade",
 				"checkpoint": "vendor-%d/model-%d",
 				"recipe": "%s"
-			}`, i, 1759361830+i, i%10, i, recipe)
+			}`, i, 1759361830+i, i%10, i, recipe))
 		}
+		modelsJSON += modelsJSONSb499.String()
 
 		response := fmt.Sprintf(`{
 			"object": "list",
@@ -544,9 +547,10 @@ func BenchmarkLemonadeParser_Parse(b *testing.B) {
 	// Generate a response with many models (build once, reuse for all iterations)
 	modelCount := 100
 	modelsJSON := ""
-	for i := 0; i < modelCount; i++ {
+	var modelsJSONSb547 strings.Builder
+	for i := range modelCount {
 		if i > 0 {
-			modelsJSON += ","
+			modelsJSONSb547.WriteString(",")
 		}
 		recipe := "oga-cpu"
 		if i%3 == 0 {
@@ -554,15 +558,16 @@ func BenchmarkLemonadeParser_Parse(b *testing.B) {
 		} else if i%3 == 1 {
 			recipe = "llamacpp"
 		}
-		modelsJSON += fmt.Sprintf(`{
+		modelsJSONSb547.WriteString(fmt.Sprintf(`{
 			"id": "model-%d",
 			"object": "model",
 			"created": %d,
 			"owned_by": "lemonade",
 			"checkpoint": "vendor-%d/model-%d",
 			"recipe": "%s"
-		}`, i, 1759361830+i, i%10, i, recipe)
+		}`, i, 1759361830+i, i%10, i, recipe))
 	}
+	modelsJSON += modelsJSONSb547.String()
 
 	response := fmt.Sprintf(`{
 		"object": "list",
@@ -576,7 +581,7 @@ func BenchmarkLemonadeParser_Parse(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = parser.Parse(responseBytes)
 	}
 }

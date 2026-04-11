@@ -160,9 +160,9 @@ func TestBaseConverter_ExtractMetadata(t *testing.T) {
 
 	t.Run("extract string", func(t *testing.T) {
 		assert.Equal(t, "test", base.ExtractMetadataString(metadata, "string_val"))
-		assert.Equal(t, "", base.ExtractMetadataString(metadata, "missing"))
-		assert.Equal(t, "", base.ExtractMetadataString(metadata, "int_val"))
-		assert.Equal(t, "", base.ExtractMetadataString(nil, "string_val"))
+		assert.Empty(t, base.ExtractMetadataString(metadata, "missing"))
+		assert.Empty(t, base.ExtractMetadataString(metadata, "int_val"))
+		assert.Empty(t, base.ExtractMetadataString(nil, "string_val"))
 	})
 
 	t.Run("extract int", func(t *testing.T) {
@@ -174,10 +174,10 @@ func TestBaseConverter_ExtractMetadata(t *testing.T) {
 	})
 
 	t.Run("extract bool", func(t *testing.T) {
-		assert.Equal(t, true, base.ExtractMetadataBool(metadata, "bool_val"))
-		assert.Equal(t, false, base.ExtractMetadataBool(metadata, "missing"))
-		assert.Equal(t, false, base.ExtractMetadataBool(metadata, "string_val"))
-		assert.Equal(t, false, base.ExtractMetadataBool(nil, "bool_val"))
+		assert.True(t, base.ExtractMetadataBool(metadata, "bool_val"))
+		assert.False(t, base.ExtractMetadataBool(metadata, "missing"))
+		assert.False(t, base.ExtractMetadataBool(metadata, "string_val"))
+		assert.False(t, base.ExtractMetadataBool(nil, "bool_val"))
 	})
 }
 
@@ -239,7 +239,7 @@ func TestConversionHelper(t *testing.T) {
 		helper := base.NewConversionHelper(model)
 
 		assert.True(t, helper.ShouldSkip())
-		assert.Equal(t, "", helper.Alias)
+		assert.Empty(t, helper.Alias)
 		assert.Nil(t, helper.Endpoint)
 	})
 

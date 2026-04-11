@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"sync"
@@ -267,7 +268,7 @@ func applyEndpointDefaults(cfg *config.EndpointConfig) {
 
 func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointConfig) error {
 	if cfg.URL == "" {
-		return fmt.Errorf("endpoint URL cannot be empty")
+		return errors.New("endpoint URL cannot be empty")
 	}
 
 	// Allow empty health check and model URLs - they will get defaults from profile or fallback values

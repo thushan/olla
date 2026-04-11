@@ -1,6 +1,7 @@
 package translator
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/tidwall/gjson"
@@ -17,13 +18,13 @@ import (
 // encoding/json.Unmarshal for this single-field lookup.
 func ExtractModelName(body []byte) (string, error) {
 	if len(body) == 0 {
-		return "", fmt.Errorf("empty request body")
+		return "", errors.New("empty request body")
 	}
 
 	result := gjson.GetBytes(body, "model")
 
 	if !result.Exists() {
-		return "", fmt.Errorf("model field is required (body may not be valid JSON)")
+		return "", errors.New("model field is required (body may not be valid JSON)")
 	}
 
 	// gjson coerces non-string types via .String() (numbers become "123",
@@ -34,7 +35,7 @@ func ExtractModelName(body []byte) (string, error) {
 
 	model := result.Str
 	if model == "" {
-		return "", fmt.Errorf("model field must not be empty")
+		return "", errors.New("model field must not be empty")
 	}
 
 	return model, nil

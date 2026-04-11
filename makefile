@@ -1,13 +1,13 @@
 PKG := github.com/thushan/olla/internal/version
 RUNTIME := Go v$(shell go version | awk '{print $$3}' | sed 's/go//')
-VERSION := "v0.0.1"
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "v0.0.0-dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)
 USER := $(shell git config user.name 2>/dev/null || whoami)
 TOOL := "make"
 
 # Tool versions (pinned)
-GOLANGCI_LINT_VERSION := v1.64.8
+GOLANGCI_LINT_VERSION := v2.11.4
 BETTERALIGN_VERSION := v0.8.2
 
 LDFLAGS := -ldflags "\
@@ -282,7 +282,7 @@ align:
 install-deps:
 	@echo "Installing dependencies..."
 	@echo "  Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	@echo "  Installing betteralign $(BETTERALIGN_VERSION)..."
 	@go install github.com/dkorunic/betteralign/cmd/betteralign@$(BETTERALIGN_VERSION)
 	@echo "Dependencies installed successfully!"
