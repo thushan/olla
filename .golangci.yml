@@ -67,7 +67,7 @@ linters:
     gocognit:
       min-complexity: 30
     misspell:
-      ignore-words:
+      ignore-rules:
         - thushan
     tagliatelle:
       case:
