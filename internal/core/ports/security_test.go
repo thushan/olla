@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -172,7 +173,7 @@ func TestSecurityChain_Validate_MiddleRejects(t *testing.T) {
 }
 
 func TestSecurityChain_Validate_ErrorHandling(t *testing.T) {
-	expectedError := fmt.Errorf("validator error")
+	expectedError := errors.New("validator error")
 	validator1 := &mockSecurityValidator{name: "validator1", shouldAllow: true}
 	validator2 := &mockSecurityValidator{name: "validator2", errorToReturn: expectedError}
 	validator3 := &mockSecurityValidator{name: "validator3", shouldAllow: true}

@@ -675,10 +675,10 @@ func TestTransformStreamingResponse_ManyTools(t *testing.T) {
 	}
 
 	// add 15 tools with interleaved arguments
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		chunks = append(chunks, toolStartChunk("chatcmpl-many", i, fmt.Sprintf("call_%d", i), fmt.Sprintf("tool_%d", i)))
 	}
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		chunks = append(chunks, toolArgsChunk("chatcmpl-many", i, fmt.Sprintf(`{\\\"n\\\":%d}`, i)))
 	}
 
@@ -690,7 +690,7 @@ func TestTransformStreamingResponse_ManyTools(t *testing.T) {
 	body := recorder.Body.String()
 
 	// verify all 15 tools are present
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		assertToolPresent(t, body, fmt.Sprintf("call_%d", i), fmt.Sprintf("tool_%d", i))
 	}
 

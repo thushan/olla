@@ -197,7 +197,7 @@ func testStreamingProfilesForSuite(t *testing.T, suite ProxyTestSuite) {
 				w.WriteHeader(http.StatusOK)
 
 				// Send response in chunks
-				for i := 0; i < tt.responseChunks; i++ {
+				for i := range tt.responseChunks {
 					chunk := fmt.Sprintf("chunk %d\n", i)
 					w.Write([]byte(chunk))
 					// Upstream flushes to simulate streaming
@@ -290,7 +290,7 @@ func TestStreamingProfilesWithContextOverride(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 
 				// Send fake binary data in chunks
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0}) // Fake JPEG header
 					if f, ok := w.(http.Flusher); ok {
 						f.Flush()
@@ -483,7 +483,7 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 						w.WriteHeader(http.StatusOK)
 
 						// Send appropriate content based on type
-						for i := 0; i < 3; i++ {
+						for i := range 3 {
 							if strings.HasPrefix(tt.contentType, "image/") {
 								w.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0})
 							} else if tt.contentType == "text/event-stream" {

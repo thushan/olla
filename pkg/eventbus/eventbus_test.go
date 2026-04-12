@@ -55,7 +55,7 @@ func TestEventBus_MultipleSubscribers(t *testing.T) {
 	var subscribers []<-chan TestEvent
 	var cleanups []func()
 
-	for i := 0; i < numSubscribers; i++ {
+	for range numSubscribers {
 		events, cleanup := bus.Subscribe(ctx)
 		subscribers = append(subscribers, events)
 		cleanups = append(cleanups, cleanup)
@@ -121,7 +121,7 @@ func TestEventBus_BackpressureHandling(t *testing.T) {
 	defer cleanup()
 
 	// Fill the buffer completely
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		delivered := bus.Publish(TestEvent{ID: i, Message: "fill buffer"})
 		if delivered != 1 {
 			t.Errorf("Event %d: expected 1 delivery, got %d", i, delivered)
@@ -140,7 +140,7 @@ func TestEventBus_BackpressureHandling(t *testing.T) {
 	}
 
 	// Drain buffer to verify first events made it through
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		select {
 		case event := <-events:
 			if event.ID != i {
@@ -167,7 +167,7 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 	receivedCounts := make([]int64, numSubscribers)
 	var subscriberWg sync.WaitGroup
 
-	for i := 0; i < numSubscribers; i++ {
+	for i := range numSubscribers {
 		events, cleanup := bus.Subscribe(ctx)
 		subscribers = append(subscribers, events)
 		cleanups = append(cleanups, cleanup)
@@ -195,11 +195,11 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 	var wg sync.WaitGroup
 	totalPublished := int64(0)
 
-	for i := 0; i < numPublishers; i++ {
+	for i := range numPublishers {
 		wg.Add(1)
 		go func(publisherID int) {
 			defer wg.Done()
-			for j := 0; j < eventsPerPublisher; j++ {
+			for j := range eventsPerPublisher {
 				event := TestEvent{
 					ID:      publisherID*1000 + j,
 					Message: "concurrent test",
@@ -395,7 +395,7 @@ func BenchmarkEventBus_Publish(b *testing.B) {
 	event := TestEvent{ID: 1, Message: "benchmark"}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		bus.Publish(event)
 	}
 }
@@ -408,7 +408,7 @@ func BenchmarkEventBus_PublishMultipleSubscribers(b *testing.B) {
 
 	// Create 10 subscribers
 	var cleanups []func()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		_, cleanup := bus.Subscribe(ctx)
 		cleanups = append(cleanups, cleanup)
 	}
@@ -421,7 +421,7 @@ func BenchmarkEventBus_PublishMultipleSubscribers(b *testing.B) {
 	event := TestEvent{ID: 1, Message: "benchmark"}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		bus.Publish(event)
 	}
 }
@@ -453,12 +453,12 @@ func TestEventBus_PublishAsyncOrderBasic(t *testing.T) {
 	defer cleanup()
 
 	// Send a series of async events
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		bus.PublishAsync(TestEvent{ID: i})
 	}
 
 	received := make([]int, 0, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		select {
 		case ev := <-events:
 			received = append(received, ev.ID)

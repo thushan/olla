@@ -134,7 +134,7 @@ func TestLeastConnectionsSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 	selectedNames := make(map[string]int)
 	connectionCounts := make(map[string]int)
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -248,11 +248,11 @@ func TestLeastConnectionsSelector_ConcurrentAccess(t *testing.T) {
 	errors := make(chan error, 100)
 
 	// Concurrent selections
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				_, err := selector.Select(ctx, endpoints)
 				if err != nil {
 					errors <- err
@@ -262,12 +262,12 @@ func TestLeastConnectionsSelector_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent connection tracking
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			endpoint := endpoints[id%len(endpoints)]
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				selector.IncrementConnections(endpoint)
 				selector.DecrementConnections(endpoint)
 			}
@@ -298,7 +298,7 @@ func TestLeastConnectionsSelector_LoadBalancing(t *testing.T) {
 	connectionCounts := make(map[string]int)
 
 	// Simulate realistic usage pattern
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		// Select endpoint
 		selected, err := selector.Select(ctx, endpoints)
 		if err != nil {

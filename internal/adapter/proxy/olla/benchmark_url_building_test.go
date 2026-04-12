@@ -38,7 +38,7 @@ func BenchmarkBuildTargetURL(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := service.buildTargetURL(req, endpoint)
 			if targetURL.Path != "/v1/chat/completions" {
 				b.Fatalf("unexpected path: %s", targetURL.Path)
@@ -62,7 +62,7 @@ func BenchmarkBuildTargetURL(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := service.buildTargetURL(req, endpoint)
 			if targetURL.Path != "/v1/completions" {
 				b.Fatalf("unexpected path: %s", targetURL.Path)
@@ -83,7 +83,7 @@ func BenchmarkBuildTargetURL(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := service.buildTargetURL(req, endpoint)
 			if targetURL.Path != "/api/tags" {
 				b.Fatalf("unexpected path: %s", targetURL.Path)
@@ -107,7 +107,7 @@ func BenchmarkBuildTargetURL(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			targetURL := service.buildTargetURL(req, endpoint)
 			// ResolveReference should join paths correctly
 			if targetURL.Host != "localhost:8000" {

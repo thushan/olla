@@ -27,6 +27,13 @@ func NewGlobFilter() ports.Filter {
 
 // Apply filters a slice of items based on the filter configuration
 func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, items interface{}, nameExtractor func(interface{}) string) (*domain.FilterResult, error) {
+	// tried without reflection but it was slower
+	// so we'll consider it for now
+	itemsValue := reflect.ValueOf(items)
+	if itemsValue.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("items must be a slice, got %T", items)
+	}
+
 	if config == nil || config.IsEmpty() {
 		// no filtering needed, return all items as accepted
 		return f.createResultFromItems(items, nil), nil
@@ -36,17 +43,10 @@ func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, ite
 		return nil, fmt.Errorf("invalid filter configuration: %w", err)
 	}
 
-	// tried without reflection but it was slower
-	// so we'll consider it for now
-	itemsValue := reflect.ValueOf(items)
-	if itemsValue.Kind() != reflect.Slice {
-		return nil, fmt.Errorf("items must be a slice, got %T", items)
-	}
-
 	accepted := make([]interface{}, 0)
 	rejected := make([]interface{}, 0)
 
-	for i := 0; i < itemsValue.Len(); i++ {
+	for i := range itemsValue.Len() {
 		item := itemsValue.Index(i).Interface()
 		itemName := nameExtractor(item)
 
@@ -161,7 +161,7 @@ func (f *GlobFilter) createResultFromItems(items interface{}, rejected []interfa
 	itemsValue := reflect.ValueOf(items)
 	accepted := make([]interface{}, 0, itemsValue.Len())
 
-	for i := 0; i < itemsValue.Len(); i++ {
+	for i := range itemsValue.Len() {
 		accepted = append(accepted, itemsValue.Index(i).Interface())
 	}
 

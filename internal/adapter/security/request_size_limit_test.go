@@ -322,7 +322,7 @@ func TestSizeValidator_Validate_ConcurrentRequests(t *testing.T) {
 	errors := make(chan error, 20)
 	results := make(chan bool, 20)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()

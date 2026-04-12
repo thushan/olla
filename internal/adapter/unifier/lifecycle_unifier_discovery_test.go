@@ -2,7 +2,7 @@ package unifier
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
@@ -85,7 +85,7 @@ func TestLifecycleUnifier_ForceEndpointCheck(t *testing.T) {
 
 	// Test with discovery failure
 	mockClient.discoverFunc = func(ctx context.Context, endpoint *domain.Endpoint) ([]*domain.ModelInfo, error) {
-		return nil, fmt.Errorf("discovery failed")
+		return nil, errors.New("discovery failed")
 	}
 
 	err = unifier.ForceEndpointCheck(ctx, "http://test-endpoint")
@@ -127,7 +127,7 @@ func TestLifecycleUnifier_GetCircuitBreakerStats(t *testing.T) {
 	assert.Empty(t, stats)
 
 	// Create circuit breaker by recording failure
-	unifier.RecordEndpointFailure(endpoint.URLString, fmt.Errorf("test error"))
+	unifier.RecordEndpointFailure(endpoint.URLString, errors.New("test error"))
 
 	// Should have stats now
 	stats = unifier.GetCircuitBreakerStats()
@@ -137,7 +137,7 @@ func TestLifecycleUnifier_GetCircuitBreakerStats(t *testing.T) {
 	assert.Equal(t, 1, stats[endpoint.URLString].Failures)
 
 	// Trip the circuit breaker
-	unifier.RecordEndpointFailure(endpoint.URLString, fmt.Errorf("test error 2"))
+	unifier.RecordEndpointFailure(endpoint.URLString, errors.New("test error 2"))
 
 	stats = unifier.GetCircuitBreakerStats()
 	assert.Equal(t, "open", stats[endpoint.URLString].State)
@@ -160,7 +160,7 @@ func TestLifecycleUnifier_DiscoveryIntegration(t *testing.T) {
 		discoverFunc: func(ctx context.Context, endpoint *domain.Endpoint) ([]*domain.ModelInfo, error) {
 			callCount++
 			if callCount > 2 {
-				return nil, fmt.Errorf("endpoint offline")
+				return nil, errors.New("endpoint offline")
 			}
 			return []*domain.ModelInfo{
 				{
@@ -204,7 +204,7 @@ func TestLifecycleUnifier_DiscoveryIntegration(t *testing.T) {
 	// Verify endpoint state changed
 	state := unifier.GetEndpointState(endpoint.URLString)
 	assert.NotNil(t, state)
-	assert.Greater(t, state.ConsecutiveFailures, 0)
+	assert.Positive(t, state.ConsecutiveFailures)
 
 	// Verify circuit breaker stats
 	cbStats := unifier.GetCircuitBreakerStats()

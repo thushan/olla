@@ -222,7 +222,7 @@ func TestFactory_CreateChain_CanAddInspectors(t *testing.T) {
 }
 
 func TestFactory_IntegrationWithRealProfiles(t *testing.T) {
-	//make sure that factory works with real profile factory and all available profiles
+	// make sure that factory works with real profile factory and all available profiles
 	logger := createTestLogger()
 	profileFactory := createTestProfileFactory(t)
 	factory := NewFactory(profileFactory, logger)

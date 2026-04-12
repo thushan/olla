@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -217,7 +218,7 @@ func (s *DiscoveryService) Dependencies() []string {
 // GetRegistry returns the model registry
 func (s *DiscoveryService) GetRegistry() (domain.ModelRegistry, error) {
 	if s.registry == nil {
-		return nil, fmt.Errorf("model registry not initialised")
+		return nil, errors.New("model registry not initialised")
 	}
 	return s.registry, nil
 }
@@ -225,7 +226,7 @@ func (s *DiscoveryService) GetRegistry() (domain.ModelRegistry, error) {
 // GetEndpointRepository returns the endpoint repository
 func (s *DiscoveryService) GetEndpointRepository() (domain.EndpointRepository, error) {
 	if s.endpointRepo == nil {
-		return nil, fmt.Errorf("endpoint repository not initialised")
+		return nil, errors.New("endpoint repository not initialised")
 	}
 	return s.endpointRepo, nil
 }
@@ -233,7 +234,7 @@ func (s *DiscoveryService) GetEndpointRepository() (domain.EndpointRepository, e
 // GetHealthChecker returns the health checker
 func (s *DiscoveryService) GetHealthChecker() (*health.HTTPHealthChecker, error) {
 	if s.healthChecker == nil {
-		return nil, fmt.Errorf("health checker not initialised")
+		return nil, errors.New("health checker not initialised")
 	}
 	return s.healthChecker, nil
 }
@@ -241,7 +242,7 @@ func (s *DiscoveryService) GetHealthChecker() (*health.HTTPHealthChecker, error)
 // GetDiscoveryService returns itself as a ports.DiscoveryService
 func (s *DiscoveryService) GetDiscoveryService() (ports.DiscoveryService, error) {
 	if s.registry == nil || s.endpointRepo == nil {
-		return nil, fmt.Errorf("discovery service not fully initialised")
+		return nil, errors.New("discovery service not fully initialised")
 	}
 	return s, nil
 }
@@ -249,7 +250,7 @@ func (s *DiscoveryService) GetDiscoveryService() (ports.DiscoveryService, error)
 // GetHealthyEndpoints implements ports.DiscoveryService
 func (s *DiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
 	if s.endpointRepo == nil {
-		return nil, fmt.Errorf("endpoint repository not initialized")
+		return nil, errors.New("endpoint repository not initialized")
 	}
 	return s.endpointRepo.GetHealthy(ctx)
 }
@@ -257,7 +258,7 @@ func (s *DiscoveryService) GetHealthyEndpoints(ctx context.Context) ([]*domain.E
 // GetEndpoints implements ports.DiscoveryService
 func (s *DiscoveryService) GetEndpoints(ctx context.Context) ([]*domain.Endpoint, error) {
 	if s.endpointRepo == nil {
-		return nil, fmt.Errorf("endpoint repository not initialized")
+		return nil, errors.New("endpoint repository not initialized")
 	}
 	return s.endpointRepo.GetAll(ctx)
 }
@@ -284,7 +285,7 @@ func (s *DiscoveryService) SetPurgeDeadEndpointsFn(fn func([]*domain.Endpoint)) 
 // UpdateEndpointStatus updates the status of an endpoint in the repository
 func (s *DiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoint *domain.Endpoint) error {
 	if s.endpointRepo == nil {
-		return fmt.Errorf("endpoint repository not initialized")
+		return errors.New("endpoint repository not initialized")
 	}
 	return s.endpointRepo.UpdateEndpoint(ctx, endpoint)
 }

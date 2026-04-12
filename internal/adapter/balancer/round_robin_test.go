@@ -73,7 +73,7 @@ func TestRoundRobinSelector_Select_SingleEndpoint(t *testing.T) {
 	}
 
 	// Should always return the same endpoint
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -127,7 +127,7 @@ func TestRoundRobinSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 	routableEndpoints := []string{"healthy", "busy", "warming"}
 
 	// Run enough selections to cycle through routable endpoints multiple times
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -171,7 +171,7 @@ func TestRoundRobinSelector_Select_CounterOverflow(t *testing.T) {
 	selector.counter = ^uint64(0) - 5 // Near uint64 max
 
 	// Should handle overflow gracefully
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed with high counter: %v", err)
@@ -264,11 +264,11 @@ func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
 	selections := make(chan string, 300)
 
 	// Concurrent selections
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				endpoint, err := selector.Select(ctx, endpoints)
 				if err != nil {
 					errors <- err
@@ -280,12 +280,12 @@ func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent connection tracking
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			endpoint := endpoints[id%len(endpoints)]
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				selector.IncrementConnections(endpoint)
 				selector.DecrementConnections(endpoint)
 			}
@@ -344,7 +344,7 @@ func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
 	}
 
 	// Select a few times
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		selector.Select(ctx, endpoints)
 	}
 
@@ -353,7 +353,7 @@ func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
 
 	// Continue selecting - should include new endpoint
 	selections := make(map[string]int)
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -395,7 +395,7 @@ func TestRoundRobinSelector_StatusChanges(t *testing.T) {
 
 	// Should only select endpoint-1 and endpoint-3
 	selections := make(map[string]int)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -428,7 +428,7 @@ func TestRoundRobinSelector_DistributionFairness(t *testing.T) {
 	selections := make(map[string]int)
 	totalSelections := 300 // Multiple of 3 for even distribution
 
-	for i := 0; i < totalSelections; i++ {
+	for range totalSelections {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -453,7 +453,7 @@ func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
 
 	// Create 50 endpoints
 	endpoints := make([]*domain.Endpoint, 50)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		endpoints[i] = createRoundRobinEndpoint(
 			fmt.Sprintf("endpoint-%d", i),
 			11434+i,
@@ -464,7 +464,7 @@ func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
 	selections := make(map[string]int)
 	totalSelections := 500 // 10 rounds through all endpoints
 
-	for i := 0; i < totalSelections; i++ {
+	for range totalSelections {
 		endpoint, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			t.Fatalf("Select failed: %v", err)
@@ -473,7 +473,7 @@ func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
 	}
 
 	// Each endpoint should be selected exactly 10 times
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		name := fmt.Sprintf("endpoint-%d", i)
 		count := selections[name]
 		if count != 10 {

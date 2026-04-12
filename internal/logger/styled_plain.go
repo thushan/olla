@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 
 	"github.com/thushan/olla/internal/core/constants"
 
@@ -61,7 +62,7 @@ func (sl *PlainStyledLogger) InfoWithHealthCheck(msg string, endpoint string, ar
 func (sl *PlainStyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
 	var formattedNums []string
 	for _, num := range numbers {
-		formattedNums = append(formattedNums, fmt.Sprintf("%d", num))
+		formattedNums = append(formattedNums, strconv.FormatInt(num, 10))
 	}
 
 	styledMsg := fmt.Sprintf(msg, toInterfaceSlice(formattedNums)...)

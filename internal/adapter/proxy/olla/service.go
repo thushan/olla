@@ -377,8 +377,8 @@ func (s *Service) proxyToSingleEndpointLegacy(ctx context.Context, w http.Respon
 	// Select endpoint with circuit breaker check
 	endpoint, cb := s.selectEndpointWithCircuitBreaker(endpoints, rlog)
 	if endpoint == nil {
-		s.RecordFailure(ctx, nil, time.Since(stats.StartTime), fmt.Errorf("all endpoints circuit breakers open"))
-		return fmt.Errorf("all endpoints unavailable due to circuit breakers")
+		s.RecordFailure(ctx, nil, time.Since(stats.StartTime), errors.New("all endpoints circuit breakers open"))
+		return errors.New("all endpoints unavailable due to circuit breakers")
 	}
 
 	stats.EndpointName = endpoint.Name
@@ -403,6 +403,9 @@ func (s *Service) proxyToSingleEndpointLegacy(ctx context.Context, w http.Respon
 	}
 
 	// Create and prepare proxy request
+	// Rewrite model name in request body if this is an alias-resolved request
+	core.RewriteModelForAlias(ctx, r, endpoint)
+
 	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, stats)
 	if err != nil {
 		cb.RecordFailure()

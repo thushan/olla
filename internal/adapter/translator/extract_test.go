@@ -150,7 +150,7 @@ func BenchmarkExtractModelName(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = ExtractModelName(body)
 	}
 }
@@ -189,7 +189,7 @@ func BenchmarkFullUnmarshal(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		var req anthropicReq
 		_ = json.Unmarshal(body, &req)
 	}
@@ -214,7 +214,7 @@ func BenchmarkExtractModelName_LargeBody(b *testing.B) {
 
 	b.ResetTimer()
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = ExtractModelName(body)
 	}
 }

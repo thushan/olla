@@ -18,7 +18,17 @@ import (
 
 const (
 	BodyInspectorName = "body"
-	MaxBodySize       = 1024 * 1024 // 1MB max body size for inspection
+	MaxBodySize       = 1024 * 1024 // 1MB max body size for full body inspection (capabilities etc.)
+
+	// modelScanSize is the hard ceiling on bytes read when scanning for the top-level "model"
+	// field in large requests (e.g. vision requests with base64 image payloads). The scan
+	// stops as soon as the field is found, so for the common case where "model" appears near
+	// the start only a handful of bytes are consumed. The ceiling exists to bound memory use
+	// when "model" appears after large fields (e.g. a multi-megabyte "messages" array);
+	// 8 MB accommodates typical vision payloads while staying well within practical limits.
+	// Requests where "model" is absent or appears beyond this ceiling will not be routed by
+	// model name — capability-based or default routing applies instead.
+	modelScanSize = 8 * 1024 * 1024
 )
 
 type modelRequest struct {
@@ -62,8 +72,39 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		return nil
 	}
 
+	// For large requests (e.g. vision with base64 images) we still need the model name for
+	// routing, but buffering the full body just to parse JSON is wasteful and would OOM for
+	// multi-megabyte payloads. Instead, stream-scan up to modelScanSize bytes using a
+	// TeeReader so all bytes read are captured for body restoration, and locate the top-level
+	// "model" key using token-level iteration that skips large nested values without buffering
+	// them. This handles the case where "messages" (with large base64 images) precedes "model".
 	if r.ContentLength > bi.maxBodySize {
-		bi.logger.Debug("Skipping body inspection for large request", "content_length", r.ContentLength)
+		// captured is a locally-allocated bytes.Buffer (not from a sync.Pool), so
+		// captured.Bytes() is safe to use directly without an extra copy — unlike the
+		// small-body path below which must copy buffer.Bytes() to avoid pool aliasing
+		// once the deferred Reset()/Put() runs.
+		captured := &bytes.Buffer{}
+		origBody := r.Body
+		tee := io.TeeReader(io.LimitReader(origBody, modelScanSize), captured)
+
+		modelName := extractTopLevelModelFieldFromReader(tee)
+
+		// Restore body: bytes the decoder read (captured via TeeReader) + remaining original body.
+		// The decoder may have stopped before the limit, so origBody still holds the unconsumed tail.
+		// readCloser ensures Close() propagates to origBody to drain the connection and avoid leaks.
+		r.Body = readCloser{
+			Reader: io.MultiReader(bytes.NewReader(captured.Bytes()), origBody),
+			Closer: origBody,
+		}
+
+		if modelName != "" {
+			profile.ModelName = bi.normalizeModelName(modelName)
+			bi.logger.Debug("Extracted model name from large request body scan",
+				"model", profile.ModelName, "content_length", r.ContentLength)
+		} else {
+			bi.logger.Debug("Could not extract model name from large request body",
+				"content_length", r.ContentLength)
+		}
 		return nil
 	}
 
@@ -80,9 +121,18 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		return nil
 	}
 
+	// Copy the buffer bytes before the deferred Reset()/Put() invalidates the slice.
+	// buffer.Bytes() aliases the pool buffer's internal array; once Reset() runs the
+	// underlying array can be reused for another request, corrupting r.Body reads.
+	restored := append([]byte(nil), buffer.Bytes()...)
+
 	// Restore the body for downstream handlers by creating a new reader that combines
 	// what we've already read with any remaining unread content
-	r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(buffer.Bytes()), r.Body))
+	origBody := r.Body
+	r.Body = readCloser{
+		Reader: io.MultiReader(bytes.NewReader(restored), origBody),
+		Closer: origBody,
+	}
 
 	modelName := bi.extractModelName(buffer.Bytes())
 	if modelName != "" {
@@ -114,12 +164,21 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 		return ""
 	}
 
+	// Fast path: complete JSON — unmarshal directly.
 	var req modelRequest
 	if err := json.Unmarshal(body, &req); err == nil && req.Model != "" {
 		return bi.normalizeModelName(req.Model)
 	}
 
-	// Fall back to flexible map-based extraction to handle non-standard formats
+	// Streaming path: works on both complete and truncated JSON (e.g. a 64 KB prefix of a
+	// multi-megabyte vision request). Scan only top-level tokens so we never descend into
+	// the large base64 image string embedded in the messages array.
+	if model := extractTopLevelModelFieldFromReader(bytes.NewReader(body)); model != "" {
+		return bi.normalizeModelName(model)
+	}
+
+	// Fall back to flexible map-based extraction to handle non-standard formats.
+	// This only succeeds for complete, valid JSON bodies.
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
 		return ""
@@ -145,11 +204,109 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 	return ""
 }
 
+// extractTopLevelModelFieldFromReader scans JSON from r (which may be a truncated stream)
+// with a streaming decoder and returns the value of the first top-level "model" string key.
+// Non-model field values are skipped using token-level iteration so large nested values
+// (e.g. base64 image payloads in "messages") are never buffered into memory.
+// This allows correct extraction even when "model" appears after large fields.
+func extractTopLevelModelFieldFromReader(r io.Reader) string {
+	dec := json.NewDecoder(r)
+
+	// Consume the opening '{' of the top-level object.
+	tok, err := dec.Token()
+	if err != nil {
+		return ""
+	}
+	if delim, ok := tok.(json.Delim); !ok || delim != '{' {
+		return ""
+	}
+
+	for dec.More() {
+		// Read the key token. At this position the decoder always yields a string key.
+		keyTok, err := dec.Token()
+		if err != nil {
+			return ""
+		}
+
+		key, ok := keyTok.(string)
+		if !ok {
+			// Malformed JSON — key position must be a string.
+			return ""
+		}
+
+		if strings.EqualFold(key, "model") {
+			// Read the value as a raw message; the value is small so allocation is fine.
+			var val json.RawMessage
+			if err := dec.Decode(&val); err != nil {
+				return ""
+			}
+			var modelStr string
+			if err := json.Unmarshal(val, &modelStr); err == nil && modelStr != "" {
+				return modelStr
+			}
+			// Value wasn't a string — keep scanning.
+			continue
+		}
+
+		// Skip the value for this key using token-level iteration so we never buffer
+		// a large nested value (e.g. a messages array containing base64 images).
+		if err := skipValueTokens(dec); err != nil {
+			// Truncated JSON or I/O error — stop scanning.
+			return ""
+		}
+	}
+
+	return ""
+}
+
+// skipValueTokens advances dec past the next JSON value at the current read position.
+// It uses token-level iteration to avoid allocating a buffer for the entire value,
+// which is important when skipping large nested arrays or objects (e.g. vision payloads).
+func skipValueTokens(dec *json.Decoder) error {
+	tok, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	delim, ok := tok.(json.Delim)
+	if !ok {
+		// Scalar value (string, number, bool, null) — already consumed.
+		return nil
+	}
+	if delim != '{' && delim != '[' {
+		// Unexpected closing delimiter at value position — treat as error.
+		return fmt.Errorf("unexpected closing delimiter %v", delim)
+	}
+	// Track open/close depth to handle arbitrarily nested structures.
+	depth := 1
+	for depth > 0 {
+		tok, err = dec.Token()
+		if err != nil {
+			return err
+		}
+		if d, ok := tok.(json.Delim); ok {
+			switch d {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+	}
+	return nil
+}
+
 func (bi *BodyInspector) normalizeModelName(model string) string {
 	model = strings.TrimSpace(model)
 	model = strings.ToLower(model)
 	// Model aliasing and tag handling is delegated to the registry layer
 	return model
+}
+
+// readCloser combines a reader (e.g. io.MultiReader) with the original body's Closer so that
+// Close properly drains/releases the underlying connection rather than becoming a no-op.
+type readCloser struct {
+	io.Reader
+	io.Closer
 }
 
 // detectRequiredCapabilities analyzes the request body to determine what capabilities are needed

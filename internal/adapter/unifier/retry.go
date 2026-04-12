@@ -43,7 +43,7 @@ func IsPermanent(err error) bool {
 func Retry(ctx context.Context, policy RetryPolicy, fn RetryableFunc) error {
 	var lastErr error
 
-	for attempt := 0; attempt < policy.MaxAttempts; attempt++ {
+	for attempt := range policy.MaxAttempts {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -82,7 +82,7 @@ func RetryWithResult[T any](ctx context.Context, policy RetryPolicy, fn func(ctx
 	var result T
 	var lastErr error
 
-	for attempt := 0; attempt < policy.MaxAttempts; attempt++ {
+	for attempt := range policy.MaxAttempts {
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}

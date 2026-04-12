@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,7 +18,7 @@ func (m *mockProfileFactory) GetProfile(profileType string) (domain.InferencePro
 	if profile, ok := m.profiles[profileType]; ok {
 		return profile, nil
 	}
-	return nil, fmt.Errorf("profile not found")
+	return nil, errors.New("profile not found")
 }
 
 func (m *mockProfileFactory) GetAvailableProfiles() []string {

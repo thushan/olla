@@ -98,7 +98,7 @@ func benchmarkRefactoredSimpleRequest(b *testing.B, proxyType string) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req := httptest.NewRequest("GET", "/api/test", nil)
 		w := httptest.NewRecorder()
 		stats := &ports.RequestStats{
@@ -128,7 +128,7 @@ func benchmarkRefactoredErrorHandling(b *testing.B, proxyType string) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req := httptest.NewRequest("GET", "/api/test", nil)
 		w := httptest.NewRecorder()
 		stats := &ports.RequestStats{
@@ -159,10 +159,10 @@ func benchmarkRefactoredHeaderProcessing(b *testing.B, proxyType string) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req := httptest.NewRequest("GET", "/api/test", nil)
 		// Add multiple headers
-		for j := 0; j < 10; j++ {
+		for j := range 10 {
 			req.Header.Add(fmt.Sprintf("X-Custom-%d", j), fmt.Sprintf("value-%d", j))
 		}
 
@@ -188,7 +188,7 @@ func benchmarkRefactoredStreamingResponse(b *testing.B, proxyType string) {
 		w.WriteHeader(http.StatusOK)
 
 		// Stream in chunks
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			w.Write([]byte(responseData[:1024]))
 			if f, ok := w.(http.Flusher); ok {
 				f.Flush()
@@ -206,7 +206,7 @@ func benchmarkRefactoredStreamingResponse(b *testing.B, proxyType string) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req := httptest.NewRequest("GET", "/api/test", nil)
 		w := &discardResponseWriter{header: make(http.Header)}
 		stats := &ports.RequestStats{
@@ -229,7 +229,7 @@ func benchmarkRefactoredConfigUpdates(b *testing.B, proxyType string) {
 
 	// Create a simple config that implements ProxyConfiguration interface
 	configs := make([]*Configuration, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		configs[i] = &Configuration{
 			ResponseTimeout:  time.Duration(i+1) * time.Second,
 			ReadTimeout:      time.Duration(i+1) * time.Second,
@@ -240,7 +240,7 @@ func benchmarkRefactoredConfigUpdates(b *testing.B, proxyType string) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		configIndex := i % len(configs)
 		proxy.UpdateConfig(configs[configIndex])
 	}
@@ -257,7 +257,7 @@ func benchmarkRefactoredStatsCollection(b *testing.B, proxyType string) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := proxy.GetStats(ctx)
 		if err != nil {
 			b.Fatal(err)
@@ -271,7 +271,7 @@ func BenchmarkEventBusPublish(b *testing.B) {
 	defer bus.Shutdown()
 
 	// Create some subscribers
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		ch, cleanup := bus.Subscribe(context.Background())
 		defer cleanup()
 
@@ -294,7 +294,7 @@ func BenchmarkEventBusPublish(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		bus.Publish(event)
 	}
 }
@@ -317,7 +317,7 @@ func BenchmarkPoolGetPut(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		obj := pool.Get()
 		// Use the object
 		obj.data[0] = byte(i)
@@ -343,7 +343,7 @@ func BenchmarkOllaCircuitBreaker(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		// Alternate between checking state and recording success/failure
 		if i%3 == 0 {
 			cb.RecordFailure()
@@ -369,7 +369,7 @@ func BenchmarkOllaObjectPools(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			buf := bufferPool.Get()
 			bufferPool.Put(buf)
 		}
@@ -393,7 +393,7 @@ func BenchmarkOllaObjectPools(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			ctx := reqPool.Get()
 			reqPool.Put(ctx)
 		}

@@ -27,7 +27,7 @@ func NewWorkerPool[T any](bus *EventBus[T], workers int, bufferSize int) *Worker
 	}
 
 	// Start worker goroutines
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wp.wg.Add(1)
 		go wp.worker()
 	}

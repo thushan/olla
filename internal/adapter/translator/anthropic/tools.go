@@ -1,8 +1,6 @@
 package anthropic
 
-import (
-	"fmt"
-)
+import "errors"
 
 // convertTools transforms Anthropic tool definitions to OpenAI function format
 // Maps input_schema directly to parameters (both use JSON Schema)
@@ -62,7 +60,7 @@ func (t *Translator) convertToolChoice(toolChoice interface{}) (interface{}, err
 			// Force specific tool selection
 			toolName, ok := choiceMap["name"].(string)
 			if !ok {
-				return nil, fmt.Errorf("tool_choice type 'tool' requires 'name' field")
+				return nil, errors.New("tool_choice type 'tool' requires 'name' field")
 			}
 			return map[string]interface{}{
 				"type": openAITypeFunction,

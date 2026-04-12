@@ -3,10 +3,11 @@ package balancer
 import (
 	"context"
 	"fmt"
-	"github.com/thushan/olla/internal/adapter/stats"
-	"github.com/thushan/olla/internal/logger"
 	"net/url"
 	"testing"
+
+	"github.com/thushan/olla/internal/adapter/stats"
+	"github.com/thushan/olla/internal/logger"
 
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -25,7 +26,7 @@ func BenchmarkFactory_Create(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		selector, err := factory.Create(DefaultBalancerPriority)
 		if err != nil {
 			b.Fatal(err)
@@ -40,14 +41,14 @@ func BenchmarkPrioritySelector_Select(b *testing.B) {
 
 	// Create test endpoints with different prior
 	endpoints := make([]*domain.Endpoint, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100+i*10)
 	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			b.Fatal(err)
@@ -70,7 +71,7 @@ func BenchmarkPrioritySelector_SelectSamePriority(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			b.Fatal(err)
@@ -84,14 +85,14 @@ func BenchmarkRoundRobinSelector_Select(b *testing.B) {
 	ctx := context.Background()
 
 	endpoints := make([]*domain.Endpoint, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100)
 	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			b.Fatal(err)
@@ -105,14 +106,14 @@ func BenchmarkLeastConnectionsSelector_Select(b *testing.B) {
 	ctx := context.Background()
 
 	endpoints := make([]*domain.Endpoint, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100)
 	}
 
 	// Add some connection counts to make it realistic
 	// faking it till we make it :D
 	for i, endpoint := range endpoints {
-		for j := 0; j < i; j++ {
+		for range i {
 			selector.IncrementConnections(endpoint)
 		}
 	}
@@ -120,7 +121,7 @@ func BenchmarkLeastConnectionsSelector_Select(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := selector.Select(ctx, endpoints)
 		if err != nil {
 			b.Fatal(err)
@@ -144,7 +145,7 @@ func BenchmarkConnectionTracking(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				selector.IncrementConnections(endpoint)
 				selector.DecrementConnections(endpoint)
 			}
@@ -162,7 +163,7 @@ func BenchmarkConcurrentSelection(b *testing.B) {
 	}
 
 	endpoints := make([]*domain.Endpoint, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100+i*50)
 	}
 
@@ -199,7 +200,7 @@ func BenchmarkLargeEndpointSet(b *testing.B) {
 			}
 
 			endpoints := make([]*domain.Endpoint, size)
-			for i := 0; i < size; i++ {
+			for i := range size {
 				status := domain.StatusHealthy
 				if i%4 == 0 {
 					status = domain.StatusBusy
@@ -216,7 +217,7 @@ func BenchmarkLargeEndpointSet(b *testing.B) {
 					b.ResetTimer()
 					b.ReportAllocs()
 
-					for i := 0; i < b.N; i++ {
+					for range b.N {
 						_, err := selector.Select(ctx, endpoints)
 						if err != nil {
 							b.Fatal(err)
@@ -237,7 +238,7 @@ func BenchmarkFilteringRoutableEndpoints(b *testing.B) {
 		domain.StatusOffline, domain.StatusUnhealthy, domain.StatusUnknown, // Not routable
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		endpoints[i] = createBenchEndpoint(
 			fmt.Sprintf("endpoint-%d", i),
 			11434+i,
@@ -260,7 +261,7 @@ func BenchmarkFilteringRoutableEndpoints(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, err := selector.Select(ctx, endpoints)
 				if err != nil {
 					b.Fatal(err)
@@ -275,7 +276,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 	b.Run("factory-creation", func(b *testing.B) {
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			factory := NewFactory(NewTestStatsCollector())
 			_ = factory
 		}
@@ -287,7 +288,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			priority, _ := factory.Create(DefaultBalancerPriority)
 			roundRobin, _ := factory.Create(DefaultBalancerRoundRobin)
 			leastConn, _ := factory.Create(DefaultBalancerLeastConnections)
@@ -302,14 +303,14 @@ func BenchmarkMemoryUsage(b *testing.B) {
 		selector := NewPrioritySelector(NewTestStatsCollector())
 		endpoints := make([]*domain.Endpoint, 100)
 
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100)
 		}
 
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			endpoint := endpoints[i%len(endpoints)]
 			selector.IncrementConnections(endpoint)
 		}
@@ -321,9 +322,9 @@ func BenchmarkPrioritySelector_ConnectionStats(b *testing.B) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
 
 	// Add connections to various endpoints
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		endpoint := createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100)
-		for j := 0; j < i%10; j++ {
+		for range i % 10 {
 			selector.IncrementConnections(endpoint)
 		}
 	}
@@ -331,7 +332,7 @@ func BenchmarkPrioritySelector_ConnectionStats(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		stats := selector.statsCollector.GetConnectionStats()
 		_ = stats
 	}
@@ -342,7 +343,7 @@ func BenchmarkConcurrentConnectionTracking(b *testing.B) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
 	endpoints := make([]*domain.Endpoint, 10)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100)
 	}
 

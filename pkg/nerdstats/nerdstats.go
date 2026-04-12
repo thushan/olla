@@ -86,9 +86,7 @@ func Snapshot(startTime time.Time) *NerdStats {
 
 	// Calculate last GC time and total GC time
 	if m.LastGC > 0 {
-		//nolint:gosec // m.LastGC is nanoseconds since epoch, safe for int64 use
 		stats.LastGC = time.Unix(0, int64(m.LastGC))
-		//nolint:gosec // PauseTotalNs is a safe uint64->Duration conversion
 		stats.TotalGCTime = time.Duration(m.PauseTotalNs)
 	}
 

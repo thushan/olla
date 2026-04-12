@@ -2,7 +2,7 @@ package balancer
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sync/atomic"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -27,7 +27,7 @@ func (r *RoundRobinSelector) Name() string {
 // Select chooses endpoints in a round-robin fashion, filtering out non-routable endpoints
 func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
 	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints available")
+		return nil, errors.New("no endpoints available")
 	}
 
 	routable := make([]*domain.Endpoint, 0, len(endpoints))
@@ -38,7 +38,7 @@ func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.End
 	}
 
 	if len(routable) == 0 {
-		return nil, fmt.Errorf("no routable endpoints available")
+		return nil, errors.New("no routable endpoints available")
 	}
 
 	current := atomic.AddUint64(&r.counter, 1) - 1 // Subtract 1 to start from 0

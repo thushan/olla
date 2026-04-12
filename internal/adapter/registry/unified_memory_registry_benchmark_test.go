@@ -15,7 +15,7 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 
 	// Create mock endpoint repository
 	endpoints := make([]*domain.Endpoint, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		status := domain.StatusHealthy
 		if i%3 == 0 {
 			status = domain.StatusUnhealthy
@@ -34,7 +34,7 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 	for i, ep := range endpoints {
 		// Register 1-3 models per endpoint
 		numModels := (i % 3) + 1
-		for j := 0; j < numModels; j++ {
+		for j := range numModels {
 			modelIdx := (i + j) % len(models)
 			model := &domain.ModelInfo{
 				Name:     models[modelIdx],
@@ -48,7 +48,7 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 	b.Run("ExistingModel", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			endpoints, err := registry.GetHealthyEndpointsForModel(ctx, "llama3:8b", mockRepo)
 			if err != nil {
 				b.Fatal(err)
@@ -60,7 +60,7 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 	b.Run("NonExistentModel", func(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			endpoints, err := registry.GetHealthyEndpointsForModel(ctx, "gpt-4", mockRepo)
 			if err != nil {
 				b.Fatal(err)
@@ -102,7 +102,7 @@ func BenchmarkGetModelsByCapability(b *testing.B) {
 	}
 
 	// Add 1000 models to test at scale
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		model := &domain.UnifiedModel{
 			ID:           fmt.Sprintf("model-%d", i),
 			Family:       fmt.Sprintf("family-%d", i%10),
@@ -118,7 +118,7 @@ func BenchmarkGetModelsByCapability(b *testing.B) {
 		b.Run(capability, func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				models, err := registry.GetModelsByCapability(ctx, capability)
 				if err != nil {
 					b.Fatal(err)
@@ -174,7 +174,7 @@ func BenchmarkRegistryWithXSync(b *testing.B) {
 	// Benchmark concurrent reads with xsync
 	b.Run("ConcurrentReads", func(b *testing.B) {
 		// Pre-populate with some data
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			model := &domain.ModelInfo{
 				Name:     fmt.Sprintf("read-model-%d", i),
 				LastSeen: time.Now(),
@@ -208,13 +208,13 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				b.StopTimer()
 				registry := createTestUnifiedRegistry()
 				b.StartTimer()
 
 				// Register models
-				for j := 0; j < size; j++ {
+				for j := range size {
 					model := &domain.ModelInfo{
 						Name:        fmt.Sprintf("model-%d", j),
 						LastSeen:    time.Now(),

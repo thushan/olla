@@ -131,7 +131,7 @@ func TestVLLMMLXParser_Parse(t *testing.T) {
 		defaultOwners := []string{"vllm-mlx", "vllm", ""}
 
 		for _, owner := range defaultOwners {
-			owner := owner
+
 			t.Run(owner, func(t *testing.T) {
 				t.Parallel()
 				response := `{
@@ -221,7 +221,7 @@ func TestVLLMMLXParser_HuggingFaceModelIDFormats(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
+
 		t.Run(tc.modelID, func(t *testing.T) {
 			t.Parallel()
 			response := `{"object":"list","data":[{"id":"` + tc.modelID + `","object":"model","created":1734000007,"owned_by":"vllm-mlx"}]}`

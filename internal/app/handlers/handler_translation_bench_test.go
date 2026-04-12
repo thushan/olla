@@ -99,7 +99,7 @@ func BenchmarkTranslationHandler_NonStreamingOverhead(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req := httptest.NewRequest("POST", "/test", bytes.NewReader(bodyBytes))
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		rec := httptest.NewRecorder()
@@ -178,7 +178,7 @@ func BenchmarkTranslationHandler_StreamingSetup(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req := httptest.NewRequest("POST", "/test", bytes.NewReader(bodyBytes))
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		rec := httptest.NewRecorder()

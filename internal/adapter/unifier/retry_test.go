@@ -67,7 +67,7 @@ func TestRetry_PermanentError(t *testing.T) {
 	assert.Equal(t, 1, attempts) // Should not retry permanent errors
 
 	var permErr *PermanentError
-	assert.True(t, errors.As(err, &permErr))
+	assert.ErrorAs(t, err, &permErr)
 }
 
 func TestRetry_ContextCancellation(t *testing.T) {

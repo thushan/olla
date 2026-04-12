@@ -891,6 +891,167 @@ func stringContains(s, substr string) bool {
 	return false
 }
 
+func TestLoadConfig_WithModelAliases(t *testing.T) {
+	configYAML := `
+model_aliases:
+  gpt-oss-120b:
+    - "gpt-oss:120b"
+    - gpt-oss-120b-MLX
+    - gguf_gpt_oss_120b.gguf
+  my-llama:
+    - "llama3.1:8b"
+    - llama-3.1-8b
+`
+	tmpFile, err := os.CreateTemp(t.TempDir(), "olla-config-*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configYAML); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	tmpFile.Close()
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if cfg.ModelAliases == nil {
+		t.Fatal("expected ModelAliases to be set")
+	}
+
+	if len(cfg.ModelAliases) != 2 {
+		t.Errorf("expected 2 aliases, got %d", len(cfg.ModelAliases))
+	}
+
+	gptModels := cfg.ModelAliases["gpt-oss-120b"]
+	if len(gptModels) != 3 {
+		t.Errorf("expected 3 models for gpt-oss-120b alias, got %d", len(gptModels))
+	}
+	if gptModels[0] != "gpt-oss:120b" {
+		t.Errorf("expected first model to be gpt-oss:120b, got %s", gptModels[0])
+	}
+
+	llamaModels := cfg.ModelAliases["my-llama"]
+	if len(llamaModels) != 2 {
+		t.Errorf("expected 2 models for my-llama alias, got %d", len(llamaModels))
+	}
+}
+
+func TestDefaultConfig_NoModelAliases(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.ModelAliases != nil {
+		t.Error("expected nil ModelAliases in default config")
+	}
+}
+
+func TestValidateModelAliases_NoAliases(t *testing.T) {
+	cfg := DefaultConfig()
+	if err := cfg.ValidateModelAliases(); err != nil {
+		t.Errorf("expected no error for empty aliases, got: %v", err)
+	}
+}
+
+func TestValidateModelAliases_ValidConfig(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		"gpt-oss-120b": {"gpt-oss:120b", "gpt-oss-120b-MLX", "gguf_gpt_oss_120b.gguf"},
+		"my-llama":     {"llama3.1:8b", "llama-3.1-8b"},
+	}
+
+	if err := cfg.ValidateModelAliases(); err != nil {
+		t.Errorf("expected no error for valid config, got: %v", err)
+	}
+}
+
+func TestValidateModelAliases_EmptyModelList(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		"empty-alias": {},
+	}
+
+	err := cfg.ValidateModelAliases()
+	if err == nil {
+		t.Error("expected error for empty model list")
+	}
+	if !stringContains(err.Error(), "no actual models configured") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidateModelAliases_EmptyModelName(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		"my-alias": {"model-a", "", "model-c"},
+	}
+
+	err := cfg.ValidateModelAliases()
+	if err == nil {
+		t.Error("expected error for empty model name")
+	}
+	if !stringContains(err.Error(), "empty model name at position 1") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidateModelAliases_WhitespaceInAliasName(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		" leading-space": {"model-a"},
+	}
+
+	err := cfg.ValidateModelAliases()
+	if err == nil {
+		t.Error("expected error for whitespace in alias name")
+	}
+	if !stringContains(err.Error(), "leading/trailing whitespace") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidateModelAliases_TrailingWhitespace(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		"trailing-space ": {"model-a"},
+	}
+
+	err := cfg.ValidateModelAliases()
+	if err == nil {
+		t.Error("expected error for trailing whitespace in alias name")
+	}
+	if !stringContains(err.Error(), "leading/trailing whitespace") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidateModelAliases_DuplicateModelNames(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		"my-alias": {"model-a", "model-b", "model-a"},
+	}
+
+	// Duplicates should produce a warning but NOT an error
+	err := cfg.ValidateModelAliases()
+	if err != nil {
+		t.Errorf("expected no error for duplicate model names (should only warn), got: %v", err)
+	}
+}
+
+func TestValidateModelAliases_SelfReferencingAlias(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		"gpt-oss-120b": {"gpt-oss:120b", "gpt-oss-120b"},
+	}
+
+	// Self-referencing is valid (alias name is also an actual model name)
+	err := cfg.ValidateModelAliases()
+	if err != nil {
+		t.Errorf("expected no error for self-referencing alias, got: %v", err)
+	}
+}
+
 // TestDefaultConfig_ModelDiscovery verifies the ModelDiscovery block is
 // populated with safe, non-zero defaults so the ticker and errgroup won't panic
 // on a fresh install.

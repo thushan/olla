@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -92,7 +93,7 @@ func benchmarkSimpleRequest(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 		w := httptest.NewRecorder()
 
@@ -127,7 +128,7 @@ func benchmarkSmallPayload(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req, stats, rlog := createTestRequestWithBody("POST", "/api/query", requestBody)
 		w := httptest.NewRecorder()
 
@@ -161,7 +162,7 @@ func benchmarkLargePayload(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req, stats, rlog := createTestRequestWithBody("GET", "/api/large", "")
 		w := httptest.NewRecorder()
 
@@ -179,7 +180,7 @@ func benchmarkStreamingResponse(b *testing.B, suite ProxyTestSuite) {
 		w.WriteHeader(http.StatusOK)
 
 		flusher := w.(http.Flusher)
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			fmt.Fprintf(w, "chunk %d\n", i)
 			flusher.Flush()
 		}
@@ -197,7 +198,7 @@ func benchmarkStreamingResponse(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req, stats, rlog := createTestRequestWithBody("GET", "/api/stream", "")
 		w := httptest.NewRecorder()
 
@@ -258,7 +259,7 @@ func benchmarkHighThroughput(b *testing.B, suite ProxyTestSuite) {
 	proxy := suite.CreateProxy(discovery, selector, config, collector)
 
 	// Warm up
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 		w := httptest.NewRecorder()
 		proxy.ProxyRequest(req.Context(), w, req, stats, rlog)
@@ -272,12 +273,12 @@ func benchmarkHighThroughput(b *testing.B, suite ProxyTestSuite) {
 	var wg sync.WaitGroup
 	requests := make(chan struct{}, b.N)
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		requests <- struct{}{}
 	}
 	close(requests)
 
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -310,7 +311,7 @@ func benchmarkErrorHandling(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 		w := httptest.NewRecorder()
 
@@ -334,7 +335,7 @@ func benchmarkConfigUpdates(b *testing.B, suite ProxyTestSuite) {
 	// Create alternate configs for updates
 	var configs []ports.ProxyConfiguration
 	if suite.Name() == "Sherpa" {
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			configs = append(configs, &Configuration{
 				ResponseTimeout:  time.Duration(i+1) * time.Second,
 				ReadTimeout:      time.Duration(i+1) * time.Second,
@@ -342,7 +343,7 @@ func benchmarkConfigUpdates(b *testing.B, suite ProxyTestSuite) {
 			})
 		}
 	} else {
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			configs = append(configs, &Configuration{
 				ResponseTimeout:  time.Duration(i+1) * time.Second,
 				ReadTimeout:      time.Duration(i+1) * time.Second,
@@ -357,7 +358,7 @@ func benchmarkConfigUpdates(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		configIndex := i % len(configs)
 		proxy.UpdateConfig(configs[configIndex])
 	}
@@ -375,7 +376,7 @@ func benchmarkStatsCollection(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := proxy.GetStats(context.Background())
 		if err != nil {
 			b.Fatalf("GetStats failed: %v", err)
@@ -402,7 +403,7 @@ func benchmarkHeaderProcessing(b *testing.B, suite ProxyTestSuite) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req, stats, rlog := createTestRequestWithBody("POST", "/api/test", `{"data": "test"}`)
 		// Add multiple headers to test header processing performance
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
@@ -441,7 +442,7 @@ func BenchmarkProxyStats(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				_, err := proxy.GetStats(context.Background())
 				if err != nil {
 					b.Fatalf("GetStats failed: %v", err)
@@ -457,15 +458,15 @@ func BenchmarkErrorFunction(b *testing.B) {
 		context.Canceled,
 		context.DeadlineExceeded,
 		io.EOF,
-		fmt.Errorf("connection refused"),
-		fmt.Errorf("connection reset"),
-		fmt.Errorf("no such host"),
+		errors.New("connection refused"),
+		errors.New("connection reset"),
+		errors.New("no such host"),
 	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		err := testErrors[i%len(testErrors)]
 		duration := time.Duration(i%1000) * time.Millisecond
 		_ = makeUserFriendlyError(err, duration, "benchmark", 30*time.Second)
@@ -498,7 +499,7 @@ func BenchmarkMemoryUsage(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
-			for i := 0; i < b.N; i++ {
+			for range b.N {
 				req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 				w := httptest.NewRecorder()
 
@@ -562,7 +563,7 @@ func BenchmarkCircuitBreaker(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for i := range b.N {
 			// Alternate between checking state and recording success/failure
 			if i%3 == 0 {
 				cb.IsOpen(endpoint)
@@ -581,9 +582,9 @@ func BenchmarkCircuitBreaker(b *testing.B) {
 		b.ResetTimer()
 		b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			// Simulate failure scenarios
-			for j := 0; j < 5; j++ {
+			for range 5 {
 				cb.RecordFailure(endpoint)
 			}
 			cb.IsOpen(endpoint)

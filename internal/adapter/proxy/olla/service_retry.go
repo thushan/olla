@@ -57,8 +57,9 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	cb := s.GetCircuitBreaker(endpoint.Name)
 	if cb != nil && cb.IsOpen() {
 		rlog.Warn("Circuit breaker is open for endpoint", "endpoint", endpoint.Name)
-		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), fmt.Errorf("circuit breaker open"))
-		return fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
+		err := fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
+		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), err)
+		return err
 	}
 
 	// Build target URL using common function that respects preserve_path
@@ -79,6 +80,9 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	// Get endpoint-specific connection pool and transport
 	pool := s.getOrCreateEndpointPool(endpoint.Name)
 	transport := pool.transport
+
+	// Rewrite model name in request body if this is an alias-resolved request
+	core.RewriteModelForAlias(ctx, r, endpoint)
 
 	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, stats)
 	if err != nil {

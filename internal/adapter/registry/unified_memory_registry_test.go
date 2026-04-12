@@ -389,7 +389,7 @@ func TestEndpointSetCacheConcurrency(t *testing.T) {
 
 	// Create test endpoints
 	endpoints := make([]*domain.Endpoint, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		endpoints[i] = &domain.Endpoint{
 			URLString: fmt.Sprintf("http://localhost:%d", 11434+i),
 			Name:      fmt.Sprintf("endpoint-%d", i),
@@ -404,7 +404,7 @@ func TestEndpointSetCacheConcurrency(t *testing.T) {
 	done := make(chan bool)
 	numGoroutines := 20
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			model := &domain.ModelInfo{
 				Name:     fmt.Sprintf("test-model-%d", id%5),
@@ -412,13 +412,13 @@ func TestEndpointSetCacheConcurrency(t *testing.T) {
 			}
 
 			// Register model on random endpoints
-			for j := 0; j < 5; j++ {
+			for j := range 5 {
 				endpointIdx := (id + j) % len(endpoints)
 				_ = registry.RegisterModel(ctx, endpoints[endpointIdx].URLString, model)
 			}
 
 			// Query healthy endpoints multiple times
-			for j := 0; j < 10; j++ {
+			for j := range 10 {
 				modelName := fmt.Sprintf("test-model-%d", j%5)
 				_, _ = registry.GetHealthyEndpointsForModel(ctx, modelName, mockRepo)
 			}
@@ -428,7 +428,7 @@ func TestEndpointSetCacheConcurrency(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		<-done
 	}
 

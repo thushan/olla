@@ -49,11 +49,11 @@ func TestWorkerPool_ConcurrentPublishingStress(t *testing.T) {
 
 	// Publish events rapidly (no delays - maximum stress)
 	var wg sync.WaitGroup
-	for p := 0; p < numPublishers; p++ {
+	for p := range numPublishers {
 		wg.Add(1)
 		go func(publisherID int) {
 			defer wg.Done()
-			for i := 0; i < eventsPerPublisher; i++ {
+			for i := range eventsPerPublisher {
 				event := string(rune('A'+publisherID)) + string(rune('0'+i))
 				eb.PublishAsync(event)
 				published.Add(1)
@@ -123,7 +123,7 @@ func TestEventBus_HighVolumePublishing(t *testing.T) {
 	const totalEvents = 100000
 	start := time.Now()
 
-	for i := 0; i < totalEvents; i++ {
+	for i := range totalEvents {
 		bus.PublishAsync(i)
 	}
 
@@ -160,7 +160,7 @@ func TestEventBus_ConcurrentSubscribers(t *testing.T) {
 	var totalReceived atomic.Int64
 	var wg sync.WaitGroup
 
-	for i := 0; i < numSubscribers; i++ {
+	for i := range numSubscribers {
 		ch, cleanup := bus.Subscribe(ctx)
 		defer cleanup()
 
@@ -180,7 +180,7 @@ func TestEventBus_ConcurrentSubscribers(t *testing.T) {
 
 	// Publish events
 	start := time.Now()
-	for i := 0; i < eventsToPublish; i++ {
+	for i := range eventsToPublish {
 		delivered := bus.Publish(i)
 		if delivered < numSubscribers/2 {
 			t.Logf("Warning: Only delivered to %d/%d subscribers at event %d", delivered, numSubscribers, i)

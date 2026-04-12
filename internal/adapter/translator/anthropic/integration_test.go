@@ -856,7 +856,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 
 		// Empty content should be filtered out
 		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
-		assert.Len(t, messages, 0)
+		assert.Empty(t, messages)
 	})
 
 	t.Run("invalid_json_in_tool_arguments", func(t *testing.T) {
@@ -1171,7 +1171,7 @@ func BenchmarkTransformRequest(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			req.Body = io.NopCloser(bytes.NewReader(body))
 			_, err := translator.TransformRequest(ctx, req)
 			if err != nil {
@@ -1207,7 +1207,7 @@ func BenchmarkTransformRequest(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			req.Body = io.NopCloser(bytes.NewReader(body))
 			_, err := translator.TransformRequest(ctx, req)
 			if err != nil {
@@ -1242,7 +1242,7 @@ func BenchmarkTransformRequest(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			req.Body = io.NopCloser(bytes.NewReader(body))
 			_, err := translator.TransformRequest(ctx, req)
 			if err != nil {
@@ -1291,7 +1291,7 @@ func BenchmarkTransformRequest(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			req.Body = io.NopCloser(bytes.NewReader(body))
 			_, err := translator.TransformRequest(ctx, req)
 			if err != nil {
@@ -1328,7 +1328,7 @@ func BenchmarkTransformRequest(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			req.Body = io.NopCloser(bytes.NewReader(body))
 			_, err := translator.TransformRequest(ctx, req)
 			if err != nil {
@@ -1364,7 +1364,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
 			if err != nil {
 				b.Fatal(err)
@@ -1402,7 +1402,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
 			if err != nil {
 				b.Fatal(err)
@@ -1446,7 +1446,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
 			if err != nil {
 				b.Fatal(err)
@@ -1493,7 +1493,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
 			if err != nil {
 				b.Fatal(err)
@@ -1536,7 +1536,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
 			if err != nil {
 				b.Fatal(err)
@@ -1588,7 +1588,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 
-		for i := 0; i < b.N; i++ {
+		for range b.N {
 			_, err := translator.TransformResponse(ctx, backendResp, httpReq)
 			if err != nil {
 				b.Fatal(err)

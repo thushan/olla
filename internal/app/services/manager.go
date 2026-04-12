@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -107,7 +108,7 @@ func (sm *ServiceManager) resolveDependencies() ([]string, error) {
 	}
 
 	if len(order) != len(sm.services) {
-		return nil, fmt.Errorf("circular dependency detected")
+		return nil, errors.New("circular dependency detected")
 	}
 
 	// Reverse to ensure dependencies start before dependants

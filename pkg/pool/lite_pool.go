@@ -28,7 +28,7 @@ package pool
 // If Go ever adds generics to sync.Pool (e.g. Go 1.23+), this becomes obsolete.
 
 import (
-	"fmt"
+	"errors"
 	"sync"
 )
 
@@ -43,12 +43,12 @@ type Pool[T any] struct {
 
 func NewLitePool[T any](newFn func() T) (*Pool[T], error) {
 	if newFn == nil {
-		return nil, fmt.Errorf("litepool: constructor must not be nil")
+		return nil, errors.New("litepool: constructor must not be nil")
 	}
 	// Validate early that the result is non-nil
 	test := newFn()
 	if any(test) == nil {
-		return nil, fmt.Errorf("litepool: constructor returned nil")
+		return nil, errors.New("litepool: constructor returned nil")
 	}
 
 	return &Pool[T]{

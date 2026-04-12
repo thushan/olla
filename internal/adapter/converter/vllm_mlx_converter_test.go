@@ -185,7 +185,7 @@ func TestVLLMMLXConverter_DetermineOwner(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
+
 		t.Run(tc.modelID, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.expected, c.determineOwner(tc.modelID))

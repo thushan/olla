@@ -371,7 +371,7 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 		require.Len(t, anthropicResp.Content, 2) // text + tool_use
 		assert.Equal(t, "tool_use", anthropicResp.Content[1].Type)
 		assert.NotNil(t, anthropicResp.Content[1].Input)
-		assert.Len(t, anthropicResp.Content[1].Input, 0) // Empty map
+		assert.Empty(t, anthropicResp.Content[1].Input) // Empty map
 	})
 }
 
@@ -611,7 +611,7 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 		}
 
 		ids := make(map[string]bool)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
 			require.NoError(t, err)
 
@@ -649,7 +649,7 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 		// Base58: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
 		// (excludes 0, O, I, l)
 		id := anthropicResp.ID
-		assert.True(t, len(id) > 6, "ID should be longer than just the prefix")
+		assert.Greater(t, len(id), 6, "ID should be longer than just the prefix")
 
 		suffix := id[6:] // Skip "msg_01" prefix
 		for _, char := range suffix {
@@ -909,7 +909,7 @@ func BenchmarkTransformResponse_Simple(b *testing.B) {
 		"usage": map[string]interface{}{"prompt_tokens": float64(5), "completion_tokens": float64(2)},
 	}
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, _ = tr.TransformResponse(context.Background(), openaiResp, nil)
 	}
 }

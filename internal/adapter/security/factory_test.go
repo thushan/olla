@@ -2,9 +2,11 @@ package security
 
 import (
 	"context"
-	"github.com/thushan/olla/internal/adapter/stats"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/thushan/olla/internal/adapter/stats"
 
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
@@ -150,7 +152,7 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 
 	// Subsequent rapid requests should be rate limited
 	rateLimited := false
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		result, err := services.Chain.Validate(ctx, req)
 		if err != nil {
 			t.Fatalf("Chain validation failed on iteration %d: %v", i, err)
@@ -218,12 +220,14 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 	}
 
 	// Make multiple requests to potentially trigger rate limiting
-	for i := 0; i < 5; i++ {
+	blocked := false
+	for i := range 5 {
 		result, err := services.Chain.Validate(ctx, req)
 		if err != nil {
 			t.Fatalf("Chain validation failed on iteration %d: %v", i, err)
 		}
 		if !result.Allowed {
+			blocked = true
 			// Chain should stop at first validator that fails
 			// In this case, rate limiter runs first, so if it fails, we get rate limit error
 			// If rate limiter passes, size validator fails with size error
@@ -233,6 +237,7 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 			break
 		}
 	}
+	assert.True(t, blocked, "expected at least one request to be blocked by the chain")
 }
 
 func TestSecurityAdapters_Stop(t *testing.T) {

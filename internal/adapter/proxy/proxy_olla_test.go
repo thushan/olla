@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -70,7 +71,7 @@ func TestOllaProxyService_CircuitBreaker(t *testing.T) {
 	}
 
 	// Record failures up to threshold
-	for i := 0; i < 4; i++ { // threshold is 5
+	for i := range 4 { // threshold is 5
 		cb.RecordFailure()
 		if cb.IsOpen() {
 			t.Errorf("Circuit breaker should remain closed after %d failures", i+1)
@@ -128,7 +129,7 @@ func TestOllaProxyService_CircuitBreaker_Integration(t *testing.T) {
 	}
 
 	// Make failing requests - should trigger circuit breaker
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		req, stats, rlog := createTestRequestWithStats("GET", "/api/test", "")
 		w := httptest.NewRecorder()
 		_ = proxy.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
@@ -177,7 +178,7 @@ func TestOllaProxyService_ConnectionPools(t *testing.T) {
 	var wg sync.WaitGroup
 	const numRequests = 10
 
-	for i := 0; i < numRequests; i++ {
+	for range numRequests {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -230,7 +231,7 @@ func TestOllaProxyService_ObjectPools(t *testing.T) {
 
 	sem := make(chan struct{}, concurrency)
 
-	for i := 0; i < numRequests; i++ {
+	for i := range numRequests {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
@@ -274,10 +275,10 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < operationsPerGoroutine; j++ {
+			for j := range operationsPerGoroutine {
 				// Simulate request recording through the proxy's public API
 				// We can't call internal updateStats anymore
 				if j%2 == 0 {
@@ -286,7 +287,7 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 					proxy.RecordSuccess(nil, latency.Milliseconds(), 1000)
 				} else {
 					// Simulate failure
-					proxy.RecordFailure(context.Background(), nil, time.Duration(10)*time.Millisecond, fmt.Errorf("test error"))
+					proxy.RecordFailure(context.Background(), nil, time.Duration(10)*time.Millisecond, errors.New("test error"))
 				}
 			}
 		}(i)

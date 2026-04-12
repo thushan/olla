@@ -2,6 +2,7 @@ package unifier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -64,14 +65,14 @@ func TestLifecycleUnifier_EndpointStateTracking(t *testing.T) {
 	}
 
 	// Test recording failures
-	unifier.RecordEndpointFailure(endpoint.URLString, fmt.Errorf("connection failed"))
+	unifier.RecordEndpointFailure(endpoint.URLString, errors.New("connection failed"))
 	state := unifier.GetEndpointState(endpoint.URLString)
 	assert.NotNil(t, state)
 	assert.Equal(t, domain.EndpointStateDegraded, state.State)
 	assert.Equal(t, 1, state.ConsecutiveFailures)
 
 	// Second failure should mark endpoint as offline
-	unifier.RecordEndpointFailure(endpoint.URLString, fmt.Errorf("connection failed again"))
+	unifier.RecordEndpointFailure(endpoint.URLString, errors.New("connection failed again"))
 	state = unifier.GetEndpointState(endpoint.URLString)
 	assert.Equal(t, domain.EndpointStateOffline, state.State)
 	assert.Equal(t, 2, state.ConsecutiveFailures)
@@ -152,7 +153,7 @@ func TestLifecycleUnifier_CircuitBreaker(t *testing.T) {
 	}
 
 	// Record failures to trip the circuit breaker
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		unifier.RecordEndpointFailure(endpoint.URLString, fmt.Errorf("failure %d", i))
 	}
 
@@ -274,7 +275,7 @@ func TestLifecycleUnifier_StateTransitions(t *testing.T) {
 	assert.Len(t, unified, 1)
 
 	// Record failures to mark endpoint offline
-	for i := 0; i < config.MaxConsecutiveFailures; i++ {
+	for i := range config.MaxConsecutiveFailures {
 		unifier.RecordEndpointFailure(endpoint.URLString, fmt.Errorf("failure %d", i))
 	}
 
@@ -300,7 +301,7 @@ func TestLifecycleUnifier_ConcurrentOperations(t *testing.T) {
 
 	// Goroutine 1: Add models
 	go func() {
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			endpoint := &domain.Endpoint{
 				URLString: fmt.Sprintf("http://endpoint%d", i),
 				Name:      fmt.Sprintf("endpoint%d", i),
@@ -318,7 +319,7 @@ func TestLifecycleUnifier_ConcurrentOperations(t *testing.T) {
 
 	// Goroutine 2: Query models
 	go func() {
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			unifier.GetAllModels(ctx)
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -327,16 +328,16 @@ func TestLifecycleUnifier_ConcurrentOperations(t *testing.T) {
 
 	// Goroutine 3: Record failures
 	go func() {
-		for i := 0; i < 15; i++ {
+		for i := range 15 {
 			url := fmt.Sprintf("http://endpoint%d", i%5)
-			unifier.RecordEndpointFailure(url, fmt.Errorf("test error"))
+			unifier.RecordEndpointFailure(url, errors.New("test error"))
 			time.Sleep(5 * time.Millisecond)
 		}
 		done <- true
 	}()
 
 	// Wait for all goroutines
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		<-done
 	}
 

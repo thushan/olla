@@ -81,7 +81,7 @@ func createRefactoredOllaProxy(endpoints []*domain.Endpoint) (ports.ProxyService
 func benchmarkProxy(b *testing.B, proxy ports.ProxyService) {
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req := httptest.NewRequest("GET", "/api/test", nil)
 		w := httptest.NewRecorder()
 		stats := &ports.RequestStats{
@@ -140,7 +140,7 @@ func BenchmarkStreamingComparison(b *testing.B) {
 func benchmarkStreamingProxy(b *testing.B, proxy ports.ProxyService) {
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for i := range b.N {
 		req := httptest.NewRequest("GET", "/api/test", nil)
 		w := &discardResponseWriter{header: make(http.Header)}
 		stats := &ports.RequestStats{

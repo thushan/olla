@@ -162,8 +162,8 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 	// Test 7: Check statistics
 	stats, err := unifiedRegistry.GetUnifiedStats(ctx)
 	require.NoError(t, err)
-	assert.Greater(t, stats.TotalUnifiedModels, 0)
-	assert.Greater(t, stats.UnificationStats.TotalUnified, int64(0))
+	assert.Positive(t, stats.TotalUnifiedModels)
+	assert.Positive(t, stats.UnificationStats.TotalUnified)
 	assert.Equal(t, int64(0), stats.UnificationStats.TotalErrors)
 
 	// Test 8: Remove endpoint and verify cleanup
