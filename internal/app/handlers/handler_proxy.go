@@ -135,26 +135,7 @@ func (a *Application) getCompatibleEndpoints(ctx context.Context, pr *proxyReque
 }
 
 func (a *Application) executeProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, pr *proxyRequest) error {
-	if pr.model != "" {
-		ctx = context.WithValue(ctx, "model", pr.model)
-		r = r.WithContext(ctx)
-	}
-
-	// pass routing decision to stats for headers
-	if pr.profile != nil && pr.profile.RoutingDecision != nil {
-		pr.stats.RoutingDecision = pr.profile.RoutingDecision
-	}
-
-	// if a model alias was resolved, pass the endpoint→model rewrite map through context
-	// so the proxy can rewrite the model name in the request body for the selected backend
-	if pr.profile != nil {
-		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.ContextModelAliasMapKey); ok {
-			if aliasMap, ok := aliasMapRaw.(map[string]string); ok {
-				ctx = context.WithValue(ctx, constants.ContextModelAliasMapKey, aliasMap)
-				r = r.WithContext(ctx)
-			}
-		}
-	}
+	ctx, r = a.prepareProxyContext(ctx, r, pr)
 
 	return a.proxyService.ProxyRequestToEndpoints(ctx, w, r, endpoints, pr.stats, pr.requestLogger)
 }

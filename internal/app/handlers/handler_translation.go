@@ -337,7 +337,7 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 	return a.writeTranslatedSuccessResponse(w, ctx, r, recorder, openaiResp, trans)
 }
 
-// prepareProxyContext sets up context with model and routing decision
+// prepareProxyContext sets up context with model, routing decision, and alias rewrite map
 func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, pr *proxyRequest) (context.Context, *http.Request) {
 	if pr.model != "" {
 		ctx = context.WithValue(ctx, "model", pr.model)
@@ -346,6 +346,17 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 
 	if pr.profile != nil && pr.profile.RoutingDecision != nil {
 		pr.stats.RoutingDecision = pr.profile.RoutingDecision
+	}
+
+	// if a model alias was resolved, pass the endpoint→model rewrite map through context
+	// so the proxy can rewrite the model name in the request body for the selected backend
+	if pr.profile != nil {
+		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.ContextModelAliasMapKey); ok {
+			if aliasMap, ok := aliasMapRaw.(map[string]string); ok {
+				ctx = context.WithValue(ctx, constants.ContextModelAliasMapKey, aliasMap)
+				r = r.WithContext(ctx)
+			}
+		}
 	}
 
 	return ctx, r
