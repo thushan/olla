@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
@@ -30,10 +31,12 @@ type DiscoveryService struct {
 	modelDiscovery *discovery.ModelDiscoveryService
 	registry       domain.ModelRegistry
 	endpointRepo   domain.EndpointRepository
-	// purgeDeadFn, when non-nil, is called with the current routable endpoint list
+	// purgeDeadFn, when set, is called with the current routable endpoint list
 	// whenever a backend transitions to unhealthy. Wired by the proxy layer so sticky
 	// session entries for dead backends are evicted promptly rather than waiting for TTL.
-	purgeDeadFn func([]*domain.Endpoint)
+	// Stored atomically because SetPurgeDeadEndpointsFn is called from the main goroutine
+	// while the health-check goroutine may concurrently invoke the callback.
+	purgeDeadFn atomic.Pointer[func([]*domain.Endpoint)]
 }
 
 // NewDiscoveryService creates a new discovery service
@@ -101,7 +104,8 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 	// Purge sticky session entries for any backend that goes offline. The purgeFn is
 	// nil when sticky sessions are disabled, making this callback a cheap no-op then.
 	s.healthChecker.SetUnhealthyCallback(health.UnhealthyCallbackFunc(func(ctx context.Context, _ *domain.Endpoint) {
-		if s.purgeDeadFn == nil {
+		fn := s.purgeDeadFn.Load()
+		if fn == nil {
 			return
 		}
 		routable, err := s.endpointRepo.GetRoutable(ctx)
@@ -109,7 +113,7 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 			s.logger.Warn("Failed to fetch routable endpoints for sticky session purge", "error", err)
 			return
 		}
-		s.purgeDeadFn(routable)
+		(*fn)(routable)
 	}))
 
 	if err := s.healthChecker.StartChecking(ctx); err != nil {
@@ -279,7 +283,7 @@ func (s *DiscoveryService) SetStatsService(statsService *StatsService) {
 // endpoint list whenever a backend transitions to unhealthy. Used by the proxy layer
 // to evict sticky session entries for dead backends without waiting for TTL expiry.
 func (s *DiscoveryService) SetPurgeDeadEndpointsFn(fn func([]*domain.Endpoint)) {
-	s.purgeDeadFn = fn
+	s.purgeDeadFn.Store(&fn)
 }
 
 // UpdateEndpointStatus updates the status of an endpoint in the repository

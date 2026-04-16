@@ -182,13 +182,22 @@ func TestStickySessionWrapper_TTLExpiry(t *testing.T) {
 	assert.Equal(t, first.URLString, second.URLString)
 	assert.Equal(t, "hit", outcome2.Result)
 
-	// Let the TTL expire.
-	time.Sleep(1500 * time.Millisecond)
-
-	ctx3, outcome3 := injectKey(context.Background(), stickyKey, "session_header")
-	_, err = w.Select(ctx3, endpoints)
-	require.NoError(t, err)
+	// Poll until the ttlcache TTL expires (1 s) rather than sleeping a fixed
+	// duration. Cap at 2 s to stay well above the TTL without being brittle.
+	deadline := time.Now().Add(2 * time.Second)
+	var outcome3 *StickyOutcome
+	for time.Now().Before(deadline) {
+		ctx3, o3 := injectKey(context.Background(), stickyKey, "session_header")
+		_, err = w.Select(ctx3, endpoints)
+		require.NoError(t, err)
+		outcome3 = o3
+		if outcome3.Result == "miss" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 	// After TTL the entry is gone, so it's a fresh miss not a repin.
+	require.NotNil(t, outcome3)
 	assert.Equal(t, "miss", outcome3.Result)
 }
 
