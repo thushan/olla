@@ -114,6 +114,8 @@ olla/
 - `internal/adapter/translator/types.go` - PassthroughCapable interface and translator types
 - `internal/adapter/translator/anthropic/` - Anthropic translator implementation
 - `internal/adapter/stats/translator_collector.go` - Translator metrics collector
+- `internal/adapter/balancer/sticky.go` - Sticky session wrapper
+- `internal/app/handlers/handler_stats_sticky.go` - Sticky session stats endpoint
 - `internal/core/constants/translator.go` - TranslatorMode and FallbackReason constants
 - `internal/core/ports/stats.go` - StatsCollector interface with translator tracking
 - `internal/core/domain/profile_config.go` - AnthropicSupportConfig for backend profiles
@@ -130,6 +132,7 @@ olla/
 - `/internal/status/models` - Models status details
 - `/internal/stats/models` - Model statistics
 - `/internal/stats/translators` - Translator statistics
+- `/internal/stats/sticky` - Sticky session statistics (returns `{"enabled":false}` when disabled)
 - `/internal/process` - Process statistics
 - `/version` - Version information
 
@@ -158,6 +161,9 @@ Dynamically registered based on configured translators (e.g., Anthropic Messages
 - `X-Olla-Routing-Strategy`: Routing strategy used (when model routing is active)
 - `X-Olla-Routing-Decision`: Routing decision made (routed/fallback/rejected)
 - `X-Olla-Routing-Reason`: Human-readable reason for routing decision
+- `X-Olla-Sticky-Session`: Sticky session status (hit/miss/repin/disabled)
+- `X-Olla-Sticky-Key-Source`: Key source used (session_header/prefix_hash/auth_header/ip)
+- `X-Olla-Session-ID`: Echoed session ID when client supplies one
 
 ## Testing
 
@@ -201,6 +207,7 @@ Always run `make ready` before committing changes.
 - **Translator Layer**: Enables API format translation (e.g., OpenAI ↔ Anthropic) with passthrough optimisation for backends with native support
 - **Passthrough Mode**: When a backend natively supports the Anthropic Messages API (vLLM, llama.cpp, LM Studio, Ollama), requests bypass translation entirely
 - **Translator Metrics**: Thread-safe per-translator statistics tracking passthrough/translation rates, fallback reasons, latency, and streaming breakdown (`internal/adapter/stats/translator_collector.go`)
+- **Sticky Sessions**: Optional decorator on the endpoint selector that pins multi-turn LLM conversations to the backend that handled the first turn, maximising KV-cache reuse. FNV-64a hashed keys, TTL + LRU bounded, purged on routable→non-routable health transitions (`internal/adapter/balancer/sticky.go`)
 - **Proxy Engines**: Choose Sherpa (simple) or Olla (high-performance)
 - **Load Balancing**: Priority-based recommended for production
 - **Version Management**: Build-time version injection via `internal/version`

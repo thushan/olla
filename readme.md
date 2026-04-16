@@ -43,6 +43,7 @@ For Large GPU deployments, Enterprise & Data-Centre use, see [TensorFoundry Foun
 ## Key Features
 
 - **🔄 Smart Load Balancing**: [Priority-based routing](https://thushan.github.io/olla/concepts/load-balancing/) with automatic failover and connection retry
+- **📌 Sticky Sessions**: [KV-cache-aware affinity routing](https://thushan.github.io/olla/concepts/sticky-sessions/) that pins multi-turn conversations to the same backend
 - **🔍 Smart Model Unification**: [Per-provider unification + OpenAI-compatible cross-provider routing](https://thushan.github.io/olla/concepts/model-unification/)
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
 - **🎯 Advanced Filtering**: [Profile and model filtering](https://thushan.github.io/olla/configuration/filters/) with glob patterns for precise control
