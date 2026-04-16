@@ -211,7 +211,7 @@ func TestStickySessionWrapper_ModelScoping(t *testing.T) {
 	// Force the second model to a specific backend so we can assert they differ.
 	// Simply select a few times — the round-robin inner will distribute.
 	var chosenB *domain.Endpoint
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		ctx2, _ := injectKey(context.Background(), keyModel2, "session_header")
 		chosenB, _ = w.Select(ctx2, endpoints)
 		if chosenB.URLString != chosenA.URLString {
@@ -353,11 +353,11 @@ func TestStickySessionWrapper_Race(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
 
-	for g := 0; g < goroutines; g++ {
-		g := g
+	for g := range goroutines {
+
 		go func() {
 			defer wg.Done()
-			for i := 0; i < iters; i++ {
+			for range iters {
 				key := fmt.Sprintf("sess-race-%d:llama3", g%5) // share some keys to exercise contention
 				ctx, _ := injectKey(context.Background(), key, "session_header")
 				_, err := w.Select(ctx, endpoints)
