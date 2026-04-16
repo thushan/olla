@@ -24,13 +24,14 @@ const (
 )
 
 type HTTPHealthChecker struct {
-	repository       domain.EndpointRepository
-	logger           logger.StyledLogger
-	recoveryCallback RecoveryCallback
-	healthClient     *HealthClient
-	ticker           *time.Ticker
-	stopCh           chan struct{}
-	isRunning        atomic.Bool
+	repository        domain.EndpointRepository
+	logger            logger.StyledLogger
+	recoveryCallback  RecoveryCallback
+	unhealthyCallback UnhealthyCallback
+	healthClient      *HealthClient
+	ticker            *time.Ticker
+	stopCh            chan struct{}
+	isRunning         atomic.Bool
 }
 
 func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.StyledLogger, client HTTPClient) *HTTPHealthChecker {
@@ -50,6 +51,13 @@ func NewHTTPHealthChecker(repository domain.EndpointRepository, logger logger.St
 func (c *HTTPHealthChecker) SetRecoveryCallback(callback RecoveryCallback) {
 	if callback != nil {
 		c.recoveryCallback = callback
+	}
+}
+
+// SetUnhealthyCallback sets the callback to be invoked when an endpoint transitions to an unhealthy state.
+func (c *HTTPHealthChecker) SetUnhealthyCallback(callback UnhealthyCallback) {
+	if callback != nil {
+		c.unhealthyCallback = callback
 	}
 }
 
@@ -270,6 +278,21 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 					c.logger.Debug("Recovery callback completed successfully",
 						"endpoint", ep.Name)
 				}
+			}(endpointCopy)
+		}
+	}
+
+	// Trigger unhealthy callback only when an endpoint becomes non-routable from a
+	// routable state. Busy and Warming are still routable, so a Healthy→Busy transition
+	// must not evict sticky sessions — that would defeat KV-cache affinity entirely.
+	// Unknown→Unhealthy is intentionally excluded: nothing could have been pinned to an
+	// endpoint that was never routable, so there is nothing to purge.
+	if statusChanged && !newStatus.IsRoutable() && oldStatus.IsRoutable() {
+		if c.unhealthyCallback != nil {
+			go func(ep domain.Endpoint) {
+				callbackCtx, cancel := context.WithTimeout(context.Background(), DefaultRecoveryCallbackTimeout)
+				defer cancel()
+				c.unhealthyCallback.OnEndpointUnhealthy(callbackCtx, &ep)
 			}(endpointCopy)
 		}
 	}

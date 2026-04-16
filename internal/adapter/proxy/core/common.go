@@ -163,6 +163,29 @@ func extractClientIP(r *http.Request) string {
 	return host
 }
 
+// SetStickySessionHeaders writes sticky session outcome headers before WriteHeader
+// is called. It reads the StickyOutcome pointer that was injected into the context
+// by the handler layer after the balancer's Select fills it. Must be called before
+// w.WriteHeader() — calling it afterwards is a no-op on a committed response.
+func SetStickySessionHeaders(w http.ResponseWriter, r *http.Request) {
+	outcome, _ := r.Context().Value(constants.ContextStickyOutcomeKey).(*domain.StickyOutcome)
+	if outcome == nil {
+		return
+	}
+	h := w.Header()
+	if outcome.Result != "" {
+		h.Set(constants.HeaderXOllaStickySession, outcome.Result)
+	}
+	if outcome.Source != "" && outcome.Source != "none" {
+		h.Set(constants.HeaderXOllaStickyKeySource, outcome.Source)
+	}
+	if outcome.Source == "session_header" {
+		if sid := r.Header.Get(constants.HeaderXOllaSessionID); sid != "" {
+			h.Set(constants.HeaderXOllaSessionID, sid)
+		}
+	}
+}
+
 // SetResponseHeaders sets common response headers
 func SetResponseHeaders(w http.ResponseWriter, stats *ports.RequestStats, endpoint *domain.Endpoint) {
 	h := w.Header()

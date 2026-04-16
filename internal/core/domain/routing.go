@@ -80,3 +80,15 @@ func (rp *RequestProfile) AddSupportedProfile(profileType string) {
 func (rp *RequestProfile) SetInspectionMeta(key string, value interface{}) {
 	rp.InspectionMeta.Store(key, value)
 }
+
+// StickyOutcome carries the result of a sticky session selection back to the
+// handler layer via context. The handler allocates it, passes it in context,
+// and the proxy engine reads it to write response headers before WriteHeader.
+// Defined here (not in adapter/balancer) so that adapter/proxy/core can read it
+// without creating an import cycle.
+type StickyOutcome struct {
+	// Result is "hit", "miss", "repin", or "disabled".
+	Result string
+	// Source is which key source produced the affinity key.
+	Source string
+}

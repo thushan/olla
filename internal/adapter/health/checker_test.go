@@ -588,6 +588,113 @@ func TestHTTPHealthChecker_ContextCancellation(t *testing.T) {
 	}
 }
 
+// nonRetryableError is a plain error (not net.Error) so classifyError returns
+// ErrorTypeHTTPError, which makes shouldRetry return false. This avoids the
+// exponential-backoff retry delays inside HealthClient.Check during unit tests.
+type nonRetryableError struct{}
+
+func (e *nonRetryableError) Error() string { return "non-retryable test error" }
+
+// nonRetryingHTTPClient returns a non-retryable error, collapsing the retry
+// loop inside HealthClient to a single attempt for fast unit tests.
+type nonRetryingHTTPClient struct{}
+
+func (c *nonRetryingHTTPClient) Do(_ *http.Request) (*http.Response, error) {
+	return nil, &nonRetryableError{}
+}
+
+// TestUnhealthyCallbackPredicate verifies that the unhealthy callback fires only when
+// an endpoint transitions from a routable state to a non-routable one. The previous
+// predicate (newStatus != Healthy && oldStatus != Unknown) incorrectly fired on
+// Healthy→Busy and Healthy→Warming, evicting sticky sessions unnecessarily.
+func TestUnhealthyCallbackPredicate(t *testing.T) {
+	t.Parallel()
+
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewPlainStyledLogger(log)
+
+	makeEndpoint := func(urlStr string, status domain.EndpointStatus) *domain.Endpoint {
+		u, _ := url.Parse(urlStr)
+		hcu, _ := url.Parse(urlStr + "/health")
+		return &domain.Endpoint{
+			Name:                 urlStr,
+			URL:                  u,
+			HealthCheckURL:       hcu,
+			URLString:            u.String(),
+			HealthCheckURLString: hcu.String(),
+			Status:               status,
+			CheckTimeout:         time.Second,
+		}
+	}
+
+	// errClient returns a non-retryable error → StatusUnhealthy (non-routable).
+	// Using a plain error (not net.Error) avoids the retry-backoff delay in HealthClient.
+	errClient := &nonRetryingHTTPClient{}
+	// okClient returns HTTP 200 → StatusHealthy (routable)
+	okClient := &mockHTTPClient{statusCode: 200}
+
+	tests := []struct {
+		name      string
+		oldStatus domain.EndpointStatus
+		client    HTTPClient
+		wantFired bool
+	}{
+		// Routable → non-routable: callback must fire.
+		{name: "Healthy→Unhealthy fires", oldStatus: domain.StatusHealthy, client: errClient, wantFired: true},
+		{name: "Busy→Unhealthy fires", oldStatus: domain.StatusBusy, client: errClient, wantFired: true},
+		{name: "Warming→Unhealthy fires", oldStatus: domain.StatusWarming, client: errClient, wantFired: true},
+
+		// Already non-routable → non-routable: nothing was pinned, so no purge.
+		{name: "Unknown→Unhealthy no fire", oldStatus: domain.StatusUnknown, client: errClient, wantFired: false},
+		{name: "Offline→Unhealthy no fire", oldStatus: domain.StatusOffline, client: errClient, wantFired: false},
+
+		// Routable → routable: keep sticky sessions intact.
+		{name: "Healthy→Healthy no fire (no change)", oldStatus: domain.StatusHealthy, client: okClient, wantFired: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			fired := make(chan struct{}, 1)
+			repo := newMockRepository()
+			ep := makeEndpoint("http://127.0.0.1:19999", tc.oldStatus)
+			repo.mu.Lock()
+			repo.endpoints[ep.URLString] = ep
+			repo.mu.Unlock()
+
+			checker := NewHTTPHealthChecker(repo, styledLogger, tc.client)
+			checker.SetUnhealthyCallback(UnhealthyCallbackFunc(func(_ context.Context, _ *domain.Endpoint) {
+				select {
+				case fired <- struct{}{}:
+				default:
+				}
+			}))
+
+			ctx := context.Background()
+			checker.checkEndpoint(ctx, ep)
+
+			// The callback dispatches asynchronously in a goroutine; give it a
+			// short window to fire before concluding it won't.
+			var gotFired bool
+			select {
+			case <-fired:
+				gotFired = true
+			case <-time.After(200 * time.Millisecond):
+			}
+
+			if gotFired && !tc.wantFired {
+				t.Errorf("unhealthy callback fired but should not have (old=%s)", tc.oldStatus)
+			}
+			if !gotFired && tc.wantFired {
+				t.Errorf("unhealthy callback not fired but should have (old=%s)", tc.oldStatus)
+			}
+		})
+	}
+}
+
 type panicHTTPClient struct{}
 
 func (p *panicHTTPClient) Do(req *http.Request) (*http.Response, error) {

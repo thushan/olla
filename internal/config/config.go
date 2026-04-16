@@ -74,6 +74,13 @@ func DefaultConfig() *Config {
 			ReadTimeout:       120 * time.Second,
 			MaxRetries:        3,
 			RetryBackoff:      500 * time.Millisecond,
+			StickySessions: StickySessionConfig{
+				Enabled:         false,
+				IdleTTLSeconds:  600,
+				MaxSessions:     10000,
+				KeySources:      []string{"session_header", "prefix_hash", "auth_header"},
+				PrefixHashBytes: 512,
+			},
 		},
 		Discovery: DiscoveryConfig{
 			Type:            DefaultDiscoveryType,
@@ -352,6 +359,11 @@ func applyEnvOverrides(config *Config) {
 	}
 	if val := os.Getenv("OLLA_PROXY_PROFILE"); val != "" {
 		config.Proxy.Profile = val
+	}
+	if val := os.Getenv("OLLA_PROXY_STICKY_SESSIONS_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Proxy.StickySessions.Enabled = enabled
+		}
 	}
 	if val := os.Getenv("OLLA_LOGGING_LEVEL"); val != "" {
 		config.Logging.Level = val

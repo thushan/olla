@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
@@ -688,6 +689,90 @@ func BenchmarkCopyHeaders_WithExistingHeaders(b *testing.B) {
 		proxyReq.Header.Set("X-Pre-Existing-1", "value1")
 		proxyReq.Header.Set("X-Pre-Existing-2", "value2")
 		CopyHeaders(proxyReq, originalReq)
+	}
+}
+
+func TestSetStickySessionHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name            string
+		outcome         *domain.StickyOutcome
+		sessionIDHeader string // value of X-Olla-Session-ID on the request
+		expectSession   string // expected X-Olla-Sticky-Session header value
+		expectSource    string // expected X-Olla-Sticky-Key-Source header value
+		expectSessionID string // expected X-Olla-Session-ID echo in response
+	}{
+		{
+			name:          "nil_outcome_no_op",
+			outcome:       nil,
+			expectSession: "",
+			expectSource:  "",
+		},
+		{
+			name:            "hit_with_session_header_source",
+			outcome:         &domain.StickyOutcome{Result: "hit", Source: "session_header"},
+			sessionIDHeader: "my-session-123",
+			expectSession:   "hit",
+			expectSource:    "session_header",
+			expectSessionID: "my-session-123",
+		},
+		{
+			name:          "miss_with_prefix_hash_source",
+			outcome:       &domain.StickyOutcome{Result: "miss", Source: "prefix_hash"},
+			expectSession: "miss",
+			expectSource:  "prefix_hash",
+		},
+		{
+			name:          "repin_with_ip_source",
+			outcome:       &domain.StickyOutcome{Result: "repin", Source: "ip"},
+			expectSession: "repin",
+			expectSource:  "ip",
+		},
+		{
+			name:          "disabled_source_none_skips_key_source_header",
+			outcome:       &domain.StickyOutcome{Result: "disabled", Source: "none"},
+			expectSession: "disabled",
+			expectSource:  "", // "none" must not be written
+		},
+		{
+			name:    "session_header_source_without_session_id_skips_echo",
+			outcome: &domain.StickyOutcome{Result: "hit", Source: "session_header"},
+			// no X-Olla-Session-ID on request
+			sessionIDHeader: "",
+			expectSession:   "hit",
+			expectSource:    "session_header",
+			expectSessionID: "", // nothing to echo
+		},
+		{
+			name:          "empty_result_skips_sticky_session_header",
+			outcome:       &domain.StickyOutcome{Result: "", Source: "ip"},
+			expectSession: "",
+			expectSource:  "ip",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodPost, "/test", nil)
+			if tt.sessionIDHeader != "" {
+				req.Header.Set(constants.HeaderXOllaSessionID, tt.sessionIDHeader)
+			}
+
+			if tt.outcome != nil {
+				ctx := context.WithValue(req.Context(), constants.ContextStickyOutcomeKey, tt.outcome)
+				req = req.WithContext(ctx)
+			}
+
+			w := httptest.NewRecorder()
+			SetStickySessionHeaders(w, req)
+
+			assert.Equal(t, tt.expectSession, w.Header().Get(constants.HeaderXOllaStickySession))
+			assert.Equal(t, tt.expectSource, w.Header().Get(constants.HeaderXOllaStickyKeySource))
+			assert.Equal(t, tt.expectSessionID, w.Header().Get(constants.HeaderXOllaSessionID))
+		})
 	}
 }
 

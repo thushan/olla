@@ -107,4 +107,9 @@ const (
 	HeaderXOllaRoutingDecision = "X-Olla-Routing-Decision"
 	HeaderXOllaRoutingReason   = "X-Olla-Routing-Reason"
 	HeaderXOllaMode            = "X-Olla-Mode"
+
+	// Sticky session headers
+	HeaderXOllaSessionID       = "X-Olla-Session-ID"        // client-supplied or echoed session identifier
+	HeaderXOllaStickySession   = "X-Olla-Sticky-Session"    // hit | miss | repin | disabled
+	HeaderXOllaStickyKeySource = "X-Olla-Sticky-Key-Source" // session_header | prefix_hash | auth_header | ip | none
 )

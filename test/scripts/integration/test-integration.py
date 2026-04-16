@@ -70,13 +70,15 @@ class TestResult:
 
 class IntegrationTester:
     def __init__(self, base_url: str, timeout: int, verbose: bool,
-                 skip_streaming: bool, skip_anthropic: bool, skip_providers: bool):
+                 skip_streaming: bool, skip_anthropic: bool, skip_providers: bool,
+                 skip_sticky: bool = False):
         self.base_url = base_url
         self.timeout = timeout
         self.verbose = verbose
         self.skip_streaming = skip_streaming
         self.skip_anthropic = skip_anthropic
         self.skip_providers = skip_providers
+        self.skip_sticky = skip_sticky
         self.results: List[TestResult] = []
         self.endpoints: List[Dict] = []
         self.models: List[Dict] = []
@@ -1229,7 +1231,278 @@ class IntegrationTester:
         self._print_result("Missing model field handled", ok, detail)
         self.record(f"{phase}/missing-model", ok, detail, phase)
 
-    # -- Phase 10: Summary ----------------------------------------------------
+    # -- Phase 10: Sticky Session Headers -------------------------------------
+
+    def phase_sticky_sessions(self):
+        self._phase_header(10, "Sticky Session Headers")
+        phase = "sticky"
+
+        if self.skip_sticky:
+            self.pcolor(GREY, "  [SKIP] Sticky session tests skipped via --skip-sticky")
+            return
+
+        if not self.selected_model:
+            self.pcolor(GREY, "  [SKIP] No model available for sticky session tests")
+            return
+
+        # Probe to determine whether sticky sessions are enabled on this instance.
+        probe = self._post("/olla/proxy/v1/chat/completions", {
+            "model": self.selected_model,
+            "messages": [{"role": "user", "content": "ping"}],
+            "max_tokens": 1,
+            "stream": False,
+        })
+        if probe is None or probe.status_code != 200:
+            self.pcolor(GREY, "  [SKIP] Probe request failed — cannot determine sticky session state")
+            return
+
+        sticky_state = probe.headers.get("X-Olla-Sticky-Session", "")
+        if sticky_state == "disabled" or sticky_state == "":
+            self.pcolor(YELLOW, "  [SKIP] Sticky sessions are disabled on this Olla instance")
+            self.pcolor(GREY,   "         Enable with proxy.sticky_sessions.enabled: true in config.yaml")
+            return
+
+        self.pcolor(GREEN, f"  Sticky sessions active (probe returned: {sticky_state})")
+
+        # -- Test 1: explicit session ID creates a pin -----------------------
+        session_id = f"integration-test-{int(time.time())}"
+        headers_with_session = {"X-Olla-Session-ID": session_id}
+
+        body = {
+            "model": self.selected_model,
+            "messages": [{"role": "user", "content": "Say one word"}],
+            "max_tokens": 1,
+            "stream": False,
+        }
+
+        r1 = self._post("/olla/proxy/v1/chat/completions", body, headers=headers_with_session)
+        ok = False
+        detail = ""
+        endpoint_pinned = ""
+
+        if r1 is not None and r1.status_code == 200:
+            sticky1 = r1.headers.get("X-Olla-Sticky-Session", "")
+            endpoint_pinned = r1.headers.get("X-Olla-Endpoint", "")
+            ok = sticky1 == "miss"
+            if ok:
+                detail = f"first request sticky=miss, endpoint={endpoint_pinned}"
+            else:
+                detail = f"expected sticky=miss, got '{sticky1}'"
+        else:
+            detail = self._error_detail(r1)
+
+        self._print_result("Session ID first request returns miss", ok, detail)
+        self.record(f"{phase}/session-first-miss", ok, detail, phase)
+
+        # -- Test 2: second request with same session ID returns hit ---------
+        r2 = self._post("/olla/proxy/v1/chat/completions", body, headers=headers_with_session)
+        ok = False
+        detail = ""
+
+        if r2 is not None and r2.status_code == 200:
+            sticky2 = r2.headers.get("X-Olla-Sticky-Session", "")
+            endpoint2 = r2.headers.get("X-Olla-Endpoint", "")
+            ok = sticky2 == "hit"
+            if ok:
+                same_ep = endpoint2 == endpoint_pinned if endpoint_pinned else True
+                detail = f"sticky=hit, endpoint={endpoint2}"
+                if endpoint_pinned and not same_ep:
+                    ok = False
+                    detail = f"sticky=hit but endpoint changed: {endpoint_pinned} -> {endpoint2}"
+            else:
+                detail = f"expected sticky=hit, got '{sticky2}'"
+        else:
+            detail = self._error_detail(r2)
+
+        self._print_result("Session ID second request returns hit", ok, detail)
+        self.record(f"{phase}/session-second-hit", ok, detail, phase)
+
+        # -- Test 3: session ID echoed back in response ----------------------
+        ok = False
+        detail = ""
+        if r1 is not None and r1.status_code == 200:
+            echoed = r1.headers.get("X-Olla-Session-ID", "")
+            ok = echoed == session_id
+            detail = (f"echoed={echoed}" if echoed else "X-Olla-Session-ID absent in response")
+        else:
+            detail = self._error_detail(r1)
+
+        self._print_result("Session ID echoed back in response header", ok, detail)
+        self.record(f"{phase}/session-id-echoed", ok, detail, phase)
+
+        # -- Test 4: key source is a valid value -----------------------------
+        valid_sources = {"session_header", "prefix_hash", "auth_header", "ip", "none"}
+        ok = False
+        detail = ""
+        if r1 is not None and r1.status_code == 200:
+            source = r1.headers.get("X-Olla-Sticky-Key-Source", "")
+            ok = source in valid_sources
+            detail = f"X-Olla-Sticky-Key-Source={source}" if source else "header absent"
+            if source and not ok:
+                detail = f"unknown key source: '{source}'"
+        else:
+            detail = self._error_detail(r1)
+
+        self._print_result("Key source is a known valid value", ok, detail)
+        self.record(f"{phase}/key-source-valid", ok, detail, phase)
+
+        # -- Test 5: prefix hash routing — same prompt hits same backend -----
+        # Use a deterministic, long system prompt so prefix_hash fires.
+        long_prompt = (
+            "You are a helpful assistant for integration testing of Olla sticky session routing. "
+            "You specialise in infrastructure, load balancers, and KV cache behaviour. "
+            "Always respond concisely. This prompt is intentionally long to exercise "
+            "the prefix hashing logic which operates on the first 512 bytes of the "
+            "messages JSON payload. Filler text: " + ("a" * 100)
+        )
+        hash_body = {
+            "model": self.selected_model,
+            "messages": [
+                {"role": "system", "content": long_prompt},
+                {"role": "user", "content": "Hello"},
+            ],
+            "max_tokens": 1,
+            "stream": False,
+        }
+
+        rh1 = self._post("/olla/proxy/v1/chat/completions", hash_body)
+        rh2 = self._post("/olla/proxy/v1/chat/completions", hash_body)
+        ok = False
+        detail = ""
+
+        if rh1 is not None and rh2 is not None and rh1.status_code == 200 and rh2.status_code == 200:
+            source_h1 = rh1.headers.get("X-Olla-Sticky-Key-Source", "")
+            source_h2 = rh2.headers.get("X-Olla-Sticky-Key-Source", "")
+            sticky_h2 = rh2.headers.get("X-Olla-Sticky-Session", "")
+            ep_h1 = rh1.headers.get("X-Olla-Endpoint", "")
+            ep_h2 = rh2.headers.get("X-Olla-Endpoint", "")
+
+            # Both must use prefix_hash as key source and the second should be a hit.
+            source_ok = source_h1 == "prefix_hash" and source_h2 == "prefix_hash"
+            hit_ok = sticky_h2 == "hit"
+
+            ok = source_ok and hit_ok
+            detail = (
+                f"source1={source_h1}, source2={source_h2}, "
+                f"sticky2={sticky_h2}, ep1={ep_h1}, ep2={ep_h2}"
+            )
+            if not source_ok:
+                detail = f"expected prefix_hash key source, got source1={source_h1} source2={source_h2}"
+            elif not hit_ok:
+                detail = f"expected sticky=hit on second request, got '{sticky_h2}'"
+        else:
+            detail = self._error_detail(rh1 or rh2)
+
+        self._print_result("Same prefix hash routes to same backend", ok, detail)
+        self.record(f"{phase}/prefix-hash-hits", ok, detail, phase)
+
+        # -- Test 6: two independent sessions pin independently --------------
+        session_x = f"integration-x-{int(time.time())}"
+        session_y = f"integration-y-{int(time.time())}"
+
+        # Establish both sessions
+        self._post("/olla/proxy/v1/chat/completions", body,
+                   headers={"X-Olla-Session-ID": session_x})
+        self._post("/olla/proxy/v1/chat/completions", body,
+                   headers={"X-Olla-Session-ID": session_y})
+
+        # Follow-up for each session
+        rx = self._post("/olla/proxy/v1/chat/completions", body,
+                        headers={"X-Olla-Session-ID": session_x})
+        ry = self._post("/olla/proxy/v1/chat/completions", body,
+                        headers={"X-Olla-Session-ID": session_y})
+
+        ok = False
+        detail = ""
+
+        if (rx is not None and ry is not None
+                and rx.status_code == 200 and ry.status_code == 200):
+            sticky_x = rx.headers.get("X-Olla-Sticky-Session", "")
+            sticky_y = ry.headers.get("X-Olla-Sticky-Session", "")
+            source_x = rx.headers.get("X-Olla-Sticky-Key-Source", "")
+            source_y = ry.headers.get("X-Olla-Sticky-Key-Source", "")
+
+            ok = (sticky_x == "hit" and sticky_y == "hit"
+                  and source_x == "session_header" and source_y == "session_header")
+            detail = (
+                f"session_x: sticky={sticky_x} source={source_x}, "
+                f"session_y: sticky={sticky_y} source={source_y}"
+            )
+        else:
+            detail = self._error_detail(rx or ry)
+
+        self._print_result("Two independent sessions pin independently", ok, detail)
+        self.record(f"{phase}/sessions-independent", ok, detail, phase)
+
+        # -- Test 7: model scoping — same session ID, different models pin separately
+        model_ids = [m.get("id", m.get("name", "")) for m in self.models
+                     if m.get("id", m.get("name", "")) and "embed" not in m.get("id", "").lower()]
+        if len(model_ids) >= 2:
+            model_a = model_ids[0]
+            model_b = model_ids[1]
+            scope_sid = f"integration-scope-{int(time.time())}"
+            scope_headers = {"X-Olla-Session-ID": scope_sid}
+
+            # Establish a pin for model_a
+            self._post("/olla/proxy/v1/chat/completions",
+                       {"model": model_a, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
+                       headers=scope_headers)
+            # model_b with the same session ID must get its own independent pin (miss)
+            rb_first = self._post("/olla/proxy/v1/chat/completions",
+                                  {"model": model_b, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
+                                  headers=scope_headers)
+            # model_a follow-up must still hit
+            ra_second = self._post("/olla/proxy/v1/chat/completions",
+                                   {"model": model_a, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
+                                   headers=scope_headers)
+
+            ok = False
+            detail = ""
+            if (rb_first is not None and ra_second is not None
+                    and rb_first.status_code == 200 and ra_second.status_code == 200):
+                rb_sticky = rb_first.headers.get("X-Olla-Sticky-Session", "")
+                ra_sticky = ra_second.headers.get("X-Olla-Sticky-Session", "")
+                # model_b first request should be a miss (new key because model differs)
+                # model_a second request should be a hit (existing pin)
+                ok = rb_sticky == "miss" and ra_sticky == "hit"
+                detail = f"model_b first={rb_sticky} (want miss), model_a second={ra_sticky} (want hit)"
+            else:
+                detail = self._error_detail(rb_first or ra_second)
+
+            self._print_result("Model-scoped keys: same session ID, different models pin separately", ok, detail)
+            self.record(f"{phase}/model-scoping", ok, detail, phase)
+        else:
+            self.pcolor(GREY, f"  [SKIP] Model scoping test skipped — only {len(model_ids)} model(s) available")
+
+        # -- Test 8: /internal/stats/sticky endpoint --------------------------
+        ok = False
+        detail = ""
+        try:
+            sr = requests.get(f"{self.base_url}/internal/stats/sticky", timeout=self.timeout)
+            if sr.status_code == 200:
+                data = sr.json()
+                has_enabled = "enabled" in data
+                if data.get("enabled"):
+                    # When enabled, expect the ttlcache metric fields to be present
+                    has_fields = all(k in data for k in ("hits", "misses", "evictions", "active_sessions"))
+                    ok = has_enabled and has_fields
+                    detail = (f"enabled=true hits={data.get('hits')} misses={data.get('misses')} "
+                              f"active={data.get('active_sessions')}")
+                    if not has_fields:
+                        detail = f"missing metric fields in response: {list(data.keys())}"
+                else:
+                    # Disabled — endpoint still returns 200 with enabled:false
+                    ok = has_enabled
+                    detail = "enabled=false (sticky sessions disabled on this instance)"
+            else:
+                detail = f"HTTP {sr.status_code}"
+        except Exception as e:
+            detail = str(e)
+
+        self._print_result("Sticky stats endpoint returns 200 with expected fields", ok, detail)
+        self.record(f"{phase}/stats-endpoint", ok, detail, phase)
+
+    # -- Phase 11: Summary ----------------------------------------------------
 
     def print_summary(self) -> bool:
         print()
@@ -1252,6 +1525,7 @@ class IntegrationTester:
             "providers": "Provider Routes",
             "headers": "Response Headers",
             "errors": "Error Handling",
+            "sticky": "Sticky Sessions",
         }
 
         for phase_key, label in phase_labels.items():
@@ -1302,6 +1576,8 @@ def main():
                         help="Skip Anthropic translator tests")
     parser.add_argument("--skip-providers", action="store_true",
                         help="Skip provider-specific route tests")
+    parser.add_argument("--skip-sticky", action="store_true",
+                        help="Skip sticky session tests")
     parser.add_argument("--verbose", action="store_true",
                         help="Show response bodies")
 
@@ -1314,6 +1590,7 @@ def main():
         skip_streaming=args.skip_streaming,
         skip_anthropic=args.skip_anthropic,
         skip_providers=args.skip_providers,
+        skip_sticky=args.skip_sticky,
     )
     tester.print_header()
 
@@ -1325,7 +1602,7 @@ def main():
     if not tester.discover():
         sys.exit(1)
 
-    # Phase 2-9: Test phases
+    # Phase 2-10: Test phases
     tester.phase_internal_endpoints()
     tester.phase_unified_models()
     tester.phase_proxy_endpoints()
@@ -1334,8 +1611,9 @@ def main():
     tester.phase_provider_routes()
     tester.phase_response_headers()
     tester.phase_error_handling()
+    tester.phase_sticky_sessions()
 
-    # Phase 10: Summary
+    # Phase 11: Summary
     all_pass = tester.print_summary()
     sys.exit(0 if all_pass else 1)
 

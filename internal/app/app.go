@@ -106,6 +106,9 @@ func registerServices(manager *services.ServiceManager, cfg *config.Config, logg
 		}
 		if disc, err := registry.GetDiscovery(); err == nil {
 			proxy.SetDiscoveryService(disc)
+			// SetPurgeDeadEndpointsFn is called inside ProxyServiceWrapper.Start() after
+			// stickyWrapper is assigned, so the registration happens-before the health-checker
+			// goroutine reads it. No registration needed here.
 		}
 		if sec, err := registry.GetSecurity(); err == nil {
 			proxy.SetSecurityService(sec)

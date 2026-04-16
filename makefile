@@ -18,7 +18,7 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration test-script-sticky
 
 # Build the application with version info
 build:
@@ -330,6 +330,11 @@ test-script-integration:
 	@echo "Running integration test scripts..."
 	@cd test/scripts && python integration/test-integration.py $(ARGS)
 
+## test-script-sticky: Run sticky session test scripts (requires running Olla instance)
+test-script-sticky:
+	@echo "Running sticky session test scripts..."
+	@cd test/scripts && python sticky/test-sticky-sessions.py $(ARGS)
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -373,4 +378,5 @@ help:
 	@echo "  check-deps      - Check installed tool versions against requirements"
 	@echo "  ci              - Run full CI pipeline locally"
 	@echo "  test-script-integration - Run integration test scripts (requires running Olla)"
+	@echo "  test-script-sticky      - Run sticky session test scripts (requires running Olla)"
 	@echo "  help            - Show this help"

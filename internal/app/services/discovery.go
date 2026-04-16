@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
@@ -30,6 +31,12 @@ type DiscoveryService struct {
 	modelDiscovery *discovery.ModelDiscoveryService
 	registry       domain.ModelRegistry
 	endpointRepo   domain.EndpointRepository
+	// purgeDeadFn, when set, is called with the current routable endpoint list
+	// whenever a backend transitions to unhealthy. Wired by the proxy layer so sticky
+	// session entries for dead backends are evicted promptly rather than waiting for TTL.
+	// Stored atomically because SetPurgeDeadEndpointsFn is called from the main goroutine
+	// while the health-check goroutine may concurrently invoke the callback.
+	purgeDeadFn atomic.Pointer[func([]*domain.Endpoint)]
 }
 
 // NewDiscoveryService creates a new discovery service
@@ -93,6 +100,21 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 	}
 
 	s.healthChecker = health.NewHTTPHealthCheckerWithDefaults(s.endpointRepo, s.logger)
+
+	// Purge sticky session entries for any backend that goes offline. The purgeFn is
+	// nil when sticky sessions are disabled, making this callback a cheap no-op then.
+	s.healthChecker.SetUnhealthyCallback(health.UnhealthyCallbackFunc(func(ctx context.Context, _ *domain.Endpoint) {
+		fn := s.purgeDeadFn.Load()
+		if fn == nil {
+			return
+		}
+		routable, err := s.endpointRepo.GetRoutable(ctx)
+		if err != nil {
+			s.logger.Warn("Failed to fetch routable endpoints for sticky session purge", "error", err)
+			return
+		}
+		(*fn)(routable)
+	}))
 
 	if err := s.healthChecker.StartChecking(ctx); err != nil {
 		return fmt.Errorf("failed to start health checker: %w", err)
@@ -255,6 +277,13 @@ func (s *DiscoveryService) RefreshEndpoints(ctx context.Context) error {
 // SetStatsService sets the stats service dependency
 func (s *DiscoveryService) SetStatsService(statsService *StatsService) {
 	s.statsService = statsService
+}
+
+// SetPurgeDeadEndpointsFn registers a function to call with the current routable
+// endpoint list whenever a backend transitions to unhealthy. Used by the proxy layer
+// to evict sticky session entries for dead backends without waiting for TTL expiry.
+func (s *DiscoveryService) SetPurgeDeadEndpointsFn(fn func([]*domain.Endpoint)) {
+	s.purgeDeadFn.Store(&fn)
 }
 
 // UpdateEndpointStatus updates the status of an endpoint in the repository

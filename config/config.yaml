@@ -41,6 +41,20 @@ proxy:
   response_timeout: 900s
   read_timeout: 600s
   
+  # KV-cache affinity routing (opt-in)
+  # Routes repeat turns in a conversation to the same backend, maximising KV-cache
+  # hit rates for long multi-turn sessions at the cost of reduced load distribution.
+  sticky_sessions:
+    enabled: false              # opt-in: route same-prefix conversations to same backend
+    idle_ttl_seconds: 600       # 10-min sliding window (refreshed on each matched request)
+    max_sessions: 10000         # LRU evicts oldest sessions when full
+    key_sources:                # tried in order; first match wins
+      - "session_header"        # X-Olla-Session-ID header (explicit client opt-in)
+      - "prefix_hash"           # FNV-1a hash of first N bytes of messages JSON (best cache locality)
+      - "auth_header"           # Authorization header hash (per-user affinity)
+      # - "ip"                  # client IP (opt-in; unreliable behind NAT/Docker)
+    prefix_hash_bytes: 512      # how many leading bytes of the messages field to hash
+
   # DEPRECATED as of v0.0.16 - These fields are no longer used
   # max_retries: 3        # Replaced by retry.max_attempts
   # retry_backoff: 500ms  # Now uses intelligent exponential backoff

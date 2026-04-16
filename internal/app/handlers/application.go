@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/adapter/registry"
@@ -84,10 +85,13 @@ type Application struct {
 	profileFactory     profile.ProfileFactory
 	profileLookup      translator.ProfileLookup
 	translatorRegistry *translator.Registry
-	aliasResolver      *registry.AliasResolver
-	server             *http.Server
-	errCh              chan error
-	StartTime          time.Time
+	// stickyStatsFn is non-nil when sticky sessions are enabled. Stored as a
+	// closure so the handler layer does not need to import the balancer package.
+	stickyStatsFn func() *balancer.StickyStats
+	aliasResolver *registry.AliasResolver
+	server        *http.Server
+	errCh         chan error
+	StartTime     time.Time
 }
 
 // NewApplication creates a new Application instance with all required dependencies
@@ -217,6 +221,12 @@ func (a *Application) GetTranslatorRegistry() *translator.Registry {
 // GetProfileLookup returns the profile lookup adapter for accessing backend profiles
 func (a *Application) GetProfileLookup() translator.ProfileLookup {
 	return a.profileLookup
+}
+
+// SetStickyStatsFn wires in the sticky session stats provider after construction.
+// Called by HTTPService when sticky sessions are enabled.
+func (a *Application) SetStickyStatsFn(fn func() *balancer.StickyStats) {
+	a.stickyStatsFn = fn
 }
 
 func (a *Application) RegisterRoutes() {

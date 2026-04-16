@@ -125,6 +125,11 @@ func (s *HTTPService) Start(ctx context.Context) error {
 	}
 	s.application = app
 
+	// Wire sticky session stats if enabled — proxySvc holds the wrapper.
+	if s.proxySvc != nil {
+		s.application.SetStickyStatsFn(s.proxySvc.StickyStats)
+	}
+
 	s.application.RegisterRoutes()
 
 	// Wire routes with security middleware
