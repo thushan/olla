@@ -1331,7 +1331,7 @@ class IntegrationTester:
         self.record(f"{phase}/session-id-echoed", ok, detail, phase)
 
         # -- Test 4: key source is a valid value -----------------------------
-        valid_sources = {"session_header", "prefix_hash", "auth_hash", "ip", "none"}
+        valid_sources = {"session_header", "prefix_hash", "auth_header", "ip", "none"}
         ok = False
         detail = ""
         if r1 is not None and r1.status_code == 200:

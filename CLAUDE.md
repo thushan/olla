@@ -162,7 +162,7 @@ Dynamically registered based on configured translators (e.g., Anthropic Messages
 - `X-Olla-Routing-Decision`: Routing decision made (routed/fallback/rejected)
 - `X-Olla-Routing-Reason`: Human-readable reason for routing decision
 - `X-Olla-Sticky-Session`: Sticky session status (hit/miss/repin/disabled)
-- `X-Olla-Sticky-Key-Source`: Key source used (session_header/prefix_hash/auth_header/ip)
+- `X-Olla-Sticky-Key-Source`: Key source used (session_header/prefix_hash/auth_header/ip/none)
 - `X-Olla-Session-ID`: Echoed session ID when client supplies one
 
 ## Testing

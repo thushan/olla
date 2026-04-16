@@ -45,7 +45,7 @@ DEFAULT_TIMEOUT = 30
 
 # Valid values for sticky session response headers
 VALID_STICKY_RESULTS = {"hit", "miss", "repin", "disabled"}
-VALID_KEY_SOURCES = {"session_header", "prefix_hash", "auth_hash", "ip", "none"}
+VALID_KEY_SOURCES = {"session_header", "prefix_hash", "auth_header", "ip", "none"}
 
 # Long system prompt used for prefix-hash tests — must be > 512 bytes so the
 # hash captures real content rather than colliding on short strings.
@@ -479,9 +479,9 @@ class StickySessionTester:
         notes = []
         ok = True
 
-        if t1_source not in ("prefix_hash", "auth_hash"):
-            # auth_hash is also acceptable when Authorization header is present
-            notes.append(f"turn-1 source='{t1_source}' (expected prefix_hash or auth_hash)")
+        if t1_source not in ("prefix_hash", "auth_header"):
+            # auth_header is also acceptable when Authorization header is present
+            notes.append(f"turn-1 source='{t1_source}' (expected prefix_hash or auth_header)")
         if t2_sticky != "hit":
             ok = False
             notes.append(f"turn-2 expected 'hit', got '{t2_sticky}'")

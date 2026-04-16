@@ -9,7 +9,7 @@ reporting, and disabled-state behaviour.
 | Behaviour | Header | Expected values |
 |-----------|--------|----------------|
 | Session state | `X-Olla-Sticky-Session` | `hit`, `miss`, `repin`, `disabled` |
-| Key derivation | `X-Olla-Sticky-Key-Source` | `session_header`, `prefix_hash`, `auth_hash`, `ip`, `none` |
+| Key derivation | `X-Olla-Sticky-Key-Source` | `session_header`, `prefix_hash`, `auth_header`, `ip`, `none` |
 | Session echo | `X-Olla-Session-ID` | Echoed back when provided in request |
 
 ### Test Cases
@@ -124,7 +124,7 @@ Affinity Tests
 | | | `miss` — no existing pin, new pin created |
 | | | `repin` — previous endpoint unavailable, repinned |
 | | | `disabled` — feature is off |
-| `X-Olla-Sticky-Key-Source` | When enabled | `session_header`, `prefix_hash`, `auth_hash`, `ip`, `none` |
+| `X-Olla-Sticky-Key-Source` | When enabled | `session_header`, `prefix_hash`, `auth_header`, `ip`, `none` |
 | `X-Olla-Session-ID` | When provided in request | Echoed back unchanged |
 
 ## Exit Codes

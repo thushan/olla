@@ -149,10 +149,13 @@ func (a *Application) injectStickyKey(ctx context.Context, r *http.Request, mode
 			limit = 512
 		}
 		snap, readErr := io.ReadAll(io.LimitReader(r.Body, int64(limit)+1))
-		if readErr == nil && len(snap) > 0 {
-			bodySnap = snap
-			// Restore body so the proxy engine can still read it.
+		// Restore any bytes already consumed, even on partial-read error, so the
+		// downstream proxy always sees a complete body.
+		if len(snap) > 0 {
 			r.Body = io.NopCloser(io.MultiReader(bytes.NewReader(snap), r.Body))
+		}
+		if readErr == nil {
+			bodySnap = snap
 		}
 	}
 
@@ -191,7 +194,9 @@ func (a *Application) setStickyResponseHeaders(w http.ResponseWriter, r *http.Re
 	if outcome == nil {
 		return
 	}
-	w.Header().Set(constants.HeaderXOllaStickySession, outcome.Result)
+	if outcome.Result != "" {
+		w.Header().Set(constants.HeaderXOllaStickySession, outcome.Result)
+	}
 	if outcome.Source != "" && outcome.Source != "none" {
 		w.Header().Set(constants.HeaderXOllaStickyKeySource, outcome.Source)
 	}
