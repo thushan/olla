@@ -254,7 +254,9 @@ func (s *ProxyServiceWrapper) SetSecurityService(securityService *SecurityServic
 }
 
 // applyStickySessions wraps the current load balancer with KV-cache affinity routing
-// when sticky sessions are enabled.
+// when sticky sessions are enabled. It also wires the purge function into the discovery
+// service immediately after the wrapper is assigned, ensuring the write of stickyWrapper
+// happens-before the health-checker goroutine can observe it via PurgeDeadEndpoints.
 func (s *ProxyServiceWrapper) applyStickySessions() {
 	if !s.config.StickySessions.Enabled {
 		return
@@ -267,4 +269,11 @@ func (s *ProxyServiceWrapper) applyStickySessions() {
 		"idle_ttl_seconds", s.config.StickySessions.IdleTTLSeconds,
 		"max_sessions", s.config.StickySessions.MaxSessions,
 		"key_sources", s.config.StickySessions.KeySources)
+
+	// stickyWrapper is now initialised — register the purge hook so that sticky
+	// session entries for dead backends are evicted on health-check failure rather
+	// than waiting for the session TTL to expire.
+	if s.discoverySvc != nil {
+		s.discoverySvc.SetPurgeDeadEndpointsFn(s.PurgeDeadEndpoints)
+	}
 }

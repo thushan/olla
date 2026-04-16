@@ -282,9 +282,12 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 		}
 	}
 
-	// Trigger unhealthy callback when an endpoint goes offline so callers can
-	// proactively clean up state tied to the dead backend (e.g. sticky sessions).
-	if statusChanged && newStatus != domain.StatusHealthy && oldStatus != domain.StatusUnknown {
+	// Trigger unhealthy callback only when an endpoint becomes non-routable from a
+	// routable state. Busy and Warming are still routable, so a Healthy→Busy transition
+	// must not evict sticky sessions — that would defeat KV-cache affinity entirely.
+	// Unknown→Unhealthy is intentionally excluded: nothing could have been pinned to an
+	// endpoint that was never routable, so there is nothing to purge.
+	if statusChanged && !newStatus.IsRoutable() && oldStatus.IsRoutable() {
 		if c.unhealthyCallback != nil {
 			go func(ep domain.Endpoint) {
 				callbackCtx, cancel := context.WithTimeout(context.Background(), DefaultRecoveryCallbackTimeout)
