@@ -211,6 +211,36 @@ proxy:
       - "*debug*"       # Exclude debug profiles
 ```
 
+### Sticky Sessions {#sticky-sessions}
+
+KV-cache affinity routing for multi-turn LLM conversations. See [Sticky Sessions](../concepts/sticky-sessions.md) for a full explanation.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `sticky_sessions.enabled` | bool | `false` | Enable affinity routing (opt-in) |
+| `sticky_sessions.idle_ttl_seconds` | int | `600` | Sliding TTL in seconds; 0 = no TTL expiry |
+| `sticky_sessions.max_sessions` | uint64 | `10000` | LRU capacity; oldest entry evicted when full |
+| `sticky_sessions.key_sources` | []string | `["session_header","prefix_hash","auth_header"]` | Ordered key source cascade; first match wins |
+| `sticky_sessions.prefix_hash_bytes` | int | `512` | Bytes of the messages field to hash for `prefix_hash` |
+
+**Environment Variable**: `OLLA_PROXY_STICKY_SESSIONS_ENABLED` (only `enabled` is exposed as an env var)
+
+Example:
+
+```yaml
+proxy:
+  sticky_sessions:
+    enabled: true               # opt-in
+    idle_ttl_seconds: 600       # 10-min sliding window
+    max_sessions: 10000         # LRU cap
+    key_sources:
+      - "session_header"        # X-Olla-Session-ID header
+      - "prefix_hash"           # hash of messages prefix
+      - "auth_header"           # hash of Authorization header
+      # - "ip"                  # client IP (unreliable behind NAT)
+    prefix_hash_bytes: 512
+```
+
 ## Discovery Configuration
 
 Endpoint discovery and health checking.

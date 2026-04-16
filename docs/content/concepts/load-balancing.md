@@ -15,6 +15,8 @@
 
 Olla provides multiple load balancing strategies to distribute requests across backend endpoints efficiently. Each strategy has specific use cases and characteristics to optimise for different deployment scenarios.
 
+For multi-turn LLM workloads, combine any strategy with [Sticky Sessions](sticky-sessions.md) to preserve KV-cache affinity across turns.
+
 ## Overview
 
 Load balancing determines which backend endpoint receives each incoming request. The strategy you choose affects:
