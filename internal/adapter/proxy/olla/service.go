@@ -75,14 +75,15 @@ type Service struct {
 	configuration *Configuration
 	retryHandler  *core.RetryHandler
 
-	// Cleanup management
-	cleanupOnce   sync.Once
 	cleanupTicker *time.Ticker
 	cleanupStop   chan struct{}
 
 	// Per-endpoint connection pools and circuit breakers
 	endpointPools   xsync.Map[string, *connectionPool]
 	circuitBreakers xsync.Map[string, *circuitBreaker]
+
+	// Cleanup management
+	cleanupOnce sync.Once
 }
 
 // connectionPool isolates HTTP transport instances per endpoint
