@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"runtime"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,22 +67,23 @@ type Service struct {
 	*core.BaseProxyComponents
 
 	// Object pools for zero-allocation operations
-	bufferPool   *pool.Pool[*[]byte]
-	requestPool  *pool.Pool[*requestContext]
-	responsePool *pool.Pool[[]byte]
-	errorPool    *pool.Pool[*errorContext]
+	bufferPool  *pool.Pool[*[]byte]
+	requestPool *pool.Pool[*requestContext]
+	errorPool   *pool.Pool[*errorContext]
 
 	transport     *http.Transport
 	configuration *Configuration
 	retryHandler  *core.RetryHandler
 
-	// Cleanup management
 	cleanupTicker *time.Ticker
 	cleanupStop   chan struct{}
 
 	// Per-endpoint connection pools and circuit breakers
 	endpointPools   xsync.Map[string, *connectionPool]
 	circuitBreakers xsync.Map[string, *circuitBreaker]
+
+	// Cleanup management
+	cleanupOnce sync.Once
 }
 
 // connectionPool isolates HTTP transport instances per endpoint
@@ -177,13 +179,6 @@ func NewService(
 		return nil, fmt.Errorf("failed to create request pool: %w", err)
 	}
 
-	responsePool, err := pool.NewLitePool(func() []byte {
-		return make([]byte, 32*1024) // 32KB for response bodies
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create response pool: %w", err)
-	}
-
 	errorPool, err := pool.NewLitePool(func() *errorContext {
 		return &errorContext{}
 	})
@@ -197,7 +192,6 @@ func NewService(
 		BaseProxyComponents: base,
 		bufferPool:          bufferPool,
 		requestPool:         requestPool,
-		responsePool:        responsePool,
 		errorPool:           errorPool,
 		transport:           transport,
 		configuration:       configuration,
@@ -328,104 +322,6 @@ func (s *Service) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWr
 	return s.ProxyRequestToEndpointsWithRetry(ctx, w, r, endpoints, stats, rlog)
 }
 
-// proxyToSingleEndpointLegacy retained for reference during migration
-// TODO: Remove after retry logic stability confirmed
-func (s *Service) proxyToSingleEndpointLegacy(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) (err error) {
-	// Get request context from pool
-	reqCtx := s.requestPool.Get()
-	defer s.requestPool.Put(reqCtx)
-
-	reqCtx.requestID = stats.RequestID
-	reqCtx.startTime = stats.StartTime
-
-	// Panic recovery
-	defer func() {
-		if rec := recover(); rec != nil {
-			s.handlePanic(ctx, w, r, stats, rlog, rec, &err)
-		}
-	}()
-
-	s.IncrementRequests()
-
-	// Use context logger if available, fallback to provided logger
-	ctxLogger := middleware.GetLogger(ctx)
-	if ctxLogger != nil {
-		ctxLogger.Debug("Olla proxy request started",
-			"method", r.Method,
-			"url", r.URL.String(),
-			"endpoint_count", len(endpoints))
-	} else {
-		rlog.Debug("proxy request started", "method", r.Method, "url", r.URL.String())
-	}
-
-	if len(endpoints) == 0 {
-		if ctxLogger != nil {
-			ctxLogger.Error("No healthy endpoints available for request")
-		} else {
-			rlog.Error("no healthy endpoints available")
-		}
-		s.RecordFailure(ctx, nil, time.Since(stats.StartTime), common.ErrNoHealthyEndpoints)
-		return common.ErrNoHealthyEndpoints
-	}
-
-	if ctxLogger != nil {
-		ctxLogger.Debug("Using provided endpoints", "count", len(endpoints))
-	} else {
-		rlog.Debug("using provided endpoints", "count", len(endpoints))
-	}
-
-	// Select endpoint with circuit breaker check
-	endpoint, cb := s.selectEndpointWithCircuitBreaker(endpoints, rlog)
-	if endpoint == nil {
-		s.RecordFailure(ctx, nil, time.Since(stats.StartTime), errors.New("all endpoints circuit breakers open"))
-		return errors.New("all endpoints unavailable due to circuit breakers")
-	}
-
-	stats.EndpointName = endpoint.Name
-	reqCtx.endpoint = endpoint.Name
-
-	// Track connections
-	s.Selector.IncrementConnections(endpoint)
-	defer s.Selector.DecrementConnections(endpoint)
-
-	// Build target URL
-	targetURL := s.buildTargetURL(r, endpoint)
-	stats.TargetUrl = targetURL.String()
-	reqCtx.targetURL = targetURL.String()
-
-	if ctxLogger != nil {
-		ctxLogger.Info("Request dispatching",
-			"endpoint", endpoint.Name,
-			"target", stats.TargetUrl,
-			"model", stats.Model)
-	} else {
-		rlog.Info("Request dispatching", "endpoint", endpoint.Name, "target", stats.TargetUrl, "model", stats.Model)
-	}
-
-	// Create and prepare proxy request
-	// Rewrite model name in request body if this is an alias-resolved request
-	core.RewriteModelForAlias(ctx, r, endpoint)
-
-	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, stats)
-	if err != nil {
-		cb.RecordFailure()
-		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), err)
-		return fmt.Errorf("failed to create proxy request: %w", err)
-	}
-
-	rlog.Debug("created proxy request")
-
-	// Execute backend request
-	resp, err := s.executeBackendRequest(ctx, endpoint, proxyReq, cb, stats, rlog)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	// Handle successful response
-	return s.handleSuccessfulResponse(ctx, w, r, resp, endpoint, cb, stats, rlog)
-}
-
 // handlePanic handles panic recovery in proxy requests
 func (s *Service) handlePanic(ctx context.Context, w http.ResponseWriter, r *http.Request, stats *ports.RequestStats, rlog logger.StyledLogger, rec interface{}, err *error) {
 	s.RecordFailure(ctx, nil, time.Since(stats.StartTime), fmt.Errorf("panic: %v", rec))
@@ -483,7 +379,7 @@ func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targ
 	stats.HeaderProcessingMs = time.Since(headerStart).Milliseconds()
 
 	// Add model header
-	if model, ok := ctx.Value("model").(string); ok && model != "" {
+	if model, ok := ctx.Value(constants.ContextModelKey).(string); ok && model != "" {
 		proxyReq.Header.Set("X-Model", model)
 		stats.Model = model
 	}
@@ -777,29 +673,31 @@ func (s *Service) cleanupUnusedResources() {
 	}
 }
 
-// Cleanup cleans up resources
+// Cleanup cleans up resources. Safe to call more than once.
 func (s *Service) Cleanup() {
-	// Stop cleanup goroutine
-	if s.cleanupStop != nil {
-		close(s.cleanupStop)
-	}
-	if s.cleanupTicker != nil {
-		s.cleanupTicker.Stop()
-	}
+	s.cleanupOnce.Do(func() {
+		// Stop cleanup goroutine
+		if s.cleanupStop != nil {
+			close(s.cleanupStop)
+		}
+		if s.cleanupTicker != nil {
+			s.cleanupTicker.Stop()
+		}
 
-	// Close all endpoint pools
-	s.endpointPools.Range(func(key string, pool *connectionPool) bool {
-		pool.transport.CloseIdleConnections()
-		return true
+		// Close all endpoint pools
+		s.endpointPools.Range(func(key string, pool *connectionPool) bool {
+			pool.transport.CloseIdleConnections()
+			return true
+		})
+
+		s.endpointPools.Clear()
+		s.circuitBreakers.Clear()
+
+		s.BaseProxyComponents.Shutdown()
+
+		// force GC to clean up
+		runtime.GC()
+
+		s.Logger.Debug("Olla proxy service cleaned up")
 	})
-
-	s.endpointPools.Clear()
-	s.circuitBreakers.Clear()
-
-	s.BaseProxyComponents.Shutdown()
-
-	// force GC to clean up
-	runtime.GC()
-
-	s.Logger.Debug("Olla proxy service cleaned up")
 }

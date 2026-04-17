@@ -714,3 +714,34 @@ func (s *statusCodeHTTPClient) Do(req *http.Request) (*http.Response, error) {
 		Body:       http.NoBody,
 	}, nil
 }
+
+// TestStopChecking_DoubleInvoke verifies concurrent double-stops do not panic.
+// Previously, two callers that both passed the isRunning.Load() guard could
+// race to close(stopCh), causing a "close of closed channel" panic.
+func TestStopChecking_DoubleInvoke(t *testing.T) {
+	t.Parallel()
+
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, cleanup, _ := logger.New(loggerCfg)
+	defer cleanup()
+	styledLogger := logger.NewPlainStyledLogger(log)
+
+	mockRepo := newMockRepository()
+	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
+
+	// Start the checker so isRunning == true.
+	if err := checker.StartChecking(context.Background()); err != nil {
+		t.Fatalf("StartChecking: %v", err)
+	}
+
+	// Two concurrent stops — neither should panic.
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for range 2 {
+		go func() {
+			defer wg.Done()
+			_ = checker.StopChecking(context.Background())
+		}()
+	}
+	wg.Wait()
+}

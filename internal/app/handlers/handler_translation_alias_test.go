@@ -77,7 +77,7 @@ func TestPrepareProxyContext_NoAliasMapWhenNoneStored(t *testing.T) {
 	assert.Nil(t, rawMap, "alias rewrite map should not be present for non-alias requests")
 
 	// Model should still be set in context
-	assert.Equal(t, "llama3.1:8b", r.Context().Value("model"))
+	assert.Equal(t, "llama3.1:8b", r.Context().Value(constants.ContextModelKey))
 }
 
 func TestPrepareProxyContext_NilProfile(t *testing.T) {
@@ -100,5 +100,5 @@ func TestPrepareProxyContext_NilProfile(t *testing.T) {
 	rawMap := r.Context().Value(constants.ContextModelAliasMapKey)
 	assert.Nil(t, rawMap, "alias rewrite map should not be present when profile is nil")
 
-	assert.Equal(t, "llama3.1:8b", r.Context().Value("model"))
+	assert.Equal(t, "llama3.1:8b", r.Context().Value(constants.ContextModelKey))
 }
