@@ -105,7 +105,9 @@ func (c *HTTPHealthChecker) StartChecking(ctx context.Context) error {
 }
 
 func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
-	if !c.isRunning.Load() {
+	// CAS from true→false is the single guard; concurrent callers that lose the
+	// race see false and return early without touching stopCh.
+	if !c.isRunning.CompareAndSwap(true, false) {
 		return nil
 	}
 
@@ -114,7 +116,6 @@ func (c *HTTPHealthChecker) StopChecking(ctx context.Context) error {
 	}
 
 	close(c.stopCh)
-	c.isRunning.Store(false)
 
 	return nil
 }
