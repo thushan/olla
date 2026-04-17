@@ -66,10 +66,9 @@ type Service struct {
 	*core.BaseProxyComponents
 
 	// Object pools for zero-allocation operations
-	bufferPool   *pool.Pool[*[]byte]
-	requestPool  *pool.Pool[*requestContext]
-	responsePool *pool.Pool[[]byte]
-	errorPool    *pool.Pool[*errorContext]
+	bufferPool  *pool.Pool[*[]byte]
+	requestPool *pool.Pool[*requestContext]
+	errorPool   *pool.Pool[*errorContext]
 
 	transport     *http.Transport
 	configuration *Configuration
@@ -177,13 +176,6 @@ func NewService(
 		return nil, fmt.Errorf("failed to create request pool: %w", err)
 	}
 
-	responsePool, err := pool.NewLitePool(func() []byte {
-		return make([]byte, 32*1024) // 32KB for response bodies
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create response pool: %w", err)
-	}
-
 	errorPool, err := pool.NewLitePool(func() *errorContext {
 		return &errorContext{}
 	})
@@ -197,7 +189,6 @@ func NewService(
 		BaseProxyComponents: base,
 		bufferPool:          bufferPool,
 		requestPool:         requestPool,
-		responsePool:        responsePool,
 		errorPool:           errorPool,
 		transport:           transport,
 		configuration:       configuration,
