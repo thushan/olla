@@ -86,7 +86,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	stats.HeaderProcessingMs = time.Since(headerStart).Milliseconds()
 
 	// Add model header if available
-	if model, ok := ctx.Value("model").(string); ok && model != "" {
+	if model, ok := ctx.Value(constants.ContextModelKey).(string); ok && model != "" {
 		proxyReq.Header.Set(constants.HeaderXModel, model)
 		stats.Model = model
 	}

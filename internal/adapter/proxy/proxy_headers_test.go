@@ -83,7 +83,7 @@ func TestProxyResponseHeaders(t *testing.T) {
 			// Test with model in context
 			t.Run("with model", func(t *testing.T) {
 				req := httptest.NewRequest("GET", "/test", nil)
-				ctx := context.WithValue(req.Context(), "model", "llama3.2:3b")
+				ctx := context.WithValue(req.Context(), constants.ContextModelKey, "llama3.2:3b")
 				req = req.WithContext(ctx)
 
 				w := httptest.NewRecorder()
@@ -127,7 +127,7 @@ func TestProxyResponseHeaders_NoOverride(t *testing.T) {
 	proxy, _ := sherpa.NewService(discovery, selector, config, createTestStatsCollector(), nil, createTestLogger())
 
 	req := httptest.NewRequest("GET", "/test", nil)
-	ctx := context.WithValue(req.Context(), "model", "real-model")
+	ctx := context.WithValue(req.Context(), constants.ContextModelKey, "real-model")
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()

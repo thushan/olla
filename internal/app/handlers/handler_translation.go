@@ -349,7 +349,7 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 // prepareProxyContext sets up context with model, routing decision, and alias rewrite map
 func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, pr *proxyRequest) (context.Context, *http.Request) {
 	if pr.model != "" {
-		ctx = context.WithValue(ctx, "model", pr.model)
+		ctx = context.WithValue(ctx, constants.ContextModelKey, pr.model)
 		r = r.WithContext(ctx)
 	}
 
