@@ -31,6 +31,7 @@ import (
 	"net/url"
 	"runtime"
 	"runtime/debug"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -75,6 +76,7 @@ type Service struct {
 	retryHandler  *core.RetryHandler
 
 	// Cleanup management
+	cleanupOnce   sync.Once
 	cleanupTicker *time.Ticker
 	cleanupStop   chan struct{}
 
@@ -670,29 +672,31 @@ func (s *Service) cleanupUnusedResources() {
 	}
 }
 
-// Cleanup cleans up resources
+// Cleanup cleans up resources. Safe to call more than once.
 func (s *Service) Cleanup() {
-	// Stop cleanup goroutine
-	if s.cleanupStop != nil {
-		close(s.cleanupStop)
-	}
-	if s.cleanupTicker != nil {
-		s.cleanupTicker.Stop()
-	}
+	s.cleanupOnce.Do(func() {
+		// Stop cleanup goroutine
+		if s.cleanupStop != nil {
+			close(s.cleanupStop)
+		}
+		if s.cleanupTicker != nil {
+			s.cleanupTicker.Stop()
+		}
 
-	// Close all endpoint pools
-	s.endpointPools.Range(func(key string, pool *connectionPool) bool {
-		pool.transport.CloseIdleConnections()
-		return true
+		// Close all endpoint pools
+		s.endpointPools.Range(func(key string, pool *connectionPool) bool {
+			pool.transport.CloseIdleConnections()
+			return true
+		})
+
+		s.endpointPools.Clear()
+		s.circuitBreakers.Clear()
+
+		s.BaseProxyComponents.Shutdown()
+
+		// force GC to clean up
+		runtime.GC()
+
+		s.Logger.Debug("Olla proxy service cleaned up")
 	})
-
-	s.endpointPools.Clear()
-	s.circuitBreakers.Clear()
-
-	s.BaseProxyComponents.Shutdown()
-
-	// force GC to clean up
-	runtime.GC()
-
-	s.Logger.Debug("Olla proxy service cleaned up")
 }

@@ -367,6 +367,29 @@ func (m *mockStatsCollector) GetEndpointStats() map[string]ports.EndpointStats {
 func (m *mockStatsCollector) GetSecurityStats() ports.SecurityStats            { return ports.SecurityStats{} }
 func (m *mockStatsCollector) GetConnectionStats() map[string]int64             { return nil }
 
+// TestCleanup_DoubleInvoke verifies that calling Cleanup twice does not panic.
+// Previously, the second call would close an already-closed channel.
+func TestCleanup_DoubleInvoke(t *testing.T) {
+	t.Parallel()
+
+	s := &Service{
+		BaseProxyComponents: &core.BaseProxyComponents{
+			Logger: createTestLogger(),
+		},
+		configuration:   &Configuration{},
+		endpointPools:   *xsync.NewMap[string, *connectionPool](),
+		circuitBreakers: *xsync.NewMap[string, *circuitBreaker](),
+		cleanupTicker:   time.NewTicker(time.Hour),
+		cleanupStop:     make(chan struct{}),
+	}
+
+	go s.cleanupLoop()
+
+	// Neither call should panic.
+	s.Cleanup()
+	s.Cleanup()
+}
+
 func createTestLogger() logger.StyledLogger {
 	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
 	log, _, _ := logger.New(loggerCfg)
