@@ -215,12 +215,13 @@ func IsConnectionError(err error) bool {
 // Well-wrapped OS errors are already caught by the net.Error / syscall.Errno
 // branches above, so this list covers only cases those branches cannot reach.
 var connectionErrors = []string{
-	"connection refused",   // syscall.ECONNREFUSED on non-unwrappable paths
-	"connection reset",     // syscall.ECONNRESET on non-unwrappable paths
-	"no such host",         // *net.DNSError without type chain
+	"connection refused",     // syscall.ECONNREFUSED on non-unwrappable paths
+	"connection reset",       // syscall.ECONNRESET on non-unwrappable paths
+	"no such host",           // *net.DNSError without type chain
 	"network is unreachable", // syscall.ENETUNREACH without type chain
-	"no route to host",     // syscall.EHOSTUNREACH without type chain
-	"connectex:",           // Windows dial error prefix; appears without net.Error wrapping on some paths
+	"no route to host",       // syscall.EHOSTUNREACH without type chain
+	"i/o timeout",            // plain-string timeout errors; net.Error.Timeout() covers wrapped ones
+	"connectex:",             // Windows dial error prefix; appears without net.Error wrapping on some paths
 }
 
 func hasConnectionError(err error) bool {
