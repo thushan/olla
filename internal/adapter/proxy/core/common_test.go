@@ -776,6 +776,29 @@ func TestSetStickySessionHeaders(t *testing.T) {
 	}
 }
 
+// TestCopyHeaders_DoesNotPropagateInboundHost verifies that the inbound client Host is never
+// forwarded to the backend. Go's transport uses req.URL.Host when req.Host is empty, which is
+// the correct backend address. Propagating the inbound Host breaks HTTPS backends behind strict
+// nginx server_name rules and is a Host-header injection vector.
+func TestCopyHeaders_DoesNotPropagateInboundHost(t *testing.T) {
+	t.Parallel()
+
+	originalReq := httptest.NewRequest("POST", "http://olla.example.com/api/generate", nil)
+	originalReq.Host = "olla.example.com"
+
+	proxyReq := httptest.NewRequest("POST", "http://backend.internal:11434/api/generate", nil)
+	proxyReq.Host = "" // Transport will use URL.Host when this is empty
+
+	CopyHeaders(proxyReq, originalReq)
+
+	// Host must remain unset so Go's transport derives it from URL.Host (the backend address).
+	assert.Empty(t, proxyReq.Host, "outbound Host must not be overridden with the inbound client Host")
+
+	// The original host must still be available to backends via X-Forwarded-Host.
+	assert.Equal(t, "olla.example.com", proxyReq.Header.Get("X-Forwarded-Host"),
+		"X-Forwarded-Host must carry the original inbound Host")
+}
+
 // BenchmarkSetResponseHeaders benchmarks the SetResponseHeaders function
 func BenchmarkSetResponseHeaders(b *testing.B) {
 	stats := &ports.RequestStats{

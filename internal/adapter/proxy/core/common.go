@@ -61,12 +61,11 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 		proxyReq.Header[header] = values
 	}
 
-	// SCOUT-581: Host header missing for some requests
-	// preserve the original host header which is critical for virtual hosting
-	// many backend services rely on this to route requests correctly
-	if originalReq.Host != "" {
-		proxyReq.Host = originalReq.Host
-	}
+	// Deprecates SCOUT-581, superseded by OLLA-135:
+	// https://github.com/thushan/olla/issues/135
+	// Do not propagate the inbound Host onto the outbound request.
+	// req.URL.Host is authoritative for the backend; X-Forwarded-Host (set below) carries
+	// the original value for backends that need it.
 
 	// Add proxy identification headers
 	proxyReq.Header.Set(constants.HeaderXProxiedBy, GetProxiedByHeader())
