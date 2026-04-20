@@ -100,6 +100,12 @@ git clone https://github.com/thushan/olla.git && cd olla && make build-release
 ./bin/olla
 ```
 
+```bash
+# Build Docker image locally (no goreleaser required)
+git clone https://github.com/thushan/olla.git && cd olla && make docker-build-local
+docker run -p 40114:40114 ghcr.io/thushan/olla:local
+```
+
 ### Verification
 
 When you have everything running, you can check it's all working with:

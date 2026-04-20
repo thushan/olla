@@ -85,6 +85,14 @@ make dev
 | `make lint` | Run golangci-lint |
 | `make ready` | Run all checks (test-short, test-race, fmt, lint, align) |
 
+### Docker Commands
+
+| Command | Description |
+|---------|-------------|
+| `make docker-build-local` | Build Docker image locally (no goreleaser required) |
+| `make docker-build` | Build Docker image with goreleaser (requires goreleaser installed) |
+| `make docker-run` | Run Docker image with local config |
+
 ## Configuration
 
 ### Development Config
@@ -181,6 +189,39 @@ Run with hot reload:
 
 ```bash
 air
+```
+
+## Docker Development
+
+### Building Docker Images Locally
+
+You can build Docker images without requiring [goreleaser](https://goreleaser.com/):
+
+```bash
+# Quick local build (recommended for development)
+make docker-build-local
+
+# This produces: ghcr.io/thushan/olla:local
+```
+
+If you have goreleaser installed, use the full release build:
+
+```bash
+# Full goreleaser build with all platforms and tags
+make docker-build
+```
+
+### Running the Docker Image
+
+```bash
+# Run the locally built image
+docker run -p 40114:40114 \
+  -v "$(pwd)/config/config.local.yaml:/config/config.yaml:ro" \
+  -e OLLA_CONFIG_FILE=/config/config.yaml \
+  ghcr.io/thushan/olla:local
+
+# Or use the convenience make target
+make docker-run
 ```
 
 ## IDE Configuration

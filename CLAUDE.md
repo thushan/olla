@@ -20,6 +20,9 @@ make build           # Build optimised binary with version info
 make build-local     # Build binary to ./build/ (fast, for testing)
 make run             # Run with version info
 make run-debug       # Run with debug logging
+make docker-build    # Build Docker image with goreleaser (requires goreleaser)
+make docker-build-local # Build Docker image locally (no goreleaser required)
+make docker-run      # Run Docker image with local config
 make ci              # Run full CI pipeline locally
 make help            # Show all available targets
 ```
