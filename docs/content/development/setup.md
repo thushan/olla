@@ -85,6 +85,15 @@ make dev
 | `make lint` | Run golangci-lint |
 | `make ready` | Run all checks (test-short, test-race, fmt, lint, align) |
 
+### Docker Commands
+
+| Command | Description |
+|---------|-------------|
+| `make docker-build-local` | Build Docker image locally for amd64 (no goreleaser required) |
+| `make docker-build-local-arm64` | Build Docker image locally for ARM64 (no goreleaser required) |
+| `make docker-build` | Build Docker image with goreleaser (requires goreleaser installed) |
+| `make docker-run` | Run Docker image with local config (amd64) |
+
 ## Configuration
 
 ### Development Config
@@ -182,6 +191,57 @@ Run with hot reload:
 ```bash
 air
 ```
+
+## Docker Development
+
+### Building Docker Images Locally
+
+You can build Docker images without requiring [goreleaser](https://goreleaser.com/):
+
+#### AMD64 (Intel/most systems)
+
+```bash
+make docker-build-local
+# Produces: ghcr.io/thushan/olla:local-amd64
+```
+
+#### ARM64 (Apple Silicon, Raspberry Pi, ARM servers)
+
+```bash
+make docker-build-local-arm64
+# Produces: ghcr.io/thushan/olla:local-arm64
+```
+
+#### Custom architecture
+
+```bash
+make docker-build-local DOCKER_ARCH=arm64
+# Produces: ghcr.io/thushan/olla:local-arm64
+```
+
+If you have goreleaser installed, use the full release build:
+
+```bash
+# Full goreleaser build with all platforms and tags
+make docker-build
+```
+
+### Running the Docker Image
+
+```bash
+# Run the locally built image
+docker run -p 40114:40114 \
+  -v "$(pwd)/config/config.local.yaml:/config/config.yaml:ro" \
+  -e OLLA_CONFIG_FILE=/config/config.yaml \
+  ghcr.io/thushan/olla:local
+
+# Or use the convenience make target
+make docker-run
+```
+
+!!! warning "Docker Network Configuration"
+
+    When running Olla in Docker, ensure your config has `server.host: 0.0.0.0` (not `localhost`). Inside the container, `localhost` binds to the loopback interface and won't be accessible from the host machine, even with published ports (`-p 40114:40114`). Use `0.0.0.0` to listen on all interfaces.
 
 ## IDE Configuration
 
