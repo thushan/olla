@@ -205,8 +205,24 @@ build-snapshot:
 # Deprecated: use build-local or build-snapshot instead
 ready-local: build-snapshot
 
+# Build Docker image without goreleaser (for local development)
+docker-build-local:
+	@echo "Building Docker image locally (without goreleaser)..."
+	@echo "Building olla binary to root..."
+	@go build $(LDFLAGS) -o olla .
+	@echo "Building Docker image..."
+	@docker build -t ghcr.io/thushan/olla:local .
+	@echo "Cleaning up binary..."
+	@rm -f olla
+	@echo "Docker image built: ghcr.io/thushan/olla:local"
+	@docker images --filter reference='*olla*local*'
+
 # Build and test Docker image locally
 docker-build:
+	@if ! command -v goreleaser &> /dev/null; then \
+		echo "❌ goreleaser not found. Use 'make docker-build-local' instead (no goreleaser required)"; \
+		exit 1; \
+	fi
 	@echo "Building Docker image locally..."
 	@goreleaser release --snapshot --clean --skip=publish,announce,sign,sbom
 	@echo "Docker images:"
