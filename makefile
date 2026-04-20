@@ -205,21 +205,27 @@ build-snapshot:
 # Deprecated: use build-local or build-snapshot instead
 ready-local: build-snapshot
 
+DOCKER_ARCH ?= amd64
+
 # Build Docker image without goreleaser (for local development)
 docker-build-local:
-	@echo "Building Docker image locally (without goreleaser)..."
+	@echo "Building Docker image locally (without goreleaser) for $(DOCKER_ARCH)..."
 	@echo "Building olla binary to root..."
-	@go build $(LDFLAGS) -o olla .
+	@CGO_ENABLED=0 GOOS=linux GOARCH=$(DOCKER_ARCH) go build $(LDFLAGS) -o olla .
 	@echo "Building Docker image..."
-	@docker build -t ghcr.io/thushan/olla:local .
+	@docker build -t ghcr.io/thushan/olla:local-$(DOCKER_ARCH) .
 	@echo "Cleaning up binary..."
 	@rm -f olla
-	@echo "Docker image built: ghcr.io/thushan/olla:local"
+	@echo "Docker image built: ghcr.io/thushan/olla:local-$(DOCKER_ARCH)"
 	@docker images --filter reference='*olla*local*'
+
+# Build Docker image for ARM64 (convenience target)
+docker-build-local-arm64:
+	@$(MAKE) docker-build-local DOCKER_ARCH=arm64
 
 # Build and test Docker image locally
 docker-build:
-	@if ! command -v goreleaser &> /dev/null; then \
+	@if ! command -v goreleaser > /dev/null 2>&1; then \
 		echo "❌ goreleaser not found. Use 'make docker-build-local' instead (no goreleaser required)"; \
 		exit 1; \
 	fi
@@ -228,14 +234,14 @@ docker-build:
 	@echo "Docker images:"
 	@docker images | grep olla | head -5
 
-# Run Docker image with local config
+# Run Docker image with local config (defaults to amd64)
 docker-run:
-	@echo "Running Docker image with local config..."
+	@echo "Running Docker image with local config (amd64)..."
 	@docker run --rm -it \
 		-p 40114:40114 \
 		-v "$(shell pwd)/config/config.local.yaml:/config/config.yaml:ro" \
 		-e OLLA_CONFIG_FILE=/config/config.yaml \
-		ghcr.io/thushan/olla:latest
+		ghcr.io/thushan/olla:local-amd64
 
 # Test full release locally (binaries + docker + archives)
 release-test:

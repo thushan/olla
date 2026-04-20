@@ -89,9 +89,10 @@ make dev
 
 | Command | Description |
 |---------|-------------|
-| `make docker-build-local` | Build Docker image locally (no goreleaser required) |
+| `make docker-build-local` | Build Docker image locally for amd64 (no goreleaser required) |
+| `make docker-build-local-arm64` | Build Docker image locally for ARM64 (no goreleaser required) |
 | `make docker-build` | Build Docker image with goreleaser (requires goreleaser installed) |
-| `make docker-run` | Run Docker image with local config |
+| `make docker-run` | Run Docker image with local config (amd64) |
 
 ## Configuration
 
@@ -197,11 +198,25 @@ air
 
 You can build Docker images without requiring [goreleaser](https://goreleaser.com/):
 
-```bash
-# Quick local build (recommended for development)
-make docker-build-local
+#### AMD64 (Intel/most systems)
 
-# This produces: ghcr.io/thushan/olla:local
+```bash
+make docker-build-local
+# Produces: ghcr.io/thushan/olla:local-amd64
+```
+
+#### ARM64 (Apple Silicon, Raspberry Pi, ARM servers)
+
+```bash
+make docker-build-local-arm64
+# Produces: ghcr.io/thushan/olla:local-arm64
+```
+
+#### Custom architecture
+
+```bash
+make docker-build-local DOCKER_ARCH=arm64
+# Produces: ghcr.io/thushan/olla:local-arm64
 ```
 
 If you have goreleaser installed, use the full release build:
@@ -223,6 +238,10 @@ docker run -p 40114:40114 \
 # Or use the convenience make target
 make docker-run
 ```
+
+!!! warning "Docker Network Configuration"
+
+    When running Olla in Docker, ensure your config has `server.host: 0.0.0.0` (not `localhost`). Inside the container, `localhost` binds to the loopback interface and won't be accessible from the host machine, even with published ports (`-p 40114:40114`). Use `0.0.0.0` to listen on all interfaces.
 
 ## IDE Configuration
 
