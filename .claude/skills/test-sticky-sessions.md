@@ -102,7 +102,7 @@ This target handles all five steps including the EXIT trap teardown.
 
 ## Expected output (passing run)
 
-```
+```text
 ╔══════════════════════════════════════════════════════════════╗
 ║  Olla Sticky Session — All Provider Routes Regression Test  ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -157,7 +157,7 @@ curl -s -D - -X POST http://localhost:40114/olla/proxy/v1/chat/completions \
 ```
 
 Expected response headers:
-```
+```text
 X-Olla-Sticky-Session: miss
 X-Olla-Sticky-Key-Source: session_header
 X-Olla-Endpoint: mock-compat-{a,b,c}
