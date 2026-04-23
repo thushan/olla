@@ -211,7 +211,7 @@ run_sticky_test() {
                 "${OLLA_URL}${url_path}" 2>/dev/null)
             local ep_div
             ep_div=$(extract_header "$headers_file" "X-Olla-Endpoint")
-            if [[ "$ep_div" != "$ep1" ]]; then
+            if [[ "$http_code" =~ ^2 ]] && [[ -n "$ep_div" ]] && [[ "$ep_div" != "$ep1" ]]; then
                 seen_other=true
                 break
             fi
