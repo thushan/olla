@@ -369,27 +369,8 @@ test-script-sticky:
 ## mock-up: Start AIMock instances and wait until all are healthy
 mock-up:
 	@echo "Starting AIMock instances..."
-	@docker compose -f test/mock/compose.yaml up -d
-	@echo "Waiting for AIMock health checks..."
-	@attempt=0; \
-	while true; do \
-		attempt=$$((attempt+1)); \
-		if [ $$attempt -gt 40 ]; then \
-			echo "ERROR: AIMock did not become healthy after 40s"; \
-			docker compose -f test/mock/compose.yaml ps; \
-			exit 1; \
-		fi; \
-		unhealthy=$$(docker compose -f test/mock/compose.yaml ps --format json 2>/dev/null | \
-			python3 -c "import sys,json; data=sys.stdin.read(); items=[json.loads(l) for l in data.splitlines() if l.strip()]; print(sum(1 for i in items if i.get('Health','') not in ('healthy','')))" 2>/dev/null || echo "0"); \
-		total=$$(docker compose -f test/mock/compose.yaml ps -q 2>/dev/null | wc -l | tr -d ' '); \
-		healthy=$$(docker compose -f test/mock/compose.yaml ps --format json 2>/dev/null | \
-			python3 -c "import sys,json; data=sys.stdin.read(); items=[json.loads(l) for l in data.splitlines() if l.strip()]; print(sum(1 for i in items if i.get('Health','') == 'healthy'))" 2>/dev/null || echo "0"); \
-		if [ "$$healthy" = "3" ]; then \
-			echo "All 3 AIMock instances are healthy"; \
-			break; \
-		fi; \
-		sleep 1; \
-	done
+	@docker compose -f test/mock/compose.yaml up -d --wait --wait-timeout 40
+	@echo "All 3 AIMock instances are healthy"
 
 ## mock-down: Stop and remove AIMock containers and volumes
 mock-down:
