@@ -80,6 +80,7 @@ func (a *Application) isProviderSupported(provider string) bool {
 	// this ensures consistency between validation and route registration
 	staticProviders := map[string]bool{
 		constants.ProviderTypeLemonade: true,
+		constants.ProviderTypeLMDeploy: true,
 		constants.ProviderTypeLMStudio: true,
 		constants.ProviderTypeOllama:   true,
 		constants.ProviderTypeOpenAI:   true,
