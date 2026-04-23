@@ -12,13 +12,13 @@ type LMDeployResponse struct {
 // Key difference from vLLM: no max_model_len field. Key difference from vLLM/SGLang:
 // owned_by defaults to "lmdeploy" (not "vllm" or "sglang").
 type LMDeployModel struct {
-	Root       *string                  `json:"root,omitempty"`
-	Parent     *string                  `json:"parent,omitempty"`
-	ID         string                   `json:"id"`
-	Object     string                   `json:"object"`
-	OwnedBy    string                   `json:"owned_by"`
+	Root       *string                   `json:"root,omitempty"`
+	Parent     *string                   `json:"parent,omitempty"`
+	ID         string                    `json:"id"`
+	Object     string                    `json:"object"`
+	OwnedBy    string                    `json:"owned_by"`
 	Permission []LMDeployModelPermission `json:"permission,omitempty"`
-	Created    int64                    `json:"created"`
+	Created    int64                     `json:"created"`
 }
 
 // LMDeployModelPermission mirrors the OpenAI permission shape that LMDeploy exposes.
