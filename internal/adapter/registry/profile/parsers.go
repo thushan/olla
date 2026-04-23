@@ -24,6 +24,8 @@ func getParserForFormat(format string) ModelResponseParser {
 		return &lemonadeParser{}
 	case constants.ProviderPrefixLMStudio1:
 		return &lmStudioParser{}
+	case constants.ProviderTypeLMDeploy:
+		return &lmdeployParser{}
 	case constants.ProviderTypeSGLang:
 		return &sglangParser{}
 	case constants.ProviderTypeVLLM:
