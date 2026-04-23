@@ -13,6 +13,16 @@ routing:
 # API compatibility
 api:
   openai_compatible: true
+
+  # Anthropic Messages API support
+  # Most OpenAI-compatible backends (LiteLLM, generic proxies) do not natively serve
+  # /v1/messages, so passthrough is disabled by default to avoid 404s. Enable this
+  # per backend profile (e.g. vllm.yaml, lmstudio.yaml) when the server supports it.
+  anthropic_support:
+    enabled: false
+    messages_path: /v1/messages
+    token_count: false
+
   paths:
     - /v1/models          # 0: health check & models
     - /v1/chat/completions # 1: chat completions
