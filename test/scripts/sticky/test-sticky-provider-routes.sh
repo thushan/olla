@@ -144,6 +144,12 @@ run_sticky_test() {
     mode1=$(extract_header "$headers_file" "X-Olla-Mode")
     marker1=$(extract_backend_marker "$(cat "$body_file")")
 
+    if [[ -z "$marker1" ]]; then
+        fail "Turn 1 fixture marker missing — AIMock fixture regression"
+        rm -f "$headers_file" "$body_file"
+        return
+    fi
+
     [[ "$sticky1" == "miss" ]] && pass "Turn 1 sticky=miss" || fail "Turn 1 sticky='${sticky1}' (expected miss)"
 
     local key_src1
@@ -176,7 +182,11 @@ run_sticky_test() {
 
     [[ "$sticky2" == "hit" ]] && pass "Turn 2 sticky=hit" || fail "Turn 2 sticky='${sticky2}' (expected hit)"
     [[ "$ep2" == "$ep1" ]] && pass "Turn 2 same endpoint (${ep1})" || fail "Turn 2 endpoint changed: '${ep1}' → '${ep2}'"
-    [[ "$marker2" == "$marker1" ]] && pass "Turn 2 same backend marker (${marker1})" || fail "Turn 2 backend marker changed: '${marker1}' → '${marker2}'"
+    if [[ -z "$marker2" ]]; then
+        fail "Turn 2 fixture marker missing — AIMock fixture regression"
+    else
+        [[ "$marker2" == "$marker1" ]] && pass "Turn 2 same backend marker (${marker1})" || fail "Turn 2 backend marker changed: '${marker1}' → '${marker2}'"
+    fi
 
     # ── Turn 3: diversity — at least one new session lands elsewhere ──────────
     # Without diversity validation, a single-instance deploy could trivially pass
