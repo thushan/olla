@@ -182,22 +182,16 @@ func TestStickySessionWrapper_TTLExpiry(t *testing.T) {
 	assert.Equal(t, first.URLString, second.URLString)
 	assert.Equal(t, "hit", outcome2.Result)
 
-	// Poll until the ttlcache TTL expires (1 s) rather than sleeping a fixed
-	// duration. Cap at 2 s to stay well above the TTL without being brittle.
-	deadline := time.Now().Add(2 * time.Second)
-	var outcome3 *StickyOutcome
-	for time.Now().Before(deadline) {
-		ctx3, o3 := injectKey(context.Background(), stickyKey, "session_header")
-		_, err = w.Select(ctx3, endpoints)
-		require.NoError(t, err)
-		outcome3 = o3
-		if outcome3.Result == "miss" {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	// ttlcache uses sliding TTL (touch-on-hit) — every Get refreshes the
+	// entry. Polling with Select would keep the entry alive forever, so we
+	// must wait the full TTL without touching the store. Add a small buffer
+	// to allow the background janitor goroutine to run the eviction sweep.
+	time.Sleep(time.Duration(cfg.IdleTTLSeconds)*time.Second + 500*time.Millisecond)
+
+	ctx3, outcome3 := injectKey(context.Background(), stickyKey, "session_header")
+	_, err = w.Select(ctx3, endpoints)
+	require.NoError(t, err)
 	// After TTL the entry is gone, so it's a fresh miss not a repin.
-	require.NotNil(t, outcome3)
 	assert.Equal(t, "miss", outcome3.Result)
 }
 
