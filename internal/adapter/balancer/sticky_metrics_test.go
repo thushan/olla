@@ -112,6 +112,27 @@ func TestComputeStickyKey_SessionHeader_EmptyModel(t *testing.T) {
 	assert.NotEqual(t, keyA, keyB, "distinct session IDs must produce distinct keys even with empty model")
 }
 
+// TestComputeStickyKey_PrefixHash_EmptyMessagesArray verifies that an empty
+// messages array falls through to the prompt field, so requests like
+// {"messages":[],"prompt":"hi"} still produce a sticky key rather than
+// being treated as keyless (which would break sticky for completions endpoints
+// that serialise an empty messages slice alongside a prompt).
+func TestComputeStickyKey_PrefixHash_EmptyMessagesArray(t *testing.T) {
+	t.Parallel()
+
+	body := []byte(`{"model":"llama3","messages":[],"prompt":"hi","max_tokens":50}`)
+	req, _ := http.NewRequest(http.MethodPost, "/", nil)
+
+	cfg := config.StickySessionConfig{
+		KeySources:      []string{"prefix_hash"},
+		PrefixHashBytes: 512,
+	}
+	key, source := ComputeStickyKey(req, "llama3", cfg, body)
+
+	assert.Equal(t, "prefix_hash", source, "empty messages array must fall back to prompt via prefix_hash")
+	assert.NotEmpty(t, key, "prompt fallback must produce a non-empty key when messages is []")
+}
+
 // TestStickySessionWrapper_EmptyModel_RoutesAndPins verifies the end-to-end path:
 // a session header arrives with no identified model, the wrapper computes a key,
 // pins a backend, and a second request with the same session ID hits the same

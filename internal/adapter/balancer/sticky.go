@@ -206,7 +206,7 @@ func stickyKeyFromPrefixHash(body []byte, modelName string, prefixBytes int) (st
 		return "", ""
 	}
 	raw := gjson.GetBytes(body, "messages").Raw
-	if raw == "" {
+	if raw == "" || raw == "[]" || raw == "null" {
 		raw = gjson.GetBytes(body, "prompt").Raw
 	}
 	if raw == "" {
