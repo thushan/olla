@@ -157,6 +157,7 @@ nav:
         - Backends:
             - Ollama: integrations/backend/ollama.md
             - LM Studio: integrations/backend/lmstudio.md
+            - LMDeploy: integrations/backend/lmdeploy.md
             - vLLM: integrations/backend/vllm.md
             - vLLM-MLX: integrations/backend/vllm-mlx.md
             - SGLang: integrations/backend/sglang.md
@@ -190,6 +191,7 @@ nav:
       - Provider APIs:
           - Ollama: api-reference/ollama.md
           - LM Studio: api-reference/lmstudio.md
+          - LMDeploy: api-reference/lmdeploy.md
           - vLLM: api-reference/vllm.md
           - vLLM-MLX: api-reference/vllm-mlx.md
           - SGLang: api-reference/sglang.md
