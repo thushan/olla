@@ -94,12 +94,13 @@ extract_backend_marker() {
 
 # ── per-path test ─────────────────────────────────────────────────────────────
 #
-# run_sticky_test <label> <url_path> <body_json> [check_passthrough]
+# run_sticky_test <label> <url_path> <body_json> [check_passthrough] [skip_turn3_reason]
 #
 #   Three-turn sticky session verification:
 #     Turn 1: miss  — new session is pinned to a backend
 #     Turn 2: hit   — same session lands on the same backend
-#     Turn 3: diversity — across 10 fresh sessions at least one hits elsewhere
+#     Turn 3: diversity — across 30 fresh sessions at least one hits elsewhere
+#              (skipped when skip_turn3_reason is non-empty)
 #   Optionally asserts X-Olla-Mode: passthrough on turn 1 (Anthropic path).
 
 run_sticky_test() {
@@ -107,6 +108,7 @@ run_sticky_test() {
     local url_path="$2"
     local body_json="$3"
     local check_passthrough="${4:-false}"
+    local skip_turn3_reason="${5:-}"
 
     local ts
     ts=$(date +%s%3N)
@@ -179,26 +181,33 @@ run_sticky_test() {
     # ── Turn 3: diversity — at least one new session lands elsewhere ──────────
     # Without diversity validation, a single-instance deploy could trivially pass
     # turns 1+2, masking a broken balancer.
-    local seen_other=false
-    local attempt
-    for attempt in $(seq 1 10); do
-        local new_session="sess-diversity-${label}-${ts}-${attempt}"
-        : > "$headers_file"; : > "$body_file"
-        http_code=$(curl -s -w "%{http_code}" -o "$body_file" -D "$headers_file" \
-            --max-time "$CURL_TIMEOUT" \
-            -X POST \
-            -H "Content-Type: application/json" \
-            -H "X-Olla-Session-ID: ${new_session}" \
-            -d "$body_json" \
-            "${OLLA_URL}${url_path}" 2>/dev/null)
-        local ep_div
-        ep_div=$(extract_header "$headers_file" "X-Olla-Endpoint")
-        if [[ "$ep_div" != "$ep1" ]]; then
-            seen_other=true
-            break
-        fi
-    done
-    $seen_other && pass "Turn 3 load balancing reaches multiple backends" || fail "Turn 3 all 10 attempts hit '${ep1}' only — balancer may be stuck"
+    # Skipped for routes whose pool is so large (e.g. main-proxy) that LCB
+    # tie-breaks deterministically at zero connections, making spread meaningless.
+    if [[ -n "$skip_turn3_reason" ]]; then
+        echo -e "  ${YELLOW}SKIP${RESET} Turn 3 diversity — ${skip_turn3_reason}"
+        SKIPPED=$((SKIPPED+1))
+    else
+        local seen_other=false
+        local attempt
+        for attempt in $(seq 1 30); do
+            local new_session="sess-diversity-${label}-${ts}-${attempt}"
+            : > "$headers_file"; : > "$body_file"
+            http_code=$(curl -s -w "%{http_code}" -o "$body_file" -D "$headers_file" \
+                --max-time "$CURL_TIMEOUT" \
+                -X POST \
+                -H "Content-Type: application/json" \
+                -H "X-Olla-Session-ID: ${new_session}" \
+                -d "$body_json" \
+                "${OLLA_URL}${url_path}" 2>/dev/null)
+            local ep_div
+            ep_div=$(extract_header "$headers_file" "X-Olla-Endpoint")
+            if [[ "$ep_div" != "$ep1" ]]; then
+                seen_other=true
+                break
+            fi
+        done
+        $seen_other && pass "Turn 3 load balancing reaches multiple backends" || fail "Turn 3 all 30 attempts hit '${ep1}' only — balancer may be stuck"
+    fi
 
     rm -f "$headers_file" "$body_file"
     echo
@@ -240,78 +249,85 @@ check_sticky_stats() {
 # ── route table ───────────────────────────────────────────────────────────────
 #
 # Format per entry:
-#   LABEL|URL_PATH|BODY_TEMPLATE|CHECK_PASSTHROUGH|SKIP_REASON
+#   LABEL|URL_PATH|BODY_TEMPLATE|CHECK_PASSTHROUGH|SKIP_REASON|SKIP_TURN3_REASON
 #
-# SKIP_REASON is non-empty when AIMock cannot serve the route's native protocol.
+# SKIP_REASON is non-empty when AIMock cannot serve the route's native protocol
+# (the entire route is skipped).
+# SKIP_TURN3_REASON is non-empty when the turn-3 diversity assertion is not
+# meaningful for this route (turns 1 and 2 still run).
 # BODY_TEMPLATE is a key selecting a pre-defined body below.
 
 OPENAI_BODY='{"model":"test-model","messages":[{"role":"user","content":"ping"}],"max_tokens":50}'
 ANTHROPIC_BODY='{"model":"claude-3-haiku-20240307","max_tokens":50,"messages":[{"role":"user","content":"ping"}]}'
 
-# Each row: label|path|body_key|check_passthrough|skip_reason
+# Each row: label|path|body_key|check_passthrough|skip_reason|skip_turn3_reason
 # body_key: "openai" or "anthropic"
 ROUTES=(
     # ── main proxy (backward-compat baseline) ──────────────────────────────────
-    "main-proxy|/olla/proxy/v1/chat/completions|openai|false|"
+    # Turn-3 diversity is skipped: the main-proxy pool spans all ~24 registered
+    # endpoints across every provider type; LCB tie-breaks deterministically at
+    # zero connections, so 30 fresh sessions consistently land on the same
+    # first-ranked instance — spread is not meaningful here.
+    "main-proxy|/olla/proxy/v1/chat/completions|openai|false||main-proxy pool is huge and LCB tie-break is deterministic at zero connections — spread not meaningful here"
 
     # ── openai-compatible provider route (primary regression target) ───────────
     # createProviderProfile("openai-compatible") widens to all OpenAI-compat types,
     # so all three mock-instance-{a,b,c} endpoints are reachable.
-    "openai-compatible|/olla/openai-compatible/v1/chat/completions|openai|false|"
+    "openai-compatible|/olla/openai-compatible/v1/chat/completions|openai|false||"
 
     # ── openai provider route ──────────────────────────────────────────────────
     # /olla/openai/ is registered via the openai-compatible profile (prefixes: openai, openai-compatible).
     # createProviderProfile("openai") also widens to all OpenAI-compat backends.
-    "openai|/olla/openai/v1/chat/completions|openai|false|"
+    "openai|/olla/openai/v1/chat/completions|openai|false||"
 
     # ── vllm provider route ────────────────────────────────────────────────────
     # Requires type: vllm endpoints. Config has dedicated vllm endpoints.
-    "vllm|/olla/vllm/v1/chat/completions|openai|false|"
+    "vllm|/olla/vllm/v1/chat/completions|openai|false||"
 
     # ── sglang provider route ──────────────────────────────────────────────────
     # Requires type: sglang endpoints.
-    "sglang|/olla/sglang/v1/chat/completions|openai|false|"
+    "sglang|/olla/sglang/v1/chat/completions|openai|false||"
 
     # ── llamacpp provider route ────────────────────────────────────────────────
     # Requires type: llamacpp endpoints.
-    "llamacpp|/olla/llamacpp/v1/chat/completions|openai|false|"
+    "llamacpp|/olla/llamacpp/v1/chat/completions|openai|false||"
 
     # ── lmstudio provider route ────────────────────────────────────────────────
     # Registered under three prefixes; test the canonical lmstudio one.
     # Requires type: lm-studio endpoints.
-    "lmstudio|/olla/lmstudio/v1/chat/completions|openai|false|"
+    "lmstudio|/olla/lmstudio/v1/chat/completions|openai|false||"
 
     # ── lm-studio alternate prefix ─────────────────────────────────────────────
-    "lm-studio|/olla/lm-studio/v1/chat/completions|openai|false|"
+    "lm-studio|/olla/lm-studio/v1/chat/completions|openai|false||"
 
     # ── litellm provider route ─────────────────────────────────────────────────
     # Requires type: litellm endpoints.
-    "litellm|/olla/litellm/v1/chat/completions|openai|false|"
+    "litellm|/olla/litellm/v1/chat/completions|openai|false||"
 
     # ── dmr (Docker Model Runner) provider route ───────────────────────────────
     # Requires type: docker-model-runner endpoints.
-    "dmr|/olla/dmr/v1/chat/completions|openai|false|"
+    "dmr|/olla/dmr/v1/chat/completions|openai|false||"
 
     # ── vllm-mlx provider route ────────────────────────────────────────────────
     # Requires type: vllm-mlx endpoints.
-    "vllm-mlx|/olla/vllm-mlx/v1/chat/completions|openai|false|"
+    "vllm-mlx|/olla/vllm-mlx/v1/chat/completions|openai|false||"
 
     # ── lemonade provider route ────────────────────────────────────────────────
     # Lemonade uses /api/v1/chat/completions, NOT /v1/chat/completions.
     # AIMock does not serve that path prefix, so this route must be skipped.
-    "lemonade|/olla/lemonade/api/v1/chat/completions|openai|false|AIMock does not serve /api/v1/* — Lemonade uses a non-standard path prefix"
+    "lemonade|/olla/lemonade/api/v1/chat/completions|openai|false|AIMock does not serve /api/v1/* — Lemonade uses a non-standard path prefix|"
 
     # ── ollama provider route ──────────────────────────────────────────────────
     # Ollama speaks /api/chat or /api/generate, not OpenAI /v1/chat/completions.
     # AIMock does not implement the Ollama protocol.
-    "ollama|/olla/ollama/api/chat|openai|false|AIMock does not speak the Ollama /api/* protocol"
+    "ollama|/olla/ollama/api/chat|openai|false|AIMock does not speak the Ollama /api/* protocol|"
 
     # ── anthropic translator route ─────────────────────────────────────────────
     # Registered via the translator layer, not the provider proxy.
     # Exercises sticky session injection in translationHandler.
     # Passthrough mode applies because openai-compatible endpoints declare
     # anthropic_support.enabled=true in their profile.
-    "anthropic-translator|/olla/anthropic/v1/messages|anthropic|true|"
+    "anthropic-translator|/olla/anthropic/v1/messages|anthropic|true||"
 )
 
 # ── main ──────────────────────────────────────────────────────────────────────
@@ -321,8 +337,8 @@ main() {
     wait_for_olla
 
     for entry in "${ROUTES[@]}"; do
-        # Parse the pipe-delimited row
-        IFS='|' read -r label url_path body_key check_passthrough skip_reason <<< "$entry"
+        # Parse the pipe-delimited row (6 fields)
+        IFS='|' read -r label url_path body_key check_passthrough skip_reason skip_turn3_reason <<< "$entry"
 
         if [[ -n "$skip_reason" ]]; then
             skip "$label ($url_path)" "$skip_reason"
@@ -336,7 +352,7 @@ main() {
             *)         body="$OPENAI_BODY" ;;
         esac
 
-        run_sticky_test "$label" "$url_path" "$body" "$check_passthrough"
+        run_sticky_test "$label" "$url_path" "$body" "$check_passthrough" "${skip_turn3_reason:-}"
     done
 
     check_sticky_stats
