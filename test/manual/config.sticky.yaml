@@ -1,0 +1,285 @@
+## Olla Sticky Session Manual Test Configuration
+## Points at three AIMock instances (test/mock/compose.yaml).
+##
+## One endpoint per provider type is registered so each provider-scoped route
+## (/olla/vllm/, /olla/sglang/, etc.) has a live backend to route to. All
+## endpoints point at the same three AIMock URLs; we vary the declared type so
+## Olla's per-provider filtering can select them. AIMock speaks
+## /v1/chat/completions and /v1/messages for all declared types.
+##
+## Lemonade and Ollama endpoints are intentionally absent: AIMock cannot serve
+## Lemonade's /api/v1/* prefix or Ollama's /api/* protocol, so those routes are
+## skipped by the test script with a printed explanation.
+
+server:
+  host: "127.0.0.1"
+  port: 40114
+  read_timeout: 10s
+  write_timeout: 0s
+  shutdown_timeout: 5s
+  request_logging: true
+  request_limits:
+    max_body_size: 10485760
+    max_header_size: 524288
+  rate_limits:
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 200
+    health_requests_per_minute: 1000
+    burst_size: 100
+    cleanup_interval: 5m
+    trust_proxy_headers: false
+    trusted_proxy_cidrs: ["127.0.0.0/8"]
+
+proxy:
+  # Sherpa is simpler to reason about for affinity debugging.
+  # Change engine to "olla" to exercise the high-performance path.
+  engine: "sherpa"
+  profile: "auto"
+  # least-connections distributes across all three instances rather than always
+  # picking the highest-priority one, which makes sticky affinity verifiable.
+  load_balancer: "least-connections"
+  stream_buffer_size: 8192
+  connection_timeout: 10s
+  response_timeout: 30s
+  read_timeout: 30s
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 0
+
+  sticky_sessions:
+    enabled: true
+    idle_ttl_seconds: 600
+    max_sessions: 1000
+    # session_header: pin on X-Olla-Session-ID supplied by the client
+    # prefix_hash: fallback when no explicit session header is present
+    key_sources: [session_header, prefix_hash]
+    prefix_hash_bytes: 512
+
+discovery:
+  type: "static"
+  refresh_interval: 10s
+  health_check:
+    initial_delay: 1s
+  static:
+    endpoints:
+      # ── openai-compatible ─────────────────────────────────────────────────
+      # Three instances give the diversity check something real to find.
+      - url: "http://127.0.0.1:9300"
+        name: "mock-compat-a"
+        type: "openai-compatible"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-compat-b"
+        type: "openai-compatible"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-compat-c"
+        type: "openai-compatible"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # ── vllm ──────────────────────────────────────────────────────────────
+      # Spread across all three AIMock instances so /olla/vllm/ has real affinity.
+      - url: "http://127.0.0.1:9300"
+        name: "mock-vllm-a"
+        type: "vllm"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-vllm-b"
+        type: "vllm"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-vllm-c"
+        type: "vllm"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # ── sglang ────────────────────────────────────────────────────────────
+      - url: "http://127.0.0.1:9300"
+        name: "mock-sglang-a"
+        type: "sglang"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-sglang-b"
+        type: "sglang"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-sglang-c"
+        type: "sglang"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # ── llamacpp ──────────────────────────────────────────────────────────
+      - url: "http://127.0.0.1:9300"
+        name: "mock-llamacpp-a"
+        type: "llamacpp"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-llamacpp-b"
+        type: "llamacpp"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-llamacpp-c"
+        type: "llamacpp"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # ── lm-studio ─────────────────────────────────────────────────────────
+      # Covers /olla/lmstudio/, /olla/lm-studio/, /olla/lm_studio/ routes.
+      - url: "http://127.0.0.1:9300"
+        name: "mock-lmstudio-a"
+        type: "lm-studio"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-lmstudio-b"
+        type: "lm-studio"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-lmstudio-c"
+        type: "lm-studio"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # ── litellm ───────────────────────────────────────────────────────────
+      - url: "http://127.0.0.1:9300"
+        name: "mock-litellm-a"
+        type: "litellm"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-litellm-b"
+        type: "litellm"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-litellm-c"
+        type: "litellm"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # ── docker-model-runner ───────────────────────────────────────────────
+      - url: "http://127.0.0.1:9300"
+        name: "mock-dmr-a"
+        type: "docker-model-runner"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-dmr-b"
+        type: "docker-model-runner"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-dmr-c"
+        type: "docker-model-runner"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+      # ── vllm-mlx ──────────────────────────────────────────────────────────
+      - url: "http://127.0.0.1:9300"
+        name: "mock-vllm-mlx-a"
+        type: "vllm-mlx"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9301"
+        name: "mock-vllm-mlx-b"
+        type: "vllm-mlx"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:9302"
+        name: "mock-vllm-mlx-c"
+        type: "vllm-mlx"
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+
+  model_discovery:
+    enabled: false  # AIMock has no real model list; skip discovery noise
+
+model_registry:
+  type: "memory"
+  enable_unifier: false
+  unification:
+    enabled: false
+  routing_strategy:
+    # optimistic so requests are not rejected for unknown models
+    type: "optimistic"
+    options:
+      fallback_behavior: "all"
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
+
+translators:
+  anthropic:
+    enabled: true
+    # passthrough_enabled lets us verify X-Olla-Mode: passthrough is set
+    # when the backend (openai-compatible + anthropic_support.enabled=true) is used
+    passthrough_enabled: true
+    max_message_size: 10485760
+    inspector:
+      enabled: false
+
+logging:
+  level: "debug"
+  format: "text"
+  output: "stdout"
+
+engineering:
+  show_nerdstats: false

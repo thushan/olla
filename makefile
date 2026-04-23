@@ -18,7 +18,7 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration test-script-sticky
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration test-script-sticky mock-up mock-down mock-status mock-logs test-sticky-manual
 
 # Build the application with version info
 build:
@@ -357,6 +357,40 @@ test-script-sticky:
 	@echo "Running sticky session test scripts..."
 	@cd test/scripts && python sticky/test-sticky-sessions.py $(ARGS)
 
+# ── AIMock helpers ────────────────────────────────────────────────────────────
+# These targets manage the three AIMock containers used by the sticky session
+# manual test harness. AIMock (ghcr.io/copilotkit/aimock) serves OpenAI and
+# Anthropic endpoints with embedded BACKEND:<id> markers so affinity tests can
+# confirm which instance handled each response.
+#
+# Ports: mock-instance-a=9300, mock-instance-b=9301, mock-instance-c=9302
+.PHONY: mock-up mock-down mock-status mock-logs test-sticky-manual
+
+## mock-up: Start AIMock instances and wait until all are healthy
+mock-up:
+	@echo "Starting AIMock instances..."
+	@docker compose -f test/mock/compose.yaml up -d --wait --wait-timeout 40
+	@echo "All 3 AIMock instances are healthy"
+
+## mock-down: Stop and remove AIMock containers and volumes
+mock-down:
+	@echo "Stopping AIMock instances..."
+	@docker compose -f test/mock/compose.yaml down -v
+
+## mock-status: Show running state of AIMock instances
+mock-status:
+	@docker compose -f test/mock/compose.yaml ps
+
+## mock-logs: Tail logs from all three AIMock instances
+mock-logs:
+	@docker compose -f test/mock/compose.yaml logs -f
+
+## test-sticky-manual: Full end-to-end sticky session test (mock-up → olla → assert → teardown)
+## Starts AIMock, runs Olla with sticky config, executes assertion script, tears down on exit.
+test-sticky-manual:
+	@echo "Running full sticky session manual test..."
+	@bash test/scripts/sticky/run-manual.sh
+
 # Show help
 help:
 	@echo "Available targets:"
@@ -401,4 +435,9 @@ help:
 	@echo "  ci              - Run full CI pipeline locally"
 	@echo "  test-script-integration - Run integration test scripts (requires running Olla)"
 	@echo "  test-script-sticky      - Run sticky session test scripts (requires running Olla)"
+	@echo "  mock-up                 - Start AIMock instances and wait for health"
+	@echo "  mock-down               - Stop AIMock instances and remove volumes"
+	@echo "  mock-status             - Show AIMock container state"
+	@echo "  mock-logs               - Tail logs from all AIMock instances"
+	@echo "  test-sticky-manual      - Full sticky session end-to-end test (mock + olla + assert)"
 	@echo "  help            - Show this help"

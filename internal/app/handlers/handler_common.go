@@ -89,9 +89,23 @@ func (a *Application) isProviderSupported(provider string) bool {
 	return staticProviders[normalised]
 }
 
-// getProviderPrefix returns the URL prefix for a provider
+// getProviderPrefix returns the canonical /olla/<provider> prefix (no trailing slash) for strip-and-forward routing.
 func getProviderPrefix(provider string) string {
-	// use the original provider name in the URL to maintain compatibility
-	// (e.g., if user accessed /olla/lmstudio/, keep that in the prefix)
 	return constants.DefaultOllaProxyPathPrefix + provider
+}
+
+// getRawProviderPrefix extracts the /olla/<provider> prefix (no trailing slash) from the incoming request path.
+// Unlike getProviderPrefix, this preserves the original spelling used by the caller
+// (e.g., /olla/lmstudio rather than /olla/lm-studio) so that path stripping works
+// even when the caller uses an alias spelling.
+func getRawProviderPrefix(path string) string {
+	if !strings.HasPrefix(path, constants.DefaultOllaProxyPathPrefix) {
+		return constants.DefaultOllaProxyPathPrefix
+	}
+	withoutBase := strings.TrimPrefix(path, constants.DefaultOllaProxyPathPrefix)
+	slashIdx := strings.Index(withoutBase, constants.DefaultPathPrefix)
+	if slashIdx == -1 {
+		return constants.DefaultOllaProxyPathPrefix + withoutBase
+	}
+	return constants.DefaultOllaProxyPathPrefix + withoutBase[:slashIdx]
 }

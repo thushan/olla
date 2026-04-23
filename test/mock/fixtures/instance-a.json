@@ -1,0 +1,11 @@
+{
+  "fixtures": [
+    {
+      "match": {},
+      "response": {
+        "content": "BACKEND:instance-a — synthetic response for sticky session affinity testing."
+      },
+      "streamingProfile": { "ttft": 50, "tps": 200, "jitter": 0.05 }
+    }
+  ]
+}

@@ -78,13 +78,23 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	ctx = context.WithValue(ctx, constants.ContextProviderTypeKey, providerType)
 
 	// The proxy needs to know which prefix to strip before forwarding.
-	// This mimics the behaviour of the main router for consistency.
-	providerPrefix := getProviderPrefix(providerType)
+	// We must use the RAW (pre-normalisation) path segment as the strip prefix so
+	// that alias spellings like /olla/lmstudio/ strip correctly — using the
+	// normalised name (lm-studio) would produce a non-matching prefix and forward
+	// the full /olla/lmstudio/... path to the backend, causing a 404.
+	providerPrefix := getRawProviderPrefix(r.URL.Path)
 	ctx = context.WithValue(ctx, constants.ContextRoutePrefixKey, providerPrefix)
 	r = r.WithContext(ctx)
 
 	ctx, r = a.setupRequestContext(r, pr.stats)
 	a.analyzeRequest(ctx, r, pr)
+
+	// Sticky session key must be computed after analyzeRequest so the model name
+	// is populated; inject into context before endpoint selection so the sticky
+	// balancer wrapper observes the key during Select(). Mirrors proxyHandler.
+	if a.Config.Proxy.StickySessions.Enabled {
+		ctx, r, _ = a.injectStickyKey(ctx, r, pr.model)
+	}
 
 	endpoints, err := a.getProviderEndpoints(ctx, providerType, pr)
 	if err != nil {

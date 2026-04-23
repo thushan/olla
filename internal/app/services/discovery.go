@@ -80,6 +80,10 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 			Type:            s.registryConfig.Type,
 			EnableUnifier:   s.registryConfig.EnableUnifier,
 			UnificationConf: &s.registryConfig.Unification,
+			// Routing strategy must be forwarded so the configured type (strict,
+			// optimistic, discovery) takes effect. Without this, registries fall
+			// back to strict regardless of what the operator configured.
+			RoutingStrategy: &s.registryConfig.RoutingStrategy,
 		}
 		var err error
 		s.registry, err = registry.NewModelRegistry(registryConfig, s.logger)

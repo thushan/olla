@@ -199,11 +199,16 @@ func stickyKeyFromSessionHeader(r *http.Request, modelName string) (string, stri
 
 // stickyKeyFromPrefixHash hashes the first prefixBytes bytes of the messages
 // JSON array so requests with identical conversation prefixes are routed together.
+// Falls back to the legacy completions "prompt" field so non-chat endpoints
+// (e.g. /v1/completions, llamaswap-style passthroughs) also produce a key.
 func stickyKeyFromPrefixHash(body []byte, modelName string, prefixBytes int) (string, string) {
 	if len(body) == 0 {
 		return "", ""
 	}
 	raw := gjson.GetBytes(body, "messages").Raw
+	if raw == "" || raw == "[]" || raw == "null" {
+		raw = gjson.GetBytes(body, "prompt").Raw
+	}
 	if raw == "" {
 		return "", ""
 	}

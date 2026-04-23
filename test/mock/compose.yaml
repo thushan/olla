@@ -1,0 +1,64 @@
+# Olla Sticky Session Test Mock Backends (AIMock)
+#
+# Three independent AIMock instances, each responding with a unique BACKEND:<id>
+# marker embedded in the response content. This lets the sticky session test script
+# confirm that repeated requests with the same session land on the same backend.
+#
+# Each instance serves both OpenAI (/v1/chat/completions) and Anthropic (/v1/messages).
+# The fixture file name differs per instance so AIMock serves the correct fixture.
+#
+# Ports chosen to match the FoundryOS convention (9300-9302) and avoid Windows
+# Hyper-V exclusion ranges.
+#
+# Usage:
+#   make mock-up      — start all three instances (waits for health)
+#   make mock-down    — stop and remove containers + volumes
+#   make mock-status  — show running state
+#   make mock-logs    — tail all three logs
+
+services:
+  mock-instance-a:
+    image: ghcr.io/copilotkit/aimock@sha256:b9d1e5c809b0800491139f4b40f3e0de4d197062e2ba77a4cce7bec78a9db4f1
+    ports:
+      - "9300:4010"
+    volumes:
+      - ./fixtures/instance-a.json:/fixtures/fixture.json:ro
+    command: ["--fixtures", "/fixtures", "--host", "0.0.0.0"]
+    healthcheck:
+      # AIMock image ships Node.js but not wget/curl — use node directly
+      test: ["CMD", "node", "-e",
+             "const h=require('http');h.get('http://localhost:4010/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  mock-instance-b:
+    image: ghcr.io/copilotkit/aimock@sha256:b9d1e5c809b0800491139f4b40f3e0de4d197062e2ba77a4cce7bec78a9db4f1
+    ports:
+      - "9301:4010"
+    volumes:
+      - ./fixtures/instance-b.json:/fixtures/fixture.json:ro
+    command: ["--fixtures", "/fixtures", "--host", "0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "const h=require('http');h.get('http://localhost:4010/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+
+  mock-instance-c:
+    image: ghcr.io/copilotkit/aimock@sha256:b9d1e5c809b0800491139f4b40f3e0de4d197062e2ba77a4cce7bec78a9db4f1
+    ports:
+      - "9302:4010"
+    volumes:
+      - ./fixtures/instance-c.json:/fixtures/fixture.json:ro
+    command: ["--fixtures", "/fixtures", "--host", "0.0.0.0"]
+    healthcheck:
+      test: ["CMD", "node", "-e",
+             "const h=require('http');h.get('http://localhost:4010/health',r=>{process.exit(r.statusCode===200?0:1)}).on('error',()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
