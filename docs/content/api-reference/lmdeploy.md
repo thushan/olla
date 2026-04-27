@@ -120,7 +120,7 @@ curl -X POST http://localhost:40114/olla/lmdeploy/v1/chat/completions \
 
 When `"stream": true`:
 
-```
+```text
 data: {"id":"chatcmpl-lmdeploy-abc123","object":"chat.completion.chunk","created":1705334400,"model":"internlm/internlm2_5-7b-chat","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
 
 data: {"id":"chatcmpl-lmdeploy-abc123","object":"chat.completion.chunk","created":1705334400,"model":"internlm/internlm2_5-7b-chat","choices":[{"index":0,"delta":{"content":"TurboMind"},"finish_reason":null}]}

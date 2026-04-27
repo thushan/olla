@@ -10,7 +10,7 @@
     <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a>
     <a href="https://github.com/sgl-project/sglang"><img src="https://img.shields.io/badge/SGLang-native-lightgreen.svg" alt="SGLang: Native Support"></a>
     <a href="https://github.com/BerriAI/litellm"><img src="https://img.shields.io/badge/LiteLLM-native-lightgreen.svg" alt="LiteLLM: Native Support"></a>
-    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-openai-lightgreen.svg" alt="LM Deploy: Native Support"></a> <br/> 
+    <a href="https://github.com/InternLM/lmdeploy"><img src="https://img.shields.io/badge/LM Deploy-native-lightgreen.svg" alt="LM Deploy: Native Support"></a> <br/> 
     <a href="https://github.com/waybarrios/vllm-mlx/"><img src="https://img.shields.io/badge/vLLM--MLX-native-lightgreen.svg" alt="vLLM-MLX: Native Support"></a>
     <a href="https://docs.docker.com/ai/model-runner/"><img src="https://img.shields.io/badge/Docker Model Runner-native-lightgreen.svg" alt="Docker Model Runner: Native Support"></a><br/>
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a>
