@@ -5,6 +5,7 @@ const (
 	ProfileLemonade         = "lemonade"
 	ProfileLlamaCpp         = "llamacpp"
 	ProfileLmStudio         = "lm-studio"
+	ProfileLMDeploy         = "lmdeploy"
 	ProfileSGLang           = "sglang"
 	ProfileVLLM             = "vllm"
 	ProfileVLLMMLX          = "vllm-mlx"

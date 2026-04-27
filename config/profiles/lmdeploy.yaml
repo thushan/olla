@@ -1,0 +1,173 @@
+# LMDeploy inference platform profile
+name: lmdeploy
+home: "https://github.com/InternLM/lmdeploy"
+version: "1.0"
+display_name: "LMDeploy"
+description: "LMDeploy efficient inference and serving for LLMs and VLMs"
+
+# Routing configuration
+routing:
+  prefixes:
+    - lmdeploy
+
+# API compatibility
+api:
+  openai_compatible: true
+  paths:
+    # Health and system endpoints
+    - /health              # 0: health check (HTTP 200, empty body)
+
+    # Model management
+    - /v1/models           # 1: list models (OpenAI-compatible ModelList)
+
+    # Text generation endpoints (OpenAI-compatible)
+    - /v1/chat/completions # 2: chat completions with SSE streaming
+    - /v1/completions      # 3: text completions
+
+    # LMDeploy-specific endpoints
+    - /v1/encode           # 4: token encoding (LMDeploy-specific)
+    - /generate            # 5: native generation endpoint
+    - /pooling             # 6: reward/score pooling (the real embeddings path)
+    # NOTE: /v1/embeddings is intentionally excluded — LMDeploy returns HTTP 400
+    # unconditionally for all backends on that path.
+
+    # Sleep state probe (LMDeploy-specific, used for auto-detection)
+    - /is_sleeping         # 7: sleep state probe
+
+  model_discovery_path: /v1/models
+  health_check_path: /health
+
+# Platform characteristics
+characteristics:
+  timeout: 2m
+  max_concurrent_requests: 100
+  default_priority: 82      # between SGLang (85) and vLLM (80)
+  streaming_support: true
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/v1/encode"    # LMDeploy-specific token encoding
+    - "/generate"     # LMDeploy native generation
+    - "/pooling"      # LMDeploy reward/score path
+    - "/is_sleeping"  # distinct from vLLM and SGLang
+  default_ports:
+    - 23333           # api_server default (not 8000 which is proxy_server)
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "lmdeploy"
+  parsing_rules:
+    chat_completions_path: "/v1/chat/completions"
+    completions_path: "/v1/completions"
+    model_field_name: "model"
+    supports_streaming: true
+
+# Path indices for specific functions
+path_indices:
+  health: 0
+  models: 1
+  chat_completions: 2
+  completions: 3
+
+# Model handling
+models:
+  name_format: "{{.Name}}"
+  capability_patterns:
+    chat:
+      - "*-Chat-*"
+      - "*-Instruct*"
+      - "*-chat-*"
+    vision:
+      - "*vision*"
+      - "*llava*"
+      - "*VL*"
+    code:
+      - "*code*"
+      - "*Code*"
+  # Context window patterns for common LMDeploy models
+  context_patterns:
+    - pattern: "*llama-3.1*"
+      context: 131072
+    - pattern: "*llama-3*"
+      context: 8192
+    - pattern: "*internlm2_5*"
+      context: 32768
+    - pattern: "*internlm2*"
+      context: 32768
+    - pattern: "*mistral*"
+      context: 32768
+    - pattern: "*qwen2*"
+      context: 32768
+
+# Resource management
+resources:
+  model_sizes:
+    - patterns: ["*70b*", "*72b*"]
+      min_memory_gb: 140
+      recommended_memory_gb: 160
+      min_gpu_memory_gb: 140
+      estimated_load_time_ms: 60000
+    - patterns: ["*34b*", "*33b*", "*30b*"]
+      min_memory_gb: 70
+      recommended_memory_gb: 80
+      min_gpu_memory_gb: 70
+      estimated_load_time_ms: 45000
+    - patterns: ["*13b*", "*14b*"]
+      min_memory_gb: 30
+      recommended_memory_gb: 40
+      min_gpu_memory_gb: 30
+      estimated_load_time_ms: 30000
+    - patterns: ["*7b*", "*8b*"]
+      min_memory_gb: 16
+      recommended_memory_gb: 24
+      min_gpu_memory_gb: 16
+      estimated_load_time_ms: 20000
+    - patterns: ["*3b*"]
+      min_memory_gb: 8
+      recommended_memory_gb: 12
+      min_gpu_memory_gb: 8
+      estimated_load_time_ms: 15000
+    - patterns: ["*1b*", "*1.1b*", "*1.5b*"]
+      min_memory_gb: 4
+      recommended_memory_gb: 8
+      min_gpu_memory_gb: 4
+      estimated_load_time_ms: 10000
+
+  defaults:
+    min_memory_gb: 8
+    recommended_memory_gb: 16
+    min_gpu_memory_gb: 8
+    requires_gpu: true
+    estimated_load_time_ms: 30000
+
+  concurrency_limits:
+    - min_memory_gb: 100
+      max_concurrent: 10
+    - min_memory_gb: 50
+      max_concurrent: 20
+    - min_memory_gb: 20
+      max_concurrent: 50
+    - min_memory_gb: 0
+      max_concurrent: 100
+
+  timeout_scaling:
+    base_timeout_seconds: 120
+    load_time_buffer: true
+
+# Metrics extraction for LMDeploy responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+    calculations:
+      is_complete: 'len(finish_reason) > 0'

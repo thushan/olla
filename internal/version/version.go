@@ -37,6 +37,7 @@ var (
 		"lemonade",
 		"litellm",
 		"llamacpp",
+		"lmdeploy",
 		"lm_studio",
 		"sglang",
 		"vllm",
