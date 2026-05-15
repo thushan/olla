@@ -22,14 +22,26 @@ Cloud inference APIs have operational characteristics that Olla does not current
 - **Rate limit headers** (`x-ratelimit-*`, `retry-after`): Olla does not parse or propagate
   provider-specific rate limit signalling beyond honouring 429 for health state.
 - **Path-prefix base URLs**: Some APIs require a base path in the URL
-  (e.g. `https://api.openrouter.ai/api/v1`). The `preserve_path: true` flag helps but
-  health check probes may still fail.
+  (e.g. `https://api.groq.com/openai/v1`). See below for how this interacts with health and
+  model discovery.
 - **Cold-start latency**: Serverless-backed providers can have high first-token latency that
   exceeds Olla's default health check timeouts.
 - **Model namespacing**: Many cloud APIs use `provider/model-name` format. Olla's model
   discovery and unification are tuned for local naming conventions.
 - **No local health check**: Cloud APIs do not expose a `/health` endpoint. Health checks
   against `/v1/models` incur real API calls and may consume quota.
+
+## URL Construction for Path-Prefixed Bases
+
+Olla joins discovery paths onto the base URL path using `path.Join`. For a base like
+`https://api.groq.com/openai/v1`, the default health or model path `/v1/models` gets
+joined as `/openai/v1/v1/models` -- a doubled prefix that silently breaks health checks and
+model discovery.
+
+Set explicit absolute `health_check_url` and `model_url` values to bypass the join entirely.
+`ResolveURLPath` returns absolute URLs as-is, so `https://api.groq.com/openai/v1/models`
+goes to the wire unchanged. This only affects discovery; proxy-time URL building is
+controlled separately by `preserve_path`.
 
 ## What We Don't Promise
 
@@ -83,6 +95,8 @@ discovery:
         type: "openai-compatible"
         priority: 10
         preserve_path: true   # required: prevents stripping the /api/v1 prefix
+        health_check_url: "https://openrouter.ai/api/v1/models"
+        model_url: "https://openrouter.ai/api/v1/models"
         check_interval: 120s
         check_timeout: 15s
         auth:
@@ -92,7 +106,7 @@ discovery:
 
 **Known limitations:**
 
-- Health checks probe `/v1/models` which incurs an API call. Set `check_interval` high
+- Health checks probe `/api/v1/models` which incurs an API call. Set `check_interval` high
   to avoid burning quota.
 - OpenRouter requires an `HTTP-Referer` header for attribution on some tiers. Use `headers:`
   to set it:
@@ -119,6 +133,8 @@ discovery:
         type: "openai-compatible"
         priority: 10
         preserve_path: true
+        health_check_url: "https://api.groq.com/openai/v1/models"
+        model_url: "https://api.groq.com/openai/v1/models"
         check_interval: 120s
         check_timeout: 10s
         auth:
@@ -153,6 +169,8 @@ discovery:
         type: "openai-compatible"
         priority: 5
         preserve_path: true
+        health_check_url: "https://api.groq.com/openai/v1/models"
+        model_url: "https://api.groq.com/openai/v1/models"
         check_interval: 120s
         auth:
           type: bearer
