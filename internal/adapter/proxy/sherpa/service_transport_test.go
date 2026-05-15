@@ -25,7 +25,7 @@ func newSherpaServiceForTransportTest(t *testing.T) *Service {
 	cfg.StreamBufferSize = 8192
 
 	svc, err := NewService(
-		nil,                // discovery service — not needed for transport tests
+		nil, // discovery service — not needed for transport tests
 		&mockEndpointSelector{},
 		cfg,
 		nil, // stats collector

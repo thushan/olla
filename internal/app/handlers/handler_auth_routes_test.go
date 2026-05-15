@@ -110,10 +110,10 @@ func minimalApp(t *testing.T, capture *authCapturingProxyService, ds ports.Disco
 	t.Helper()
 
 	return &Application{
-		logger:       log,
-		proxyService: capture,
+		logger:           log,
+		proxyService:     capture,
 		discoveryService: ds,
-		inspectorChain: inspector.NewChain(log),
+		inspectorChain:   inspector.NewChain(log),
 		profileFactory: &mockProfileFactory{
 			validProfiles: map[string]bool{
 				"ollama":    true,
