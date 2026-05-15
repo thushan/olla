@@ -12,7 +12,7 @@ keywords: olla remote, cloud api, ollama cloud, openrouter, groq, experimental
     we make no guarantees about continued compatibility, and issues specific to cloud providers
     will not be prioritised.
 
-    If you want to use hosted APIs, consider LiteLLM as an intermediary — it handles the
+    If you want to use hosted APIs, consider LiteLLM as an intermediary. It handles the
     provider-specific quirks, and Olla then talks to LiteLLM as a local OpenAI-compatible endpoint.
 
 ## Why Cloud APIs Are Not First-Class
@@ -67,7 +67,7 @@ discovery:
 
 - The Ollama Cloud API surface may differ from local Ollama. Model names include the namespace
   (e.g. `hf.co/bartowski/Llama-3.2-3B-Instruct-GGUF`).
-- Health check hits `/` — this works on the Ollama Cloud base URL.
+- Health check hits `/`, which works on the Ollama Cloud base URL.
 
 ### OpenRouter
 
@@ -141,7 +141,7 @@ preferred and remote endpoints act as overflow:
 discovery:
   static:
     endpoints:
-      # Local — always preferred
+      # Local, always preferred
       - url: "http://localhost:8000"
         name: "local-vllm"
         type: "vllm"
@@ -169,6 +169,6 @@ APIs, PRs are welcome. See [Contributing](../development/contributing.md).
 
 ## See Also
 
-- [Endpoint Authentication](endpoint-auth.md) — auth configuration reference
-- [Configuration Overview](overview.md) — general configuration
-- [LiteLLM Integration](../integrations/backend/litellm.md) — recommended cloud API gateway
+- [Endpoint Authentication](endpoint-auth.md): auth configuration reference
+- [Configuration Overview](overview.md): general configuration
+- [LiteLLM Integration](../integrations/backend/litellm.md): recommended cloud API gateway

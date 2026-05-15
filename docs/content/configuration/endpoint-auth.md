@@ -7,7 +7,7 @@ keywords: olla auth, endpoint authentication, bearer token, api key, basic auth,
 # Endpoint Authentication
 
 Olla can attach outbound authentication headers to requests forwarded to a backend endpoint. This is
-for authenticating **Olla to the backend** — it has no bearing on how clients authenticate to Olla.
+for authenticating **Olla to the backend**. It has no bearing on how clients authenticate to Olla.
 
 ## When to Use It
 
@@ -47,7 +47,7 @@ Sends a custom header (default `X-Api-Key`). Use `header:` to override.
         auth:
           type: api_key
           key: "sk-master-key"
-          header: "Authorization"   # optional — default is X-Api-Key
+          header: "Authorization"   # optional, default is X-Api-Key
 ```
 
 ### `basic`
@@ -74,7 +74,7 @@ auth:
   token: "${VLLM_API_KEY}"
 ```
 
-Olla expands these at startup using `ExpandStrict` — **if the variable is unset and has no default,
+Olla expands these at startup using `ExpandStrict`. **If the variable is unset and has no default,
 the process exits with a clear error**. This prevents silent misconfiguration.
 
 ### Default Values
@@ -279,6 +279,6 @@ Olla config:
 
 ## See Also
 
-- [Configuration Reference](reference.md) — complete `auth:` field list
-- [Security Best Practices](practices/security.md) — production hardening
-- [Experimental Remote Backends](endpoint-auth-remote.md) — cloud API recipes
+- [Configuration Reference](reference.md): complete `auth:` field list
+- [Security Best Practices](practices/security.md): production hardening
+- [Experimental Remote Backends](endpoint-auth-remote.md): cloud API recipes
