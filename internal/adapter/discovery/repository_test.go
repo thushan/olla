@@ -845,3 +845,44 @@ func TestStaticEndpointRepository_EmptyURLs_WithNestedPath(t *testing.T) {
 		t.Errorf("ModelURLString = %q, expected %q", endpoint.ModelURLString, expectedModelURL)
 	}
 }
+
+// TestUpdateEndpoint_PersistsRateLimitedUntil confirms that a 429-triggered
+// RateLimitedUntil timestamp is not lost when UpdateEndpoint is called.
+// The field was missing from the copy list, so the scheduler kept re-probing
+// rate-limited backends immediately after the health checker set the deadline.
+func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
+	t.Parallel()
+
+	repo := NewStaticEndpointRepository()
+	cfg := []config.EndpointConfig{
+		{
+			Name:          "rl-endpoint",
+			URL:           "http://localhost:11434",
+			Type:          "ollama",
+			Priority:      ptrInt(100),
+			CheckInterval: 5 * time.Second,
+			CheckTimeout:  2 * time.Second,
+		},
+	}
+	if err := repo.LoadFromConfig(context.Background(), cfg); err != nil {
+		t.Fatalf("LoadFromConfig: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	rateLimitDeadline := time.Now().Add(60 * time.Second).Truncate(time.Millisecond)
+	ep.RateLimitedUntil = rateLimitDeadline
+
+	if err := repo.UpdateEndpoint(context.Background(), ep); err != nil {
+		t.Fatalf("UpdateEndpoint: %v", err)
+	}
+
+	updated, _ := repo.GetAll(context.Background())
+	if updated[0].RateLimitedUntil.IsZero() {
+		t.Error("RateLimitedUntil was not persisted — got zero time after UpdateEndpoint")
+	}
+	if !updated[0].RateLimitedUntil.Equal(rateLimitDeadline) {
+		t.Errorf("RateLimitedUntil = %v, want %v", updated[0].RateLimitedUntil, rateLimitDeadline)
+	}
+}

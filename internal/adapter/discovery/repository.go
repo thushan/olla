@@ -115,6 +115,7 @@ func (r *StaticEndpointRepository) UpdateEndpoint(ctx context.Context, endpoint 
 	existing.BackoffMultiplier = endpoint.BackoffMultiplier
 	existing.NextCheckTime = endpoint.NextCheckTime
 	existing.LastLatency = endpoint.LastLatency
+	existing.RateLimitedUntil = endpoint.RateLimitedUntil
 
 	return nil
 }
