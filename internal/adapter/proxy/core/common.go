@@ -91,11 +91,21 @@ func CopyHeaders(proxyReq, originalReq *http.Request, endpoint *domain.Endpoint)
 	// Update or set X-Forwarded headers
 	updateForwardedHeaders(proxyReq, originalReq)
 
-	// Apply endpoint-configured auth last so it always wins over anything the client sent.
-	// The strip loop above already removed the client's Authorization, so Set() here is
-	// defensive — it guarantees no client credential leaks through even on future strip-list gaps.
-	if endpoint != nil && endpoint.AuthHeaderName != "" {
-		proxyReq.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
+	// Apply endpoint-level custom headers after the strip so operators can explicitly
+	// re-introduce a header that the strip removed (e.g. a backend that needs X-Api-Key).
+	// Auth is applied after these so the auth: section always wins on conflict — if the
+	// user accidentally puts Authorization in headers: and auth:, auth: takes precedence.
+	if endpoint != nil {
+		for name, value := range endpoint.Headers {
+			proxyReq.Header.Set(name, value)
+		}
+
+		// Auth wins over anything in the headers: map and over anything the client sent.
+		// The strip loop above already removed client credentials; Set() here is
+		// defensive so future strip-list gaps can't leak client creds to the upstream.
+		if endpoint.AuthHeaderName != "" {
+			proxyReq.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
+		}
 	}
 }
 
