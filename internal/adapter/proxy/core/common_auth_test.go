@@ -155,35 +155,32 @@ func TestCopyHeaders_NilEndpointStripsAuth(t *testing.T) {
 }
 
 // TestCopyHeaders_AuthArrivesAtBackend wires up a real httptest backend and
-// confirms that the injected Authorization header actually arrives at the upstream.
-// This is the moment auth becomes real: not just set on proxyReq but transported.
+// confirms that the injected Authorization header survives the full round-trip,
+// not just that CopyHeaders places it on proxyReq in memory.
 func TestCopyHeaders_AuthArrivesAtBackend(t *testing.T) {
 	t.Parallel()
 
-	_, captured := newCapturingBackend(t)
+	srv, captured := newCapturingBackend(t)
 
 	endpoint := &domain.Endpoint{
 		AuthHeaderName:  "Authorization",
 		AuthHeaderValue: "Bearer backend-secret",
 	}
 
-	// Simulate what the proxy does: build proxyReq, run CopyHeaders, then RoundTrip.
 	originalReq := httptest.NewRequest(http.MethodGet, "http://olla.internal/api/tags", nil)
 
-	proxyReq, err := http.NewRequest(http.MethodGet, "http://backend.internal/api/tags", nil)
+	proxyReq, err := http.NewRequest(http.MethodGet, srv.URL+"/api/tags", nil)
 	require.NoError(t, err)
 
 	CopyHeaders(proxyReq, originalReq, endpoint)
 
-	// Verify the header is set on the outbound request (transport-level assertion).
-	// We check proxyReq directly because httptest.Server routing isn't needed to prove
-	// the header is correctly placed on the outgoing request object.
-	assert.Equal(t, "Bearer backend-secret", proxyReq.Header.Get("Authorization"),
-		"Authorization header must be present on the proxy request before transport")
+	resp, err := http.DefaultClient.Do(proxyReq)
+	require.NoError(t, err)
+	defer resp.Body.Close() //nolint:errcheck
 
-	// captured is populated only if the backend received a real request;
-	// we assert on proxyReq because we're testing CopyHeaders, not the transport.
-	_ = captured
+	require.NotNil(t, captured.headers, "backend must have received a request")
+	assert.Equal(t, "Bearer backend-secret", captured.headers.Get("Authorization"),
+		"Authorization header must arrive at the backend after transport")
 }
 
 // TestCopyHeaders_CustomHeaders covers the endpoint.Headers map injection behaviour.
