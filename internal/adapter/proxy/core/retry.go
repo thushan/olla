@@ -35,7 +35,42 @@ func NewRetryHandler(discoveryService ports.DiscoveryService, logger logger.Styl
 // ProxyFunc defines the signature for endpoint proxy implementations
 type ProxyFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error
 
-// ExecuteWithRetry attempts request delivery with automatic failover on connection errors
+// responseStartedWriter wraps http.ResponseWriter and records whether any response
+// bytes or status codes have been sent to the client. We use this to gate retry
+// decisions: once the client has received data, retrying a non-idempotent request
+// would send duplicate content or charge twice on metered APIs.
+type responseStartedWriter struct {
+	http.ResponseWriter
+	started bool
+}
+
+func (rw *responseStartedWriter) WriteHeader(code int) {
+	rw.started = true
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *responseStartedWriter) Write(b []byte) (int, error) {
+	rw.started = true
+	return rw.ResponseWriter.Write(b)
+}
+
+// isIdempotent reports whether the HTTP method is safe to retry after a partial
+// response. GET, HEAD and OPTIONS are defined as idempotent by RFC 9110; POST,
+// PATCH and DELETE are not — retrying them risks double-billing or duplicate side
+// effects if the upstream already processed the first attempt.
+func isIdempotent(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+// ExecuteWithRetry attempts request delivery with automatic failover on connection errors.
+// For non-idempotent methods (POST, PATCH, DELETE), retry is suppressed once the
+// response has started — we cannot resend to a different endpoint without risking
+// duplicate content reaching the client or double-charging a metered API.
 func (h *RetryHandler) ExecuteWithRetry(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -59,6 +94,9 @@ func (h *RetryHandler) ExecuteWithRetry(
 		return err
 	}
 
+	// Wrap the writer so we can detect when bytes have been committed to the client.
+	tracker := &responseStartedWriter{ResponseWriter: w}
+
 	var lastErr error
 	maxRetries := len(endpoints)
 	attemptCount := 0
@@ -76,7 +114,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 		}
 
 		attemptCount++
-		lastErr = h.executeProxyAttempt(ctx, w, r, endpoint, selector, stats, proxyFunc)
+		lastErr = h.executeProxyAttempt(ctx, tracker, r, endpoint, selector, stats, proxyFunc)
 
 		if lastErr == nil {
 			return nil
@@ -84,6 +122,17 @@ func (h *RetryHandler) ExecuteWithRetry(
 
 		if !IsConnectionError(lastErr) {
 			// Non-connection error warrants immediate failure
+			return lastErr
+		}
+
+		// For non-idempotent methods, once the response has started we cannot
+		// safely retry — the client would receive a partial response from this
+		// endpoint followed by a fresh one from the next, causing corruption or
+		// double-billing. Return the error and let the caller decide.
+		if tracker.started && !isIdempotent(r.Method) {
+			h.logger.Debug("skipping retry: response already started for non-idempotent method",
+				"method", r.Method,
+				"endpoint", endpoint.Name)
 			return lastErr
 		}
 
