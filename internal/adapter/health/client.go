@@ -98,11 +98,21 @@ func (hc *HealthClient) Check(ctx context.Context, endpoint *domain.Endpoint) (r
 	// Record overall latency including retries
 	result.Latency = time.Since(overallStart)
 
-	// Record result in circuit breaker
-	if lastErr != nil || result.Status != domain.StatusHealthy {
+	// Record result in circuit breaker.
+	// ConfigError and RateLimited are not service failures — the backend is up and
+	// responding. Counting them as failures would trip the CB on misconfigured
+	// credentials or a throttled endpoint, hiding the real cause from the operator.
+	if lastErr != nil {
 		hc.circuitBreaker.RecordFailure(healthCheckURL)
 	} else {
-		hc.circuitBreaker.RecordSuccess(healthCheckURL)
+		switch result.Status {
+		case domain.StatusConfigError, domain.StatusRateLimited:
+			// Do not trip the circuit breaker — this is operator or rate error, not downtime.
+		case domain.StatusHealthy, domain.StatusBusy:
+			hc.circuitBreaker.RecordSuccess(healthCheckURL)
+		default:
+			hc.circuitBreaker.RecordFailure(healthCheckURL)
+		}
 	}
 
 	if lastErr != nil {
@@ -247,8 +257,15 @@ func classifyError(err error) domain.HealthCheckErrorType {
 	return domain.ErrorTypeHTTPError
 }
 
-// determineStatus converts HTTP response info into endpoint status
-// Status logic: offline for network errors, busy for slow responses, healthy otherwise
+// determineStatus converts HTTP response info into endpoint status.
+//
+// Classification priorities:
+//   - Network/transport errors → Offline
+//   - 401/403 → ConfigError (operator must fix credentials; no circuit-breaker trip)
+//   - 429 → RateLimited (transient; scheduler will honour Retry-After before next probe)
+//   - 2xx with high latency → Busy (still routable, just slow)
+//   - 2xx → Healthy
+//   - anything else → Unhealthy
 func determineStatus(statusCode int, latency time.Duration, err error, errorType domain.HealthCheckErrorType) domain.EndpointStatus {
 	if err != nil {
 		switch errorType {
@@ -257,6 +274,18 @@ func determineStatus(statusCode int, latency time.Duration, err error, errorType
 		default:
 			return domain.StatusUnhealthy
 		}
+	}
+
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		// The backend is up but rejecting our credentials. Retrying will never help
+		// until the operator updates the auth config. We don't trip the circuit breaker
+		// for this — it's a config problem, not a service availability problem.
+		return domain.StatusConfigError
+	case http.StatusTooManyRequests:
+		// The backend is healthy but throttling us. The scheduler honours Retry-After
+		// before the next probe so we don't hammer a rate-limited endpoint.
+		return domain.StatusRateLimited
 	}
 
 	if statusCode >= HealthyEndpointStatusRangeStart && statusCode < HealthyEndpointStatusRangeEnd {

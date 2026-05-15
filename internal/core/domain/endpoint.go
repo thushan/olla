@@ -8,12 +8,14 @@ import (
 )
 
 const (
-	StatusStringHealthy   = "healthy"
-	StatusStringBusy      = "busy"
-	StatusStringOffline   = "offline"
-	StatusStringWarming   = "warming"
-	StatusStringUnhealthy = "unhealthy"
-	StatusStringUnknown   = "unknown"
+	StatusStringHealthy      = "healthy"
+	StatusStringBusy         = "busy"
+	StatusStringOffline      = "offline"
+	StatusStringWarming      = "warming"
+	StatusStringUnhealthy    = "unhealthy"
+	StatusStringUnknown      = "unknown"
+	StatusStringConfigError  = "config_error"
+	StatusStringRateLimited  = "rate_limited"
 )
 
 type Endpoint struct {
@@ -58,12 +60,18 @@ func (e *Endpoint) GetHealthCheckURLString() string {
 type EndpointStatus string
 
 const (
-	StatusHealthy   EndpointStatus = StatusStringHealthy
-	StatusBusy      EndpointStatus = StatusStringBusy
-	StatusOffline   EndpointStatus = StatusStringOffline
-	StatusWarming   EndpointStatus = StatusStringWarming
-	StatusUnhealthy EndpointStatus = StatusStringUnhealthy
-	StatusUnknown   EndpointStatus = StatusStringUnknown
+	StatusHealthy     EndpointStatus = StatusStringHealthy
+	StatusBusy        EndpointStatus = StatusStringBusy
+	StatusOffline     EndpointStatus = StatusStringOffline
+	StatusWarming     EndpointStatus = StatusStringWarming
+	StatusUnhealthy   EndpointStatus = StatusStringUnhealthy
+	StatusUnknown     EndpointStatus = StatusStringUnknown
+	// StatusConfigError indicates the endpoint is reachable but the credentials
+	// or headers are wrong. The operator must fix config — retrying achieves nothing.
+	StatusConfigError EndpointStatus = StatusStringConfigError
+	// StatusRateLimited indicates the endpoint returned 429. The scheduler should
+	// honour the Retry-After delay before probing again.
+	StatusRateLimited EndpointStatus = StatusStringRateLimited
 )
 
 func (s EndpointStatus) IsRoutable() bool {
