@@ -70,6 +70,13 @@ func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logg
 			MaxIdleConnsPerHost: 2,
 			IdleConnTimeout:     30 * time.Second,
 			DisableKeepAlives:   false,
+			// Per-probe timeouts are already enforced by the CheckTimeout context in
+			// performSingleCheck; this header timeout is a backstop against backends
+			// that accept the TCP connection but then never send a response header.
+			ResponseHeaderTimeout: DefaultHealthCheckerResponseHeaderTimeout,
+			// Honour HTTPS_PROXY/HTTP_PROXY/NO_PROXY so health probes reach
+			// endpoints that sit behind a corporate network proxy.
+			Proxy: http.ProxyFromEnvironment,
 		},
 	}
 	return NewHTTPHealthChecker(repository, logger, client)

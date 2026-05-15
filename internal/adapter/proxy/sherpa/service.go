@@ -35,6 +35,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -55,6 +56,9 @@ const (
 	ClientDisconnectionBytesThreshold = 1024
 	ClientDisconnectionTimeThreshold  = 5 * time.Second
 )
+
+// DefaultResponseHeaderTimeout re-exports the shared constant for Sherpa callers.
+const DefaultResponseHeaderTimeout = config.DefaultResponseHeaderTimeout
 
 // Service implements the Sherpa proxy - optimised for simplicity and maintainability
 type Service struct {
@@ -88,11 +92,15 @@ func NewService(
 
 	// Create transport with TCP tuning for LLM streaming
 	transport := &http.Transport{
-		MaxIdleConns:        DefaultMaxIdleConns,
-		IdleConnTimeout:     DefaultIdleConnTimeout,
-		DisableCompression:  DefaultDisableCompression,
-		TLSHandshakeTimeout: DefaultTLSHandshakeTimeout,
-		MaxIdleConnsPerHost: DefaultMaxIdleConnsPerHost,
+		MaxIdleConns:          DefaultMaxIdleConns,
+		IdleConnTimeout:       DefaultIdleConnTimeout,
+		DisableCompression:    DefaultDisableCompression,
+		TLSHandshakeTimeout:   DefaultTLSHandshakeTimeout,
+		MaxIdleConnsPerHost:   DefaultMaxIdleConnsPerHost,
+		ResponseHeaderTimeout: DefaultResponseHeaderTimeout,
+		// Honour HTTPS_PROXY/HTTP_PROXY/NO_PROXY so corporate users can route
+		// outbound traffic through their network proxy.
+		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
 				Timeout:   configuration.GetConnectionTimeout(),

@@ -41,7 +41,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy/common"
-	"github.com/thushan/olla/internal/adapter/proxy/config"
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/domain"
@@ -144,22 +144,22 @@ func NewService(
 ) (*Service, error) {
 
 	if configuration.StreamBufferSize == 0 {
-		configuration.StreamBufferSize = config.OllaDefaultStreamBufferSize
+		configuration.StreamBufferSize = proxyconfig.OllaDefaultStreamBufferSize
 	}
 	if configuration.MaxIdleConns == 0 {
-		configuration.MaxIdleConns = config.OllaDefaultMaxIdleConns
+		configuration.MaxIdleConns = proxyconfig.OllaDefaultMaxIdleConns
 	}
 	if configuration.MaxConnsPerHost == 0 {
-		configuration.MaxConnsPerHost = config.OllaDefaultMaxConnsPerHost
+		configuration.MaxConnsPerHost = proxyconfig.OllaDefaultMaxConnsPerHost
 	}
 	if configuration.MaxIdleConnsPerHost == 0 {
-		configuration.MaxIdleConnsPerHost = config.OllaDefaultMaxIdleConnsPerHost
+		configuration.MaxIdleConnsPerHost = proxyconfig.OllaDefaultMaxIdleConnsPerHost
 	}
 	if configuration.IdleConnTimeout == 0 {
-		configuration.IdleConnTimeout = config.OllaDefaultIdleConnTimeout
+		configuration.IdleConnTimeout = proxyconfig.OllaDefaultIdleConnTimeout
 	}
 	if configuration.ReadTimeout == 0 {
-		configuration.ReadTimeout = config.DefaultReadTimeout
+		configuration.ReadTimeout = proxyconfig.DefaultReadTimeout
 	}
 
 	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
@@ -211,13 +211,17 @@ func NewService(
 // createOptimisedTransport creates an HTTP transport optimised for AI workloads
 func createOptimisedTransport(config *Configuration) *http.Transport {
 	return &http.Transport{
-		MaxIdleConns:        config.MaxIdleConns,
-		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
-		MaxConnsPerHost:     config.MaxConnsPerHost,
-		IdleConnTimeout:     config.IdleConnTimeout,
-		TLSHandshakeTimeout: DefaultTLSHandshakeTimeout,
-		DisableCompression:  true,
-		ForceAttemptHTTP2:   true,
+		MaxIdleConns:          config.MaxIdleConns,
+		MaxIdleConnsPerHost:   config.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       config.MaxConnsPerHost,
+		IdleConnTimeout:       config.IdleConnTimeout,
+		TLSHandshakeTimeout:   DefaultTLSHandshakeTimeout,
+		DisableCompression:    true,
+		ForceAttemptHTTP2:     true,
+		ResponseHeaderTimeout: proxyconfig.DefaultResponseHeaderTimeout,
+		// Honour HTTPS_PROXY/HTTP_PROXY/NO_PROXY so corporate users can route
+		// outbound traffic through their network proxy.
+		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
 				Timeout:   config.GetConnectionTimeout(),
