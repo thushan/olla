@@ -90,6 +90,13 @@ func CopyHeaders(proxyReq, originalReq *http.Request, endpoint *domain.Endpoint)
 
 	// Update or set X-Forwarded headers
 	updateForwardedHeaders(proxyReq, originalReq)
+
+	// Apply endpoint-configured auth last so it always wins over anything the client sent.
+	// The strip loop above already removed the client's Authorization, so Set() here is
+	// defensive — it guarantees no client credential leaks through even on future strip-list gaps.
+	if endpoint != nil && endpoint.AuthHeaderName != "" {
+		proxyReq.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
+	}
 }
 
 // SHERPA-81: Update X-Forwarded-* headers in request
