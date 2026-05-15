@@ -132,6 +132,7 @@ func (hc *HealthClient) performSingleCheck(ctx context.Context, endpoint *domain
 	}
 
 	req = injectDefaultHeaders(req)
+	injectEndpointAuth(req, endpoint)
 	resp, err := hc.client.Do(req)
 	result.Latency = time.Since(start)
 
@@ -166,6 +167,25 @@ func injectDefaultHeaders(req *http.Request) *http.Request {
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Cache-Control", "no-cache")
 	return req
+}
+
+// injectEndpointAuth applies the endpoint's configured auth and custom headers onto
+// a probe request. We can't use core.CopyHeaders here — it strips then re-injects
+// based on an incoming client request, which doesn't exist for health probes.
+func injectEndpointAuth(req *http.Request, endpoint *domain.Endpoint) {
+	if endpoint == nil {
+		return
+	}
+
+	// Apply static headers from the endpoint config first so auth can override them.
+	for name, value := range endpoint.Headers {
+		req.Header.Set(name, value)
+	}
+
+	// Auth always wins over the headers map — matches CopyHeaders precedence.
+	if endpoint.AuthHeaderName != "" {
+		req.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
+	}
 }
 
 func calculateBackoffDelay(attempt int) time.Duration {
