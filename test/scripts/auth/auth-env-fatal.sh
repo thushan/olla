@@ -29,7 +29,8 @@ BACKEND_PORT="${BACKEND_PORT:-19914}"
 OLLA_LOG="${TMPDIR:-/tmp}/olla-auth-env-fatal.log"
 
 # Deliberately unset — must NOT be present when Olla starts.
-MISSING_VAR="OLLA_TEST_MISSING_TOKEN_$(date +%s%N)"
+# Use seconds + PID for uniqueness; %N (nanoseconds) is GNU-only and fails on BSD/macOS.
+MISSING_VAR="OLLA_TEST_MISSING_TOKEN_$(date +%s)_$$"
 unset "$MISSING_VAR" 2>/dev/null || true
 
 ENDPOINT_NAME="mock-env-fatal"
