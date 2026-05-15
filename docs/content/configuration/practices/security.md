@@ -324,6 +324,30 @@ Monitor these security events:
 - Failed health checks
 - Configuration changes
 
+## Upstream Response Header Stripping
+
+Olla removes the following headers from upstream responses before returning them to clients:
+
+- `Authorization`
+- `Proxy-Authorization`
+- `Set-Cookie`
+- `X-Api-Key`
+- `X-Auth-Token`
+
+Any header named in an endpoint's `auth.header` field or in the `headers:` map is also stripped on the response side. This means operator-supplied custom auth header names are protected even when they do not appear in the list above. The reason: backends should not be able to set cookies on clients or reflect credentials back through Olla.
+
+!!! note "Custom header names"
+    If you configure a non-standard credential header (e.g. `auth.header: X-My-Token`), Olla strips `X-My-Token` from responses as well. No additional configuration is needed.
+
+## Secrets Resolution
+
+Credential values in `auth:` and `headers:` blocks support two forms:
+
+- **`${VAR}`** — resolved from the environment at startup. An unset variable with no `:-default` is a fatal error, so misconfigured auth surfaces before the server starts accepting traffic.
+- **`_file` fields** (`token_file`, `key_file`, `username_file`, `password_file`) — reads the secret from a file path and trims whitespace. The standard pattern for Docker Secrets and Kubernetes mounted volumes.
+
+Setting both the inline field and its `_file` sibling is a fatal startup error.
+
 ## Secrets Management
 
 ### Configuration Files
