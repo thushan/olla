@@ -386,6 +386,7 @@ Olla validates configuration on startup:
 
 ### Next Steps
 - [Configuration Reference](reference.md) - Complete configuration options
+- [Endpoint Authentication](endpoint-auth.md) - Bearer, API key, and basic auth for backends
 - [Configuration Examples](examples.md) - Common configuration scenarios
 - [Configuration Best Practices](practices/configuration.md) - Native and Docker configuration strategies
 - [Best Practices](practices/overview.md) - Production recommendations
