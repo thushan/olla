@@ -343,8 +343,8 @@ Any header named in an endpoint's `auth.header` field or in the `headers:` map i
 
 Credential values in `auth:` and `headers:` blocks support two forms:
 
-- **`${VAR}`** — resolved from the environment at startup. An unset variable with no `:-default` is a fatal error, so misconfigured auth surfaces before the server starts accepting traffic.
-- **`_file` fields** (`token_file`, `key_file`, `username_file`, `password_file`) — reads the secret from a file path and trims whitespace. The standard pattern for Docker Secrets and Kubernetes mounted volumes.
+- **`${VAR}`**: resolved from the environment at startup. An unset variable with no `:-default` is a fatal error, so misconfigured auth surfaces before the server starts accepting traffic.
+- **`_file` fields** (`token_file`, `key_file`, `username_file`, `password_file`): reads the secret from a file path and trims whitespace. The standard pattern for Docker Secrets and Kubernetes mounted volumes.
 
 Setting both the inline field and its `_file` sibling is a fatal startup error.
 

@@ -284,11 +284,11 @@ discovery:
 
 ### Why does my endpoint show `config_error`?
 
-A `config_error` status means Olla received a 401 or 403 from the backend during a health probe. This is an auth misconfiguration, not a network failure — the backend is reachable but rejecting the credentials. Check that the `auth.token`, `auth.key`, or `auth.password` value configured on the endpoint matches what the backend expects.
+A `config_error` status means Olla received a 401 or 403 from the backend during a health probe. This is an auth misconfiguration, not a network failure. The backend is reachable but rejecting the credentials. Check that the `auth.token`, `auth.key`, or `auth.password` value configured on the endpoint matches what the backend expects.
 
 ### What does `rate_limited` mean?
 
-The health probe received a 429 (Too Many Requests) response. Olla marks the endpoint as `rate_limited` and honours the `Retry-After` header if present. Probing resumes automatically once the wait period expires. This is most common when health checks are running too frequently against a rate-limited backend — increase `check_interval` if it happens repeatedly.
+The health probe received a 429 (Too Many Requests) response. Olla marks the endpoint as `rate_limited` and honours the `Retry-After` header if present. Probing resumes automatically once the wait period expires. This is most common when health checks are running too frequently against a rate-limited backend; increase `check_interval` if it happens repeatedly.
 
 ### How do I authenticate to a backend protected by `--api-key`?
 
