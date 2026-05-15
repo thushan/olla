@@ -6,9 +6,9 @@ import (
 )
 
 type HealthCheckResult struct {
-	Error      error
-	Status     EndpointStatus
-	Latency    time.Duration
+	Error   error
+	Status  EndpointStatus
+	Latency time.Duration
 	// RateLimitedUntil is populated when the probe received a 429 with a Retry-After
 	// header. The scheduler uses this to skip probing until the window has elapsed.
 	RateLimitedUntil time.Time

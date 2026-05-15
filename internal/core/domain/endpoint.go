@@ -8,14 +8,14 @@ import (
 )
 
 const (
-	StatusStringHealthy      = "healthy"
-	StatusStringBusy         = "busy"
-	StatusStringOffline      = "offline"
-	StatusStringWarming      = "warming"
-	StatusStringUnhealthy    = "unhealthy"
-	StatusStringUnknown      = "unknown"
-	StatusStringConfigError  = "config_error"
-	StatusStringRateLimited  = "rate_limited"
+	StatusStringHealthy     = "healthy"
+	StatusStringBusy        = "busy"
+	StatusStringOffline     = "offline"
+	StatusStringWarming     = "warming"
+	StatusStringUnhealthy   = "unhealthy"
+	StatusStringUnknown     = "unknown"
+	StatusStringConfigError = "config_error"
+	StatusStringRateLimited = "rate_limited"
 )
 
 type Endpoint struct {
@@ -42,8 +42,8 @@ type Endpoint struct {
 	AuthHeaderValue string `json:"-"`
 	// RateLimitedUntil is set when a health probe receives 429. The scheduler skips
 	// probing this endpoint until the time passes. Never serialised.
-	RateLimitedUntil time.Time `json:"-"`
-	LastLatency      time.Duration
+	RateLimitedUntil    time.Time `json:"-"`
+	LastLatency         time.Duration
 	CheckInterval       time.Duration
 	CheckTimeout        time.Duration
 	Priority            int
@@ -63,12 +63,12 @@ func (e *Endpoint) GetHealthCheckURLString() string {
 type EndpointStatus string
 
 const (
-	StatusHealthy     EndpointStatus = StatusStringHealthy
-	StatusBusy        EndpointStatus = StatusStringBusy
-	StatusOffline     EndpointStatus = StatusStringOffline
-	StatusWarming     EndpointStatus = StatusStringWarming
-	StatusUnhealthy   EndpointStatus = StatusStringUnhealthy
-	StatusUnknown     EndpointStatus = StatusStringUnknown
+	StatusHealthy   EndpointStatus = StatusStringHealthy
+	StatusBusy      EndpointStatus = StatusStringBusy
+	StatusOffline   EndpointStatus = StatusStringOffline
+	StatusWarming   EndpointStatus = StatusStringWarming
+	StatusUnhealthy EndpointStatus = StatusStringUnhealthy
+	StatusUnknown   EndpointStatus = StatusStringUnknown
 	// StatusConfigError indicates the endpoint is reachable but the credentials
 	// or headers are wrong. The operator must fix config — retrying achieves nothing.
 	StatusConfigError EndpointStatus = StatusStringConfigError
