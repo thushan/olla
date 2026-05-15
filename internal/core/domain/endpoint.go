@@ -17,12 +17,12 @@ const (
 )
 
 type Endpoint struct {
-	LastChecked           time.Time
-	NextCheckTime         time.Time
-	URL                   *url.URL
-	HealthCheckURL        *url.URL
-	ModelUrl              *url.URL
-	ModelFilter           *FilterConfig
+	LastChecked    time.Time
+	NextCheckTime  time.Time
+	URL            *url.URL
+	HealthCheckURL *url.URL
+	ModelUrl       *url.URL
+	ModelFilter    *FilterConfig
 	// Headers holds verbatim outbound headers copied from endpoint config at load time.
 	Headers               map[string]string
 	Name                  string
@@ -37,14 +37,14 @@ type Endpoint struct {
 	AuthHeaderName string
 	// AuthHeaderValue is the fully composed header value (e.g. "Bearer tok", "Basic base64(...)").
 	// Never serialised — leaking credentials through logs or status endpoints would be a security issue.
-	AuthHeaderValue string `json:"-"`
-	LastLatency           time.Duration
-	CheckInterval         time.Duration
-	CheckTimeout          time.Duration
-	Priority              int
-	ConsecutiveFailures   int
-	BackoffMultiplier     int
-	PreservePath          bool
+	AuthHeaderValue     string `json:"-"`
+	LastLatency         time.Duration
+	CheckInterval       time.Duration
+	CheckTimeout        time.Duration
+	Priority            int
+	ConsecutiveFailures int
+	BackoffMultiplier   int
+	PreservePath        bool
 }
 
 func (e *Endpoint) GetURLString() string {
