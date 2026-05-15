@@ -36,7 +36,10 @@ type ModelInfo struct {
 
 type EndpointModels struct {
 	LastUpdated time.Time    `json:"last_updated"`
-	EndpointURL string       `json:"endpoint_url"`
+	// EndpointURL is used for internal map-keying only; it must not appear in
+	// serialised API responses because it may carry auth credentials or internal
+	// network addresses.
+	EndpointURL string       `json:"-"`
 	Models      []*ModelInfo `json:"models"`
 }
 
