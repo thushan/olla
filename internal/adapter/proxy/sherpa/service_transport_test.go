@@ -1,7 +1,6 @@
 package sherpa
 
 import (
-	"net/http"
 	"reflect"
 	"runtime"
 	"testing"
@@ -39,22 +38,18 @@ func newSherpaServiceForTransportTest(t *testing.T) *Service {
 	return svc
 }
 
-// TestSherpaTransport_ProxyFromEnvironment asserts that the Sherpa transport
-// honours HTTPS_PROXY/HTTP_PROXY/NO_PROXY env vars. Without this, outbound
-// connections silently bypass any corporate network proxy.
-func TestSherpaTransport_ProxyFromEnvironment(t *testing.T) {
+// TestSherpaTransport_NoProxyFromEnvironment asserts that the Sherpa proxy
+// transport does NOT honour HTTP_PROXY/HTTPS_PROXY. Olla targets local
+// inference backends; routing credentialled requests through an outbound proxy
+// on plain HTTP is a credential-exposure risk. Health probes keep the env proxy.
+func TestSherpaTransport_NoProxyFromEnvironment(t *testing.T) {
 	t.Parallel()
 
 	svc := newSherpaServiceForTransportTest(t)
 
-	if svc.transport.Proxy == nil {
-		t.Fatal("Sherpa transport.Proxy is nil — HTTPS_PROXY/HTTP_PROXY will be silently ignored")
-	}
-
-	got := funcName(svc.transport.Proxy)
-	want := funcName(http.ProxyFromEnvironment)
-	if got != want {
-		t.Errorf("transport.Proxy = %s, want %s (http.ProxyFromEnvironment)", got, want)
+	if svc.transport.Proxy != nil {
+		got := funcName(svc.transport.Proxy)
+		t.Errorf("Sherpa transport.Proxy = %s, want nil — proxy requests must not be routed through env proxy", got)
 	}
 }
 

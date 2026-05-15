@@ -1,7 +1,6 @@
 package olla
 
 import (
-	"net/http"
 	"reflect"
 	"runtime"
 	"testing"
@@ -91,10 +90,11 @@ func TestCreateOptimisedTransport_FieldsAreDistinct(t *testing.T) {
 	}
 }
 
-// TestCreateOptimisedTransport_ProxyFromEnvironment asserts that the Olla transport
-// honours HTTPS_PROXY/HTTP_PROXY/NO_PROXY so outbound backend connections are
-// routed through any corporate network proxy configured in the environment.
-func TestCreateOptimisedTransport_ProxyFromEnvironment(t *testing.T) {
+// TestCreateOptimisedTransport_NoProxyFromEnvironment asserts that the Olla proxy
+// transport does NOT honour HTTP_PROXY/HTTPS_PROXY. Olla targets local
+// inference backends; routing credentialled requests through an outbound proxy
+// on plain HTTP is a credential-exposure risk. Health probes keep the env proxy.
+func TestCreateOptimisedTransport_NoProxyFromEnvironment(t *testing.T) {
 	t.Parallel()
 
 	cfg := &Configuration{}
@@ -103,14 +103,9 @@ func TestCreateOptimisedTransport_ProxyFromEnvironment(t *testing.T) {
 
 	transport := createOptimisedTransport(cfg)
 
-	if transport.Proxy == nil {
-		t.Fatal("Olla transport.Proxy is nil — HTTPS_PROXY/HTTP_PROXY will be silently ignored")
-	}
-
-	got := funcName(transport.Proxy)
-	want := funcName(http.ProxyFromEnvironment)
-	if got != want {
-		t.Errorf("transport.Proxy = %s, want %s (http.ProxyFromEnvironment)", got, want)
+	if transport.Proxy != nil {
+		got := funcName(transport.Proxy)
+		t.Errorf("Olla transport.Proxy = %s, want nil — proxy requests must not be routed through env proxy", got)
 	}
 }
 

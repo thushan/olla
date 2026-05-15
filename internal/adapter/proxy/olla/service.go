@@ -219,9 +219,10 @@ func createOptimisedTransport(config *Configuration) *http.Transport {
 		DisableCompression:    true,
 		ForceAttemptHTTP2:     true,
 		ResponseHeaderTimeout: proxyconfig.DefaultResponseHeaderTimeout,
-		// Honour HTTPS_PROXY/HTTP_PROXY/NO_PROXY so corporate users can route
-		// outbound traffic through their network proxy.
-		Proxy: http.ProxyFromEnvironment,
+		// Olla targets local inference backends; outbound proxy env vars are not
+		// honoured here because they would route credentialled requests through an
+		// intermediary on plain HTTP. Health probes (no credentials) keep the proxy
+		// so corporate monitoring infra still works for connectivity checks.
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
 				Timeout:   config.GetConnectionTimeout(),
