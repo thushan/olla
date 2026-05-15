@@ -90,3 +90,35 @@ func TestEndpointAuthFieldsNotSerialised(t *testing.T) {
 		t.Errorf("Endpoint JSON contains auth header value: %s", data)
 	}
 }
+
+// TestEndpointHeadersNotSerialised asserts that Endpoint.Headers is not included
+// in JSON output. The map may contain API keys or other custom auth values set
+// via the headers: config block; exposing them through status endpoints would
+// leak operator secrets.
+func TestEndpointHeadersNotSerialised(t *testing.T) {
+	t.Parallel()
+
+	ep := domain.Endpoint{
+		Name: "guarded-backend",
+		Type: "ollama",
+		Headers: map[string]string{
+			"X-Custom-Key": "do-not-leak",
+		},
+	}
+
+	data, err := json.Marshal(ep)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+
+	if strings.Contains(string(data), "do-not-leak") {
+		t.Errorf("Endpoint JSON contains Headers map value: %s", data)
+	}
+	if strings.Contains(string(data), "X-Custom-Key") {
+		t.Errorf("Endpoint JSON contains Headers map key: %s", data)
+	}
+	// Sanity: other fields still serialise.
+	if !strings.Contains(string(data), "guarded-backend") {
+		t.Errorf("Endpoint JSON missing name field: %s", data)
+	}
+}

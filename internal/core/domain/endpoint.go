@@ -26,7 +26,7 @@ type Endpoint struct {
 	ModelUrl       *url.URL
 	ModelFilter    *FilterConfig
 	// Headers holds verbatim outbound headers copied from endpoint config at load time.
-	Headers               map[string]string
+	Headers               map[string]string `json:"-"`
 	Name                  string
 	Type                  string `json:"type,omitempty"`
 	Status                EndpointStatus
