@@ -19,7 +19,7 @@ type resolvedAuth struct {
 	// credential holds the resolved token (bearer) or key (api_key).
 	credential string
 	// header overrides the default header name for api_key auth.
-	header string
+	header   string
 	authType string
 }
 

@@ -476,8 +476,8 @@ func TestAuthPrecompute_Headers_EnvResolved(t *testing.T) {
 
 	cfg := validEndpointBase("headers-env")
 	cfg.Headers = map[string]string{
-		"X-Tenant":  "${OLLA_TEST_TENANT}",
-		"X-Static":  "literal",
+		"X-Tenant": "${OLLA_TEST_TENANT}",
+		"X-Static": "literal",
 	}
 
 	repo := NewStaticEndpointRepository()
