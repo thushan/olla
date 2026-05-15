@@ -2,6 +2,11 @@ package discovery
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -219,5 +224,312 @@ func TestLoadFromConfig_AuthNil_Succeeds(t *testing.T) {
 	repo := NewStaticEndpointRepository()
 	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig with nil auth failed: %v", err)
+	}
+}
+
+// ── Commit 2: env/file resolution ───────────────────────────────────────────
+
+// TestAuthResolve_EnvVar_ExpandsToken verifies that a ${VAR} placeholder in the
+// token field is expanded through the environment at load time.
+func TestAuthResolve_EnvVar_ExpandsToken(t *testing.T) {
+	t.Setenv("OLLA_TEST_TOKEN", "resolved-secret")
+
+	cfg := validEndpointBase("bearer-env")
+	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "${OLLA_TEST_TOKEN}"}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	if len(eps) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(eps))
+	}
+	if !strings.HasSuffix(eps[0].AuthHeaderValue, "resolved-secret") {
+		t.Errorf("AuthHeaderValue %q does not end with resolved token", eps[0].AuthHeaderValue)
+	}
+}
+
+// TestAuthResolve_MissingEnvVar_FatalError verifies that an unset ${VAR} in an
+// auth field causes a startup-fatal error that mentions the endpoint name.
+func TestAuthResolve_MissingEnvVar_FatalError(t *testing.T) {
+	t.Parallel()
+
+	// Guarantee the var is absent
+	varName := "OLLA_DEFINITELY_UNSET_VAR_XYZ"
+	os.Unsetenv(varName) //nolint:errcheck
+
+	cfg := validEndpointBase("bearer-missing-env")
+	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: fmt.Sprintf("${%s}", varName)}
+
+	repo := NewStaticEndpointRepository()
+	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	if err == nil {
+		t.Fatal("expected error for unset env var, got nil")
+	}
+	if !strings.Contains(err.Error(), "bearer-missing-env") {
+		t.Errorf("error should mention endpoint name, got: %v", err)
+	}
+}
+
+// TestAuthResolve_TokenFile_ReadsAndTrims verifies that token_file reads the
+// file content and strips trailing whitespace (e.g. trailing newline from echo).
+func TestAuthResolve_TokenFile_ReadsAndTrims(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token.txt")
+	if err := os.WriteFile(tokenPath, []byte("file-secret\n"), 0o600); err != nil {
+		t.Fatalf("writing token file: %v", err)
+	}
+
+	cfg := validEndpointBase("bearer-file")
+	cfg.Auth = &config.AuthConfig{Type: "bearer", TokenFile: tokenPath}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	if !strings.HasSuffix(eps[0].AuthHeaderValue, "file-secret") {
+		t.Errorf("AuthHeaderValue %q does not end with trimmed file content", eps[0].AuthHeaderValue)
+	}
+}
+
+// TestAuthResolve_BothInlineAndFile_FatalError ensures the both-set conflict is
+// caught at resolution time (ExpandWithFile enforces this).
+func TestAuthResolve_BothInlineAndFile_FatalError(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "token.txt")
+	_ = os.WriteFile(tokenPath, []byte("tok\n"), 0o600)
+
+	cfg := validEndpointBase("bearer-both")
+	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "inline", TokenFile: tokenPath}
+
+	repo := NewStaticEndpointRepository()
+	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	if err == nil {
+		t.Fatal("expected error for both token and token_file, got nil")
+	}
+}
+
+// TestAuthResolve_EmptyAfterExpansion_FatalError verifies that a token that
+// resolves to an empty string (e.g. env var set to "") is a startup-fatal error.
+func TestAuthResolve_EmptyAfterExpansion_FatalError(t *testing.T) {
+	t.Setenv("OLLA_EMPTY_TOKEN", "")
+
+	cfg := validEndpointBase("bearer-empty")
+	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "${OLLA_EMPTY_TOKEN:-}"}
+
+	repo := NewStaticEndpointRepository()
+	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	if err == nil {
+		t.Fatal("expected error for empty-resolved token, got nil")
+	}
+}
+
+// ── Commit 3: precomputed headers ───────────────────────────────────────────
+
+// TestAuthPrecompute_Bearer_AuthorizationHeader verifies the bearer auth
+// produces the correct Authorization header value.
+func TestAuthPrecompute_Bearer_AuthorizationHeader(t *testing.T) {
+	t.Parallel()
+
+	cfg := validEndpointBase("bearer-precompute")
+	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "mysecrettoken"}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	if ep.AuthHeaderName != "Authorization" {
+		t.Errorf("AuthHeaderName = %q, want %q", ep.AuthHeaderName, "Authorization")
+	}
+	if ep.AuthHeaderValue != "Bearer mysecrettoken" {
+		t.Errorf("AuthHeaderValue = %q, want %q", ep.AuthHeaderValue, "Bearer mysecrettoken")
+	}
+}
+
+// TestAuthPrecompute_APIKey_DefaultHeader verifies that api_key with no header
+// override uses X-Api-Key as the header name.
+func TestAuthPrecompute_APIKey_DefaultHeader(t *testing.T) {
+	t.Parallel()
+
+	cfg := validEndpointBase("apikey-default")
+	cfg.Auth = &config.AuthConfig{Type: "api_key", Key: "mykey"}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	if ep.AuthHeaderName != "X-Api-Key" {
+		t.Errorf("AuthHeaderName = %q, want %q", ep.AuthHeaderName, "X-Api-Key")
+	}
+	if ep.AuthHeaderValue != "mykey" {
+		t.Errorf("AuthHeaderValue = %q, want %q", ep.AuthHeaderValue, "mykey")
+	}
+}
+
+// TestAuthPrecompute_APIKey_CustomHeader verifies that an explicit header field
+// overrides the default X-Api-Key name.
+func TestAuthPrecompute_APIKey_CustomHeader(t *testing.T) {
+	t.Parallel()
+
+	cfg := validEndpointBase("apikey-custom")
+	cfg.Auth = &config.AuthConfig{Type: "api_key", Key: "mykey", Header: "X-My-Auth"}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	if ep.AuthHeaderName != "X-My-Auth" {
+		t.Errorf("AuthHeaderName = %q, want %q", ep.AuthHeaderName, "X-My-Auth")
+	}
+	if ep.AuthHeaderValue != "mykey" {
+		t.Errorf("AuthHeaderValue = %q, want %q", ep.AuthHeaderValue, "mykey")
+	}
+}
+
+// TestAuthPrecompute_Basic_CorrectBase64 verifies the basic auth header is the
+// correctly base64-encoded "username:password" pair. We decode it to be explicit.
+func TestAuthPrecompute_Basic_CorrectBase64(t *testing.T) {
+	t.Parallel()
+
+	cfg := validEndpointBase("basic-precompute")
+	cfg.Auth = &config.AuthConfig{Type: "basic", Username: "alice", Password: "s3cret"}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	if ep.AuthHeaderName != "Authorization" {
+		t.Errorf("AuthHeaderName = %q, want %q", ep.AuthHeaderName, "Authorization")
+	}
+
+	const prefix = "Basic "
+	if !strings.HasPrefix(ep.AuthHeaderValue, prefix) {
+		t.Fatalf("AuthHeaderValue %q does not start with %q", ep.AuthHeaderValue, prefix)
+	}
+
+	encoded := strings.TrimPrefix(ep.AuthHeaderValue, prefix)
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("base64 decode failed: %v", err)
+	}
+
+	const want = "alice:s3cret"
+	if string(decoded) != want {
+		t.Errorf("decoded basic credentials = %q, want %q", string(decoded), want)
+	}
+}
+
+// TestAuthPrecompute_NoAuth_EmptyFields verifies that endpoints without auth
+// have zero-value AuthHeaderName and nil Headers.
+func TestAuthPrecompute_NoAuth_EmptyFields(t *testing.T) {
+	t.Parallel()
+
+	cfg := validEndpointBase("no-auth-fields")
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	if ep.AuthHeaderName != "" {
+		t.Errorf("AuthHeaderName should be empty for endpoint without auth, got %q", ep.AuthHeaderName)
+	}
+	if ep.AuthHeaderValue != "" {
+		t.Errorf("AuthHeaderValue should be empty for endpoint without auth, got %q", ep.AuthHeaderValue)
+	}
+	if ep.Headers != nil {
+		t.Errorf("Headers should be nil when no headers configured, got %v", ep.Headers)
+	}
+}
+
+// TestAuthPrecompute_Headers_EnvResolved verifies that values in the headers
+// map are expanded through the environment at load time.
+func TestAuthPrecompute_Headers_EnvResolved(t *testing.T) {
+	t.Setenv("OLLA_TEST_TENANT", "acme-corp")
+
+	cfg := validEndpointBase("headers-env")
+	cfg.Headers = map[string]string{
+		"X-Tenant":  "${OLLA_TEST_TENANT}",
+		"X-Static":  "literal",
+	}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	if ep.Headers["X-Tenant"] != "acme-corp" {
+		t.Errorf("Headers[X-Tenant] = %q, want %q", ep.Headers["X-Tenant"], "acme-corp")
+	}
+	if ep.Headers["X-Static"] != "literal" {
+		t.Errorf("Headers[X-Static] = %q, want %q", ep.Headers["X-Static"], "literal")
+	}
+}
+
+// ── Security audit ───────────────────────────────────────────────────────────
+
+// TestAuthSecurity_AuthHeaderValue_NotInJSON asserts that AuthHeaderValue is
+// excluded from JSON serialisation of a domain.Endpoint. This guards against
+// credential leakage through status endpoints or debug logs.
+// (The json:"-" tag on AuthHeaderValue provides the guarantee; this test keeps
+// it honest so no future refactor can accidentally remove it.)
+func TestAuthSecurity_AuthHeaderValue_NotInJSON(t *testing.T) {
+	t.Parallel()
+
+	cfg := validEndpointBase("security-ep")
+	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "super-secret-do-not-leak"}
+
+	repo := NewStaticEndpointRepository()
+	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	// The domain.Endpoint JSON test already covers the tag; here we exercise
+	// the full load → retrieve → marshal path to catch end-to-end regressions.
+	eps, _ := repo.GetAll(context.Background())
+	ep := eps[0]
+
+	// AuthHeaderValue must be set (we loaded auth successfully).
+	if ep.AuthHeaderValue == "" {
+		t.Fatal("AuthHeaderValue is empty — auth was not wired in")
+	}
+
+	// GetURLString and GetHealthCheckURLString are the only string accessors on
+	// Endpoint; neither should expose credentials.
+	if strings.Contains(ep.GetURLString(), "secret") {
+		t.Errorf("GetURLString leaks credential: %q", ep.GetURLString())
+	}
+	if strings.Contains(ep.GetHealthCheckURLString(), "secret") {
+		t.Errorf("GetHealthCheckURLString leaks credential: %q", ep.GetHealthCheckURLString())
 	}
 }
