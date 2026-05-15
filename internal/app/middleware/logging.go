@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -231,9 +232,16 @@ func redactQuery(raw string) string {
 			out[i] = pair
 			continue
 		}
+		// Decode the key for comparison so percent-encoded forms like
+		// %70assword (password) are caught. Fall back to the raw key if
+		// the escape sequence is malformed.
+		decoded, decodeErr := url.QueryUnescape(k)
+		if decodeErr != nil {
+			decoded = k
+		}
 		sensitive := false
 		for _, sk := range sensitiveQueryKeys {
-			if strings.EqualFold(k, sk) {
+			if strings.EqualFold(decoded, sk) {
 				sensitive = true
 				break
 			}

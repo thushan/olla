@@ -217,6 +217,27 @@ func TestRedactQuery(t *testing.T) {
 			wantHide: []string{"k1", "t2", "k3"},
 			wantKeep: []string{"[REDACTED]"},
 		},
+		{
+			// %70assword decodes to "password" — must still be redacted.
+			name:     "percent-encoded key redacted",
+			input:    "%70assword=secret",
+			wantHide: []string{"secret"},
+			wantKeep: []string{"[REDACTED]"},
+		},
+		{
+			// api%5Fkey decodes to "api_key" (underscore encoded as %5F).
+			name:     "encoded underscore in key redacted",
+			input:    "api%5Fkey=foo",
+			wantHide: []string{"foo"},
+			wantKeep: []string{"[REDACTED]"},
+		},
+		{
+			// %ZZ is not a valid percent-escape; must fall back to raw key comparison
+			// without panicking. "zzz" is not sensitive so the value passes through.
+			name:     "malformed escape falls back to raw key",
+			input:    "%ZZname=value",
+			wantKeep: []string{"value"},
+		},
 	}
 
 	for _, tt := range tests {
