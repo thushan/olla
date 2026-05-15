@@ -461,12 +461,9 @@ endpoints:
 
 ### Authentication
 
-!!! warning "Authentication Not Supported"
-    Olla does not currently support authentication headers for endpoints. If your API requires authentication, you'll need to:
-    
-    - Use a reverse proxy that adds authentication
-    - Wait for this feature to be implemented
-    - Access only public/local endpoints
+!!! tip "Authenticated Endpoints"
+    Olla supports per-endpoint authentication (bearer, api_key, and basic) for backends that
+    require credentials. See [Endpoint Authentication](../../configuration/endpoint-auth.md).
 
 ### Custom Networks
 
