@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/config"
 )
 
@@ -868,7 +869,8 @@ func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
 		t.Fatalf("LoadFromConfig: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, err := repo.GetAll(context.Background())
+	require.NoError(t, err, "GetAll before UpdateEndpoint")
 	ep := eps[0]
 
 	rateLimitDeadline := time.Now().Add(60 * time.Second).Truncate(time.Millisecond)
@@ -878,9 +880,10 @@ func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
 		t.Fatalf("UpdateEndpoint: %v", err)
 	}
 
-	updated, _ := repo.GetAll(context.Background())
+	updated, err := repo.GetAll(context.Background())
+	require.NoError(t, err, "GetAll after UpdateEndpoint")
 	if updated[0].RateLimitedUntil.IsZero() {
-		t.Error("RateLimitedUntil was not persisted — got zero time after UpdateEndpoint")
+		t.Error("RateLimitedUntil was not persisted; got zero time after UpdateEndpoint")
 	}
 	if !updated[0].RateLimitedUntil.Equal(rateLimitDeadline) {
 		t.Errorf("RateLimitedUntil = %v, want %v", updated[0].RateLimitedUntil, rateLimitDeadline)
