@@ -12,7 +12,7 @@ This guide covers setting up a complete development environment for Olla.
 
 ### Required
 
-- **Go 1.24+**: [Download Go](https://golang.org/dl/)
+- **Go 1.24**: [Download Go](https://golang.org/dl/). Olla pins to 1.24; several `golang.org/x/*` packages have moved to 1.25 and are held back. See the dependencies note in `CLAUDE.md` if you plan to update them.
 - **Git**: For version control
 - **Make**: Build automation
 
