@@ -41,7 +41,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/proxy/common"
-	"github.com/thushan/olla/internal/adapter/proxy/config"
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/domain"
@@ -144,22 +144,22 @@ func NewService(
 ) (*Service, error) {
 
 	if configuration.StreamBufferSize == 0 {
-		configuration.StreamBufferSize = config.OllaDefaultStreamBufferSize
+		configuration.StreamBufferSize = proxyconfig.OllaDefaultStreamBufferSize
 	}
 	if configuration.MaxIdleConns == 0 {
-		configuration.MaxIdleConns = config.OllaDefaultMaxIdleConns
+		configuration.MaxIdleConns = proxyconfig.OllaDefaultMaxIdleConns
 	}
 	if configuration.MaxConnsPerHost == 0 {
-		configuration.MaxConnsPerHost = config.OllaDefaultMaxConnsPerHost
+		configuration.MaxConnsPerHost = proxyconfig.OllaDefaultMaxConnsPerHost
 	}
 	if configuration.MaxIdleConnsPerHost == 0 {
-		configuration.MaxIdleConnsPerHost = config.OllaDefaultMaxIdleConnsPerHost
+		configuration.MaxIdleConnsPerHost = proxyconfig.OllaDefaultMaxIdleConnsPerHost
 	}
 	if configuration.IdleConnTimeout == 0 {
-		configuration.IdleConnTimeout = config.OllaDefaultIdleConnTimeout
+		configuration.IdleConnTimeout = proxyconfig.OllaDefaultIdleConnTimeout
 	}
 	if configuration.ReadTimeout == 0 {
-		configuration.ReadTimeout = config.DefaultReadTimeout
+		configuration.ReadTimeout = proxyconfig.DefaultReadTimeout
 	}
 
 	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
@@ -211,13 +211,18 @@ func NewService(
 // createOptimisedTransport creates an HTTP transport optimised for AI workloads
 func createOptimisedTransport(config *Configuration) *http.Transport {
 	return &http.Transport{
-		MaxIdleConns:        config.MaxIdleConns,
-		MaxIdleConnsPerHost: config.MaxIdleConnsPerHost,
-		MaxConnsPerHost:     config.MaxConnsPerHost,
-		IdleConnTimeout:     config.IdleConnTimeout,
-		TLSHandshakeTimeout: DefaultTLSHandshakeTimeout,
-		DisableCompression:  true,
-		ForceAttemptHTTP2:   true,
+		MaxIdleConns:          config.MaxIdleConns,
+		MaxIdleConnsPerHost:   config.MaxIdleConnsPerHost,
+		MaxConnsPerHost:       config.MaxConnsPerHost,
+		IdleConnTimeout:       config.IdleConnTimeout,
+		TLSHandshakeTimeout:   DefaultTLSHandshakeTimeout,
+		DisableCompression:    true,
+		ForceAttemptHTTP2:     true,
+		ResponseHeaderTimeout: proxyconfig.DefaultResponseHeaderTimeout,
+		// Olla targets local inference backends; outbound proxy env vars are not
+		// honoured here because they would route credentialled requests through an
+		// intermediary on plain HTTP. Health probes (no credentials) keep the proxy
+		// so corporate monitoring infra still works for connectivity checks.
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
 				Timeout:   config.GetConnectionTimeout(),
@@ -366,8 +371,9 @@ func (s *Service) buildTargetURL(r *http.Request, endpoint *domain.Endpoint) *ur
 	return common.BuildTargetURL(r, endpoint, s.configuration.GetProxyPrefix())
 }
 
-// prepareProxyRequest creates and prepares the proxy request with headers
-func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targetURL *url.URL, stats *ports.RequestStats) (*http.Request, error) {
+// prepareProxyRequest creates and prepares the proxy request with headers.
+// endpoint is passed through so CopyHeaders can apply per-endpoint auth and custom headers.
+func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targetURL *url.URL, endpoint *domain.Endpoint, stats *ports.RequestStats) (*http.Request, error) {
 	proxyReq, err := http.NewRequestWithContext(ctx, r.Method, targetURL.String(), r.Body)
 	if err != nil {
 		return nil, err
@@ -375,7 +381,7 @@ func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targ
 
 	// Copy headers
 	headerStart := time.Now()
-	core.CopyHeaders(proxyReq, r)
+	core.CopyHeaders(proxyReq, r, endpoint)
 	stats.HeaderProcessingMs = time.Since(headerStart).Milliseconds()
 
 	// Add model header
@@ -458,12 +464,8 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	core.SetResponseHeaders(w, stats, endpoint)
 	core.SetStickySessionHeaders(w, r)
 
-	// Copy response headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
+	// Copy response headers, stripping any sensitive headers the upstream may reflect
+	core.CopyResponseHeaders(w.Header(), resp.Header, endpoint)
 
 	w.WriteHeader(resp.StatusCode)
 

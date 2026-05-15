@@ -65,6 +65,10 @@ characteristics:
   max_concurrent_requests: 100
   default_priority: 80
   streaming_support: true
+  auth:
+    required: false
+    types:
+      - bearer   # enabled via --api-key flag
 
 # Detection hints for auto-discovery
 detection:

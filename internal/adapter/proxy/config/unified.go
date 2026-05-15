@@ -23,6 +23,15 @@ const (
 	OllaDefaultTimeout     = 30 * time.Second
 	OllaDefaultKeepAlive   = 30 * time.Second
 	OllaDefaultReadTimeout = 30 * time.Second
+
+	// DefaultResponseHeaderTimeout caps the time a backend may hold the connection
+	// open after accepting without sending a single response header byte.
+	// 30 s is chosen to match Olla's other timeout defaults; Sherpa uses the same constant.
+	DefaultResponseHeaderTimeout = 30 * time.Second
+
+	// DefaultHealthResponseHeaderTimeout is shorter than the proxy timeout because
+	// health probes are latency-sensitive and already bounded by CheckTimeout.
+	DefaultHealthResponseHeaderTimeout = 10 * time.Second
 )
 
 // ProxyConfig defines the interface for all proxy configurations

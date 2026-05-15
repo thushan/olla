@@ -12,6 +12,7 @@ import (
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
+	"github.com/thushan/olla/pkg/envresolver"
 )
 
 const (
@@ -114,6 +115,7 @@ func (r *StaticEndpointRepository) UpdateEndpoint(ctx context.Context, endpoint 
 	existing.BackoffMultiplier = endpoint.BackoffMultiplier
 	existing.NextCheckTime = endpoint.NextCheckTime
 	existing.LastLatency = endpoint.LastLatency
+	existing.RateLimitedUntil = endpoint.RateLimitedUntil
 
 	return nil
 }
@@ -142,6 +144,18 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 		applyEndpointDefaults(&cfg)
 		if err := r.validateEndpointConfig(cfg); err != nil {
 			return fmt.Errorf("invalid endpoint config for %q: %w", cfg.Name, err)
+		}
+
+		var resolved resolvedAuth
+		if cfg.Auth != nil {
+			if err := validateAuth(cfg.Name, cfg.Auth); err != nil {
+				return err
+			}
+			var rerr error
+			resolved, rerr = resolveAuth(cfg.Name, cfg.Auth)
+			if rerr != nil {
+				return rerr
+			}
 		}
 
 		endpointURL, err := url.Parse(cfg.URL)
@@ -188,6 +202,22 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			BackoffMultiplier:     1,
 			NextCheckTime:         now,
 			PreservePath:          cfg.PreservePath,
+		}
+
+		if cfg.Auth != nil {
+			newEndpoint.AuthHeaderName, newEndpoint.AuthHeaderValue = precomputeAuthHeaders(resolved)
+		}
+
+		if len(cfg.Headers) > 0 {
+			resolvedHeaders := make(map[string]string, len(cfg.Headers))
+			for k, v := range cfg.Headers {
+				expanded, herr := envresolver.ExpandStrict(v)
+				if herr != nil {
+					return fmt.Errorf("endpoint %q: header %q: %w", cfg.Name, k, herr)
+				}
+				resolvedHeaders[k] = expanded
+			}
+			newEndpoint.Headers = resolvedHeaders
 		}
 
 		newEndpoints[urlString] = newEndpoint

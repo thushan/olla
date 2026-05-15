@@ -121,7 +121,7 @@ func TestCopyHeaders(t *testing.T) {
 			proxyReq := httptest.NewRequest("GET", "http://backend.com/test", nil)
 
 			// Copy headers
-			CopyHeaders(proxyReq, originalReq)
+			CopyHeaders(proxyReq, originalReq, nil)
 
 			// Check that expected headers were copied
 			for k, expectedValues := range tt.expectedCopied {
@@ -231,7 +231,7 @@ func TestCopyHeaders_ProxyHeaders(t *testing.T) {
 			proxyReq := httptest.NewRequest("GET", "http://backend.com/test", nil)
 
 			// Copy headers
-			CopyHeaders(proxyReq, originalReq)
+			CopyHeaders(proxyReq, originalReq, nil)
 
 			// Check forwarded headers
 			if tt.expectedForwardedFor != "" {
@@ -603,7 +603,7 @@ func TestCopyHeaders_ExistingHeaders(t *testing.T) {
 			t.Logf("Test: %s - Initial header count: %d", tt.description, initialLen)
 
 			// Copy headers
-			CopyHeaders(proxyReq, originalReq)
+			CopyHeaders(proxyReq, originalReq, nil)
 
 			// Verify expected headers (excluding proxy-specific headers)
 			for k, expectedValues := range tt.expectedHeaders {
@@ -648,7 +648,7 @@ func TestCopyHeaders_MapPreSizingOptimization(t *testing.T) {
 		originalReq.Header.Set("X-Test", "value")
 
 		// This should work without panic
-		CopyHeaders(req, originalReq)
+		CopyHeaders(req, originalReq, nil)
 
 		assert.Equal(t, "value", req.Header.Get("X-Test"))
 	})
@@ -667,7 +667,7 @@ func BenchmarkCopyHeaders(b *testing.B) {
 	b.ReportAllocs()
 	for range b.N {
 		proxyReq := httptest.NewRequest("GET", "http://backend.com/proxy", nil)
-		CopyHeaders(proxyReq, originalReq)
+		CopyHeaders(proxyReq, originalReq, nil)
 	}
 }
 
@@ -688,7 +688,7 @@ func BenchmarkCopyHeaders_WithExistingHeaders(b *testing.B) {
 		// Pre-populate with some headers (edge case)
 		proxyReq.Header.Set("X-Pre-Existing-1", "value1")
 		proxyReq.Header.Set("X-Pre-Existing-2", "value2")
-		CopyHeaders(proxyReq, originalReq)
+		CopyHeaders(proxyReq, originalReq, nil)
 	}
 }
 
@@ -789,7 +789,7 @@ func TestCopyHeaders_DoesNotPropagateInboundHost(t *testing.T) {
 	proxyReq := httptest.NewRequest("POST", "http://backend.internal:11434/api/generate", nil)
 	proxyReq.Host = "" // Transport will use URL.Host when this is empty
 
-	CopyHeaders(proxyReq, originalReq)
+	CopyHeaders(proxyReq, originalReq, nil)
 
 	// Host must remain unset so Go's transport derives it from URL.Host (the backend address).
 	assert.Empty(t, proxyReq.Host, "outbound Host must not be overridden with the inbound client Host")
@@ -797,6 +797,170 @@ func TestCopyHeaders_DoesNotPropagateInboundHost(t *testing.T) {
 	// The original host must still be available to backends via X-Forwarded-Host.
 	assert.Equal(t, "olla.example.com", proxyReq.Header.Get("X-Forwarded-Host"),
 		"X-Forwarded-Host must carry the original inbound Host")
+}
+
+// TestCopyResponseHeaders_StripsSensitiveHeaders verifies that headers a
+// compromised or misconfigured backend should never reflect to clients are
+// removed, while safe headers pass through unchanged.
+func TestCopyResponseHeaders_StripsSensitiveHeaders(t *testing.T) {
+	t.Parallel()
+
+	sensitiveHeaders := []string{
+		"Authorization",
+		"Proxy-Authorization",
+		"X-Api-Key",
+		"X-Auth-Token",
+		"Set-Cookie",
+	}
+
+	for _, header := range sensitiveHeaders {
+		t.Run("strips_"+header, func(t *testing.T) {
+			t.Parallel()
+
+			src := http.Header{}
+			src.Set(header, "must-not-appear")
+			src.Set("Content-Type", "application/json")
+
+			dst := http.Header{}
+			CopyResponseHeaders(dst, src, nil)
+
+			if got := dst.Get(header); got != "" {
+				t.Errorf("CopyResponseHeaders forwarded sensitive header %q = %q, want empty", header, got)
+			}
+			if got := dst.Get("Content-Type"); got == "" {
+				t.Error("CopyResponseHeaders dropped Content-Type header; safe headers must pass through")
+			}
+		})
+	}
+}
+
+// TestCopyResponseHeaders_PassesThroughSafeHeaders verifies that non-sensitive
+// headers from the upstream response are forwarded to the client unchanged.
+func TestCopyResponseHeaders_PassesThroughSafeHeaders(t *testing.T) {
+	t.Parallel()
+
+	src := http.Header{}
+	src.Set("Content-Type", "text/event-stream")
+	src.Set("X-Custom-Header", "custom-value")
+	src.Set("Cache-Control", "no-cache")
+
+	dst := http.Header{}
+	CopyResponseHeaders(dst, src, nil)
+
+	for _, h := range []string{"Content-Type", "X-Custom-Header", "Cache-Control"} {
+		if dst.Get(h) == "" {
+			t.Errorf("CopyResponseHeaders dropped safe header %q", h)
+		}
+	}
+}
+
+// TestCopyResponseHeaders_StripsEndpointAuthHeader verifies that an endpoint's
+// configured auth header name is stripped from the upstream response, preventing
+// a backend that reflects it from leaking credentials to the client.
+func TestCopyResponseHeaders_StripsEndpointAuthHeader(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &domain.Endpoint{
+		AuthHeaderName: "X-Custom-Auth",
+	}
+
+	src := http.Header{}
+	src.Set("X-Custom-Auth", "leaked-secret")
+	src.Set("Content-Encoding", "gzip")
+
+	dst := http.Header{}
+	CopyResponseHeaders(dst, src, endpoint)
+
+	if got := dst.Get("X-Custom-Auth"); got != "" {
+		t.Errorf("endpoint auth header leaked to client: X-Custom-Auth = %q, want empty", got)
+	}
+	if got := dst.Get("Content-Encoding"); got == "" {
+		t.Error("CopyResponseHeaders dropped safe header Content-Encoding")
+	}
+}
+
+// TestCopyResponseHeaders_StripsEndpointConfiguredHeaders verifies that every
+// header named in endpoint.Headers is stripped from the upstream response. The
+// rule is consistent: anything the operator names is denied on the way back,
+// regardless of whether the header looks benign.
+func TestCopyResponseHeaders_StripsEndpointConfiguredHeaders(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &domain.Endpoint{
+		Headers: map[string]string{
+			"X-Foo": "bar",
+			"X-Bar": "baz",
+		},
+	}
+
+	src := http.Header{}
+	src.Set("X-Foo", "upstream-value")
+	src.Set("X-Bar", "upstream-value")
+	src.Set("Content-Type", "application/json")
+
+	dst := http.Header{}
+	CopyResponseHeaders(dst, src, endpoint)
+
+	for _, h := range []string{"X-Foo", "X-Bar"} {
+		if got := dst.Get(h); got != "" {
+			t.Errorf("endpoint configured header %q leaked to client = %q, want empty", h, got)
+		}
+	}
+	if got := dst.Get("Content-Type"); got == "" {
+		t.Error("CopyResponseHeaders dropped safe header Content-Type")
+	}
+}
+
+// TestCopyResponseHeaders_StripsBenignLookingEndpointHeader proves that
+// operator-configured headers are always stripped on the return path, even when
+// the header name looks benign (e.g. Content-Type). Consistency matters more than
+// semantic judgement about what "looks safe".
+func TestCopyResponseHeaders_StripsBenignLookingEndpointHeader(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &domain.Endpoint{
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+	}
+
+	src := http.Header{}
+	src.Set("Content-Type", "text/plain")
+	src.Set("Content-Encoding", "gzip")
+
+	dst := http.Header{}
+	CopyResponseHeaders(dst, src, endpoint)
+
+	if got := dst.Get("Content-Type"); got != "" {
+		t.Errorf("operator-configured Content-Type was not stripped: got %q, want empty", got)
+	}
+	// A header not in any deny list must still pass through.
+	if got := dst.Get("Content-Encoding"); got == "" {
+		t.Error("CopyResponseHeaders dropped Content-Encoding which is not in any deny list")
+	}
+}
+
+// TestCopyResponseHeaders_PassesThroughUndeniedHeader confirms that a normal
+// response header not mentioned in any deny list reaches the client unchanged.
+func TestCopyResponseHeaders_PassesThroughUndeniedHeader(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &domain.Endpoint{
+		AuthHeaderName: "X-Custom-Auth",
+		Headers:        map[string]string{"X-Foo": "bar"},
+	}
+
+	src := http.Header{}
+	src.Set("Content-Encoding", "gzip")
+	src.Set("X-Custom-Auth", "secret")
+	src.Set("X-Foo", "value")
+
+	dst := http.Header{}
+	CopyResponseHeaders(dst, src, endpoint)
+
+	if got := dst.Get("Content-Encoding"); got != "gzip" {
+		t.Errorf("Content-Encoding = %q, want %q", got, "gzip")
+	}
 }
 
 // BenchmarkSetResponseHeaders benchmarks the SetResponseHeaders function

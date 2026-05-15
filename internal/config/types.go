@@ -126,9 +126,28 @@ type StaticDiscoveryConfig struct {
 	Endpoints []EndpointConfig `yaml:"endpoints"`
 }
 
+// AuthConfig holds per-endpoint outbound authentication configuration.
+// Inline credential and _file variants are mutually exclusive; validation
+// (fatal startup error on conflict) is enforced in P3.
+type AuthConfig struct {
+	// header overrides the default header name for api_key auth (default X-Api-Key).
+	Header       string `yaml:"header,omitempty"`
+	Token        string `yaml:"token,omitempty"`
+	TokenFile    string `yaml:"token_file,omitempty"`
+	Key          string `yaml:"key,omitempty"`
+	KeyFile      string `yaml:"key_file,omitempty"`
+	Username     string `yaml:"username,omitempty"`
+	UsernameFile string `yaml:"username_file,omitempty"`
+	Password     string `yaml:"password,omitempty"`
+	PasswordFile string `yaml:"password_file,omitempty"`
+	Type         string `yaml:"type,omitempty"`
+}
+
 // EndpointConfig holds configuration for an AI inference endpoint
 type EndpointConfig struct {
 	ModelFilter *domain.FilterConfig `yaml:"model_filter,omitempty"`
+	Auth        *AuthConfig          `yaml:"auth,omitempty"`
+	Headers     map[string]string    `yaml:"headers,omitempty"`
 	// Priority uses a pointer so nil means "omitted in config" rather than explicitly zero.
 	// This lets applyEndpointDefaults distinguish "user set 0" from "user said nothing",
 	// since 0 is a valid, lower-than-default priority value.

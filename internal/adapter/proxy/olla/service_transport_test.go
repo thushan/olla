@@ -1,11 +1,18 @@
 package olla
 
 import (
+	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
-	"github.com/thushan/olla/internal/adapter/proxy/config"
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 )
+
+// funcName extracts the full symbol name of a function value.
+func funcName(f interface{}) string {
+	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
+}
 
 // TestCreateOptimisedTransport_ConnectionLimits verifies that both MaxConnsPerHost and
 // MaxIdleConnsPerHost are mapped to their correct fields on http.Transport.
@@ -42,18 +49,18 @@ func TestCreateOptimisedTransport_DefaultsApplied(t *testing.T) {
 	// Zero-value config — defaults should be filled in by NewService, but we can verify
 	// the expected defaults are consistent with the package constants.
 	cfg := &Configuration{}
-	cfg.MaxConnsPerHost = config.OllaDefaultMaxConnsPerHost
-	cfg.MaxIdleConnsPerHost = config.OllaDefaultMaxIdleConnsPerHost
-	cfg.MaxIdleConns = config.OllaDefaultMaxIdleConns
-	cfg.IdleConnTimeout = config.OllaDefaultIdleConnTimeout
+	cfg.MaxConnsPerHost = proxyconfig.OllaDefaultMaxConnsPerHost
+	cfg.MaxIdleConnsPerHost = proxyconfig.OllaDefaultMaxIdleConnsPerHost
+	cfg.MaxIdleConns = proxyconfig.OllaDefaultMaxIdleConns
+	cfg.IdleConnTimeout = proxyconfig.OllaDefaultIdleConnTimeout
 
 	transport := createOptimisedTransport(cfg)
 
-	if transport.MaxConnsPerHost != config.OllaDefaultMaxConnsPerHost {
-		t.Errorf("MaxConnsPerHost: want %d, got %d", config.OllaDefaultMaxConnsPerHost, transport.MaxConnsPerHost)
+	if transport.MaxConnsPerHost != proxyconfig.OllaDefaultMaxConnsPerHost {
+		t.Errorf("MaxConnsPerHost: want %d, got %d", proxyconfig.OllaDefaultMaxConnsPerHost, transport.MaxConnsPerHost)
 	}
-	if transport.MaxIdleConnsPerHost != config.OllaDefaultMaxIdleConnsPerHost {
-		t.Errorf("MaxIdleConnsPerHost: want %d, got %d", config.OllaDefaultMaxIdleConnsPerHost, transport.MaxIdleConnsPerHost)
+	if transport.MaxIdleConnsPerHost != proxyconfig.OllaDefaultMaxIdleConnsPerHost {
+		t.Errorf("MaxIdleConnsPerHost: want %d, got %d", proxyconfig.OllaDefaultMaxIdleConnsPerHost, transport.MaxIdleConnsPerHost)
 	}
 }
 
@@ -80,5 +87,47 @@ func TestCreateOptimisedTransport_FieldsAreDistinct(t *testing.T) {
 	}
 	if transport.MaxIdleConnsPerHost != 10 {
 		t.Errorf("MaxIdleConnsPerHost: want 10, got %d", transport.MaxIdleConnsPerHost)
+	}
+}
+
+// TestCreateOptimisedTransport_NoProxyFromEnvironment asserts that the Olla proxy
+// transport does NOT honour HTTP_PROXY/HTTPS_PROXY. Olla targets local
+// inference backends; routing credentialled requests through an outbound proxy
+// on plain HTTP is a credential-exposure risk. Health probes keep the env proxy.
+func TestCreateOptimisedTransport_NoProxyFromEnvironment(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Configuration{}
+	cfg.MaxIdleConns = proxyconfig.OllaDefaultMaxIdleConns
+	cfg.IdleConnTimeout = proxyconfig.OllaDefaultIdleConnTimeout
+
+	transport := createOptimisedTransport(cfg)
+
+	if transport.Proxy != nil {
+		got := funcName(transport.Proxy)
+		t.Errorf("Olla transport.Proxy = %s, want nil: proxy requests must not be routed through env proxy", got)
+	}
+}
+
+// TestCreateOptimisedTransport_ResponseHeaderTimeout asserts that the Olla transport
+// has a finite ResponseHeaderTimeout. Without it, a backend that accepts the TCP
+// connection but withholds response headers blocks the goroutine indefinitely.
+func TestCreateOptimisedTransport_ResponseHeaderTimeout(t *testing.T) {
+	t.Parallel()
+
+	cfg := &Configuration{}
+	cfg.MaxIdleConns = proxyconfig.OllaDefaultMaxIdleConns
+	cfg.IdleConnTimeout = proxyconfig.OllaDefaultIdleConnTimeout
+
+	transport := createOptimisedTransport(cfg)
+
+	if transport.ResponseHeaderTimeout <= 0 {
+		t.Errorf("transport.ResponseHeaderTimeout is %v; backends that stall after accept will hang indefinitely",
+			transport.ResponseHeaderTimeout)
+	}
+
+	want := proxyconfig.DefaultResponseHeaderTimeout
+	if transport.ResponseHeaderTimeout != want {
+		t.Errorf("transport.ResponseHeaderTimeout = %v, want %v", transport.ResponseHeaderTimeout, want)
 	}
 }

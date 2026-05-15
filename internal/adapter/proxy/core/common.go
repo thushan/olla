@@ -34,8 +34,10 @@ func GetViaHeader() string {
 	return viaHeader
 }
 
-// CopyHeaders copies headers from originalReq to proxyReq with proper handling
-func CopyHeaders(proxyReq, originalReq *http.Request) {
+// CopyHeaders copies headers from originalReq to proxyReq with proper handling.
+// endpoint carries the per-endpoint auth and custom header config applied after
+// the client headers are copied and the sensitive strip list runs.
+func CopyHeaders(proxyReq, originalReq *http.Request, endpoint *domain.Endpoint) {
 	// Pre-size based on source to avoid rehashing
 	if proxyReq.Header == nil {
 		proxyReq.Header = make(http.Header, len(originalReq.Header))
@@ -88,6 +90,23 @@ func CopyHeaders(proxyReq, originalReq *http.Request) {
 
 	// Update or set X-Forwarded headers
 	updateForwardedHeaders(proxyReq, originalReq)
+
+	// Apply endpoint-level custom headers after the strip so operators can explicitly
+	// re-introduce a header that the strip removed (e.g. a backend that needs X-Api-Key).
+	// Auth is applied after these so the auth: section always wins on conflict. If the
+	// user accidentally puts Authorization in headers: and auth:, auth: takes precedence.
+	if endpoint != nil {
+		for name, value := range endpoint.Headers {
+			proxyReq.Header.Set(name, value)
+		}
+
+		// Auth wins over anything in the headers: map and over anything the client sent.
+		// The strip loop above already removed client credentials; Set() here is
+		// defensive so future strip-list gaps can't leak client creds to the upstream.
+		if endpoint.AuthHeaderName != "" {
+			proxyReq.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
+		}
+	}
 }
 
 // SHERPA-81: Update X-Forwarded-* headers in request
@@ -160,6 +179,55 @@ func extractClientIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return host
+}
+
+// responseHeaderStripList holds upstream response headers that must never reach
+// the client. A backend that reflects auth credentials or sets cookies is almost
+// certainly misconfigured; stripping here prevents credential leakage in the rare
+// case where a compromised or buggy upstream reflects these headers back.
+var responseHeaderStripList = []string{
+	constants.HeaderAuthorization,
+	constants.HeaderProxyAuthorization,
+	constants.HeaderXAPIKey,
+	constants.HeaderXAuthToken,
+	"Set-Cookie",
+}
+
+// CopyResponseHeaders copies upstream response headers to the client, filtering
+// headers that should never leave the proxy boundary. Use this at every site that
+// copies resp.Header to w.Header() to keep the strip list consistent.
+//
+// The deny set is the union of the static strip list, the endpoint's auth header
+// name, and every key in the endpoint's custom header map. Operator-configured
+// headers must be stripped on the return path for the same reason they're set on
+// the outbound path: if a compromised backend reflects them, the client would
+// receive credentials it has no business seeing. Pass nil endpoint to use only the
+// static list (safe for callers without endpoint context, though all current call
+// sites have one).
+func CopyResponseHeaders(dst http.Header, src http.Header, endpoint *domain.Endpoint) {
+	// Build a transient deny set: static list + endpoint-specific names.
+	// For the common case (no endpoint or empty config) this stays small.
+	deny := make(map[string]struct{}, len(responseHeaderStripList)+2)
+	for _, h := range responseHeaderStripList {
+		deny[h] = struct{}{}
+	}
+	if endpoint != nil {
+		if endpoint.AuthHeaderName != "" {
+			deny[http.CanonicalHeaderKey(endpoint.AuthHeaderName)] = struct{}{}
+		}
+		for name := range endpoint.Headers {
+			deny[http.CanonicalHeaderKey(name)] = struct{}{}
+		}
+	}
+
+	for key, values := range src {
+		if _, blocked := deny[http.CanonicalHeaderKey(key)]; blocked {
+			continue
+		}
+		for _, v := range values {
+			dst.Add(key, v)
+		}
+	}
 }
 
 // SetStickySessionHeaders writes sticky session outcome headers before WriteHeader

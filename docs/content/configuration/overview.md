@@ -143,6 +143,8 @@ server:
 
 See [Rate Limiting Reference](reference.md#rate-limiting) for complete details.
 
+Endpoints also support per-endpoint outbound authentication (`auth:`) and custom headers (`headers:`). See [Endpoint Authentication](endpoint-auth.md) for configuration details.
+
 ## Proxy Configuration
 
 The `proxy` section controls request routing and proxy behaviour.
@@ -386,6 +388,7 @@ Olla validates configuration on startup:
 
 ### Next Steps
 - [Configuration Reference](reference.md) - Complete configuration options
+- [Endpoint Authentication](endpoint-auth.md) - Bearer, API key, and basic auth for backends
 - [Configuration Examples](examples.md) - Common configuration scenarios
 - [Configuration Best Practices](practices/configuration.md) - Native and Docker configuration strategies
 - [Best Practices](practices/overview.md) - Production recommendations

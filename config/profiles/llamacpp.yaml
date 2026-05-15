@@ -68,6 +68,10 @@ characteristics:
   default_priority: 95         # High priority for direct GGUF inference
   streaming_support: true
   single_model_server: true    # important: One model per instance
+  auth:
+    required: false
+    types:
+      - bearer   # enabled via --api-key flag
 
 # Detection hints for auto-discovery
 detection:

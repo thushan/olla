@@ -37,6 +37,11 @@ characteristics:
   max_concurrent_requests: 20
   default_priority: 50
   streaming_support: true
+  auth:
+    required: false
+    types:
+      - bearer   # standard Authorization: Bearer for most OpenAI-compatible APIs
+      - api_key  # some backends use a custom header (set header: in auth config)
 
 # Detection hints for auto-discovery
 detection:

@@ -45,6 +45,10 @@ characteristics:
   max_concurrent_requests: 10
   default_priority: 100
   streaming_support: true
+  auth:
+    required: false
+    types:
+      - bearer   # used by Ollama Cloud and protected remote instances
   
 # Detection hints for auto-discovery
 detection:

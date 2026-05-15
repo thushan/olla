@@ -95,6 +95,9 @@ discovery:
         check_timeout: 1s
 ```
 
+!!! tip "Authenticated LM Studio"
+    LM Studio itself does not require authentication, but if you place a reverse proxy in front of it that does, the same `auth:` block applies. Configure the credential Olla should present with `auth.type: bearer` or `auth.type: basic` on the endpoint. See [Endpoint Authentication](../../configuration/endpoint-auth.md) for details.
+
 ### Multiple LM Studio Instances
 
 Run multiple LM Studio servers on different ports:

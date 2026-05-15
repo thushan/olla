@@ -1,0 +1,88 @@
+## Olla Auth Manual Test Configuration
+## Demonstrates outbound auth header injection — bearer, api_key, basic, and
+## custom headers — against a single mock backend.
+##
+## The mock backend (test/cmd/mockbackend) enforces auth and returns 401 when
+## a required credential is absent or wrong. AIMock does NOT enforce auth, so
+## use the Go mock backend for enforcement tests; AIMock for happy-path flow.
+##
+## Usage (bearer, token from environment):
+##   export AUTH_TOKEN="test-token-abc123"
+##   go run . --config test/manual/config.auth.yaml
+##
+## The bash scripts in test/scripts/auth/ automate startup and teardown.
+## Run them with:
+##   bash test/scripts/auth/auth-bearer.sh
+##   bash test/scripts/auth/auth-env-fatal.sh   # proves missing var is fatal
+
+server:
+  host: "127.0.0.1"
+  port: 40115
+  read_timeout: 10s
+  write_timeout: 0s
+  shutdown_timeout: 5s
+  request_logging: true
+  request_limits:
+    max_body_size: 10485760
+    max_header_size: 524288
+  rate_limits:
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 200
+    health_requests_per_minute: 1000
+    burst_size: 50
+    cleanup_interval: 5m
+    trust_proxy_headers: false
+    trusted_proxy_cidrs: ["127.0.0.0/8"]
+
+proxy:
+  engine: "olla"
+  profile: "auto"
+  load_balancer: "priority"
+  stream_buffer_size: 8192
+  connection_timeout: 10s
+  response_timeout: 30s
+  read_timeout: 30s
+  retry:
+    enabled: false
+
+discovery:
+  type: "static"
+  refresh_interval: 10s
+  health_check:
+    initial_delay: 1s
+  static:
+    endpoints:
+      # Primary bearer-auth endpoint — token injected from AUTH_TOKEN env var.
+      # The mock backend (port 19910) enforces the value.
+      - url: "http://127.0.0.1:19910"
+        name: "mock-bearer"
+        type: "openai-compatible"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+        auth:
+          type: bearer
+          token: "${AUTH_TOKEN}"
+
+  model_discovery:
+    enabled: false
+
+model_registry:
+  type: "memory"
+  enable_unifier: false
+  unification:
+    enabled: false
+  routing_strategy:
+    type: "optimistic"
+    options:
+      fallback_behavior: "all"
+
+logging:
+  level: "debug"
+  format: "text"
+  output: "stdout"
+
+engineering:
+  show_nerdstats: false
