@@ -1,11 +1,24 @@
 package envresolver
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// writeTemp creates a temp file with the given content and returns its path.
+// The file is automatically removed when t completes.
+func writeTemp(t *testing.T, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "envresolver-*.txt")
+	require.NoError(t, err)
+	_, err = f.WriteString(content)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return f.Name()
+}
 
 // --- Expand ---
 
@@ -198,4 +211,77 @@ func TestExpandStrict(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// --- ExpandWithFile ---
+
+func TestExpandWithFile(t *testing.T) {
+	t.Run("both_set_is_error", func(t *testing.T) {
+		_, err := ExpandWithFile("direct-value", "/some/file")
+		require.Error(t, err)
+		// Neither the value nor the path must appear — the value may be a
+		// secret and the path leaks config structure.
+		assert.NotContains(t, err.Error(), "direct-value")
+		assert.NotContains(t, err.Error(), "/some/file")
+	})
+
+	t.Run("neither_set_returns_empty", func(t *testing.T) {
+		got, err := ExpandWithFile("", "")
+		require.NoError(t, err)
+		assert.Equal(t, "", got)
+	})
+
+	t.Run("plain_value_returned", func(t *testing.T) {
+		got, err := ExpandWithFile("api-key-value", "")
+		require.NoError(t, err)
+		assert.Equal(t, "api-key-value", got)
+	})
+
+	t.Run("plain_value_with_placeholder_expanded", func(t *testing.T) {
+		t.Setenv("OLLA_FILE_TEST_KEY", "expanded-key")
+		got, err := ExpandWithFile("${OLLA_FILE_TEST_KEY}", "")
+		require.NoError(t, err)
+		assert.Equal(t, "expanded-key", got)
+	})
+
+	t.Run("file_value_read_and_returned", func(t *testing.T) {
+		f := writeTemp(t, "my-secret-token\n")
+		got, err := ExpandWithFile("", f)
+		require.NoError(t, err)
+		assert.Equal(t, "my-secret-token", got)
+	})
+
+	t.Run("file_trailing_newline_trimmed", func(t *testing.T) {
+		f := writeTemp(t, "  token-with-spaces  \n")
+		got, err := ExpandWithFile("", f)
+		require.NoError(t, err)
+		assert.Equal(t, "token-with-spaces", got)
+	})
+
+	t.Run("file_no_trailing_newline_still_works", func(t *testing.T) {
+		f := writeTemp(t, "bare-token")
+		got, err := ExpandWithFile("", f)
+		require.NoError(t, err)
+		assert.Equal(t, "bare-token", got)
+	})
+
+	t.Run("missing_file_returns_error", func(t *testing.T) {
+		_, err := ExpandWithFile("", "/tmp/olla-envresolver-does-not-exist-xyz")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "olla-envresolver-does-not-exist-xyz")
+	})
+
+	t.Run("file_permission_denied", func(t *testing.T) {
+		// chmod-based permission denial is not reliably enforceable on Windows —
+		// the process owner can still read files they own regardless of mode bits.
+		if isWindows() {
+			t.Skip("permission simulation not supported on Windows")
+		}
+		f := writeTemp(t, "secret")
+		require.NoError(t, os.Chmod(f, 0o000))
+		t.Cleanup(func() { os.Chmod(f, 0o600) })
+
+		_, err := ExpandWithFile("", f)
+		require.Error(t, err)
+	})
 }

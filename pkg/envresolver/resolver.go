@@ -74,3 +74,35 @@ func ExpandStrict(s string) (string, error) {
 
 	return expanded, nil
 }
+
+// ExpandWithFile resolves a config value that may come from either a literal
+// string or a file path (the _file sibling-field convention). Callers pass the
+// literal value and the file path; exactly one must be non-empty.
+//
+// When fileValue is set, the file is read and its contents are returned with
+// leading/trailing whitespace trimmed. This mirrors the Docker Secrets / k8s
+// mounted-secret pattern where a file holds a single secret value.
+//
+// Both values being non-empty is a configuration error the operator must fix
+// before the process starts — this function fails fast so the mistake surfaces
+// immediately rather than silently preferring one source.
+func ExpandWithFile(value, fileValue string) (string, error) {
+	hasValue := value != ""
+	hasFile := fileValue != ""
+
+	if hasValue && hasFile {
+		return "", errors.New("both value and value_file are set; use exactly one")
+	}
+
+	if hasFile {
+		raw, err := os.ReadFile(fileValue)
+		if err != nil {
+			// Report the path but not any partial content.
+			return "", fmt.Errorf("reading secret file %q: %w", fileValue, err)
+		}
+		return strings.TrimSpace(string(raw)), nil
+	}
+
+	// Plain value path — still expand any ${VAR} placeholders inside it.
+	return Expand(value), nil
+}
