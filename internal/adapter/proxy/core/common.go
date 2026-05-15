@@ -196,17 +196,32 @@ var responseHeaderStripList = []string{
 // CopyResponseHeaders copies upstream response headers to the client, filtering
 // headers that should never leave the proxy boundary. Use this at every site that
 // copies resp.Header to w.Header() to keep the strip list consistent.
-func CopyResponseHeaders(dst http.Header, src http.Header) {
-	for key, values := range src {
-		canonical := http.CanonicalHeaderKey(key)
-		stripped := false
-		for _, blocked := range responseHeaderStripList {
-			if canonical == blocked {
-				stripped = true
-				break
-			}
+//
+// The deny set is the union of the static strip list, the endpoint's auth header
+// name, and every key in the endpoint's custom header map. Operator-configured
+// headers must be stripped on the return path for the same reason they're set on
+// the outbound path: if a compromised backend reflects them, the client would
+// receive credentials it has no business seeing. Pass nil endpoint to use only the
+// static list (safe for callers without endpoint context, though all current call
+// sites have one).
+func CopyResponseHeaders(dst http.Header, src http.Header, endpoint *domain.Endpoint) {
+	// Build a transient deny set: static list + endpoint-specific names.
+	// For the common case (no endpoint or empty config) this stays small.
+	deny := make(map[string]struct{}, len(responseHeaderStripList)+2)
+	for _, h := range responseHeaderStripList {
+		deny[h] = struct{}{}
+	}
+	if endpoint != nil {
+		if endpoint.AuthHeaderName != "" {
+			deny[http.CanonicalHeaderKey(endpoint.AuthHeaderName)] = struct{}{}
 		}
-		if stripped {
+		for name := range endpoint.Headers {
+			deny[http.CanonicalHeaderKey(name)] = struct{}{}
+		}
+	}
+
+	for key, values := range src {
+		if _, blocked := deny[http.CanonicalHeaderKey(key)]; blocked {
 			continue
 		}
 		for _, v := range values {

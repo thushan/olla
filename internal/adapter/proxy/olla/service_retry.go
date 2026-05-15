@@ -125,7 +125,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	core.SetStickySessionHeaders(w, r)
 
 	// Copy response headers, stripping any sensitive headers the upstream may reflect
-	core.CopyResponseHeaders(w.Header(), resp.Header)
+	core.CopyResponseHeaders(w.Header(), resp.Header, endpoint)
 
 	w.WriteHeader(resp.StatusCode)
 

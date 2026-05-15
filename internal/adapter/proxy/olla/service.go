@@ -465,7 +465,7 @@ func (s *Service) handleSuccessfulResponse(ctx context.Context, w http.ResponseW
 	core.SetStickySessionHeaders(w, r)
 
 	// Copy response headers, stripping any sensitive headers the upstream may reflect
-	core.CopyResponseHeaders(w.Header(), resp.Header)
+	core.CopyResponseHeaders(w.Header(), resp.Header, endpoint)
 
 	w.WriteHeader(resp.StatusCode)
 
