@@ -38,16 +38,18 @@ discovery:
 
 ### `api_key`
 
-Sends a custom header (default `X-Api-Key`). Use `header:` to override.
+Sends a custom header (default `X-Api-Key`). Use `header:` to override. The raw credential
+value is written to the header with no scheme prefix -- use `bearer` if the backend expects
+`Authorization: Bearer <token>`.
 
 ```yaml
-      - url: "http://litellm:4000"
-        name: "litellm-gw"
-        type: "litellm"
+      - url: "http://analytics-llm:9000"
+        name: "analytics-gw"
+        type: "openai-compatible"
         auth:
           type: api_key
-          key: "sk-master-key"
-          header: "Authorization"   # optional, default is X-Api-Key
+          key: "${ANALYTICS_API_KEY}"
+          header: "X-Api-Key"   # optional, this is the default
 ```
 
 ### `basic`

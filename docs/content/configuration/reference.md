@@ -313,13 +313,13 @@ discovery:
 **API key with custom header:**
 
 ```yaml
-      - url: "http://litellm:4000"
-        name: "litellm-gw"
-        type: "litellm"
+      - url: "http://custom-gw:9000"
+        name: "custom-gw"
+        type: "openai-compatible"
         auth:
           type: api_key
-          key: "${LITELLM_KEY}"
-          header: "Authorization"
+          key: "${CUSTOM_API_KEY}"
+          header: "X-Api-Key"
         headers:
           X-Tenant-ID: "team-a"
 ```
