@@ -280,6 +280,24 @@ discovery:
     interval: 15m  # Less frequent discovery
 ```
 
+## Authentication
+
+### Why does my endpoint show `config_error`?
+
+A `config_error` status means Olla received a 401 or 403 from the backend during a health probe. This is an auth misconfiguration, not a network failure — the backend is reachable but rejecting the credentials. Check that the `auth.token`, `auth.key`, or `auth.password` value configured on the endpoint matches what the backend expects.
+
+### What does `rate_limited` mean?
+
+The health probe received a 429 (Too Many Requests) response. Olla marks the endpoint as `rate_limited` and honours the `Retry-After` header if present. Probing resumes automatically once the wait period expires. This is most common when health checks are running too frequently against a rate-limited backend — increase `check_interval` if it happens repeatedly.
+
+### How do I authenticate to a backend protected by `--api-key`?
+
+Use `auth.type: bearer` on the endpoint. Both vLLM (`vllm serve --api-key`) and llama.cpp (`llama-server --api-key`) treat the value as a bearer token checked against the `Authorization` header. See [Endpoint Authentication](configuration/endpoint-auth.md) for full configuration and Docker/Kubernetes examples.
+
+### Olla refuses to start with a `${VAR}` error
+
+The environment variable referenced in your config was not set (or not exported) when Olla started. This is intentional: Olla uses fail-fast expansion so a missing secret surfaces as a startup error rather than silently forwarding unauthenticated requests. Export the variable before starting Olla, or use the `_file` form (`token_file`, `key_file`, etc.) for container and Kubernetes deployments where secrets are mounted as files.
+
 ## Common Issues
 
 ### "No healthy endpoints available"
