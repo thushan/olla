@@ -2,7 +2,7 @@
 // the outbound request pipeline.
 package constants
 
-// Auth type identifiers — these are the valid values for endpoint auth.type in config.
+// Auth type identifiers. These are the valid values for endpoint auth.type in config.
 const (
 	AuthTypeBearer = "bearer"
 	AuthTypeAPIKey = "api_key"
@@ -19,7 +19,7 @@ const (
 	AuthDefaultAPIKeyHeader = "X-Api-Key" //nolint:gosec // false positive: this is a header name, not a credential
 )
 
-// Auth scheme prefixes — note the trailing space; these are prepended to the
+// Auth scheme prefixes. Note the trailing space; these are prepended to the
 // credential value when building the final Authorization header.
 const (
 	AuthSchemeBearer = "Bearer "

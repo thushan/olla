@@ -11,7 +11,7 @@ import (
 
 // TestEndpointModelsURLNotSerialised asserts that EndpointModels.EndpointURL
 // is never emitted in JSON output. The field is used as an internal map key
-// and must not appear in API responses — it may carry auth credentials or
+// and must not appear in API responses; it may carry auth credentials or
 // internal network addresses.
 func TestEndpointModelsURLNotSerialised(t *testing.T) {
 	t.Parallel()

@@ -34,7 +34,7 @@ func resolveAuth(name string, cfg *config.AuthConfig) (resolvedAuth, error) {
 	case constants.AuthTypeBasic:
 		return resolveBasicAuth(name, cfg)
 	default:
-		// unreachable — validateAuth guards this
+		// unreachable; validateAuth guards this
 		return resolvedAuth{}, fmt.Errorf("endpoint %q: unknown auth type %q", name, cfg.Type)
 	}
 }
@@ -147,7 +147,7 @@ func validateAuth(name string, cfg *config.AuthConfig) error {
 		return validateBasicAuth(name, cfg)
 	}
 
-	// unreachable — IsValidAuthType guards the switch above
+	// unreachable; IsValidAuthType guards the switch above
 	return nil
 }
 

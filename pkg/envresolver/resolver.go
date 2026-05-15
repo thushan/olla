@@ -13,7 +13,7 @@ import (
 	"strings"
 )
 
-// tokenPattern matches ${VAR} and ${VAR:-default} — no nesting, no bare $VAR.
+// tokenPattern matches ${VAR} and ${VAR:-default}. No nesting, no bare $VAR.
 var tokenPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 
 // Expand replaces every ${VAR} and ${VAR:-default} placeholder in s with its
@@ -95,7 +95,7 @@ func ExpandStrict(s string) (string, error) {
 // mounted-secret pattern where a file holds a single secret value.
 //
 // Both values being non-empty is a configuration error the operator must fix
-// before the process starts — this function fails fast so the mistake surfaces
+// before the process starts. This function fails fast so the mistake surfaces
 // immediately rather than silently preferring one source.
 func ExpandWithFile(value, fileValue string) (string, error) {
 	hasValue := value != ""
@@ -114,6 +114,6 @@ func ExpandWithFile(value, fileValue string) (string, error) {
 		return strings.TrimSpace(string(raw)), nil
 	}
 
-	// Plain value path — still expand any ${VAR} placeholders inside it.
+	// Plain value path: still expand any ${VAR} placeholders inside it.
 	return Expand(value), nil
 }

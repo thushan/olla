@@ -70,13 +70,13 @@ func TestHealthProbe_MissingAuth(t *testing.T) {
 
 	srv := authEnforcingBackend(t, "Authorization", "Bearer required")
 
-	// Endpoint has no auth configured — backend will reject with 401.
+	// Endpoint has no auth configured; backend will reject with 401.
 	ep := makeEndpoint(t, srv.URL)
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
 	result, err := hc.Check(context.Background(), ep)
 
-	// No transport error — just an HTTP 401.
+	// No transport error; just an HTTP 401.
 	require.NoError(t, err, "401 is an HTTP response, not a transport error")
 	assert.Equal(t, http.StatusUnauthorized, result.StatusCode)
 	assert.NotEqual(t, domain.StatusHealthy, result.Status, "unauthenticated probe must not be healthy")

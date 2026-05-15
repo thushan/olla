@@ -93,7 +93,7 @@ func CopyHeaders(proxyReq, originalReq *http.Request, endpoint *domain.Endpoint)
 
 	// Apply endpoint-level custom headers after the strip so operators can explicitly
 	// re-introduce a header that the strip removed (e.g. a backend that needs X-Api-Key).
-	// Auth is applied after these so the auth: section always wins on conflict — if the
+	// Auth is applied after these so the auth: section always wins on conflict. If the
 	// user accidentally puts Authorization in headers: and auth:, auth: takes precedence.
 	if endpoint != nil {
 		for name, value := range endpoint.Headers {

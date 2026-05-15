@@ -161,7 +161,7 @@ func TestAuthAcrossProxyRoutes_ProxyHandler(t *testing.T) {
 
 // TestAuthAcrossProxyRoutes_ProviderProxyHandler verifies providerProxyHandler (the
 // route used by /olla/ollama/, /olla/openai/, etc.) also forwards the auth endpoint.
-// This is the handler that was wired incorrectly in issue #139 — had this test
+// This is the handler that was wired incorrectly in issue #139. Had this test
 // existed then, the missing sticky-session wiring would have been caught first.
 func TestAuthAcrossProxyRoutes_ProviderProxyHandler(t *testing.T) {
 	t.Parallel()
@@ -235,7 +235,7 @@ func assertAuthEndpointReached(t *testing.T, handlerName string, capture *authCa
 	t.Helper()
 
 	require.NotNil(t, capture.capturedCtx,
-		"%s: proxy service was never called — handler returned before reaching executeProxyRequest", handlerName)
+		"%s: proxy service was never called; handler returned before reaching executeProxyRequest", handlerName)
 
 	assert.NotEmpty(t, capture.capturedEndpoints,
 		"%s: proxy service was called with zero endpoints", handlerName)
@@ -249,7 +249,7 @@ func assertAuthEndpointReached(t *testing.T, handlerName string, capture *authCa
 	}
 
 	assert.True(t, found,
-		"%s: auth-configured endpoint was not present in the endpoints forwarded to the proxy service — "+
+		"%s: auth-configured endpoint was not present in the endpoints forwarded to the proxy service; "+
 			"CopyHeaders will not inject backend credentials for this route family", handlerName)
 }
 

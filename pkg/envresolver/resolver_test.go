@@ -24,7 +24,7 @@ func writeTemp(t *testing.T, content string) string {
 
 // TestExpand covers the core placeholder expansion logic.
 // Subtests cannot be t.Parallel() here because t.Setenv is used for env
-// isolation — t.Parallel() inside a subtest that calls t.Setenv panics in Go's
+// isolation. t.Parallel() inside a subtest that calls t.Setenv panics in Go's
 // test runner. The parent still runs concurrently with other top-level tests.
 func TestExpand(t *testing.T) {
 	tests := []struct {
@@ -224,7 +224,7 @@ func TestExpandStrict(t *testing.T) {
 			wantErr: true,
 			// Must name the variable so the operator knows what to set.
 			errContains: []string{"OLLA_STRICT_NOT_SET_ZZZ"},
-			// Must NOT echo the ${...} token — that leaks the unresolved
+			// Must NOT echo the ${...} token; that leaks the unresolved
 			// placeholder literally into logs.
 			errAbsent: []string{"${"},
 		},
@@ -274,7 +274,7 @@ func TestExpandWithFile(t *testing.T) {
 	t.Run("both_set_is_error", func(t *testing.T) {
 		_, err := ExpandWithFile("direct-value", "/some/file")
 		require.Error(t, err)
-		// Neither the value nor the path must appear — the value may be a
+		// Neither the value nor the path must appear. The value may be a
 		// secret and the path leaks config structure.
 		assert.NotContains(t, err.Error(), "direct-value")
 		assert.NotContains(t, err.Error(), "/some/file")
@@ -327,8 +327,8 @@ func TestExpandWithFile(t *testing.T) {
 	})
 
 	t.Run("file_permission_denied", func(t *testing.T) {
-		// chmod-based permission denial is not reliably enforceable on Windows —
-		// the process owner can still read files they own regardless of mode bits.
+		// chmod-based permission denial is not reliably enforceable on Windows.
+		// The process owner can still read files they own regardless of mode bits.
 		if isWindows() {
 			t.Skip("permission simulation not supported on Windows")
 		}

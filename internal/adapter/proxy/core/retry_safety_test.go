@@ -104,7 +104,7 @@ func TestResponseStartedWriter_TracksWrites(t *testing.T) {
 		assert.True(t, rw.started)
 	})
 
-	t.Run("neither called — not started", func(t *testing.T) {
+	t.Run("neither called: not started", func(t *testing.T) {
 		t.Parallel()
 		rw := &responseStartedWriter{ResponseWriter: httptest.NewRecorder()}
 		assert.False(t, rw.started)
@@ -156,7 +156,7 @@ func TestRetry_POSTWithBytesWritten_NoRetry(t *testing.T) {
 	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
-	// Error expected — the stream failed.
+	// Error expected; the stream failed.
 	require.Error(t, err)
 	// Critically: only ONE attempt. Retrying would double-bill the user.
 	assert.Equal(t, 1, attemptsHit, "must not retry POST after response bytes flushed to client")
@@ -213,7 +213,7 @@ func TestRetry_GETMidStreamRST_DoesRetry(t *testing.T) {
 	proxyFunc := func(ctx context.Context, w http.ResponseWriter, r *http.Request, ep *domain.Endpoint, s *ports.RequestStats) error {
 		attemptsHit++
 		if attemptsHit == 1 {
-			// First attempt: write bytes then RST — simulates mid-stream failure.
+			// First attempt: write bytes then RST, simulates mid-stream failure.
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("partial"))
 			return &connectionResetError{}
@@ -251,7 +251,7 @@ func TestResponseStartedWriter_Unwrap(t *testing.T) {
 func TestRetry_HTTPTestBackend_PostRSTBeforeBody(t *testing.T) {
 	t.Parallel()
 
-	// Backend 1: immediately close — simulates a refused connection.
+	// Backend 1: immediately close, simulates a refused connection.
 	srv1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hj, ok := w.(http.Hijacker)
 		if !ok {

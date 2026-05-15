@@ -218,7 +218,7 @@ func TestRedactQuery(t *testing.T) {
 			wantKeep: []string{"[REDACTED]"},
 		},
 		{
-			// %70assword decodes to "password" — must still be redacted.
+			// %70assword decodes to "password" and must still be redacted.
 			name:     "percent-encoded key redacted",
 			input:    "%70assword=secret",
 			wantHide: []string{"secret"},

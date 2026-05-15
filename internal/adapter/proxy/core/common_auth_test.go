@@ -40,7 +40,7 @@ func TestCopyHeaders_WithAuth(t *testing.T) {
 		wantNoHeader string // header that must NOT be present
 	}{
 		{
-			name:         "no auth on endpoint — client auth is stripped",
+			name:         "no auth on endpoint: client auth is stripped",
 			endpoint:     &domain.Endpoint{},
 			clientAuth:   "Bearer client-token",
 			wantNoHeader: "Authorization",
@@ -133,12 +133,12 @@ func TestCopyHeaders_AuthOverwrite(t *testing.T) {
 
 	// Must be exactly the endpoint value, never both.
 	values := proxyReq.Header["Authorization"]
-	require.Len(t, values, 1, "Authorization must have exactly one value — Set not Add")
+	require.Len(t, values, 1, "Authorization must have exactly one value (Set not Add)")
 	assert.Equal(t, "Bearer endpoint-token", values[0], "endpoint credential must win over client credential")
 }
 
 // TestCopyHeaders_NilEndpointStripsAuth verifies that passing nil endpoint
-// still strips the client's Authorization — the nil path must not regress the security behaviour.
+// still strips the client's Authorization. The nil path must not regress the security behaviour.
 func TestCopyHeaders_NilEndpointStripsAuth(t *testing.T) {
 	t.Parallel()
 
@@ -156,7 +156,7 @@ func TestCopyHeaders_NilEndpointStripsAuth(t *testing.T) {
 
 // TestCopyHeaders_AuthArrivesAtBackend wires up a real httptest backend and
 // confirms that the injected Authorization header actually arrives at the upstream.
-// This is the moment auth becomes real — not just set on proxyReq but transported.
+// This is the moment auth becomes real: not just set on proxyReq but transported.
 func TestCopyHeaders_AuthArrivesAtBackend(t *testing.T) {
 	t.Parallel()
 
@@ -234,7 +234,7 @@ func TestCopyHeaders_CustomHeaders(t *testing.T) {
 		assert.Equal(t, "Bearer from-auth-section", values[0], "auth: section must beat headers: map")
 	})
 
-	t.Run("sensitive header in headers map overrides the strip — operator intent wins", func(t *testing.T) {
+	t.Run("sensitive header in headers map overrides the strip: operator intent wins", func(t *testing.T) {
 		t.Parallel()
 
 		// The strip removes the client's X-Api-Key, but if the operator explicitly

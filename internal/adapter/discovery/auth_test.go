@@ -199,7 +199,7 @@ func TestLoadFromConfig_AuthValidation_RejectsInvalidShape(t *testing.T) {
 		CheckInterval: 5 * time.Second,
 		CheckTimeout:  2 * time.Second,
 		Auth: &config.AuthConfig{
-			// bearer with both token and token_file — must fail
+			// bearer with both token and token_file must fail
 			Type:      "bearer",
 			Token:     "tok",
 			TokenFile: "/run/secrets/token",
@@ -214,7 +214,7 @@ func TestLoadFromConfig_AuthValidation_RejectsInvalidShape(t *testing.T) {
 }
 
 // TestLoadFromConfig_AuthNil_Succeeds confirms that endpoints without an auth
-// block load normally — auth is always optional.
+// block load normally. Auth is always optional.
 func TestLoadFromConfig_AuthNil_Succeeds(t *testing.T) {
 	t.Parallel()
 
@@ -521,7 +521,7 @@ func TestAuthSecurity_AuthHeaderValue_NotInJSON(t *testing.T) {
 
 	// AuthHeaderValue must be set (we loaded auth successfully).
 	if ep.AuthHeaderValue == "" {
-		t.Fatal("AuthHeaderValue is empty — auth was not wired in")
+		t.Fatal("AuthHeaderValue is empty: auth was not wired in")
 	}
 
 	// GetURLString and GetHealthCheckURLString are the only string accessors on

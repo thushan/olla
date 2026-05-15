@@ -35,12 +35,12 @@ func extractTransport(t *testing.T) *http.Transport {
 	// always passes a *http.Client so the assertion is safe in tests.
 	httpClient, ok := checker.healthClient.client.(*http.Client)
 	if !ok {
-		t.Fatal("health client is not *http.Client — test needs updating")
+		t.Fatal("health client is not *http.Client; update this test if the type changes")
 	}
 
 	transport, ok := httpClient.Transport.(*http.Transport)
 	if !ok {
-		t.Fatal("http.Client.Transport is not *http.Transport — test needs updating")
+		t.Fatal("http.Client.Transport is not *http.Transport; update this test if the type changes")
 	}
 
 	return transport
@@ -56,7 +56,7 @@ func TestHealthClientTransport_NoProxyFromEnvironment(t *testing.T) {
 	transport := extractTransport(t)
 
 	if transport.Proxy != nil {
-		t.Errorf("health transport.Proxy = %s, want nil — credentials must not transit an env proxy",
+		t.Errorf("health transport.Proxy = %s, want nil: credentials must not transit an env proxy",
 			funcName(transport.Proxy))
 	}
 }
@@ -71,7 +71,7 @@ func TestHealthClientTransport_ResponseHeaderTimeout(t *testing.T) {
 	transport := extractTransport(t)
 
 	if transport.ResponseHeaderTimeout <= 0 {
-		t.Errorf("health transport.ResponseHeaderTimeout is %v — a backend that stalls after accept will block health probes indefinitely",
+		t.Errorf("health transport.ResponseHeaderTimeout is %v; a backend that stalls after accept will block health probes indefinitely",
 			transport.ResponseHeaderTimeout)
 	}
 

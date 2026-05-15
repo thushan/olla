@@ -101,15 +101,15 @@ func (hc *HealthClient) Check(ctx context.Context, endpoint *domain.Endpoint) (r
 	result.Latency = time.Since(overallStart)
 
 	// Record result in circuit breaker.
-	// ConfigError and RateLimited are not service failures — the backend is up and
-	// responding. Counting them as failures would trip the CB on misconfigured
+	// ConfigError and RateLimited are not service failures. The backend is up and
+	// responding; counting them as failures would trip the CB on misconfigured
 	// credentials or a throttled endpoint, hiding the real cause from the operator.
 	if lastErr != nil {
 		hc.circuitBreaker.RecordFailure(healthCheckURL)
 	} else {
 		switch result.Status {
 		case domain.StatusConfigError, domain.StatusRateLimited:
-			// Do not trip the circuit breaker — this is operator or rate error, not downtime.
+			// Do not trip the circuit breaker; this is an operator or rate error, not downtime.
 		case domain.StatusHealthy, domain.StatusBusy:
 			hc.circuitBreaker.RecordSuccess(healthCheckURL)
 		default:
@@ -218,7 +218,7 @@ func injectDefaultHeaders(req *http.Request) *http.Request {
 }
 
 // injectEndpointAuth applies the endpoint's configured auth and custom headers onto
-// a probe request. We can't use core.CopyHeaders here — it strips then re-injects
+// a probe request. We can't use core.CopyHeaders here because it strips then re-injects
 // based on an incoming client request, which doesn't exist for health probes.
 func injectEndpointAuth(req *http.Request, endpoint *domain.Endpoint) {
 	if endpoint == nil {
@@ -230,7 +230,7 @@ func injectEndpointAuth(req *http.Request, endpoint *domain.Endpoint) {
 		req.Header.Set(name, value)
 	}
 
-	// Auth always wins over the headers map — matches CopyHeaders precedence.
+	// Auth always wins over the headers map (matches CopyHeaders precedence).
 	if endpoint.AuthHeaderName != "" {
 		req.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
 	}
@@ -318,7 +318,7 @@ func determineStatus(statusCode int, latency time.Duration, err error, errorType
 	case http.StatusUnauthorized, http.StatusForbidden:
 		// The backend is up but rejecting our credentials. Retrying will never help
 		// until the operator updates the auth config. We don't trip the circuit breaker
-		// for this — it's a config problem, not a service availability problem.
+		// for this; it's a config problem, not a service availability problem.
 		return domain.StatusConfigError
 	case http.StatusTooManyRequests:
 		// The backend is healthy but throttling us. The scheduler honours Retry-After

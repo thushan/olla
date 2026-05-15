@@ -24,7 +24,7 @@ func newSherpaServiceForTransportTest(t *testing.T) *Service {
 	cfg.StreamBufferSize = 8192
 
 	svc, err := NewService(
-		nil, // discovery service — not needed for transport tests
+		nil, // discovery service, not needed for transport tests
 		&mockEndpointSelector{},
 		cfg,
 		nil, // stats collector
@@ -49,7 +49,7 @@ func TestSherpaTransport_NoProxyFromEnvironment(t *testing.T) {
 
 	if svc.transport.Proxy != nil {
 		got := funcName(svc.transport.Proxy)
-		t.Errorf("Sherpa transport.Proxy = %s, want nil — proxy requests must not be routed through env proxy", got)
+		t.Errorf("Sherpa transport.Proxy = %s, want nil: proxy requests must not be routed through env proxy", got)
 	}
 }
 
@@ -62,7 +62,7 @@ func TestSherpaTransport_ResponseHeaderTimeout(t *testing.T) {
 	svc := newSherpaServiceForTransportTest(t)
 
 	if svc.transport.ResponseHeaderTimeout <= 0 {
-		t.Errorf("transport.ResponseHeaderTimeout is %v — backends that stall after accept will hang indefinitely",
+		t.Errorf("transport.ResponseHeaderTimeout is %v; backends that stall after accept will hang indefinitely",
 			svc.transport.ResponseHeaderTimeout)
 	}
 

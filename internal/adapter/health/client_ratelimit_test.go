@@ -140,17 +140,17 @@ func TestScheduler_SkipsRateLimitedEndpoints(t *testing.T) {
 		wantSkipped      bool
 	}{
 		{
-			name:             "window in future — skip",
+			name:             "window in future: skip",
 			rateLimitedUntil: now.Add(30 * time.Second),
 			wantSkipped:      true,
 		},
 		{
-			name:             "window just expired — probe",
+			name:             "window just expired: probe",
 			rateLimitedUntil: now.Add(-time.Millisecond),
 			wantSkipped:      false,
 		},
 		{
-			name:             "zero time — probe (never rate-limited)",
+			name:             "zero time: probe (never rate-limited)",
 			rateLimitedUntil: time.Time{},
 			wantSkipped:      false,
 		},

@@ -41,7 +41,7 @@ func main() {
 		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ok"})
 	})
 
-	// Health + model listing — both share the same auth check so Olla's
+	// Health + model listing share the same auth check so Olla's
 	// health probes exercise the credential path.
 	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, r *http.Request) {
 		if !authorised(w, r, *requireHeader, *requireValue) {
@@ -56,7 +56,7 @@ func main() {
 		})
 	})
 
-	// Chat completions — the route Olla proxies inference requests through.
+	// Chat completions: the route Olla proxies inference requests through.
 	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		if !authorised(w, r, *requireHeader, *requireValue) {
 			return

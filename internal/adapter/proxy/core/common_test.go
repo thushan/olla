@@ -828,7 +828,7 @@ func TestCopyResponseHeaders_StripsSensitiveHeaders(t *testing.T) {
 				t.Errorf("CopyResponseHeaders forwarded sensitive header %q = %q, want empty", header, got)
 			}
 			if got := dst.Get("Content-Type"); got == "" {
-				t.Error("CopyResponseHeaders dropped Content-Type header — safe headers must pass through")
+				t.Error("CopyResponseHeaders dropped Content-Type header; safe headers must pass through")
 			}
 		})
 	}

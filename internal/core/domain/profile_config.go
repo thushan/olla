@@ -59,7 +59,7 @@ type ProfileConfig struct {
 
 	Characteristics struct {
 		// Auth declares optional authentication hints for this backend profile.
-		// This is purely informational at the profile level — it does not enforce
+		// This is purely informational at the profile level and does not enforce
 		// validation. Future tooling (startup warnings, status endpoints) can use
 		// it to guide operators when configuring endpoint auth.
 		Auth                  AuthHint      `yaml:"auth,omitempty" json:"auth,omitempty"`
@@ -90,7 +90,7 @@ type ProfileConfig struct {
 }
 
 // AuthHint describes the authentication capabilities of a backend profile.
-// Fields are intentionally optional — absent means "we don't know" or "not applicable".
+// Fields are intentionally optional. Absent means "we don't know" or "not applicable".
 // This is advisory only; the actual auth configuration lives in the endpoint config.
 type AuthHint struct {
 	// DefaultHeader is the expected credential header for api_key auth.

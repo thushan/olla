@@ -63,7 +63,7 @@ func (rw *responseStartedWriter) Unwrap() http.ResponseWriter {
 
 // isIdempotent reports whether the HTTP method is safe to retry after a partial
 // response. GET, HEAD and OPTIONS are defined as idempotent by RFC 9110; POST,
-// PATCH and DELETE are not — retrying them risks double-billing or duplicate side
+// PATCH and DELETE are not. Retrying them risks double-billing or duplicate side
 // effects if the upstream already processed the first attempt.
 func isIdempotent(method string) bool {
 	switch method {
@@ -76,8 +76,8 @@ func isIdempotent(method string) bool {
 
 // ExecuteWithRetry attempts request delivery with automatic failover on connection errors.
 // For non-idempotent methods (POST, PATCH, DELETE), retry is suppressed once the
-// response has started — we cannot resend to a different endpoint without risking
-// duplicate content reaching the client or double-charging a metered API.
+// response has started. Resending to a different endpoint risks duplicate content
+// reaching the client or double-charging a metered API.
 func (h *RetryHandler) ExecuteWithRetry(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -133,7 +133,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 		}
 
 		// For non-idempotent methods, once the response has started we cannot
-		// safely retry — the client would receive a partial response from this
+		// safely retry. The client would receive a partial response from this
 		// endpoint followed by a fresh one from the next, causing corruption or
 		// double-billing. Return the error and let the caller decide.
 		if tracker.started && !isIdempotent(r.Method) {

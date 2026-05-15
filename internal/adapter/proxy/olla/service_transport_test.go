@@ -105,7 +105,7 @@ func TestCreateOptimisedTransport_NoProxyFromEnvironment(t *testing.T) {
 
 	if transport.Proxy != nil {
 		got := funcName(transport.Proxy)
-		t.Errorf("Olla transport.Proxy = %s, want nil — proxy requests must not be routed through env proxy", got)
+		t.Errorf("Olla transport.Proxy = %s, want nil: proxy requests must not be routed through env proxy", got)
 	}
 }
 
@@ -122,7 +122,7 @@ func TestCreateOptimisedTransport_ResponseHeaderTimeout(t *testing.T) {
 	transport := createOptimisedTransport(cfg)
 
 	if transport.ResponseHeaderTimeout <= 0 {
-		t.Errorf("transport.ResponseHeaderTimeout is %v — backends that stall after accept will hang indefinitely",
+		t.Errorf("transport.ResponseHeaderTimeout is %v; backends that stall after accept will hang indefinitely",
 			transport.ResponseHeaderTimeout)
 	}
 

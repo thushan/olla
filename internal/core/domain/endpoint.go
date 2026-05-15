@@ -41,7 +41,7 @@ type Endpoint struct {
 	// Precomputed at load time so the hot path pays no allocation cost.
 	AuthHeaderName string
 	// AuthHeaderValue is the fully composed header value (e.g. "Bearer tok", "Basic base64(...)").
-	// Never serialised — leaking credentials through logs or status endpoints would be a security issue.
+	// Never serialised; leaking credentials through logs or status endpoints would be a security issue.
 	AuthHeaderValue     string `json:"-"`
 	LastLatency         time.Duration
 	CheckInterval       time.Duration
@@ -70,7 +70,7 @@ const (
 	StatusUnhealthy EndpointStatus = StatusStringUnhealthy
 	StatusUnknown   EndpointStatus = StatusStringUnknown
 	// StatusConfigError indicates the endpoint is reachable but the credentials
-	// or headers are wrong. The operator must fix config — retrying achieves nothing.
+	// or headers are wrong. The operator must fix config; retrying achieves nothing.
 	StatusConfigError EndpointStatus = StatusStringConfigError
 	// StatusRateLimited indicates the endpoint returned 429. The scheduler should
 	// honour the Retry-After delay before probing again.
