@@ -150,6 +150,93 @@ func TestGetRequestIDWithoutContext(t *testing.T) {
 	}
 }
 
+func TestRedactQuery(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		wantHide []string // substrings that must NOT appear in output
+		wantKeep []string // substrings that MUST appear in output
+	}{
+		{
+			name:     "empty query",
+			input:    "",
+			wantKeep: []string{},
+		},
+		{
+			name:     "api_key redacted",
+			input:    "api_key=sk-1234",
+			wantHide: []string{"sk-1234"},
+			wantKeep: []string{"[REDACTED]"},
+		},
+		{
+			name:     "safe param unchanged",
+			input:    "safe_param=value",
+			wantKeep: []string{"safe_param", "value"},
+		},
+		{
+			name:     "mixed: token redacted, safe param kept",
+			input:    "safe_param=value&token=secret",
+			wantHide: []string{"secret"},
+			wantKeep: []string{"[REDACTED]", "safe_param", "value"},
+		},
+		{
+			name:     "case-insensitive TOKEN",
+			input:    "TOKEN=foo",
+			wantHide: []string{"foo"},
+			wantKeep: []string{"[REDACTED]"},
+		},
+		{
+			name:     "password redacted",
+			input:    "user=alice&password=hunter2",
+			wantHide: []string{"hunter2"},
+			wantKeep: []string{"[REDACTED]", "alice"},
+		},
+		{
+			name:     "access_token redacted",
+			input:    "access_token=tok-xyz",
+			wantHide: []string{"tok-xyz"},
+			wantKeep: []string{"[REDACTED]"},
+		},
+		{
+			name:     "secret redacted",
+			input:    "secret=my-secret&page=2",
+			wantHide: []string{"my-secret"},
+			wantKeep: []string{"[REDACTED]", "page"},
+		},
+		{
+			name:     "auth redacted",
+			input:    "auth=bearer-token",
+			wantHide: []string{"bearer-token"},
+			wantKeep: []string{"[REDACTED]"},
+		},
+		{
+			name:     "multiple sensitive keys all redacted",
+			input:    "api_key=k1&token=t2&key=k3",
+			wantHide: []string{"k1", "t2", "k3"},
+			wantKeep: []string{"[REDACTED]"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := redactQuery(tt.input)
+			for _, hide := range tt.wantHide {
+				if strings.Contains(result, hide) {
+					t.Errorf("redactQuery(%q) = %q; should not contain %q", tt.input, result, hide)
+				}
+			}
+			for _, keep := range tt.wantKeep {
+				if keep != "" && !strings.Contains(result, keep) {
+					t.Errorf("redactQuery(%q) = %q; should contain %q", tt.input, result, keep)
+				}
+			}
+		})
+	}
+}
+
 // Mock styled logger for testing
 type mockStyledLogger struct{}
 

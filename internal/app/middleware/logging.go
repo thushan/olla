@@ -191,7 +191,7 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 				"remote_addr", r.RemoteAddr,
 				"method", r.Method,
 				"path", r.URL.Path,
-				"query", r.URL.RawQuery,
+				"query", redactQuery(r.URL.RawQuery),
 				"status", wrapped.status,
 				"request_bytes", requestSize,
 				"response_bytes", wrapped.size,
@@ -202,6 +202,54 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 				"accept", r.Header.Get(constants.HeaderAccept))
 		})
 	}
+}
+
+// sensitiveQueryKeys lists query parameter names whose values must never appear
+// in logs. Values are compared case-insensitively.
+var sensitiveQueryKeys = []string{
+	"api_key", "token", "access_token", "key", "password", "secret", "auth",
+}
+
+// redactQuery returns a sanitised version of a raw query string with values for
+// sensitive parameter names replaced by [REDACTED]. It does not modify the
+// original string; callers should use the return value for logging only.
+func redactQuery(raw string) string {
+	if raw == "" {
+		return raw
+	}
+
+	// Parse into individual key=value pairs while preserving order and raw form.
+	// We rebuild manually rather than using url.Values.Encode() because the latter
+	// percent-encodes bracket characters in "[REDACTED]".
+	pairs := strings.Split(raw, "&")
+	var changed bool
+	out := make([]string, len(pairs))
+
+	for i, pair := range pairs {
+		k, _, hasVal := strings.Cut(pair, "=")
+		if !hasVal {
+			out[i] = pair
+			continue
+		}
+		sensitive := false
+		for _, sk := range sensitiveQueryKeys {
+			if strings.EqualFold(k, sk) {
+				sensitive = true
+				break
+			}
+		}
+		if sensitive {
+			out[i] = k + "=[REDACTED]"
+			changed = true
+		} else {
+			out[i] = pair
+		}
+	}
+
+	if !changed {
+		return raw
+	}
+	return strings.Join(out, "&")
 }
 
 // formatBytes converts byte count to human-readable format
