@@ -108,11 +108,14 @@ timeout 15 go run "$REPO_ROOT" --config "$CONFIG" >"$OLLA_LOG" 2>&1
 EXIT_CODE=$?
 set -e
 
-# Test 1: non-zero exit (fatal startup failure)
-if [[ $EXIT_CODE -ne 0 ]]; then
+# Test 1: non-zero exit (fatal startup failure), but not a timeout.
+# Exit 124 means the process was still running after 15s, which is its own failure mode.
+if [[ $EXIT_CODE -eq 124 ]]; then
+    fail "Olla exited non-zero on missing env var" "process timed out after 15s, expected immediate startup failure"
+elif [[ $EXIT_CODE -ne 0 ]]; then
     pass "Olla exited non-zero on missing env var (exit ${EXIT_CODE})"
 else
-    fail "Olla exited non-zero on missing env var" "got exit 0 — startup should have aborted"
+    fail "Olla exited non-zero on missing env var" "got exit 0, startup should have aborted"
 fi
 
 # Test 2: error output mentions the endpoint name
