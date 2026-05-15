@@ -10,6 +10,9 @@ const (
 	DefaultHealthCheckerTimeout = 5 * time.Second
 	SlowResponseThreshold       = 10 * time.Second
 
+	// DefaultRateLimitBackoff is used when a 429 carries no Retry-After header.
+	DefaultRateLimitBackoff = 30 * time.Second
+
 	HealthyEndpointStatusRangeStart = 200
 	HealthyEndpointStatusRangeEnd   = 300
 

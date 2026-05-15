@@ -9,8 +9,11 @@ type HealthCheckResult struct {
 	Error      error
 	Status     EndpointStatus
 	Latency    time.Duration
-	ErrorType  HealthCheckErrorType
-	StatusCode int
+	// RateLimitedUntil is populated when the probe received a 429 with a Retry-After
+	// header. The scheduler uses this to skip probing until the window has elapsed.
+	RateLimitedUntil time.Time
+	ErrorType        HealthCheckErrorType
+	StatusCode       int
 }
 
 type HealthCheckErrorType int

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/thushan/olla/internal/version"
@@ -169,7 +171,43 @@ func (hc *HealthClient) performSingleCheck(ctx context.Context, endpoint *domain
 	result.StatusCode = resp.StatusCode
 	result.Status = determineStatus(resp.StatusCode, result.Latency, nil, domain.ErrorTypeNone)
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		result.RateLimitedUntil = parseRetryAfter(resp.Header.Get("Retry-After"), endpoint.Name)
+	}
+
 	return result, nil
+}
+
+// parseRetryAfter interprets the Retry-After header value per RFC 9110.
+// It accepts delay-seconds and HTTP-date formats. Falls back to DefaultRateLimitBackoff
+// if the value is missing or malformed.
+func parseRetryAfter(header, endpointName string) time.Time {
+	now := time.Now()
+
+	if header == "" {
+		slog.Info("no Retry-After header on 429, using default backoff",
+			"endpoint", endpointName,
+			"default", DefaultRateLimitBackoff)
+		return now.Add(DefaultRateLimitBackoff)
+	}
+
+	// Try delay-seconds first (most common for API services).
+	if secs, err := strconv.ParseInt(header, 10, 64); err == nil {
+		return now.Add(time.Duration(secs) * time.Second)
+	}
+
+	// Try HTTP-date format (RFC 1123 / RFC 850 / ANSI C asctime).
+	for _, layout := range []string{http.TimeFormat, "Monday, 02-Jan-06 15:04:05 MST", "Mon Jan _2 15:04:05 2006"} {
+		if t, err := time.Parse(layout, header); err == nil {
+			return t
+		}
+	}
+
+	slog.Info("malformed Retry-After header on 429, using default backoff",
+		"endpoint", endpointName,
+		"header", header,
+		"default", DefaultRateLimitBackoff)
+	return now.Add(DefaultRateLimitBackoff)
 }
 
 func injectDefaultHeaders(req *http.Request) *http.Request {

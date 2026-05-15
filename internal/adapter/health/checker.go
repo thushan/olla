@@ -162,9 +162,14 @@ func (c *HTTPHealthChecker) performHealthChecks(ctx context.Context) {
 
 	endpointsToCheck := make([]*domain.Endpoint, 0, len(endpoints))
 
-	// Filter endpoints that are due for checking
+	// Filter endpoints that are due for checking.
+	// Skip endpoints still inside a rate-limit window — hammering a throttled backend
+	// will not make it respond faster and wastes quota.
 	for _, endpoint := range endpoints {
 		if now.Before(endpoint.NextCheckTime) {
+			continue
+		}
+		if !endpoint.RateLimitedUntil.IsZero() && now.Before(endpoint.RateLimitedUntil) {
 			continue
 		}
 		endpointsToCheck = append(endpointsToCheck, endpoint)
@@ -224,6 +229,14 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 	endpointCopy.Status = newStatus
 	endpointCopy.LastChecked = now
 	endpointCopy.LastLatency = result.Latency
+
+	// Persist the rate-limit window so the scheduler can skip this endpoint until
+	// the backend is ready to serve probes again.
+	if !result.RateLimitedUntil.IsZero() {
+		endpointCopy.RateLimitedUntil = result.RateLimitedUntil
+	} else {
+		endpointCopy.RateLimitedUntil = time.Time{} // clear on non-429 responses
+	}
 
 	isSuccess := result.Status == domain.StatusHealthy
 	nextInterval, newMultiplier := calculateBackoff(&endpointCopy, isSuccess)
