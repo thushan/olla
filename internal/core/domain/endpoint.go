@@ -19,12 +19,15 @@ const (
 )
 
 type Endpoint struct {
-	LastChecked    time.Time
-	NextCheckTime  time.Time
-	URL            *url.URL
-	HealthCheckURL *url.URL
-	ModelUrl       *url.URL
-	ModelFilter    *FilterConfig
+	LastChecked   time.Time
+	NextCheckTime time.Time
+	// RateLimitedUntil is set when a health probe receives 429. The scheduler skips
+	// probing this endpoint until the time passes. Never serialised.
+	RateLimitedUntil time.Time `json:"-"`
+	URL              *url.URL
+	HealthCheckURL   *url.URL
+	ModelUrl         *url.URL
+	ModelFilter      *FilterConfig
 	// Headers holds verbatim outbound headers copied from endpoint config at load time.
 	Headers               map[string]string `json:"-"`
 	Name                  string
@@ -39,10 +42,7 @@ type Endpoint struct {
 	AuthHeaderName string
 	// AuthHeaderValue is the fully composed header value (e.g. "Bearer tok", "Basic base64(...)").
 	// Never serialised — leaking credentials through logs or status endpoints would be a security issue.
-	AuthHeaderValue string `json:"-"`
-	// RateLimitedUntil is set when a health probe receives 429. The scheduler skips
-	// probing this endpoint until the time passes. Never serialised.
-	RateLimitedUntil    time.Time `json:"-"`
+	AuthHeaderValue     string `json:"-"`
 	LastLatency         time.Duration
 	CheckInterval       time.Duration
 	CheckTimeout        time.Duration
