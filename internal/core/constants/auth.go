@@ -25,3 +25,13 @@ const (
 	AuthSchemeBearer = "Bearer "
 	AuthSchemeBasic  = "Basic "
 )
+
+// IsValidAuthType reports whether s is a recognised auth.type value.
+func IsValidAuthType(s string) bool {
+	switch s {
+	case AuthTypeBearer, AuthTypeAPIKey, AuthTypeBasic:
+		return true
+	default:
+		return false
+	}
+}

@@ -144,6 +144,12 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			return fmt.Errorf("invalid endpoint config for %q: %w", cfg.Name, err)
 		}
 
+		if cfg.Auth != nil {
+			if err := validateAuth(cfg.Name, cfg.Auth); err != nil {
+				return err
+			}
+		}
+
 		endpointURL, err := url.Parse(cfg.URL)
 		if err != nil {
 			return fmt.Errorf("invalid endpoint URL %q: %w", cfg.URL, err)

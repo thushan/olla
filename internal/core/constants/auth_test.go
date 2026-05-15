@@ -6,16 +6,6 @@ import (
 	"github.com/thushan/olla/internal/core/constants"
 )
 
-// IsValidAuthType reports whether s is a recognised auth type.
-func IsValidAuthType(s string) bool {
-	switch s {
-	case constants.AuthTypeBearer, constants.AuthTypeAPIKey, constants.AuthTypeBasic:
-		return true
-	default:
-		return false
-	}
-}
-
 func TestIsValidAuthType(t *testing.T) {
 	t.Parallel()
 
@@ -35,7 +25,7 @@ func TestIsValidAuthType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := IsValidAuthType(tt.input)
+			got := constants.IsValidAuthType(tt.input)
 			if got != tt.want {
 				t.Errorf("IsValidAuthType(%q) = %v, want %v", tt.input, got, tt.want)
 			}
