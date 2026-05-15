@@ -274,6 +274,68 @@ discovery:
 | `static.endpoints[].check_interval` | duration | No | Health check interval (default: `5s`) |
 | `static.endpoints[].check_timeout` | duration | No | Health check timeout (default: `2s`) |
 | `static.endpoints[].model_filter` | object | No | Model filtering for this endpoint |
+| `static.endpoints[].auth` | object | No | Outbound authentication credentials (see below) |
+| `static.endpoints[].headers` | map[string]string | No | Custom outbound headers applied on every forwarded request |
+
+#### Endpoint Authentication (`auth:`)
+
+Attaches credentials to requests forwarded from Olla to a backend. See [Endpoint Authentication](endpoint-auth.md) for the full guide.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `auth.type` | string | `bearer`, `api_key`, or `basic` |
+| `auth.token` | string | Bearer token value. Sends `Authorization: Bearer <token>`. Mutually exclusive with `token_file`. |
+| `auth.token_file` | string | Path to a file containing the bearer token. |
+| `auth.key` | string | API key value. Mutually exclusive with `key_file`. |
+| `auth.key_file` | string | Path to a file containing the API key. |
+| `auth.header` | string | Header name for `api_key` type (default: `X-Api-Key`). |
+| `auth.username` | string | Username for `basic` type. Mutually exclusive with `username_file`. |
+| `auth.username_file` | string | Path to a file containing the username. |
+| `auth.password` | string | Password for `basic` type. Mutually exclusive with `password_file`. |
+| `auth.password_file` | string | Path to a file containing the password. |
+
+`${VAR}` interpolation works on every value field. `_file` fields read and trim the file contents at startup. Setting both the inline field and its `_file` sibling is a fatal error, as is an unresolved `${VAR}` with no default.
+
+**Bearer example:**
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      - url: "http://gpu-server:8000"
+        name: "vllm-gpu"
+        type: "vllm"
+        auth:
+          type: bearer
+          token: "${VLLM_API_KEY}"
+```
+
+**API key with custom header:**
+
+```yaml
+      - url: "http://litellm:4000"
+        name: "litellm-gw"
+        type: "litellm"
+        auth:
+          type: api_key
+          key: "${LITELLM_KEY}"
+          header: "Authorization"
+        headers:
+          X-Tenant-ID: "team-a"
+```
+
+#### Custom Outbound Headers (`headers:`)
+
+`headers:` is a free-form map of header names to values. All entries are copied verbatim onto every request forwarded to that endpoint. `auth:` and `headers:` can coexist; the `auth:` block always wins for its own credential header. `${VAR}` interpolation applies to values.
+
+```yaml
+      - url: "http://custom-llm:9000"
+        name: "custom"
+        type: "openai-compatible"
+        headers:
+          X-Tenant-ID: "acme"
+          X-Request-Source: "olla"
+```
 
 #### URL Configuration
 
