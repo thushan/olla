@@ -64,7 +64,7 @@ func TestHealthProbe_BearerAuth(t *testing.T) {
 
 // TestHealthProbe_MissingAuth demonstrates that probing an auth-protected backend
 // without credentials configured on the endpoint returns an unhealthy classification.
-// Phase 6 will refine this to StatusConfigError; for now the backend 401 is enough.
+// A 401 response maps to StatusConfigError via the health client's status mapping.
 func TestHealthProbe_MissingAuth(t *testing.T) {
 	t.Parallel()
 
