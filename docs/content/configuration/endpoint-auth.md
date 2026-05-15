@@ -86,7 +86,7 @@ Use `${VAR:-default}` for optional credentials or fallback values:
 ```yaml
 auth:
   type: api_key
-  key: "${LITELLM_MASTER_KEY:-changeme}"
+  key: "${CUSTOM_API_KEY:-changeme}"
 ```
 
 !!! warning "Defaults in production"
