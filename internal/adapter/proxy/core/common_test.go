@@ -799,6 +799,61 @@ func TestCopyHeaders_DoesNotPropagateInboundHost(t *testing.T) {
 		"X-Forwarded-Host must carry the original inbound Host")
 }
 
+// TestCopyResponseHeaders_StripsSensitiveHeaders verifies that headers a
+// compromised or misconfigured backend should never reflect to clients are
+// removed, while safe headers pass through unchanged.
+func TestCopyResponseHeaders_StripsSensitiveHeaders(t *testing.T) {
+	t.Parallel()
+
+	sensitiveHeaders := []string{
+		"Authorization",
+		"Proxy-Authorization",
+		"X-Api-Key",
+		"X-Auth-Token",
+		"Set-Cookie",
+	}
+
+	for _, header := range sensitiveHeaders {
+		t.Run("strips_"+header, func(t *testing.T) {
+			t.Parallel()
+
+			src := http.Header{}
+			src.Set(header, "must-not-appear")
+			src.Set("Content-Type", "application/json")
+
+			dst := http.Header{}
+			CopyResponseHeaders(dst, src)
+
+			if got := dst.Get(header); got != "" {
+				t.Errorf("CopyResponseHeaders forwarded sensitive header %q = %q, want empty", header, got)
+			}
+			if got := dst.Get("Content-Type"); got == "" {
+				t.Error("CopyResponseHeaders dropped Content-Type header — safe headers must pass through")
+			}
+		})
+	}
+}
+
+// TestCopyResponseHeaders_PassesThroughSafeHeaders verifies that non-sensitive
+// headers from the upstream response are forwarded to the client unchanged.
+func TestCopyResponseHeaders_PassesThroughSafeHeaders(t *testing.T) {
+	t.Parallel()
+
+	src := http.Header{}
+	src.Set("Content-Type", "text/event-stream")
+	src.Set("X-Custom-Header", "custom-value")
+	src.Set("Cache-Control", "no-cache")
+
+	dst := http.Header{}
+	CopyResponseHeaders(dst, src)
+
+	for _, h := range []string{"Content-Type", "X-Custom-Header", "Cache-Control"} {
+		if dst.Get(h) == "" {
+			t.Errorf("CopyResponseHeaders dropped safe header %q", h)
+		}
+	}
+}
+
 // BenchmarkSetResponseHeaders benchmarks the SetResponseHeaders function
 func BenchmarkSetResponseHeaders(b *testing.B) {
 	stats := &ports.RequestStats{

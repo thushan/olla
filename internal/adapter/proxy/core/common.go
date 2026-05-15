@@ -181,6 +181,40 @@ func extractClientIP(r *http.Request) string {
 	return host
 }
 
+// responseHeaderStripList holds upstream response headers that must never reach
+// the client. A backend that reflects auth credentials or sets cookies is almost
+// certainly misconfigured; stripping here prevents credential leakage in the rare
+// case where a compromised or buggy upstream reflects these headers back.
+var responseHeaderStripList = []string{
+	constants.HeaderAuthorization,
+	constants.HeaderProxyAuthorization,
+	constants.HeaderXAPIKey,
+	constants.HeaderXAuthToken,
+	"Set-Cookie",
+}
+
+// CopyResponseHeaders copies upstream response headers to the client, filtering
+// headers that should never leave the proxy boundary. Use this at every site that
+// copies resp.Header to w.Header() to keep the strip list consistent.
+func CopyResponseHeaders(dst http.Header, src http.Header) {
+	for key, values := range src {
+		canonical := http.CanonicalHeaderKey(key)
+		stripped := false
+		for _, blocked := range responseHeaderStripList {
+			if canonical == blocked {
+				stripped = true
+				break
+			}
+		}
+		if stripped {
+			continue
+		}
+		for _, v := range values {
+			dst.Add(key, v)
+		}
+	}
+}
+
 // SetStickySessionHeaders writes sticky session outcome headers before WriteHeader
 // is called. It reads the StickyOutcome pointer that was injected into the context
 // by the handler layer after the balancer's Select fills it. Must be called before
