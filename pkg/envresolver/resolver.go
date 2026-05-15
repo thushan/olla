@@ -29,7 +29,11 @@ func Expand(s string) string {
 		expr := token[2 : len(token)-1] // strip ${ and }
 		name, fallback, hasFallback := strings.Cut(expr, ":-")
 
-		if v := os.Getenv(name); v != "" {
+		v, set := os.LookupEnv(name)
+		// POSIX :- semantics: use default when the variable is unset OR empty.
+		// An explicitly set but empty variable still triggers the default, matching
+		// shell behaviour and making empty-string auth values detectable downstream.
+		if set && v != "" {
 			return v
 		}
 		if hasFallback {
@@ -54,13 +58,20 @@ func ExpandStrict(s string) (string, error) {
 		expr := token[2 : len(token)-1]
 		name, fallback, hasFallback := strings.Cut(expr, ":-")
 
-		if v := os.Getenv(name); v != "" {
+		v, set := os.LookupEnv(name)
+		// POSIX :- semantics: empty triggers default just like unset.
+		if set && v != "" {
 			return v
 		}
 		if hasFallback {
 			return fallback
 		}
-		missing = append(missing, name)
+		// Only report as missing when the variable is genuinely unset;
+		// an explicit empty value is a valid (if unusual) operator choice
+		// and is handled by the downstream empty-token validation.
+		if !set {
+			missing = append(missing, name)
+		}
 		return ""
 	})
 

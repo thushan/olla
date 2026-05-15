@@ -138,6 +138,61 @@ func TestExpand(t *testing.T) {
 	}
 }
 
+// TestExpand_LookupEnvSemantics covers the distinction between unset and
+// explicitly-empty variables. Subtests do not call t.Parallel() because
+// t.Setenv panics when combined with t.Parallel() in Go's test runner.
+func TestExpand_LookupEnvSemantics(t *testing.T) {
+	t.Run("unset_var_no_default_resolves_to_empty", func(t *testing.T) {
+		// Lenient Expand never errors; unset resolves to "".
+		got := Expand("${OLLA_LOOKUP_UNSET_XYZ_ABC}")
+		assert.Equal(t, "", got)
+	})
+
+	t.Run("explicit_empty_no_default_resolves_to_empty", func(t *testing.T) {
+		t.Setenv("OLLA_LOOKUP_EXPLICIT_EMPTY", "")
+		got := Expand("${OLLA_LOOKUP_EXPLICIT_EMPTY}")
+		assert.Equal(t, "", got)
+	})
+
+	t.Run("default_used_when_var_unset", func(t *testing.T) {
+		got := Expand("${OLLA_LOOKUP_UNSET_FOR_DEFAULT_XYZ:-mydefault}")
+		assert.Equal(t, "mydefault", got)
+	})
+
+	t.Run("default_used_when_var_explicit_empty", func(t *testing.T) {
+		// POSIX :- treats empty the same as unset; the default wins.
+		t.Setenv("OLLA_LOOKUP_EMPTY_DEFAULT", "")
+		got := Expand("${OLLA_LOOKUP_EMPTY_DEFAULT:-fallback}")
+		assert.Equal(t, "fallback", got)
+	})
+
+	t.Run("default_not_used_when_var_non_empty", func(t *testing.T) {
+		t.Setenv("OLLA_LOOKUP_NON_EMPTY", "real-value")
+		got := Expand("${OLLA_LOOKUP_NON_EMPTY:-ignored}")
+		assert.Equal(t, "real-value", got)
+	})
+}
+
+// TestExpandStrict_LookupEnvSemantics covers the ExpandStrict distinction
+// between unset (fatal) and explicitly-empty (allowed; downstream concern).
+// Subtests do not call t.Parallel() for the same reason as TestExpand.
+func TestExpandStrict_LookupEnvSemantics(t *testing.T) {
+	t.Run("unset_var_returns_error", func(t *testing.T) {
+		_, err := ExpandStrict("${OLLA_STRICT_LOOKUP_UNSET_XYZ_ABC}")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "OLLA_STRICT_LOOKUP_UNSET_XYZ_ABC")
+	})
+
+	t.Run("explicit_empty_no_error", func(t *testing.T) {
+		// An explicitly set-but-empty variable is not a missing variable;
+		// the downstream caller validates whether empty is acceptable.
+		t.Setenv("OLLA_STRICT_LOOKUP_EMPTY", "")
+		got, err := ExpandStrict("${OLLA_STRICT_LOOKUP_EMPTY}")
+		require.NoError(t, err)
+		assert.Equal(t, "", got)
+	})
+}
+
 // --- ExpandStrict ---
 
 func TestExpandStrict(t *testing.T) {
