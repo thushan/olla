@@ -230,6 +230,21 @@ func TestRetry_GETMidStreamRST_DoesRetry(t *testing.T) {
 	assert.Equal(t, 2, attemptsHit, "GET should always retry on connection errors")
 }
 
+// TestResponseStartedWriter_Unwrap verifies that Flush works through the wrapper via
+// http.NewResponseController. Without Unwrap(), the controller cannot reach the
+// underlying flusher and SSE streams stall silently.
+func TestResponseStartedWriter_Unwrap(t *testing.T) {
+	t.Parallel()
+
+	inner := httptest.NewRecorder()
+	rw := &responseStartedWriter{ResponseWriter: inner}
+
+	rc := http.NewResponseController(rw)
+	if err := rc.Flush(); err != nil {
+		t.Errorf("Flush() via ResponseController on wrapped writer = %v, want nil", err)
+	}
+}
+
 // TestRetry_HTTPTestBackend_PostRSTBeforeBody uses a real httptest backend that
 // refuses the connection before sending a response. We verify that ExecuteWithRetry
 // does attempt a second endpoint (no bytes written).

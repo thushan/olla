@@ -54,6 +54,13 @@ func (rw *responseStartedWriter) Write(b []byte) (int, error) {
 	return rw.ResponseWriter.Write(b)
 }
 
+// Unwrap exposes the underlying ResponseWriter so http.NewResponseController can
+// discover optional interfaces (Flush, Hijack, SetDeadline, etc.) via the chain.
+// Without this, the wrapper hides the underlying flusher and SSE streams stall.
+func (rw *responseStartedWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 // isIdempotent reports whether the HTTP method is safe to retry after a partial
 // response. GET, HEAD and OPTIONS are defined as idempotent by RFC 9110; POST,
 // PATCH and DELETE are not — retrying them risks double-billing or duplicate side
