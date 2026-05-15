@@ -84,7 +84,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	// Rewrite model name in request body if this is an alias-resolved request
 	core.RewriteModelForAlias(ctx, r, endpoint)
 
-	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, stats)
+	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, endpoint, stats)
 	if err != nil {
 		if cb != nil {
 			cb.RecordFailure()

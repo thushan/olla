@@ -121,7 +121,7 @@ func TestCopyHeaders(t *testing.T) {
 			proxyReq := httptest.NewRequest("GET", "http://backend.com/test", nil)
 
 			// Copy headers
-			CopyHeaders(proxyReq, originalReq)
+			CopyHeaders(proxyReq, originalReq, nil)
 
 			// Check that expected headers were copied
 			for k, expectedValues := range tt.expectedCopied {
@@ -231,7 +231,7 @@ func TestCopyHeaders_ProxyHeaders(t *testing.T) {
 			proxyReq := httptest.NewRequest("GET", "http://backend.com/test", nil)
 
 			// Copy headers
-			CopyHeaders(proxyReq, originalReq)
+			CopyHeaders(proxyReq, originalReq, nil)
 
 			// Check forwarded headers
 			if tt.expectedForwardedFor != "" {
@@ -603,7 +603,7 @@ func TestCopyHeaders_ExistingHeaders(t *testing.T) {
 			t.Logf("Test: %s - Initial header count: %d", tt.description, initialLen)
 
 			// Copy headers
-			CopyHeaders(proxyReq, originalReq)
+			CopyHeaders(proxyReq, originalReq, nil)
 
 			// Verify expected headers (excluding proxy-specific headers)
 			for k, expectedValues := range tt.expectedHeaders {
@@ -648,7 +648,7 @@ func TestCopyHeaders_MapPreSizingOptimization(t *testing.T) {
 		originalReq.Header.Set("X-Test", "value")
 
 		// This should work without panic
-		CopyHeaders(req, originalReq)
+		CopyHeaders(req, originalReq, nil)
 
 		assert.Equal(t, "value", req.Header.Get("X-Test"))
 	})
@@ -667,7 +667,7 @@ func BenchmarkCopyHeaders(b *testing.B) {
 	b.ReportAllocs()
 	for range b.N {
 		proxyReq := httptest.NewRequest("GET", "http://backend.com/proxy", nil)
-		CopyHeaders(proxyReq, originalReq)
+		CopyHeaders(proxyReq, originalReq, nil)
 	}
 }
 
@@ -688,7 +688,7 @@ func BenchmarkCopyHeaders_WithExistingHeaders(b *testing.B) {
 		// Pre-populate with some headers (edge case)
 		proxyReq.Header.Set("X-Pre-Existing-1", "value1")
 		proxyReq.Header.Set("X-Pre-Existing-2", "value2")
-		CopyHeaders(proxyReq, originalReq)
+		CopyHeaders(proxyReq, originalReq, nil)
 	}
 }
 
@@ -789,7 +789,7 @@ func TestCopyHeaders_DoesNotPropagateInboundHost(t *testing.T) {
 	proxyReq := httptest.NewRequest("POST", "http://backend.internal:11434/api/generate", nil)
 	proxyReq.Host = "" // Transport will use URL.Host when this is empty
 
-	CopyHeaders(proxyReq, originalReq)
+	CopyHeaders(proxyReq, originalReq, nil)
 
 	// Host must remain unset so Go's transport derives it from URL.Host (the backend address).
 	assert.Empty(t, proxyReq.Host, "outbound Host must not be overridden with the inbound client Host")

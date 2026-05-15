@@ -34,8 +34,10 @@ func GetViaHeader() string {
 	return viaHeader
 }
 
-// CopyHeaders copies headers from originalReq to proxyReq with proper handling
-func CopyHeaders(proxyReq, originalReq *http.Request) {
+// CopyHeaders copies headers from originalReq to proxyReq with proper handling.
+// endpoint carries the per-endpoint auth and custom header config applied after
+// the client headers are copied and the sensitive strip list runs.
+func CopyHeaders(proxyReq, originalReq *http.Request, endpoint *domain.Endpoint) {
 	// Pre-size based on source to avoid rehashing
 	if proxyReq.Header == nil {
 		proxyReq.Header = make(http.Header, len(originalReq.Header))

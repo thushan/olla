@@ -82,7 +82,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	rlog.Debug("created proxy request")
 
 	headerStart := time.Now()
-	core.CopyHeaders(proxyReq, r)
+	core.CopyHeaders(proxyReq, r, endpoint)
 	stats.HeaderProcessingMs = time.Since(headerStart).Milliseconds()
 
 	// Add model header if available
