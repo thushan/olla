@@ -77,11 +77,33 @@ type ProfileConfig struct {
 	} `yaml:"path_indices"`
 
 	Characteristics struct {
+		// Auth declares optional authentication hints for this backend profile.
+		// This is purely informational at the profile level — it does not enforce
+		// validation. Future tooling (startup warnings, status endpoints) can use
+		// it to guide operators when configuring endpoint auth.
+		Auth                  AuthHint      `yaml:"auth,omitempty" json:"auth,omitempty"`
 		Timeout               time.Duration `yaml:"timeout"`
 		MaxConcurrentRequests int           `yaml:"max_concurrent_requests"`
 		DefaultPriority       int           `yaml:"default_priority"`
 		StreamingSupport      bool          `yaml:"streaming_support"`
 	} `yaml:"characteristics"`
+}
+
+// AuthHint describes the authentication capabilities of a backend profile.
+// Fields are intentionally optional — absent means "we don't know" or "not applicable".
+// This is advisory only; the actual auth configuration lives in the endpoint config.
+type AuthHint struct {
+	// DefaultHeader is the expected credential header for api_key auth.
+	// Empty means the backend uses the standard Authorization header.
+	DefaultHeader string `yaml:"default_header,omitempty" json:"default_header,omitempty"`
+
+	// Types lists the authentication schemes this backend supports (e.g. ["bearer"]).
+	// An empty slice means the backend has no documented auth support.
+	Types []string `yaml:"types,omitempty" json:"types,omitempty"`
+
+	// Required indicates whether the backend is known to require authentication.
+	// False (default) means auth is optional or not applicable for most deployments.
+	Required bool `yaml:"required,omitempty" json:"required,omitempty"`
 }
 
 // ModelSizePattern defines resource requirements for models matching specific patterns
