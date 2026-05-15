@@ -23,6 +23,8 @@ type Endpoint struct {
 	HealthCheckURL        *url.URL
 	ModelUrl              *url.URL
 	ModelFilter           *FilterConfig
+	// Headers holds verbatim outbound headers copied from endpoint config at load time.
+	Headers               map[string]string
 	Name                  string
 	Type                  string `json:"type,omitempty"`
 	Status                EndpointStatus
@@ -30,6 +32,12 @@ type Endpoint struct {
 	HealthCheckPathString string
 	HealthCheckURLString  string
 	ModelURLString        string
+	// AuthHeaderName is the resolved header name for outbound auth (e.g. "Authorization", "X-Api-Key").
+	// Precomputed at load time so the hot path pays no allocation cost.
+	AuthHeaderName string
+	// AuthHeaderValue is the fully composed header value (e.g. "Bearer tok", "Basic base64(...)").
+	// Never serialised — leaking credentials through logs or status endpoints would be a security issue.
+	AuthHeaderValue string `json:"-"`
 	LastLatency           time.Duration
 	CheckInterval         time.Duration
 	CheckTimeout          time.Duration
