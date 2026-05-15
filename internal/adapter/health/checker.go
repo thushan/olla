@@ -74,9 +74,9 @@ func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logg
 			// performSingleCheck; this header timeout is a backstop against backends
 			// that accept the TCP connection but then never send a response header.
 			ResponseHeaderTimeout: DefaultHealthCheckerResponseHeaderTimeout,
-			// Honour HTTPS_PROXY/HTTP_PROXY/NO_PROXY so health probes reach
-			// endpoints that sit behind a corporate network proxy.
-			Proxy: http.ProxyFromEnvironment,
+			// No proxy: health probes now carry auth credentials (Authorization / API key
+			// headers injected by the endpoint auth config). Routing them through an
+			// environment proxy risks leaking those credentials to a third party.
 		},
 	}
 	return NewHTTPHealthChecker(repository, logger, client)

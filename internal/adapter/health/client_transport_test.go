@@ -46,22 +46,18 @@ func extractTransport(t *testing.T) *http.Transport {
 	return transport
 }
 
-// TestHealthClientTransport_ProxyFromEnvironment asserts that the default health
-// checker transport honours HTTPS_PROXY/HTTP_PROXY/NO_PROXY so probes reach
-// backends that sit behind a corporate network proxy.
-func TestHealthClientTransport_ProxyFromEnvironment(t *testing.T) {
+// TestHealthClientTransport_NoProxyFromEnvironment asserts that the default health
+// checker transport does NOT route through environment proxies. Health probes carry
+// auth credentials; routing them via an operator-configured proxy risks leaking those
+// credentials to a third party.
+func TestHealthClientTransport_NoProxyFromEnvironment(t *testing.T) {
 	t.Parallel()
 
 	transport := extractTransport(t)
 
-	if transport.Proxy == nil {
-		t.Fatal("health transport.Proxy is nil — HTTPS_PROXY/HTTP_PROXY will be silently ignored")
-	}
-
-	got := funcName(transport.Proxy)
-	want := funcName(http.ProxyFromEnvironment)
-	if got != want {
-		t.Errorf("transport.Proxy = %s, want %s (http.ProxyFromEnvironment)", got, want)
+	if transport.Proxy != nil {
+		t.Errorf("health transport.Proxy = %s, want nil — credentials must not transit an env proxy",
+			funcName(transport.Proxy))
 	}
 }
 
