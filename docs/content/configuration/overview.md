@@ -143,6 +143,8 @@ server:
 
 See [Rate Limiting Reference](reference.md#rate-limiting) for complete details.
 
+Endpoints also support per-endpoint outbound authentication (`auth:`) and custom headers (`headers:`). See [Endpoint Authentication](endpoint-auth.md) for configuration details.
+
 ## Proxy Configuration
 
 The `proxy` section controls request routing and proxy behaviour.
