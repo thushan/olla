@@ -37,7 +37,7 @@ func (s *roundRobinSelector) Select(_ context.Context, eps []*domain.Endpoint) (
 	s.idx++
 	return ep, nil
 }
-func (s *roundRobinSelector) Name() string                          { return "round-robin" }
+func (s *roundRobinSelector) Name() string                            { return "round-robin" }
 func (s *roundRobinSelector) IncrementConnections(_ *domain.Endpoint) {}
 func (s *roundRobinSelector) DecrementConnections(_ *domain.Endpoint) {}
 
@@ -46,15 +46,15 @@ func namedEndpoint(name string) *domain.Endpoint {
 	return &domain.Endpoint{Name: name, CheckTimeout: 0}
 }
 
-// connectionResetErr satisfies net.Error so IsConnectionError returns true.
-type connectionResetErr struct{}
+// connectionResetError satisfies net.Error so IsConnectionError returns true.
+type connectionResetError struct{}
 
-func (e *connectionResetErr) Error() string   { return "connection reset by peer" }
-func (e *connectionResetErr) Timeout() bool   { return false }
-func (e *connectionResetErr) Temporary() bool { return false }
+func (e *connectionResetError) Error() string   { return "connection reset by peer" }
+func (e *connectionResetError) Timeout() bool   { return false }
+func (e *connectionResetError) Temporary() bool { return false }
 
 // Ensure it implements net.Error.
-var _ net.Error = (*connectionResetErr)(nil)
+var _ net.Error = (*connectionResetError)(nil)
 
 // ---- tests ------------------------------------------------------------------
 
@@ -150,7 +150,7 @@ func TestRetry_POSTWithBytesWritten_NoRetry(t *testing.T) {
 		// Simulate: write the headers + bytes, then return a connection error.
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write(make([]byte, 100))
-		return &connectionResetErr{}
+		return &connectionResetError{}
 	}
 
 	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
@@ -181,7 +181,7 @@ func TestRetry_POSTBeforeBytesWritten_DoesRetry(t *testing.T) {
 		attemptsHit++
 		if attemptsHit == 1 {
 			// First attempt: connection error before writing anything.
-			return &connectionResetErr{}
+			return &connectionResetError{}
 		}
 		// Second attempt: success.
 		w.WriteHeader(http.StatusOK)
@@ -216,7 +216,7 @@ func TestRetry_GETMidStreamRST_DoesRetry(t *testing.T) {
 			// First attempt: write bytes then RST — simulates mid-stream failure.
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("partial"))
-			return &connectionResetErr{}
+			return &connectionResetError{}
 		}
 		// Second attempt: success.
 		w.WriteHeader(http.StatusOK)
@@ -271,10 +271,10 @@ func TestRetry_HTTPTestBackend_PostRSTBeforeBody(t *testing.T) {
 		attempt++
 		if attempt == 1 {
 			// Simulate connection error from srv1 before any bytes written.
-			return fmt.Errorf("connection refused: %w", &connectionResetErr{})
+			return fmt.Errorf("connection refused: %w", &connectionResetError{})
 		}
 		// Forward to srv2.
-		resp, err := http.Get(srv2.URL) //nolint:noctx
+		resp, err := http.Get(srv2.URL)
 		if err != nil {
 			return err
 		}
