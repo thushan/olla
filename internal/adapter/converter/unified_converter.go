@@ -74,9 +74,15 @@ func (c *UnifiedConverter) ConvertToFormat(models []*domain.UnifiedModel, filter
 func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModelData {
 	availability := make([]EndpointStatus, 0, len(model.SourceEndpoints))
 	for _, ep := range model.SourceEndpoints {
+		// Use GetEffectiveState() rather than ep.State directly: the lifecycle
+		// unifier updates the typed ModelState field, while ep.State (the legacy
+		// string) is only set at discovery time and never transitions. Reading
+		// the effective state ensures health-driven transitions surface in the
+		// API response. GetEffectiveState() also normalises legacy string values
+		// ("loaded", "not-loaded", "available") to the typed enum.
 		availability = append(availability, EndpointStatus{
 			Endpoint: ep.EndpointName, // Use endpoint name instead of URL
-			State:    ep.State,
+			State:    string(ep.GetEffectiveState()),
 		})
 	}
 	// OLLA-85: [Unification] Models with different digests fail to unify correctly.
