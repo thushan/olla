@@ -105,10 +105,22 @@ type ProxyConfig struct {
 
 // DiscoveryConfig holds service discovery configuration
 type DiscoveryConfig struct {
-	Type            string                `yaml:"type"` // Only "static" is implemented
+	Type            string                `yaml:"type"` // "static" or "fc"
 	Static          StaticDiscoveryConfig `yaml:"static"`
+	FC              FCDiscoveryConfig     `yaml:"fc"`
 	RefreshInterval time.Duration         `yaml:"refresh_interval"`
 	ModelDiscovery  ModelDiscoveryConfig  `yaml:"model_discovery"`
+}
+
+// FCDiscoveryConfig holds configuration for Flight Controller-based dynamic discovery.
+// When discovery.type is "fc", Olla polls the FC /registry endpoint and reconciles
+// its backend list on each tick (petersimmons1972/instinct#12).
+type FCDiscoveryConfig struct {
+	// RegistryURL is the base URL of the Flight Controller service, e.g.
+	// http://ai-fleet-controller.ai-fleet.svc.cluster.local
+	RegistryURL string `yaml:"registry_url"`
+	// PollInterval is how often Olla polls FC /registry. Default: 15s.
+	PollInterval time.Duration `yaml:"poll_interval"`
 }
 
 // ModelDiscoveryConfig holds model discvery specific settings
