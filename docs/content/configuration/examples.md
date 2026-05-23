@@ -327,10 +327,10 @@ discovery:
         model_url: "/v1/models"
         health_check_url: "/health"
         
-      # Generic OpenAI-compatible endpoint
-      - url: "https://api.llm-provider.com"
-        name: "cloud-backup"
-        type: "openai"
+      # Generic OpenAI-compatible endpoint (local or self-hosted)
+      - url: "http://localai-server:8080"
+        name: "localai-backup"
+        type: "openai-compatible"  # or "openai" — both are accepted aliases
         priority: 10  # Low priority fallback
         health_check_url: "/v1/models"
 
@@ -373,7 +373,7 @@ discovery:
       # Docker Model Runner with base path
       - url: "http://docker-runner:8080/api/models/llama"
         name: "docker-llama"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Preserves /api/models/llama
         priority: 100
         health_check_url: "/api/models/llama/health"
@@ -381,7 +381,7 @@ discovery:
       # Another model on the same server
       - url: "http://docker-runner:8080/api/models/mistral"
         name: "docker-mistral"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Preserves /api/models/mistral
         priority: 90
         health_check_url: "/api/models/mistral/health"
@@ -396,16 +396,16 @@ discovery:
   static:
     endpoints:
       # API Gateway with path routing
-      - url: "https://api.company.com/llm/prod/v1"
+      - url: "http://api.internal/llm/prod/v1"
         name: "gateway-prod"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Keep /llm/prod/v1 prefix
         priority: 100
 
       # Development endpoint
-      - url: "https://api.company.com/llm/dev/v1"
+      - url: "http://api.internal/llm/dev/v1"
         name: "gateway-dev"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Keep /llm/dev/v1 prefix
         priority: 50
 ```
@@ -422,7 +422,7 @@ discovery:
       # Chat service
       - url: "http://services:8080/chat/api"
         name: "chat-service"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true
         priority: 100
         model_filter:
@@ -431,7 +431,7 @@ discovery:
       # Code generation service
       - url: "http://services:8080/code/api"
         name: "code-service"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true
         priority: 100
         model_filter:
@@ -440,7 +440,7 @@ discovery:
       # Embedding service
       - url: "http://services:8080/embeddings/api"
         name: "embedding-service"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true
         priority: 100
         model_filter:
@@ -496,7 +496,7 @@ discovery:
       # Custom relative paths
       - url: "http://backend:9000/inference/"
         name: "custom-backend"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         health_check_url: "/status"      # -> http://backend:9000/inference/status
         model_url: "/api/v1/models"      # -> http://backend:9000/inference/api/v1/models
 ```

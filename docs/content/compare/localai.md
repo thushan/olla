@@ -91,12 +91,12 @@ endpoints:
   - name: localai-gpu
     url: http://gpu-server:8080
     priority: 1
-    type: openai
+    type: openai-compatible  # or "openai" — accepted alias
   
   - name: localai-cpu
     url: http://cpu-server:8080
     priority: 2
-    type: openai
+    type: openai-compatible
   
   - name: ollama-backup
     url: http://ollama:11434

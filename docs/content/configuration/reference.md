@@ -266,7 +266,7 @@ discovery:
 |-------|------|----------|-------------|
 | `static.endpoints[].url` | string | Yes | Endpoint base URL |
 | `static.endpoints[].name` | string | Yes | Unique endpoint name |
-| `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`). `openai` and `openai-compatible` are aliases — both route to the same profile. |
+| `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai-compatible`). `openai` is accepted as an alias for `openai-compatible`. |
 | `static.endpoints[].priority` | int | No | Selection priority (higher=preferred, default: `100`) |
 | `static.endpoints[].preserve_path` | bool | No | Preserve base path in URL when proxying (default: `false`) |
 | `static.endpoints[].health_check_url` | string | No | Health check path (optional, uses profile default if not specified) |
@@ -288,7 +288,7 @@ The `health_check_url` and `model_url` fields are **optional**. When not specifi
 | `lm-studio` | `/v1/models` | `/api/v0/models` |
 | `vllm` | `/health` | `/v1/models` |
 | `sglang` | `/health` | `/v1/models` |
-| `openai` | `/v1/models` | `/v1/models` |
+| `openai-compatible` (or `openai`) | `/v1/models` | `/v1/models` |
 | `auto` (or unknown) | `/` | `/v1/models` |
 
 **Both fields support:**
@@ -383,7 +383,7 @@ discovery:
       # Docker Model Runner with base path
       - url: "http://localhost:8080/api/models/llama"
         name: "docker-llama"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Keep /api/models/llama in requests
 
       # Endpoint with model filtering

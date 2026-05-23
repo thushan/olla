@@ -452,8 +452,8 @@ Balance between quick failure detection and false positives:
 - url: "http://localhost:11434"
   check_timeout: 1s
 
-# Remote endpoints - allow for network latency
-- url: "https://api.example.com"
+# Network endpoints (e.g. another machine on the LAN) - allow for network latency
+- url: "http://gpu-server.internal:8080"
   check_timeout: 5s
 ```
 

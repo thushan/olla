@@ -186,10 +186,10 @@ discovery:
         type: "llamacpp"
         priority: 95
 
-      # Low priority remote endpoint
-      - url: "https://api.example.com"
-        name: "remote-api"
-        type: "openai"
+      # Low priority OpenAI-compatible fallback (e.g. a self-hosted LiteLLM gateway)
+      - url: "http://litellm:4000"
+        name: "litellm-fallback"
+        type: "openai-compatible"  # or "openai" — both are accepted aliases
         priority: 10
 ```
 
@@ -214,7 +214,7 @@ curl -I http://localhost:40114/olla/ollama/v1/models
 Look for these headers:
 
 - `X-Olla-Endpoint`: Which backend handled the request
-- `X-Olla-Backend-Type`: Type of backend (ollama/openai/lm-studio)
+- `X-Olla-Backend-Type`: Type of backend (echoes the configured `type:` value, e.g. `ollama`, `openai-compatible`, `lm-studio`)
 - `X-Olla-Request-ID`: Unique request identifier
 - `X-Olla-Response-Time`: Total processing time
 

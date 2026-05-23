@@ -665,7 +665,7 @@ Don't update versions in natively supported profiles however.
 | llamacpp | `llamacpp` | `llamacpp`, `llama-cpp`, `llama_cpp` | None |
 | vllm | `vllm` | `vllm` | None |
 | sglang | `sglang` | `sglang` | None |
-| openai-compatible | `openai` | `openai`, `openai-compatible` | None |
+| openai-compatible | `openai-compatible` (or `openai` — alias) | `openai`, `openai-compatible` | None |
 
 ### Required Fields
 
