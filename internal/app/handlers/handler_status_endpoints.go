@@ -14,18 +14,27 @@ import (
 	"github.com/thushan/olla/pkg/format"
 )
 
+// CircuitBreakerState provides visibility into per-endpoint circuit breaker status
+type CircuitBreakerState struct {
+	State                string `json:"state"` // "closed", "open", or "half-open"
+	LastTripTimestamp    *string `json:"last_trip_ts,omitempty"` // ISO-8601 or null if never tripped
+	ConsecutiveFailures  int64  `json:"consecutive_failures"`
+	CooldownRemainingSec int    `json:"cooldown_remaining_s"`
+}
+
 type EndpointSummary struct {
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	Status        string `json:"status"`
-	LastModelSync string `json:"last_model_sync,omitempty"`
-	HealthCheck   string `json:"health_check"`
-	ResponseTime  string `json:"response_time,omitempty"`
-	SuccessRate   string `json:"success_rate"`
-	Issues        string `json:"issues,omitempty"`
-	Priority      int    `json:"priority"`
-	ModelCount    int    `json:"model_count"`
-	RequestCount  int64  `json:"request_count"`
+	Name            string               `json:"name"`
+	Type            string               `json:"type"`
+	Status          string               `json:"status"`
+	LastModelSync   string               `json:"last_model_sync,omitempty"`
+	HealthCheck     string               `json:"health_check"`
+	ResponseTime    string               `json:"response_time,omitempty"`
+	SuccessRate     string               `json:"success_rate"`
+	Issues          string               `json:"issues,omitempty"`
+	Priority        int                  `json:"priority"`
+	ModelCount      int                  `json:"model_count"`
+	RequestCount    int64                `json:"request_count"`
+	CircuitBreaker  *CircuitBreakerState `json:"circuit_breaker,omitempty"`
 }
 
 type EndpointStatusResponse struct {
@@ -120,7 +129,36 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 
 	summary.Issues = a.getEndpointIssuesSummaryOptimised(endpoint, stats, hasStats)
 
+	// Populate circuit breaker state if available (Olla-specific feature)
+	summary.CircuitBreaker = a.getCircuitBreakerState(endpoint.Name)
+
 	return summary
+}
+
+// getCircuitBreakerState retrieves circuit breaker state from the proxy service if available.
+// Returns nil if the proxy service does not support circuit breaker inspection (Olla-specific).
+func (a *Application) getCircuitBreakerState(endpointName string) *CircuitBreakerState {
+	// Type-assert to Olla service to access circuit breaker state (Olla-specific feature).
+	// If the proxy service is not Olla, return nil (no circuit breaker state available).
+	ollaService, ok := a.proxyService.(interface {
+		GetCircuitBreakerState(endpointName string) interface{}
+	})
+	if !ok {
+		return nil
+	}
+
+	stateMap := ollaService.GetCircuitBreakerState(endpointName)
+	if stateMap == nil {
+		return nil
+	}
+
+	// Marshal the map into the CircuitBreakerState struct
+	data, _ := json.Marshal(stateMap)
+	var cbs CircuitBreakerState
+	if err := json.Unmarshal(data, &cbs); err != nil {
+		return nil
+	}
+	return &cbs
 }
 
 func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoint, stats ports.EndpointStats, hasStats bool) string {

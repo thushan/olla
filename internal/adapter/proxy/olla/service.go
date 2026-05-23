@@ -292,6 +292,30 @@ func (s *Service) SetEndpointCircuitBreakerConfig(name string, timeout time.Dura
 	})
 }
 
+// GetCircuitBreakerState returns the state information for an endpoint's circuit breaker.
+// Used by status handlers to expose breaker state to callers.
+// Returns a CircuitBreakerState with the current state details.
+func (s *Service) GetCircuitBreakerState(endpointName string) interface{} {
+	cb := s.GetCircuitBreaker(endpointName)
+	state, lastTrip, failures, cooldown := cb.GetStateInfo()
+
+	return map[string]interface{}{
+		"state":                  state,
+		"last_trip_ts":           timeToISO8601(lastTrip),
+		"consecutive_failures":   failures,
+		"cooldown_remaining_s":   cooldown,
+	}
+}
+
+// timeToISO8601 converts a time.Time pointer to ISO-8601 string pointer, or nil if input is nil
+func timeToISO8601(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	iso := t.UTC().Format(time.RFC3339Nano)
+	return &iso
+}
+
 // GetCircuitBreaker returns the circuit breaker for an endpoint (exported for testing).
 // Applies per-endpoint overrides when available, then service-level config, then defaults.
 func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
@@ -374,6 +398,51 @@ func (cb *circuitBreaker) RecordFailure() {
 	if failures >= cb.threshold {
 		atomic.StoreInt64(&cb.state, 1) // open
 	}
+}
+
+// GetState returns the current circuit breaker state as a machine-readable string.
+// Returns "closed", "open", or "half-open".
+func (cb *circuitBreaker) GetState() string {
+	state := atomic.LoadInt64(&cb.state)
+	switch state {
+	case 0:
+		return "closed"
+	case 1:
+		return "open"
+	case 2:
+		return "half-open"
+	default:
+		return "unknown"
+	}
+}
+
+// GetStateInfo returns the full state information for observability.
+// lastTripTs is in ISO-8601 format if the breaker has ever been open, otherwise nil.
+// cooldownRemainingSec is 0 if the breaker is closed or half-open.
+func (cb *circuitBreaker) GetStateInfo() (state string, lastTripTs *time.Time, consecutiveFailures int64, cooldownRemainingSec int) {
+	state = cb.GetState()
+	consecutiveFailures = atomic.LoadInt64(&cb.failures)
+	cooldownRemainingSec = 0
+
+	lastFailureNs := atomic.LoadInt64(&cb.lastFailure)
+	if lastFailureNs > 0 {
+		lastFailureTime := time.Unix(0, lastFailureNs)
+		lastTripTs = &lastFailureTime
+
+		// If breaker is open, calculate cooldown remaining
+		if state == "open" {
+			elapsed := time.Since(lastFailureTime)
+			timeout := cb.effectiveTimeout()
+			if elapsed < timeout {
+				cooldownRemainingSec = int((timeout - elapsed).Seconds())
+				if cooldownRemainingSec < 0 {
+					cooldownRemainingSec = 0
+				}
+			}
+		}
+	}
+
+	return
 }
 
 // ProxyRequest handles incoming HTTP requests
