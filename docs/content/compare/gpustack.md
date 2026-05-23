@@ -94,16 +94,16 @@ Olla and GPUStack work excellently together:
 ```yaml
 # Olla configuration
 endpoints:
-  # GPUStack-managed endpoints
+  # GPUStack-managed endpoints (OpenAI-compatible API)
   - name: gpustack-pool-1
     url: http://gpustack-1.internal:8080
     priority: 1
-    type: openai
+    type: openai-compatible  # or "openai" — accepted alias
   
   - name: gpustack-pool-2
     url: http://gpustack-2.internal:8080
     priority: 1
-    type: openai
+    type: openai-compatible
   
   # Other endpoints
   - name: ollama-backup
@@ -111,10 +111,10 @@ endpoints:
     priority: 2
     type: ollama
   
-  - name: cloud-overflow
+  - name: litellm-overflow
     url: http://litellm:8000
     priority: 10
-    type: openai
+    type: litellm
 ```
 
 ### Benefits of Combined Deployment:

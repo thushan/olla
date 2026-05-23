@@ -12,7 +12,7 @@ keywords: ["olla profiles", "backend configuration", "profile system", "custom p
 > # Ollama: config/profiles/ollama.yaml
 > # LM Studio: config/profiles/lmstudio.yaml
 > # vLLM: config/profiles/vllm.yaml
-> # OpenAI: config/profiles/openai.yaml
+> # OpenAI-compatible: config/profiles/openai-compatible.yaml (type: "openai" is also accepted)
 > 
 > endpoints:
 >   - type: "ollama"      # Uses ollama profile
@@ -665,7 +665,7 @@ Don't update versions in natively supported profiles however.
 | llamacpp | `llamacpp` | `llamacpp`, `llama-cpp`, `llama_cpp` | None |
 | vllm | `vllm` | `vllm` | None |
 | sglang | `sglang` | `sglang` | None |
-| openai-compatible | `openai` | `openai`, `openai-compatible` | None |
+| openai-compatible | `openai-compatible` (or `openai` — alias) | `openai`, `openai-compatible` | None |
 
 ### Required Fields
 

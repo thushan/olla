@@ -249,7 +249,11 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 				a.lmstudioEnhancedModelsHandler,
 				prefix+" enhanced models", "GET")
 		case constants.ProviderTypeOpenAICompat:
-			// Pure OpenAI routes get the full compatibility handler
+			// openai-compatible.yaml owns the "openai" URL prefix as well as its
+			// own name — so profileName here is always "openai-compatible", but the
+			// prefix variable can be "openai". We dispatch on prefix, not profileName,
+			// so /olla/openai/... gets the full openaiModelsHandler while other
+			// openai-compatible prefixes (e.g. a custom alias) get the generic one.
 			if prefix == constants.ProviderTypeOpenAI {
 				a.routeRegistry.RegisterWithMethod(openAIPath,
 					a.openaiModelsHandler,

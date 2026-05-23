@@ -29,7 +29,7 @@ func TestProfileRoutingPrefixes(t *testing.T) {
 		{"lmstudio prefix", "lmstudio", true},
 		{"lm_studio prefix", "lm_studio", true},
 
-		// Routing prefix for openai (from openai.yaml)
+		// Routing prefix for openai (from openai-compatible.yaml, which owns the "openai" prefix)
 		{"openai prefix", "openai", true},
 
 		// Auto profile
