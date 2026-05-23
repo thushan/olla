@@ -12,7 +12,7 @@ keywords: ["olla profiles", "backend configuration", "profile system", "custom p
 > # Ollama: config/profiles/ollama.yaml
 > # LM Studio: config/profiles/lmstudio.yaml
 > # vLLM: config/profiles/vllm.yaml
-> # OpenAI: config/profiles/openai.yaml
+> # OpenAI-compatible: config/profiles/openai-compatible.yaml (type: "openai" is also accepted)
 > 
 > endpoints:
 >   - type: "ollama"      # Uses ollama profile

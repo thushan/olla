@@ -42,8 +42,7 @@ olla/
 │   │   ├── litellm.yaml    # LiteLLM gateway configuration
 │   │   ├── vllm.yaml       # vLLM configuration
 │   │   ├── sglang.yaml     # SGLang configuration
-│   │   ├── openai-compatible.yaml  # OpenAI-compatible generic profile
-│   │   └── openai.yaml     # OpenAI profile
+│   │   └── openai-compatible.yaml  # OpenAI-compatible generic profile (type: "openai" is an alias)
 │   ├── models.yaml         # Model configurations
 │   └── config.local.yaml   # Local configuration overrides (user, not committed to git)
 ├── internal/
