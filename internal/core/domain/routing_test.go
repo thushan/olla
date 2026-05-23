@@ -138,6 +138,13 @@ func TestRequestProfile_IsCompatibleWith_OpenAICompatibility(t *testing.T) {
 		t.Error("IsCompatibleWith() should match OpenAI compatible exactly")
 	}
 
+	// Endpoints configured type:"openai" must also pass — this was the root cause of issue #148.
+	// The GET /olla/openai/v1/models handler builds a profile with SupportedBy=[openai-compatible]
+	// then filters endpoints; without this alias, type:"openai" endpoints were silently dropped.
+	if !profile.IsCompatibleWith(ProfileOpenAI) {
+		t.Error("IsCompatibleWith() OpenAI compatible should accept endpoints typed as 'openai'")
+	}
+
 	// but not with unsupported types
 	if profile.IsCompatibleWith("unknown-type") {
 		t.Error("IsCompatibleWith() OpenAI compatible should not work with unknown types")
