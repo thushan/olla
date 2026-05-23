@@ -15,17 +15,18 @@ import (
 )
 
 type EndpointSummary struct {
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	Status        string `json:"status"`
-	LastModelSync string `json:"last_model_sync,omitempty"`
-	HealthCheck   string `json:"health_check"`
-	ResponseTime  string `json:"response_time,omitempty"`
-	SuccessRate   string `json:"success_rate"`
-	Issues        string `json:"issues,omitempty"`
-	Priority      int    `json:"priority"`
-	ModelCount    int    `json:"model_count"`
-	RequestCount  int64  `json:"request_count"`
+	Name           string                      `json:"name"`
+	Type           string                      `json:"type"`
+	Status         string                      `json:"status"`
+	LastModelSync  string                      `json:"last_model_sync,omitempty"`
+	HealthCheck    string                      `json:"health_check"`
+	ResponseTime   string                      `json:"response_time,omitempty"`
+	SuccessRate    string                      `json:"success_rate"`
+	Issues         string                      `json:"issues,omitempty"`
+	Priority       int                         `json:"priority"`
+	ModelCount     int                         `json:"model_count"`
+	RequestCount   int64                       `json:"request_count"`
+	CircuitBreaker *domain.CircuitBreakerState `json:"circuit_breaker,omitempty"`
 }
 
 type EndpointStatusResponse struct {
@@ -119,8 +120,24 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 	}
 
 	summary.Issues = a.getEndpointIssuesSummaryOptimised(endpoint, stats, hasStats)
+	summary.CircuitBreaker = a.getCircuitBreakerState(endpoint)
 
 	return summary
+}
+
+func (a *Application) getCircuitBreakerState(endpoint *domain.Endpoint) *domain.CircuitBreakerState {
+	if a.proxyService == nil {
+		return nil
+	}
+	breakerStateProvider, ok := a.proxyService.(interface {
+		GetCircuitBreakerState(endpoint *domain.Endpoint) domain.CircuitBreakerState
+	})
+	if !ok {
+		return nil
+	}
+
+	state := breakerStateProvider.GetCircuitBreakerState(endpoint)
+	return &state
 }
 
 func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoint, stats ports.EndpointStats, hasStats bool) string {
