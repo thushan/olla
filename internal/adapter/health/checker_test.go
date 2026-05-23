@@ -251,6 +251,62 @@ func TestCircuitBreaker_BasicOperation(t *testing.T) {
 	}
 }
 
+func TestCircuitBreaker_PerEndpointOverrides(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      CircuitBreakerConfig
+		failures    int
+		expectOpen  bool
+		sleepBefore bool
+	}{
+		{
+			name: "custom threshold delays open",
+			config: CircuitBreakerConfig{
+				Threshold: DefaultCircuitBreakerThreshold + 2,
+			},
+			failures:   DefaultCircuitBreakerThreshold,
+			expectOpen: false,
+		},
+		{
+			name: "custom threshold opens at override",
+			config: CircuitBreakerConfig{
+				Threshold: DefaultCircuitBreakerThreshold + 2,
+			},
+			failures:   DefaultCircuitBreakerThreshold + 2,
+			expectOpen: true,
+		},
+		{
+			name: "custom timeout controls half open cooldown",
+			config: CircuitBreakerConfig{
+				Threshold: 1,
+				Timeout:   10 * time.Millisecond,
+			},
+			failures:    1,
+			expectOpen:  false,
+			sleepBefore: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cb := NewCircuitBreaker()
+			url := "http://localhost:11434/" + tt.name
+			cb.ConfigureEndpoint(url, tt.config)
+
+			for range tt.failures {
+				cb.RecordFailure(url)
+			}
+			if tt.sleepBefore {
+				time.Sleep(20 * time.Millisecond)
+			}
+
+			if got := cb.IsOpen(url); got != tt.expectOpen {
+				t.Fatalf("IsOpen() = %v, want %v", got, tt.expectOpen)
+			}
+		})
+	}
+}
+
 func TestCircuitBreaker_Cleanup(t *testing.T) {
 	cb := NewCircuitBreaker()
 	url1 := "http://localhost:11434"

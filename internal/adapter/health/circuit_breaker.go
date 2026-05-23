@@ -25,6 +25,7 @@ type CircuitBreaker struct {
 	endpoints        *xsync.Map[string, *circuitState]
 	failureThreshold int
 	timeout          time.Duration
+	endpointConfigs  *xsync.Map[string, CircuitBreakerConfig]
 }
 
 type circuitState struct {
@@ -34,12 +35,26 @@ type circuitState struct {
 	isOpen      int32
 }
 
+type CircuitBreakerConfig struct {
+	Timeout   time.Duration
+	Threshold int
+}
+
 func NewCircuitBreaker() *CircuitBreaker {
 	return &CircuitBreaker{
 		endpoints:        xsync.NewMap[string, *circuitState](),
 		failureThreshold: DefaultCircuitBreakerThreshold,
 		timeout:          DefaultCircuitBreakerTimeout,
+		endpointConfigs:  xsync.NewMap[string, CircuitBreakerConfig](),
 	}
+}
+
+func (cb *CircuitBreaker) ConfigureEndpoint(endpointURL string, cfg CircuitBreakerConfig) {
+	if cfg.Timeout <= 0 && cfg.Threshold <= 0 {
+		cb.endpointConfigs.Delete(endpointURL)
+		return
+	}
+	cb.endpointConfigs.Store(endpointURL, cfg)
 }
 
 func (cb *CircuitBreaker) IsOpen(endpointURL string) bool {
@@ -53,7 +68,7 @@ func (cb *CircuitBreaker) IsOpen(endpointURL string) bool {
 	// Check if circuit should auto-recover
 	if atomic.LoadInt32(&state.isOpen) == 1 {
 		lastFailure := atomic.LoadInt64(&state.lastFailure)
-		if time.Unix(0, lastFailure).Add(cb.timeout).Before(time.Now()) {
+		if time.Unix(0, lastFailure).Add(cb.timeoutForEndpoint(endpointURL)).Before(time.Now()) {
 			// Allow one request through (half-open state)
 			if atomic.CompareAndSwapInt64(&state.lastAttempt, 0, now) {
 				return false
@@ -89,7 +104,7 @@ func (cb *CircuitBreaker) RecordFailure(endpointURL string) {
 	atomic.StoreInt64(&state.lastFailure, time.Now().UnixNano())
 	atomic.StoreInt64(&state.lastAttempt, 0)
 
-	if failures >= int64(cb.failureThreshold) {
+	if failures >= int64(cb.thresholdForEndpoint(endpointURL)) {
 		atomic.StoreInt32(&state.isOpen, 1)
 	}
 }
@@ -112,4 +127,18 @@ func (cb *CircuitBreaker) loadOrCreateState(endpointURL string) *circuitState {
 		return &circuitState{}, false
 	})
 	return state
+}
+
+func (cb *CircuitBreaker) timeoutForEndpoint(endpointURL string) time.Duration {
+	if cfg, ok := cb.endpointConfigs.Load(endpointURL); ok && cfg.Timeout > 0 {
+		return cfg.Timeout
+	}
+	return cb.timeout
+}
+
+func (cb *CircuitBreaker) thresholdForEndpoint(endpointURL string) int {
+	if cfg, ok := cb.endpointConfigs.Load(endpointURL); ok && cfg.Threshold > 0 {
+		return cfg.Threshold
+	}
+	return cb.failureThreshold
 }

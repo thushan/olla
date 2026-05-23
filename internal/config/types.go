@@ -144,15 +144,21 @@ type EndpointConfig struct {
 	// Priority uses a pointer so nil means "omitted in config" rather than explicitly zero.
 	// This lets applyEndpointDefaults distinguish "user set 0" from "user said nothing",
 	// since 0 is a valid, lower-than-default priority value.
-	Priority       *int          `yaml:"priority"`
-	URL            string        `yaml:"url"`
-	Name           string        `yaml:"name"`
-	Type           string        `yaml:"type"`
-	HealthCheckURL string        `yaml:"health_check_url"`
-	ModelURL       string        `yaml:"model_url"`
-	CheckInterval  time.Duration `yaml:"check_interval"`
-	CheckTimeout   time.Duration `yaml:"check_timeout"`
-	PreservePath   bool          `yaml:"preserve_path"`
+	Priority *int `yaml:"priority"`
+	// CircuitBreakerTimeout overrides the circuit breaker cooldown for this endpoint.
+	// Zero means use the global default.
+	CircuitBreakerTimeout time.Duration `yaml:"circuit_breaker_timeout,omitempty"`
+	// CircuitBreakerThreshold overrides the consecutive failure threshold for this endpoint.
+	// Zero means use the global default.
+	CircuitBreakerThreshold int           `yaml:"circuit_breaker_threshold,omitempty"`
+	URL                     string        `yaml:"url"`
+	Name                    string        `yaml:"name"`
+	Type                    string        `yaml:"type"`
+	HealthCheckURL          string        `yaml:"health_check_url"`
+	ModelURL                string        `yaml:"model_url"`
+	CheckInterval           time.Duration `yaml:"check_interval"`
+	CheckTimeout            time.Duration `yaml:"check_timeout"`
+	PreservePath            bool          `yaml:"preserve_path"`
 }
 
 // LoggingConfig holds logging configuration
