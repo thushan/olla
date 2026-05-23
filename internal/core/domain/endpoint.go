@@ -17,26 +17,28 @@ const (
 )
 
 type Endpoint struct {
-	LastChecked           time.Time
-	NextCheckTime         time.Time
-	URL                   *url.URL
-	HealthCheckURL        *url.URL
-	ModelUrl              *url.URL
-	ModelFilter           *FilterConfig
-	Name                  string
-	Type                  string `json:"type,omitempty"`
-	Status                EndpointStatus
-	URLString             string
-	HealthCheckPathString string
-	HealthCheckURLString  string
-	ModelURLString        string
-	LastLatency           time.Duration
-	CheckInterval         time.Duration
-	CheckTimeout          time.Duration
-	Priority              int
-	ConsecutiveFailures   int
-	BackoffMultiplier     int
-	PreservePath          bool
+	LastChecked             time.Time
+	NextCheckTime           time.Time
+	URL                     *url.URL
+	HealthCheckURL          *url.URL
+	ModelUrl                *url.URL
+	ModelFilter             *FilterConfig
+	Name                    string
+	Type                    string `json:"type,omitempty"`
+	Status                  EndpointStatus
+	URLString               string
+	HealthCheckPathString   string
+	HealthCheckURLString    string
+	ModelURLString          string
+	LastLatency             time.Duration
+	CheckInterval           time.Duration
+	CheckTimeout            time.Duration
+	CircuitBreakerTimeout   time.Duration
+	Priority                int
+	CircuitBreakerThreshold int
+	ConsecutiveFailures     int
+	BackoffMultiplier       int
+	PreservePath            bool
 }
 
 func (e *Endpoint) GetURLString() string {

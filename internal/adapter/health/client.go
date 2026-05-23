@@ -50,6 +50,10 @@ func (hc *HealthClient) Check(ctx context.Context, endpoint *domain.Endpoint) (r
 	}()
 
 	healthCheckURL := endpoint.GetHealthCheckURLString()
+	hc.circuitBreaker.ConfigureEndpoint(healthCheckURL, CircuitBreakerConfig{
+		Timeout:   endpoint.CircuitBreakerTimeout,
+		Threshold: endpoint.CircuitBreakerThreshold,
+	})
 
 	// Check circuit breaker first
 	if hc.circuitBreaker.IsOpen(healthCheckURL) {

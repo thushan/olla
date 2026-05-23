@@ -58,8 +58,8 @@ const (
 	ClientDisconnectionBytesThreshold = 1024
 	ClientDisconnectionTimeThreshold  = 5 * time.Second
 
-	// Circuit breaker threshold higher than health checker for tolerance
-	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
+	// Circuit breaker threshold higher than health checker for tolerance.
+	proxyCircuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -99,6 +99,7 @@ type circuitBreaker struct {
 	lastFailure int64 // atomic
 	state       int64 // atomic: 0=closed, 1=open, 2=half-open
 	threshold   int64
+	timeout     time.Duration
 }
 
 // requestContext contains per-request data from our object pool
@@ -258,14 +259,34 @@ func (s *Service) getOrCreateEndpointPool(endpoint string) *connectionPool {
 	return actual
 }
 
-// GetCircuitBreaker returns the circuit breaker for an endpoint (exported for testing)
+// GetCircuitBreaker returns the circuit breaker for an endpoint (exported for testing).
 func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
+	return s.getCircuitBreaker(endpoint, 0, 0)
+}
+
+func (s *Service) getCircuitBreakerForEndpoint(endpoint *domain.Endpoint) *circuitBreaker {
+	return s.getCircuitBreaker(
+		endpoint.Name,
+		endpoint.CircuitBreakerTimeout,
+		endpoint.CircuitBreakerThreshold,
+	)
+}
+
+func (s *Service) getCircuitBreaker(endpoint string, timeout time.Duration, threshold int) *circuitBreaker {
 	if cb, ok := s.circuitBreakers.Load(endpoint); ok {
 		return cb
 	}
 
+	if threshold <= 0 {
+		threshold = proxyCircuitBreakerThreshold
+	}
+	if timeout <= 0 {
+		timeout = health.DefaultCircuitBreakerTimeout
+	}
+
 	newCB := &circuitBreaker{
-		threshold: circuitBreakerThreshold,
+		threshold: int64(threshold),
+		timeout:   timeout,
 		state:     0, // closed
 	}
 
@@ -282,7 +303,7 @@ func (cb *circuitBreaker) IsOpen() bool {
 
 	// Check if timeout has passed
 	lastFailure := atomic.LoadInt64(&cb.lastFailure)
-	if time.Since(time.Unix(0, lastFailure)) > health.DefaultCircuitBreakerTimeout {
+	if time.Since(time.Unix(0, lastFailure)) > cb.timeout {
 		// Try half-open state
 		if atomic.CompareAndSwapInt64(&cb.state, 1, 2) {
 			// State transition: Open -> Half-open
@@ -341,7 +362,7 @@ func (s *Service) handlePanic(ctx context.Context, w http.ResponseWriter, r *htt
 // selectEndpointWithCircuitBreaker selects an endpoint that has a healthy circuit breaker
 func (s *Service) selectEndpointWithCircuitBreaker(endpoints []*domain.Endpoint, rlog logger.StyledLogger) (*domain.Endpoint, *circuitBreaker) {
 	for _, ep := range endpoints {
-		cb := s.GetCircuitBreaker(ep.Name)
+		cb := s.getCircuitBreakerForEndpoint(ep)
 		stateBefore := atomic.LoadInt64(&cb.state)
 		if !cb.IsOpen() {
 			stateAfter := atomic.LoadInt64(&cb.state)
@@ -349,7 +370,7 @@ func (s *Service) selectEndpointWithCircuitBreaker(endpoints []*domain.Endpoint,
 			if stateBefore == 1 && stateAfter == 2 {
 				rlog.Info("Circuit breaker entering half-open state",
 					"endpoint", ep.Name,
-					"timeout", health.DefaultCircuitBreakerTimeout)
+					"timeout", cb.timeout)
 			}
 			return ep, cb
 		}
