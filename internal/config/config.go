@@ -40,8 +40,18 @@ var DefaultLocalNetworkTrustedCIDRs = []string{
 	"192.168.0.0/16",
 }
 
+var DefaultAllowedModels = []string{
+	"qwen3-coder-30b",
+	"qwen3-14b-awq",
+	"inference",
+	"leviathan-7900xt-vllm",
+	"embed",
+	"oblivion-gb10-infinity",
+}
+
 func DefaultConfig() *Config {
 	return &Config{
+		AllowedModels: append([]string(nil), DefaultAllowedModels...),
 		Server: ServerConfig{
 			Host:            DefaultHost,
 			Port:            DefaultPort,
@@ -193,6 +203,9 @@ func (c *Config) Validate() error {
 
 	if err := c.Translators.Validate(); err != nil {
 		return fmt.Errorf("translators config invalid: %w", err)
+	}
+	if err := c.ValidateAllowedModels(); err != nil {
+		return fmt.Errorf("allowed_models invalid: %w", err)
 	}
 
 	return nil

@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,6 +42,11 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, r := a.setupRequestContext(r, pr.stats)
 
 	a.analyzeRequest(ctx, r, pr)
+
+	if !a.isModelAllowed(pr.model) {
+		a.writeModelAllowlistError(w, pr.model)
+		return
+	}
 
 	// Sticky session key must be computed after analyzeRequest so the model
 	// name is available; inject into context before endpoint selection.
@@ -390,6 +396,35 @@ func (a *Application) handleProxyError(w http.ResponseWriter, err error) {
 	if w.Header().Get(constants.HeaderContentType) == "" {
 		http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
 	}
+}
+
+func makeAllowedModelSet(models []string) map[string]struct{} {
+	if len(models) == 0 {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(models))
+	for _, model := range models {
+		allowed[model] = struct{}{}
+	}
+	return allowed
+}
+
+func (a *Application) isModelAllowed(model string) bool {
+	if model == "" || len(a.allowedModels) == 0 {
+		return true
+	}
+	_, ok := a.allowedModels[model]
+	return ok
+}
+
+func (a *Application) writeModelAllowlistError(w http.ResponseWriter, model string) {
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"error":          fmt.Sprintf("model %q is not allowed by allowed_models", model),
+		"model":          model,
+		"allowed_models": a.Config.AllowedModels,
+	})
 }
 
 func (a *Application) stripRoutePrefix(ctx context.Context, path string) string {
