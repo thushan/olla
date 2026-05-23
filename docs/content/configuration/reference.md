@@ -266,7 +266,7 @@ discovery:
 |-------|------|----------|-------------|
 | `static.endpoints[].url` | string | Yes | Endpoint base URL |
 | `static.endpoints[].name` | string | Yes | Unique endpoint name |
-| `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`) |
+| `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `sglang`, `lemonade`, `litellm`, `openai`). `openai` and `openai-compatible` are aliases — both route to the same profile. |
 | `static.endpoints[].priority` | int | No | Selection priority (higher=preferred, default: `100`) |
 | `static.endpoints[].preserve_path` | bool | No | Preserve base path in URL when proxying (default: `false`) |
 | `static.endpoints[].health_check_url` | string | No | Health check path (optional, uses profile default if not specified) |

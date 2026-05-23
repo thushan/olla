@@ -338,11 +338,11 @@ The Authorization header is forwarded to the backend. Configure API keys in your
 
 ```yaml
 endpoints:
-  - url: "https://api.openai.com"
-    name: "openai-production"
+  - url: "http://localhost:8080"
+    name: "my-openai-compatible-backend"
     type: "openai"
     headers:
-      Authorization: "Bearer ${OPENAI_API_KEY}"
+      Authorization: "Bearer ${API_KEY}"
 ```
 
 ## Rate Limits
