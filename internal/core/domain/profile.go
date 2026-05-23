@@ -9,6 +9,7 @@ const (
 	ProfileSGLang           = "sglang"
 	ProfileVLLM             = "vllm"
 	ProfileVLLMMLX          = "vllm-mlx"
+	ProfileOpenAI           = "openai"
 	ProfileOpenAICompatible = "openai-compatible"
 	ProfileDockerMR         = "docker-model-runner"
 	ProfileAuto             = "auto"
