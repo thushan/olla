@@ -225,6 +225,15 @@ func (p *openAIParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 			Name:     model.ID,
 			Type:     model.Object, // always "model" in openai responses
 			LastSeen: now,
+			// OpenAI-compatible /v1/models has no size or state fields. For these
+			// backends (vllm, llama.cpp, Infinity, etc.) the presence of a model
+			// in the discovery response IS the availability signal — these servers
+			// only list models that are loaded and ready to serve. Without a
+			// non-zero Size, MapModelState() falls through to "unknown" and the
+			// model never appears available in the unified /olla/models response.
+			// Set a sentinel size of 1 to signal "loaded / available, exact size
+			// not reported by this backend".
+			Size: 1,
 		}
 
 		// openai is stingy with metadata
