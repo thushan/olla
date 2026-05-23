@@ -27,6 +27,7 @@ type Config struct {
 	//       - gpt-oss-120b-MLX
 	//       - gguf_gpt_oss_120b.gguf
 	ModelAliases  map[string][]string `yaml:"model_aliases,omitempty"`
+	AllowedModels []string            `yaml:"allowed_models,omitempty"`
 	Logging       LoggingConfig       `yaml:"logging"`
 	Filename      string              `yaml:"-"`
 	Translators   TranslatorsConfig   `yaml:"translators"`
@@ -434,6 +435,28 @@ func (c *Config) ValidateModelAliases() error {
 			}
 			seen[modelName] = true
 		}
+	}
+
+	return nil
+}
+
+func (c *Config) ValidateAllowedModels() error {
+	if len(c.AllowedModels) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool, len(c.AllowedModels))
+	for i, modelName := range c.AllowedModels {
+		if modelName == "" {
+			return fmt.Errorf("allowed_models has empty model name at position %d", i)
+		}
+		if strings.TrimSpace(modelName) != modelName {
+			return fmt.Errorf("allowed model %q contains leading/trailing whitespace", modelName)
+		}
+		if seen[modelName] {
+			slog.Warn("Duplicate model name in allowed_models", "model", modelName)
+		}
+		seen[modelName] = true
 	}
 
 	return nil

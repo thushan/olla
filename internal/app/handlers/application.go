@@ -89,6 +89,7 @@ type Application struct {
 	// closure so the handler layer does not need to import the balancer package.
 	stickyStatsFn func() *balancer.StickyStats
 	aliasResolver *registry.AliasResolver
+	allowedModels map[string]struct{}
 	server        *http.Server
 	errCh         chan error
 	StartTime     time.Time
@@ -171,6 +172,10 @@ func NewApplication(
 	if aliasResolver != nil {
 		logger.Info("Model aliases configured", "alias_count", len(cfg.ModelAliases))
 	}
+	allowedModels := makeAllowedModelSet(cfg.AllowedModels)
+	if len(allowedModels) > 0 {
+		logger.Info("Model allowlist configured", "model_count", len(allowedModels))
+	}
 
 	// Use profile factory directly as it implements the ProfileLookup interface
 	// The Factory.GetAnthropicSupport method provides the required functionality
@@ -192,6 +197,7 @@ func NewApplication(
 		converterFactory:   converter.NewConverterFactory(),
 		translatorRegistry: translatorRegistry,
 		aliasResolver:      aliasResolver,
+		allowedModels:      allowedModels,
 		server:             server,
 		errCh:              make(chan error, 1),
 		StartTime:          time.Now(),

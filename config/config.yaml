@@ -1,4 +1,12 @@
 # Olla Configuration (default)
+allowed_models:
+  - qwen3-coder-30b
+  - qwen3-14b-awq
+  - inference
+  - leviathan-7900xt-vllm
+  - embed
+  - oblivion-gb10-infinity
+
 server:
   host: "localhost" # Use 0.0.0.0 to bind to all interfaces (so it's accessible externally)
   port: 40114 # default port for Olla - 4-OLLA
