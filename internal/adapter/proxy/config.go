@@ -39,6 +39,11 @@ type Configuration struct {
 	IdleConnTimeout time.Duration
 	MaxIdleConns    int
 	MaxConnsPerHost int
+
+	// Circuit breaker global overrides (petersimmons1972/aifleet#94, #95).
+	// Per-endpoint overrides registered via Service.SetEndpointCircuitBreakerConfig take precedence.
+	CircuitBreakerTimeout   time.Duration
+	CircuitBreakerThreshold int
 }
 
 func (c *Configuration) GetProxyProfile() string {
@@ -108,6 +113,17 @@ func (c *Configuration) GetMaxConnsPerHost() int {
 		return OllaDefaultMaxConnsPerHost
 	}
 	return c.MaxConnsPerHost
+}
+
+// GetCircuitBreakerTimeout returns the global circuit breaker timeout, or zero if unset
+// (factory will fall back to health.DefaultCircuitBreakerTimeout).
+func (c *Configuration) GetCircuitBreakerTimeout() time.Duration {
+	return c.CircuitBreakerTimeout
+}
+
+// GetCircuitBreakerThreshold returns the global circuit breaker failure threshold, or zero if unset.
+func (c *Configuration) GetCircuitBreakerThreshold() int {
+	return c.CircuitBreakerThreshold
 }
 
 // Compile-time check to ensure both configurations implement the interface

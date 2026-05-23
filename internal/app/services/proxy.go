@@ -171,12 +171,17 @@ func (s *ProxyServiceWrapper) Dependencies() []string {
 // for Olla engine).
 func (s *ProxyServiceWrapper) createProxyConfiguration() *proxy.Configuration {
 	return &proxy.Configuration{
-		ProxyPrefix:         "",
-		ConnectionTimeout:   s.config.ConnectionTimeout,
-		ConnectionKeepAlive: 30 * time.Second,
-		ResponseTimeout:     s.config.ResponseTimeout,
-		ReadTimeout:         s.config.ReadTimeout,
-		StreamBufferSize:    s.config.StreamBufferSize,
+		ProxyPrefix:             "",
+		ConnectionTimeout:       s.config.ConnectionTimeout,
+		ConnectionKeepAlive:     30 * time.Second,
+		ResponseTimeout:         s.config.ResponseTimeout,
+		ReadTimeout:             s.config.ReadTimeout,
+		StreamBufferSize:        s.config.StreamBufferSize,
+		// Circuit breaker overrides from proxy.circuit_breaker config stanza
+		// or OLLA_HEALTH_CIRCUIT_BREAKER_TIMEOUT/THRESHOLD env vars.
+		// (petersimmons1972/aifleet#94, #95)
+		CircuitBreakerTimeout:   s.config.CircuitBreaker.Timeout,
+		CircuitBreakerThreshold: s.config.CircuitBreaker.Threshold,
 	}
 }
 
