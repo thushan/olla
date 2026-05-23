@@ -74,6 +74,13 @@ func DefaultConfig() *Config {
 			ReadTimeout:       120 * time.Second,
 			MaxRetries:        3,
 			RetryBackoff:      500 * time.Millisecond,
+			// Circuit breaker defaults match historical behaviour so existing deployments
+			// are unaffected unless they explicitly override via config or env var.
+			// Raise timeout for fleets with slow cold-start backends (petersimmons1972/aifleet#94).
+			CircuitBreaker: CircuitBreakerConfig{
+				Timeout:   30 * time.Second, // matches health.DefaultCircuitBreakerTimeout
+				Threshold: 5,               // matches service.go circuitBreakerThreshold
+			},
 			StickySessions: StickySessionConfig{
 				Enabled:         false,
 				IdleTTLSeconds:  600,
@@ -408,6 +415,21 @@ func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
 			config.Translators.Anthropic.PassthroughEnabled = enabled
+		}
+	}
+
+	// Circuit breaker global overrides (petersimmons1972/aifleet#95)
+	// OLLA_HEALTH_CIRCUIT_BREAKER_TIMEOUT overrides the global cooldown between
+	// breaker-open and the next half-open probe. Raise for fleets with slow cold-start
+	// backends (e.g. vLLM on NFS). Format: Go duration string, e.g. "300s", "5m".
+	if val := os.Getenv("OLLA_HEALTH_CIRCUIT_BREAKER_TIMEOUT"); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			config.Proxy.CircuitBreaker.Timeout = d
+		}
+	}
+	if val := os.Getenv("OLLA_HEALTH_CIRCUIT_BREAKER_THRESHOLD"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			config.Proxy.CircuitBreaker.Threshold = n
 		}
 	}
 }

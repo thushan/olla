@@ -58,8 +58,9 @@ const (
 	ClientDisconnectionBytesThreshold = 1024
 	ClientDisconnectionTimeThreshold  = 5 * time.Second
 
-	// Circuit breaker threshold higher than health checker for tolerance
-	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
+	// Circuit breaker threshold higher than health checker for tolerance.
+	// This is the fallback when no per-configuration value is set.
+	defaultCircuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -82,6 +83,12 @@ type Service struct {
 	endpointPools   xsync.Map[string, *connectionPool]
 	circuitBreakers xsync.Map[string, *circuitBreaker]
 
+	// endpointBreakerConfigs caches per-endpoint circuit breaker overrides loaded at startup.
+	// Key: endpoint name. Populated by SetEndpointCircuitBreakerConfig (called by factory).
+	// Pointer so tests that construct Service{} directly without initialising this field
+	// can be guarded with a nil check. (petersimmons1972/aifleet#95)
+	endpointBreakerConfigs *xsync.Map[string, endpointBreakerConfig]
+
 	// Cleanup management
 	cleanupOnce sync.Once
 }
@@ -95,10 +102,15 @@ type connectionPool struct {
 
 // circuitBreaker prevents overwhelming failing endpoints
 type circuitBreaker struct {
-	failures    int64 // atomic
-	lastFailure int64 // atomic
-	state       int64 // atomic: 0=closed, 1=open, 2=half-open
+	failures    int64         // atomic
+	lastFailure int64         // atomic
+	state       int64         // atomic: 0=closed, 1=open, 2=half-open
 	threshold   int64
+	// timeout is the cooldown before allowing a half-open probe.
+	// Set from EndpointConfig.CircuitBreakerTimeout (per-endpoint) or
+	// OllaConfig.CircuitBreakerTimeout (global), falling back to
+	// health.DefaultCircuitBreakerTimeout. (petersimmons1972/aifleet#94, #95)
+	timeout time.Duration
 }
 
 // requestContext contains per-request data from our object pool
@@ -189,17 +201,18 @@ func NewService(
 	transport := createOptimisedTransport(configuration)
 
 	service := &Service{
-		BaseProxyComponents: base,
-		bufferPool:          bufferPool,
-		requestPool:         requestPool,
-		errorPool:           errorPool,
-		transport:           transport,
-		configuration:       configuration,
-		retryHandler:        core.NewRetryHandler(discoveryService, logger),
-		circuitBreakers:     *xsync.NewMap[string, *circuitBreaker](),
-		endpointPools:       *xsync.NewMap[string, *connectionPool](),
-		cleanupTicker:       time.NewTicker(5 * time.Minute),
-		cleanupStop:         make(chan struct{}),
+		BaseProxyComponents:    base,
+		bufferPool:             bufferPool,
+		requestPool:            requestPool,
+		errorPool:              errorPool,
+		transport:              transport,
+		configuration:          configuration,
+		retryHandler:           core.NewRetryHandler(discoveryService, logger),
+		circuitBreakers:        *xsync.NewMap[string, *circuitBreaker](),
+		endpointPools:          *xsync.NewMap[string, *connectionPool](),
+		endpointBreakerConfigs: xsync.NewMap[string, endpointBreakerConfig](),
+		cleanupTicker:          time.NewTicker(5 * time.Minute),
+		cleanupStop:            make(chan struct{}),
 	}
 
 	// Start cleanup goroutine
@@ -258,14 +271,61 @@ func (s *Service) getOrCreateEndpointPool(endpoint string) *connectionPool {
 	return actual
 }
 
-// GetCircuitBreaker returns the circuit breaker for an endpoint (exported for testing)
+// endpointBreakerConfig holds per-endpoint circuit breaker overrides.
+// Zero values mean "use the service-level default".
+type endpointBreakerConfig struct {
+	Timeout   time.Duration
+	Threshold int
+}
+
+// SetEndpointCircuitBreakerConfig registers per-endpoint overrides from EndpointConfig.
+// Called during startup after the discovery service is configured.
+// Safe to call concurrently; no-op if endpointBreakerConfigs is nil.
+// (petersimmons1972/aifleet#95)
+func (s *Service) SetEndpointCircuitBreakerConfig(name string, timeout time.Duration, threshold int) {
+	if s.endpointBreakerConfigs == nil {
+		return
+	}
+	s.endpointBreakerConfigs.Store(name, endpointBreakerConfig{
+		Timeout:   timeout,
+		Threshold: threshold,
+	})
+}
+
+// GetCircuitBreaker returns the circuit breaker for an endpoint (exported for testing).
+// Applies per-endpoint overrides when available, then service-level config, then defaults.
 func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 	if cb, ok := s.circuitBreakers.Load(endpoint); ok {
 		return cb
 	}
 
+	// Resolve threshold: per-endpoint > service config > hardcoded default
+	threshold := int64(defaultCircuitBreakerThreshold)
+	var timeout time.Duration
+
+	// endpointBreakerConfigs is nil when tests construct Service{} without initialising it.
+	if s.endpointBreakerConfigs != nil {
+		if cfg, ok := s.endpointBreakerConfigs.Load(endpoint); ok {
+			if cfg.Threshold > 0 {
+				threshold = int64(cfg.Threshold)
+			}
+			timeout = cfg.Timeout // zero means use effectiveTimeout() fallback chain
+		}
+	}
+	// Service-level config override (applies to all endpoints without a per-endpoint override).
+	// Guard against nil configuration (tests may omit it).
+	if s.configuration != nil {
+		if s.configuration.CircuitBreakerThreshold > 0 && threshold == int64(defaultCircuitBreakerThreshold) {
+			threshold = int64(s.configuration.CircuitBreakerThreshold)
+		}
+		if timeout == 0 && s.configuration.CircuitBreakerTimeout > 0 {
+			timeout = s.configuration.CircuitBreakerTimeout
+		}
+	}
+
 	newCB := &circuitBreaker{
-		threshold: circuitBreakerThreshold,
+		threshold: threshold,
+		timeout:   timeout,
 		state:     0, // closed
 	}
 
@@ -274,15 +334,24 @@ func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 }
 
 // Circuit breaker methods
+
+// effectiveTimeout returns the per-endpoint timeout or falls back to health.DefaultCircuitBreakerTimeout.
+func (cb *circuitBreaker) effectiveTimeout() time.Duration {
+	if cb.timeout > 0 {
+		return cb.timeout
+	}
+	return health.DefaultCircuitBreakerTimeout
+}
+
 func (cb *circuitBreaker) IsOpen() bool {
 	state := atomic.LoadInt64(&cb.state)
 	if state != 1 {
 		return false
 	}
 
-	// Check if timeout has passed
+	// Check if cooldown has elapsed; use per-endpoint timeout if configured.
 	lastFailure := atomic.LoadInt64(&cb.lastFailure)
-	if time.Since(time.Unix(0, lastFailure)) > health.DefaultCircuitBreakerTimeout {
+	if time.Since(time.Unix(0, lastFailure)) > cb.effectiveTimeout() {
 		// Try half-open state
 		if atomic.CompareAndSwapInt64(&cb.state, 1, 2) {
 			// State transition: Open -> Half-open
@@ -349,7 +418,7 @@ func (s *Service) selectEndpointWithCircuitBreaker(endpoints []*domain.Endpoint,
 			if stateBefore == 1 && stateAfter == 2 {
 				rlog.Info("Circuit breaker entering half-open state",
 					"endpoint", ep.Name,
-					"timeout", health.DefaultCircuitBreakerTimeout)
+					"timeout", cb.effectiveTimeout())
 			}
 			return ep, cb
 		}

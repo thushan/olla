@@ -88,6 +88,19 @@ type StickySessionConfig struct {
 	Enabled         bool `yaml:"enabled"`
 }
 
+// CircuitBreakerConfig holds global circuit breaker defaults.
+// Per-endpoint overrides take precedence when set on EndpointConfig.
+type CircuitBreakerConfig struct {
+	// Timeout is how long to keep the breaker open before allowing a half-open probe.
+	// Default: 30s. For fleets with slow cold-start backends, raise to e.g. 300s.
+	// Per-endpoint override: EndpointConfig.CircuitBreakerTimeout.
+	Timeout time.Duration `yaml:"timeout"`
+	// Threshold is the number of consecutive failures before opening the breaker.
+	// Default: 5 (proxy layer), 3 (health checker).
+	// Per-endpoint override: EndpointConfig.CircuitBreakerThreshold.
+	Threshold int `yaml:"threshold"`
+}
+
 // ProxyConfig holds proxy-specific configuration
 type ProxyConfig struct {
 	ProfileFilter     *domain.FilterConfig `yaml:"profile_filter,omitempty"`
@@ -95,6 +108,7 @@ type ProxyConfig struct {
 	LoadBalancer      string               `yaml:"load_balancer"`
 	Profile           string               `yaml:"profile"`
 	StickySessions    StickySessionConfig  `yaml:"sticky_sessions"`
+	CircuitBreaker    CircuitBreakerConfig `yaml:"circuit_breaker"`
 	ConnectionTimeout time.Duration        `yaml:"connection_timeout"`
 	ResponseTimeout   time.Duration        `yaml:"response_timeout"`
 	ReadTimeout       time.Duration        `yaml:"read_timeout"`
@@ -144,7 +158,15 @@ type EndpointConfig struct {
 	// Priority uses a pointer so nil means "omitted in config" rather than explicitly zero.
 	// This lets applyEndpointDefaults distinguish "user set 0" from "user said nothing",
 	// since 0 is a valid, lower-than-default priority value.
-	Priority       *int          `yaml:"priority"`
+	Priority *int `yaml:"priority"`
+	// CircuitBreakerTimeout overrides the global circuit breaker cooldown for this endpoint.
+	// Use a value >= the expected cold-start time for slow backends (e.g. 2000s for vLLM on NFS).
+	// Zero means use the global default (see proxy.circuit_breaker.timeout or OLLA_HEALTH_CIRCUIT_BREAKER_TIMEOUT).
+	// See: petersimmons1972/aifleet#94, #95.
+	CircuitBreakerTimeout time.Duration `yaml:"circuit_breaker_timeout,omitempty"`
+	// CircuitBreakerThreshold overrides the global failure threshold for this endpoint.
+	// Zero means use the global default.
+	CircuitBreakerThreshold int `yaml:"circuit_breaker_threshold,omitempty"`
 	URL            string        `yaml:"url"`
 	Name           string        `yaml:"name"`
 	Type           string        `yaml:"type"`
