@@ -947,6 +947,53 @@ func TestDefaultConfig_NoModelAliases(t *testing.T) {
 	}
 }
 
+func TestDefaultConfig_AllowedModels(t *testing.T) {
+	cfg := DefaultConfig()
+	if len(cfg.AllowedModels) != len(DefaultAllowedModels) {
+		t.Fatalf("expected %d default allowed models, got %d", len(DefaultAllowedModels), len(cfg.AllowedModels))
+	}
+
+	for i, expected := range DefaultAllowedModels {
+		if cfg.AllowedModels[i] != expected {
+			t.Fatalf("AllowedModels[%d] = %q, want %q", i, cfg.AllowedModels[i], expected)
+		}
+	}
+}
+
+func TestValidateAllowedModels_RejectsBadEntries(t *testing.T) {
+	tests := []struct {
+		name          string
+		allowedModels []string
+		wantErr       string
+	}{
+		{
+			name:          "empty model",
+			allowedModels: []string{"qwen3-coder-30b", ""},
+			wantErr:       "empty model name",
+		},
+		{
+			name:          "leading whitespace",
+			allowedModels: []string{" qwen3-coder-30b"},
+			wantErr:       "leading/trailing whitespace",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.AllowedModels = tt.allowedModels
+
+			err := cfg.ValidateAllowedModels()
+			if err == nil {
+				t.Fatal("expected error")
+			}
+			if !stringContains(err.Error(), tt.wantErr) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidateModelAliases_NoAliases(t *testing.T) {
 	cfg := DefaultConfig()
 	if err := cfg.ValidateModelAliases(); err != nil {

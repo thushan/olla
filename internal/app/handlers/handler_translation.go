@@ -257,6 +257,12 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
+		if !a.isModelAllowed(pr.model) {
+			a.writeModelAllowlistError(w, pr.model)
+			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNone)
+			return
+		}
+
 		// Inject sticky session key. bodyBytes is already buffered from the model-name
 		// extraction above, so pass it directly to avoid a second read/restore cycle.
 		// The outcome pointer is stored in context; sub-handlers read it before WriteHeader.
