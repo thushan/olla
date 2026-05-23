@@ -106,13 +106,14 @@ discovery:
         check_interval: 2s
         check_timeout: 1s
       - url: "http://localhost:8000"
-        name: "local-vllm"
+        name: "oblivion-gb10-vllm"
         type: "vllm"
         priority: 100
         model_url: "/v1/models"
         health_check_url: "/health"
         check_interval: 5s
         check_timeout: 2s
+        circuit_breaker_timeout: 2000s
   model_discovery:
     enabled: true
     interval: 5m

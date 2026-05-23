@@ -3,8 +3,11 @@ package config
 import (
 	"os"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -213,6 +216,45 @@ func TestConfigTypes(t *testing.T) {
 	// Test boolean fields
 	if cfg.Engineering.ShowNerdStats != false {
 		t.Error("ShowNerdStats should be disabled by default")
+	}
+}
+
+func TestConfigYAML_EndpointCircuitBreakerOverrides(t *testing.T) {
+	var cfg Config
+	data := `
+discovery:
+  type: "static"
+  static:
+    endpoints:
+      - url: "http://localhost:8000"
+        name: "oblivion-gb10-vllm"
+        type: "vllm"
+        priority: 100
+        health_check_url: "/health"
+        model_url: "/v1/models"
+        check_interval: 5s
+        check_timeout: 2s
+        circuit_breaker_timeout: 2000s
+        circuit_breaker_threshold: 7
+`
+
+	if err := yaml.Unmarshal([]byte(strings.TrimSpace(data)), &cfg); err != nil {
+		t.Fatalf("yaml.Unmarshal failed: %v", err)
+	}
+
+	if len(cfg.Discovery.Static.Endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(cfg.Discovery.Static.Endpoints))
+	}
+
+	endpoint := cfg.Discovery.Static.Endpoints[0]
+	if endpoint.Name != "oblivion-gb10-vllm" {
+		t.Fatalf("endpoint.Name = %q, want oblivion-gb10-vllm", endpoint.Name)
+	}
+	if endpoint.CircuitBreakerTimeout != 2000*time.Second {
+		t.Fatalf("endpoint.CircuitBreakerTimeout = %v, want 2000s", endpoint.CircuitBreakerTimeout)
+	}
+	if endpoint.CircuitBreakerThreshold != 7 {
+		t.Fatalf("endpoint.CircuitBreakerThreshold = %d, want 7", endpoint.CircuitBreakerThreshold)
 	}
 }
 
