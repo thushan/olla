@@ -56,3 +56,32 @@ func TestServiceCircuitBreaker_DefaultsRemainUnchanged(t *testing.T) {
 		t.Fatalf("timeout = %v, want %v", cb.timeout, health.DefaultCircuitBreakerTimeout)
 	}
 }
+
+func TestServiceCircuitBreaker_StateSnapshot(t *testing.T) {
+	s := &Service{
+		circuitBreakers: *xsync.NewMap[string, *circuitBreaker](),
+	}
+	endpoint := &domain.Endpoint{
+		Name:                    "breaker-open",
+		CircuitBreakerTimeout:   30 * time.Second,
+		CircuitBreakerThreshold: 2,
+	}
+
+	cb := s.getCircuitBreakerForEndpoint(endpoint)
+	cb.RecordFailure()
+	cb.RecordFailure()
+
+	state := s.GetCircuitBreakerState(endpoint)
+	if state.State != "open" {
+		t.Fatalf("State = %q, want open", state.State)
+	}
+	if state.ConsecutiveFailures != 2 {
+		t.Fatalf("ConsecutiveFailures = %d, want 2", state.ConsecutiveFailures)
+	}
+	if state.LastTripTimestamp == nil {
+		t.Fatal("LastTripTimestamp is nil")
+	}
+	if state.CooldownRemainingSec <= 0 {
+		t.Fatalf("CooldownRemainingSec = %d, want positive", state.CooldownRemainingSec)
+	}
+}

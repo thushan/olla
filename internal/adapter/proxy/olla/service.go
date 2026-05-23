@@ -264,6 +264,10 @@ func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 	return s.getCircuitBreaker(endpoint, 0, 0)
 }
 
+func (s *Service) GetCircuitBreakerState(endpoint *domain.Endpoint) domain.CircuitBreakerState {
+	return s.getCircuitBreakerForEndpoint(endpoint).GetState()
+}
+
 func (s *Service) getCircuitBreakerForEndpoint(endpoint *domain.Endpoint) *circuitBreaker {
 	return s.getCircuitBreaker(
 		endpoint.Name,
@@ -325,6 +329,43 @@ func (cb *circuitBreaker) RecordFailure() {
 
 	if failures >= cb.threshold {
 		atomic.StoreInt64(&cb.state, 1) // open
+	}
+}
+
+func (cb *circuitBreaker) GetState() domain.CircuitBreakerState {
+	state := cb.stateName()
+	lastFailureNs := atomic.LoadInt64(&cb.lastFailure)
+	var lastTrip *time.Time
+	cooldownRemainingSec := 0
+	if lastFailureNs > 0 {
+		lastFailure := time.Unix(0, lastFailureNs)
+		lastTrip = &lastFailure
+		if state == "open" {
+			remaining := time.Until(lastFailure.Add(cb.timeout))
+			if remaining > 0 {
+				cooldownRemainingSec = int(remaining.Seconds())
+			}
+		}
+	}
+
+	return domain.CircuitBreakerState{
+		State:                state,
+		LastTripTimestamp:    lastTrip,
+		ConsecutiveFailures:  atomic.LoadInt64(&cb.failures),
+		CooldownRemainingSec: cooldownRemainingSec,
+	}
+}
+
+func (cb *circuitBreaker) stateName() string {
+	switch atomic.LoadInt64(&cb.state) {
+	case 0:
+		return "closed"
+	case 1:
+		return "open"
+	case 2:
+		return "half-open"
+	default:
+		return "unknown"
 	}
 }
 
