@@ -425,6 +425,39 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 	}
 }
 
+func TestStaticEndpointRepository_LoadFromConfig_CircuitBreakerOverrides(t *testing.T) {
+	repo := NewStaticEndpointRepository()
+	cfg := config.EndpointConfig{
+		Name:                    "slow-vllm",
+		URL:                     "http://localhost:8000",
+		Type:                    "ollama",
+		Priority:                ptrInt(100),
+		CheckInterval:           5 * time.Second,
+		CheckTimeout:            2 * time.Second,
+		CircuitBreakerTimeout:   2000 * time.Second,
+		CircuitBreakerThreshold: 7,
+	}
+
+	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	if err != nil {
+		t.Fatalf("LoadFromConfig failed: %v", err)
+	}
+
+	endpoints, err := repo.GetAll(context.Background())
+	if err != nil {
+		t.Fatalf("GetAll failed: %v", err)
+	}
+	if len(endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(endpoints))
+	}
+	if endpoints[0].CircuitBreakerTimeout != 2000*time.Second {
+		t.Fatalf("CircuitBreakerTimeout = %v, want 2000s", endpoints[0].CircuitBreakerTimeout)
+	}
+	if endpoints[0].CircuitBreakerThreshold != 7 {
+		t.Fatalf("CircuitBreakerThreshold = %d, want 7", endpoints[0].CircuitBreakerThreshold)
+	}
+}
+
 func TestStaticEndpointRepository_EmptyConfig(t *testing.T) {
 	repo := NewStaticEndpointRepository()
 	ctx := context.Background()
