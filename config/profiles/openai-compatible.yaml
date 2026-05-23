@@ -7,6 +7,7 @@ description: "OpenAI-compatible API"
 # Routing configuration
 routing:
   prefixes:
+    # We added an alias for openai in this profile in v0.0.28+
     - openai
     - openai-compatible
 
