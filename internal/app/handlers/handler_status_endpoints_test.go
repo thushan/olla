@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
 )
 
 // mockStatusEndpointRepository for status endpoint testing
@@ -101,6 +102,35 @@ func (m *mockStatusStatsCollector) GetEndpointStats() map[string]ports.EndpointS
 		return make(map[string]ports.EndpointStats)
 	}
 	return m.endpointStats
+}
+
+type mockStatusProxyService struct {
+	states map[string]domain.CircuitBreakerState
+}
+
+func (m *mockStatusProxyService) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, stats *ports.RequestStats, rlog logger.StyledLogger) error {
+	return nil
+}
+
+func (m *mockStatusProxyService) ProxyRequestToEndpoints(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+	endpoints []*domain.Endpoint,
+	stats *ports.RequestStats,
+	rlog logger.StyledLogger,
+) error {
+	return nil
+}
+
+func (m *mockStatusProxyService) GetStats(ctx context.Context) (ports.ProxyStats, error) {
+	return ports.ProxyStats{}, nil
+}
+
+func (m *mockStatusProxyService) UpdateConfig(configuration ports.ProxyConfiguration) {}
+
+func (m *mockStatusProxyService) GetCircuitBreakerState(endpoint *domain.Endpoint) domain.CircuitBreakerState {
+	return m.states[endpoint.Name]
 }
 
 // mockStatusModelRegistry for status endpoint testing
@@ -203,6 +233,48 @@ func TestEndpointsStatusHandler_BasicFunctionality(t *testing.T) {
 	assert.Equal(t, 1, response.HealthyCount)
 	assert.Equal(t, 1, response.RoutableCount)
 	assert.Len(t, response.Endpoints, 2)
+}
+
+func TestEndpointsStatusHandler_IncludesCircuitBreakerState(t *testing.T) {
+	lastTrip := time.Now().Add(-5 * time.Second).UTC().Truncate(time.Second)
+	endpoints := []*domain.Endpoint{
+		{
+			Name:      "breaker-open",
+			Type:      "ollama",
+			URLString: "http://localhost:11434",
+			Status:    domain.StatusHealthy,
+			Priority:  1,
+		},
+	}
+	app := createTestStatusApplication(endpoints)
+	app.proxyService = &mockStatusProxyService{
+		states: map[string]domain.CircuitBreakerState{
+			"breaker-open": {
+				State:                "open",
+				LastTripTimestamp:    &lastTrip,
+				ConsecutiveFailures:  3,
+				CooldownRemainingSec: 25,
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status/endpoints", nil)
+	w := httptest.NewRecorder()
+
+	app.endpointsStatusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response EndpointStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&response)
+	require.NoError(t, err)
+	require.Len(t, response.Endpoints, 1)
+	require.NotNil(t, response.Endpoints[0].CircuitBreaker)
+	assert.Equal(t, "open", response.Endpoints[0].CircuitBreaker.State)
+	assert.Equal(t, int64(3), response.Endpoints[0].CircuitBreaker.ConsecutiveFailures)
+	assert.Equal(t, 25, response.Endpoints[0].CircuitBreaker.CooldownRemainingSec)
+	require.NotNil(t, response.Endpoints[0].CircuitBreaker.LastTripTimestamp)
+	assert.True(t, response.Endpoints[0].CircuitBreaker.LastTripTimestamp.Equal(lastTrip))
 }
 
 func TestEndpointsStatusHandler_Concurrent(t *testing.T) {
