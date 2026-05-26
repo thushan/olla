@@ -213,10 +213,15 @@ func (p *openAIParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 		return nil, fmt.Errorf("failed to parse OpenAI-compatible response: %w", err)
 	}
 
-	models := make([]*domain.ModelInfo, 0, len(response.Data))
+	responseModels := response.Data
+	if len(responseModels) == 0 && len(response.Models) > 0 {
+		responseModels = response.Models
+	}
+
+	models := make([]*domain.ModelInfo, 0, len(responseModels))
 	now := time.Now()
 
-	for _, model := range response.Data {
+	for _, model := range responseModels {
 		if model.ID == "" {
 			continue
 		}

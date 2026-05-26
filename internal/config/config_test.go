@@ -994,14 +994,121 @@ func TestDefaultConfig_NoModelAliases(t *testing.T) {
 
 func TestDefaultConfig_AllowedModels(t *testing.T) {
 	cfg := DefaultConfig()
-	if len(cfg.AllowedModels) != len(DefaultAllowedModels) {
-		t.Fatalf("expected %d default allowed models, got %d", len(DefaultAllowedModels), len(cfg.AllowedModels))
+	if len(cfg.AllowedModels) != 0 {
+		t.Fatalf("expected default allowed_models to allow all models, got %v", cfg.AllowedModels)
+	}
+}
+
+func TestLoadConfig_ExplicitAllowedModels(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "olla-allowed-models-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	configData := `
+allowed_models:
+  - qwen3-coder:30b
+  - BAAI/bge-m3
+`
+	if _, err := tmpFile.WriteString(strings.TrimSpace(configData)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatal(err)
 	}
 
-	for i, expected := range DefaultAllowedModels {
-		if cfg.AllowedModels[i] != expected {
-			t.Fatalf("AllowedModels[%d] = %q, want %q", i, cfg.AllowedModels[i], expected)
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	want := []string{"qwen3-coder:30b", "BAAI/bge-m3"}
+	if len(cfg.AllowedModels) != len(want) {
+		t.Fatalf("expected %d allowed models, got %d", len(want), len(cfg.AllowedModels))
+	}
+	for i := range want {
+		if cfg.AllowedModels[i] != want[i] {
+			t.Fatalf("AllowedModels[%d] = %q, want %q", i, cfg.AllowedModels[i], want[i])
 		}
+	}
+}
+
+func TestLoadConfig_RejectsMisplacedTopLevelModelSections(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "olla-misplaced-model-sections-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	configData := `
+model_discovery:
+  enabled: true
+routing_strategy:
+  type: optimistic
+`
+	if _, err := tmpFile.WriteString(strings.TrimSpace(configData)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = Load(tmpFile.Name())
+	if err == nil {
+		t.Fatal("expected misplaced top-level model sections to fail validation")
+	}
+	if !stringContains(err.Error(), "model_discovery must be configured as discovery.model_discovery") {
+		t.Fatalf("error = %q, want model_discovery schema guidance", err.Error())
+	}
+	if !stringContains(err.Error(), "routing_strategy must be configured as model_registry.routing_strategy") {
+		t.Fatalf("error = %q, want routing_strategy schema guidance", err.Error())
+	}
+}
+
+func TestLoadConfig_NestedModelSections(t *testing.T) {
+	tmpFile, err := os.CreateTemp("", "olla-nested-model-sections-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	configData := `
+discovery:
+  model_discovery:
+    enabled: true
+    interval: 5m
+    timeout: 30s
+    concurrent_workers: 5
+model_registry:
+  routing_strategy:
+    type: optimistic
+    options:
+      fallback_behavior: compatible_only
+`
+	if _, err := tmpFile.WriteString(strings.TrimSpace(configData)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if !cfg.Discovery.ModelDiscovery.Enabled {
+		t.Fatal("expected deployed config to enable discovery.model_discovery")
+	}
+	if cfg.Discovery.ModelDiscovery.Interval != 5*time.Minute {
+		t.Fatalf("discovery.model_discovery.interval = %v, want 5m", cfg.Discovery.ModelDiscovery.Interval)
+	}
+	if cfg.ModelRegistry.RoutingStrategy.Type != "optimistic" {
+		t.Fatalf("model_registry.routing_strategy.type = %q, want optimistic", cfg.ModelRegistry.RoutingStrategy.Type)
+	}
+	if cfg.ModelRegistry.RoutingStrategy.Options.FallbackBehavior != "compatible_only" {
+		t.Fatalf("model_registry.routing_strategy.options.fallback_behavior = %q, want compatible_only", cfg.ModelRegistry.RoutingStrategy.Options.FallbackBehavior)
 	}
 }
 

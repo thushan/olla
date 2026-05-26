@@ -40,14 +40,7 @@ var DefaultLocalNetworkTrustedCIDRs = []string{
 	"192.168.0.0/16",
 }
 
-var DefaultAllowedModels = []string{
-	"qwen3-coder-30b",
-	"qwen3-14b-awq",
-	"inference",
-	"leviathan-7900xt-vllm",
-	"embed",
-	"oblivion-gb10-infinity",
-}
+var DefaultAllowedModels = []string{}
 
 func DefaultConfig() *Config {
 	return &Config{
@@ -231,6 +224,9 @@ func Load(flagConfigFile ...string) (*Config, error) {
 
 	for _, path := range configPaths {
 		if data, err := os.ReadFile(path); err == nil {
+			if err := validateConfigFileSchema(data); err != nil {
+				return nil, fmt.Errorf("failed to validate %s: %w", path, err)
+			}
 			if err := yaml.Unmarshal(data, config); err != nil {
 				return nil, fmt.Errorf("failed to parse %s: %w", path, err)
 			}
@@ -259,6 +255,31 @@ func Load(flagConfigFile ...string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func validateConfigFileSchema(data []byte) error {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
+		return err
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+
+	var problems []string
+	root := doc.Content[0]
+	for i := 0; i < len(root.Content); i += 2 {
+		switch root.Content[i].Value {
+		case "model_discovery":
+			problems = append(problems, "model_discovery must be configured as discovery.model_discovery")
+		case "routing_strategy":
+			problems = append(problems, "routing_strategy must be configured as model_registry.routing_strategy")
+		}
+	}
+	if len(problems) > 0 {
+		return errors.New(strings.Join(problems, "; "))
+	}
+	return nil
 }
 
 func ApplyConfigCaches(config *Config) {
