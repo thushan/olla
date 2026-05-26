@@ -148,7 +148,9 @@ func DefaultConfig() *Config {
 			Output: "stdout",
 		},
 		Engineering: EngineeringConfig{
-			ShowNerdStats: false,
+			ShowNerdStats:                        false,
+			EndpointDegradedSuccessRateThreshold: 80.0,
+			EndpointDegradedMinimumRequests:      10,
 		},
 		Translators: TranslatorsConfig{
 			Anthropic: AnthropicTranslatorConfig{
