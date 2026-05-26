@@ -171,7 +171,9 @@ type LoggingConfig struct {
 
 // EngineeringConfig holds development/debugging configuration
 type EngineeringConfig struct {
-	ShowNerdStats bool `yaml:"show_nerdstats"`
+	ShowNerdStats                        bool    `yaml:"show_nerdstats"`
+	EndpointDegradedSuccessRateThreshold float64 `yaml:"endpoint_degraded_success_rate_threshold"`
+	EndpointDegradedMinimumRequests      int64   `yaml:"endpoint_degraded_minimum_requests"`
 }
 
 // ModelRegistryConfig holds model registry configuration

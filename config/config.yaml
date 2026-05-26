@@ -177,6 +177,8 @@ logging:
 
 engineering:
   show_nerdstats: false
+  endpoint_degraded_success_rate_threshold: 80.0
+  endpoint_degraded_minimum_requests: 10
 
 # Model aliases allow mapping a single virtual model name to multiple actual model names
 # across different backends. When a request arrives with an alias, olla finds endpoints

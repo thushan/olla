@@ -714,12 +714,16 @@ Debug and development features.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `show_nerdstats` | bool | `false` | Show memory stats on shutdown |
+| `endpoint_degraded_success_rate_threshold` | float | `80.0` | Mark endpoints degraded when request success rate drops below this percentage |
+| `endpoint_degraded_minimum_requests` | integer | `10` | Minimum endpoint request count before low success rate degradation is reported |
 
 Example:
 
 ```yaml
 engineering:
   show_nerdstats: true
+  endpoint_degraded_success_rate_threshold: 80.0
+  endpoint_degraded_minimum_requests: 10
 ```
 
 When enabled, displays:
