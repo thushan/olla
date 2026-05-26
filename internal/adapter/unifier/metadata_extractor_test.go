@@ -181,6 +181,12 @@ func TestInferCapabilitiesFromMetadata(t *testing.T) {
 			expectedCapabilities: []string{"text-generation", "vision", "multimodal", "image-understanding"},
 		},
 		{
+			name:                 "llama.cpp BGE alias by name",
+			modelType:            "",
+			modelName:            "BAAI/bge-m3",
+			expectedCapabilities: []string{"embeddings", "similarity", "vector-search"},
+		},
+		{
 			name:          "Multiple capabilities",
 			modelType:     "vlm",
 			modelName:     "codellama-instruct-vision",
@@ -212,7 +218,7 @@ func TestInferCapabilitiesFromMetadata(t *testing.T) {
 			}
 
 			// For embedding models, ensure text-generation is not present
-			if tt.modelType == "embeddings" || tt.modelType == "embedding" {
+			if tt.modelType == "embeddings" || tt.modelType == "embedding" || tt.modelName == "BAAI/bge-m3" {
 				assert.NotContains(t, caps, "text-generation")
 			}
 		})

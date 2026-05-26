@@ -136,12 +136,19 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 
 	// Name-based inference using patterns from configuration
 	nameLower := strings.ToLower(modelName)
+	embeddingByName := false
 	for _, pattern := range config.Capabilities.NamePatterns {
 		if pattern.regex != nil && pattern.regex.MatchString(nameLower) {
 			for _, cap := range pattern.Capabilities {
 				capabilities[cap] = true
+				if cap == "embeddings" {
+					embeddingByName = true
+				}
 			}
 		}
+	}
+	if embeddingByName {
+		delete(capabilities, "text-generation")
 	}
 
 	// Context window size determines long-form processing capabilities
