@@ -118,7 +118,7 @@ Contains the business logic and domain models.
 type Endpoint struct {
     URL            string
     Name           string
-    Type           EndpointType  // ollama, lm-studio, vllm, openai
+    Type           EndpointType  // ollama, lm-studio, vllm, openai-compatible (openai is an alias)
     Priority       int
     Health         HealthStatus
     CircuitBreaker *CircuitBreaker

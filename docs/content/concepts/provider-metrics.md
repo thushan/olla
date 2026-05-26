@@ -169,10 +169,10 @@ metrics:
       model_load_ms: "load_duration_ns / 1000000"
 ```
 
-### OpenAI Profile Example
+### OpenAI-Compatible Profile Example
 ```yaml
-# config/profiles/openai.yaml
-name: openai
+# config/profiles/openai-compatible.yaml
+name: openai-compatible
 display_name: "OpenAI Compatible"
 
 metrics:

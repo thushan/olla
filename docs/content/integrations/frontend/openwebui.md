@@ -498,12 +498,12 @@ Configure priorities based on cost and performance:
 
 ```yaml
 endpoints:
-  # Free/local first
+  # Primary local endpoint
   - url: "http://localhost:11434"
     priority: 100
   
-  # Backup/cloud
-  - url: "https://api.provider.com"
+  # Fallback (e.g. LiteLLM gateway for cloud overflow)
+  - url: "http://litellm:4000"
     priority: 10
 ```
 

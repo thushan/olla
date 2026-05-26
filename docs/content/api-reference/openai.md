@@ -1,6 +1,6 @@
-# OpenAI API
+# OpenAI-Compatible API
 
-Proxy endpoints for OpenAI and OpenAI-compatible services. Available through the `/olla/openai/` and `/olla/openai-compatible/` prefixes.
+Proxy endpoints for OpenAI-compatible local inference backends (LocalAI, vLLM, llama.cpp, LM Studio, etc.). Available through the `/olla/openai/` and `/olla/openai-compatible/` prefixes — both route through the same `openai-compatible` profile.
 
 ## Endpoints Overview
 
@@ -334,15 +334,15 @@ curl -X POST http://localhost:40114/olla/openai/v1/images/generations \
 
 ## Authentication
 
-The Authorization header is forwarded to the backend. Configure API keys in your endpoints:
+The Authorization header is forwarded to the backend as-is. For most local backends no key is required, but if your backend expects one you can pass it through:
 
 ```yaml
 endpoints:
-  - url: "https://api.openai.com"
-    name: "openai-production"
-    type: "openai"
+  - url: "http://localhost:8080"
+    name: "my-openai-compatible-backend"
+    type: "openai-compatible"  # or "openai" — both are accepted aliases
     headers:
-      Authorization: "Bearer ${OPENAI_API_KEY}"
+      Authorization: "Bearer ${API_KEY}"
 ```
 
 ## Rate Limits
@@ -379,6 +379,6 @@ All responses include standard Olla headers:
 
 - `X-Olla-Endpoint` - Backend endpoint name
 - `X-Olla-Model` - Model used
-- `X-Olla-Backend-Type` - Always "openai" for these endpoints
+- `X-Olla-Backend-Type` - Echoes the `type:` value configured for the endpoint (e.g. `openai` or `openai-compatible`)
 - `X-Olla-Response-Time` - Total processing time
 - `X-Olla-Request-ID` - Request tracking ID

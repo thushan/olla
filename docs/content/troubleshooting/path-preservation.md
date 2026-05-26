@@ -68,7 +68,7 @@ discovery:
     endpoints:
       - url: "http://endpoint:8080/api/v1"
         name: "api-endpoint"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Enable path preservation
 ```
 
@@ -101,7 +101,7 @@ discovery:
     endpoints:
       - url: "http://endpoint:8080"  # No base path
         name: "simple-endpoint"
-        type: "openai"
+        type: "openai-compatible"
         preserve_path: false  # Default - no preservation needed
 ```
 
@@ -132,7 +132,7 @@ discovery:
     endpoints:
       - url: "http://docker-runner:8080/api/models/llama"
         name: "docker-llama"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Required for Docker Model Runner
         health_check_url: "/api/models/llama/health"
 ```
@@ -150,7 +150,7 @@ discovery:
 API gateways often use path-based routing:
 
 ```
-Gateway: https://api.company.com/llm/prod/v1
+Gateway: http://api.internal/llm/prod/v1
 Routes to: http://internal-llm:8080/v1
 ```
 
@@ -162,9 +162,9 @@ Enable path preservation for gateway endpoints:
 discovery:
   static:
     endpoints:
-      - url: "https://api.company.com/llm/prod/v1"
+      - url: "http://api.internal/llm/prod/v1"
         name: "gateway-prod"
-        type: "openai"
+        type: "openai-compatible"  # or "openai" — accepted alias
         preserve_path: true  # Keep gateway routing path
 ```
 
@@ -242,14 +242,14 @@ discovery:
       # Test WITH preservation
       - url: "http://localhost:8081/base/path"
         name: "with-preservation"
-        type: "openai"
+        type: "openai-compatible"
         preserve_path: true
         priority: 100
 
       # Test WITHOUT preservation
       - url: "http://localhost:8082/base/path"
         name: "without-preservation"
-        type: "openai"
+        type: "openai-compatible"
         preserve_path: false
         priority: 50
 
@@ -334,7 +334,7 @@ Always document why path preservation is enabled:
 endpoints:
   - url: "http://service:8080/api/models/llama"
     name: "docker-llama"
-    type: "openai"
+    type: "openai-compatible"  # or "openai" — accepted alias
     preserve_path: true  # Required: Docker Model Runner uses path-based model routing
 ```
 

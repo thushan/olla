@@ -75,7 +75,7 @@ endpoints:
   - name: cloud-litellm
     url: http://litellm:8000
     priority: 10  # Only when local unavailable
-    type: openai
+    type: litellm
 ```
 
 ### 3. The Multi-Tenant Pattern
@@ -205,12 +205,12 @@ endpoints:
   - name: localai-primary
     url: http://localai:8080
     priority: 1
-    type: openai
+    type: openai-compatible  # or "openai" — accepted alias
     
   - name: localai-backup
     url: http://localai2:8080
     priority: 2
-    type: openai
+    type: openai-compatible
 ```
 
 ## Advanced Patterns

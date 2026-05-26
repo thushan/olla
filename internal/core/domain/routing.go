@@ -55,7 +55,10 @@ func (rp *RequestProfile) IsCompatibleWith(endpointType string) bool {
 		if supported == endpointType {
 			return true
 		}
-		if supported == ProfileOpenAICompatible && (endpointType == ProfileOllama || endpointType == ProfileLmStudio) {
+		// "openai" is a user-facing alias for openai-compatible — endpoints configured
+		// with type "openai" speak the same protocol and must be accepted here.
+		// Ollama and LM Studio also expose the OpenAI-compatible API surface.
+		if supported == ProfileOpenAICompatible && (endpointType == ProfileOllama || endpointType == ProfileLmStudio || endpointType == ProfileOpenAI) {
 			return true
 		}
 	}

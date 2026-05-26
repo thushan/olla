@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 
@@ -151,8 +152,17 @@ func (f *Factory) buildPrefixLookup() {
 			continue
 		}
 
-		// Each prefix in the YAML becomes a valid route
+		// Each prefix in the YAML becomes a valid route.
+		// Two profiles claiming the same prefix produces non-deterministic routing
+		// because Go map iteration order is random — warn loudly rather than silently win.
 		for _, prefix := range config.Routing.Prefixes {
+			if existing, collision := f.prefixLookup[prefix]; collision && existing != profileName {
+				slog.Warn("two profiles claim the same routing prefix; one will shadow the other",
+					"prefix", prefix,
+					"keeping", existing,
+					"ignored", profileName,
+				)
+			}
 			f.prefixLookup[prefix] = profileName
 		}
 

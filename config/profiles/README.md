@@ -23,7 +23,7 @@ These profiles control:
 - `vllm.yaml` - vLLM high-performance inference server
 - `sglang.yaml` - SGLang high-performance inference server
 - `anthropic.yaml` - Anthropic Claude API
-- `openai.yaml` - OpenAI-compatible API generic profile
+- `openai-compatible.yaml` - OpenAI-compatible API generic profile (also accepts `type: "openai"` as an alias)
 
 ### llama.cpp vs Ollama
 
