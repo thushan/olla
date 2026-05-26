@@ -273,6 +273,10 @@ func getDefaultConfig() *ModelUnificationConfig {
 			Pattern:      "(vision|vlm|llava|bakllava)",
 			Capabilities: []string{"vision", "multimodal", "image-understanding"},
 		},
+		{
+			Pattern:      "(^|[/_-])(bge|e5|gte|minilm|jina-embeddings?|nomic-embed|mxbai-embed|text-embedding)",
+			Capabilities: []string{"embeddings", "similarity", "vector-search"},
+		},
 	}
 
 	config.Capabilities.ContextThresholds = map[string]int64{

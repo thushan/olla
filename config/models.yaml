@@ -195,6 +195,12 @@ capabilities:
         - multimodal
         - image-understanding
 
+    - pattern: "(^|[/_-])(bge|e5|gte|minilm|jina-embeddings?|nomic-embed|mxbai-embed|text-embedding)"
+      capabilities:
+        - embeddings
+        - similarity
+        - vector-search
+
   # Context length categories (in tokens)
   context_thresholds:
     extended_context: 32000
