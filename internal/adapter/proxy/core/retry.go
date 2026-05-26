@@ -192,6 +192,10 @@ func IsConnectionError(err error) bool {
 		return false
 	}
 
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return true

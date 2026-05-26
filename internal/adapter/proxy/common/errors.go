@@ -44,10 +44,10 @@ func MakeUserFriendlyError(err error, duration time.Duration, errorContext strin
 
 	case errors.Is(err, context.DeadlineExceeded):
 		if responseTimeout > 0 {
-			return fmt.Errorf("request timeout after %.1fs - server timeout of %.1fs exceeded (LLM model taking longer than expected)",
-				duration.Seconds(), responseTimeout.Seconds())
+			return fmt.Errorf("request timeout after %.1fs - server timeout of %.1fs exceeded (LLM model taking longer than expected): %w",
+				duration.Seconds(), responseTimeout.Seconds(), err)
 		}
-		return fmt.Errorf("request timeout after %.1fs - server timeout exceeded (LLM response took too long)", duration.Seconds())
+		return fmt.Errorf("request timeout after %.1fs - server timeout exceeded (LLM response took too long): %w", duration.Seconds(), err)
 
 	case errors.Is(err, io.EOF):
 		if errorContext == "streaming" {
@@ -63,7 +63,7 @@ func MakeUserFriendlyError(err error, duration time.Duration, errorContext strin
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		if netErr.Timeout() {
-			return fmt.Errorf("network timeout after %.1fs - unable to connect to LLM backend (check backend availability)", duration.Seconds())
+			return fmt.Errorf("network timeout after %.1fs - unable to connect to LLM backend (check backend availability): %w", duration.Seconds(), netErr)
 		}
 		return fmt.Errorf("network error after %.1fs - %w (check network connectivity to LLM backend)", duration.Seconds(), netErr)
 	}

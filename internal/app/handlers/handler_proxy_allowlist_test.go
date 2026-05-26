@@ -15,6 +15,18 @@ import (
 	"github.com/thushan/olla/internal/core/constants"
 )
 
+func TestDefaultConfigFile_AllowsFleetModelNames(t *testing.T) {
+	cfg, err := config.Load("../../../config/config.yaml")
+	require.NoError(t, err)
+
+	app := &Application{
+		Config:        cfg,
+		allowedModels: makeAllowedModelSet(cfg.AllowedModels),
+	}
+
+	assert.True(t, app.isModelAllowed("qwen3-coder:30b"))
+}
+
 func TestProxyHandler_RejectsModelOutsideAllowlist(t *testing.T) {
 	styledLog := &mockStyledLogger{}
 	profileFactory, err := profile.NewFactoryWithDefaults()

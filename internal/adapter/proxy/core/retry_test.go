@@ -2,11 +2,17 @@ package core
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
 
@@ -33,6 +39,24 @@ func (t *testDiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoin
 	*t.updatedEndpoint = *endpoint
 	return nil
 }
+
+type retryTestSelector struct {
+	selectCalls int
+}
+
+func (s *retryTestSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
+	if len(endpoints) == 0 {
+		return nil, errors.New("no endpoints")
+	}
+	s.selectCalls++
+	return endpoints[0], nil
+}
+
+func (s *retryTestSelector) Name() string { return "retry-test" }
+
+func (s *retryTestSelector) IncrementConnections(endpoint *domain.Endpoint) {}
+
+func (s *retryTestSelector) DecrementConnections(endpoint *domain.Endpoint) {}
 
 func TestMarkEndpointUnhealthyBackoffProgression(t *testing.T) {
 	tests := []struct {
@@ -139,4 +163,43 @@ func TestMarkEndpointUnhealthyNilEndpoint(t *testing.T) {
 
 	// Verify no update was made
 	assert.Nil(t, testDiscovery.updatedEndpoint, "Should not update nil endpoint")
+}
+
+func TestExecuteWithRetry_RetriesFriendlyTimeoutError(t *testing.T) {
+	testDiscovery := &testDiscoveryService{}
+
+	logConfig := &logger.Config{Level: "error"}
+	log, _, err := logger.New(logConfig)
+	require.NoError(t, err)
+	testLogger := logger.NewPlainStyledLogger(log)
+
+	handler := NewRetryHandler(testDiscovery, testLogger)
+	selector := &retryTestSelector{}
+
+	endpoints := []*domain.Endpoint{
+		{Name: "endpoint-a", CheckInterval: 5 * time.Second},
+		{Name: "endpoint-b", CheckInterval: 5 * time.Second},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "http://example.com/v1/chat/completions", http.NoBody)
+	w := httptest.NewRecorder()
+	stats := &ports.RequestStats{StartTime: time.Now()}
+
+	attempts := 0
+	proxyFunc := func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error {
+		attempts++
+		if attempts == 1 {
+			return common.MakeUserFriendlyError(context.DeadlineExceeded, 30*time.Second, "backend", 15*time.Second)
+		}
+		w.WriteHeader(http.StatusOK)
+		return nil
+	}
+
+	err = handler.ExecuteWithRetry(context.Background(), w, req, endpoints, selector, stats, proxyFunc)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, attempts)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.NotNil(t, testDiscovery.updatedEndpoint)
+	assert.Equal(t, "endpoint-a", testDiscovery.updatedEndpoint.Name)
 }

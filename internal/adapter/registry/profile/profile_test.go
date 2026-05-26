@@ -171,6 +171,59 @@ func TestDetectionHints(t *testing.T) {
 	}
 }
 
+func TestOpenAICompatibleProfile_ParseModelsResponse(t *testing.T) {
+	profile := getTestProfile(t, domain.ProfileOpenAICompatible)
+
+	tests := []struct {
+		name         string
+		responseBody []byte
+		wantName     string
+	}{
+		{
+			name: "OpenAI data array",
+			responseBody: []byte(`{
+				"object": "list",
+				"data": [
+					{
+						"id": "gpt-4o-mini",
+						"object": "model"
+					}
+				]
+			}`),
+			wantName: "gpt-4o-mini",
+		},
+		{
+			name: "Infinity top-level models array",
+			responseBody: []byte(`{
+				"models": [
+					{
+						"id": "BAAI/bge-m3",
+						"object": "model",
+						"created": 1734000007,
+						"owned_by": "infinity"
+					}
+				]
+			}`),
+			wantName: "BAAI/bge-m3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models, err := profile.ParseModelsResponse(tt.responseBody)
+			if err != nil {
+				t.Fatalf("ParseModelsResponse failed: %v", err)
+			}
+			if len(models) != 1 {
+				t.Fatalf("expected 1 model, got %d", len(models))
+			}
+			if models[0].Name != tt.wantName {
+				t.Fatalf("model name = %q, want %q", models[0].Name, tt.wantName)
+			}
+		})
+	}
+}
+
 // Migrated and enhanced tests from parser_test.go
 func TestParseModelsResponse(t *testing.T) {
 	tests := []struct {
