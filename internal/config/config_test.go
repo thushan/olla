@@ -52,6 +52,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Proxy.MaxRetries != 3 {
 		t.Errorf("Expected max retries 3, got %d", cfg.Proxy.MaxRetries)
 	}
+	if !cfg.ModelRegistry.RoutingStrategy.Options.DiscoveryRefreshOnMiss {
+		t.Error("Expected discovery refresh on miss to be enabled by default")
+	}
 
 	// Test engineering defaults
 	if cfg.Engineering.ShowNerdStats != false {
