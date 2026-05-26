@@ -124,7 +124,7 @@ func DefaultConfig() *Config {
 			RoutingStrategy: ModelRoutingStrategy{
 				Type: "strict", // default to strict for predictable behavior
 				Options: ModelRoutingStrategyOptions{
-					DiscoveryRefreshOnMiss: false,
+					DiscoveryRefreshOnMiss: true,
 					DiscoveryTimeout:       2 * time.Second,
 					FallbackBehavior:       constants.FallbackBehaviorCompatibleOnly,
 				},

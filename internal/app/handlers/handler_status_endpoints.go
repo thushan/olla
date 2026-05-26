@@ -42,6 +42,8 @@ type EndpointStatusResponse struct {
 
 const (
 	healthyStatus                          = "healthy"
+	circuitOpenStatus                      = "circuit_open"
+	circuitOpenDegradationReason           = "circuit breaker open"
 	degradedSuccessRateThresholdPercent    = 80.0
 	degradedSuccessRateMinimumRequestCount = int64(10)
 )
@@ -129,7 +131,15 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 		summary.Degraded = true
 		summary.DegradationReason = "low success rate"
 	}
-	summary.CircuitBreaker = a.getCircuitBreakerState(endpoint)
+	if circuitBreaker := a.getCircuitBreakerState(endpoint); circuitBreaker != nil {
+		summary.CircuitBreaker = circuitBreaker
+		if isCircuitBreakerOpen(circuitBreaker) {
+			summary.Status = circuitOpenStatus
+			summary.Degraded = true
+			summary.DegradationReason = circuitOpenDegradationReason
+			summary.Issues = appendEndpointIssue(summary.Issues, circuitOpenDegradationReason)
+		}
+	}
 
 	return summary
 }
@@ -147,6 +157,20 @@ func (a *Application) getCircuitBreakerState(endpoint *domain.Endpoint) *domain.
 
 	state := breakerStateProvider.GetCircuitBreakerState(endpoint)
 	return &state
+}
+
+func isCircuitBreakerOpen(state *domain.CircuitBreakerState) bool {
+	return state != nil && state.State == "open"
+}
+
+func appendEndpointIssue(existing, issue string) string {
+	if existing == "" {
+		return issue
+	}
+	if existing == issue {
+		return existing
+	}
+	return existing + "; " + issue
 }
 
 func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoint, stats ports.EndpointStats, hasStats bool) string {

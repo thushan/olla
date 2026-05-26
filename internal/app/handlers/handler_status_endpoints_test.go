@@ -270,12 +270,18 @@ func TestEndpointsStatusHandler_IncludesCircuitBreakerState(t *testing.T) {
 	err := json.NewDecoder(w.Body).Decode(&response)
 	require.NoError(t, err)
 	require.Len(t, response.Endpoints, 1)
-	require.NotNil(t, response.Endpoints[0].CircuitBreaker)
-	assert.Equal(t, "open", response.Endpoints[0].CircuitBreaker.State)
-	assert.Equal(t, int64(3), response.Endpoints[0].CircuitBreaker.ConsecutiveFailures)
-	assert.Equal(t, 25, response.Endpoints[0].CircuitBreaker.CooldownRemainingSec)
-	require.NotNil(t, response.Endpoints[0].CircuitBreaker.LastTripTimestamp)
-	assert.True(t, response.Endpoints[0].CircuitBreaker.LastTripTimestamp.Equal(lastTrip))
+
+	summary := response.Endpoints[0]
+	assert.Equal(t, "circuit_open", summary.Status)
+	assert.True(t, summary.Degraded)
+	assert.Equal(t, "circuit breaker open", summary.DegradationReason)
+	assert.Equal(t, "circuit breaker open", summary.Issues)
+	require.NotNil(t, summary.CircuitBreaker)
+	assert.Equal(t, "open", summary.CircuitBreaker.State)
+	assert.Equal(t, int64(3), summary.CircuitBreaker.ConsecutiveFailures)
+	assert.Equal(t, 25, summary.CircuitBreaker.CooldownRemainingSec)
+	require.NotNil(t, summary.CircuitBreaker.LastTripTimestamp)
+	assert.True(t, summary.CircuitBreaker.LastTripTimestamp.Equal(lastTrip))
 }
 
 func TestEndpointsStatusHandler_MarksHealthyEndpointWithLowSuccessRateDegraded(t *testing.T) {

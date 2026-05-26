@@ -149,7 +149,7 @@ model_registry:
       
       # Discovery mode settings
       discovery_timeout: 2s  # Timeout for discovery refresh
-      discovery_refresh_on_miss: false  # Refresh discovery when model not found
+      discovery_refresh_on_miss: true  # Refresh discovery when model not found
 
 translators:
   #####
