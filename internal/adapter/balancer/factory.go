@@ -11,6 +11,7 @@ import (
 const DefaultBalancerPriority = "priority"
 const DefaultBalancerRoundRobin = "round-robin"
 const DefaultBalancerLeastConnections = "least-connections"
+const DefaultBalancerOMLXLoadedFirst = "omlx-loaded-first"
 
 type Factory struct {
 	creators       map[string]func(ports.StatsCollector) domain.EndpointSelector
@@ -32,6 +33,9 @@ func NewFactory(statsCollector ports.StatsCollector) *Factory {
 	})
 	factory.Register(DefaultBalancerLeastConnections, func(collector ports.StatsCollector) domain.EndpointSelector {
 		return NewLeastConnectionsSelector(collector)
+	})
+	factory.Register(DefaultBalancerOMLXLoadedFirst, func(collector ports.StatsCollector) domain.EndpointSelector {
+		return NewOMLXLoadedFirstSelector(collector)
 	})
 
 	return factory
