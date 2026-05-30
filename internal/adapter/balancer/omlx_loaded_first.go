@@ -16,9 +16,10 @@ import (
 )
 
 const (
-	defaultOMLXStatusPath    = "/v1/models/status"
-	defaultOMLXStatusTTL     = 2 * time.Second
-	defaultOMLXStatusTimeout = 300 * time.Millisecond
+	defaultOMLXStatusPath               = "/v1/models/status"
+	defaultOMLXStatusTTL                = 2 * time.Second
+	defaultOMLXStatusTimeout            = 300 * time.Millisecond
+	defaultOMLXStatusRefreshConcurrency = 4
 )
 
 // OMLXLoadedFirstSelector prefers endpoints where the requested model is already
@@ -26,12 +27,15 @@ const (
 // compatible endpoints. It intentionally keeps model compatibility filtering in
 // the registry/routing layer; this selector only reorders the eligible set.
 type OMLXLoadedFirstSelector struct {
-	inner      *LeastConnectionsSelector
-	httpClient *http.Client
-	statusTTL  time.Duration
+	inner         *LeastConnectionsSelector
+	httpClient    *http.Client
+	statusTTL     time.Duration
+	refreshTokens chan struct{}
 
-	cacheMu sync.RWMutex
-	cache   map[string]omlxStatusCacheEntry
+	cacheMu    sync.RWMutex
+	cache      map[string]omlxStatusCacheEntry
+	refreshMu  sync.Mutex
+	refreshing map[string]struct{}
 }
 
 type omlxStatusCacheEntry struct {
@@ -50,10 +54,12 @@ type omlxModelStatus struct {
 
 func NewOMLXLoadedFirstSelector(statsCollector ports.StatsCollector) *OMLXLoadedFirstSelector {
 	return &OMLXLoadedFirstSelector{
-		inner:      NewLeastConnectionsSelector(statsCollector),
-		httpClient: &http.Client{Timeout: defaultOMLXStatusTimeout},
-		statusTTL:  defaultOMLXStatusTTL,
-		cache:      make(map[string]omlxStatusCacheEntry),
+		inner:         NewLeastConnectionsSelector(statsCollector),
+		httpClient:    &http.Client{Timeout: defaultOMLXStatusTimeout},
+		statusTTL:     defaultOMLXStatusTTL,
+		refreshTokens: make(chan struct{}, defaultOMLXStatusRefreshConcurrency),
+		cache:         make(map[string]omlxStatusCacheEntry),
+		refreshing:    make(map[string]struct{}),
 	}
 }
 
@@ -95,7 +101,13 @@ func (selector *OMLXLoadedFirstSelector) loadedEndpoints(ctx context.Context, en
 			continue
 		}
 
-		if selector.isModelLoaded(ctx, endpoint, backendModel) {
+		cachedStatus, ok := selector.cachedStatus(endpoint.GetURLString())
+		if !ok {
+			selector.scheduleStatusRefresh(ctx, endpoint)
+			continue
+		}
+
+		if cachedStatus.loadedModels[backendModel] {
 			loadedEndpoints = append(loadedEndpoints, endpoint)
 		}
 	}
@@ -116,20 +128,6 @@ func (selector *OMLXLoadedFirstSelector) modelForEndpoint(ctx context.Context, e
 	return requestModel
 }
 
-func (selector *OMLXLoadedFirstSelector) isModelLoaded(ctx context.Context, endpoint *domain.Endpoint, modelName string) bool {
-	if cachedStatus, ok := selector.cachedStatus(endpoint.GetURLString()); ok {
-		return cachedStatus.loadedModels[modelName]
-	}
-
-	fetchedStatus, err := selector.fetchStatus(ctx, endpoint)
-	if err != nil {
-		return false
-	}
-
-	selector.storeStatus(endpoint.GetURLString(), fetchedStatus)
-	return fetchedStatus.loadedModels[modelName]
-}
-
 func (selector *OMLXLoadedFirstSelector) cachedStatus(endpointURL string) (omlxStatusCacheEntry, bool) {
 	selector.cacheMu.RLock()
 	defer selector.cacheMu.RUnlock()
@@ -140,6 +138,43 @@ func (selector *OMLXLoadedFirstSelector) cachedStatus(endpointURL string) (omlxS
 	}
 
 	return entry, true
+}
+
+func (selector *OMLXLoadedFirstSelector) scheduleStatusRefresh(ctx context.Context, endpoint *domain.Endpoint) {
+	endpointURL := endpoint.GetURLString()
+
+	selector.refreshMu.Lock()
+	if _, ok := selector.refreshing[endpointURL]; ok {
+		selector.refreshMu.Unlock()
+		return
+	}
+	selector.refreshing[endpointURL] = struct{}{}
+	selector.refreshMu.Unlock()
+
+	refreshCtx := context.WithoutCancel(ctx)
+	go func() {
+		selector.refreshTokens <- struct{}{}
+		defer func() {
+			<-selector.refreshTokens
+			selector.refreshMu.Lock()
+			delete(selector.refreshing, endpointURL)
+			selector.refreshMu.Unlock()
+		}()
+
+		selector.refreshStatus(refreshCtx, endpoint)
+	}()
+}
+
+func (selector *OMLXLoadedFirstSelector) refreshStatus(ctx context.Context, endpoint *domain.Endpoint) {
+	fetchedStatus, err := selector.fetchStatus(ctx, endpoint)
+	if err != nil {
+		fetchedStatus = omlxStatusCacheEntry{
+			fetchedAt:    time.Now(),
+			loadedModels: map[string]bool{},
+		}
+	}
+
+	selector.storeStatus(endpoint.GetURLString(), fetchedStatus)
 }
 
 func (selector *OMLXLoadedFirstSelector) storeStatus(endpointURL string, entry omlxStatusCacheEntry) {
