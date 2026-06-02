@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/health"
@@ -29,6 +30,11 @@ type DiscoveryService struct {
 	statsService   *StatsService
 	logger         logger.StyledLogger
 	modelDiscovery *discovery.ModelDiscoveryService
+	// fcPoller drives dynamic endpoint reconciliation when discovery.type = "fc".
+	// Runs a background goroutine that polls Flight Controller /registry; cancelled
+	// on Stop() via fcPollerCancel (petersimmons1972/instinct#12).
+	fcPoller       *discovery.FCDiscoveryPoller
+	fcPollerCancel context.CancelFunc
 	registry       domain.ModelRegistry
 	endpointRepo   domain.EndpointRepository
 	// purgeDeadFn, when set, is called with the current routable endpoint list
@@ -98,6 +104,27 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 		if err := staticRepo.LoadFromConfig(ctx, s.config.Static.Endpoints); err != nil {
 			return fmt.Errorf("failed to load endpoints from config: %w", err)
 		}
+		s.endpointRepo = staticRepo
+	case "fc":
+		// Flight Controller dynamic discovery: poll FC /registry on a fixed interval
+		// and atomically replace the endpoint set (petersimmons1972/instinct#12).
+		if s.config.FC.RegistryURL == "" {
+			return fmt.Errorf("discovery.fc.registry_url is required when discovery.type is \"fc\"")
+		}
+		pollInterval := s.config.FC.PollInterval
+		if pollInterval <= 0 {
+			pollInterval = 15 * time.Second
+		}
+		staticRepo := discovery.NewStaticEndpointRepository()
+		poller := discovery.NewFCDiscoveryPoller(staticRepo, s.config.FC.RegistryURL, s.logger)
+		// Run an initial blocking poll so endpoints are populated before health checks start.
+		if err := poller.Poll(ctx); err != nil {
+			return fmt.Errorf("fc-discovery: initial poll failed: %w", err)
+		}
+		pollerCtx, cancel := context.WithCancel(context.Background())
+		s.fcPoller = poller
+		s.fcPollerCancel = cancel
+		go poller.RunLoop(pollerCtx, pollInterval)
 		s.endpointRepo = staticRepo
 	default:
 		return fmt.Errorf("unsupported discovery type: %s", s.config.Type)
@@ -215,6 +242,11 @@ func (s *DiscoveryService) Stop(ctx context.Context) error {
 			s.logger.Warn("  Failed to stop model discovery", "error", err)
 		}
 	}
+
+	if s.fcPollerCancel != nil {
+		s.fcPollerCancel()
+	}
+
 	return nil
 }
 

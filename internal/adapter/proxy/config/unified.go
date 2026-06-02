@@ -123,6 +123,12 @@ type OllaConfig struct {
 	MaxIdleConns        int
 	MaxConnsPerHost     int
 	MaxIdleConnsPerHost int
+
+	// Circuit breaker globals — override defaults for the entire proxy service.
+	// Per-endpoint overrides in EndpointConfig take precedence when non-zero.
+	// (petersimmons1972/aifleet#94, #95)
+	CircuitBreakerTimeout   time.Duration
+	CircuitBreakerThreshold int
 }
 
 // GetStreamBufferSize returns the stream buffer size, defaulting to OllaDefaultStreamBufferSize for better performance

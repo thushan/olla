@@ -76,6 +76,16 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 			ollaConfig.MaxConnsPerHost = 50
 		}
 
+		// Circuit breaker overrides — pass from app Configuration if available.
+		// (petersimmons1972/aifleet#94, #95)
+		if cbConfig, ok := config.(interface {
+			GetCircuitBreakerTimeout() time.Duration
+			GetCircuitBreakerThreshold() int
+		}); ok {
+			ollaConfig.CircuitBreakerTimeout = cbConfig.GetCircuitBreakerTimeout()
+			ollaConfig.CircuitBreakerThreshold = cbConfig.GetCircuitBreakerThreshold()
+		}
+
 		return olla.NewService(discovery, selector, ollaConfig, collector, metricsExtractor, logger)
 	})
 
