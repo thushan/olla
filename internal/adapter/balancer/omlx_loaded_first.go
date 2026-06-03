@@ -29,13 +29,14 @@ const (
 type OMLXLoadedFirstSelector struct {
 	inner         *LeastConnectionsSelector
 	httpClient    *http.Client
-	statusTTL     time.Duration
 	refreshTokens chan struct{}
+	cache         map[string]omlxStatusCacheEntry
+	refreshing    map[string]struct{}
+
+	statusTTL time.Duration
 
 	cacheMu    sync.RWMutex
-	cache      map[string]omlxStatusCacheEntry
 	refreshMu  sync.Mutex
-	refreshing map[string]struct{}
 }
 
 type omlxStatusCacheEntry struct {
