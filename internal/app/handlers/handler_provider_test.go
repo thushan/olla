@@ -147,6 +147,37 @@ func TestProviderRouting(t *testing.T) {
 	}
 }
 
+func TestProviderRouting_FailsClosedWhenNoProviderMatches(t *testing.T) {
+	app := createTestApplication(t)
+
+	openAIURL, _ := url.Parse("http://localhost:8080")
+	app.discoveryService = &mockDiscoveryServiceWithHealthy{
+		endpoints: []*domain.Endpoint{{
+			Name:      "openai-1",
+			URL:       openAIURL,
+			URLString: openAIURL.String(),
+			Type:      "openai",
+			Status:    domain.StatusHealthy,
+		}},
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/olla/ollama/api/generate", strings.NewReader(`{"model":"llama3"}`))
+	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	w := httptest.NewRecorder()
+
+	app.providerProxyHandler(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status %d, got %d: %s", http.StatusNotFound, resp.StatusCode, w.Body.String())
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, "No ollama endpoints available") {
+		t.Fatalf("expected 'No ollama endpoints available', got %q", body)
+	}
+}
+
 // mockDiscoveryServiceWithHealthy returns a single healthy endpoint matching the
 // requested provider type so provider-scoped routing can reach the proxy stage.
 type mockDiscoveryServiceWithHealthy struct {

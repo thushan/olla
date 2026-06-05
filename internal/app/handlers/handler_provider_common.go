@@ -10,6 +10,7 @@ import (
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
 )
 
 // createProviderProfile builds routing constraints for provider-specific requests.
@@ -133,7 +134,7 @@ func (a *Application) getProviderEndpoints(ctx context.Context, providerType str
 	providerProfile := a.createProviderProfile(providerType)
 	providerProfile.Path = pr.targetPath
 
-	providerEndpoints := a.filterEndpointsByProfile(endpoints, providerProfile, pr.requestLogger)
+	providerEndpoints := a.filterProviderScopedEndpoints(endpoints, providerProfile, pr.requestLogger)
 
 	// If the request has specific requirements (e.g., needs vision support),
 	// apply those filters on top of the provider constraint
@@ -190,6 +191,40 @@ func (a *Application) filterModelsByProvider(ctx context.Context, models []*doma
 	}
 
 	return providerModels, nil
+}
+
+// filterProviderScopedEndpoints applies provider-type filtering without falling back to
+// unrelated endpoint types. Provider routes must fail closed when no matching provider
+// endpoints are available.
+func (a *Application) filterProviderScopedEndpoints(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
+	if profile == nil || len(profile.SupportedBy) == 0 {
+		logger.Debug("No provider profile filtering applied", "total_endpoints", len(endpoints))
+		return endpoints
+	}
+
+	compatible := make([]*domain.Endpoint, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		normalizedType := NormaliseProviderType(endpoint.Type)
+		if profile.IsCompatibleWith(normalizedType) {
+			compatible = append(compatible, endpoint)
+		}
+	}
+
+	if len(compatible) == 0 {
+		logger.Warn("No compatible endpoints found for provider-scoped path",
+			"path", profile.Path,
+			"supported_by", profile.SupportedBy,
+			"total_endpoints", len(endpoints))
+		return []*domain.Endpoint{}
+	}
+
+	logger.Debug("Filtered provider endpoints by compatibility",
+		"path", profile.Path,
+		"compatible_count", len(compatible),
+		"total_count", len(endpoints),
+		"supported_by", profile.SupportedBy)
+
+	return compatible
 }
 
 // getProviderModels handles the complete flow of fetching models for a provider-specific
