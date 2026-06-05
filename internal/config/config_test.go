@@ -306,6 +306,36 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_IgnoresUnsupportedEnvironmentVariables(t *testing.T) {
+	base := DefaultConfig()
+
+	oldEnvVars := map[string]string{
+		"OLLA_SERVER_REQUEST_LOGGING":                        "false",
+		"OLLA_SERVER_RATE_LIMITS_GLOBAL_REQUESTS_PER_MINUTE": "9999",
+		"OLLA_LOG_LEVEL":                                     "error",
+	}
+
+	for key, value := range oldEnvVars {
+		os.Setenv(key, value)
+		defer os.Unsetenv(key)
+	}
+
+	loaded, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if loaded.Server.RequestLogging != base.Server.RequestLogging {
+		t.Errorf("RequestLogging changed from %t to %t via unsupported env var", base.Server.RequestLogging, loaded.Server.RequestLogging)
+	}
+	if loaded.Server.RateLimits.GlobalRequestsPerMinute != base.Server.RateLimits.GlobalRequestsPerMinute {
+		t.Errorf("GlobalRequestsPerMinute changed from %d to %d via unsupported env var", base.Server.RateLimits.GlobalRequestsPerMinute, loaded.Server.RateLimits.GlobalRequestsPerMinute)
+	}
+	if loaded.Logging.Level != base.Logging.Level {
+		t.Errorf("Logging level changed from %q to %q via unsupported env var", base.Logging.Level, loaded.Logging.Level)
+	}
+}
+
 func TestParseByteSize(t *testing.T) {
 	testCases := []struct {
 		input    string
