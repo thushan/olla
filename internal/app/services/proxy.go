@@ -16,6 +16,13 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
+const (
+	// defaultConnectionKeepAlive is the fallback when the proxy config omits
+	// connection_keep_alive. Matches the app-layer default to keep behaviour
+	// identical for operators who haven't set the field.
+	defaultConnectionKeepAlive = 30 * time.Second
+)
+
 // ProxyServiceWrapper adapts the core proxy implementation to the service lifecycle
 // model. It manages the creation of load balancers and proxy engines, ensuring they
 // receive validated endpoints from the discovery service.
@@ -170,13 +177,19 @@ func (s *ProxyServiceWrapper) Dependencies() []string {
 // will augment this with engine-specific settings (e.g., connection pool parameters
 // for Olla engine).
 func (s *ProxyServiceWrapper) createProxyConfiguration() *proxy.Configuration {
+	keepAlive := s.config.ConnectionKeepAlive
+	if keepAlive == 0 {
+		keepAlive = defaultConnectionKeepAlive
+	}
 	return &proxy.Configuration{
-		ProxyPrefix:         "",
-		ConnectionTimeout:   s.config.ConnectionTimeout,
-		ConnectionKeepAlive: 30 * time.Second,
-		ResponseTimeout:     s.config.ResponseTimeout,
-		ReadTimeout:         s.config.ReadTimeout,
-		StreamBufferSize:    s.config.StreamBufferSize,
+		ProxyPrefix:           "",
+		ConnectionTimeout:     s.config.ConnectionTimeout,
+		ConnectionKeepAlive:   keepAlive,
+		ResponseTimeout:       s.config.ResponseTimeout,
+		ReadTimeout:           s.config.ReadTimeout,
+		ResponseHeaderTimeout: s.config.ResponseHeaderTimeout,
+		TLSHandshakeTimeout:   s.config.TLSHandshakeTimeout,
+		StreamBufferSize:      s.config.StreamBufferSize,
 	}
 }
 

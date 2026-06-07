@@ -948,6 +948,55 @@ func createTestEndpointWithModelURL(baseURL, endpointType, modelURLString string
 	}
 }
 
+// TestDiscoverModels_AuthenticatedEndpoint verifies that discovery requests carry
+// the endpoint auth header. Without it, authenticated backends 401 and discovery
+// never populates the model list.
+func TestDiscoverModels_AuthenticatedEndpoint(t *testing.T) {
+	t.Parallel()
+
+	const token = "Bearer test-secret"
+	var receivedAuth string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		receivedAuth = r.Header.Get("Authorization")
+		if receivedAuth != token {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"models":[{"name":"llama3:8b","size":1234}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	endpointURL, _ := url.Parse(srv.URL)
+	endpoint := &domain.Endpoint{
+		Name:            "auth-backend",
+		Type:            domain.ProfileOllama,
+		URL:             endpointURL,
+		URLString:       srv.URL,
+		AuthHeaderName:  "Authorization",
+		AuthHeaderValue: token,
+	}
+
+	factory, err := profile.NewFactoryWithDefaults()
+	if err != nil {
+		t.Fatalf("profile factory: %v", err)
+	}
+
+	client := NewHTTPModelDiscoveryClientWithDefaults(factory, createTestLogger())
+	models, err := client.DiscoverModels(context.Background(), endpoint)
+	if err != nil {
+		t.Fatalf("DiscoverModels failed: %v", err)
+	}
+	if len(models) == 0 {
+		t.Error("expected models, got none")
+	}
+	if receivedAuth != token {
+		t.Errorf("backend received auth %q, want %q", receivedAuth, token)
+	}
+}
+
 func createTestLogger() logger.StyledLogger {
 	slogLogger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 		Level: slog.LevelError, // Only log errors to reduce test noise

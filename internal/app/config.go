@@ -15,16 +15,28 @@ const (
 	DefaultReadTimeout         = 300 * time.Second
 	DefaultLoadBalancer        = "priority"
 	DefaultStreamBufferSize    = 8 * 1024 // 8KB
+
+	// DefaultReadHeaderTimeout guards the inbound server against Slowloris-style
+	// attacks where a client opens a connection and trickles headers indefinitely.
+	// 10 s is enough for any legitimate client to send its headers; backends that
+	// are slow to respond are covered by ConnectionTimeout instead.
+	DefaultReadHeaderTimeout = 10 * time.Second
 )
 
 func updateProxyConfiguration(config *config.Config) *proxy.Configuration {
+	keepAlive := config.Proxy.ConnectionKeepAlive
+	if keepAlive == 0 {
+		keepAlive = DefaultConnectionKeepAlive
+	}
 	return &proxy.Configuration{
-		ConnectionTimeout:   config.Proxy.ConnectionTimeout,
-		ConnectionKeepAlive: DefaultConnectionKeepAlive,
-		ResponseTimeout:     config.Proxy.ResponseTimeout,
-		ReadTimeout:         config.Proxy.ReadTimeout,
-		ProxyPrefix:         constants.ContextRoutePrefixKey,
-		StreamBufferSize:    getStreamBufferSize(config),
+		ConnectionTimeout:     config.Proxy.ConnectionTimeout,
+		ConnectionKeepAlive:   keepAlive,
+		ResponseTimeout:       config.Proxy.ResponseTimeout,
+		ReadTimeout:           config.Proxy.ReadTimeout,
+		ResponseHeaderTimeout: config.Proxy.ResponseHeaderTimeout,
+		TLSHandshakeTimeout:   config.Proxy.TLSHandshakeTimeout,
+		ProxyPrefix:           constants.ContextRoutePrefixKey,
+		StreamBufferSize:      getStreamBufferSize(config),
 	}
 }
 func getStreamBufferSize(config *config.Config) int {

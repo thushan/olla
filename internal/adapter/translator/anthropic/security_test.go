@@ -345,32 +345,33 @@ func TestRequestSizeLimit(t *testing.T) {
 	})
 }
 
-func TestUnknownFieldsRejection(t *testing.T) {
+func TestUnknownFieldsTolerated(t *testing.T) {
 	translator := NewTranslator(createTestLogger(), createTestConfig())
 	ctx := context.Background()
 
 	t.Run("request_with_unknown_field", func(t *testing.T) {
-		// Create raw JSON with an unknown field
+		// Unknown fields must be silently ignored, not rejected. A proxy must not be
+		// stricter than the upstream API it emulates.
 		rawJSON := `{
 			"model": "claude-sonnet-4-20250929",
 			"max_tokens": 1024,
 			"messages": [
 				{"role": "user", "content": "Hello"}
 			],
-			"unknown_field": "this should cause rejection"
+			"unknown_field": "should be tolerated and ignored"
 		}`
 
 		req := &http.Request{
 			Body: io.NopCloser(bytes.NewReader([]byte(rawJSON))),
 		}
 
-		_, err := translator.TransformRequest(ctx, req)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to parse Anthropic request")
+		result, err := translator.TransformRequest(ctx, req)
+		require.NoError(t, err)
+		assert.NotNil(t, result)
 	})
 
 	t.Run("request_without_unknown_fields", func(t *testing.T) {
-		// Valid request should succeed
+		// Valid request should succeed as before.
 		rawJSON := `{
 			"model": "claude-sonnet-4-20250929",
 			"max_tokens": 1024,
@@ -393,7 +394,7 @@ func TestSecurityFeaturesCombined(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("invalid_params_with_unknown_fields", func(t *testing.T) {
-		// Request with both unknown field and invalid temperature
+		// Unknown field is tolerated; validation still rejects the out-of-range temperature.
 		rawJSON := `{
 			"model": "claude-sonnet-4-20250929",
 			"max_tokens": 1024,
@@ -410,7 +411,7 @@ func TestSecurityFeaturesCombined(t *testing.T) {
 
 		_, err := translator.TransformRequest(ctx, req)
 		require.Error(t, err)
-		// Should fail at JSON parsing stage due to unknown field
-		assert.Contains(t, err.Error(), "failed to parse Anthropic request")
+		// Unknown field is silently ignored; rejection comes from Validate() on temperature.
+		assert.Contains(t, err.Error(), "invalid request")
 	})
 }

@@ -372,6 +372,38 @@ func TestCountSystemChars(t *testing.T) {
 	}
 }
 
+// TestTransformRequest_WithContextManagementField is a regression test for GitHub issue #154.
+// Claude Code v2.1.156+ sends context_management in requests; lenient parsing must not reject it.
+func TestTransformRequest_WithContextManagementField(t *testing.T) {
+	translator := NewTranslator(createTestLogger(), createTestConfig())
+
+	// Realistic context_management payload as sent by Claude Code.
+	rawJSON := `{
+		"model": "claude-3-5-sonnet-20241022",
+		"max_tokens": 1024,
+		"messages": [
+			{"role": "user", "content": "Hello"}
+		],
+		"context_management": {
+			"edits": [
+				{"type": "clear_tool_uses_20250919"}
+			]
+		}
+	}`
+
+	req := &http.Request{
+		Body: io.NopCloser(bytes.NewReader([]byte(rawJSON))),
+	}
+
+	result, err := translator.TransformRequest(context.Background(), req)
+	require.NoError(t, err, "context_management field must be tolerated and not cause a parse error")
+	require.NotNil(t, result)
+
+	// context_management has no OpenAI equivalent and must not leak into the translated request.
+	_, present := result.OpenAIRequest["context_management"]
+	assert.False(t, present, "context_management must not appear in the translated OpenAI request")
+}
+
 // TestEstimateTokens_WithSystemArray tests token estimation with array system prompt
 func TestEstimateTokens_WithSystemArray(t *testing.T) {
 	req := &AnthropicRequest{

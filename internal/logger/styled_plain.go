@@ -100,6 +100,10 @@ func (sl *PlainStyledLogger) InfoHealthStatus(msg string, name string, status do
 		statusText = "Unhealthy"
 	case domain.StatusUnknown:
 		statusText = "Unknown"
+	case domain.StatusConfigError:
+		statusText = "Config Error"
+	case domain.StatusRateLimited:
+		statusText = "Rate Limited"
 	}
 	styledMsg := fmt.Sprintf("%s %s is %s", msg, name, statusText)
 	sl.logger.Info(styledMsg, args...)

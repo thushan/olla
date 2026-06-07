@@ -23,6 +23,20 @@ const (
 	OllaDefaultTimeout     = 30 * time.Second
 	OllaDefaultKeepAlive   = 30 * time.Second
 	OllaDefaultReadTimeout = 30 * time.Second
+
+	// DefaultResponseHeaderTimeout caps the time a backend may hold the connection
+	// open after accepting without sending a single response header byte.
+	// 30 s is chosen to match Olla's other timeout defaults; Sherpa uses the same constant.
+	DefaultResponseHeaderTimeout = 30 * time.Second
+
+	// DefaultHealthResponseHeaderTimeout is shorter than the proxy timeout because
+	// health probes are latency-sensitive and already bounded by CheckTimeout.
+	DefaultHealthResponseHeaderTimeout = 10 * time.Second
+
+	// DefaultTLSHandshakeTimeout caps the TLS negotiation phase. 10 s matches the
+	// Go stdlib default and is sufficient for local inference backends; slow TLS
+	// handshakes on these hosts usually indicate a misconfiguration.
+	DefaultTLSHandshakeTimeout = 10 * time.Second
 )
 
 // ProxyConfig defines the interface for all proxy configurations
@@ -42,13 +56,37 @@ type ProxyConfig interface {
 
 // BaseProxyConfig contains common configuration fields for all proxy implementations
 type BaseProxyConfig struct {
-	ProxyPrefix         string
-	Profile             string
-	ConnectionTimeout   time.Duration
-	ConnectionKeepAlive time.Duration
-	ResponseTimeout     time.Duration
-	ReadTimeout         time.Duration
-	StreamBufferSize    int
+	ProxyPrefix           string
+	Profile               string
+	ConnectionTimeout     time.Duration
+	ConnectionKeepAlive   time.Duration
+	ResponseTimeout       time.Duration
+	ReadTimeout           time.Duration
+	ResponseHeaderTimeout time.Duration
+	TLSHandshakeTimeout   time.Duration
+	StreamBufferSize      int
+}
+
+// GetResponseHeaderTimeout returns the maximum time the transport waits for a
+// backend's first response header, defaulting to DefaultResponseHeaderTimeout.
+// Raise it for backends that load models on demand (e.g. Lemonade), where the
+// first request blocks until the model is resident and the 30s default would
+// abort a legitimate cold start.
+func (c *BaseProxyConfig) GetResponseHeaderTimeout() time.Duration {
+	if c.ResponseHeaderTimeout == 0 {
+		return DefaultResponseHeaderTimeout
+	}
+	return c.ResponseHeaderTimeout
+}
+
+// GetTLSHandshakeTimeout returns the TLS handshake timeout, defaulting to
+// DefaultTLSHandshakeTimeout. Exposed so operators can extend it for backends
+// behind slow TLS terminators, though the default covers all local backends.
+func (c *BaseProxyConfig) GetTLSHandshakeTimeout() time.Duration {
+	if c.TLSHandshakeTimeout == 0 {
+		return DefaultTLSHandshakeTimeout
+	}
+	return c.TLSHandshakeTimeout
 }
 
 // GetProxyProfile returns the proxy profile, defaulting to "auto" if not set

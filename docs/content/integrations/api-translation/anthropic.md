@@ -153,6 +153,8 @@ Olla supports two modes for handling Anthropic API requests, selected automatica
 - Tool definitions → OpenAI function definitions
 - Stop sequences → OpenAI stop parameter
 
+**Unknown and experimental fields**: Unrecognised Anthropic request fields (for example `context_management`, `output_config`, and future experimental beta fields) are tolerated and safely ignored during translation rather than rejected. In passthrough mode these fields are forwarded to the backend untouched, so backends with native Anthropic support receive them as-is.
+
 ### Response Translation (OpenAI → Anthropic)
 
 **OpenAI Response**:

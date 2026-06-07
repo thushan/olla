@@ -143,6 +143,24 @@ server:
 
 See [Rate Limiting Reference](reference.md#rate-limiting) for complete details.
 
+### CORS
+
+CORS is disabled by default. Enable it only when browser clients (such as OpenWebUI or a custom dashboard) connect directly to Olla. Non-browser clients are unaffected.
+
+```yaml
+server:
+  cors:
+    enabled: true
+    allowed_origins:
+      - "https://my-dashboard.example.com"
+    allow_credentials: true
+    max_age: 600
+```
+
+See [Security Best Practices](practices/security.md#cors) for the full configuration reference and credential/wildcard caveat.
+
+Endpoints also support per-endpoint outbound authentication (`auth:`) and custom headers (`headers:`). See [Endpoint Authentication](endpoint-auth.md) for configuration details.
+
 ## Proxy Configuration
 
 The `proxy` section controls request routing and proxy behaviour.
@@ -386,6 +404,7 @@ Olla validates configuration on startup:
 
 ### Next Steps
 - [Configuration Reference](reference.md) - Complete configuration options
+- [Endpoint Authentication](endpoint-auth.md) - Bearer, API key, and basic auth for backends
 - [Configuration Examples](examples.md) - Common configuration scenarios
 - [Configuration Best Practices](practices/configuration.md) - Native and Docker configuration strategies
 - [Best Practices](practices/overview.md) - Production recommendations

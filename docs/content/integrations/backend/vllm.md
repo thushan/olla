@@ -96,6 +96,9 @@ discovery:
         check_timeout: 2s
 ```
 
+!!! tip "Authenticated vLLM"
+    vLLM supports the `--api-key` flag to require a bearer token on all requests. Configure the matching credential with `auth.type: bearer` on the endpoint. See [Endpoint Authentication](../../configuration/endpoint-auth.md) for details.
+
 ### Production Setup
 
 Configure vLLM for high-throughput production:

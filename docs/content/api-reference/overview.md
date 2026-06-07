@@ -210,8 +210,8 @@ For streaming endpoints (chat completions, text generation), responses use:
 
 ## CORS Support
 
-CORS headers are included for browser-based clients:
+CORS is **disabled by default**. Most clients (CLI tools, SDKs, coding agents, and server-side apps such as OpenWebUI's backend) send no `Origin` header, so CORS does not apply to them.
 
-- `Access-Control-Allow-Origin: *`
-- `Access-Control-Allow-Methods: GET, POST, OPTIONS`
-- `Access-Control-Allow-Headers: Content-Type, Authorization`
+Enable it only when a browser connects directly to Olla, for example a custom web dashboard or a UI configured for browser-direct connections. Once enabled, Olla answers preflight requests automatically and, by default, exposes the full `X-Olla-*` response header set so browser JavaScript can read routing and model metadata.
+
+The allowed origins, methods, headers, exposed headers, credentials, and preflight cache are all configurable. See [Security Best Practices - CORS](../configuration/practices/security.md#cors) and the [Configuration Reference](../configuration/reference.md#cors) for details.

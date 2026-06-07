@@ -174,6 +174,15 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 	req.Header.Set("User-Agent", fmt.Sprintf(DefaultUserAgent, version.ShortName, version.Version))
 	req.Header.Set("Accept", DefaultContentType)
 
+	// Apply any per-endpoint custom headers then auth, mirroring what CopyHeaders does on
+	// the proxy path. Without this, authenticated backends 401 during model discovery.
+	for name, value := range endpoint.Headers {
+		req.Header.Set(name, value)
+	}
+	if endpoint.AuthHeaderName != "" {
+		req.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		networkErr := &NetworkError{URL: discoveryURL, Err: err}

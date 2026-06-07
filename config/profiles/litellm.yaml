@@ -45,6 +45,11 @@ characteristics:
   max_concurrent_requests: 100  # LiteLLM handles high concurrency well
   default_priority: 95  # High priority as a unified gateway
   streaming_support: true
+  auth:
+    required: false     # optional but common in production deployments
+    types:
+      - bearer          # master key via Authorization: Bearer
+      - api_key         # some versions accept x-goog-api-key or custom header
   
 # Detection hints for auto-discovery
 detection:

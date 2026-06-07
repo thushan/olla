@@ -99,7 +99,12 @@ The default port for `lmdeploy serve api_server` is **23333**. Register individu
 
 ### Authentication
 
-LMDeploy supports optional Bearer-token authentication via the `--api-keys` flag. Configure the token in Olla's endpoint headers so it is forwarded on every proxied request:
+LMDeploy supports optional Bearer-token authentication via the `--api-keys` flag (plural).
+
+!!! tip "Use the `auth:` block"
+    Prefer the structured `auth:` block over a raw `headers:` entry. Olla validates credentials
+    at startup and resolves `${VAR}` placeholders and `_file` secrets consistently across all
+    auth types. See [Endpoint Authentication](../../configuration/endpoint-auth.md) for details.
 
 ```yaml
 discovery:
@@ -112,8 +117,9 @@ discovery:
         health_check_url: "/health"
         check_interval: 10s
         check_timeout: 5s
-        headers:
-          Authorization: "Bearer ${LMDEPLOY_API_KEY}"
+        auth:
+          type: bearer
+          token: "${LMDEPLOY_API_KEY}"
 ```
 
 The `/health` endpoint is auth-exempt on LMDeploy, so health checks will succeed even when a key is required for inference.

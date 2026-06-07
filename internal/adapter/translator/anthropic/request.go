@@ -17,10 +17,12 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 	limitedBody := io.LimitReader(r.Body, t.maxMessageSize)
 	defer r.Body.Close()
 
-	// use decoder for memory efficiency and strict validation
+	// Parse leniently: as a proxy we must not be stricter than the upstream API we emulate.
+	// Unknown or newer Anthropic fields (e.g. context_management, experimental beta fields)
+	// are silently ignored rather than rejected. The streaming decoder is kept for memory
+	// efficiency on large requests.
 	var anthropicReq AnthropicRequest
 	decoder := json.NewDecoder(limitedBody)
-	decoder.DisallowUnknownFields()
 
 	if err := decoder.Decode(&anthropicReq); err != nil {
 		return nil, fmt.Errorf("failed to parse Anthropic request: %w", err)

@@ -117,6 +117,17 @@ discovery:
 - `model_url`: Endpoint for model discovery (default: `/api/v1/models`)
 - `health_check_url`: Health check endpoint (default: `/api/v1/health`)
 
+> **On-demand model loading:** Lemonade loads a model into memory on the first
+> request for it, which can take longer than the proxy's default 30s
+> `response_header_timeout` and surface as a `502` cold-start failure. If you see
+> this, raise the timeout in the `proxy` block (see
+> [Configuration Reference](../../configuration/reference/)):
+>
+> ```yaml
+> proxy:
+>   response_header_timeout: 180s
+> ```
+
 ### Production Setup: Multiple Instances
 
 Load balance across multiple Lemonade SDK instances:

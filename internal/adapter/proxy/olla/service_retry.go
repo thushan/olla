@@ -84,7 +84,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	// Rewrite model name in request body if this is an alias-resolved request
 	core.RewriteModelForAlias(ctx, r, endpoint)
 
-	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, stats)
+	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, endpoint, stats)
 	if err != nil {
 		if cb != nil {
 			cb.RecordFailure()
@@ -124,12 +124,8 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	core.SetResponseHeaders(w, stats, endpoint)
 	core.SetStickySessionHeaders(w, r)
 
-	// Copy response headers
-	for key, values := range resp.Header {
-		for _, value := range values {
-			w.Header().Add(key, value)
-		}
-	}
+	// Copy response headers, stripping any sensitive headers the upstream may reflect
+	core.CopyResponseHeaders(w.Header(), resp.Header, endpoint)
 
 	w.WriteHeader(resp.StatusCode)
 

@@ -73,6 +73,17 @@ func (p *lemonadeParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 			}
 		}
 
+		// Map Lemonade's `downloaded` flag to an available state. Lemonade loads
+		// models on demand, so a downloaded model is serveable - the equivalent
+		// of a pulled Ollama model. Without this the model has no state, which
+		// the router treats as unknown and excludes from dispatch, making the
+		// Lemonade endpoint unroutable for chat.
+		if model.Downloaded {
+			state := domain.ModelStateAvailable.String()
+			details.State = &state
+			hasDetails = true
+		}
+
 		if hasDetails {
 			modelInfo.Details = details
 		}

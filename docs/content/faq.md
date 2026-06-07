@@ -79,6 +79,14 @@ OLLA_LOG_LEVEL=debug
 
 However, some settings like `proxy.profile` must be set in the YAML configuration file.
 
+### Do I need to enable CORS?
+
+Only if a browser connects **directly** to Olla, such as a custom web dashboard or a UI configured for browser-direct connections. CORS is disabled by default.
+
+You do **not** need CORS for CLI tools, SDKs, coding agents, or server-side apps. This includes the standard OpenWebUI setup, where OpenWebUI's own backend calls Olla server-to-server (no browser `Origin` is involved). If Olla sits behind a reverse proxy (nginx, Traefik), handle CORS there instead.
+
+When you do enable it, list explicit origins rather than `*` if you also set `allow_credentials: true` (the combination is forbidden by the CORS spec and Olla rejects it at startup). See [CORS configuration](configuration/practices/security.md#cors).
+
 ## Troubleshooting
 
 ### Streaming responses arrive all at once
@@ -280,6 +288,24 @@ discovery:
     interval: 15m  # Less frequent discovery
 ```
 
+## Authentication
+
+### Why does my endpoint show `config_error`?
+
+A `config_error` status means Olla received a 401 or 403 from the backend during a health probe. This is an auth misconfiguration, not a network failure. The backend is reachable but rejecting the credentials. Check that the `auth.token`, `auth.key`, or `auth.password` value configured on the endpoint matches what the backend expects.
+
+### What does `rate_limited` mean?
+
+The health probe received a 429 (Too Many Requests) response. Olla marks the endpoint as `rate_limited` and honours the `Retry-After` header if present. Probing resumes automatically once the wait period expires. This is most common when health checks are running too frequently against a rate-limited backend; increase `check_interval` if it happens repeatedly.
+
+### How do I authenticate to a backend protected by `--api-key`?
+
+Use `auth.type: bearer` on the endpoint. Both vLLM (`vllm serve --api-key`) and llama.cpp (`llama-server --api-key`) treat the value as a bearer token checked against the `Authorization` header. See [Endpoint Authentication](configuration/endpoint-auth.md) for full configuration and Docker/Kubernetes examples.
+
+### Olla refuses to start with a `${VAR}` error
+
+The environment variable referenced in your config was not set (or not exported) when Olla started. This is intentional: Olla uses fail-fast expansion so a missing secret surfaces as a startup error rather than silently forwarding unauthenticated requests. Export the variable before starting Olla, or use the `_file` form (`token_file`, `key_file`, etc.) for container and Kubernetes deployments where secrets are mounted as files.
+
 ## Common Issues
 
 ### "No healthy endpoints available"
@@ -304,6 +330,8 @@ Olla adds several headers to responses:
 - `X-Olla-Response-Time`: Total processing time
 
 If missing, check you're using the `/olla/` prefix in your requests.
+
+If a **browser** client cannot read these headers (server-side clients are unaffected), the browser is hiding them, not Olla. Cross-origin JavaScript can only read response headers that are explicitly exposed. Enable CORS and leave `exposed_headers` empty to auto-expose the full `X-Olla-*` set. See [CORS configuration](configuration/practices/security.md#cors).
 
 ### Connection refused errors
 

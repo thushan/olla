@@ -24,4 +24,9 @@ type LemonadeModel struct {
 	Checkpoint string `json:"checkpoint"` // HuggingFace model path (e.g., "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx")
 	Recipe     string `json:"recipe"`     // Inference engine (e.g., "oga-cpu", "oga-npu", "llamacpp", "flm")
 	Created    int64  `json:"created"`    // Unix timestamp
+	// Downloaded reports that the model is present on disk and serveable on
+	// demand. Lemonade loads models on demand, so this is the readiness signal
+	// (the equivalent of an Ollama model being pulled) used to mark the model
+	// available for routing.
+	Downloaded bool `json:"downloaded"`
 }

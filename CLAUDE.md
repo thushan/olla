@@ -216,7 +216,7 @@ Always run `make ready` before committing changes.
 - **Version Management**: Build-time version injection via `internal/version`
 
 ### Development Guidelines
-- Go 1.24+
+- Go 1.24 (do not bump to 1.25; see Dependencies for held-back packages)
 - Australian English for comments and documentation
 - Comment on **why** rather than **what**
 - Always run `make ready` before committing
@@ -230,11 +230,25 @@ Always run `make ready` before committing changes.
 "github.com/puzpuzpuz/xsync/v4"  // Concurrent maps/counters
 "github.com/tidwall/gjson"       // Fast JSON parsing
 "github.com/jellydator/ttlcache" // Time-to-live cache
+"github.com/rs/cors"             // CORS middleware for browser clients
 "golang.org/x/sync"              // errgroup
 "golang.org/x/time"              // rate limiting
 ```
 
 Do not add additional dependencies unless explicitly asked.
+
+### Go 1.24 Compatibility Pins
+
+Olla targets Go 1.24. From the versions listed below onward, the upstream `go` directive moves to 1.25, so these packages are held back:
+
+- `golang.org/x/sys` at v0.41.0 (v0.42.0+ requires Go 1.25)
+- `golang.org/x/term` at v0.40.0
+- `golang.org/x/text` at v0.34.0
+- `golang.org/x/sync` at v0.19.0
+- `golang.org/x/time` at v0.14.0
+- `atomicgo.dev/keyboard` at v0.2.9
+
+`go get -u ./...` will silently bump the toolchain to 1.25 by pulling these. After running it, check `go.mod` and pin the affected packages back to the versions above, or use `go get -u=patch ./...` to limit upgrades to patch releases only.
 
 ## SUB-AGENT DELEGATION
 

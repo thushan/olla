@@ -31,23 +31,73 @@ type Config struct {
 	Filename      string              `yaml:"-"`
 	Translators   TranslatorsConfig   `yaml:"translators"`
 	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
-	Proxy         ProxyConfig         `yaml:"proxy"`
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
+	Proxy         ProxyConfig         `yaml:"proxy"`
 	Server        ServerConfig        `yaml:"server"`
 	Engineering   EngineeringConfig   `yaml:"engineering"`
 }
 
+// CorsConfig controls browser cross-origin access to the Olla API.
+// This matters when a browser-based client (OpenWebUI, a custom dashboard, etc.)
+// calls Olla from a different origin. Non-browser clients (curl, SDKs, other
+// services) ignore CORS headers entirely, so enabling this has no effect on them.
+//
+// Security note: combining AllowCredentials=true with AllowedOrigins=["*"] is
+// forbidden by the CORS spec — the browser will reject the response. Validate()
+// enforces this at startup rather than letting it silently break at runtime.
+//
+// ExposedHeaders is intentionally left empty here; the middleware phase will
+// automatically expose the full X-Olla-* response header set.
+type CorsConfig struct {
+	AllowedOrigins   []string `yaml:"allowed_origins"`
+	AllowedMethods   []string `yaml:"allowed_methods"`
+	AllowedHeaders   []string `yaml:"allowed_headers"`
+	ExposedHeaders   []string `yaml:"exposed_headers"`
+	MaxAge           int      `yaml:"max_age"`
+	Enabled          bool     `yaml:"enabled"`
+	AllowCredentials bool     `yaml:"allow_credentials"`
+}
+
 // ServerConfig holds HTTP server configuration
 type ServerConfig struct {
-	Host            string              `yaml:"host"`
-	RateLimits      ServerRateLimits    `yaml:"rate_limits"`
-	RequestLimits   ServerRequestLimits `yaml:"request_limits"`
-	Port            int                 `yaml:"port"`
-	ReadTimeout     time.Duration       `yaml:"read_timeout"`
-	WriteTimeout    time.Duration       `yaml:"write_timeout"`
-	IdleTimeout     time.Duration       `yaml:"idle_timeout"`
-	ShutdownTimeout time.Duration       `yaml:"shutdown_timeout"`
-	RequestLogging  bool                `yaml:"request_logging"`
+	Host              string              `yaml:"host"`
+	Cors              CorsConfig          `yaml:"cors"`
+	RateLimits        ServerRateLimits    `yaml:"rate_limits"`
+	RequestLimits     ServerRequestLimits `yaml:"request_limits"`
+	Port              int                 `yaml:"port"`
+	ReadTimeout       time.Duration       `yaml:"read_timeout"`
+	ReadHeaderTimeout time.Duration       `yaml:"read_header_timeout"`
+	WriteTimeout      time.Duration       `yaml:"write_timeout"`
+	IdleTimeout       time.Duration       `yaml:"idle_timeout"`
+	ShutdownTimeout   time.Duration       `yaml:"shutdown_timeout"`
+	RequestLogging    bool                `yaml:"request_logging"`
+}
+
+// Validate checks CORS configuration for spec-violating combinations that would
+// silently break browser clients at runtime rather than failing loudly at startup.
+func (c *CorsConfig) Validate() error {
+	if !c.Enabled {
+		return nil
+	}
+	// rs/cors treats an empty AllowedOrigins list as allow-all, which is the
+	// opposite of what an operator expects when they write allowed_origins: [].
+	// Require an explicit ["*"] to opt into allow-all so the intent is unambiguous.
+	if len(c.AllowedOrigins) == 0 {
+		return errors.New("cors: allowed_origins must not be empty when cors is enabled; set [\"*\"] to allow all origins explicitly")
+	}
+	if c.MaxAge < 0 {
+		return fmt.Errorf("cors.max_age must be non-negative, got %d", c.MaxAge)
+	}
+	// The CORS spec forbids Access-Control-Allow-Origin: * when credentials are in play.
+	// Browsers will refuse the response, so this is a startup error rather than a warning.
+	if c.AllowCredentials {
+		for _, origin := range c.AllowedOrigins {
+			if origin == "*" {
+				return errors.New("cors: allow_credentials=true is incompatible with allowed_origins=[\"*\"]; list explicit origins instead")
+			}
+		}
+	}
+	return nil
 }
 
 // GetAddress returns the server address in host:port format
@@ -90,17 +140,20 @@ type StickySessionConfig struct {
 
 // ProxyConfig holds proxy-specific configuration
 type ProxyConfig struct {
-	ProfileFilter     *domain.FilterConfig `yaml:"profile_filter,omitempty"`
-	Engine            string               `yaml:"engine"`
-	LoadBalancer      string               `yaml:"load_balancer"`
-	Profile           string               `yaml:"profile"`
-	StickySessions    StickySessionConfig  `yaml:"sticky_sessions"`
-	ConnectionTimeout time.Duration        `yaml:"connection_timeout"`
-	ResponseTimeout   time.Duration        `yaml:"response_timeout"`
-	ReadTimeout       time.Duration        `yaml:"read_timeout"`
-	RetryBackoff      time.Duration        `yaml:"retry_backoff"` // Deprecated: Use model_registry.routing_strategy instead. TODO: Removal: v0.1.0
-	StreamBufferSize  int                  `yaml:"stream_buffer_size"`
-	MaxRetries        int                  `yaml:"max_retries"` // Deprecated: Use model_registry.routing_strategy instead. TODO: Removal: v0.1.0
+	ProfileFilter         *domain.FilterConfig `yaml:"profile_filter,omitempty"`
+	Engine                string               `yaml:"engine"`
+	LoadBalancer          string               `yaml:"load_balancer"`
+	Profile               string               `yaml:"profile"`
+	StickySessions        StickySessionConfig  `yaml:"sticky_sessions"`
+	ConnectionTimeout     time.Duration        `yaml:"connection_timeout"`
+	ConnectionKeepAlive   time.Duration        `yaml:"connection_keep_alive"`
+	ResponseTimeout       time.Duration        `yaml:"response_timeout"`
+	ReadTimeout           time.Duration        `yaml:"read_timeout"`
+	ResponseHeaderTimeout time.Duration        `yaml:"response_header_timeout"`
+	TLSHandshakeTimeout   time.Duration        `yaml:"tls_handshake_timeout"`
+	RetryBackoff          time.Duration        `yaml:"retry_backoff"` // Deprecated: Use model_registry.routing_strategy instead. TODO: Removal: v0.1.0
+	StreamBufferSize      int                  `yaml:"stream_buffer_size"`
+	MaxRetries            int                  `yaml:"max_retries"` // Deprecated: Use model_registry.routing_strategy instead. TODO: Removal: v0.1.0
 }
 
 // DiscoveryConfig holds service discovery configuration
@@ -126,9 +179,28 @@ type StaticDiscoveryConfig struct {
 	Endpoints []EndpointConfig `yaml:"endpoints"`
 }
 
+// AuthConfig holds per-endpoint outbound authentication configuration.
+// Inline credential and _file variants are mutually exclusive; validation
+// (fatal startup error on conflict) is enforced in P3.
+type AuthConfig struct {
+	// header overrides the default header name for api_key auth (default X-Api-Key).
+	Header       string `yaml:"header,omitempty"`
+	Token        string `yaml:"token,omitempty"`
+	TokenFile    string `yaml:"token_file,omitempty"`
+	Key          string `yaml:"key,omitempty"`
+	KeyFile      string `yaml:"key_file,omitempty"`
+	Username     string `yaml:"username,omitempty"`
+	UsernameFile string `yaml:"username_file,omitempty"`
+	Password     string `yaml:"password,omitempty"`
+	PasswordFile string `yaml:"password_file,omitempty"`
+	Type         string `yaml:"type,omitempty"`
+}
+
 // EndpointConfig holds configuration for an AI inference endpoint
 type EndpointConfig struct {
 	ModelFilter *domain.FilterConfig `yaml:"model_filter,omitempty"`
+	Auth        *AuthConfig          `yaml:"auth,omitempty"`
+	Headers     map[string]string    `yaml:"headers,omitempty"`
 	// Priority uses a pointer so nil means "omitted in config" rather than explicitly zero.
 	// This lets applyEndpointDefaults distinguish "user set 0" from "user said nothing",
 	// since 0 is a valid, lower-than-default priority value.

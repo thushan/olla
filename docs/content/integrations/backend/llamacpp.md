@@ -110,6 +110,9 @@ discovery:
         # Profile handles health checks and model discovery
 ```
 
+!!! tip "Authenticated llama.cpp"
+    `llama-server` accepts `--api-key` (or `--api-key-file` for file-based secrets) to protect the HTTP endpoint. Configure the matching credential with `auth.type: bearer` on the endpoint. See [Endpoint Authentication](../../configuration/endpoint-auth.md) for details.
+
 ### Production Setup
 
 Configure llama.cpp for production with proper timeouts:

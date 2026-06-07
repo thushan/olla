@@ -10,10 +10,18 @@ import (
 	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/app/handlers"
+	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
+)
+
+const (
+	// defaultReadHeaderTimeout protects the inbound server against Slowloris-style
+	// attacks. A legitimate client sends its full header set well within 10 s; slow
+	// backends are handled by proxy.ConnectionTimeout which applies much later.
+	defaultReadHeaderTimeout = 10 * time.Second
 )
 
 // HTTPService manages the HTTP server lifecycle and route registration. It coordinates
@@ -106,6 +114,10 @@ func (s *HTTPService) Start(ctx context.Context) error {
 	}
 
 	readTimeout := s.config.ReadTimeout
+	readHeaderTimeout := s.config.ReadHeaderTimeout
+	if readHeaderTimeout == 0 {
+		readHeaderTimeout = defaultReadHeaderTimeout
+	}
 	writeTimeout := s.config.WriteTimeout
 	idleTimeout := s.config.IdleTimeout
 
@@ -138,18 +150,29 @@ func (s *HTTPService) Start(ctx context.Context) error {
 	securityAdapters := s.application.GetSecurityAdapters()
 	routeRegistry.WireUpWithSecurityChain(mux, securityAdapters)
 
+	var root http.Handler = mux
+	root = applyCORS(root, s.fullConfig.Server.Cors)
+
+	if s.fullConfig.Server.Cors.Enabled {
+		s.logger.Info("CORS enabled",
+			"allowed_origins", s.fullConfig.Server.Cors.AllowedOrigins,
+			"allow_credentials", s.fullConfig.Server.Cors.AllowCredentials)
+	}
+
 	s.server = &http.Server{
-		Addr:         s.config.GetAddress(),
-		Handler:      mux,
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-		IdleTimeout:  idleTimeout,
+		Addr:              s.config.GetAddress(),
+		Handler:           root,
+		ReadTimeout:       readTimeout,
+		ReadHeaderTimeout: readHeaderTimeout,
+		WriteTimeout:      writeTimeout,
+		IdleTimeout:       idleTimeout,
 	}
 
 	go func() {
 		s.logger.Info("HTTP server listening",
 			"address", s.server.Addr,
 			"readTimeout", readTimeout,
+			"readHeaderTimeout", readHeaderTimeout,
 			"writeTimeout", writeTimeout,
 			"idleTimeout", idleTimeout)
 
@@ -164,6 +187,22 @@ func (s *HTTPService) Start(ctx context.Context) error {
 
 	s.printWarnings()
 	return nil
+}
+
+// applyCORS wraps the root handler with CORS as the outermost layer so that
+// browser preflight (OPTIONS) requests are answered directly by rs/cors and
+// never reach the per-route security chain (rate-limiting, access logging).
+// This is correct CORS behaviour: preflights carry no credentials or body and
+// never reach a backend, so letting the security chain return 401/403/429 to
+// a preflight probe would break legitimate browser clients. Actual GET/POST
+// requests pass through rs/cors and then traverse the full security chain as
+// normal. Kept as a seam so the enable/disable wiring is testable without
+// standing up the full HTTP server.
+func applyCORS(handler http.Handler, cfg config.CorsConfig) http.Handler {
+	if !cfg.Enabled {
+		return handler
+	}
+	return middleware.NewCORS(cfg).Handler(handler)
 }
 
 func (s *HTTPService) printWarnings() {

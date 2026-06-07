@@ -390,6 +390,56 @@ func TestLemonadeParser_Parse(t *testing.T) {
 	})
 }
 
+func TestLemonadeParser_DownloadedState(t *testing.T) {
+	parser := &lemonadeParser{}
+
+	// Lemonade reports per-model `downloaded` in /api/v1/models. A downloaded
+	// model is present on disk and serveable on demand, so it must map to an
+	// "available" state - otherwise the router treats it as unknown-state and
+	// excludes the endpoint from dispatch (no chat routing to Lemonade).
+	testCases := []struct {
+		name            string
+		downloadedField string // JSON snippet for the field, "" to omit it entirely
+		expectAvailable bool
+	}{
+		{"downloaded true marks model available", `"downloaded": true,`, true},
+		{"downloaded false leaves state unset", `"downloaded": false,`, false},
+		{"downloaded omitted leaves state unset", ``, false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			response := fmt.Sprintf(`{
+				"object": "list",
+				"data": [
+					{
+						"id": "Qwen3-0.6B-GGUF",
+						"object": "model",
+						"created": 1759361710,
+						"owned_by": "lemonade",
+						%s
+						"recipe": "llamacpp"
+					}
+				]
+			}`, tc.downloadedField)
+
+			models, err := parser.Parse([]byte(response))
+			require.NoError(t, err)
+			require.Len(t, models, 1)
+
+			model := models[0]
+			require.NotNil(t, model.Details) // recipe always produces details
+
+			if tc.expectAvailable {
+				require.NotNil(t, model.Details.State)
+				assert.Equal(t, "available", *model.Details.State)
+			} else {
+				assert.Nil(t, model.Details.State)
+			}
+		})
+	}
+}
+
 func TestLemonadeParser_RecipeInference(t *testing.T) {
 	t.Run("infers format correctly for all recipe types", func(t *testing.T) {
 		testCases := []struct {

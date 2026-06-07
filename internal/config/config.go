@@ -63,6 +63,17 @@ func DefaultConfig() *Config {
 				TrustedProxyCIDRs:       DefaultLocalNetworkTrustedCIDRs,
 				TrustedProxyCIDRsParsed: nil, // Will be parsed later
 			},
+			// CORS is off by default; operators opt-in when browser clients need access.
+			// ExposedHeaders is empty here — the middleware phase populates the X-Olla-* set.
+			Cors: CorsConfig{
+				Enabled:          false,
+				AllowedOrigins:   []string{"*"},
+				AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+				AllowedHeaders:   []string{"*"},
+				ExposedHeaders:   nil,
+				AllowCredentials: false,
+				MaxAge:           300,
+			},
 		},
 		Proxy: ProxyConfig{
 			Engine:            DefaultProxyEngine,
@@ -193,6 +204,10 @@ func (c *Config) Validate() error {
 
 	if err := c.Translators.Validate(); err != nil {
 		return fmt.Errorf("translators config invalid: %w", err)
+	}
+
+	if err := c.Server.Cors.Validate(); err != nil {
+		return fmt.Errorf("server.cors config invalid: %w", err)
 	}
 
 	return nil
@@ -354,6 +369,26 @@ func applyEnvOverrides(config *Config) {
 			config.Proxy.ReadTimeout = duration
 		}
 	}
+	if val := os.Getenv("OLLA_PROXY_RESPONSE_HEADER_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Proxy.ResponseHeaderTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_TLS_HANDSHAKE_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Proxy.TLSHandshakeTimeout = duration
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_CONNECTION_KEEP_ALIVE"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Proxy.ConnectionKeepAlive = duration
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_READ_HEADER_TIMEOUT"); val != "" {
+		if duration, err := time.ParseDuration(val); err == nil {
+			config.Server.ReadHeaderTimeout = duration
+		}
+	}
 	if val := os.Getenv("OLLA_PROXY_LOAD_BALANCER"); val != "" {
 		config.Proxy.LoadBalancer = val
 	}
@@ -408,6 +443,35 @@ func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
 			config.Translators.Anthropic.PassthroughEnabled = enabled
+		}
+	}
+
+	// CORS overrides — only relevant for browser-based clients; no-op for everything else.
+	if val := os.Getenv("OLLA_SERVER_CORS_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Server.Cors.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_CORS_ALLOWED_ORIGINS"); val != "" {
+		config.Server.Cors.AllowedOrigins = strings.Split(val, ",")
+	}
+	if val := os.Getenv("OLLA_SERVER_CORS_ALLOWED_METHODS"); val != "" {
+		config.Server.Cors.AllowedMethods = strings.Split(val, ",")
+	}
+	if val := os.Getenv("OLLA_SERVER_CORS_ALLOWED_HEADERS"); val != "" {
+		config.Server.Cors.AllowedHeaders = strings.Split(val, ",")
+	}
+	if val := os.Getenv("OLLA_SERVER_CORS_EXPOSED_HEADERS"); val != "" {
+		config.Server.Cors.ExposedHeaders = strings.Split(val, ",")
+	}
+	if val := os.Getenv("OLLA_SERVER_CORS_ALLOW_CREDENTIALS"); val != "" {
+		if allow, err := strconv.ParseBool(val); err == nil {
+			config.Server.Cors.AllowCredentials = allow
+		}
+	}
+	if val := os.Getenv("OLLA_SERVER_CORS_MAX_AGE"); val != "" {
+		if age, err := strconv.Atoi(val); err == nil {
+			config.Server.Cors.MaxAge = age
 		}
 	}
 }

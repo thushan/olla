@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/config"
 )
 
@@ -843,5 +844,48 @@ func TestStaticEndpointRepository_EmptyURLs_WithNestedPath(t *testing.T) {
 	expectedModelURL := "http://localhost:12434/engines/ollama/api/tags"
 	if endpoint.ModelURLString != expectedModelURL {
 		t.Errorf("ModelURLString = %q, expected %q", endpoint.ModelURLString, expectedModelURL)
+	}
+}
+
+// TestUpdateEndpoint_PersistsRateLimitedUntil confirms that a 429-triggered
+// RateLimitedUntil timestamp is not lost when UpdateEndpoint is called.
+// The field was missing from the copy list, so the scheduler kept re-probing
+// rate-limited backends immediately after the health checker set the deadline.
+func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
+	t.Parallel()
+
+	repo := NewStaticEndpointRepository()
+	cfg := []config.EndpointConfig{
+		{
+			Name:          "rl-endpoint",
+			URL:           "http://localhost:11434",
+			Type:          "ollama",
+			Priority:      ptrInt(100),
+			CheckInterval: 5 * time.Second,
+			CheckTimeout:  2 * time.Second,
+		},
+	}
+	if err := repo.LoadFromConfig(context.Background(), cfg); err != nil {
+		t.Fatalf("LoadFromConfig: %v", err)
+	}
+
+	eps, err := repo.GetAll(context.Background())
+	require.NoError(t, err, "GetAll before UpdateEndpoint")
+	ep := eps[0]
+
+	rateLimitDeadline := time.Now().Add(60 * time.Second).Truncate(time.Millisecond)
+	ep.RateLimitedUntil = rateLimitDeadline
+
+	if err := repo.UpdateEndpoint(context.Background(), ep); err != nil {
+		t.Fatalf("UpdateEndpoint: %v", err)
+	}
+
+	updated, err := repo.GetAll(context.Background())
+	require.NoError(t, err, "GetAll after UpdateEndpoint")
+	if updated[0].RateLimitedUntil.IsZero() {
+		t.Error("RateLimitedUntil was not persisted; got zero time after UpdateEndpoint")
+	}
+	if !updated[0].RateLimitedUntil.Equal(rateLimitDeadline) {
+		t.Errorf("RateLimitedUntil = %v, want %v", updated[0].RateLimitedUntil, rateLimitDeadline)
 	}
 }

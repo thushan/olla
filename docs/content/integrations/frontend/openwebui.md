@@ -16,6 +16,9 @@ export OLLAMA_BASE_URL="http://localhost:40114/olla/ollama"
 
 You can find an example integration of OpenWebUI with Olla and Ollama instances in <code>examples/ollama-openwebui</code> - see [latest in Github](https://github.com/thushan/olla/tree/main/examples/ollama-openwebui).
 
+!!! note "CORS is not required for this setup"
+    OpenWebUI's backend connects to Olla server-to-server (the `OLLAMA_BASE_URL` above is read by the OpenWebUI server, not the browser), so no browser `Origin` reaches Olla and CORS does not apply. You only need to enable [Olla's CORS support](../../configuration/practices/security.md#cors) if a browser connects **directly** to Olla, such as a UI configured for browser-direct connections.
+
 ## Overview
 
 <table>
@@ -461,12 +464,9 @@ endpoints:
 
 ### Authentication
 
-!!! warning "Authentication Not Supported"
-    Olla does not currently support authentication headers for endpoints. If your API requires authentication, you'll need to:
-    
-    - Use a reverse proxy that adds authentication
-    - Wait for this feature to be implemented
-    - Access only public/local endpoints
+!!! tip "Authenticated Endpoints"
+    Olla supports per-endpoint authentication (bearer, api_key, and basic) for backends that
+    require credentials. See [Endpoint Authentication](../../configuration/endpoint-auth.md).
 
 ### Custom Networks
 

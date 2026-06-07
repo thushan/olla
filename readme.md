@@ -52,7 +52,7 @@ For Large GPU deployments, Enterprise & Data-Centre use, see [TensorFoundry Foun
 - **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
 - **⚡🔄 Anthropic Messages API**: [Passthrough for backends with native support; automatic translation for others](https://thushan.github.io/olla/integrations/api-translation/anthropic/)
-- **🛡️ Production Ready**: Rate limiting, request size limits, graceful shutdown
+- **🛡️ Production Ready**: Rate limiting, request size limits, optional CORS for browser clients, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
 - **⚙️ High Performance**: Designed to be very [lightweight & efficient](https://thushan.github.io/olla/configuration/practices/performance/), runs on less than 50Mb RAM.
@@ -155,6 +155,8 @@ curl http://localhost:40114/olla/proxy/v1/models
 
 #### Anthropic Messages API
 
+You can use `/olla/anthropic`
+
 ```bash
 # Chat completion (passthrough for supported backends, translated for others)
 curl http://localhost:40114/olla/anthropic/v1/messages \
@@ -172,6 +174,8 @@ curl http://localhost:40114/olla/anthropic/v1/messages \
 ```
 
 #### Provider-Specific Endpoints
+
+Use provider specific patterns (Eg. `/olla/ollama`)
 
 ```bash
 # Target a specific backend type directly
@@ -243,6 +247,15 @@ Full documentation is available at **[https://thushan.github.io/olla/](https://t
 * **[API Reference](https://thushan.github.io/olla/api-reference/overview/)** - Olla System API Reference
 * **[Development](https://thushan.github.io/olla/development/overview/)** - Contributing and development guide
 
+### Guides
+
+In-depth guides on the TensorFoundry blog:
+
+* **[What is an LLM Proxy?](https://tensorfoundry.io/blog/what-is-an-llm-proxy)** - Why you end up needing one
+* **[Olla vs LiteLLM](https://tensorfoundry.io/blog/olla-vs-litellm)** - Where each fits, where each wins
+* **[Deploying LLMs on Your Own Infrastructure](https://tensorfoundry.io/blog/deploying-llms-on-your-own-infrastructure)** - A practical guide
+* **[LLM Inference Servers Compared](https://tensorfoundry.io/blog/llm-inference-servers-compared)** - vLLM, SGLang, llama.cpp and Ollama
+
 ## 🤝 Contributing
 
 We welcome contributions! Please open an issue first to discuss major changes.
@@ -270,9 +283,10 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 <div align="center">
 
+**Built by [TensorFoundry](https://tensorfoundry.io)**, Australian AI infrastructure for running LLMs on your own hardware.
+
+[🌐 TensorFoundry](https://tensorfoundry.io) • [📖 Documentation](https://thushan.github.io/olla/) • [🐛 Issues](https://github.com/thushan/olla/issues) • [🚀 Releases](https://github.com/thushan/olla/releases)
+
 **Made with ❤️ for the LLM community**
-
-[🏠 Homepage](https://github.com/thushan/olla) • [📖 Documentation](https://thushan.github.io/olla/) • [🐛 Issues](https://github.com/thushan/olla/issues) • [🚀 Releases](https://github.com/thushan/olla/releases)
-
 
 </div>

@@ -1230,3 +1230,392 @@ func TestConfigValidate_WriteTimeoutZeroAllowed(t *testing.T) {
 		t.Errorf("Expected no error for WriteTimeout == 0 (valid streaming config), got: %v", err)
 	}
 }
+
+// TestDefaultConfig_CorsDefaults verifies the out-of-the-box CORS config:
+// disabled, wildcard origins, safe methods, no credentials, 5-min preflight cache.
+func TestDefaultConfig_CorsDefaults(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	cors := cfg.Server.Cors
+
+	if cors.Enabled {
+		t.Error("expected CORS disabled by default")
+	}
+	if cors.AllowCredentials {
+		t.Error("expected AllowCredentials false by default")
+	}
+	if cors.MaxAge != 300 {
+		t.Errorf("expected MaxAge 300, got %d", cors.MaxAge)
+	}
+	if len(cors.AllowedOrigins) != 1 || cors.AllowedOrigins[0] != "*" {
+		t.Errorf("expected AllowedOrigins=[\"*\"], got %v", cors.AllowedOrigins)
+	}
+	wantMethods := []string{"GET", "POST", "OPTIONS"}
+	if len(cors.AllowedMethods) != len(wantMethods) {
+		t.Errorf("expected %d AllowedMethods, got %d", len(wantMethods), len(cors.AllowedMethods))
+	}
+	for i, m := range wantMethods {
+		if i < len(cors.AllowedMethods) && cors.AllowedMethods[i] != m {
+			t.Errorf("AllowedMethods[%d]: expected %s, got %s", i, m, cors.AllowedMethods[i])
+		}
+	}
+	if len(cors.AllowedHeaders) != 1 || cors.AllowedHeaders[0] != "*" {
+		t.Errorf("expected AllowedHeaders=[\"*\"], got %v", cors.AllowedHeaders)
+	}
+	if len(cors.ExposedHeaders) != 0 {
+		t.Errorf("expected ExposedHeaders empty by default, got %v", cors.ExposedHeaders)
+	}
+}
+
+// TestCorsConfig_YAMLParsing confirms a full cors block round-trips correctly through YAML.
+func TestCorsConfig_YAMLParsing(t *testing.T) {
+	configYAML := `
+server:
+  host: localhost
+  port: 40114
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "OPTIONS"
+    allowed_headers:
+      - "Content-Type"
+      - "Authorization"
+    exposed_headers:
+      - "X-Olla-Request-ID"
+    allow_credentials: true
+    max_age: 600
+`
+	import_tmp, err := os.CreateTemp(t.TempDir(), "olla-cors-*.yaml")
+	if err != nil {
+		t.Fatalf("failed to create temp file: %v", err)
+	}
+	defer os.Remove(import_tmp.Name())
+	if _, err := import_tmp.WriteString(configYAML); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	import_tmp.Close()
+
+	cfg, err := Load(import_tmp.Name())
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	cors := cfg.Server.Cors
+	if !cors.Enabled {
+		t.Error("expected CORS enabled")
+	}
+	if !cors.AllowCredentials {
+		t.Error("expected AllowCredentials true")
+	}
+	if cors.MaxAge != 600 {
+		t.Errorf("expected MaxAge 600, got %d", cors.MaxAge)
+	}
+	if len(cors.AllowedOrigins) != 2 {
+		t.Errorf("expected 2 allowed origins, got %d", len(cors.AllowedOrigins))
+	}
+	if cors.AllowedOrigins[0] != "http://localhost:3000" {
+		t.Errorf("expected first origin http://localhost:3000, got %s", cors.AllowedOrigins[0])
+	}
+	if len(cors.AllowedMethods) != 4 {
+		t.Errorf("expected 4 allowed methods, got %d", len(cors.AllowedMethods))
+	}
+	if len(cors.AllowedHeaders) != 2 {
+		t.Errorf("expected 2 allowed headers, got %d", len(cors.AllowedHeaders))
+	}
+	if len(cors.ExposedHeaders) != 1 || cors.ExposedHeaders[0] != "X-Olla-Request-ID" {
+		t.Errorf("expected ExposedHeaders=[\"X-Olla-Request-ID\"], got %v", cors.ExposedHeaders)
+	}
+}
+
+// TestCorsConfig_EnvOverrides checks that each OLLA_SERVER_CORS_* variable is parsed and applied.
+// Not parallel: env vars are process-global; parallel subtests would bleed into each other.
+func TestCorsConfig_EnvOverrides(t *testing.T) {
+	testCases := []struct {
+		name    string
+		envVars map[string]string
+		checkFn func(*Config) bool
+		desc    string
+	}{
+		{
+			name:    "CORS enabled",
+			envVars: map[string]string{"OLLA_SERVER_CORS_ENABLED": "true"},
+			checkFn: func(c *Config) bool { return c.Server.Cors.Enabled },
+			desc:    "Cors.Enabled should be true",
+		},
+		{
+			name:    "CORS disabled via 0",
+			envVars: map[string]string{"OLLA_SERVER_CORS_ENABLED": "0"},
+			checkFn: func(c *Config) bool { return !c.Server.Cors.Enabled },
+			desc:    "Cors.Enabled should be false",
+		},
+		{
+			name:    "allowed origins comma-separated",
+			envVars: map[string]string{"OLLA_SERVER_CORS_ALLOWED_ORIGINS": "http://a.com,http://b.com"},
+			checkFn: func(c *Config) bool {
+				return len(c.Server.Cors.AllowedOrigins) == 2 &&
+					c.Server.Cors.AllowedOrigins[0] == "http://a.com" &&
+					c.Server.Cors.AllowedOrigins[1] == "http://b.com"
+			},
+			desc: "AllowedOrigins should have 2 entries",
+		},
+		{
+			name:    "allowed methods comma-separated",
+			envVars: map[string]string{"OLLA_SERVER_CORS_ALLOWED_METHODS": "GET,POST,DELETE"},
+			checkFn: func(c *Config) bool { return len(c.Server.Cors.AllowedMethods) == 3 },
+			desc:    "AllowedMethods should have 3 entries",
+		},
+		{
+			name:    "allowed headers comma-separated",
+			envVars: map[string]string{"OLLA_SERVER_CORS_ALLOWED_HEADERS": "Content-Type,Authorization"},
+			checkFn: func(c *Config) bool { return len(c.Server.Cors.AllowedHeaders) == 2 },
+			desc:    "AllowedHeaders should have 2 entries",
+		},
+		{
+			name:    "exposed headers comma-separated",
+			envVars: map[string]string{"OLLA_SERVER_CORS_EXPOSED_HEADERS": "X-Olla-Request-ID,X-Olla-Model"},
+			checkFn: func(c *Config) bool { return len(c.Server.Cors.ExposedHeaders) == 2 },
+			desc:    "ExposedHeaders should have 2 entries",
+		},
+		{
+			name: "allow credentials true",
+			envVars: map[string]string{
+				"OLLA_SERVER_CORS_ALLOW_CREDENTIALS": "true",
+				"OLLA_SERVER_CORS_ENABLED":           "true",
+				"OLLA_SERVER_CORS_ALLOWED_ORIGINS":   "http://trusted.example.com",
+			},
+			checkFn: func(c *Config) bool { return c.Server.Cors.AllowCredentials },
+			desc:    "AllowCredentials should be true",
+		},
+		{
+			name:    "max age int",
+			envVars: map[string]string{"OLLA_SERVER_CORS_MAX_AGE": "3600"},
+			checkFn: func(c *Config) bool { return c.Server.Cors.MaxAge == 3600 },
+			desc:    "MaxAge should be 3600",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			for k, v := range tc.envVars {
+				os.Setenv(k, v)
+			}
+			defer func() {
+				for k := range tc.envVars {
+					os.Unsetenv(k)
+				}
+			}()
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load failed: %v", err)
+			}
+
+			if !tc.checkFn(cfg) {
+				t.Errorf("%s: check failed for env %v", tc.desc, tc.envVars)
+			}
+		})
+	}
+}
+
+// TestCorsConfig_Validate covers the two error paths and the happy path.
+func TestCorsConfig_Validate(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		cors        CorsConfig
+		errContains string
+	}{
+		{
+			name: "disabled config skips validation entirely",
+			cors: CorsConfig{
+				Enabled:          false,
+				AllowedOrigins:   []string{"*"},
+				AllowCredentials: true, // would be invalid if enabled
+				MaxAge:           -1,   // would be invalid if enabled
+			},
+		},
+		{
+			name: "valid enabled config with explicit origins and credentials",
+			cors: CorsConfig{
+				Enabled:          true,
+				AllowedOrigins:   []string{"http://localhost:3000"},
+				AllowedMethods:   []string{"GET", "POST"},
+				AllowCredentials: true,
+				MaxAge:           300,
+			},
+		},
+		{
+			name: "valid enabled config with wildcard and no credentials",
+			cors: CorsConfig{
+				Enabled:          true,
+				AllowedOrigins:   []string{"*"},
+				AllowCredentials: false,
+				MaxAge:           600,
+			},
+		},
+		{
+			name: "credentials with wildcard origin is rejected",
+			cors: CorsConfig{
+				Enabled:          true,
+				AllowedOrigins:   []string{"*"},
+				AllowCredentials: true,
+				MaxAge:           300,
+			},
+			errContains: "allow_credentials",
+		},
+		{
+			name: "negative max_age is rejected",
+			cors: CorsConfig{
+				Enabled:          true,
+				AllowedOrigins:   []string{"http://example.com"},
+				AllowCredentials: false,
+				MaxAge:           -1,
+			},
+			errContains: "max_age",
+		},
+		{
+			name: "zero max_age is accepted",
+			cors: CorsConfig{
+				Enabled:          true,
+				AllowedOrigins:   []string{"http://example.com"},
+				AllowCredentials: false,
+				MaxAge:           0,
+			},
+		},
+		{
+			name: "credentials with mixed origins containing wildcard is rejected",
+			cors: CorsConfig{
+				Enabled:          true,
+				AllowedOrigins:   []string{"http://safe.example.com", "*"},
+				AllowCredentials: true,
+				MaxAge:           300,
+			},
+			errContains: "allow_credentials",
+		},
+		{
+			// rs/cors treats a nil slice as allow-all; reject it so the operator
+			// must be explicit rather than accidentally opening up all origins.
+			name: "nil allowed_origins when enabled is rejected",
+			cors: CorsConfig{
+				Enabled:        true,
+				AllowedOrigins: nil,
+			},
+			errContains: "allowed_origins",
+		},
+		{
+			// Same as nil — an empty slice is indistinguishable to rs/cors and
+			// equally surprising to an operator who left the key blank.
+			name: "empty allowed_origins slice when enabled is rejected",
+			cors: CorsConfig{
+				Enabled:        true,
+				AllowedOrigins: []string{},
+			},
+			errContains: "allowed_origins",
+		},
+		{
+			// Disabled CORS skips validation, so a nil origins list is fine.
+			name: "nil allowed_origins when disabled is accepted",
+			cors: CorsConfig{
+				Enabled:        false,
+				AllowedOrigins: nil,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := tc.cors.Validate()
+
+			if tc.errContains == "" {
+				if err != nil {
+					t.Errorf("expected no error, got: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got nil", tc.errContains)
+				}
+				if !contains(err.Error(), tc.errContains) {
+					t.Errorf("expected error containing %q, got: %v", tc.errContains, err)
+				}
+			}
+		})
+	}
+}
+
+// TestConfigValidate_CorsInvalidPropagates confirms that a bad CORS config causes
+// Config.Validate() to return an error (i.e. it's wired into the startup gate).
+func TestConfigValidate_CorsInvalidPropagates(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultConfig()
+	cfg.Server.Cors.Enabled = true
+	cfg.Server.Cors.AllowedOrigins = []string{"*"}
+	cfg.Server.Cors.AllowCredentials = true
+
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for credentials+wildcard, got nil")
+	}
+	if !contains(err.Error(), "allow_credentials") {
+		t.Errorf("expected error to mention allow_credentials, got: %v", err)
+	}
+}
+
+// TestEnvOverrides_NewTunables verifies that the four tunables added on the
+// feature/config-tunables branch are each individually honoured by
+// applyEnvOverrides, so the docs claim (all settings support OLLA_ prefix) holds.
+// Not parallel: env vars are process-global; sequential subtests prevent bleed.
+func TestEnvOverrides_NewTunables(t *testing.T) {
+	testCases := []struct {
+		envVar  string
+		value   string
+		checkFn func(*Config) bool
+	}{
+		{
+			envVar:  "OLLA_SERVER_READ_HEADER_TIMEOUT",
+			value:   "15s",
+			checkFn: func(c *Config) bool { return c.Server.ReadHeaderTimeout == 15*time.Second },
+		},
+		{
+			envVar:  "OLLA_PROXY_CONNECTION_KEEP_ALIVE",
+			value:   "90s",
+			checkFn: func(c *Config) bool { return c.Proxy.ConnectionKeepAlive == 90*time.Second },
+		},
+		{
+			envVar:  "OLLA_PROXY_RESPONSE_HEADER_TIMEOUT",
+			value:   "180s",
+			checkFn: func(c *Config) bool { return c.Proxy.ResponseHeaderTimeout == 180*time.Second },
+		},
+		{
+			envVar:  "OLLA_PROXY_TLS_HANDSHAKE_TIMEOUT",
+			value:   "20s",
+			checkFn: func(c *Config) bool { return c.Proxy.TLSHandshakeTimeout == 20*time.Second },
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.envVar, func(t *testing.T) {
+			os.Setenv(tc.envVar, tc.value)
+			defer os.Unsetenv(tc.envVar)
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load failed: %v", err)
+			}
+
+			if !tc.checkFn(cfg) {
+				t.Errorf("%s=%s was not applied: got %+v", tc.envVar, tc.value, cfg.Proxy)
+			}
+		})
+	}
+}

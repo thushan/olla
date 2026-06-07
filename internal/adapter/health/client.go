@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/thushan/olla/internal/version"
@@ -98,11 +100,21 @@ func (hc *HealthClient) Check(ctx context.Context, endpoint *domain.Endpoint) (r
 	// Record overall latency including retries
 	result.Latency = time.Since(overallStart)
 
-	// Record result in circuit breaker
-	if lastErr != nil || result.Status != domain.StatusHealthy {
+	// Record result in circuit breaker.
+	// ConfigError and RateLimited are not service failures. The backend is up and
+	// responding; counting them as failures would trip the CB on misconfigured
+	// credentials or a throttled endpoint, hiding the real cause from the operator.
+	if lastErr != nil {
 		hc.circuitBreaker.RecordFailure(healthCheckURL)
 	} else {
-		hc.circuitBreaker.RecordSuccess(healthCheckURL)
+		switch result.Status {
+		case domain.StatusConfigError, domain.StatusRateLimited:
+			// Do not trip the circuit breaker; this is an operator or rate error, not downtime.
+		case domain.StatusHealthy, domain.StatusBusy:
+			hc.circuitBreaker.RecordSuccess(healthCheckURL)
+		default:
+			hc.circuitBreaker.RecordFailure(healthCheckURL)
+		}
 	}
 
 	if lastErr != nil {
@@ -132,6 +144,7 @@ func (hc *HealthClient) performSingleCheck(ctx context.Context, endpoint *domain
 	}
 
 	req = injectDefaultHeaders(req)
+	injectEndpointAuth(req, endpoint)
 	resp, err := hc.client.Do(req)
 	result.Latency = time.Since(start)
 
@@ -158,7 +171,43 @@ func (hc *HealthClient) performSingleCheck(ctx context.Context, endpoint *domain
 	result.StatusCode = resp.StatusCode
 	result.Status = determineStatus(resp.StatusCode, result.Latency, nil, domain.ErrorTypeNone)
 
+	if resp.StatusCode == http.StatusTooManyRequests {
+		result.RateLimitedUntil = parseRetryAfter(resp.Header.Get("Retry-After"), endpoint.Name)
+	}
+
 	return result, nil
+}
+
+// parseRetryAfter interprets the Retry-After header value per RFC 9110.
+// It accepts delay-seconds and HTTP-date formats. Falls back to DefaultRateLimitBackoff
+// if the value is missing or malformed.
+func parseRetryAfter(header, endpointName string) time.Time {
+	now := time.Now()
+
+	if header == "" {
+		slog.Info("no Retry-After header on 429, using default backoff",
+			"endpoint", endpointName,
+			"default", DefaultRateLimitBackoff)
+		return now.Add(DefaultRateLimitBackoff)
+	}
+
+	// Try delay-seconds first (most common for API services).
+	if secs, err := strconv.ParseInt(header, 10, 64); err == nil {
+		return now.Add(time.Duration(secs) * time.Second)
+	}
+
+	// Try HTTP-date format (RFC 1123 / RFC 850 / ANSI C asctime).
+	for _, layout := range []string{http.TimeFormat, "Monday, 02-Jan-06 15:04:05 MST", "Mon Jan _2 15:04:05 2006"} {
+		if t, err := time.Parse(layout, header); err == nil {
+			return t
+		}
+	}
+
+	slog.Info("malformed Retry-After header on 429, using default backoff",
+		"endpoint", endpointName,
+		"header", header,
+		"default", DefaultRateLimitBackoff)
+	return now.Add(DefaultRateLimitBackoff)
 }
 
 func injectDefaultHeaders(req *http.Request) *http.Request {
@@ -166,6 +215,25 @@ func injectDefaultHeaders(req *http.Request) *http.Request {
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Cache-Control", "no-cache")
 	return req
+}
+
+// injectEndpointAuth applies the endpoint's configured auth and custom headers onto
+// a probe request. We can't use core.CopyHeaders here because it strips then re-injects
+// based on an incoming client request, which doesn't exist for health probes.
+func injectEndpointAuth(req *http.Request, endpoint *domain.Endpoint) {
+	if endpoint == nil {
+		return
+	}
+
+	// Apply static headers from the endpoint config first so auth can override them.
+	for name, value := range endpoint.Headers {
+		req.Header.Set(name, value)
+	}
+
+	// Auth always wins over the headers map (matches CopyHeaders precedence).
+	if endpoint.AuthHeaderName != "" {
+		req.Header.Set(endpoint.AuthHeaderName, endpoint.AuthHeaderValue)
+	}
 }
 
 func calculateBackoffDelay(attempt int) time.Duration {
@@ -227,8 +295,15 @@ func classifyError(err error) domain.HealthCheckErrorType {
 	return domain.ErrorTypeHTTPError
 }
 
-// determineStatus converts HTTP response info into endpoint status
-// Status logic: offline for network errors, busy for slow responses, healthy otherwise
+// determineStatus converts HTTP response info into endpoint status.
+//
+// Classification priorities:
+//   - Network/transport errors → Offline
+//   - 401/403 → ConfigError (operator must fix credentials; no circuit-breaker trip)
+//   - 429 → RateLimited (transient; scheduler will honour Retry-After before next probe)
+//   - 2xx with high latency → Busy (still routable, just slow)
+//   - 2xx → Healthy
+//   - anything else → Unhealthy
 func determineStatus(statusCode int, latency time.Duration, err error, errorType domain.HealthCheckErrorType) domain.EndpointStatus {
 	if err != nil {
 		switch errorType {
@@ -237,6 +312,18 @@ func determineStatus(statusCode int, latency time.Duration, err error, errorType
 		default:
 			return domain.StatusUnhealthy
 		}
+	}
+
+	switch statusCode {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		// The backend is up but rejecting our credentials. Retrying will never help
+		// until the operator updates the auth config. We don't trip the circuit breaker
+		// for this; it's a config problem, not a service availability problem.
+		return domain.StatusConfigError
+	case http.StatusTooManyRequests:
+		// The backend is healthy but throttling us. The scheduler honours Retry-After
+		// before the next probe so we don't hammer a rate-limited endpoint.
+		return domain.StatusRateLimited
 	}
 
 	if statusCode >= HealthyEndpointStatusRangeStart && statusCode < HealthyEndpointStatusRangeEnd {

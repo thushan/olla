@@ -69,6 +69,7 @@ server:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `read_timeout` | duration | `30s` | Time to read request |
+| `read_header_timeout` | duration | `10s` | Max time to read request headers. Protects against Slowloris attacks; unset defaults to 10s. |
 | `write_timeout` | duration | `0s` | Response write timeout (must be 0 for streaming) |
 | `idle_timeout` | duration | `0s` | Keep-alive timeout (0 = use read_timeout) |
 | `shutdown_timeout` | duration | `10s` | Graceful shutdown timeout |
@@ -78,6 +79,7 @@ Example:
 ```yaml
 server:
   read_timeout: 30s
+  read_header_timeout: 10s
   write_timeout: 0s      # Required for streaming
   idle_timeout: 120s
   shutdown_timeout: 30s
@@ -127,6 +129,35 @@ server:
       - "172.16.0.0/12"
 ```
 
+### CORS {#cors}
+
+Cross-Origin Resource Sharing settings. Only relevant when browser clients (OpenWebUI, custom dashboards) connect directly to Olla. Disabled by default; non-browser clients (curl, SDKs, coding agents) are unaffected regardless of this setting.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `cors.enabled` | bool | `false` | Enable CORS middleware |
+| `cors.allowed_origins` | []string | `["*"]` | Permitted origins. Must be explicit URLs when `allow_credentials` is `true` |
+| `cors.allowed_methods` | []string | `["GET","POST","OPTIONS"]` | Permitted HTTP methods |
+| `cors.allowed_headers` | []string | `["*"]` | Permitted request headers |
+| `cors.exposed_headers` | []string | `[]` | Response headers exposed to browser JS. Empty = auto-expose full `X-Olla-*` set |
+| `cors.allow_credentials` | bool | `false` | Send `Access-Control-Allow-Credentials: true` |
+| `cors.max_age` | int | `300` | Preflight cache duration in seconds |
+
+!!! warning "Credentials + wildcard origin"
+    Setting `allow_credentials: true` with `allowed_origins: ["*"]` is forbidden by the CORS spec. Olla rejects this combination at startup with a fatal error. List explicit origins when credentials are required.
+
+Example:
+
+```yaml
+server:
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"
+    allow_credentials: true
+    max_age: 600
+```
+
 ## Proxy Configuration
 
 Proxy engine and request handling settings.
@@ -153,16 +184,22 @@ proxy:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `connection_timeout` | duration | `30s` | Backend connection timeout |
+| `connection_keep_alive` | duration | `30s` | TCP keep-alive interval for backend connections |
 | `response_timeout` | duration | `10m` | Response timeout |
 | `read_timeout` | duration | `120s` | Read timeout |
+| `response_header_timeout` | duration | `30s` | Max wait for the backend's first response header. Raise it for backends that load models on demand (e.g. Lemonade), where the first request blocks until the model is resident and the 30s default would abort the cold start. |
+| `tls_handshake_timeout` | duration | `10s` | Maximum time allowed for a TLS handshake with a backend |
 
 Example:
 
 ```yaml
 proxy:
   connection_timeout: 45s
+  connection_keep_alive: 30s
   response_timeout: 0s    # Disable for streaming
   read_timeout: 0s
+  response_header_timeout: 180s  # allow slow on-demand model loads
+  tls_handshake_timeout: 10s
 ```
 
 ### Retry Behaviour
@@ -274,6 +311,68 @@ discovery:
 | `static.endpoints[].check_interval` | duration | No | Health check interval (default: `5s`) |
 | `static.endpoints[].check_timeout` | duration | No | Health check timeout (default: `2s`) |
 | `static.endpoints[].model_filter` | object | No | Model filtering for this endpoint |
+| `static.endpoints[].auth` | object | No | Outbound authentication credentials (see below) |
+| `static.endpoints[].headers` | map[string]string | No | Custom outbound headers applied on every forwarded request |
+
+#### Endpoint Authentication (`auth:`)
+
+Attaches credentials to requests forwarded from Olla to a backend. See [Endpoint Authentication](endpoint-auth.md) for the full guide.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `auth.type` | string | `bearer`, `api_key`, or `basic` |
+| `auth.token` | string | Bearer token value. Sends `Authorization: Bearer <token>`. Mutually exclusive with `token_file`. |
+| `auth.token_file` | string | Path to a file containing the bearer token. |
+| `auth.key` | string | API key value. Mutually exclusive with `key_file`. |
+| `auth.key_file` | string | Path to a file containing the API key. |
+| `auth.header` | string | Header name for `api_key` type (default: `X-Api-Key`). |
+| `auth.username` | string | Username for `basic` type. Mutually exclusive with `username_file`. |
+| `auth.username_file` | string | Path to a file containing the username. |
+| `auth.password` | string | Password for `basic` type. Mutually exclusive with `password_file`. |
+| `auth.password_file` | string | Path to a file containing the password. |
+
+`${VAR}` interpolation works on every value field. `_file` fields read and trim the file contents at startup. Setting both the inline field and its `_file` sibling is a fatal error, as is an unresolved `${VAR}` with no default.
+
+**Bearer example:**
+
+```yaml
+discovery:
+  static:
+    endpoints:
+      - url: "http://gpu-server:8000"
+        name: "vllm-gpu"
+        type: "vllm"
+        auth:
+          type: bearer
+          token: "${VLLM_API_KEY}"
+```
+
+**API key with custom header:**
+
+```yaml
+      - url: "http://custom-gw:9000"
+        name: "custom-gw"
+        type: "openai-compatible"
+        auth:
+          type: api_key
+          key: "${CUSTOM_API_KEY}"
+          header: "X-Api-Key"
+        headers:
+          X-Tenant-ID: "team-a"
+```
+
+#### Custom Outbound Headers (`headers:`)
+
+`headers:` is a free-form map of header names to values. All entries are copied verbatim onto every request forwarded to that endpoint. `auth:` and `headers:` can coexist; the `auth:` block always wins for its own credential header. `${VAR}` interpolation applies to values.
+
+```yaml
+      - url: "http://custom-llm:9000"
+        name: "custom"
+        type: "openai-compatible"
+        headers:
+          X-Tenant-ID: "acme"
+          X-Request-Source: "olla"
+```
 
 #### URL Configuration
 
@@ -782,6 +881,7 @@ server:
   host: "localhost"
   port: 40114
   read_timeout: 30s
+  read_header_timeout: 10s
   write_timeout: 0s
   # idle_timeout: 0s  # Optional (0 = use read_timeout)
   shutdown_timeout: 10s
@@ -809,6 +909,9 @@ proxy:
   connection_timeout: 30s
   response_timeout: 10m
   read_timeout: 120s
+  response_header_timeout: 30s
+  connection_keep_alive: 30s
+  tls_handshake_timeout: 10s
   # DEPRECATED as of v0.0.16 - retry is now automatic
   # max_retries: 3
   # retry_backoff: 1s

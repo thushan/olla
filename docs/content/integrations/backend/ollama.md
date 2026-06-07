@@ -137,8 +137,9 @@ discovery:
         check_timeout: 5s
 ```
 
-!!! note "Authentication Not Supported"
-    Olla does not currently support authentication headers for endpoints. If your Ollama server requires authentication, you'll need to use a reverse proxy or wait for this feature to be added.
+!!! tip "Authenticated Ollama"
+    To authenticate to a remote or protected Ollama instance, use the `auth:` block on the endpoint.
+    See [Endpoint Authentication](../../configuration/endpoint-auth.md) for details.
 
 ## Anthropic Messages API Support
 
