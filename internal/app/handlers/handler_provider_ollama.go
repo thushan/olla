@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 
+	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/constants"
 )
 
@@ -29,15 +33,60 @@ func (a *Application) ollamaModelsHandler(w http.ResponseWriter, r *http.Request
 	json.NewEncoder(w).Encode(response)
 }
 
-// ollamaModelShowHandler handles model detail requests.
+// ollamaModelShowHandler proxies /api/show to the backend that hosts the requested model.
 // endpoint: POST /olla/ollama/api/show
 //
-// aggregating model details across instances presents challenges:
-// - modelfiles may differ between instances
-// - version conflicts need resolution
-// - parameter reconciliation is non-trivial
+// Reconciling model details across instances is not feasible: modelfiles, templates, and
+// tensor metadata differ per-node with no canonical merge strategy. Returning one node's
+// real answer is correct — LangFlow and similar clients only need a single coherent response,
+// not an aggregate. providerProxyHandler handles endpoint selection and body rewriting.
 func (a *Application) ollamaModelShowHandler(w http.ResponseWriter, r *http.Request) {
-	http.Error(w, "model show not supported in multi-instance proxy", http.StatusNotImplemented)
+	ctx := r.Context()
+
+	// Read the body to extract the model name, then restore it so the downstream
+	// proxy sees an intact body. The same read-restore idiom is used in body_inspector.go
+	// and injectStickyKey — each stage restores independently.
+	var bodyBytes []byte
+	if r.Body != nil {
+		var readErr error
+		bodyBytes, readErr = io.ReadAll(r.Body)
+		if readErr != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		r.ContentLength = int64(len(bodyBytes))
+	}
+
+	var req struct {
+		Model string `json:"model"`
+	}
+	if len(bodyBytes) > 0 {
+		if err := json.Unmarshal(bodyBytes, &req); err != nil {
+			http.Error(w, "invalid request body: expected JSON with 'model' field", http.StatusBadRequest)
+			return
+		}
+	}
+
+	if req.Model == "" {
+		http.Error(w, "model name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Verify Olla knows about this model before forwarding. If the registry is the wrong
+	// type or unavailable we fall through to the proxy anyway — better to let the backend
+	// return a 404 than refuse known-good requests due to a registry type mismatch.
+	if unifiedRegistry, ok := a.modelRegistry.(*registry.UnifiedMemoryModelRegistry); ok {
+		if _, err := unifiedRegistry.GetUnifiedModel(ctx, req.Model); err != nil {
+			http.Error(w, fmt.Sprintf("model %q not found", req.Model), http.StatusNotFound)
+			return
+		}
+	}
+
+	// Delegate to the provider proxy. r.URL.Path is still the full /olla/ollama/api/show
+	// at this point — providerProxyHandler extracts the provider from that path, so it
+	// must remain unmodified.
+	a.providerProxyHandler(w, r)
 }
 
 // ollamaRunningModelsHandler returns currently loaded/running models.
