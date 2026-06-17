@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -77,8 +79,15 @@ func main() {
 		vlog.Printf(theme.ColourProfiler("Profiling server started at http://%s/debug/pprof/\n"), profileAddress)
 	}
 
+	// Load configuration before logger setup so logging.output is respected.
+	cfg, err := config.Load(configFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load configuration: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Setup logging
-	lcfg := buildLoggerConfig()
+	lcfg := buildLoggerConfig(cfg)
 	logInstance, styledLogger, cleanup, err := logger.NewWithTheme(lcfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialise logger: %v\n", err)
@@ -105,12 +114,6 @@ func main() {
 		shutdownTime = time.Now()
 		cancel()
 	}()
-
-	// Load configuration
-	cfg, err := config.Load(configFile)
-	if err != nil {
-		logger.FatalWithLogger(logInstance, "Failed to load configuration", "error", err)
-	}
 
 	// Validate model alias configuration at startup
 	if err = cfg.ValidateModelAliases(); err != nil {
@@ -202,8 +205,8 @@ func reportProcessStats(logger logger.StyledLogger, startTime time.Time) {
 	)
 }
 
-func buildLoggerConfig() *logger.Config {
-	return &logger.Config{
+func buildLoggerConfig(cfg *config.Config) *logger.Config {
+	lcfg := &logger.Config{
 		Level:      env.GetEnvOrDefault("OLLA_LOG_LEVEL", DefaultLoggerLevel),
 		PrettyLogs: env.GetEnvBoolOrDefault("OLLA_PRETTY_LOGS", DefaultPrettyLogs),
 		FileOutput: env.GetEnvBoolOrDefault("OLLA_FILE_OUTPUT", DefaultFileOutput),
@@ -213,4 +216,33 @@ func buildLoggerConfig() *logger.Config {
 		MaxAge:     env.GetEnvIntOrDefault("OLLA_LOG_MAX_AGE_DAYS", DefaultLogMaxAgeDays),
 		Theme:      env.GetEnvOrDefault("OLLA_THEME", DefaultTheme),
 	}
+
+	if cfg == nil {
+		return lcfg
+	}
+
+	if cfg.Logging.Level != "" {
+		lcfg.Level = cfg.Logging.Level
+	}
+
+	output := strings.TrimSpace(cfg.Logging.Output)
+	switch strings.ToLower(output) {
+	case "", "stdout":
+		lcfg.FileOutput = false
+		lcfg.OutputPath = ""
+	case "stderr":
+		lcfg.FileOutput = false
+		lcfg.OutputPath = ""
+	default:
+		lcfg.FileOutput = true
+		if filepath.IsAbs(output) {
+			lcfg.OutputPath = output
+			lcfg.LogDir = filepath.Dir(output)
+		} else {
+			lcfg.OutputPath = filepath.Clean(output)
+			lcfg.LogDir = filepath.Dir(lcfg.OutputPath)
+		}
+	}
+
+	return lcfg
 }

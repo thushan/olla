@@ -18,6 +18,7 @@ import (
 type Config struct {
 	Level      string
 	LogDir     string
+	OutputPath string
 	Theme      string
 	MaxSize    int // megabytes
 	MaxBackups int
@@ -129,12 +130,18 @@ func createJSONHandler(level slog.Level, writer *os.File) slog.Handler {
 // createFileHandler creates a file-based JSON handler with rotation
 // wraps with ansiStripHandler to ensure clean JSON output without ANSI codes
 func createFileHandler(cfg *Config, level slog.Level) (slog.Handler, func(), error) {
-	if err := os.MkdirAll(cfg.LogDir, 0755); err != nil {
+	logFilePath := filepath.Join(cfg.LogDir, DefaultLogOutputName)
+	if cfg.OutputPath != "" {
+		logFilePath = cfg.OutputPath
+	}
+
+	logDir := filepath.Dir(logFilePath)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return nil, nil, err
 	}
 
 	rotator := &lumberjack.Logger{
-		Filename:   filepath.Join(cfg.LogDir, DefaultLogOutputName),
+		Filename:   logFilePath,
 		MaxSize:    cfg.MaxSize,
 		MaxBackups: cfg.MaxBackups,
 		MaxAge:     cfg.MaxAge,

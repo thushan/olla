@@ -341,6 +341,40 @@ func TestEndpointDisabledAfterMaxFailures(t *testing.T) {
 	}
 }
 
+func TestDiscoverEndpointContextCanceledDoesNotCountAsFailure(t *testing.T) {
+	endpoint := createMockEndpoint("http://localhost:11434", "test-endpoint")
+
+	client := &mockDiscoveryClient{
+		discoveryErrors: map[string]error{
+			endpoint.URLString: &DiscoveryError{
+				EndpointURL: endpoint.URLString,
+				ProfileType: domain.ProfileOMLX,
+				Operation:   "http_request",
+				Err: &NetworkError{
+					URL: endpoint.URLString + "/v1/models",
+					Err: context.Canceled,
+				},
+			},
+		},
+	}
+	endpointRepo := &mockEndpointRepository{}
+	modelRegistry := &mockModelRegistry{registeredModels: make([]*domain.ModelInfo, 0)}
+	service := NewModelDiscoveryService(client, endpointRepo, modelRegistry, DiscoveryConfig{Timeout: 5 * time.Second}, createTestLogger())
+
+	err := service.DiscoverEndpoint(context.Background(), endpoint)
+	if err == nil {
+		t.Fatalf("expected context cancellation error, got nil")
+	}
+
+	if got := service.getFailureCount(endpoint.URLString); got != 0 {
+		t.Fatalf("expected no failure count increment for context cancellation, got %d", got)
+	}
+
+	if service.isEndpointDisabled(endpoint.URLString) {
+		t.Fatalf("endpoint should not be disabled for context cancellation")
+	}
+}
+
 func TestFilterActiveEndpoints(t *testing.T) {
 	endpoints := []*domain.Endpoint{
 		createMockEndpoint("http://localhost:11434", "enabled-1"),
