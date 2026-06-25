@@ -1,0 +1,13 @@
+# Copy to config/prometheus.local.yaml for local Prometheus scraping:
+#   cp config/prometheus.local.yaml.example config/prometheus.local.yaml
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: olla
+    metrics_path: /internal/metrics
+    static_configs:
+      - targets:
+          - olla:40114

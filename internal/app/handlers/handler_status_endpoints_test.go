@@ -68,6 +68,7 @@ func (m *mockStatusEndpointRepository) Exists(ctx context.Context, endpointURL *
 // mockStatusStatsCollector for status endpoint testing
 type mockStatusStatsCollector struct {
 	endpointStats map[string]ports.EndpointStats
+	proxyStats    ports.ProxyStats
 }
 
 func (m *mockStatusStatsCollector) RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
@@ -88,7 +89,7 @@ func (m *mockStatusStatsCollector) RecordTranslatorRequest(event ports.Translato
 func (m *mockStatusStatsCollector) GetTranslatorStats() map[string]ports.TranslatorStats {
 	return nil
 }
-func (m *mockStatusStatsCollector) GetProxyStats() ports.ProxyStats { return ports.ProxyStats{} }
+func (m *mockStatusStatsCollector) GetProxyStats() ports.ProxyStats { return m.proxyStats }
 func (m *mockStatusStatsCollector) GetSecurityStats() ports.SecurityStats {
 	return ports.SecurityStats{}
 }

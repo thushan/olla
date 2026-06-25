@@ -345,7 +345,12 @@ ci: deps fmt vet lint test-race test-cover build
 # Docker compose up with local config
 docker-compose:
 	@echo "Starting with docker-compose..."
-	@docker-compose up
+	@docker compose up
+
+# Docker compose with local overlay (Prometheus + Grafana, local Olla image)
+docker-compose-local:
+	@echo "Starting with docker-compose local overlay..."
+	@docker compose -f docker-compose.yaml -f docker-compose.local.yaml up
 
 # Run integration test scripts (requires running Olla instance)
 test-script-integration:
@@ -441,7 +446,8 @@ help:
 	@echo "  build-snapshot  - Build full release to ./dist/ (archives, checksums, etc)"
 	@echo "  docker-build    - Build Docker images locally"
 	@echo "  docker-run      - Run Docker image with local config"
-	@echo "  docker-compose  - Run with docker-compose"
+	@echo "  docker-compose        - Run with docker-compose"
+	@echo "  docker-compose-local  - Run with Prometheus/Grafana local overlay"
 	@echo "  release-test    - Test full release (binaries + docker + archives)"
 	@echo "  goreleaser-check- Check goreleaser configuration"
 	@echo "  fmt             - Format code"
