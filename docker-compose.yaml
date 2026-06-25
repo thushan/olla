@@ -22,6 +22,11 @@ services:
     networks:
       - ollama-network
 
+# Local development with Prometheus/Grafana overlay:
+#   cp docker-compose.local.yaml.example docker-compose.local.yaml
+#   cp config/prometheus.local.yaml.example config/prometheus.local.yaml
+#   make docker-build-local && docker compose -f docker-compose.yaml -f docker-compose.local.yaml up
+
 # Example: Run Ollama alongside Olla
 #  ollama:
 #    image: ollama/ollama:latest

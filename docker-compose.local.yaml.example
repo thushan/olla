@@ -1,0 +1,53 @@
+# Copy to docker-compose.local.yaml for local development:
+#   cp docker-compose.local.yaml.example docker-compose.local.yaml
+#   cp config/prometheus.local.yaml.example config/prometheus.local.yaml
+#
+# Build the local Olla image first:
+#   make docker-build-local        # amd64
+#   make docker-build-local-arm64  # Apple Silicon / ARM64
+#
+# Start stack:
+#   docker compose -f docker-compose.yaml -f docker-compose.local.yaml up
+#
+# Olla:        http://localhost:40114
+# Metrics:     http://localhost:40114/internal/metrics
+# Prometheus:  http://localhost:9090
+# Grafana:     http://localhost:3000  (admin / admin)
+
+services:
+  olla:
+    image: ghcr.io/thushan/olla:local-${DOCKER_ARCH:-amd64}
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: olla-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.local.yaml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - ollama-network
+    depends_on:
+      olla:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: olla-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - ollama-network
+    depends_on:
+      - prometheus
+
+volumes:
+  grafana_data:
