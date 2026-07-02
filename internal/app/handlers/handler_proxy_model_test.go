@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http/httptest"
@@ -205,6 +206,10 @@ func (m *mockStyledLogger) InfoConfigChange(oldName, newName string)            
 type mockSimpleModelRegistry struct {
 	baseMockRegistry
 	endpointsForModel map[string][]string
+	// strict switches GetRoutableEndpointsForModel to genuine strict-routing
+	// behaviour (reject with nil endpoints) instead of the default fallback-to-all
+	// used by most existing tests. Defaults to false so current callers are unaffected.
+	strict bool
 }
 
 func (m *mockSimpleModelRegistry) GetEndpointsForModel(ctx context.Context, modelName string) ([]string, error) {
@@ -220,11 +225,20 @@ func (m *mockSimpleModelRegistry) IsModelAvailable(ctx context.Context, modelNam
 }
 
 func (m *mockSimpleModelRegistry) GetRoutableEndpointsForModel(ctx context.Context, modelName string, healthyEndpoints []*domain.Endpoint) ([]*domain.Endpoint, *domain.ModelRoutingDecision, error) {
-	// implement strict routing for tests
 	modelEndpoints, _ := m.GetEndpointsForModel(ctx, modelName)
 
 	if len(modelEndpoints) == 0 {
-		// model not found - return all healthy as fallback (for test compatibility)
+		if m.strict {
+			// genuine strict routing: model nowhere in the fleet, reject with no endpoints
+			return nil, &domain.ModelRoutingDecision{
+				Strategy:   "strict",
+				Action:     "rejected",
+				Reason:     "model_not_found",
+				StatusCode: 404,
+			}, fmt.Errorf("model %s not found on any endpoint", modelName)
+		}
+
+		// default (most existing tests): return all healthy as fallback
 		return healthyEndpoints, &domain.ModelRoutingDecision{
 			Strategy: "test",
 			Action:   "fallback",
@@ -246,7 +260,16 @@ func (m *mockSimpleModelRegistry) GetRoutableEndpointsForModel(ctx context.Conte
 	}
 
 	if len(routable) == 0 {
-		// model only on unhealthy endpoints
+		if m.strict {
+			return nil, &domain.ModelRoutingDecision{
+				Strategy:   "strict",
+				Action:     "rejected",
+				Reason:     "model_unavailable",
+				StatusCode: 503,
+			}, fmt.Errorf("model %s only available on unhealthy endpoints", modelName)
+		}
+
+		// model only on unhealthy endpoints - fallback for test compatibility
 		return healthyEndpoints, &domain.ModelRoutingDecision{
 			Strategy: "test",
 			Action:   "fallback",

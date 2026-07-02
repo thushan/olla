@@ -576,6 +576,14 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 		if decision != nil {
 			profile.RoutingDecision = decision
 		}
+
+		// A rejection (strict model_not_found, or optimistic none/compatible_only) must
+		// fail fast exactly like the non-alias path below - returning candidates here would
+		// silently proxy to a compatible-but-wrong backend and ignore the routing verdict (#191).
+		if decision != nil && decision.Action == ports.RoutingActionRejected {
+			return []*domain.Endpoint{}
+		}
+
 		if routeErr != nil || len(routableEndpoints) == 0 {
 			return candidates
 		}
