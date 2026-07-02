@@ -67,7 +67,10 @@ func (m *mockStatusEndpointRepository) Exists(ctx context.Context, endpointURL *
 
 // mockStatusStatsCollector for status endpoint testing
 type mockStatusStatsCollector struct {
-	endpointStats map[string]ports.EndpointStats
+	endpointStats      map[string]ports.EndpointStats
+	proxyStats         ports.ProxyStats
+	modelStats         map[string]ports.ModelStats
+	modelEndpointStats map[string]map[string]ports.EndpointModelStats
 }
 
 func (m *mockStatusStatsCollector) RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
@@ -80,15 +83,23 @@ func (m *mockStatusStatsCollector) RecordModelRequest(model string, endpoint *do
 }
 func (m *mockStatusStatsCollector) RecordModelError(model string, endpoint *domain.Endpoint, errorType string) {
 }
-func (m *mockStatusStatsCollector) GetModelStats() map[string]ports.ModelStats { return nil }
+func (m *mockStatusStatsCollector) GetModelStats() map[string]ports.ModelStats {
+	if m.modelStats == nil {
+		return make(map[string]ports.ModelStats)
+	}
+	return m.modelStats
+}
 func (m *mockStatusStatsCollector) GetModelEndpointStats() map[string]map[string]ports.EndpointModelStats {
-	return nil
+	if m.modelEndpointStats == nil {
+		return make(map[string]map[string]ports.EndpointModelStats)
+	}
+	return m.modelEndpointStats
 }
 func (m *mockStatusStatsCollector) RecordTranslatorRequest(event ports.TranslatorRequestEvent) {}
 func (m *mockStatusStatsCollector) GetTranslatorStats() map[string]ports.TranslatorStats {
 	return nil
 }
-func (m *mockStatusStatsCollector) GetProxyStats() ports.ProxyStats { return ports.ProxyStats{} }
+func (m *mockStatusStatsCollector) GetProxyStats() ports.ProxyStats { return m.proxyStats }
 func (m *mockStatusStatsCollector) GetSecurityStats() ports.SecurityStats {
 	return ports.SecurityStats{}
 }

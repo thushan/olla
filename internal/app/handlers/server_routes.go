@@ -31,6 +31,7 @@ func (a *Application) registerRoutes() {
 	// for operations and shouldn't depend on any provider configuration
 	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/status", a.statusHandler, "Endpoint status", "GET")
+	a.routeRegistry.RegisterWithMethod(constants.DefaultMetricsEndpoint, a.metricsHandler, "Prometheus metrics", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/status/endpoints", a.endpointsStatusHandler, "Endpoints status", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/status/models", a.modelsStatusHandler, "Models status", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/stats/models", a.modelStatsHandler, "Model statistics", "GET")

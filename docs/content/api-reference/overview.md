@@ -23,6 +23,7 @@ Internal endpoints for health monitoring, system status, and statistics.
 
 - `/internal/health` - Health check endpoint
 - `/internal/status` - System status and statistics
+- `/internal/metrics` - Prometheus metrics (same data as `/internal/status` and `/internal/stats/models`)
 - `/internal/status/endpoints` - Endpoint status details
 - `/internal/status/models` - Model registry status
 - `/internal/stats/models` - Model usage statistics

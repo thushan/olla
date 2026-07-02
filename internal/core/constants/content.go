@@ -6,6 +6,7 @@ const (
 	// Standard Content Types
 	ContentTypeJSON           = "application/json"
 	ContentTypeText           = "text/plain"
+	ContentTypePrometheus     = "text/plain; version=0.0.4; charset=utf-8"
 	ContentTypeHTML           = "text/html"
 	ContentTypeXML            = "application/xml"
 	ContentTypeJavaScript     = "application/javascript"

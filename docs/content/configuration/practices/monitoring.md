@@ -13,6 +13,7 @@ This guide covers monitoring and observability for Olla deployments.
 > # Built-in endpoints (always enabled)
 > # /internal/health - Basic health check
 > # /internal/status - Detailed status
+> # /internal/metrics - Prometheus metrics (same data as /internal/status and /internal/stats/models)
 > # /internal/status/endpoints - Endpoint details
 > # /internal/stats/models - Model statistics
 > # /internal/stats/translators - Translator statistics
@@ -237,12 +238,34 @@ JSON format enables parsing:
 
 ## Prometheus Metrics
 
-### Exporting Metrics
+### Built-in endpoint
 
-While Olla doesn't have built-in Prometheus support, you can scrape the status endpoint:
+Olla exposes Prometheus text format at `/internal/metrics`, derived from the same snapshot as `/internal/status`:
+
+```bash
+curl http://localhost:40114/internal/metrics
+```
+
+Prometheus scrape configuration:
+
+```yaml
+scrape_configs:
+  - job_name: olla
+    static_configs:
+      - targets: ['localhost:40114']
+    metrics_path: /internal/metrics
+```
+
+Key metrics include `olla_requests_total`, `olla_failures_total`, `olla_endpoints_healthy`, `olla_avg_latency_ms`, per-endpoint series with an `endpoint` label (`olla_endpoint_up` also includes `status`), and model usage series (`olla_models_*`, `olla_model_*`, `olla_model_endpoint_*`) matching [`/internal/stats/models`](../../api-reference/system.md#get-internalstatsmodels). See the [System Endpoints API Reference](../../api-reference/system.md#get-internalmetrics) for the full list.
+
+> :memo: When running in Docker, set `OLLA_SERVER_HOST=0.0.0.0` (or `server.host: "0.0.0.0"`) so the published port is reachable from the host.
+
+### Optional external exporter
+
+For translator-specific metrics or custom dashboards, you can still scrape JSON endpoints alongside `/internal/metrics`:
 
 ```python
-# prometheus_exporter.py
+# prometheus_exporter.py (optional - for /internal/stats/translators etc.)
 import requests
 import time
 from prometheus_client import start_http_server, Gauge, Histogram
@@ -259,7 +282,7 @@ tokens_per_second = Histogram('olla_tokens_per_second', 'Token generation speed'
 prompt_tokens = Histogram('olla_prompt_tokens', 'Prompt token count',
                           ['endpoint', 'model'])
 completion_tokens = Histogram('olla_completion_tokens', 'Completion token count',
-                              ['endpoint', 'model'])
+                          ['endpoint', 'model'])
 
 def collect_metrics():
     while True:
@@ -286,6 +309,8 @@ if __name__ == '__main__':
     start_http_server(8000)
     collect_metrics()
 ```
+
+Prefer `/internal/metrics` for proxy, endpoint, and model stats; use `/internal/stats/translators` when you need translation passthrough rates.
 
 ### Grafana Dashboard
 

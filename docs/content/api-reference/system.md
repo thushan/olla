@@ -9,6 +9,7 @@ Internal endpoints for health monitoring, system status, and process information
 | GET | `/version` | Get Olla version information |
 | GET | `/internal/health` | Health check endpoint |
 | GET | `/internal/status` | System status and statistics |
+| GET | `/internal/metrics` | Prometheus metrics (same data as `/internal/status` and `/internal/stats/models`) |
 | GET | `/internal/status/endpoints` | Detailed endpoint status |
 | GET | `/internal/status/models` | Model registry status |
 | GET | `/internal/stats/models` | Model usage statistics |
@@ -49,6 +50,7 @@ curl -X GET http://localhost:40114/version
     "version": "v1",
     "endpoints": {
       "health": "/internal/health",
+      "metrics": "/internal/metrics",
       "status": "/internal/status",
       "process": "/internal/process",
       "version": "/version"
@@ -184,6 +186,85 @@ curl -X GET http://localhost:40114/internal/status
 **`endpoints[]` fields**: `name`, `status`, `success_rate`, `avg_latency`, `traffic`, `last_check`, `next_check`, `issues`, `models.{last_updated, count}`, `priority`, `connections`, `requests`. The `last_check` and `next_check` values are human-readable relative strings (e.g. `"2 seconds ago"`, `"in 3 seconds"`), not RFC3339 timestamps.
 
 **`system` fields**: `status` (healthy/degraded/critical), `endpoints_up`, `success_rate`, `avg_latency`, `total_traffic`, `uptime`, `version`, `commit`, `active_connections`, `security_violations`, `total_requests`, `total_failures`.
+
+---
+
+## GET /internal/metrics
+
+Prometheus text exposition of the same operational data as [`/internal/status`](#get-internalstatus) and [`/internal/stats/models`](#get-internalstatsmodels). Use this endpoint for Prometheus, Grafana Agent, or VictoriaMetrics scraping.
+
+### Request
+
+```bash
+curl -X GET http://localhost:40114/internal/metrics
+```
+
+### Response
+
+Content-Type: `text/plain; version=0.0.4; charset=utf-8`
+
+```text
+# HELP olla_requests_total Total proxy requests processed
+# TYPE olla_requests_total counter
+olla_requests_total 1523
+# HELP olla_endpoints_healthy Number of healthy endpoints
+# TYPE olla_endpoints_healthy gauge
+olla_endpoints_healthy 2
+# HELP olla_model_requests_total Total requests for a model
+# TYPE olla_model_requests_total counter
+olla_model_requests_total{model="llama3.2"} 1200
+```
+
+### Metrics exposed
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `olla_info` | gauge | Build and proxy config (`version`, `commit`, `engine`, `profile`, `balancer` labels) |
+| `olla_system_status` | gauge | Overall status: `2`=healthy, `1`=degraded, `0`=critical |
+| `olla_endpoints_total` | gauge | Total configured endpoints |
+| `olla_endpoints_healthy` | gauge | Healthy endpoint count |
+| `olla_success_rate_percent` | gauge | Proxy success rate |
+| `olla_avg_latency_ms` | gauge | Average proxy latency (ms) |
+| `olla_total_traffic_bytes` | gauge | Total traffic (bytes) |
+| `olla_uptime_seconds` | gauge | Process uptime |
+| `olla_active_connections` | gauge | Active connections |
+| `olla_requests_total` | counter | Total proxy requests |
+| `olla_failures_total` | counter | Total failed requests |
+| `olla_security_*` | gauge/counter | Security posture and violations |
+| `olla_endpoint_up` | gauge | Endpoint health (`endpoint`, `status` labels; value `1`=up) |
+| `olla_endpoint_*` | gauge/counter | Per-endpoint stats (`endpoint` label only) |
+| `olla_models_*` | gauge/counter | Aggregate model stats (same summary as `/internal/stats/models`) |
+| `olla_model_*` | gauge/counter | Per-model stats (`model` label) |
+| `olla_model_endpoint_*` | gauge/counter | Per-model, per-endpoint stats (`model`, `endpoint` labels) |
+
+> :memo: Translator-specific metrics remain on [`/internal/stats/translators`](#get-internalstatstranslators). Model routing and usage metrics from `/internal/stats/models` are included in `/internal/metrics`; scrape `/internal/stats/translators` separately if you need translation passthrough rates.
+
+### Prometheus scrape config
+
+```yaml
+scrape_configs:
+  - job_name: olla
+    static_configs:
+      - targets: ['localhost:40114']
+    metrics_path: /internal/metrics
+```
+
+> :memo: When running Olla in Docker, bind the server to all interfaces (`server.host: "0.0.0.0"` or `OLLA_SERVER_HOST=0.0.0.0`) so published ports are reachable from the host.
+
+---
+
+## GET /internal/stats/models
+
+Model usage statistics including per-model request counts, latency, routing effectiveness, and optional per-endpoint breakdowns. The same data is exposed in Prometheus format on [`/internal/metrics`](#get-internalmetrics) as `olla_models_*`, `olla_model_*`, and `olla_model_endpoint_*` series.
+
+### Request
+
+```bash
+curl -X GET http://localhost:40114/internal/stats/models
+curl -X GET "http://localhost:40114/internal/stats/models?include_endpoints=true&include_summary=true"
+```
+
+Query parameters: `include_endpoints=true` adds per-endpoint breakdown per model; `include_summary=true` adds aggregated endpoint summaries.
 
 ---
 

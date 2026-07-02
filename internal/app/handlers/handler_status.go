@@ -89,36 +89,73 @@ type StatusResponse struct {
 	System    SystemSummary      `json:"system"`
 }
 
-func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	now := time.Now()
+type statusSnapshot struct {
+	endpointStats   map[string]ports.EndpointStats
+	connectionStats map[string]int64
+	endpointModels  map[string]*domain.EndpointModels
+	all             []*domain.Endpoint
+	healthy         []*domain.Endpoint
+	proxyStats      ports.ProxyStats
+	securityStats   ports.SecurityStats
+}
 
+func (a *Application) gatherStatusSnapshot(ctx context.Context) (*statusSnapshot, error) {
 	all, healthy, _, err := a.getEndpointCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	endpointModelsMap, emErr := a.modelRegistry.GetEndpointModelMap(ctx)
+	if emErr != nil {
+		a.logger.Warn("Failed to get model map", "error", emErr)
+		endpointModelsMap = make(map[string]*domain.EndpointModels)
+	}
+
+	var endpointStats map[string]ports.EndpointStats
+	var proxyStats ports.ProxyStats
+	var securityStats ports.SecurityStats
+	var connectionStats map[string]int64
+
+	if a.statsCollector != nil {
+		endpointStats = a.statsCollector.GetEndpointStats()
+		proxyStats = a.statsCollector.GetProxyStats()
+		securityStats = a.statsCollector.GetSecurityStats()
+		connectionStats = a.statsCollector.GetConnectionStats()
+	}
+
+	return &statusSnapshot{
+		all:             all,
+		healthy:         healthy,
+		endpointStats:   endpointStats,
+		proxyStats:      proxyStats,
+		securityStats:   securityStats,
+		connectionStats: connectionStats,
+		endpointModels:  endpointModelsMap,
+	}, nil
+}
+
+func (a *Application) buildStatusResponse(snapshot *statusSnapshot) StatusResponse {
+	response := StatusResponse{
+		Timestamp: time.Now(),
+		Endpoints: make([]EndpointResponse, len(snapshot.all)),
+	}
+
+	response.Proxy = a.buildProxySummary(a.Config.Proxy)
+	response.System = a.buildSystemSummary(snapshot.all, snapshot.healthy, snapshot.proxyStats, snapshot.securityStats, snapshot.connectionStats, snapshot.endpointStats)
+	a.buildUnifiedEndpoints(snapshot.all, snapshot.endpointStats, snapshot.connectionStats, response.Endpoints, snapshot.endpointModels)
+	response.Security = a.buildSecuritySummary(snapshot.securityStats)
+
+	return response
+}
+
+func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
+	snapshot, err := a.gatherStatusSnapshot(r.Context())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get endpoint data: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	endpointStatsMap := a.statsCollector.GetEndpointStats()
-	proxyStats := a.statsCollector.GetProxyStats()
-	securityStats := a.statsCollector.GetSecurityStats()
-	connectionStats := a.statsCollector.GetConnectionStats()
-	endpointModelsMap, emErr := a.modelRegistry.GetEndpointModelMap(ctx)
-
-	if emErr != nil {
-		a.logger.Warn("Failed to get model map", "error", err)
-		endpointModelsMap = make(map[string]*domain.EndpointModels)
-	}
-
-	response := StatusResponse{
-		Timestamp: now,
-		Endpoints: make([]EndpointResponse, len(all)),
-	}
-
-	response.Proxy = a.buildProxySummary(a.Config.Proxy)
-	response.System = a.buildSystemSummary(all, healthy, proxyStats, securityStats, connectionStats, endpointStatsMap)
-	a.buildUnifiedEndpoints(all, endpointStatsMap, connectionStats, response.Endpoints, endpointModelsMap)
-	response.Security = a.buildSecuritySummary(securityStats)
+	response := a.buildStatusResponse(snapshot)
 
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusOK)

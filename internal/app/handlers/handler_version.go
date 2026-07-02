@@ -55,6 +55,7 @@ func (a *Application) versionHandler(w http.ResponseWriter, r *http.Request) {
 			Version: "v1",
 			Endpoints: map[string]string{
 				"health":  "/internal/health",
+				"metrics": "/internal/metrics",
 				"status":  "/internal/status",
 				"process": "/internal/process",
 				"version": "/version",
