@@ -647,7 +647,7 @@ model_aliases:
 ```
 
 !!! note
-    Alias names take priority over standard model routing. If no endpoints are found for the alias, Olla falls back to standard routing using the alias name as a regular model name. See [Model Aliases](../concepts/model-aliases.md) for details.
+    Alias names take priority over standard model routing. If no endpoints are found for the alias, Olla falls back to standard routing using the alias name as a regular model name, honouring the configured routing strategy. Under `strict` (the default) an alias whose targets are all unavailable is rejected (`404`/`503`), not proxied to a compatible-but-wrong backend. See [Model Aliases](../concepts/model-aliases.md) for details.
 
 ## Routing Response Headers
 
