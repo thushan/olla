@@ -80,6 +80,11 @@ func TestResolveAliasEndpoints_ResolvesToCorrectEndpoints(t *testing.T) {
 	assert.Equal(t, "gpt-oss-120b-MLX", aliasMap["http://lmstudio:1234"])
 }
 
+// TestResolveAliasEndpoints_NoMatchingEndpoints covers #191: when an alias resolves to
+// no endpoints and the standard-routing fallback lookup also rejects (the target model
+// exists nowhere in the fleet), the result must be empty. Returning candidates here would
+// silently proxy the request to a backend that doesn't serve the requested model, defeating
+// strict routing entirely - this is exactly the bug this test used to codify.
 func TestResolveAliasEndpoints_NoMatchingEndpoints(t *testing.T) {
 	styledLog := &mockStyledLogger{}
 
@@ -93,55 +98,8 @@ func TestResolveAliasEndpoints_NoMatchingEndpoints(t *testing.T) {
 		},
 	}
 
-	// Registry has no models matching the alias
-	modelRegistry := &mockSimpleModelRegistry{
-		endpointsForModel: map[string][]string{},
-	}
-
-	aliases := map[string][]string{
-		"nonexistent-alias": {"model-not-in-registry"},
-	}
-	aliasResolver := registry.NewAliasResolver(aliases, styledLog)
-
-	app := &Application{
-		modelRegistry: modelRegistry,
-		aliasResolver: aliasResolver,
-		logger:        styledLog,
-	}
-
-	profile := domain.NewRequestProfile("/v1/chat/completions")
-	profile.ModelName = "nonexistent-alias"
-	profile.SupportedBy = []string{domain.ProfileOllama}
-
-	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
-
-	// Should fall back to all candidates since alias resolved to no endpoints
-	// and standard routing also finds nothing useful
-	assert.Len(t, result, 1)
-	assert.Contains(t, result, candidates[0])
-}
-
-// TestResolveAliasEndpoints_RejectedRoutingFailsFast verifies the #191 fix: when
-// an alias resolves to no endpoints and the fallback standard-routing lookup also
-// comes back as a strict rejection (model nowhere in the fleet), resolveAliasEndpoints
-// must return an empty slice - not the full candidate list - so the caller fails fast
-// instead of silently proxying to a backend that doesn't serve the requested model.
-func TestResolveAliasEndpoints_RejectedRoutingFailsFast(t *testing.T) {
-	styledLog := &mockStyledLogger{}
-
-	endpoint1URL, _ := url.Parse("http://ollama:11434")
-	candidates := []*domain.Endpoint{
-		{
-			Name:      "ollama",
-			URL:       endpoint1URL,
-			URLString: "http://ollama:11434",
-			Type:      domain.ProfileOllama,
-		},
-	}
-
-	// strict: true means GetRoutableEndpointsForModel returns a genuine rejection
-	// (nil endpoints, Action=Rejected) rather than the misleading fallback-to-all
-	// most other tests in this package rely on.
+	// Registry has no models matching the alias, and strict mode means the standard-routing
+	// fallback lookup rejects rather than handing back all candidates.
 	modelRegistry := &mockSimpleModelRegistry{
 		endpointsForModel: map[string][]string{},
 		strict:            true,
@@ -164,7 +122,7 @@ func TestResolveAliasEndpoints_RejectedRoutingFailsFast(t *testing.T) {
 
 	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
 
-	assert.Empty(t, result, "a rejected routing decision must fail fast with no endpoints, not fall back to all candidates")
+	assert.Empty(t, result, "a rejected fallback lookup must fail fast, not return all candidates")
 
 	require.NotNil(t, profile.RoutingDecision, "rejection decision should still be recorded for headers/metrics")
 	assert.Equal(t, "rejected", profile.RoutingDecision.Action)
