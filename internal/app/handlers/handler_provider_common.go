@@ -104,22 +104,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if len(endpoints) == 0 {
-		http.Error(w, fmt.Sprintf("No %s endpoints available", providerType), http.StatusNotFound)
-		return
-	}
-
-	// Update request path to the target path (strip provider prefix)
-	r.URL.Path = pr.targetPath
-
-	a.logRequestStart(pr, len(endpoints))
-	err = a.executeProxyRequest(ctx, w, r, endpoints, pr)
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, err)
-
-	if err != nil {
-		a.handleProxyError(w, err)
-	}
+	a.dispatchToEndpoints(ctx, w, r, pr, endpoints, providerType)
 }
 
 // getProviderEndpoints returns only endpoints matching the requested provider type.

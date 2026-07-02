@@ -62,21 +62,84 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.logRequestStart(pr, len(endpoints))
+	a.dispatchToEndpoints(ctx, w, r, pr, endpoints, "")
+}
+
+// dispatchToEndpoints is the shared tail of proxyHandler and providerProxyHandler:
+// forward to the proxy engine when endpoints were selected, or fail fast with the
+// correct status when selection produced none. Consolidating this here means a
+// routing rejection (#191) is honoured identically regardless of which route the
+// request came in on, instead of each handler drifting its own empty-endpoint handling.
+func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, pr *proxyRequest, endpoints []*domain.Endpoint, providerType string) {
+	if len(endpoints) == 0 {
+		a.writeNoRoutableEndpoints(w, r, pr, providerType)
+		return
+	}
 
 	// Strip the route prefix before forwarding to the backend.
 	// Without this, BuildTargetURL receives the full /olla/proxy/... path and
 	// GetProxyPrefix() returns "route_prefix" (a context key name, not a URL path),
-	// so its StripPrefix is a no-op. This mirrors providerProxyHandler (line 100).
+	// so its StripPrefix is a no-op.
 	r.URL.Path = pr.targetPath
 
-	err = a.executeProxyRequest(ctx, w, r, endpoints, pr)
+	a.logRequestStart(pr, len(endpoints))
+
+	err := a.executeProxyRequest(ctx, w, r, endpoints, pr)
 	pr.captureStickyOutcome(ctx, r)
 	a.logRequestResult(pr, err)
 
 	if err != nil {
 		a.handleProxyError(w, err)
 	}
+}
+
+// writeNoRoutableEndpoints short-circuits a request when endpoint selection produced
+// zero candidates, instead of letting it fall through to the proxy engine (which would
+// either proxy to a compatible-but-wrong backend, or return a generic 502/404 that hides
+// the actual routing verdict). A rejection routing decision takes priority - it carries
+// the precise status code and reason (e.g. strict "model_not_found" -> 404) - falling
+// back to the historical per-route defaults only when no decision was recorded.
+func (a *Application) writeNoRoutableEndpoints(w http.ResponseWriter, r *http.Request, pr *proxyRequest, providerType string) {
+	var decision *domain.ModelRoutingDecision
+	if pr.profile != nil {
+		decision = pr.profile.RoutingDecision
+	}
+
+	var status int
+	var reason string
+
+	switch {
+	case decision != nil && decision.StatusCode >= http.StatusBadRequest:
+		status = decision.StatusCode
+		reason = decision.Reason
+		pr.stats.RoutingDecision = decision
+	case providerType != "":
+		// no decision was recorded (e.g. modelRegistry unset) - preserve the
+		// precise provider-route message rather than a vague generic one.
+		status = http.StatusNotFound
+		reason = fmt.Sprintf("No %s endpoints available", providerType)
+	default:
+		status = http.StatusServiceUnavailable
+		reason = "no healthy endpoints available"
+	}
+
+	// Preserve normal request telemetry (client_ip, model, duration, routing fields)
+	// even though we're short-circuiting before the proxy engine ever runs.
+	a.logRequestStart(pr, 0)
+	pr.captureStickyOutcome(r.Context(), r)
+	a.logRequestResult(pr, nil)
+
+	// Headers must be set before http.Error, which calls WriteHeader.
+	a.setStickyResponseHeadersFromRequest(w, r)
+	if decision != nil {
+		w.Header().Set(constants.HeaderXOllaRoutingStrategy, decision.Strategy)
+		w.Header().Set(constants.HeaderXOllaRoutingDecision, decision.Action)
+		if decision.Reason != "" {
+			w.Header().Set(constants.HeaderXOllaRoutingReason, decision.Reason)
+		}
+	}
+
+	http.Error(w, reason, status)
 }
 
 func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
