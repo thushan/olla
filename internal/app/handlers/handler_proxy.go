@@ -124,10 +124,12 @@ func (a *Application) writeNoRoutableEndpoints(w http.ResponseWriter, r *http.Re
 	}
 
 	// Preserve normal request telemetry (client_ip, model, duration, routing fields)
-	// even though we're short-circuiting before the proxy engine ever runs.
+	// even though we're short-circuiting before the proxy engine ever runs. Logged as
+	// an explicit rejection rather than logRequestResult's "completed", so a fail-fast
+	// 404/503 is never mistaken for a successful proxy in the logs (#191).
 	a.logRequestStart(pr, 0)
 	pr.captureStickyOutcome(r.Context(), r)
-	a.logRequestResult(pr, nil)
+	a.logRequestRejected(pr, status)
 
 	// Headers must be set before http.Error, which calls WriteHeader.
 	a.setStickyResponseHeadersFromRequest(w, r)
@@ -349,6 +351,40 @@ func (a *Application) logRequestStart(pr *proxyRequest, endpointCount int) {
 	}
 
 	pr.requestLogger.Debug("Request details", debugFields...)
+}
+
+// logRequestRejected records a request that never reached the proxy engine because
+// endpoint selection produced no routable target. Kept distinct from logRequestResult's
+// "completed"/"failed" outcomes so a fail-fast rejection (e.g. strict model_not_found)
+// is surfaced as a rejection rather than a successful completion (#191).
+func (a *Application) logRequestRejected(pr *proxyRequest, status int) {
+	duration := time.Since(pr.stats.StartTime)
+
+	logFields := []any{
+		"client_ip", pr.clientIP,
+		"path", pr.path,
+		"status", status,
+		"duration_ms", duration.Milliseconds(),
+	}
+
+	if pr.model != "" {
+		logFields = append(logFields, "model", pr.model)
+	}
+
+	// routing fields explain why nothing was routable (strategy/action/reason)
+	if rd := pr.stats.RoutingDecision; rd != nil {
+		if rd.Strategy != "" {
+			logFields = append(logFields, "routing_strategy", rd.Strategy)
+		}
+		if rd.Action != "" {
+			logFields = append(logFields, "routing_action", rd.Action)
+		}
+		if rd.Reason != "" {
+			logFields = append(logFields, "routing_reason", rd.Reason)
+		}
+	}
+
+	pr.requestLogger.Warn("Request rejected", logFields...)
 }
 
 func (a *Application) logRequestResult(pr *proxyRequest, err error) {
