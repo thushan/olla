@@ -269,7 +269,7 @@ func (m *mockSimpleModelRegistry) GetRoutableEndpointsForModel(ctx context.Conte
 			}, fmt.Errorf("model %s only available on unhealthy endpoints", modelName)
 		}
 
-		// model only on unhealthy endpoints - fallback for test compatibility
+		// model only on unhealthy endpoints; fallback for test compatibility
 		return healthyEndpoints, &domain.ModelRoutingDecision{
 			Strategy: "test",
 			Action:   "fallback",

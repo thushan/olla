@@ -84,7 +84,7 @@ func TestResolveAliasEndpoints_ResolvesToCorrectEndpoints(t *testing.T) {
 // no endpoints and the standard-routing fallback lookup also rejects (the target model
 // exists nowhere in the fleet), the result must be empty. Returning candidates here would
 // silently proxy the request to a backend that doesn't serve the requested model, defeating
-// strict routing entirely - this is exactly the bug this test used to codify.
+// strict routing entirely. This is exactly the bug this test used to codify.
 func TestResolveAliasEndpoints_NoMatchingEndpoints(t *testing.T) {
 	styledLog := &mockStyledLogger{}
 

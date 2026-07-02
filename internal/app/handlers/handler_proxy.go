@@ -96,9 +96,9 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 // writeNoRoutableEndpoints short-circuits a request when endpoint selection produced
 // zero candidates, instead of letting it fall through to the proxy engine (which would
 // either proxy to a compatible-but-wrong backend, or return a generic 502/404 that hides
-// the actual routing verdict). A rejection routing decision takes priority - it carries
-// the precise status code and reason (e.g. strict "model_not_found" -> 404) - falling
-// back to the historical per-route defaults only when no decision was recorded.
+// the actual routing verdict). A rejection routing decision takes priority: it carries
+// the precise status code and reason (strict model_not_found gives 404). Without a
+// decision we keep the historical per-route defaults.
 func (a *Application) writeNoRoutableEndpoints(w http.ResponseWriter, r *http.Request, pr *proxyRequest, providerType string) {
 	var decision *domain.ModelRoutingDecision
 	if pr.profile != nil {
@@ -114,7 +114,7 @@ func (a *Application) writeNoRoutableEndpoints(w http.ResponseWriter, r *http.Re
 		reason = decision.Reason
 		pr.stats.RoutingDecision = decision
 	case providerType != "":
-		// no decision was recorded (e.g. modelRegistry unset) - preserve the
+		// no decision was recorded (e.g. modelRegistry unset), so preserve the
 		// precise provider-route message rather than a vague generic one.
 		status = http.StatusNotFound
 		reason = fmt.Sprintf("No %s endpoints available", providerType)
@@ -677,7 +677,7 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 		}
 
 		// A rejection (strict model_not_found, or optimistic none/compatible_only) must
-		// fail fast exactly like the non-alias path below - returning candidates here would
+		// fail fast exactly like the non-alias path below. Returning candidates here would
 		// silently proxy to a compatible-but-wrong backend and ignore the routing verdict (#191).
 		if decision != nil && decision.Action == ports.RoutingActionRejected {
 			return []*domain.Endpoint{}
