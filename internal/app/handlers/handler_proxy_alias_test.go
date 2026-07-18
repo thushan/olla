@@ -193,13 +193,16 @@ func TestResolveAliasEndpoints_ShortCircuitsOnStatusCodeNotActionString(t *testi
 	assert.Equal(t, http.StatusNotFound, profile.RoutingDecision.StatusCode)
 }
 
-// TestResolveAliasEndpoints_NoIntersectionWithCandidates covers fix 4 from the #191
-// follow-up review: the alias resolves to real target models, but none of the endpoints
-// serving those models are in the healthy/compatible candidate list. Before the fix this
-// branch returned an empty slice without a routing decision, so the rejection reached
-// writeNoRoutableEndpoints with no decision - a generic reason, no X-Olla-Routing-*
-// headers, and the fallback default status rather than a decision-aware one.
-func TestResolveAliasEndpoints_NoIntersectionWithCandidates(t *testing.T) {
+// TestResolveAliasEndpoints_NoIntersectionWithCandidates_StrictRejects covers fix 4 from
+// the #191 follow-up review, CodeRabbit round 2: the alias resolves to real target models,
+// but none of the endpoints serving those models are in the healthy/compatible candidate
+// list. Rather than the handler synthesising its own rejection, this must fall through to
+// the configured routing strategy for the alias name itself - exactly like the "resolved to
+// no endpoints at all" branch - so the strategy's decision (not a hardcoded one) governs the
+// outcome. Under a strict/rejecting registry that decision is still a fail-fast rejection,
+// just reported as model_not_found/404 (an unknown model name) rather than the
+// alias-specific model_unavailable/503 the handler used to synthesise.
+func TestResolveAliasEndpoints_NoIntersectionWithCandidates_StrictRejects(t *testing.T) {
 	styledLog := &mockStyledLogger{}
 
 	endpoint1URL, _ := url.Parse("http://ollama:11434")
@@ -214,6 +217,69 @@ func TestResolveAliasEndpoints_NoIntersectionWithCandidates(t *testing.T) {
 	}
 
 	// The alias resolves to a model that only exists on lmstudio, which isn't a candidate.
+	// strict:true means the fallback lookup on the alias name itself also rejects, since
+	// "gpt-oss-120b" isn't a model the registry knows about either.
+	modelRegistry := &mockSimpleModelRegistry{
+		endpointsForModel: map[string][]string{
+			"gpt-oss-120b-MLX": {"http://lmstudio:1234"},
+		},
+		strict: true,
+	}
+
+	aliases := map[string][]string{
+		"gpt-oss-120b": {"gpt-oss-120b-MLX"},
+	}
+	aliasResolver := registry.NewAliasResolver(aliases, styledLog)
+
+	app := &Application{
+		modelRegistry: modelRegistry,
+		aliasResolver: aliasResolver,
+		logger:        styledLog,
+	}
+
+	profile := domain.NewRequestProfile("/v1/chat/completions")
+	profile.ModelName = "gpt-oss-120b"
+	profile.SupportedBy = []string{domain.ProfileOllama, domain.ProfileLmStudio}
+
+	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
+
+	assert.Empty(t, result, "strict routing on the alias name also rejects, so nothing is routable")
+
+	require.NotNil(t, profile.RoutingDecision, "a decision must be recorded so headers/status are decision-aware, not generic")
+	assert.Equal(t, "strict", profile.RoutingDecision.Strategy)
+	assert.Equal(t, "rejected", profile.RoutingDecision.Action)
+	assert.Equal(t, http.StatusNotFound, profile.RoutingDecision.StatusCode)
+
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	assert.False(t, ok, "rejected fallback must not carry an alias rewrite map")
+	assert.Nil(t, aliasMapRaw)
+}
+
+// TestResolveAliasEndpoints_NoIntersectionWithCandidates_OptimisticFallsBack covers the
+// other side of the same fix: under a registry that returns a fallback decision with
+// endpoints (optimistic routing, fallback_behavior: all) instead of a rejection, the
+// no-intersection branch must let that fallback through rather than unconditionally
+// returning empty. This is the behaviour CodeRabbit flagged as missing - previously this
+// branch always rejected, so optimistic/all could never recover here. The returned
+// endpoints don't serve the alias's actual target models (they're the routing strategy's
+// substitute, not an alias match), so the alias rewrite map must NOT be set - the proxy
+// has to forward the original request body unchanged.
+func TestResolveAliasEndpoints_NoIntersectionWithCandidates_OptimisticFallsBack(t *testing.T) {
+	styledLog := &mockStyledLogger{}
+
+	endpoint1URL, _ := url.Parse("http://ollama:11434")
+	candidates := []*domain.Endpoint{
+		{
+			Name:      "ollama",
+			URL:       endpoint1URL,
+			URLString: "http://ollama:11434",
+			Type:      domain.ProfileOllama,
+		},
+	}
+
+	// The alias resolves to a model that only exists on lmstudio, which isn't a candidate.
+	// strict is left false, so mockSimpleModelRegistry's fallback lookup on the alias name
+	// mirrors an optimistic/all decision: it hands back the candidates rather than rejecting.
 	modelRegistry := &mockSimpleModelRegistry{
 		endpointsForModel: map[string][]string{
 			"gpt-oss-120b-MLX": {"http://lmstudio:1234"},
@@ -237,13 +303,15 @@ func TestResolveAliasEndpoints_NoIntersectionWithCandidates(t *testing.T) {
 
 	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
 
-	assert.Empty(t, result, "no candidate serves the aliased model, so nothing is routable")
+	require.Len(t, result, 1, "the fallback decision hands back the candidate set, so the request still proxies")
+	assert.Equal(t, "http://ollama:11434", result[0].URLString)
 
-	require.NotNil(t, profile.RoutingDecision, "a decision must be recorded so headers/status are decision-aware, not generic")
-	assert.Equal(t, "alias", profile.RoutingDecision.Strategy)
-	assert.Equal(t, "rejected", profile.RoutingDecision.Action)
-	assert.Equal(t, constants.RoutingReasonModelUnavailable, profile.RoutingDecision.Reason)
-	assert.Equal(t, http.StatusServiceUnavailable, profile.RoutingDecision.StatusCode)
+	require.NotNil(t, profile.RoutingDecision)
+	assert.NotEqual(t, "rejected", profile.RoutingDecision.Action)
+
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	assert.False(t, ok, "fallback endpoints weren't confirmed to serve the aliased model, so no rewrite map must be set")
+	assert.Nil(t, aliasMapRaw)
 }
 
 func TestResolveAliasEndpoints_SelfReferencingAlias(t *testing.T) {

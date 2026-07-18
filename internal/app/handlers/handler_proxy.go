@@ -680,27 +680,7 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 			logFields...)
 
 		// fall through to standard routing in case the alias name itself is a known model
-		routableEndpoints, decision, routeErr := a.modelRegistry.GetRoutableEndpointsForModel(ctx, aliasName, candidates)
-		if decision != nil {
-			profile.RoutingDecision = decision
-		}
-
-		// A rejection must fail fast exactly like the non-alias path below. Returning
-		// candidates here would silently proxy to a compatible-but-wrong backend and
-		// ignore the routing verdict (#191). Keyed on status code rather than the
-		// "rejected" action string because writeNoRoutableEndpoints uses the same
-		// status-code contract, and not every registry implementation reports
-		// rejections as "rejected" - MemoryModelRegistry's base GetRoutableEndpointsForModel
-		// uses "no_model"/"no_healthy" with 404/503. Keying on the action string would
-		// silently miss those and reintroduce the bug this fix closes.
-		if decision != nil && decision.StatusCode >= http.StatusBadRequest {
-			return []*domain.Endpoint{}
-		}
-
-		if routeErr != nil || len(routableEndpoints) == 0 {
-			return candidates
-		}
-		return routableEndpoints
+		return a.routeByAliasName(ctx, aliasName, profile, candidates)
 	}
 
 	// filter candidates to only those that have one of the aliased models
@@ -717,14 +697,16 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 			"resolved_endpoints", len(endpointToModel))
 
 		// The alias resolved to real target models, but none of them are on a healthy/
-		// compatible candidate - equivalent to the strict strategy's "model only available
-		// on unhealthy endpoints" case. Set a routing decision here (mirroring
-		// RoutingReasonModelUnavailable/503) so the rejection carries X-Olla-Routing-*
-		// headers and a decision-aware status instead of falling through to
-		// writeNoRoutableEndpoints' generic default (#191).
-		profile.RoutingDecision = ports.NewRoutingDecision("alias", ports.RoutingActionRejected,
-			constants.RoutingReasonModelUnavailable)
-		return []*domain.Endpoint{}
+		// compatible candidate. Rather than synthesising a rejection here, consult the
+		// routing strategy for the alias name itself, exactly like the "resolved to no
+		// endpoints at all" branch above - this is what lets optimistic routing with
+		// fallback_behavior: all substitute a different endpoint instead of the request
+		// being unconditionally rejected (#191 follow-up). Trade-off accepted: the
+		// resulting rejection reason/status is whatever the registry reports for an
+		// unknown model (typically model_not_found/404) rather than the alias-specific
+		// model_unavailable/503 this branch used to synthesise; consistency with the
+		// policy engine wins over status-code precision.
+		return a.routeByAliasName(ctx, aliasName, profile, candidates)
 	}
 
 	// store the rewrite map in the profile for use during request proxying
@@ -752,6 +734,39 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 		"total_candidates", len(candidates))
 
 	return aliasEndpoints
+}
+
+// routeByAliasName is the shared tail for both resolveAliasEndpoints fallback paths:
+// alias resolution producing no endpoints at all, and alias resolution producing
+// endpoints that don't intersect the healthy/compatible candidate set. Both cases treat
+// the alias name as if it were a plain model name and hand the decision to the configured
+// routing strategy, rather than the handler synthesising its own rejection - this is what
+// lets fallback_behavior: all under optimistic routing substitute a different endpoint
+// instead of always rejecting (#191 follow-up). It does NOT set the alias rewrite map:
+// any endpoints returned here were not confirmed to serve one of the alias's actual
+// target models, so the proxy must forward the original request body unchanged.
+func (a *Application) routeByAliasName(ctx context.Context, aliasName string, profile *domain.RequestProfile, candidates []*domain.Endpoint) []*domain.Endpoint {
+	routableEndpoints, decision, routeErr := a.modelRegistry.GetRoutableEndpointsForModel(ctx, aliasName, candidates)
+	if decision != nil {
+		profile.RoutingDecision = decision
+	}
+
+	// A rejection must fail fast exactly like the non-alias path in filterEndpointsByProfile.
+	// Returning candidates here would silently proxy to a compatible-but-wrong backend and
+	// ignore the routing verdict (#191). Keyed on status code rather than the "rejected"
+	// action string because writeNoRoutableEndpoints uses the same status-code contract,
+	// and not every registry implementation reports rejections as "rejected" -
+	// MemoryModelRegistry's base GetRoutableEndpointsForModel uses "no_model"/"no_healthy"
+	// with 404/503. Keying on the action string would silently miss those and reintroduce
+	// the bug this fix closes.
+	if decision != nil && decision.StatusCode >= http.StatusBadRequest {
+		return []*domain.Endpoint{}
+	}
+
+	if routeErr != nil || len(routableEndpoints) == 0 {
+		return candidates
+	}
+	return routableEndpoints
 }
 
 func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
