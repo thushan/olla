@@ -706,6 +706,15 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 		logger.Warn("No healthy endpoints found for model alias",
 			"alias", aliasName,
 			"resolved_endpoints", len(endpointToModel))
+
+		// The alias resolved to real target models, but none of them are on a healthy/
+		// compatible candidate - equivalent to the strict strategy's "model only available
+		// on unhealthy endpoints" case. Set a routing decision here (mirroring
+		// RoutingReasonModelUnavailable/503) so the rejection carries X-Olla-Routing-*
+		// headers and a decision-aware status instead of falling through to
+		// writeNoRoutableEndpoints' generic default (#191).
+		profile.RoutingDecision = ports.NewRoutingDecision("alias", ports.RoutingActionRejected,
+			constants.RoutingReasonModelUnavailable)
 		return []*domain.Endpoint{}
 	}
 

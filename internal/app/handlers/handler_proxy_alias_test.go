@@ -193,6 +193,59 @@ func TestResolveAliasEndpoints_ShortCircuitsOnStatusCodeNotActionString(t *testi
 	assert.Equal(t, http.StatusNotFound, profile.RoutingDecision.StatusCode)
 }
 
+// TestResolveAliasEndpoints_NoIntersectionWithCandidates covers fix 4 from the #191
+// follow-up review: the alias resolves to real target models, but none of the endpoints
+// serving those models are in the healthy/compatible candidate list. Before the fix this
+// branch returned an empty slice without a routing decision, so the rejection reached
+// writeNoRoutableEndpoints with no decision - a generic reason, no X-Olla-Routing-*
+// headers, and the fallback default status rather than a decision-aware one.
+func TestResolveAliasEndpoints_NoIntersectionWithCandidates(t *testing.T) {
+	styledLog := &mockStyledLogger{}
+
+	endpoint1URL, _ := url.Parse("http://ollama:11434")
+	// Only ollama is a candidate; lmstudio (which actually serves the aliased model) is not.
+	candidates := []*domain.Endpoint{
+		{
+			Name:      "ollama",
+			URL:       endpoint1URL,
+			URLString: "http://ollama:11434",
+			Type:      domain.ProfileOllama,
+		},
+	}
+
+	// The alias resolves to a model that only exists on lmstudio, which isn't a candidate.
+	modelRegistry := &mockSimpleModelRegistry{
+		endpointsForModel: map[string][]string{
+			"gpt-oss-120b-MLX": {"http://lmstudio:1234"},
+		},
+	}
+
+	aliases := map[string][]string{
+		"gpt-oss-120b": {"gpt-oss-120b-MLX"},
+	}
+	aliasResolver := registry.NewAliasResolver(aliases, styledLog)
+
+	app := &Application{
+		modelRegistry: modelRegistry,
+		aliasResolver: aliasResolver,
+		logger:        styledLog,
+	}
+
+	profile := domain.NewRequestProfile("/v1/chat/completions")
+	profile.ModelName = "gpt-oss-120b"
+	profile.SupportedBy = []string{domain.ProfileOllama, domain.ProfileLmStudio}
+
+	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
+
+	assert.Empty(t, result, "no candidate serves the aliased model, so nothing is routable")
+
+	require.NotNil(t, profile.RoutingDecision, "a decision must be recorded so headers/status are decision-aware, not generic")
+	assert.Equal(t, "alias", profile.RoutingDecision.Strategy)
+	assert.Equal(t, "rejected", profile.RoutingDecision.Action)
+	assert.Equal(t, constants.RoutingReasonModelUnavailable, profile.RoutingDecision.Reason)
+	assert.Equal(t, http.StatusServiceUnavailable, profile.RoutingDecision.StatusCode)
+}
+
 func TestResolveAliasEndpoints_SelfReferencingAlias(t *testing.T) {
 	styledLog := &mockStyledLogger{}
 
