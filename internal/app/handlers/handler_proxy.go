@@ -676,10 +676,15 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 			profile.RoutingDecision = decision
 		}
 
-		// A rejection (strict model_not_found, or optimistic none/compatible_only) must
-		// fail fast exactly like the non-alias path below. Returning candidates here would
-		// silently proxy to a compatible-but-wrong backend and ignore the routing verdict (#191).
-		if decision != nil && decision.Action == ports.RoutingActionRejected {
+		// A rejection must fail fast exactly like the non-alias path below. Returning
+		// candidates here would silently proxy to a compatible-but-wrong backend and
+		// ignore the routing verdict (#191). Keyed on status code rather than the
+		// "rejected" action string because writeNoRoutableEndpoints uses the same
+		// status-code contract, and not every registry implementation reports
+		// rejections as "rejected" - MemoryModelRegistry's base GetRoutableEndpointsForModel
+		// uses "no_model"/"no_healthy" with 404/503. Keying on the action string would
+		// silently miss those and reintroduce the bug this fix closes.
+		if decision != nil && decision.StatusCode >= http.StatusBadRequest {
 			return []*domain.Endpoint{}
 		}
 

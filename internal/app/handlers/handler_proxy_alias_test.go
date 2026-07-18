@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"net/http"
 	"net/url"
 	"testing"
 
@@ -126,6 +128,69 @@ func TestResolveAliasEndpoints_NoMatchingEndpoints(t *testing.T) {
 
 	require.NotNil(t, profile.RoutingDecision, "rejection decision should still be recorded for headers/metrics")
 	assert.Equal(t, "rejected", profile.RoutingDecision.Action)
+}
+
+// mockBasicActionModelRegistry mimics MemoryModelRegistry's base GetRoutableEndpointsForModel
+// (internal/adapter/registry/memory_registry.go), which reports rejections with action
+// "no_model"/"no_healthy" rather than "rejected", but still sets a 4xx/5xx StatusCode.
+// Used to prove the alias fail-fast short-circuit is keyed on status code, not the
+// "rejected" action string (fix 1 from the #191 follow-up review).
+type mockBasicActionModelRegistry struct {
+	baseMockRegistry
+}
+
+func (m *mockBasicActionModelRegistry) GetRoutableEndpointsForModel(_ context.Context, _ string, _ []*domain.Endpoint) ([]*domain.Endpoint, *domain.ModelRoutingDecision, error) {
+	return []*domain.Endpoint{}, &domain.ModelRoutingDecision{
+		Strategy:   "basic",
+		Action:     "no_model",
+		Reason:     "Model not found in any endpoint",
+		StatusCode: http.StatusNotFound,
+	}, nil
+}
+
+// TestResolveAliasEndpoints_ShortCircuitsOnStatusCodeNotActionString covers fix 1 from
+// the #191 follow-up review: the alias fail-fast short-circuit must key on
+// decision.StatusCode (matching writeNoRoutableEndpoints' contract), not on
+// decision.Action == "rejected". A registry that reports a 404 rejection under a
+// different action name (as MemoryModelRegistry's base implementation does) must
+// still short-circuit; keying on the action string alone would silently fall through
+// and reintroduce the #191 bypass.
+func TestResolveAliasEndpoints_ShortCircuitsOnStatusCodeNotActionString(t *testing.T) {
+	styledLog := &mockStyledLogger{}
+
+	endpoint1URL, _ := url.Parse("http://ollama:11434")
+	candidates := []*domain.Endpoint{
+		{
+			Name:      "ollama",
+			URL:       endpoint1URL,
+			URLString: "http://ollama:11434",
+			Type:      domain.ProfileOllama,
+		},
+	}
+
+	// Alias resolves to nothing, so resolveAliasEndpoints falls through to the
+	// standard-routing fallback lookup, which is where the short-circuit lives.
+	aliases := map[string][]string{
+		"nonexistent-alias": {"model-not-in-registry"},
+	}
+	aliasResolver := registry.NewAliasResolver(aliases, styledLog)
+
+	app := &Application{
+		modelRegistry: &mockBasicActionModelRegistry{},
+		aliasResolver: aliasResolver,
+		logger:        styledLog,
+	}
+
+	profile := domain.NewRequestProfile("/v1/chat/completions")
+	profile.ModelName = "nonexistent-alias"
+	profile.SupportedBy = []string{domain.ProfileOllama}
+
+	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
+
+	assert.Empty(t, result, "a 404/503 decision must fail fast regardless of its action string")
+	require.NotNil(t, profile.RoutingDecision)
+	assert.Equal(t, "no_model", profile.RoutingDecision.Action, "sanity check: this registry deliberately does not use the \"rejected\" action string")
+	assert.Equal(t, http.StatusNotFound, profile.RoutingDecision.StatusCode)
 }
 
 func TestResolveAliasEndpoints_SelfReferencingAlias(t *testing.T) {
