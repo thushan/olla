@@ -133,15 +133,24 @@ func (a *Application) writeNoRoutableEndpoints(w http.ResponseWriter, r *http.Re
 
 	// Headers must be set before http.Error, which calls WriteHeader.
 	a.setStickyResponseHeadersFromRequest(w, r)
-	if decision != nil {
-		w.Header().Set(constants.HeaderXOllaRoutingStrategy, decision.Strategy)
-		w.Header().Set(constants.HeaderXOllaRoutingDecision, decision.Action)
-		if decision.Reason != "" {
-			w.Header().Set(constants.HeaderXOllaRoutingReason, decision.Reason)
-		}
-	}
+	a.setRoutingDecisionHeaders(w, decision)
 
 	http.Error(w, reason, status)
+}
+
+// setRoutingDecisionHeaders writes the X-Olla-Routing-* observability headers from
+// a routing decision. Shared by writeNoRoutableEndpoints and the translation route's
+// zero-endpoint rejection so a decision-aware rejection carries the same headers
+// regardless of which route produced it (#191).
+func (a *Application) setRoutingDecisionHeaders(w http.ResponseWriter, decision *domain.ModelRoutingDecision) {
+	if decision == nil {
+		return
+	}
+	w.Header().Set(constants.HeaderXOllaRoutingStrategy, decision.Strategy)
+	w.Header().Set(constants.HeaderXOllaRoutingDecision, decision.Action)
+	if decision.Reason != "" {
+		w.Header().Set(constants.HeaderXOllaRoutingReason, decision.Reason)
+	}
 }
 
 func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
