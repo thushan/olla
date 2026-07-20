@@ -393,12 +393,33 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// make sure that we have at least one endpoint available
 		// prevents hanging when model routing fails to find compatible backends
 		if len(endpoints) == 0 {
-			pr.requestLogger.Warn("No endpoints available for model",
-				"model", pr.model,
-				"translator", trans.Name())
-			a.writeTranslatorError(w, trans, pr,
-				fmt.Errorf("no healthy endpoints available for model: %s", pr.model),
-				http.StatusNotFound)
+			// A recorded routing decision (e.g. strict model_not_found/model_unavailable)
+			// carries the precise status and reason. Without one, defaulting to 404
+			// preserves the historical behaviour. Falling through to a hardcoded 404
+			// would flatten a strict "model only on unhealthy endpoints" 503 to 404 and
+			// drop the X-Olla-Routing-* headers, which the equivalent proxy-route
+			// rejection (writeNoRoutableEndpoints) always sets (#191).
+			var decision *domain.ModelRoutingDecision
+			if pr.profile != nil {
+				decision = pr.profile.RoutingDecision
+			}
+
+			status := http.StatusNotFound
+			reason := fmt.Sprintf("no healthy endpoints available for model: %s", pr.model)
+			if decision != nil && decision.StatusCode >= http.StatusBadRequest {
+				status = decision.StatusCode
+				reason = decision.Reason
+				pr.stats.RoutingDecision = decision
+				a.setRoutingDecisionHeaders(w, decision)
+			}
+
+			// Headers must be set before writeTranslatorError, which calls WriteHeader.
+			a.setStickyResponseHeadersFromRequest(w, r)
+
+			a.logRequestStart(pr, 0)
+			a.logRequestRejected(pr, status)
+
+			a.writeTranslatorError(w, trans, pr, errors.New(reason), status)
 			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNoCompatibleEndpoints)
 			return
 		}

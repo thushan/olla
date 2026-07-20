@@ -40,7 +40,7 @@ func (a *Application) createProviderProfile(providerType string) *domain.Request
 				}
 			}
 		} else {
-			// Test/static fallback — must track the openai-compatible types in
+			// Test/static fallback: must track the openai-compatible types in
 			// isProviderSupported (handler_common.go) and getStaticProviders (server_routes.go)
 			profile.AddSupportedProfile(constants.ProviderTypeOpenAI)
 			profile.AddSupportedProfile(constants.ProviderTypeVLLM)
@@ -81,7 +81,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 
 	// The proxy needs to know which prefix to strip before forwarding.
 	// We must use the RAW (pre-normalisation) path segment as the strip prefix so
-	// that alias spellings like /olla/lmstudio/ strip correctly — using the
+	// that alias spellings like /olla/lmstudio/ strip correctly. Using the
 	// normalised name (lm-studio) would produce a non-matching prefix and forward
 	// the full /olla/lmstudio/... path to the backend, causing a 404.
 	providerPrefix := getRawProviderPrefix(r.URL.Path)
@@ -104,22 +104,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if len(endpoints) == 0 {
-		http.Error(w, fmt.Sprintf("No %s endpoints available", providerType), http.StatusNotFound)
-		return
-	}
-
-	// Update request path to the target path (strip provider prefix)
-	r.URL.Path = pr.targetPath
-
-	a.logRequestStart(pr, len(endpoints))
-	err = a.executeProxyRequest(ctx, w, r, endpoints, pr)
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, err)
-
-	if err != nil {
-		a.handleProxyError(w, err)
-	}
+	a.dispatchToEndpoints(ctx, w, r, pr, endpoints, providerType)
 }
 
 // getProviderEndpoints returns only endpoints matching the requested provider type.

@@ -119,7 +119,12 @@ In this case:
 
 When a model name matches both a configured alias **and** a real model known to the registry, the alias takes priority. This ensures consistent cross-backend routing.
 
-If the alias resolves to zero endpoints (none of the actual model names are available), Olla falls back to standard model routing using the alias name as a regular model name.
+If the alias resolves to zero endpoints (none of the actual model names are available), Olla falls back to standard model routing using the alias name as a regular model name. That fallback honours the configured [routing strategy](model-routing.md), so an alias whose targets are all unavailable behaves exactly like any other unroutable model:
+
+- **`strict`** (default), or **`optimistic`** with `none` / `compatible_only`: the request is rejected. `404` when the alias name matches no model anywhere, `503` when it only resolves to unhealthy endpoints.
+- **`optimistic`** with `all`: the request is routed to any healthy endpoint.
+
+Olla does not silently proxy an unroutable alias to a compatible-but-wrong backend.
 
 ## Interaction with Other Features
 
