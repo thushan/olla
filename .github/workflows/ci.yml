@@ -41,13 +41,15 @@ jobs:
         go-version: ['1.24']
     steps:
       - name: Configure Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Verify dependencies
         run: go mod verify
@@ -68,7 +70,7 @@ jobs:
         run: make test-race
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           file: ./coverage.out
           flags: unittests
@@ -79,13 +81,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Configure Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
@@ -111,7 +115,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up QEMU for ARM64 emulation (Linux only)
         if: runner.os == 'Linux'
@@ -120,7 +126,7 @@ jobs:
           platforms: linux/arm64
 
       - name: Configure Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true

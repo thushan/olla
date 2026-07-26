@@ -8,6 +8,32 @@ updates:
     time: "02:00"
     timezone: Australia/Melbourne
   open-pull-requests-limit: 10
+  # Bundle routine minor/patch bumps into one PR so we review the week's Go
+  # dependency updates together instead of one PR per module. Majors still come
+  # through individually so a breaking change gets its own review.
+  groups:
+    go-modules:
+      patterns:
+      - "*"
+      update-types:
+      - minor
+      - patch
+  # Held back for Go 1.24 compatibility - from the next minor these move their
+  # go directive to 1.25, which silently bumps the toolchain. See CLAUDE.md.
+  # Patch releases within the pinned line are still allowed.
+  ignore:
+  - dependency-name: "golang.org/x/sys"
+    update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - dependency-name: "golang.org/x/term"
+    update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - dependency-name: "golang.org/x/text"
+    update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - dependency-name: "golang.org/x/sync"
+    update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - dependency-name: "golang.org/x/time"
+    update-types: ["version-update:semver-major", "version-update:semver-minor"]
+  - dependency-name: "atomicgo.dev/keyboard"
+    update-types: ["version-update:semver-major", "version-update:semver-minor"]
 - package-ecosystem: github-actions
   directory: "/"
   schedule:
@@ -16,3 +42,9 @@ updates:
     time: "22:00"
     timezone: Australia/Melbourne
   open-pull-requests-limit: 10
+  # One grouped PR for all workflow action bumps - they are low-risk and easier
+  # to review and merge together.
+  groups:
+    github-actions:
+      patterns:
+      - "*"
