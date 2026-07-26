@@ -50,6 +50,14 @@ Olla provides Anthropic Messages API translation, enabling Claude-compatible cli
 
 These clients can use local models across any supported backend through Olla's Anthropic translation layer. Backends with native Anthropic support (Ollama, LM Studio, vLLM, vLLM-MLX, llama.cpp, Docker Model Runner, oMLX) use zero-overhead passthrough; the rest (SGLang, LMDeploy, Lemonade, LiteLLM, generic OpenAI-compatible) are served via translation.
 
+### Agents
+
+Agent harnesses that speak OpenAI-compatible APIs:
+
+| Client | Description | Integration Guide |
+|--------|-------------|-------------------|
+| [Hermes Agent](./frontend/hermes-agent.md) | Nous Research's agent harness | OpenAI-compatible custom provider, plus a sticky-session recipe |
+
 ### API Translation
 
 Olla can translate between different LLM API formats:
