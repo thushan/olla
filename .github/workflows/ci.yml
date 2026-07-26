@@ -48,6 +48,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Verify dependencies
         run: go mod verify
@@ -86,6 +88,8 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
@@ -112,6 +116,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Set up QEMU for ARM64 emulation (Linux only)
         if: runner.os == 'Linux'

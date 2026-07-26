@@ -20,6 +20,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Configure Go
         uses: actions/setup-go@v7
