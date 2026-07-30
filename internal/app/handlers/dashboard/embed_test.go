@@ -407,3 +407,61 @@ func TestServeIndexMissingGuardsNoPanic(t *testing.T) {
 type fstestFS struct{}
 
 func (fstestFS) Open(string) (fs.File, error) { return nil, fs.ErrNotExist }
+
+// TestSecurityHeadersOnAsset confirms an ordinary static asset response
+// (e.g. the built JS bundle) carries the browser-hardening headers: MIME
+// sniffing protection, a frame policy, and a CSP.
+func TestSecurityHeadersOnAsset(t *testing.T) {
+	ts := httptest.NewServer(mountedHandler(populatedFS))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/internal/ui/assets/index-AbC123.js")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options: got %q, want %q", got, "nosniff")
+	}
+	if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options: got %q, want %q", got, "DENY")
+	}
+	csp := resp.Header.Get("Content-Security-Policy")
+	if csp == "" {
+		t.Fatal("Content-Security-Policy header is missing")
+	}
+	if !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Errorf("CSP should set frame-ancestors 'none', got %q", csp)
+	}
+	if !strings.Contains(csp, "script-src 'self'") {
+		t.Errorf("CSP should restrict script-src to 'self', got %q", csp)
+	}
+	if strings.Contains(csp, "unsafe-eval") {
+		t.Errorf("CSP should never allow unsafe-eval, got %q", csp)
+	}
+}
+
+// TestSecurityHeadersOnIndex confirms the SPA index response (the entry
+// document at /internal/ui/) carries the same hardening headers as static
+// assets - it is the response most likely to be navigated to directly.
+func TestSecurityHeadersOnIndex(t *testing.T) {
+	ts := httptest.NewServer(mountedHandler(populatedFS))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/internal/ui/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if got := resp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options: got %q, want %q", got, "nosniff")
+	}
+	if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options: got %q, want %q", got, "DENY")
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); csp == "" {
+		t.Error("Content-Security-Policy header is missing on the SPA index response")
+	}
+}

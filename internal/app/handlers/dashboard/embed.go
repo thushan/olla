@@ -184,6 +184,7 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Content-Type", contentTypeFor(rel))
 	w.Header().Set("Cache-Control", cacheControlFor(rel))
+	setSecurityHeaders(w)
 
 	// modtime is serveEpoch rather than the zero time: ServeContent uses it to
 	// set Last-Modified and to drive If-Modified-Since precondition checks, so
@@ -205,7 +206,56 @@ func (h *spaHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", mimeOverrides[".html"])
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("ETag", `"`+etagFor(data)+`"`)
+	setSecurityHeaders(w)
 	http.ServeContent(w, r, indexFile, serveEpoch, bytes.NewReader(data))
+}
+
+// dashboardCSP is the Content-Security-Policy applied to every successful
+// dashboard response (both the SPA shell and its static assets, since either
+// could be navigated to directly). It is as strict as the actual built
+// bundle allows, not the strictest CSP possible in the abstract:
+//
+//   - script-src 'self' with no 'unsafe-inline'/'unsafe-eval': the built
+//     index.html loads only an external module script
+//     (assets/index-*.js), never an inline <script> block, so scripts don't
+//     need it.
+//   - style-src 'self' 'unsafe-inline': several compiled components
+//     (PctBar, RangeBar, SortableTable, the loading skeletons) render
+//     data-driven bar widths via a Svelte-compiled style attribute
+//     (element.style.cssText = "width:NN%..."), which CSP's style-src
+//     gates the same way it gates a literal style="" attribute. Without
+//     'unsafe-inline' here every latency/success-rate bar silently renders
+//     at 0 width. Tightening this would need the frontend build to move
+//     those to CSS custom properties (style:--fill-pct + a stylesheet rule)
+//     instead of a raw style string - a frontend build change, logged to
+//     the findings file rather than made here.
+//   - img-src/font-src 'self': all icons and fonts are same-origin embedded
+//     assets, nothing external.
+//   - connect-src 'self': the poll stores fetch /internal/status* on the
+//     same origin only.
+//   - frame-ancestors 'none' plus the redundant X-Frame-Options: DENY below
+//     covers browsers that only understand the older header.
+//   - base-uri/form-action 'none': the SPA has no forms and no reason to
+//     ever change its document base.
+const dashboardCSP = "default-src 'self'; " +
+	"script-src 'self'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data:; " +
+	"font-src 'self'; " +
+	"connect-src 'self'; " +
+	"frame-ancestors 'none'; " +
+	"base-uri 'none'; " +
+	"form-action 'none'"
+
+// setSecurityHeaders applies the browser hardening headers common to every
+// successful dashboard response: MIME-sniffing protection, a frame policy
+// (belt-and-braces via both the modern CSP directive and the legacy
+// header), and the CSP above.
+func setSecurityHeaders(w http.ResponseWriter) {
+	h := w.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Content-Security-Policy", dashboardCSP)
 }
 
 // looksLikeStaticAsset reports whether rel is shaped like a built asset
