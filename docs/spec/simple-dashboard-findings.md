@@ -245,3 +245,36 @@ _(populated as work packages proceed)_
   pass's backend-only scope. Severity: low today, escalating to medium the
   moment any call site starts passing endpoint/model-derived strings through
   it — flagged so a future PR checks this before doing so.
+
+### OverviewPanel rowId fix follow-up — DOM ids still collide, only the each-key was fixed
+
+- **`ep-<slug>` / `glance-<slug>` DOM ids are still lossy and can collide,
+  making "jump to endpoint" resolve to the wrong row.**
+  (`web/dashboard/src/panels/EndpointsPanel.svelte`'s `rowDomId`,
+  `web/dashboard/src/panels/OverviewPanel.svelte`'s `rowDomId` and
+  `jumpToEndpoints`, `web/dashboard/src/panels/ModelsPanel.svelte`'s
+  `domId`). This branch fixed OverviewPanel's glance table using the same
+  lossy `cssId()` slug as Svelte's each-block *key* (rowId), matching the
+  fix already applied to `EndpointsPanel`/`ModelsPanel` in `eb14006` — that
+  was the assigned defect and it is now fixed everywhere (verified by
+  grepping every `rowId=`/`rowId(` call site in `web/dashboard/src/`; none
+  remain lossy). But all three components still derive their DOM `id`
+  attribute from that same slug, and DOM ids are not required to be
+  unique the way each-keys are, so `document.getElementById` silently
+  resolves to whichever row happened to render first when two names
+  collide once slugged. Confirmed via test: with endpoints named
+  `node.a` (priority 100) and `node-a` (priority 90), both render `id="ep-
+  node-a"`; clicking "jump to endpoint" from the `node-a` glance row
+  scrolls to and focuses `node.a`'s row instead, with no error and no
+  visible indication anything went wrong. `App.jump-focus.test.js`'s new
+  collision case exercises the jump from `node.a` specifically (which
+  self-resolves correctly, since it renders first) to avoid encoding the
+  wrong-target behaviour as a passing spec; the `node-a` case is left
+  unasserted here as the documented gap. Fixing this properly needs a
+  disambiguation strategy for the DOM id (e.g. an index suffix, or a
+  DOM-safe hash of the exact name instead of the current char-strip slug)
+  across all three components, which is broader than this branch's single
+  assigned defect (the each-key fix). Severity: low-medium (only affects
+  operators with two endpoint or model names that collide once
+  punctuation is stripped, and the failure mode is a wrong jump target,
+  not a crash or data-correctness issue elsewhere in the panel).
