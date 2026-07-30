@@ -131,19 +131,23 @@
   {:else if sys}
     <div class="section">
       <div class="tile-grid">
-        <StatTile
-          label="System status"
-          valueHtml={true}
-          value={`<span class="glyph g-${statusCls(sys.status)}" aria-hidden="true">${statusGlyph(sys.status)}</span> ${sys.status}`}
-          subHtml={true}
-          sub={`<strong>${proxy?.engine ?? 'olla'}</strong> engine · <strong>${proxy?.balancer ?? 'priority'}</strong> balancing`}
-        />
+        <StatTile label="System status">
+          {#snippet children()}
+            <span class="glyph g-{statusCls(sys.status)}" aria-hidden="true">{statusGlyph(sys.status)}</span>
+            {sys.status}
+          {/snippet}
+          {#snippet subSnippet()}
+            <strong>{proxy?.engine ?? 'olla'}</strong> engine · <strong>{proxy?.balancer ?? 'priority'}</strong> balancing
+          {/snippet}
+        </StatTile>
         <StatTile
           label="Endpoints up"
-          valueHtml={true}
-          value={`${up}<span class="unit">/ ${total}</span>`}
           sub="{total - up} unavailable"
-        />
+        >
+          {#snippet children()}
+            {up}<span class="unit">/ {total}</span>
+          {/snippet}
+        </StatTile>
         <StatTile
           label="Success rate"
           value={sys.success_rate}
