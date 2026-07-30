@@ -95,20 +95,57 @@ func TestEnhancedLogging_Gate(t *testing.T) {
 		}
 	})
 
-	// NonProxyPath_InfoLevel: non-proxy requests log at Info, which IS enabled at
-	// the default level - both "Request started" and "Request completed" must appear.
+	// NonProxyPath_InfoLevel: ordinary (non-proxy, non-/internal/) requests log
+	// at Info, which IS enabled at the default level - both "Request started"
+	// and "Request completed" must appear.
 	t.Run("NonProxyPath_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
 
 		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
 
-		req := httptest.NewRequest(http.MethodGet, "/internal/health", nil)
+		req := httptest.NewRequest(http.MethodGet, "/version", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
 		if ch.count < 2 {
 			t.Errorf("expected at least 2 log records at info level for non-proxy path, got %d", ch.count)
+		}
+	})
+
+	// InternalPollPath_InfoLevel: dashboard polls under /internal/ are quiet
+	// traffic and log at Debug, so at the default Info level neither "Request
+	// started" nor "Request completed" should appear - same treatment as the
+	// proxy hot path, so an open dashboard tab doesn't flood the log.
+	t.Run("InternalPollPath_InfoLevel", func(t *testing.T) {
+		ch := &countingHandler{minLevel: slog.LevelInfo}
+		setDefaultLogger(t, ch)
+
+		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
+
+		req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+		rr := httptest.NewRecorder()
+		mw.ServeHTTP(rr, req)
+
+		if ch.count != 0 {
+			t.Errorf("expected 0 log records at info level for /internal/ poll path, got %d", ch.count)
+		}
+	})
+
+	// InternalPollPath_DebugLevel: at debug level, /internal/ poll traffic is
+	// still observable when an operator turns the verbosity up.
+	t.Run("InternalPollPath_DebugLevel", func(t *testing.T) {
+		ch := &countingHandler{minLevel: slog.LevelDebug}
+		setDefaultLogger(t, ch)
+
+		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
+
+		req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+		rr := httptest.NewRecorder()
+		mw.ServeHTTP(rr, req)
+
+		if ch.count < 2 {
+			t.Errorf("expected at least 2 log records at debug level for /internal/ poll path, got %d", ch.count)
 		}
 	})
 }

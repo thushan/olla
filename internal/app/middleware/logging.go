@@ -59,6 +59,22 @@ func IsProxyRequest(path string) bool {
 		(strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/api/v0/")) // /api/v0/ is internal
 }
 
+// internalPathPrefix is where the admin dashboard's status/health/stats polls
+// land. An open dashboard tab polls several of these every few seconds; at
+// info level that floods both the console log and the dedicated access log
+// with traffic that carries no operational signal, so it is demoted to debug
+// alongside the existing proxy hot-path treatment. The dashboard's own
+// /internal/ui/ asset navigations also match, which is fine: navigations are
+// infrequent and demoting them keeps the access log focused on proxy traffic.
+const internalPathPrefix = "/internal/"
+
+// isQuietPollRoute reports whether path belongs to a route whose routine,
+// high-frequency traffic should log at debug rather than info: the proxy hot
+// path (already demoted) plus the dashboard's /internal/ polling surface.
+func isQuietPollRoute(path string) bool {
+	return IsProxyRequest(path) || strings.HasPrefix(path, internalPathPrefix)
+}
+
 // responseWriter wraps http.ResponseWriter to capture response size and status
 type responseWriter struct {
 	http.ResponseWriter
@@ -140,11 +156,12 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			wrapped := &responseWriter{ResponseWriter: w, status: 200}
 
 			// Gate field construction on whether the record will actually be emitted.
-			// On the proxy hot path at the default info level, Debug records are discarded
-			// by the handler — building the []any slice and calling formatBytes 2x per
-			// request is pure waste. Non-proxy requests log at Info, so they only pay the
-			// cost when info-level logging is actually enabled.
-			isProxy := IsProxyRequest(r.URL.Path)
+			// On the proxy hot path and the dashboard's /internal/ polling surface, at
+			// the default info level Debug records are discarded by the handler —
+			// building the []any slice and calling formatBytes 2x per request is pure
+			// waste. Other requests log at Info, so they only pay the cost when
+			// info-level logging is actually enabled.
+			isProxy := isQuietPollRoute(r.URL.Path)
 			if isProxy {
 				if baseLogger.Enabled(ctx, slog.LevelDebug) {
 					baseLogger.Debug("HTTP request started",
@@ -234,10 +251,18 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 			// Build fields only when the handler is enabled to avoid allocating the
 			// format.RFC3339 string, redactQuery output, and the variadic slice on every
 			// request when the file sink is not configured.
+			//
+			// Dashboard polls against /internal/ log at debug: an open tab hits
+			// several of these routes every few seconds and would otherwise
+			// dominate the access log with routine, non-operational traffic.
 			baseLogger := slog.Default()
 			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
-			if baseLogger.Enabled(detailedCtx, slog.LevelInfo) {
-				baseLogger.InfoContext(detailedCtx, "Access log",
+			level := slog.LevelInfo
+			if strings.HasPrefix(r.URL.Path, internalPathPrefix) {
+				level = slog.LevelDebug
+			}
+			if baseLogger.Enabled(detailedCtx, level) {
+				baseLogger.Log(detailedCtx, level, "Access log",
 					"timestamp", start.Format(time.RFC3339),
 					"request_id", requestID,
 					"remote_addr", r.RemoteAddr,
