@@ -442,6 +442,51 @@ func TestEndpointsStatusHandler_TieBreakerStableOrder(t *testing.T) {
 	assert.Equal(t, "zebra", response.Endpoints[2].Name)
 }
 
+// Regression for the B2/C1 conflict: sanitiseDisplayURL strips query and
+// fragment, so two endpoints that differ only by query string arrive with an
+// identical display URL. Before the ID tie-breaker, the URL-based comparator
+// tied completely on same name+URL and the sort was unstable across polls
+// (input order decided it, and input order comes from map iteration). The ID
+// tie-breaker must still order deterministically because it is derived from
+// the raw, pre-sanitisation URL.
+func TestEndpointsStatusHandler_TieBreakerDeterministicOnCollidingDisplayURL(t *testing.T) {
+	a := &domain.Endpoint{Name: "twin", Type: "ollama", URLString: "http://host:11434?v=a", Status: domain.StatusHealthy, Priority: 5}
+	b := &domain.Endpoint{Name: "twin", Type: "ollama", URLString: "http://host:11434?v=b", Status: domain.StatusHealthy, Priority: 5}
+
+	// The repository's endpoint map is keyed on the raw URL (B2), so a and b
+	// are genuinely distinct entries; GetAll's returned slice order is not
+	// guaranteed the same across polls (real repository backs onto a map). A
+	// correct tie-breaker must pick the same winner regardless of which
+	// order they arrive in - that's what "stable across polls" means. Feed
+	// both input orders and compare the winner by identity (ID), not index.
+	orderings := [][]*domain.Endpoint{{a, b}, {b, a}}
+
+	var firstWinner string
+	for i, endpoints := range orderings {
+		app := createTestStatusApplication(endpoints)
+		req := httptest.NewRequest(http.MethodGet, "/internal/status/endpoints", nil)
+		w := httptest.NewRecorder()
+		app.endpointsStatusHandler(w, req)
+
+		var response EndpointStatusResponse
+		require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+		require.Len(t, response.Endpoints, 2)
+
+		// The two rows must remain individually identifiable and their
+		// display URLs really do collide - that is the bug this ID exists to
+		// route around.
+		assert.NotEqual(t, response.Endpoints[0].ID, response.Endpoints[1].ID)
+		assert.Equal(t, response.Endpoints[0].URL, response.Endpoints[1].URL, "test setup: display URLs should collide after sanitisation")
+
+		winner := response.Endpoints[0].ID
+		if i == 0 {
+			firstWinner = winner
+		} else {
+			assert.Equal(t, firstWinner, winner, "the same endpoint must sort first regardless of input order (map-iteration order varies across polls)")
+		}
+	}
+}
+
 func TestBuildEndpointSummaryOptimised(t *testing.T) {
 	endpoint := &domain.Endpoint{
 		Name:      "test-endpoint",

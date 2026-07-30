@@ -180,3 +180,41 @@ func TestBuildUnifiedEndpoints_TieBreakerStableOrder(t *testing.T) {
 	assert.Equal(t, "mango", out[1].Name)
 	assert.Equal(t, "zebra", out[2].Name)
 }
+
+// Regression for the B2/C1 conflict: two endpoints differing only by query
+// string sanitise to an identical display URL, so a URL-based tie-breaker
+// ties completely and ordering falls back to map-iteration order, which is
+// unstable across polls. The ID tie-breaker is derived from the raw
+// pre-sanitisation URL, so it must still order deterministically.
+func TestBuildUnifiedEndpoints_TieBreakerDeterministicOnCollidingDisplayURL(t *testing.T) {
+	a := &domain.Endpoint{Name: "twin", URLString: "http://host:11434?v=a", Status: domain.StatusHealthy, Priority: 5}
+	b := &domain.Endpoint{Name: "twin", URLString: "http://host:11434?v=b", Status: domain.StatusHealthy, Priority: 5}
+
+	app := createTestStatusApplication([]*domain.Endpoint{a, b})
+
+	// The repository's endpoint map is keyed on the raw URL (B2), so a and b
+	// are genuinely distinct entries; the slice arriving here comes from map
+	// iteration and its order is not guaranteed to be the same across polls.
+	// A correct tie-breaker must resolve to the same relative order of a and
+	// b regardless of which order they arrive in - that's what "stable
+	// across polls" means. Feed both input orders and compare the winner by
+	// identity (URLString), not by output index.
+	orderings := [][]*domain.Endpoint{{a, b}, {b, a}}
+
+	var firstWinner string
+	for i, endpoints := range orderings {
+		out := make([]EndpointResponse, len(endpoints))
+		app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil)
+
+		require.Len(t, out, 2)
+		assert.NotEqual(t, out[0].ID, out[1].ID)
+		assert.Equal(t, out[0].URL, out[1].URL, "test setup: display URLs should collide after sanitisation")
+
+		winner := out[0].ID
+		if i == 0 {
+			firstWinner = winner
+		} else {
+			assert.Equal(t, firstWinner, winner, "the same endpoint must sort first regardless of input order (map-iteration order varies across polls)")
+		}
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // FR-14 sanitisation half: the display URL surfaced in JSON must strip
@@ -62,6 +63,27 @@ func TestSanitiseDisplayURL_NeverLeaksCredentials(t *testing.T) {
 	assert.NotContains(t, got, password)
 	assert.NotContains(t, got, "user")
 	assert.NotContains(t, got, "k=v")
+}
+
+// stableEndpointID must distinguish endpoints that sanitiseDisplayURL would
+// otherwise render identically (query/fragment stripped), since the
+// repository keys its endpoint map on the full raw URL including query and
+// fragment. It must also be deterministic across repeated calls so ordering
+// and any future client-side keying stay stable across polls and restarts.
+func TestStableEndpointID_DistinctForSanitisedCollisions(t *testing.T) {
+	a := "http://host:11434?v=a"
+	b := "http://host:11434?v=b"
+
+	require.Equal(t, sanitiseDisplayURL(a), sanitiseDisplayURL(b), "test setup: display URLs should collide after sanitisation")
+	assert.NotEqual(t, stableEndpointID(a), stableEndpointID(b), "IDs must differ even though display URLs collide")
+}
+
+func TestStableEndpointID_DeterministicAcrossCalls(t *testing.T) {
+	const raw = "http://localhost:11434/v1?token=abc"
+	first := stableEndpointID(raw)
+	for range 5 {
+		assert.Equal(t, first, stableEndpointID(raw), "stableEndpointID must return the same value across repeated calls")
+	}
 }
 
 // C1 regression: a parse error (here caused by a space in the password) must
