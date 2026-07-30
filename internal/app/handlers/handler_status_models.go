@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -118,12 +117,13 @@ func (a *Application) buildModelSummaries(modelMap map[string]*domain.EndpointMo
 			} else {
 				existing.Endpoints = append(existing.Endpoints, endpointName)
 
-				if model.LastSeen.Unix() > parseTimeAgoOptimised(existing.LastSeen) {
+				// A model hosted on several endpoints must deterministically
+				// report the newest last-seen timestamp, not whichever
+				// endpoint the map iteration happened to visit last.
+				if newerModelTimestamp(model.LastSeen, existing.LastSeenAt) {
 					existing.LastSeen = format.TimeAgo(model.LastSeen)
-					if !model.LastSeen.IsZero() {
-						ls := model.LastSeen
-						existing.LastSeenAt = &ls
-					}
+					ls := model.LastSeen
+					existing.LastSeenAt = &ls
 				}
 			}
 		}
@@ -241,14 +241,35 @@ func (a *Application) groupModelsByFamilyWithDetails(models []ModelSummary) []Mo
 	return modelGroups
 }
 
+// newerModelTimestamp reports whether candidate should replace current as a
+// model's recorded last-seen value. Comparing the real time.Time (rather than
+// round-tripping through format.TimeAgo's rendered string, which never
+// contained the substrings a former parser looked for) is what makes the
+// comparison correct at all. A zero candidate never wins; a nil current
+// always loses to any real candidate.
+func newerModelTimestamp(candidate time.Time, current *time.Time) bool {
+	if candidate.IsZero() {
+		return false
+	}
+	return current == nil || candidate.After(*current)
+}
+
+// modelLastSeenTime returns m's last-seen instant, or the zero time when
+// unknown, for use as a sort key.
+func modelLastSeenTime(m ModelSummary) time.Time {
+	if m.LastSeenAt != nil {
+		return *m.LastSeenAt
+	}
+	return time.Time{}
+}
+
 func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelSummary {
 	sort.Slice(models, func(i, j int) bool {
-		ti, tj := parseTimeAgoOptimised(models[i].LastSeen), parseTimeAgoOptimised(models[j].LastSeen)
-		if ti != tj {
-			return ti > tj
+		ti, tj := modelLastSeenTime(models[i]), modelLastSeenTime(models[j])
+		if !ti.Equal(tj) {
+			return ti.After(tj)
 		}
-		// FR-15: parseTimeAgoOptimised is coarse (many models share a bucket),
-		// so break ties by name for a stable, diffable order across polls.
+		// FR-15: break ties by name for a stable, diffable order across polls.
 		return models[i].Name < models[j].Name
 	})
 
@@ -291,29 +312,3 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 	return caps
 }
 
-// from Scout
-func parseTimeAgoOptimised(timeAgo string) int64 {
-	if strings.Contains(timeAgo, "second") {
-		return time.Now().Unix() - 30
-	}
-	if strings.Contains(timeAgo, "minute") {
-		if len(timeAgo) > 2 && timeAgo[0] >= '0' && timeAgo[0] <= '9' {
-			if num, err := strconv.Atoi(string(timeAgo[0])); err == nil {
-				return time.Now().Unix() - int64(num*60)
-			}
-		}
-		return time.Now().Unix() - 300
-	}
-	if strings.Contains(timeAgo, "hour") {
-		if len(timeAgo) > 2 && timeAgo[0] >= '0' && timeAgo[0] <= '9' {
-			if num, err := strconv.Atoi(string(timeAgo[0])); err == nil {
-				return time.Now().Unix() - int64(num*3600)
-			}
-		}
-		return time.Now().Unix() - 7200
-	}
-	if strings.Contains(timeAgo, "day") {
-		return time.Now().Unix() - 43200
-	}
-	return time.Now().Unix() - 86400
-}
