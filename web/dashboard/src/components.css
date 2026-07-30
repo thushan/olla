@@ -149,6 +149,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Surface a frozen-data signal distinct from the neutral degraded reason. */
+.status-reason.stale {
+  color: var(--amber, #d97706);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 
 /* NAV / TABS */
 .tabs {

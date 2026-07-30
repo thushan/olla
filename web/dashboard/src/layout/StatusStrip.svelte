@@ -10,6 +10,18 @@
   const sys = $derived(overview.data?.system);
   const has = $derived(!!sys);
 
+  // Without consulting overview.status the strip would display confident
+  // numbers during an outage while the panels below report unreachable. The
+  // data-state attribute mirrors the panels' pattern so CSS and assistive tech
+  // can tell a live strip from a stale one, and the visible marker gives the
+  // operator a non-numeric signal that the figures are frozen.
+  const stateStatus = $derived(
+    overview.status === 'stale' || overview.status === 'error' ? overview.status : null
+  );
+  const staleWord = $derived(
+    overview.status === 'stale' ? 'stale' : overview.status === 'error' ? 'unreachable' : null
+  );
+
   // "degraded" on its own tells the operator nothing actionable. Derive a
   // short reason from real endpoint data (offline count) rather than
   // fabricate one; when healthy or when we have no endpoint data yet, say
@@ -42,7 +54,7 @@
   }
 </script>
 
-<dl class="status-strip" aria-label="System status summary">
+<dl class="status-strip" aria-label="System status summary" data-state={stateStatus}>
   <div class="status-cell system-status">
     <dt>Status</dt>
     <dd>
@@ -50,7 +62,9 @@
         <span class="glyph g-{cls(sys.status)}" aria-hidden="true">{glyph(sys.status)}</span>{sys.status}
       {:else}<span class="dash">—</span>{/if}
     </dd>
-    {#if degradedReason}
+    {#if staleWord}
+      <span class="status-reason stale" data-stale title="Last poll {stateStatus}; figures below may be frozen">{staleWord}</span>
+    {:else if degradedReason}
       <span class="status-reason" title={degradedReason}>{degradedReason}</span>
     {/if}
   </div>
