@@ -154,7 +154,12 @@
         <td>{fmtAgo(m.last_seen_at, now) || 'never'}</td>
       {/snippet}
     </SortableTable>
-  {:else}
+  {:else if models.hasData}
+    <!-- Gated on hasData (data !== null), not just "groups/flatRecent are
+         empty": a failed fetch also leaves both empty, and without this
+         guard the empty-state copy rendered alongside StatusBanner's error,
+         telling the operator "no models" when the real story was "the
+         request failed". -->
     <p class="panel-intro">No models discovered yet. Once backends respond to discovery, models will appear here.</p>
   {/if}
 </div>
