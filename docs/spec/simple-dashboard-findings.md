@@ -153,3 +153,42 @@ _(populated as work packages proceed)_
   (or unit-test `StatusTag` directly) before claiming coverage. Severity: low
   (unlikely render path; the fallback is non-crashing).
 
+
+### Build-pipeline review — pre-existing Windows parse-time dependencies (acknowledged, not planned)
+
+- **`makefile:2` and `makefile:5` shell out to `awk`/`sed`/`date` at parse
+  time.** `RUNTIME := $(shell go version | awk '{print $$3}' | sed
+  's/go//')` and `DATE := $(shell date +%Y-%m-%dT%H:%M:%S%z)` are `:=`
+  immediate assignments, so they execute on every `make` invocation
+  regardless of target — including `make help` and `make ready` — not just
+  build targets. This predates this branch (present on `main` before
+  `feature/simple-dashboard`) and is unrelated to the two build-pipeline
+  defects this branch's build-pipeline fix addressed (the `build-web` copy
+  step and the missing `setup-node` step in `release.yml`). Also pre-existing
+  in the same vein: `mkdir -p`, `rm -rf` and `uname -m` used in the
+  cross-compile `validate-*`/`docker-build-local` targets. The maintainer has
+  confirmed Git Bash is an accepted, supported prerequisite for `make` on
+  Windows (they run `make ready` under it routinely), so none of this blocks
+  native Windows development today and no work is planned against it. Recorded
+  here only so a future contributor investigating Windows Makefile behaviour
+  finds the answer already known rather than re-deriving it. Severity: none
+  (acknowledged working-as-intended under the Git-Bash-required policy).
+
+### Release pipeline — documented goreleaser Docker verification path lacks Node (and Go, and make)
+
+- **The `docker run ... goreleaser/goreleaser:latest release --snapshot
+  --clean` commands documented in `.goreleaser.yml:1-5`** run inside the
+  official `goreleaser/goreleaser` image, which ships only the goreleaser
+  binary and git on a minimal base — no Go toolchain, no `make`, and no
+  Node/npm. `before.hooks` in the same file calls `make build-web`, so
+  running that documented command as-is fails inside the container on three
+  missing tools at once, not just Node. This is a pre-existing local-testing
+  convenience comment, not the GitHub Actions release path (which runs
+  goreleaser directly on the `ubuntu-latest` runner via
+  `goreleaser-action`, now fixed to install Node explicitly - see
+  `.github/workflows/release.yml`). Fixing the documented container path
+  would mean building and maintaining a custom goreleaser image with Go,
+  Node and make pinned, which is materially more than this branch's two
+  build-pipeline defects. Logged for PR 2 or a dedicated release-tooling
+  pass. Severity: low (local convenience command only; does not affect
+  actual tagged releases).
