@@ -196,6 +196,27 @@ logging:
 engineering:
   show_nerdstats: false
 
+# Admin dashboard (read-only, no auth). Gated by network-layer allowlists: a
+# request must come from an allowed CIDR AND present an allowed Host header.
+# Proxy headers (X-Forwarded-For, X-Real-IP) are never consulted for this
+# decision, so a reverse proxy on the same host defeats the loopback check.
+# Loopback-only default matches the bare-metal first-run; Docker operators
+# typically need to widen access_policy.allowed_cidrs to the bridge gateway's
+# subnet. IP-literal Hosts (127.0.0.1, [::1]) are auto-accepted by FR-11, so
+# only the non-IP "localhost" needs to appear in allowed_hosts.
+dashboard:
+  enabled: true
+  access_policy:
+    allowed_cidrs:
+      - "127.0.0.0/8"
+      - "::1/128"
+    allowed_hosts:
+      - "localhost"
+  # gate_internal_api is reserved for a future PR and is inert on this branch:
+  # setting it true has no effect. When wired (PR 2), it will extend the same
+  # access_policy to the rest of /internal/* and /version.
+  gate_internal_api: false
+
 # Model aliases allow mapping a single virtual model name to multiple actual model names
 # across different backends. When a request arrives with an alias, olla finds endpoints
 # serving any of the listed actual models and rewrites the model name in the request to
