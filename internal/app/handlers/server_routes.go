@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/thushan/olla/internal/adapter/translator"
+	"github.com/thushan/olla/internal/app/handlers/dashboard"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -55,6 +56,22 @@ func (a *Application) registerRoutes() {
 
 	// Provider routes are built from YAML configs when available
 	a.registerProviderRoutes()
+
+	// Dashboard mounts last so its /internal/ui/ subtree cannot shadow any
+	// provider or internal route registered above. The collision check is
+	// belt-and-braces defence against a future regression: every route above
+	// is either an /olla/ prefixed proxy route or a fixed literal distinct
+	// from /internal/ui/, so this is never expected to fire. On detecting a
+	// collision we log Error and skip mounting (fail safe: never mount
+	// something shadowed, never take the server down over a defensive check).
+	// registerRoutes' signature stays unchanged: a collision skips the
+	// dashboard rather than halting startup. See simple-dashboard.md §5.
+	if _, exists := a.routeRegistry.GetRoutes()[dashboard.DashboardRoute]; exists {
+		a.logger.Error("dashboard route collision; skipping mount",
+			"route", dashboard.DashboardRoute)
+	} else {
+		dashboard.RegisterRoutes(a.routeRegistry, a.Config.Dashboard, a.logger, dashboard.Handler())
+	}
 }
 
 // registerTranslatorRoutes dynamically registers routes for all translators
