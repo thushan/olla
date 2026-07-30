@@ -311,4 +311,3 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 	}
 	return caps
 }
-
