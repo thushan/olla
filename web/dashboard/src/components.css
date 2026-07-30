@@ -484,6 +484,11 @@ tbody tr:hover .col-sticky {
   color: var(--text-faint);
 }
 
+.historical {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
 /* RANGE BAR (min/avg/max latency, p95/p99) */
 .range-bar {
   position: relative;
