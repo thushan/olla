@@ -349,6 +349,27 @@ func TestRegisterRoutes_DoesNotTouchOtherRoutes(t *testing.T) {
 	}
 }
 
+// C3: the access-policy 403 must carry the same browser-hardening headers as
+// a successful dashboard response. reject() previously set only
+// X-Content-Type-Options, leaving the 403 frameable and without a CSP or
+// Referrer-Policy. The body names the failed check, so it is operator-facing
+// text that must be hardened like any other response the handler emits.
+func TestAccessMiddleware_403CarriesSecurityHeaders(t *testing.T) {
+	t.Parallel()
+
+	reached := false
+	h := AccessMiddleware(loopbackConfig(), nil, reachedHandler(&reached))
+
+	rec := doRequest(t, h, "203.0.113.9:54321", "localhost", "", "")
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status: got %d, want 403", rec.Code)
+	}
+	if reached {
+		t.Fatal("handler must not be reached on 403")
+	}
+	assertDashboardSecurityHeaders(t, rec.Header())
+}
+
 // TestRegisterRoutes_DisabledDoesNotMountDashboardOrAffectOthers confirms the
 // "enabled:false" off switch: the dashboard subtree is absent from the mux
 // entirely, so a request to /internal/ui/ hits the default mux 404 rather than

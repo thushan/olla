@@ -465,3 +465,89 @@ func TestSecurityHeadersOnIndex(t *testing.T) {
 		t.Error("Content-Security-Policy header is missing on the SPA index response")
 	}
 }
+
+// assertDashboardSecurityHeaders checks the four browser-hardening headers
+// every dashboard response must carry, regardless of status code. Shared
+// with access_test.go (same package) so the 403 path is held to the same
+// standard as the 200/404/405/503 paths.
+func assertDashboardSecurityHeaders(t *testing.T, h http.Header) {
+	t.Helper()
+	cases := []struct {
+		header string
+		want   string
+		// substring true means want is checked as a contains, not equality
+		// (used for CSP whose full value is long and version-sensitive).
+		substring bool
+	}{
+		{"X-Content-Type-Options", "nosniff", false},
+		{"X-Frame-Options", "DENY", false},
+		{"Content-Security-Policy", "frame-ancestors 'none'", true},
+		{"Referrer-Policy", "no-referrer", false},
+	}
+	for _, c := range cases {
+		got := h.Get(c.header)
+		switch {
+		case got == "":
+			t.Errorf("%s header missing (must be set before any response body)", c.header)
+		case c.substring && !strings.Contains(got, c.want):
+			t.Errorf("%s: got %q, want to contain %q", c.header, got, c.want)
+		case !c.substring && got != c.want:
+			t.Errorf("%s: got %q, want %q", c.header, got, c.want)
+		}
+	}
+}
+
+// C3: security headers must be present on EVERY response path in the
+// dashboard handler tree, not just the 200 path. A 404 (missing asset), a
+// 405 (wrong method), and the not-built 503 must all carry the same
+// hardening headers as a successful response, plus Referrer-Policy. Without
+// this, an error page can be framed, sniffed, or referrer-leaked exactly as
+// a success page can. These paths previously set none of the headers
+// (or only X-Content-Type-Options), so they fail against the shared
+// assertion until setSecurityHeaders is called before every write.
+func TestSecurityHeadersOn404(t *testing.T) {
+	ts := httptest.NewServer(mountedHandler(populatedFS))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/internal/ui/assets/missing-hash.js")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status: got %d, want 404", resp.StatusCode)
+	}
+	assertDashboardSecurityHeaders(t, resp.Header)
+}
+
+func TestSecurityHeadersOn405(t *testing.T) {
+	ts := httptest.NewServer(mountedHandler(populatedFS))
+	defer ts.Close()
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/internal/ui/", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("status: got %d, want 405", resp.StatusCode)
+	}
+	assertDashboardSecurityHeaders(t, resp.Header)
+}
+
+func TestSecurityHeadersOnNotBuilt503(t *testing.T) {
+	sentinelOnly := fstest.MapFS{".gitkeep": &fstest.MapFile{Data: nil}}
+	ts := httptest.NewServer(dashboardHandler(sentinelOnly))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status: got %d, want 503", resp.StatusCode)
+	}
+	assertDashboardSecurityHeaders(t, resp.Header)
+}

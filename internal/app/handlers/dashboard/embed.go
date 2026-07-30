@@ -111,6 +111,7 @@ func notBuiltHandler() http.Handler {
 			"fix", "run `make build-web` before building, or use a release target")
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		setSecurityHeaders(w)
 		http.Error(w, "dashboard not built; run `make build-web` before building the binary", http.StatusServiceUnavailable)
 	})
 }
@@ -121,6 +122,7 @@ type spaHandler struct {
 
 func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		setSecurityHeaders(w)
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -139,6 +141,7 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !fs.ValidPath(rel) {
+		setSecurityHeaders(w)
 		http.NotFound(w, r)
 		return
 	}
@@ -154,6 +157,7 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		// of a clean, diagnosable 404. Genuine SPA routes (/dashboard/endpoints
 		// etc) have no extension and must still resolve to index.html.
 		if looksLikeStaticAsset(rel) {
+			setSecurityHeaders(w)
 			http.NotFound(w, r)
 			return
 		}
@@ -176,6 +180,7 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	data, err := io.ReadAll(f)
 	if err != nil {
+		setSecurityHeaders(w)
 		http.Error(w, "read error", http.StatusInternalServerError)
 		return
 	}
@@ -200,6 +205,7 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *spaHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
 	data, err := fs.ReadFile(h.root, indexFile)
 	if err != nil {
+		setSecurityHeaders(w)
 		http.Error(w, "dashboard index missing", http.StatusNotFound)
 		return
 	}
@@ -248,14 +254,19 @@ const dashboardCSP = "default-src 'self'; " +
 	"form-action 'none'"
 
 // setSecurityHeaders applies the browser hardening headers common to every
-// successful dashboard response: MIME-sniffing protection, a frame policy
+// dashboard response: MIME-sniffing protection, a frame policy
 // (belt-and-braces via both the modern CSP directive and the legacy
-// header), and the CSP above.
+// header), the CSP above, and Referrer-Policy so an operator navigating to
+// the dashboard from another internal tool does not leak its URL as a
+// Referer on subsequent requests. It must be called before any response
+// body is written, on every response path (200, 404, 405, 403, 503), so
+// error pages are not frameable or sniffable either.
 func setSecurityHeaders(w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("X-Frame-Options", "DENY")
 	h.Set("Content-Security-Policy", dashboardCSP)
+	h.Set("Referrer-Policy", "no-referrer")
 }
 
 // looksLikeStaticAsset reports whether rel is shaped like a built asset

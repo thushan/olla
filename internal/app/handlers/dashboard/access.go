@@ -151,8 +151,12 @@ func ipInAnyCIDR(ip string, cidrs []*net.IPNet) bool {
 // not an API response.
 func reject(w http.ResponseWriter, log logger.StyledLogger, reason, clientIP, host string) {
 	body := strings.NewReader("403 forbidden: " + reason + " (ip=" + clientIP + ", host=" + host + ")\n")
+	// Hardening headers apply to every dashboard response path, including
+	// this 403: the body is operator-facing text that must not be frameable,
+	// sniffable, or referrer-leaked. setSecurityHeaders is shared with
+	// embed.go so the policy is identical across the handler tree.
+	setSecurityHeaders(w)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusForbidden)
 	_, _ = io.Copy(w, body)
 	if log != nil {
