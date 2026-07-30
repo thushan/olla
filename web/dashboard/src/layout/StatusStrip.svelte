@@ -11,21 +11,19 @@
   const has = $derived(!!sys);
 
   // "degraded" on its own tells the operator nothing actionable. Derive a
-  // short reason from real endpoint data (offline count, breaker state)
-  // rather than fabricate one; when healthy or when we have no endpoint
-  // data yet, say nothing so the strip stays quiet.
+  // short reason from real endpoint data (offline count) rather than
+  // fabricate one; when healthy or when we have no endpoint data yet, say
+  // nothing so the strip stays quiet. Breaker state is deliberately not
+  // consulted: on main it trips only on health-probe failures, not live
+  // proxy traffic, so it would under-report real failures (spec §4.2).
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
   const degradedReason = $derived(reasonFor(sys?.status, endpointList));
 
   function reasonFor(status, list) {
     if (!status || status === 'healthy' || !list.length) return null;
     const offline = list.filter((e) => e.status === 'offline' || e.status === 'critical').length;
-    const open = list.filter((e) => e.circuit_breaker === 'open').length;
-    const halfOpen = list.filter((e) => e.circuit_breaker === 'half-open').length;
     const parts = [];
     if (offline) parts.push(`${offline} offline`);
-    if (open) parts.push(`${open} breaker${open > 1 ? 's' : ''} open`);
-    if (halfOpen) parts.push(`${halfOpen} breaker${halfOpen > 1 ? 's' : ''} half-open`);
     return parts.length ? parts.join(', ') : null;
   }
 

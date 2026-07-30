@@ -37,6 +37,7 @@ const sysBody = {
     active_connections: 0,
     total_requests: 40,
     total_failures: 0,
+    security_violations: 7,
     version: 'v0.0.29',
     commit: 'abc123',
     start_time: new Date().toISOString(),
@@ -120,5 +121,23 @@ describe('OverviewPanel glance table latency', () => {
 
     const cell = document.querySelector('.glance-link .txt')?.closest('tr')?.querySelectorAll('td.num')[1];
     expect(cell.textContent.trim()).toBe('55ms');
+  });
+});
+
+describe('OverviewPanel security-violations tile (FR-3, spec §4.3.1)', () => {
+  it('renders the security-violations count from sys.security_violations', async () => {
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshBoth([
+      { name: 'ep', status: 'healthy', success_rate: '100.0%', request_count: 1, avg_latency_ms: 5 },
+    ]);
+
+    const tiles = [...document.querySelectorAll('.stat-tile, .tile')];
+    // Match by label text across whatever wrapper class the StatTile component
+    // renders, so this does not break on a class rename.
+    const sec = tiles.find((t) => t.textContent.includes('Security violations'));
+    expect(sec).toBeTruthy();
+    expect(sec.textContent).toContain('7');
   });
 });

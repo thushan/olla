@@ -44,7 +44,6 @@
     { key: 'model_count', label: 'Models', sortable: true, num: true },
     { key: 'request_count', label: 'Requests', sortable: true, num: true },
     { key: 'active_connections', label: 'Conn', sortable: true, num: true },
-    { key: 'circuit_breaker', label: 'Breaker', sortable: true },
     { key: 'url', label: 'URL', sortable: false },
     { key: 'health_check_at', label: 'Last chk', sortable: false },
     { key: 'next_check_at', label: 'Next chk', sortable: false },
@@ -77,8 +76,7 @@
 >
   <h2>Endpoints</h2>
   <p class="panel-intro">
-    Every configured backend, its health-check state and routing weight. Circuit breaker state
-    reflects Olla's own trip logic, independent of raw endpoint status.
+    Every configured backend, its health-check state and routing weight.
   </p>
 
   <StatusBanner store={endpoints} />
@@ -121,7 +119,6 @@
         <td class="num">{#if e.model_count === 0}<span class="dash">0</span>{:else}{e.model_count}{/if}</td>
         <td class="num">{e.request_count?.toLocaleString('en-AU') ?? 0}</td>
         <td class="num">{#if e.active_connections > 0}{e.active_connections}{:else}<span class="dash">0</span>{/if}</td>
-        <td><StatusTag status={e.circuit_breaker} kind="breaker" /></td>
         <td class="url-cell" title={e.url}>{e.url || '—'}</td>
         <td>{fmtAgo(e.health_check_at, now) || 'never'}</td>
         <td>{fmtUntil(e.next_check_at, now) || '—'}</td>

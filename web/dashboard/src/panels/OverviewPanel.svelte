@@ -110,7 +110,7 @@
   {#if loading}
     <div class="section">
       <div class="tile-grid">
-        {#each Array(8) as _, i}<div class="skeleton tile-skel"></div>{/each}
+        {#each Array(9) as _, i}<div class="skeleton tile-skel"></div>{/each}
       </div>
     </div>
     <div class="section">
@@ -162,6 +162,11 @@
           label="Total failures"
           value={fmtInt(sys.total_failures)}
           sub="{(100 - successPctNum).toFixed(1)}% of traffic"
+        />
+        <StatTile
+          label="Security violations"
+          value={fmtInt(sys.security_violations)}
+          sub="rejected by security layer"
         />
       </div>
     </div>

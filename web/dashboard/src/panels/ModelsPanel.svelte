@@ -13,67 +13,37 @@
   const groups = $derived(models.data?.model_groups ?? []);
   const flatRecent = $derived(models.data?.recent_models ?? []);
 
-  // Per-model request/latency stats from /internal/stats/models, keyed by
-  // model name so the panel can merge without restructuring the grouped form.
-  const stats = $derived(models.data?.stats ?? {});
-  const statsSummary = $derived(models.data?.stats_summary ?? null);
-
   // Re-evaluated each tick so last_seen_at stays "Xs ago" live.
   const now = $derived(liveNow());
 
-  // Sort each family's models by name as the API already does; SortableTable
-  // will re-sort within group based on the column the user clicks.
+  // Discovery-only columns (spec §4.3). Per-model traffic figures
+  // (requests/success/p95/p99) are intentionally absent: nothing on the
+  // proxy path populates them on main, so they would always read zero and
+  // mislead the operator. Wiring that is PR 2 proxy-engine scope.
   const columns = [
     { key: 'name', label: 'Model', sortable: true, sticky: true },
     { key: 'params', label: 'Params', sortable: true },
     { key: 'quant', label: 'Quant', sortable: true },
     { key: 'size_bytes', label: 'Size', sortable: true, num: true },
     { key: 'endpoints_count', label: 'Endpoints', sortable: true, num: true },
-    { key: 'total_requests', label: 'Requests', sortable: true, num: true },
-    { key: 'success_rate_num', label: 'Success', sortable: true, num: true },
-    { key: 'p95_latency_ms', label: 'p95', sortable: true, num: true },
-    { key: 'p99_latency_ms', label: 'p99', sortable: true, num: true },
     { key: 'last_seen_at', label: 'Last seen', sortable: false },
   ];
 
-  // Derive size_bytes for sort/aria: prefer summed per_endpoint bytes, fall
-  // back to parsing the merged size string. Renders as the API's size string.
+  // Derive a numeric size for sort/aria from the model's own size string.
+  // Previously this preferred a summed per_endpoint bytes total, but
+  // per_endpoint has no prior art on main (spec §4.4.1) and was cut.
   function sizeBytesOf(m) {
-    if (m.per_endpoint?.length) {
-      const sum = m.per_endpoint.reduce((s, p) => s + (p.size_bytes || 0), 0);
-      if (sum > 0) return sum;
-    }
     if (!m.size) return 0;
     const u = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };
     const match = String(m.size).match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
     return match ? parseFloat(match[1]) * u[match[2]] : 0;
   }
 
-  // success_rate/p95_latency/p99_latency arrive pre-formatted ("98.5%",
-  // "1.5s") for display. Sorting on the formatted strings compares
-  // lexicographically ("100ms" < "9ms"), so every numeric column needs a
-  // parsed numeric twin to sort against; the formatted string still renders
-  // verbatim.
-  function parseLatencyMs(s) {
-    if (!s) return 0;
-    const m = String(s).trim().match(/^([\d.]+)\s*(ms|s)$/);
-    if (!m) return 0;
-    const value = parseFloat(m[1]);
-    return m[2] === 's' ? value * 1000 : value;
-  }
-
   function normalise(m) {
-    // Merge per-model stats from /internal/stats/models onto the row so the
-    // request/success/latency columns have a single source of truth.
-    const s = stats[m.name] ?? {};
-    const merged = { ...m, ...s };
     return {
-      ...merged,
+      ...m,
       size_bytes: sizeBytesOf(m),
       endpoints_count: m.endpoints?.length ?? 0,
-      success_rate_num: parseFloat(merged.success_rate) || 0,
-      p95_latency_ms: parseLatencyMs(merged.p95_latency),
-      p99_latency_ms: parseLatencyMs(merged.p99_latency),
     };
   }
 
@@ -93,11 +63,6 @@
     return String(name).replace(/[^a-z0-9]+/gi, '-');
   }
 
-  function fmtRequests(n) {
-    if (!Number.isFinite(Number(n)) || Number(n) <= 0) return '—';
-    return Number(n).toLocaleString('en-AU');
-  }
-
   const orderedGroups = $derived(groupOrder(groups));
 </script>
 
@@ -111,8 +76,7 @@
 >
   <h2>Models</h2>
   <p class="panel-intro">
-    Models discovered across the herd, grouped by family. Per-endpoint detail is folded into the
-    Endpoints column tooltip; sorting applies within each family group.
+    Models discovered across the herd, grouped by family. Sorting applies within each family group.
   </p>
 
   <StatusBanner store={models} />
@@ -152,17 +116,13 @@
                 {#if m.endpoints?.length}
                   <div class="endpoint-pills">
                     {#each m.endpoints as ep}
-                      <span class="pill" title={m.per_endpoint?.find((p) => p.endpoint === ep)?.parameter_size ?? ''}>{ep}</span>
+                      <span class="pill">{ep}</span>
                     {/each}
                   </div>
                 {:else}
                   <span class="dash">0</span>
                 {/if}
               </td>
-              <td class="num">{m.total_requests ? fmtRequests(m.total_requests) : '—'}</td>
-              <td>{m.success_rate || '—'}</td>
-              <td>{m.p95_latency || '—'}</td>
-              <td>{m.p99_latency || '—'}</td>
               <td>{fmtAgo(m.last_seen_at, now) || 'never'}</td>
             </tr>
           {/each}
@@ -183,10 +143,6 @@
             </div>
           {:else}<span class="dash">0</span>{/if}
         </td>
-        <td class="num">{m.total_requests ? fmtRequests(m.total_requests) : '—'}</td>
-        <td>{m.success_rate || '—'}</td>
-        <td>{m.p95_latency || '—'}</td>
-        <td>{m.p99_latency || '—'}</td>
         <td>{fmtAgo(m.last_seen_at, now) || 'never'}</td>
       {/snippet}
     </SortableTable>

@@ -72,7 +72,6 @@ describe('EndpointsPanel latency column', () => {
       success_rate: '99.0%',
       request_count: 40,
       model_count: 1,
-      circuit_breaker: 'closed',
       // Last health-check probe took 1.5s - an unrelated metric that must
       // never leak into the proxy-latency average.
       response_time: '1.5s',
@@ -100,7 +99,6 @@ describe('EndpointsPanel latency column', () => {
       success_rate: '99.0%',
       request_count: 40,
       model_count: 1,
-      circuit_breaker: 'closed',
       response_time: '1.5s',
       // no avg_latency_ms field at all
       min_latency_ms: 10,
@@ -138,7 +136,6 @@ describe('EndpointsPanel latency column', () => {
         success_rate: '99.0%',
         request_count: 40,
         model_count: 1,
-        circuit_breaker: 'closed',
         avg_latency_ms: 100,
         min_latency_ms: 10,
         max_latency_ms: 200,
@@ -151,7 +148,6 @@ describe('EndpointsPanel latency column', () => {
         success_rate: '99.0%',
         request_count: 40,
         model_count: 1,
-        circuit_breaker: 'closed',
         avg_latency_ms: 50,
         min_latency_ms: 5,
         max_latency_ms: 800,
