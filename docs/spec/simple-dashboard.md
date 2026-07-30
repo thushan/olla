@@ -25,7 +25,17 @@ Maintain a running findings list at `docs/spec/simple-dashboard-findings.md`. Cr
 Two tripwires, both hard stops requiring you to reconsider before proceeding, not soft suggestions:
 
 1. **Any change touching a subsystem outside "read-only admin dashboard" is evidence it belongs in the findings list, not the diff.** If a work package's diff touches `internal/adapter/proxy/`, `internal/adapter/health/circuit_breaker.go`, Sherpa, or streaming code, stop and re-scope — log the trigger, don't fix it.
-2. **A second attempt at the same fix within this branch is a hard stop.** If a specialist's fix comes back needing a second correction for the same underlying issue, escalate to the user rather than iterating a third time. Iteration loops on a single fix are exactly the failure mode that produced 151 commits.
+2. **A second attempt at the same fix within this branch is a hard stop.** If a specialist's fix comes back needing a second correction for the same underlying issue, escalate to the user rather than iterating a third time. Iteration loops on a single fix are exactly the failure mode that produced 151 commits. **This overrides the `/orchestrate` skill's default cap of three fix iterations per work package** — do not spend a third attempt on the same underlying bug just because the skill's counter allows it; escalate on the second failure.
+
+### Mechanical scope gate — run this, don't reason about it
+
+"Fixed only if this branch introduced it" is too easy to rationalise mid-work. Make it a command, run at the end of every work package and again before the final `code-reviewer` pass:
+
+```
+git diff --name-only main...HEAD | grep -vE '^(web/dashboard/|internal/app/handlers/dashboard/|internal/app/handlers/handler_status\.go$|internal/app/handlers/handler_status_endpoints\.go$|internal/app/handlers/handler_status_models\.go$|internal/app/handlers/handler_status.*_test\.go$|internal/app/handlers/handler_routes_dashboard_test\.go$|internal/app/handlers/server_routes\.go$|internal/app/middleware/logging\.go$|internal/app/middleware/logging.*_test\.go$|internal/config/types\.go$|internal/config/config\.go$|internal/config/dashboard_test\.go$|internal/config/shipped_config_test\.go$|internal/adapter/discovery/repository\.go$|internal/adapter/discovery/repository_test\.go$|config/config\.yaml$|test/config_docs/|makefile$|\.github/workflows/ci\.yml$|\.goreleaser\.yml$|\.gitignore$|docs/)'
+```
+
+The output must be **empty**. Anything it prints is a hard stop, not a judgement call. Two outcomes, no third option: either the file genuinely belongs on this branch and the allowlist above is incomplete (fix the allowlist in this spec and say why in the report), or it doesn't belong and the change is reverted and logged to the findings file. In particular, `internal/app/handlers/application.go`, `internal/app/services/http.go`, anything under `internal/adapter/proxy/`, and anything under `internal/adapter/health/` are deliberately absent from the allowlist — their appearance in the diff is itself the tripwire (see §5's route-mounting design, which exists specifically so the first two never need touching).
 
 ## 1. Purpose and scope
 
@@ -62,8 +72,8 @@ Operators currently see fleet state only via JSON endpoints (`/internal/status`,
 
 - **FR-1**: The dashboard is served at `GET /internal/ui/` and all sub-paths, on the same HTTP listener Olla already serves the proxy and `/internal/*` API from. No new listener, no new port.
 - **FR-2**: The dashboard has three panels: Overview, Endpoints, Models, reachable via client-side navigation (no full page reload between them).
-- **FR-3**: Overview shows fleet-level status: endpoints up/total, aggregate success rate, aggregate average latency, total traffic, uptime, version, active connections, security violation count.
-- **FR-4**: Endpoints panel lists every configured endpoint with: name, type, status, priority, success rate, average/min/max proxy latency, request count, model count, last health check (relative and absolute), next health check (relative and absolute), last model sync (relative and absolute), sanitised URL, and per-endpoint model list.
+- **FR-3**: Overview shows fleet-level status: endpoints up/total, aggregate success rate, aggregate average latency, total traffic, uptime, version, active connections, security violation count. Uptime is computed client-side from an absolute process-start timestamp (§4.4), not baked into the response as a relative string, so it stays live between polls without refetching.
+- **FR-4**: Endpoints panel lists every configured endpoint with: name, type, status, priority, success rate, average/min/max proxy latency, request count, active connections, model count, last health check (relative and absolute), next health check (relative and absolute), last model sync (relative and absolute), sanitised URL. **No per-endpoint model list** — cut from this PR (see §4.4 audit); the Models panel's own per-model endpoint list already answers the inverse question, and no prior art for a per-endpoint model list exists anywhere in the copied frontend or handlers. Log the idea to the findings file for PR 2.
 - **FR-5**: Models panel lists discovered models with: name, family, parameter size, quantisation, size on disk, which endpoints host each model, last seen (relative and absolute). No per-model traffic figures (§4.3).
 - **FR-6**: The frontend polls each panel's backing endpoint on an interval with jittered backoff when the tab is not visible (reuse the existing scheduler from `feature/dashboard-impl`, §5.1). It does not use ETag/conditional GET (§4.1).
 - **FR-7**: Both light and dark themes are supported, following system preference by default, with a manual toggle.
@@ -78,9 +88,13 @@ Operators currently see fleet state only via JSON endpoints (`/internal/status`,
 
 ## 4. Detail on scope boundaries
 
-### 4.1 Out of scope: ETag / conditional GET
+### 4.1 Out of scope: ETag / conditional GET (JSON only — asset caching is different and stays)
 
-The frontend only sends `If-None-Match` after it has already seen an `ETag` from a prior response. Never implementing ETag means the frontend simply always gets a full `200` body — it degrades to plain polling with zero breakage, not a partial feature. Skipping this avoids an entire class of cache-validity bugs (stale ETag after config reload, hash collisions, etc.) for a freshness feature nobody asked for. `feature/dashboard-impl` built a full ETag layer (`status_etag.go`, 142 lines, plus a 533-line test file) — do not copy or reimplement it.
+**Two unrelated things are both called "ETag" here — keep one, ban the other.** `internal/app/handlers/dashboard/embed.go` legitimately sets a SHA-256 content-hash ETag and a `Last-Modified` header on the **static SPA assets** it serves (JS/CSS/fonts). That's ordinary, low-risk HTTP asset caching, is part of the copied `embed.go`, and must be kept as-is — do not strip it while chasing the ETag ban below.
+
+What's banned for PR 1 is **conditional GET on the JSON status endpoints** (`status_etag.go` on `feature/dashboard-impl`, 142 lines plus a 533-line test file — do not copy or reimplement either). The frontend only sends `If-None-Match` after it has already seen an `ETag` from a prior JSON response, so never implementing it means the frontend simply always gets a full `200` body — it degrades to plain polling with zero breakage, not a partial feature. Skipping it avoids an entire class of cache-validity bugs (stale ETag after config reload, hash collisions, etc.) for a freshness feature nobody asked for.
+
+**The client-side conditional-GET machinery in the copied `poll-store.svelte.js` (the shared factory behind all three stores) stays in place, dormant, not ripped out.** It reads an `ETag` response header and sends `If-None-Match` on the next request if one was seen; since the JSON endpoints in this PR never send an `ETag`, every `if (etag)` gate in that file never fires and the stores behave as plain polls. This is deliberate: the machinery guards PR 2's eventual re-enable of JSON ETags, and removing it risks breaking the store for no behavioural gain now. Keep its existing tests too. Do not "clean up" this code as part of the trim work (WP-3) — leaving it dormant, not deleting it, is the decision.
 
 ### 4.2 Out of scope: circuit breaker column
 
@@ -92,6 +106,10 @@ On `main` today, the circuit breaker (in `internal/adapter/health/`) trips only 
 
 **PR 1's Models panel shows discovery data only**: name, family, parameter size, quantisation, size, and which endpoints host each model — all sourced from `GetEndpointModelMap` / `domain.ModelInfo.Details`, which is live and correct on `main` today. Remove any per-model traffic columns and the companion `/internal/stats/models` fetch from the copied frontend (§5.3). Wiring `RecordModelRequest` into the proxy path is a proxy-engine change and is explicitly forbidden on this branch (§2) — it is PR 2 scope.
 
+### 4.3.1 Decision: the security-violations tile ships in PR 1
+
+FR-3 names a security-violations tile, but the copied `OverviewPanel.svelte` (eight tiles: system status, endpoints up, success rate, avg latency, total traffic, active connections, total requests, total failures) does not have one, even though the backing data (`SystemSummary.SecurityViolations`, already computed on `main` today) exists. Decision: **add the tile.** It is a single `StatTile` reading a field that already exists — cheaper than editing FR-3 to drop it, and security-violation visibility is a reasonable thing for an ops glance view to show. This is explicit WP-3 scope (§7), not something to discover mid-review.
+
 ### 4.4 Additive handler fields — what already exists vs what's new
 
 Verified against `main` at `f4bde8d`:
@@ -100,7 +118,9 @@ Verified against `main` at `f4bde8d`:
 - `EndpointSummary.ResponseTime` (`handler_status_endpoints.go`) is `format.Latency(endpoint.LastLatency.Milliseconds())` — the **last health-check probe's** latency, formatted as a string (e.g. `"14ms"`). This is a different metric from proxy request latency and must never be parsed back into a number or presented as if it were the average proxy latency.
 - `EndpointSummary` has no `url` field today. Add one, sanitised per FR-14.
 - `EndpointSummary`/`EndpointResponse` carry only relative time strings today (`format.TimeAgo`, `format.TimeUntil`) for health-check and model-sync timestamps. Add absolute RFC3339 timestamps alongside them (see below), additive.
-- Per-endpoint model detail (`GetEndpointModelMap`, `domain.EndpointModels`, `domain.ModelInfo.Details`) already exists and is already partially surfaced (`ModelCount`, `LastModelSync` in `EndpointSummary`). Extend to include the model list itself where the Endpoints panel needs it.
+- `EndpointSummary` has no `active_connections` field today, even though the data exists: `SystemSummary.ActiveConnections` (on `/internal/status`) is already computed from `statsCollector.GetConnectionStats()`, that same map is already available inside `handler_status.go`'s snapshot, but `endpointsStatusHandler` in `handler_status_endpoints.go` never calls `GetConnectionStats()` at all today. Add the per-endpoint fetch and field — it is a projection of data the stats collector already tracks, not new tracking.
+- `SystemSummary` (`/internal/status`) has no `start_time` field today, only the pre-formatted relative `uptime` string. Add it — `a.StartTime` (`internal/app/handlers/application.go`) already exists as a Go field and is read today only to compute `UptimeHuman`; expose it as RFC3339 too.
+- **Per-endpoint model list is explicitly cut from this PR** (FR-4). `ModelCount`/`LastModelSync` stay as they are; do not add a model-name array or per-model detail to `EndpointSummary`. See the audit below for why.
 
 Concretely, add to the endpoints response (`/internal/status/endpoints`, i.e. `EndpointSummary`, and equivalently to `/internal/status`'s `EndpointResponse` where it makes sense):
 
@@ -110,14 +130,52 @@ Concretely, add to the endpoints response (`/internal/status/endpoints`, i.e. `E
 | `max_latency_ms` | `int64` | From `ports.EndpointStats.MaxLatency`. Same zero-traffic handling as above. |
 | `avg_latency_ms` | `*int64` with `omitempty` | Average **proxy request** latency from `ports.EndpointStats.AverageLatency`. Pointer + `omitempty` so an endpoint with no traffic **omits** the field rather than emitting a misleading `0`. Do not confuse with `response_time` (health-probe latency, a string, unrelated metric — see above). |
 | `url` | `string` | Sanitised per FR-14 (userinfo stripped, query/fragment stripped). |
+| `active_connections` | `int64` | From `statsCollector.GetConnectionStats()[url]`, the same map `/internal/status`'s `SystemSummary` already aggregates. `endpointsStatusHandler` needs to fetch this map — it doesn't today. |
 | `next_check_at` | `*time.Time` with `omitempty`, RFC3339 | Absolute form of the existing `next_check` relative string. Additive — `next_check` stays exactly as-is. |
 | `health_check_at` | `*time.Time` with `omitempty`, RFC3339 | Absolute form of the existing `health_check`/`last_check` relative string. Additive. |
 | `last_model_sync_at` | `*time.Time` with `omitempty`, RFC3339 | Absolute form of the existing `last_model_sync` relative string. Additive. |
 | `last_seen_at` | `*time.Time` with `omitempty`, RFC3339 | Per-model last-seen, absolute form, alongside the existing relative `last_seen` string on model entries (`ModelSummary` in `handler_status_models.go`). Additive. |
+| `start_time` | `time.Time`, RFC3339 | On `SystemSummary` (`/internal/status`), not the endpoints response. Source: `a.StartTime`, already held on `Application`. Not `omitempty` — always known once the process is up. |
 
 **Hard requirement (FR-13)**: nothing existing may be renamed, retyped, or removed from `StatusResponse`, `EndpointStatusResponse`/`EndpointSummary`, or `ModelStatusResponse`/`ModelSummary`. A previous attempt broke this. The wire-shape pinning test (work package 2, §6) is non-negotiable and must be written and passing before any additive field lands.
 
 Also apply FR-15 (deterministic ordering) to every slice/map iteration in these three handlers that isn't already sorted (`handler_status.go`'s `buildUnifiedEndpoints` already sorts; `handler_status_models.go`'s family-grouping map iteration and endpoint-name map iteration do not — sort them).
+
+### 4.4.1 Full field audit — every field the copied frontend reads, checked against main + this table
+
+This audit exists because a silent contract mismatch (frontend reads a field the backend never sends) renders as an empty or zeroed value with **no console error** — the same failure class as a prop-name bug that once zeroed every latency bar while its text label still read correctly. Re-run this audit (or an equivalent one) whenever a field is added or renamed on either side; see §8's field-contract assertion for the runtime version of this check.
+
+**`sys` — `/internal/status` → `SystemSummary` / `ProxySummary`:**
+
+| Field read by frontend | Status |
+|---|---|
+| `status`, `endpoints_up`, `success_rate`, `avg_latency`, `total_traffic`, `total_requests`, `total_failures`, `version`, `commit` | On main today. |
+| `active_connections` | On main today (`SystemSummary.ActiveConnections`). |
+| `start_time` | **Missing.** Added above — required or `OverviewPanel`/`StatusStrip` uptime renders `—` forever. |
+| `proxy.engine`, `proxy.balancer` | On main today (`ProxySummary`). |
+
+**`endpoints[]` — `/internal/status/endpoints` → `EndpointSummary`:**
+
+| Field read by frontend | Status |
+|---|---|
+| `name`, `type`, `status`, `priority`, `success_rate`, `model_count`, `request_count`, `issues` | On main today. |
+| `avg_latency_ms`, `min_latency_ms`, `max_latency_ms` | Added above. |
+| `url` | Added above, sanitised. |
+| `active_connections` | **Missing on main.** Added above — without it the Endpoints panel's "Conn" column reads `undefined`, `undefined > 0` is `false`, and it renders `0` for every endpoint forever, indistinguishable from a genuinely idle fleet. |
+| `health_check_at`, `next_check_at` | Added above. |
+| `circuit_breaker` | **Deliberately not added** — out of scope, §4.2. The frontend's Breaker column and the `StatusStrip` breaker-derived reason text must be removed (WP-3), not fed a field that doesn't exist. |
+
+**`model_groups[].models[]` / `recent_models[]` — `/internal/status/models` → `ModelSummary`/`ModelGroupSummary`:**
+
+| Field read by frontend | Status |
+|---|---|
+| `name`, `params`, `quant`, `size`, `endpoints`, `last_seen` | On main today. |
+| `model_groups[].family`, `.model_count`, `.endpoints` | On main today (`ModelGroupSummary`), when queried with `?detailed=true&group=family` as the copied `models.svelte.js` store does. |
+| `last_seen_at` | Added above. |
+| `per_endpoint` (used only for a pill tooltip showing per-endpoint parameter size) | **No prior art on main.** Not part of `ModelSummary` today and not part of §4.4's additive list. Cut the tooltip lookup in WP-3; log to findings alongside the FR-4 per-endpoint-model-list cut — both are "nice, but two-sided design work no one asked for yet." |
+| `total_requests`, `success_rate` (merged), `p95_latency`, `p99_latency` | Per-model traffic — out of scope, §4.3. Sourced today via a companion fetch to `/internal/stats/models` and a client-side merge (`mergeStats`/`normalise()` in `models.svelte.js`/`ModelsPanel.svelte`); WP-3 removes the fetch, the merge, and the columns. |
+
+No other fields read by `OverviewPanel.svelte`, `StatusStrip.svelte`, `EndpointsPanel.svelte`, or `ModelsPanel.svelte` are unaccounted for by this table. The `StatusTag` component's `busy`/`warming`/`config_error`/`rate_limited` domain statuses (`internal/core/domain/endpoint.go`) have no entry in its `STATUS` map and fall through to a neutral glyph with the raw status text as the label — not broken, but untested against real fleet states this PR is unlikely to exercise. Log to the findings file; do not expand the map speculatively (KISSAI).
 
 ## 5. Reuse plan: `feature/dashboard-impl`
 
@@ -130,19 +188,48 @@ An earlier branch, `feature/dashboard-impl`, contains a verified, final-form imp
 - Makefile frontend targets: `install-web`, `build-web`, `test-web`, `lint-web`, `clean-web`, `check-fonts-web`, `ci-web`, and the Node-toolchain check appended to `install-deps`/`check-tools`. The project's Makefile is lowercase (`makefile`), not `Makefile` — check both are not present, and edit the one that exists.
 - `docs/content/configuration/dashboard.md` and the frontend build-prerequisite note added to `docs/content/development/setup.md`.
 
+**Do NOT copy at all** (verified present on `feature/dashboard-impl`, none of it dashboard work):
+
+- `design/mockups/olla-admin-dashboard/` — roughly 7,000 lines of design-exploration HTML mockups, unreferenced by any shipped code. Historical scaffolding, not part of the feature.
+- `assets/logo/olla-thumb.png` (repo root) — unrelated to `web/dashboard/src/assets/logo/olla-thumb.png`, which is part of the frontend tree and does get copied with it.
+- The stray `/build` line that sits in the same `.gitignore` hunk as the dashboard entries on `feature/dashboard-impl` — check what `main`'s `.gitignore` already does for build output before adding anything; don't duplicate a rule that already exists in different form.
+
 **Surgical extraction only — do NOT whole-file copy these** (verified: each of these files on `feature/dashboard-impl` also carries unrelated circuit-breaker or ETag changes that must not land):
 
 - `internal/config/types.go` — copy only the `DashboardConfig` and `AccessPolicyConfig` type blocks and their methods (`Validate`, `ParsedCIDRs`). Do **not** copy any `CircuitBreakerConfig` additions in the same file.
 - `internal/config/config.go` — copy only the `Dashboard: DashboardConfig{...}` block inside `DefaultConfig()` and the `c.Dashboard.Validate()` call inside `Config.Validate()`. Do **not** copy the `CircuitBreaker: CircuitBreakerConfig{...}` block or the `c.Proxy.CircuitBreaker.Validate()` call that sit next to them on that branch.
-- `config/config.yaml` — copy only the `dashboard:` block. Do **not** copy the `circuit_breaker:` block that sits above it in the `proxy:` section on that branch.
-- `internal/app/handlers/server_routes.go` — copy only: the dashboard import, the `dashboard.RegisterRoutes(...)` call mounted **last** (so it cannot shadow any provider or internal route registered earlier), and `assertNoRouteCollidesWithDashboard` run before that mount. Do **not** copy the `gateInternal`/`gateIfWanted` wrapping of every existing `/internal/*` route registration *unless* you are implementing `GateInternalAPI` support (optional — see §5.2); if you skip `GateInternalAPI`, still copy the `DashboardConfig.Enabled` gate and the collision check, just without wrapping the other routes.
+- `config/config.yaml` — copy only the `dashboard:` block. It is a **top-level** section (a sibling of `proxy:`, `server:`, `logging:`, etc.), not nested inside `proxy:`. Do **not** copy the `circuit_breaker:` block that sits inside `proxy:` immediately above it on that branch.
+- `internal/app/handlers/server_routes.go` — copy only: the dashboard import, the `dashboard.RegisterRoutes(...)` call mounted **last** (so it cannot shadow any provider or internal route registered earlier), and a collision check run before that mount. See "Route mounting" below for the required (not optional) design here — it is deliberately different from `feature/dashboard-impl`'s version. Do **not** copy the `gateInternal`/`gateIfWanted` wrapping of every existing `/internal/*` route registration — `GateInternalAPI` is mandated off for this PR (§5.2).
 - `handler_status.go`, `handler_status_endpoints.go`, `handler_status_models.go` — do **not** copy these at all. `feature/dashboard-impl`'s versions bundle the additive fields together with the full ETag layer and the per-model traffic columns this spec excludes. Reimplement the additive fields fresh per §4.4 (work package 2).
+- `internal/adapter/discovery/repository.go` — copy only the userinfo-rejection hunk inside `validateEndpointConfig` (FR-14's config-validation half: rejects an endpoint URL containing `user:pass@host`, directing the operator to the `auth` config block). This file carries no other dashboard-impl scope creep — the hunk is small and isolated — but it is still a surgical extraction, not a whole-file copy, because the rest of the file is unrelated repository code that has likely moved since `feature/dashboard-impl` was cut. This is WP-2's file, not WP-1b's — putting FR-14's validation here (not in `internal/config`) is precisely so it does not collide with WP-1b's `types.go`/`config.go` edits.
+- `internal/app/middleware/logging.go` — copy the `isQuietPollRoute` helper and its use in both `EnhancedLoggingMiddleware` and `AccessLoggingMiddleware` to demote `/internal/*` polling traffic to Debug. This one is genuinely dashboard-motivated (an open tab polls several `/internal/*` routes every few seconds; at Info that floods the access log with zero operational signal) and isolated from the CB/proxy changes elsewhere in that branch — include it as part of WP-1b, not as an afterthought.
 - `.github/workflows/ci.yml`, `.goreleaser.yml`, `.gitignore` — copy only the Node setup step / `make ci-web` step / `make build-web` before-hook / dashboard-dist gitignore entries shown in the `feature/dashboard-impl` diff. These files may have moved on since that branch was cut — re-apply as a patch, don't blindly overwrite.
+
+**Route mounting — no `registerRoutes()` signature change (required design, not a suggestion)**
+
+`feature/dashboard-impl` changes `registerRoutes()` to return an `error` so a dashboard route collision can halt startup. That signature change has a real cost this spec will not pay: `registerRoutes()` is called from `internal/app/handlers/application.go` (`RegisterRoutes()`) and `internal/app/services/http.go`, and on `feature/dashboard-impl` **both of those call sites' files also carry unrelated circuit-breaker plumbing** — `application.go` gains a `circuitBreaker *health.CircuitBreaker` field and a new `NewApplication` parameter; `http.go` gains a `circuitBreaker` field, `GetCircuitBreaker()` wiring, and a `logDashboardPolicy()` startup-log helper. Copying the error-return hunk drags you toward opening those two files, which is the single most likely route back into the 151-commit vortex described in §0: a compile error appears, the old branch's version of the file looks like the fix, and pulling it in means pulling in `health.CircuitBreaker`.
+
+**Required approach:** do not change `registerRoutes()`'s signature. `/internal/ui/` is provably collision-free today — every provider route is built with an `/olla/` prefix (`registerProviderRoutes`) and every existing internal route is a fixed literal distinct from `/internal/ui/` — so the collision check is belt-and-braces defence against a future regression, not a condition expected to fire. On detecting a collision, log at **Error** level and **skip mounting the dashboard** (fail safe: never mount something shadowed, never take the whole server down over a defensive check firing). No error return, no signature change, no ripple into `application.go` or `services/http.go` — both stay byte-for-byte as they are on `main` today.
+
+One direct consequence: `logDashboardPolicy()` (the startup log line describing the effective access policy) lives in `http.go` and is cut from this PR entirely under this design. Log it to the findings file as a PR 2 nice-to-have — the dashboard still works, and 403s remain self-diagnosing (FR-11/FR-12) — just without a startup summary line naming the effective CIDR/host allowlist.
+
+If this genuinely proves unworkable (it shouldn't — it's a Go compile-time question, not a design trade-off), the documented fallback is to add `application.go` and `services/http.go` to the surgical extraction list above, taking **only** the error-propagation plumbing (new `error` return, the `if regErr := ...` check at the call site) and explicitly **not** the `circuitBreaker` field, the `NewApplication` parameter, or `logDashboardPolicy`. State in the work package report which of the two approaches was used and why.
+
+**Test file dispositions:**
+
+| File on `feature/dashboard-impl` | Disposition |
+|---|---|
+| `internal/app/handlers/dashboard/access_test.go`, `embed_test.go` | Copy whole — clean, dashboard-only. |
+| `internal/config/dashboard_test.go` | Copy whole — clean, dashboard-only (`DashboardConfig.Validate` unit tests). |
+| `test/config_docs/dashboard_test.go` | Copy whole — clean, dashboard-only; feeds WP-5's doc-snippet validation. |
+| `internal/config/shipped_config_test.go` | **Do not copy whole.** 307 lines bundling `TestShippedConfig_DashboardPopulated`, `TestDefaultConfig_MatchesShippedDashboardAccessPolicy`, and `TestShippedConfig_DashboardKnownFields` together with `TestShippedConfig_CircuitBreakerPopulated`/`CircuitBreakerKnownFields` and a shared CB-node-parsing helper. Extract only the three Dashboard-prefixed tests (they don't depend on the CB helper) into `internal/config/dashboard_test.go` or a new file; drop the rest. |
+| `internal/app/services/http_dashboard_policy_test.go` | **Do not copy.** Tests `logDashboardPolicy`, which under the required no-ripple design (above) does not exist in this PR. |
+| `internal/app/handlers/handler_routes_dashboard_test.go` | **Do not copy whole.** Reimplement, scoped to the no-ripple design: dashboard mounts and is reachable, access middleware stays scoped to `/internal/ui/`, disabled dashboard leaves the route table intact, a synthetic collision logs Error and skips mounting rather than panicking or shadowing, proxy and non-proxy routes remain present and unaffected. Drop the three `GateInternalAPI`-specific subtests (`GateInternalAPIWrapsInternalAndVersion`, `GateInternalAPILeavesOllaUntouched`, `GateInternalAPIOffLeavesRoutesUntouched`) — that wrapping isn't implemented this PR (§5.2). |
 
 **Known-good properties of the copied work — re-verify empirically, do not assume they still hold after the copy:**
 
 - `install-web` must be a prerequisite of `test-web`, `lint-web`, and `build-web`, with no inline `npm ci` inside `build-web` itself. Verify by running `rm -rf web/dashboard/node_modules && make ci-web` from a clean state and confirming it succeeds.
-- Built assets are **not** committed. `internal/app/handlers/dashboard/dist/` is gitignored except for a `.gitkeep` sentinel. The Go binary must build and run with **no Node present at all** (`make ready`, `make test`, `make build` via plain `go build` must all succeed without Node); the dashboard route serves the explanatory 503 (FR-10) in that state.
+- Built assets are **not** committed. `internal/app/handlers/dashboard/dist/` is gitignored except for a `.gitkeep` sentinel. `make ready`, `make test`, and a raw `go build ./...` must all succeed with **no Node present at all**; the dashboard route serves the explanatory 503 (FR-10) when a binary is built that way. **`make build` itself is not Node-free by design** — `feature/dashboard-impl` makes `build` depend on `build-web` so a plain `make build` always ships a current SPA, and that dependency is correct and must be kept, not "fixed" to avoid needing Node. Verify the Node-free path with `go build ./...` directly, never by weakening `build`'s prerequisites.
 - `make ready` must never require Node. `ci-web` is a separate target, not folded into `ready`.
 - The `.woff2` magic-byte check (`check-fonts-web`) exists because a font file that was actually a saved HTML error page once shipped in this history. Keep it and verify it actually catches a corrupted font (swap in a text file with a `.woff2` extension temporarily and confirm the target fails, then restore).
 - The access policy reads the client IP from `r.RemoteAddr` only. `X-Forwarded-For` / `X-Real-IP` must never be consulted for this decision, under any config. Verify this is actually true in the copied `access.go`, not merely commented as true.
@@ -152,9 +239,11 @@ An earlier branch, `feature/dashboard-impl`, contains a verified, final-form imp
 
 The copied frontend already implements: a shared jittered poll scheduler with visibility-based backoff, a shared reactive clock (for relative-time display without re-fetching), a theme store (system/light/dark with manual override, persisted), and a generic `SortableTable` component used by both the Endpoints and Models panels. Reuse these as-is; do not rewrite them.
 
-### 5.2 `GateInternalAPI` is optional for PR 1
+### 5.2 `GateInternalAPI` is OFF and unwired for PR 1 — mandatory, not a judgement call
 
-`feature/dashboard-impl`'s `DashboardConfig.GateInternalAPI` extends the same access policy to the rest of `/internal/*` and `/version`. This is a genuinely separable feature from "serve a dashboard at `/internal/ui/`." Include it if the copy-and-verify comes cheaply (the code exists and is small), but do not treat it as blocking — if it introduces any risk of the security-chain regression called out in §2 (exempting `/internal/*` from existing middleware), default it to `false` and log a note in the findings file rather than debug it under this branch's time budget.
+`feature/dashboard-impl`'s `DashboardConfig.GateInternalAPI` extends the same access policy to the rest of `/internal/*` and `/version`, implemented by wrapping every existing route registration in `server_routes.go` with a conditional middleware call. That wrapping of every existing registration is exactly the kind of broad, easy-to-get-subtly-wrong surface change §0's tripwires exist to catch — a wrong wrap either leaves a route ungated when the operator thinks it's covered, or gates something that breaks an existing Prometheus scrape or health poller.
+
+**For PR 1: the `GateInternalAPI` config field exists (it's part of the `DashboardConfig` struct copied in §5's surgical `types.go` extraction, defaulting to `false`), but no wrapping logic is implemented.** Setting it to `true` in config has no effect this PR — it is inert. Do not implement the wrapping. Log this explicitly to the findings file as PR 2 scope, with a pointer to the `gateInternal`/`gateIfWanted` pattern in `feature/dashboard-impl`'s `server_routes.go` diff as prior art for when it's picked up.
 
 ## 6. Non-functional requirements
 
@@ -169,23 +258,30 @@ The copied frontend already implements: a shared jittered poll scheduler with vi
 Dispatch each to the named specialist. Dependencies are listed; packages with no dependency on each other can run in parallel.
 
 **WP-1: Copy and wire frontend + embed handler + access policy + config**
-Specialist: `svelte-expert-developer` for the frontend half, `go-principal-architect` for the Go half — split into WP-1a (frontend copy, `svelte-expert-developer`) and WP-1b (embed handler, access policy, config, route mounting, `go-principal-architect`). WP-1b depends on nothing from WP-1a except knowing the route (`/internal/ui/`) and that the frontend build output lands in `internal/app/handlers/dashboard/dist/`.
-Acceptance: `web/dashboard/` copied and building (`make build-web` succeeds); `internal/app/handlers/dashboard/{embed,access}.go` and tests copied and passing; `DashboardConfig`/`AccessPolicyConfig` surgically extracted into `types.go`/`config.go`/`config.yaml` per §5 (no circuit-breaker leakage — diff the PR against `feature/dashboard-impl`'s file to confirm nothing extra came along); route mounted last in `server_routes.go` with the collision check; `make ready` green with no Node present; dashboard reachable at `/internal/ui/` from loopback, 403 from a non-loopback source (test via a spoofed `RemoteAddr` or an actual non-loopback bind), 404 when `dashboard.enabled: false`.
+Specialist: `svelte-expert-developer` for the frontend half, `go-principal-architect` for the Go half — split into WP-1a (frontend copy, `svelte-expert-developer`) and WP-1b (embed handler, access policy, config, route mounting, quiet-poll logging, `go-principal-architect`). WP-1b depends on nothing from WP-1a except knowing the route (`/internal/ui/`) and that the frontend build output lands in `internal/app/handlers/dashboard/dist/`.
+Acceptance: `web/dashboard/` copied and building (`make build-web` succeeds); `internal/app/handlers/dashboard/{embed,access}.go` and tests copied and passing; `DashboardConfig`/`AccessPolicyConfig` surgically extracted into `types.go`/`config.go`/`config.yaml` per §5 (no circuit-breaker leakage — diff the PR against `feature/dashboard-impl`'s file to confirm nothing extra came along; `GateInternalAPI` field present but unwired per §5.2); route mounted last in `server_routes.go` with the **no-signature-change collision design** (§5: log Error and skip mounting on collision, `registerRoutes()` keeps its existing return type, `application.go` and `services/http.go` are untouched — verify with `git diff main...HEAD -- internal/app/handlers/application.go internal/app/services/http.go` is empty); `isQuietPollRoute` copied into `internal/app/middleware/logging.go` so dashboard polling logs at Debug not Info; `make ready` green with no Node present; dashboard reachable at `/internal/ui/` from loopback, 403 from a non-loopback source (test via a spoofed `RemoteAddr` or an actual non-loopback bind), 404 when `dashboard.enabled: false`.
 
-**WP-2: Additive handler fields + wire-shape pinning test**
+**WP-2: Additive handler fields + FR-14 config validation + wire-shape pinning test**
 Specialist: `go-principal-architect`, with `test-architect` writing the pinning test (or `go-principal-architect` writing it under `test-architect` review — orchestrator's call based on the pairing that worked in earlier packages).
-Depends on: nothing (independent of WP-1, touches different files).
-Acceptance: fields listed in §4.4 added to `EndpointSummary`/`EndpointResponse`/`ModelSummary` per FR-13/FR-14/FR-15; a test exists that captures `main`'s current wire shape for `/internal/status`, `/internal/status/endpoints`, and `/internal/status/models` (field names and JSON types) and asserts every pre-existing field still round-trips under the same key and type after this work package's changes; URL sanitisation verified with a test case containing userinfo and a query string; config validation rejects an endpoint URL containing userinfo with a clear error naming the `auth` config block; `make ready` green.
+Depends on: nothing (independent of WP-1, touches different files: the three `handler_status*.go` files and `internal/adapter/discovery/repository.go`, none of which WP-1b touches — this separation is deliberate, see §5, so the two work packages' commits can be reviewed and land independently without file-level collision).
+Acceptance: fields listed in §4.4 (including `active_connections` on `EndpointSummary` and `start_time` on `SystemSummary`) added per FR-13/FR-14/FR-15; a test exists that captures `main`'s current wire shape for `/internal/status`, `/internal/status/endpoints`, and `/internal/status/models` (field names and JSON types) and asserts every pre-existing field still round-trips under the same key and type after this work package's changes; URL sanitisation verified with a test case containing userinfo and a query string; the userinfo-rejection hunk landed in `internal/adapter/discovery/repository.go`'s `validateEndpointConfig` (not `internal/config`) rejects an endpoint URL containing userinfo with a clear error naming the `auth` config block; `make ready` green.
 
-**WP-3: Frontend trim — remove circuit-breaker column, Models traffic columns, companion fetch**
+**WP-3: Frontend trim and contract completion — circuit-breaker column, Models traffic columns, companion fetch, uptime wiring, security-violations tile, intro-text correction**
 Specialist: `svelte-expert-developer`.
-Depends on: WP-1a (needs the copied frontend in place first).
-Acceptance: no circuit-breaker column or "why degraded" text anywhere in the Endpoints panel or status strip; Models panel shows only discovery columns (name, family, params, quant, size, endpoints, last seen); the `/internal/stats/models` fetch and its store are removed, not just hidden in the UI; existing vitest suite updated to match and passing; `svelte-check` clean.
+Depends on: WP-1a (needs the copied frontend in place first). Benefits from WP-2 having landed `start_time`/`active_connections` first so the contract-completion half can be verified against a real payload, but is not strictly blocked on it — the frontend already reads both fields; WP-2 supplies the values.
+This work package owns every "renders empty/zero with no error" contract gap the coordinator review surfaced (§4.4.1), not just the traffic-column removal. Acceptance:
+- No circuit-breaker column or "why degraded" breaker text anywhere in the Endpoints panel or `StatusStrip` (the offline-count part of `StatusStrip`'s degraded-reason text stays; only the breaker-derived parts go).
+- Models panel shows only discovery columns (name, family, params, quant, size, endpoints, last seen); the `/internal/stats/models` fetch, `mergeStats`, `normalise()`'s stats-merge, and the `stats`/`stats_summary` fields are removed from `models.svelte.js` and `ModelsPanel.svelte` entirely, not just hidden; the `per_endpoint` tooltip lookup on the endpoint pills is removed (§4.4.1 — no prior art); `ModelsPanel`'s intro text is corrected to no longer claim a per-endpoint tooltip that no longer exists.
+- The security-violations `StatTile` is added to `OverviewPanel` (§4.3.1), reading `sys.security_violations`.
+- The `active_connections` "Conn" column in `EndpointsPanel` is confirmed working against WP-2's new field (no frontend change needed — the column already exists — but this package owns verifying it, not assuming it).
+- Uptime in `OverviewPanel` and `StatusStrip` is confirmed live against WP-2's new `start_time` field (again, no frontend change expected — `fmtUptime(sys.start_time, now)` already exists — this package owns verifying it renders and ticks, not assuming it).
+- A **new** vitest file for `ModelsPanel.svelte` is added — none exists on `feature/dashboard-impl`, so "existing suite updated and passing" is trivially satisfiable for exactly the most-entangled trim (the stats-merge removal) without one. The new file must cover: discovery-only columns render, no traffic columns present, per_endpoint tooltip absent, family grouping still works.
+- Existing vitest suite (`OverviewPanel.test.js`, `EndpointsPanel.test.js`, etc.) updated to match and passing; `svelte-check` clean.
 
 **WP-4: Build/CI/Makefile wiring + clean-checkout verification**
 Specialist: `go-principal-architect` (Makefile and CI are Go-project tooling here, not frontend).
 Depends on: WP-1a and WP-1b (needs both the frontend and the embed handler to exist to wire the full pipeline).
-Acceptance: Makefile targets copied/patched per §5 and confirmed against the project's actual Makefile conventions (box-rule banners, section order, `.PHONY`, `install-tools`/`check-tools` entries for Node — see root `CLAUDE.md` Makefile conventions); `.github/workflows/ci.yml` and `.goreleaser.yml` patched (not overwritten) to add the Node setup step and `make ci-web`/`make build-web` calls; `rm -rf web/dashboard/node_modules && make ci-web` succeeds from a genuinely clean state; `make ready` succeeds with `web/dashboard/node_modules` absent and no Node binary on `PATH` (simulate by adjusting `PATH` for that one invocation); a plain `go build ./...` with no prior `make build-web` succeeds and the resulting binary serves the 503 not-built response at `/internal/ui/`.
+Acceptance: Makefile targets copied/patched per §5 and confirmed against the project's actual Makefile conventions (box-rule banners, section order, `.PHONY`, `install-tools`/`check-tools` entries for Node — see root `CLAUDE.md` Makefile conventions); `.github/workflows/ci.yml` and `.goreleaser.yml` patched (not overwritten) to add the Node setup step and `make ci-web`/`make build-web` calls; `rm -rf web/dashboard/node_modules && make ci-web` succeeds from a genuinely clean state; `make ready`, `make test`, and a raw `go build ./...` succeed with `web/dashboard/node_modules` absent and no Node binary on `PATH` (simulate by adjusting `PATH` for those invocations) — `make build` is **not** included in this check, since it legitimately depends on `build-web` and therefore needs Node (§5); the binary produced by the Node-free `go build ./...` serves the 503 not-built response at `/internal/ui/`.
 
 **WP-5: Documentation**
 Specialist: `docs-writer`.
@@ -207,15 +303,19 @@ Acceptance: full-diff review against this spec's acceptance criteria; any findin
 1. `make ready` green. `make ci-web` green from a genuinely clean checkout with no `node_modules` present.
 2. **Seeded UI verification with Playwright, via `web-verifier`.** The repo has mock backends at `test/cmd/ollamock` and `test/cmd/mockbackend`, and an `olla-validate` skill that boots an ollamock fleet — use or adapt that boot process. Boot a realistic multi-endpoint fleet (several backends, several models, at least one endpoint deliberately unhealthy or offline), point Olla at it, drive real traffic through the proxy so counters actually move, then hand off to `web-verifier`. Required assertions:
    - All three panels render real (non-placeholder, non-zero-everywhere) data.
+   - **Field-contract assertion (highest-value single check — run this first, it is what §4.4.1's static audit exists to make redundant, and it catches whatever the audit missed).** Grep the shipped frontend (`web/dashboard/src/`) for every JSON field any store or panel reads (`.data?.foo`, `e.foo`, `sys.foo`, `m.foo`), fetch a live response from each of the three endpoints against the seeded fleet, and assert every field the frontend reads is present in the matching response. This is the general form of "a prop-name mismatch silently zeroed the latency bar" — it catches that whole class, present and future, in one pass. A `console.error`-free run does **not** catch this class of bug, since Svelte binds `undefined` silently; treat "no console errors" as a separate, weaker check, not a substitute.
+   - **Tile-by-tile Overview checklist.** Every named FR-3 stat (status, endpoints up/total, success rate, avg latency, total traffic, uptime, active connections, total requests, total failures, security violations) parses as a real, non-placeholder value. Uptime specifically must have **increased** between two polls taken minutes apart — a static or reset uptime means `start_time` is wrong or absent.
+   - **`active_connections` in-flight assertion.** A column that always shows a plausible `0` on an idle fleet would pass a naive check. Hold at least one slow streamed request open against ollamock through the proxy and assert the Endpoints panel's Conn value for that backend is non-zero while the request is in flight, then returns to its prior value after it completes.
    - Counters visibly change between two successive polls.
    - Clicking a column header reorders the table rows.
    - Both light and dark themes render without visual breakage.
-   - No console errors during normal navigation and polling.
+   - No console errors during normal navigation and polling (kept as a check, but see above — it is not sufficient on its own).
    - No horizontal overflow at 375px, 768px, and 1440px viewport widths.
-   - Status indicators are distinguishable in a greyscale rendering (NFR-5).
+   - **Greyscale legibility, by method not eyeballing (NFR-5).** Inject `filter: grayscale(1)` on the page (or emulate a greyscale colour scheme) and screenshot the Endpoints panel with a mix of healthy/degraded/offline rows; confirm each status is still distinguishable by glyph/shape/text, not colour alone.
+   - If the seeded fleet happens to produce a `busy`, `warming`, `config_error`, or `rate_limited` endpoint status, screenshot it — `StatusTag` has no explicit styling for these (§4.4.1) and falls through to a neutral glyph with the raw status as label. If ollamock cannot produce these states (likely), do not fabricate one for this PR; log to findings that this path is untested rather than treating an unexercised code path as verified.
 3. **Verify against a long-running instance, not a freshly started one.** Leave Olla running and the dashboard polling for several minutes before asserting anything — a previous verification pass missed a real bug because a freshly started instance never reached steady state (e.g. averages computed from a single sample, health-check cycles that hadn't completed a full round yet).
 4. **Assert rendered values, not just text content, where a bug could hide in prop wiring.** Specifically check computed `style` attributes (e.g. width/height percentages) on any bar or meter component, not only its adjacent text label. A prop-name mismatch has previously silently zeroed every latency bar's visual width while its text label still read the correct number — a text-only assertion would have passed.
-5. `code-reviewer` pass on the full diff (WP-7) before the orchestrator declares the branch complete.
+5. `code-reviewer` pass on the full diff (WP-7) before the orchestrator declares the branch complete. As part of this pass, re-run the mechanical scope-gate command from §0 and confirm its output is still empty.
 
 Report format for this section: pass/fail per assertion above, with screenshots or console/network evidence from `web-verifier` attached to the final report.
 
@@ -232,13 +332,16 @@ Report format for this section: pass/fail per assertion above, with screenshots 
 | NFR-1 | WP-2 review (no new hot-path cost) |
 | NFR-2, NFR-3 | WP-1b acceptance + code-reviewer (WP-7) |
 | NFR-4, NFR-5 | WP-6 Playwright assertions |
+| Field audit (§4.4.1): `start_time`, `active_connections`, security-violations tile, `per_endpoint` tooltip cut | WP-2 (backend fields) + WP-3 (frontend tile/verification/cut) + WP-6 field-contract assertion |
+| Route-mounting design (§5, no signature change) | WP-1b acceptance (`git diff` on `application.go`/`services/http.go` empty) + code-reviewer (WP-7) |
 
 ## 10. Assumptions
 
 - **A1**: "Endpoints response" in the user's brief refers to `/internal/status/endpoints` (`EndpointSummary`) as the primary target for the new fields, with equivalent fields added to `/internal/status`'s `EndpointResponse` where they don't already exist in some form (e.g. `AvgLatency` there is already a formatted string; add the raw `avg_latency_ms` alongside it rather than replacing it). Rejected alternative: adding fields only to `/internal/status` and leaving `/internal/status/endpoints` as-is — rejected because the dashboard's Endpoints panel is the primary consumer and that handler currently has the least detail.
-- **A2**: `GateInternalAPI` (§5.2) is treated as optional/best-effort rather than a hard requirement of this PR, since the user's brief describes it as part of the reused config blocks but the core ask (three panels, loopback-gated, read-only) does not depend on it. Rejected alternative: making it mandatory — rejected because it's the one piece of the copied `server_routes.go` diff that touches every existing route registration, which is exactly the kind of broad surface change §0's tripwires warn about; better to default it off and log rather than force it through under time pressure.
+- **A2**: `GateInternalAPI` (§5.2) is mandated off and unwired for this PR — the config field exists (so a future PR 2 doesn't need a config migration) but setting it has no effect. This was tightened from an earlier draft that left it as an "include if cheap" judgement call, which invited exactly the kind of broad route-wrapping surface change §0's tripwires exist to catch. Rejected alternative: implementing the wrapping when it "comes cheaply" — rejected outright, not just deprioritised, because "cheap" is not knowable until the wrapping is attempted, and by then the diff already includes edits to every existing route registration line.
 - **A3**: The min/max/avg latency zero-traffic display convention (whether zero-traffic endpoints show `0`, omit the field, or show a sentinel) for `min_latency_ms`/`max_latency_ms` follows whatever the existing handler already does for adjacent zero-traffic fields (`RequestCount`, `SuccessRate` show `"N/A"` for the latter) rather than inventing a new convention — the wire-shape test (WP-2) should pin whichever choice is made so it doesn't drift silently later. `avg_latency_ms` is explicitly pointer+omitempty per the user's brief, which is unambiguous; min/max are not, hence this assumption. Rejected alternative: also making min/max pointer+omitempty for consistency — plausible, but the brief only specified this for `avg_latency_ms`, so treating it as the more conservative additive-field default (plain zero value, matching the existing struct's current non-pointer fields) avoids guessing beyond what was asked.
 - **A4**: `web-verifier`'s Playwright session is run by the orchestrator against a fleet booted via the `olla-validate` skill's ollamock harness (or a close adaptation of it) rather than a bespoke fleet setup, since that harness already exists and is CI-safe. Rejected alternative: standing up real Ollama/vLLM instances for verification — rejected as unnecessary weight for a UI-rendering check, and inconsistent with the project's existing mock-backend-first testing convention.
+- **A5**: Route-collision handling for `/internal/ui/` fails safe by logging Error and skipping the mount, rather than halting startup with a returned error (§5). Rejected alternative: propagating an error from `registerRoutes()` as `feature/dashboard-impl` does — rejected because that signature change ripples into `application.go` and `services/http.go`, both of which carry unrelated circuit-breaker plumbing on that branch, making them exactly the files most likely to pull the branch back into copying entangled code. A collision that only skips the dashboard (rather than crashing the whole proxy) is also the more conservative failure mode for a feature this spec explicitly says has zero authentication and is not load-bearing for Olla's core proxy function.
 
 ## 11. Open questions
 
