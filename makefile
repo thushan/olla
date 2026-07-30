@@ -284,10 +284,9 @@ install-web:
 	@echo "Frontend dependencies installed."
 
 # Build the SPA. Vite's outDir points straight at the gitignored go:embed
-# source (see vite.config.js), so there is no separate copy step - that copy
-# used to rely on `cp -r`/`rm -rf`, which don't exist on native Windows. A
-# writeBundle plugin hook in vite.config.js restores the .gitkeep sentinel
-# emptyOutDir wipes on every build.
+# source (see vite.config.js), so there is no separate rm/cp/touch copy step
+# any more. A writeBundle plugin hook in vite.config.js restores the
+# .gitkeep sentinel emptyOutDir wipes on every build.
 build-web: install-web
 	@echo "Building frontend into embed source..."
 	@cd $(WEB_DIR) && npm run build

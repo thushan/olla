@@ -8,14 +8,14 @@ import tailwindcss from '@tailwindcss/vite';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Vite writes straight into the go:embed source (see internal/app/handlers/
-// dashboard/embed.go) so `make build-web` no longer needs a separate copy
-// step - that copy previously relied on `cp -r`, which doesn't exist on
-// native Windows. emptyOutDir wipes the directory (including the committed
+// dashboard/embed.go) so `make build-web` no longer needs a separate
+// rm/cp/touch copy step - one less moving part, and it matches how the other
+// web targets (install-web, test-web, lint-web) already run a bare npm
+// command. emptyOutDir wipes the directory (including the committed
 // .gitkeep sentinel) on every build, so it is rewritten by the plugin below.
 const EMBED_DIST = path.resolve(__dirname, '../../internal/app/handlers/dashboard/dist');
 
-// Restores the .gitkeep sentinel emptyOutDir removes, using plain Node fs so
-// it behaves identically on Windows, Linux and macOS.
+// Restores the .gitkeep sentinel emptyOutDir removes.
 function restoreGitkeep() {
   return {
     name: 'restore-embed-gitkeep',
