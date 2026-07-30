@@ -332,3 +332,58 @@ constraint or a different treatment for models hosted on many endpoints.
 Severity: cosmetic, no data-correctness impact, but it affects every row of
 every table and reads as an unfinished UI. Cheap to fix once the alignment
 model is decided.
+
+# CONSOLIDATED PRE-MERGE LIST (spec input)
+
+Two independent architect reviews plus two verification passes. Every item below was verified in code; scope calls note whether this branch caused it.
+
+## Blocks the push
+
+**B1. Proxy access logs suppressed at default level. REGRESSION, ours.**
+`internal/app/middleware/logging.go:107` - `isQuietPollOutcome` opens with `if IsProxyRequest(path) { return true }`, unconditional on status. `AccessLoggingMiddleware` (~:312) now picks its level from that helper, so every proxy access record is Debug. On main the access log was unconditionally `slog.LevelInfo` (`git show main:...logging.go:239-240`). Main separately quiets proxy CONSOLE lines (~:130-138) - deliberate, pre-existing, must stay. This branch conflated the two. Note the helper's own doc comment (:98-105) promises 404/5xx are never swallowed; the proxy branch returns before any status check, so the code contradicts its comment.
+Fix: split into a console variant (path-only) and an access-log variant (status-aware: proxy 2xx/3xx quiet, 4xx/5xx at Info).
+Tests: NONE exist asserting access-log level for a proxy path at any status. `TestAccessLoggingMiddleware` (logging_test.go:74-109) only checks a 200 response body. Need table-driven: (proxy,200)->Debug, (proxy,500)->Info, (proxy,400)->Info, (/internal/health,200)->Debug, (/internal/health,404)->Info. `mockStyledLogger` already exists.
+
+**B2. Exact-duplicate and empty endpoint names blank both tables.**
+`EndpointsPanel.svelte:59-61` and `OverviewPanel.svelte:192` key on `row.name`. Two endpoints both named `ollama`, or two with empty names, throw `each_key_duplicate` as an uncaught exception inside a reactive effect - zero rows render, whole table blanks. Verified this throws in PRODUCTION builds too, not just dev (`svelte/src/internal/client/dom/blocks/each.js:351-357` still calls it in the non-DEV branch).
+Reachable from valid config: neither `Config.Validate()` (`internal/config/config.go:191-237`) nor `validateEndpointConfig` (`internal/adapter/discovery/repository.go:299-343`) checks endpoint name emptiness or uniqueness.
+Existing tests only cover slug-colliding but DISTINCT names (`node.a`/`node-a`); none use `ollama`/`ollama` or empty/empty.
+Fix: key on `row.url`. Verified structurally unique - `repository.go:223` does `newEndpoints[urlString] = newEndpoint`, so duplicate URLs collapse before the frontend sees them, and `EndpointSummary.URL` is already in every row. Two lines. Recommend ALSO making `SortableTable` incapable of emitting a duplicate key (index disambiguation) so no future caller can reintroduce the crash.
+
+**B3. Slug-colliding names jump to the WRONG endpoint.**
+`OverviewPanel.svelte:93` resolves `ep-${cssId(name)}` via `getElementById`; `EndpointsPanel.svelte:62-67`, `OverviewPanel.svelte:193` and `ModelsPanel.svelte` all derive DOM ids from the same lossy slug. With `node.a` and `node-a` present, both rows get `id="ep-node-a"` and the lookup always returns the first in DOM order.
+The existing test deliberately avoids the failing direction - its own comment (`App.jump-focus.test.js:126-134`) says jumping from `node-a` "would land on node.a's row instead, silently" and declines to assert it. Honestly logged, but the wrong-target behaviour has zero coverage.
+Fix: same pattern as the each-key fix - derive the DOM id from the exact value (or an index disambiguator) across all three components, and flip the avoided assertion to cover the failing direction.
+
+## Cheap, do now
+
+- **C1.** `sanitiseDisplayURL` (`handler_status_endpoints.go:189-202`) ends `if err != nil { return raw }`, returning credentials verbatim when `url.Parse` fails (e.g. a space in the password). Config-load validation only catches URLs that parse. Return a sentinel. Single caller, nothing depends on the fail-open behaviour.
+- **C2.** `GateInternalAPI` is inert. Correction to earlier framing: it IS documented as inert in `types.go:143-149`, `config.go:169` and two tests - the gap is operator-facing only, since nothing signals at startup. Add a `slog.Warn` when set true (same pattern as `notBuiltWarn`), keep the field so PR 2 needs no migration. Do not delete, do not hard-fail.
+- **C3.** Security headers only on the success path. `setSecurityHeaders` (`dashboard/embed.go:254-259`) is called from the 200 path (:187) and `serveIndex` (:209) only - not the 405 (:125), the two `http.NotFound` branches (:142, :157), or `notBuiltHandler`'s 503 (:114). `access.go`'s `reject` (:152-158) sets only `X-Content-Type-Options`. No `Referrer-Policy` anywhere. Set headers once before any response is written, and add `Referrer-Policy: no-referrer`.
+- **C4.** Remove `{@html}` / `valueHtml` / `subHtml` from `StatTile.svelte:7-19`. No live XSS (all three callers pass an enum, config values or an integer) but it is an opt-in footgun on a shared component. Verified contained: three call sites in `OverviewPanel`, no ripple into tile layout CSS. Express as snippets instead.
+- **C5.** Sort comparators lack a tie-breaker (`handler_status_endpoints.go:76-81`, `handler_status.go:300-305`, both byte-identical to main). Equal-priority same-health endpoints reorder between polls; the dashboard makes the jitter visible. Append a name/URL comparison.
+- **C6.** StatusStrip has no staleness indicator - it reads `overview.data` without consulting `overview.status`, so during an outage it shows confident numbers while the panel below says unreachable. The `data-state` pattern already exists (`EndpointsPanel.svelte:84`) to copy.
+- **C7.** Offline endpoints render a full green success bar. `PctBar` derives from `success_rate_num`/`hasData` with no reference to `e.status`, so lifetime counters sit beside a red offline pill. Gate the bar on status.
+- **C8.** Duplicate type badge - `EndpointsPanel.svelte:112` renders a `badge-type` span inside the name cell and :115 renders a Type column, both showing `e.type`. Drop one.
+- **C9.** `.goreleaser.yml:1-6` documents a `docker run goreleaser/goreleaser` command that cannot work: the image has no Node, no make, and the `before.hooks` now run `make build-web`. Doc comment only - the real tagged-release path IS correctly fixed (`release.yml:33-36` pins `setup-node` before goreleaser).
+- **C10.** Table column alignment (see the detailed section above). `td.num { text-align: right }` only moves inline content, so bar and chip cells ignore it while their headers obey. Affects Success and Latency on Endpoints and Overview, and Endpoints on Models. Separate `num` (sort) from alignment (presentation) so it cannot recur.
+
+## Defer to PR 2
+
+- **D1.** Zero-traffic fleets report status `critical`. `handler_status.go:199` leaves success rate at 0 when `TotalRequests == 0` and `:206` classifies below 90% as critical, so a fresh healthy install opens red. Verified byte-for-byte identical to main - pre-existing, and the fix touches shared classification code that `/internal/status` consumers may alert on. Strong PR 2 opener; too much blast radius to rush pre-push.
+- **D2.** Wire upstream 5xx into stats and the breaker. One change unlocks an honest success rate, the `circuit_breaker` column and issue #144 together. Until then the success-rate tile reads 100% against an all-500 fleet (`proxy/core/base.go:83` counts any streamed response as success). PR 1 should relabel the tile so it does not overclaim.
+- **D3.** Zone-scoped IPv6 (`fe80::1%eth0`) fails CIDR matching - `access.go:133-144` passes it to `net.ParseIP`, which rejects zones. Fail-CLOSED (legitimate client denied), narrow, not a bypass.
+- **D4.** Overview tile IA: nine tiles of which five duplicate the status strip directly above, and at desktop width THREE empty grid cells (not one) - `repeat(4, 1fr)` with 9 tiles. Content decision, not a defect.
+- **D5.** Endpoints table is 12 columns with a horizontal scrollbar at 1280px. `NEXT CHK` reads "now" on every row; `fmtUntil` (`lib/format.js:122-128`) returns "now" for any past timestamp, so the frontend is consistent with the claim, but whether `next_check_at` genuinely lags the health checker was NOT traced end to end - needs a backend look before deciding which layer to fix.
+- **D6.** Per-endpoint last error and per-endpoint model list. Rated by review as worth more than half of what is currently displayed: during an incident, "connection refused" vs "503 upstream" vs "probe timeout" is the entire question.
+- **D7.** Mobile: Endpoints shows 2 of 12 columns at 390px. Overview degrades well; Endpoints needs a card layout.
+- **D8.** Sticky sessions are a shipped feature with no dashboard representation at all.
+- **D9.** Rate limiting on `/internal/*` (none today, and JSON ETags were deliberately cut), real `gate_internal_api` wiring, and a startup warning on non-private CIDRs.
+
+## Process notes
+
+- `make ready` does not run `ci-web`, so a frontend regression passes the local pre-commit gate and only `make ci` catches it. Defensible (keeps `ready` Node-free) but CI must be the enforcing gate.
+- `docs/spec/` is in `.gitignore`; files here need `git add -f`. A fresh agent may silently fail to commit into this directory.
+- `betteralign` runs at v0.11.0 against a v0.8.2 pin and rewrites struct field order repo-wide during `make ready`. Pre-existing; pin later.
+- Concurrent agents need a no-`git stash` rule as well as file ownership - stash is repo-global, and one agent stashed while peers had uncommitted work.
+- Allowlist edits by an implementing agent should be a human-review flag: an agent can make its own diff pass by widening the gate.
