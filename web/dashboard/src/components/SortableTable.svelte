@@ -8,7 +8,15 @@
   // `columns`: [{ key, label, sortable=false, num=false, sticky=false }]
   // `rows`: array of objects keyed by column.key
   // `initialSort`: { key, dir: 'asc'|'desc' } or null
-  // `rowId`: (row) => string, used as the tr key (defaults to index)
+  // `rowId`: (row, i) => string, used as the tr KEY (defaults to index). Must
+  //   be the row's exact unique identity - never a lossy transform (e.g. a
+  //   CSS-safe slug), or two rows that collapse to the same slug trigger
+  //   Svelte's each_key_duplicate and blank the entire table body.
+  // `rowDomId`: optional (row, i) => string, used as the tr's `id` ATTRIBUTE
+  //   in the generic rowSnippet path (e.g. so another panel can scrollIntoView
+  //   + focus a specific row). Deliberately separate from `rowId`: the DOM id
+  //   can use a CSS-safe slug since a jump target only needs to exist, not be
+  //   collision-proof, but that same slug must never be used as the each key.
   // `rowSnippet`: snippet receiving { row } for each body row's <td> markup
   // `groupSnippet`: optional snippet rendered between family groups (Models
   //   panel), receiving { rows, sort, sortRows } - `sortRows(list)` applies
@@ -20,6 +28,7 @@
     rows = [],
     initialSort = null,
     rowId = (_r, i) => `r-${i}`,
+    rowDomId = null,
     rowSnippet = null,
     groupSnippet = null,
     showScrollHint = true,
@@ -100,7 +109,7 @@
         {@render groupSnippet({ rows: sorted, sort, sortRows })}
       {:else}
         {#each sorted as row, i (rowId(row, i))}
-          <tr>
+          <tr id={rowDomId ? rowDomId(row, i) : undefined} tabindex={rowDomId ? -1 : undefined}>
             {@render rowSnippet({ row })}
           </tr>
         {/each}

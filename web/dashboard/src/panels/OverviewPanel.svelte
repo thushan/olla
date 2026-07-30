@@ -1,4 +1,5 @@
 <script>
+  import { tick } from 'svelte';
   import { overview } from '../lib/stores/overview.svelte.js';
   import { endpoints } from '../lib/stores/endpoints.svelte.js';
   import StatTile from '../components/StatTile.svelte';
@@ -80,11 +81,19 @@
     return parseFloat(m[1]) * units[m[2]];
   }
 
-  function jumpToEndpoints(name) {
+  // onJumpToEndpoints() swaps the active panel (App.svelte unmounts this one
+  // entirely), so `await tick()` before touching the DOM - without it the
+  // lookup below always missed, because EndpointsPanel's row for `name`
+  // hadn't been rendered yet: the panel swap and this call raced, the jump
+  // never scrolled anywhere, and the clicked button (now removed from the
+  // DOM) dropped keyboard focus to <body> with no replacement.
+  async function jumpToEndpoints(name) {
     onJumpToEndpoints();
-    queueMicrotask(() => {
-      document.getElementById(`ep-${cssId(name)}`)?.scrollIntoView({ block: 'center' });
-    });
+    await tick();
+    const el = document.getElementById(`ep-${cssId(name)}`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    el.focus();
   }
   function cssId(name) {
     return String(name).replace(/[^a-z0-9]+/gi, '-');
