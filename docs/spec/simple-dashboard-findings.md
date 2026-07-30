@@ -278,3 +278,57 @@ _(populated as work packages proceed)_
   operators with two endpoint or model names that collide once
   punctuation is stripped, and the failure mode is a wrong jump target,
   not a crash or data-correctness issue elsewhere in the panel).
+
+## Table column alignment: header and cell disagree on composite columns
+
+Reported by the maintainer with screenshots of all three panels. One root
+cause produces every symptom.
+
+`web/dashboard/src/components.css:368-371` right-aligns columns flagged
+`num: true`:
+
+    thead th.num,
+    td.num { text-align: right; }
+
+`text-align` only positions INLINE content. The cells for Success, Latency
+and Endpoints do not contain text, they contain a block/flex child (the
+bar component, or a wrapped set of endpoint chips). Those children ignore
+`text-align` entirely, so the header right-aligns and the cell content
+stays hard left, leaving a wide dead gap between the two.
+
+Affected columns, all flagged `num: true` while rendering non-numeric
+content:
+
+- `success_rate_num` (Endpoints, `EndpointsPanel.svelte:42`, cell at :117)
+  and the equivalent Success column in Overview's "Herd at a glance"
+- `avg_latency_ms` (Endpoints, :43, cell at :120) - the min/avg/max range bar
+- `endpoints_count` (Models, `ModelsPanel.svelte:28`) - wrapped chips
+
+Genuinely numeric columns are correct and should not be touched: Priority,
+Models, Requests, Conn (`EndpointsPanel.svelte:116,129,130,131`) and Size
+(`ModelsPanel.svelte:27`) all hold plain text, so `text-align: right`
+works as intended and header and value line up.
+
+Two fix directions, pick one and apply it consistently:
+
+1. Stop flagging bar/chip columns as `num` and left-align their headers to
+   match their content. Simplest and arguably most correct - a progress bar
+   is not a number, and a right-aligned header over a left-anchored bar
+   will always read as broken. Keeps `num` meaning "holds a numeral".
+2. Keep `num` for sort purposes but give the cells a real alignment
+   mechanism, e.g. `justify-content: flex-end` on the flex container inside
+   `.num` cells, so the composite content actually moves right.
+
+Note the two concerns are currently conflated: `num` is doing double duty
+as "sort numerically" and "align right". Separating them (e.g. `num` for
+sort, an explicit `align` field for presentation) would prevent this class
+of mismatch recurring as columns are added.
+
+Also reported alongside, same area, needs a decision rather than a
+mechanical fix: Models' Endpoints column is over-wide, so even once
+alignment is corrected the chips sit far from the header - it needs a width
+constraint or a different treatment for models hosted on many endpoints.
+
+Severity: cosmetic, no data-correctness impact, but it affects every row of
+every table and reads as an unfinished UI. Cheap to fix once the alignment
+model is decided.
