@@ -114,4 +114,96 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     expect(document.activeElement).toBe(row);
     expect(document.activeElement).not.toBe(document.body);
   });
+
+  // Regression coverage for the OverviewPanel rowId fix: two endpoints whose
+  // names collide once slugged ("node.a" / "node-a") used to throw
+  // each_key_duplicate on the glance table itself, and with no error
+  // boundary anywhere in the app that blanked the ENTIRE Overview panel -
+  // stat tiles included - so the glance-link this test depends on never
+  // rendered and the jump path was unreachable. This proves the fix holds
+  // with the collision actually present, not just on a collision-free fleet.
+  //
+  // Note: this deliberately jumps from "node.a", not "node-a". EndpointsPanel
+  // and OverviewPanel both still derive their DOM id from the same lossy
+  // cssId() slug (`ep-node-a` / `glance-node-a` for BOTH names), so
+  // document.getElementById always resolves to whichever row rendered first
+  // in DOM order - here that happens to be node.a's own row, so this jump
+  // self-resolves correctly. Jumping from "node-a" would land on node.a's
+  // row instead, silently. That DOM-id collision is a distinct latent defect
+  // from the each-key one fixed here and is out of scope for this fix; see
+  // docs/spec/simple-dashboard-findings.md.
+  it('still jumps and focuses correctly when the glance table has colliding endpoint names', async () => {
+    component = mount(App, { target: document.body });
+    flushSync();
+
+    global.fetch = vi.fn(async (url) => {
+      if (String(url).includes('/internal/status/endpoints')) {
+        return jsonResponse({
+          endpoints: [
+            {
+              name: 'node.a',
+              type: 'ollama',
+              status: 'healthy',
+              priority: 100,
+              success_rate: '99.0%',
+              request_count: 10,
+              model_count: 1,
+              avg_latency_ms: 20,
+              min_latency_ms: 5,
+              max_latency_ms: 40,
+            },
+            {
+              name: 'node-a',
+              type: 'ollama',
+              status: 'healthy',
+              priority: 90,
+              success_rate: '98.0%',
+              request_count: 8,
+              model_count: 1,
+              avg_latency_ms: 25,
+              min_latency_ms: 5,
+              max_latency_ms: 40,
+            },
+          ],
+          total_count: 2,
+          healthy_count: 2,
+          routable_count: 2,
+        });
+      }
+      return jsonResponse(sysBody);
+    });
+    overview.refresh();
+    endpoints.refresh();
+    await vi.waitFor(() => {
+      expect(overview.data?.system?.status).toBe('healthy');
+      expect(endpoints.data?.endpoints?.length).toBe(2);
+    });
+    flushSync();
+
+    // Both glance rows rendered - the panel did not blank on the collision.
+    const glanceLinks = [...document.querySelectorAll('.glance-link .txt')].map((el) =>
+      el.textContent.trim()
+    );
+    expect(glanceLinks).toEqual(expect.arrayContaining(['node.a', 'node-a']));
+
+    const jumpBtn = [...document.querySelectorAll('.glance-link')].find(
+      (btn) => btn.querySelector('.txt')?.textContent.trim() === 'node.a'
+    );
+    expect(jumpBtn).toBeTruthy();
+    jumpBtn.click();
+
+    const row = await vi.waitFor(() => {
+      const el = document.getElementById('ep-node-a');
+      expect(el).toBeTruthy();
+      return el;
+    });
+
+    expect(document.getElementById('panel-endpoints')).not.toBeNull();
+    expect(document.getElementById('panel-overview')).toBeNull();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+    expect(document.activeElement).toBe(row);
+    expect(document.activeElement).not.toBe(document.body);
+    // The row focus actually landed on is the correct one for this jump.
+    expect(row.textContent).toContain('node.a');
+  });
 });
