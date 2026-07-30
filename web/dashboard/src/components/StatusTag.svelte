@@ -1,10 +1,8 @@
 <script>
-  // Single component enforcing "glyph + colour + text" for every status /
-  // circuit-breaker indicator. Never colour alone (colour-blind / greyscale).
-  let { status = 'healthy', kind = 'status' } = $props();
+  // Single component enforcing "glyph + colour + text" for every status
+  // indicator. Never colour alone (colour-blind / greyscale).
+  let { status = 'healthy' } = $props();
 
-  // Two maps with identical shape so this component serves both signal types
-  // without callers reaching into colour classes directly.
   const STATUS = {
     healthy: { glyph: '●', cls: 'green', label: 'healthy' },
     degraded: { glyph: '◐', cls: 'amber', label: 'degraded' },
@@ -13,14 +11,8 @@
     critical: { glyph: '○', cls: 'red', label: 'critical' },
     unknown: { glyph: '○', cls: 'neutral', label: 'unknown' },
   };
-  const CB = {
-    closed: { glyph: '●', cls: 'green', label: 'closed' },
-    'half-open': { glyph: '◐', cls: 'amber', label: 'half-open' },
-    open: { glyph: '○', cls: 'red', label: 'open' },
-  };
 
-  const map = $derived(kind === 'breaker' ? CB : STATUS);
-  const meta = $derived(map[status] ?? { glyph: '○', cls: 'neutral', label: status || 'unknown' });
+  const meta = $derived(STATUS[status] ?? { glyph: '○', cls: 'neutral', label: status || 'unknown' });
 </script>
 
 <span class="status-tag st-{meta.cls}">
