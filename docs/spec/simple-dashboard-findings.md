@@ -46,3 +46,49 @@ _(populated as work packages proceed)_
   is a refactor beyond the additive brief. Severity: low (cosmetic, only
   affects recent-models ordering within a coarse time bucket).
 
+### WP-3 — Frontend trim and contract completion
+
+- **`ModelsPanel` flat-path rows have no DOM id** (`web/dashboard/src/panels/ModelsPanel.svelte`,
+  `web/dashboard/src/components/SortableTable.svelte`). Pre-existing in the
+  copied frontend: the grouped path's snippet renders `<tr id={rowId(m)}>` on
+  each row, but the flat `recent_models` path goes through `SortableTable`'s
+  default `{#each sorted ...}` wrapper which renders a bare `<tr>` with no id
+  (the `rowId` prop is used only as Svelte's keyed-each key, not a DOM id).
+  WP-3's new `ModelsPanel.test.js` locates the flat row by name text rather
+  than id to sidestep this. Fixing it means either planting the id in the flat
+  `rowSnippet` or teaching `SortableTable` to emit `id` on rows, both broader
+  than the trim brief. Severity: low (no operator-facing impact; only affects
+  test selectors and the `#model-<name>` anchor, which OverviewPanel's "jump to
+  endpoint" pattern does not target for models).
+
+- **`StatusTag`'s breaker branch is now unreachable**
+  (`web/dashboard/src/components/StatusTag.svelte`). The `kind="breaker"` code
+  path (its `CB` status map) remained after WP-3 removed the EndpointsPanel
+  Breaker column, which was its sole caller. It is dead but harmless. Left in
+  place rather than trimmed because removing it is component surgery beyond
+  the column-removal brief, and PR 2 may revisit how breaker state is
+  presented once the breaker is wired to proxy-path failures (§4.2).
+  Severity: low (dead branch, no runtime effect).
+
+### WP-1b — Go wiring (embed handler, access policy, config, route mount, quiet-poll logging)
+
+- **`DashboardConfig.GateInternalAPI` is inert on this branch**
+  (`internal/config/types.go`, `config/config.yaml`). The field ships (default
+  `false`) so PR 2 needs no config migration, but no wrapping logic is
+  implemented: setting it `true` has no effect. The intended behaviour (extend
+  the same `AccessPolicy` to the rest of `/internal/*` and `/version`) is PR 2
+  scope per simple-dashboard.md §5.2. Prior art for the wiring lives in
+  `feature/dashboard-impl`'s `server_routes.go` (`gateInternal`/`gateIfWanted`).
+  Severity: low (documented gap, no operator-facing impact since the field
+  defaults off and is explicitly inert).
+
+- **`logDashboardPolicy` startup summary line is absent.** Under the
+  no-signature-change route-mounting design (§5), `registerRoutes()` does not
+  return an error, so `internal/app/services/http.go` stays byte-for-byte
+  unchanged and the `logDashboardPolicy()` helper that lived there on
+  `feature/dashboard-impl` does not exist on this branch. 403s remain
+  self-diagnosing via `access.go`'s `reject()` body, so the dashboard is
+  operable without it. PR 2 can reintroduce the line (it logs the effective
+  CIDR/host allowlist at startup) without revisiting the route-mounting design.
+  Severity: low (cosmetic observability gap).
+
