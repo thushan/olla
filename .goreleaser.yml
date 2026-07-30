@@ -11,6 +11,9 @@ project_name: olla
 before:
   hooks:
     - go mod download
+    # Build the dashboard SPA into the gitignored embed source before the Go
+    # build compiles it in. Release binaries must always ship the current SPA.
+    - make build-web
     # Create empty directories for the package
     - mkdir -p logs tmp data
     - touch data/.gitkeep

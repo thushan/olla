@@ -26,6 +26,7 @@ on:
 
 env:
   GO_VERSION: 1.24.x
+  NODE_VERSION: "20"
   GOLANGCILINT_VERSION: "2.11.4"
   BETTERALIGN_VERSION: "0.8.2"
 
@@ -57,11 +58,20 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Configure Node
+        # make build now rebuilds the dashboard SPA, which needs Node.
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Run go vet
         run: go vet ./...
 
       - name: Run go fmt check
         run: make fmt && git diff --exit-code
+
+      - name: Run frontend gates (vitest + svelte-check + font integrity)
+        run: make ci-web
 
       - name: Build
         run: make build
@@ -130,6 +140,12 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      - name: Configure Node
+        # make build-release rebuilds the dashboard SPA, which needs Node.
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Build and test native platform
         run: |
