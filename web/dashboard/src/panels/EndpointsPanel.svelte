@@ -6,6 +6,7 @@
   import RangeBar from '../components/RangeBar.svelte';
   import PctBar from '../components/PctBar.svelte';
   import { fmtAgo, fmtUntil } from '../lib/format.js';
+  import { stableId } from '../lib/dom-id.js';
   import { getNow as liveNow } from '../lib/clock.svelte.js';
 
   const data = $derived(endpoints.data?.endpoints ?? []);
@@ -50,20 +51,22 @@
     { key: 'issues', label: 'Issues', sortable: false },
   ];
 
-  // Svelte's keyed-each identity must be the endpoint's exact, unique name -
-  // not the CSS-safe slug. Two endpoints named "node.a" and "node-a" both
-  // slug to "node-a", so keying on the slug threw each_key_duplicate and
-  // blanked the whole table. The slug is still useful as a DOM id (so
-  // OverviewPanel's "jump to endpoint" can find a row to scroll to), so it's
-  // kept for that purpose only, under its own name.
+  // Svelte's keyed-each identity must be structurally unique. The endpoint's
+  // URL is the right key: the backend keys its endpoint map by URL
+  // (repository.go: `newEndpoints[urlString]`), so duplicates collapse before
+  // the frontend ever sees them. Keying on name blanks the table when two
+  // endpoints share a name (or both have empty names) - each_key_duplicate,
+  // with no error boundary to contain it. SortableTable additionally
+  // disambiguates any residual collision as a last line of defence.
   function rowId(row) {
-    return row.name;
+    return row.url ?? row.name;
   }
+  // DOM id derived from the endpoint's unique identity (url, falling back to
+  // name) via a lossless hash - NOT the lossy cssId slug, which made "node.a"
+  // and "node-a" both resolve to ep-node-a so getElementById returned the
+  // wrong row. See lib/dom-id.js.
   function rowDomId(row) {
-    return `ep-${cssId(row.name)}`;
-  }
-  function cssId(name) {
-    return String(name).replace(/[^a-z0-9]+/gi, '-');
+    return `ep-${stableId(row.url ?? row.name)}`;
   }
 
   function issueList(issues) {

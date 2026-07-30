@@ -64,6 +64,30 @@
 
   const sorted = $derived(sort ? [...rows].sort(compare) : rows);
 
+  // Defence in depth against each_key_duplicate: Svelte throws (and, with no
+  // error boundary, blanks the whole table body) the moment two rows share a
+  // key. Callers must key on a truly unique field, but if they don't - or if
+  // the data genuinely carries duplicates (two endpoints with the same name) -
+  // we suffix collisions with an ordinal so the table keeps rendering. The
+  // raw rowId is preserved for the non-colliding majority.
+  const uniqueKeyed = $derived(dedupeKeys(sorted, rowId));
+
+  function dedupeKeys(list, keyFor) {
+    const totals = new Map();
+    for (const r of list) {
+      const k = keyFor(r, 0);
+      totals.set(k, (totals.get(k) ?? 0) + 1);
+    }
+    const issued = new Map();
+    return list.map((row, i) => {
+      const k = keyFor(row, i);
+      if ((totals.get(k) ?? 0) === 1) return { row, key: k };
+      const n = issued.get(k) ?? 0;
+      issued.set(k, n + 1);
+      return { row, key: `${k}#${n}` };
+    });
+  }
+
   // Exposed to groupSnippet so a grouped view (Models panel) can sort each
   // family's own row list against the same comparator/sort state the header
   // click updates. Without this the group snippet has no way to see `sort`,
@@ -108,9 +132,9 @@
       {#if groupSnippet}
         {@render groupSnippet({ rows: sorted, sort, sortRows })}
       {:else}
-        {#each sorted as row, i (rowId(row, i))}
-          <tr id={rowDomId ? rowDomId(row, i) : undefined} tabindex={rowDomId ? -1 : undefined}>
-            {@render rowSnippet({ row })}
+        {#each uniqueKeyed as kr, i (kr.key)}
+          <tr id={rowDomId ? rowDomId(kr.row, i) : undefined} tabindex={rowDomId ? -1 : undefined}>
+            {@render rowSnippet({ row: kr.row })}
           </tr>
         {/each}
       {/if}

@@ -8,6 +8,7 @@
   import PctBar from '../components/PctBar.svelte';
   import SortableTable from '../components/SortableTable.svelte';
   import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format.js';
+  import { stableId } from '../lib/dom-id.js';
   import { getNow as liveNow } from '../lib/clock.svelte.js';
 
   // Cross-panel navigation is delegated to App.svelte so this panel never
@@ -83,20 +84,21 @@
 
   // onJumpToEndpoints() swaps the active panel (App.svelte unmounts this one
   // entirely), so `await tick()` before touching the DOM - without it the
-  // lookup below always missed, because EndpointsPanel's row for `name`
+  // lookup below always missed, because EndpointsPanel's row for this endpoint
   // hadn't been rendered yet: the panel swap and this call raced, the jump
   // never scrolled anywhere, and the clicked button (now removed from the
   // DOM) dropped keyboard focus to <body> with no replacement.
-  async function jumpToEndpoints(name) {
+  //
+  // The DOM id is computed from the endpoint's unique identity (url) via the
+  // same lossless hash EndpointsPanel uses, so the lookup resolves to the
+  // matching row even when two names collide once punctuation is stripped.
+  async function jumpToEndpoints(e) {
     onJumpToEndpoints();
     await tick();
-    const el = document.getElementById(`ep-${cssId(name)}`);
+    const el = document.getElementById(`ep-${stableId(e.url ?? e.name)}`);
     if (!el) return;
     el.scrollIntoView({ block: 'center' });
     el.focus();
-  }
-  function cssId(name) {
-    return String(name).replace(/[^a-z0-9]+/gi, '-');
   }
 </script>
 
@@ -189,15 +191,15 @@
         columns={glanceColumns}
         rows={glanceRows}
         initialSort={{ key: 'status_rank', dir: 'asc' }}
-        rowId={(row) => row.name}
-        rowDomId={(row) => `glance-${cssId(row.name)}`}
+        rowId={(row) => row.url ?? row.name}
+        rowDomId={(row) => `glance-${stableId(row.url ?? row.name)}`}
       >
         {#snippet rowSnippet({ row: e })}
           <td class="col-sticky">
             <button
               class="glance-link"
               type="button"
-              onclick={() => jumpToEndpoints(e.name)}
+              onclick={() => jumpToEndpoints(e)}
               title="Open {e.name} in the Endpoints panel"
             >
               <span class="glyph g-{statusCls(e.status)}" aria-hidden="true">{statusGlyph(e.status)}</span>

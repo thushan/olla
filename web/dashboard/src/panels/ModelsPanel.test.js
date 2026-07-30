@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { models } from '../lib/stores/models.svelte.js';
+import { stableId } from '../lib/dom-id.js';
 import ModelsPanel from './ModelsPanel.svelte';
 
 // WP-3 coverage: the Models panel was trimmed to discovery-only columns
@@ -122,7 +123,7 @@ describe('ModelsPanel trim (discovery-only)', () => {
       expect(models.data?.model_groups?.length).toBe(groupedPayload.model_groups.length)
     );
 
-    const qwenRow = document.getElementById('model-qwen3-8b');
+    const qwenRow = document.getElementById(`model-${stableId('qwen3:8b')}`);
     expect(qwenRow).toBeTruthy();
     const cells = [...qwenRow.querySelectorAll('td')].map((td) => td.textContent.trim());
     // The legacy total_requests value must not surface anywhere in the row.
@@ -140,7 +141,7 @@ describe('ModelsPanel trim (discovery-only)', () => {
       expect(models.data?.model_groups?.length).toBe(groupedPayload.model_groups.length)
     );
 
-    const qwenRow = document.getElementById('model-qwen3-8b');
+    const qwenRow = document.getElementById(`model-${stableId('qwen3:8b')}`);
     const pills = [...qwenRow.querySelectorAll('.pill')];
     expect(pills.length).toBe(1);
     // per_endpoint.parameter_size was '8B'; the trimmed pill must not leak it.

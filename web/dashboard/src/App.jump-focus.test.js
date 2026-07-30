@@ -4,6 +4,7 @@ import App from './App.svelte';
 import { navigation } from './lib/stores/navigation.svelte.js';
 import { overview } from './lib/stores/overview.svelte.js';
 import { endpoints } from './lib/stores/endpoints.svelte.js';
+import { stableId } from './lib/dom-id.js';
 
 // Regression coverage: "jump to endpoint" on the Overview glance table looked
 // up `ep-<slug>` in the DOM, but the generic row path in SortableTable never
@@ -59,6 +60,7 @@ async function seedData() {
         endpoints: [
           {
             name: 'ollama-1',
+            url: 'http://ollama-1:11434',
             type: 'ollama',
             status: 'healthy',
             priority: 100,
@@ -98,7 +100,7 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     jumpBtn.click();
 
     const row = await vi.waitFor(() => {
-      const el = document.getElementById('ep-ollama-1');
+      const el = document.getElementById(`ep-${stableId('http://ollama-1:11434')}`);
       expect(el).toBeTruthy();
       return el;
     });
@@ -115,24 +117,15 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     expect(document.activeElement).not.toBe(document.body);
   });
 
-  // Regression coverage for the OverviewPanel rowId fix: two endpoints whose
-  // names collide once slugged ("node.a" / "node-a") used to throw
-  // each_key_duplicate on the glance table itself, and with no error
-  // boundary anywhere in the app that blanked the ENTIRE Overview panel -
-  // stat tiles included - so the glance-link this test depends on never
-  // rendered and the jump path was unreachable. This proves the fix holds
-  // with the collision actually present, not just on a collision-free fleet.
-  //
-  // Note: this deliberately jumps from "node.a", not "node-a". EndpointsPanel
-  // and OverviewPanel both still derive their DOM id from the same lossy
-  // cssId() slug (`ep-node-a` / `glance-node-a` for BOTH names), so
-  // document.getElementById always resolves to whichever row rendered first
-  // in DOM order - here that happens to be node.a's own row, so this jump
-  // self-resolves correctly. Jumping from "node-a" would land on node.a's
-  // row instead, silently. That DOM-id collision is a distinct latent defect
-  // from the each-key one fixed here and is out of scope for this fix; see
-  // docs/spec/simple-dashboard-findings.md.
-  it('still jumps and focuses correctly when the glance table has colliding endpoint names', async () => {
+  // Regression coverage for the DOM-id collision bug. The old cssId() slug
+  // stripped punctuation, so "node.a" and "node-a" both produced id
+  // "ep-node-a". getElementById always returned whichever row rendered first
+  // in DOM order - here node.a (priority 100 sorts first). Clicking "jump"
+  // from the node-a glance row therefore scrolled to and focused node.a's row,
+  // silently wrong, with no error. The prior test deliberately jumped from
+  // node.a (which self-resolves) to avoid encoding the bug as a passing spec;
+  // this case flips that and jumps from node-a, asserting it lands on node-a.
+  it('jumps from node-a to node-a (not node.a) when names collide once slugged', async () => {
     component = mount(App, { target: document.body });
     flushSync();
 
@@ -142,6 +135,7 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
           endpoints: [
             {
               name: 'node.a',
+              url: 'http://node-a:11434',
               type: 'ollama',
               status: 'healthy',
               priority: 100,
@@ -154,6 +148,7 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
             },
             {
               name: 'node-a',
+              url: 'http://node-b:11434',
               type: 'ollama',
               status: 'healthy',
               priority: 90,
@@ -186,14 +181,23 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     );
     expect(glanceLinks).toEqual(expect.arrayContaining(['node.a', 'node-a']));
 
+    // The two endpoint rows carry DISTINCT DOM ids (the old code gave both
+    // ep-node-a).
+    const nodeAUrl = 'http://node-a:11434';
+    const nodeBUrl = 'http://node-b:11434';
+    const idA = `ep-${stableId(nodeAUrl)}`;
+    const idB = `ep-${stableId(nodeBUrl)}`;
+    expect(idA).not.toBe(idB);
+
+    // Jump from node-a's glance row.
     const jumpBtn = [...document.querySelectorAll('.glance-link')].find(
-      (btn) => btn.querySelector('.txt')?.textContent.trim() === 'node.a'
+      (btn) => btn.querySelector('.txt')?.textContent.trim() === 'node-a'
     );
     expect(jumpBtn).toBeTruthy();
     jumpBtn.click();
 
     const row = await vi.waitFor(() => {
-      const el = document.getElementById('ep-node-a');
+      const el = document.getElementById(idB);
       expect(el).toBeTruthy();
       return el;
     });
@@ -203,7 +207,10 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
     expect(document.activeElement).toBe(row);
     expect(document.activeElement).not.toBe(document.body);
-    // The row focus actually landed on is the correct one for this jump.
-    expect(row.textContent).toContain('node.a');
+    // Landed on node-a's row, NOT node.a's. Assert against the name cell's
+    // exact text, not loose textContent: the URL "http://node-a:..." contains
+    // the substring "node-a", which would mask the wrong-target failure.
+    const landedName = row.querySelector('.name-text')?.textContent.trim();
+    expect(landedName).toBe('node-a');
   });
 });

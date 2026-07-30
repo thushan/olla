@@ -3,6 +3,7 @@
   import SortableTable from '../components/SortableTable.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import { fmtAgo } from '../lib/format.js';
+  import { stableId } from '../lib/dom-id.js';
   import { getNow as liveNow } from '../lib/clock.svelte.js';
 
   const loading = $derived(models.status === 'loading');
@@ -56,19 +57,17 @@
     });
   }
 
-  // Decoupled per the same fix as EndpointsPanel: `rowKey` is the each-key
-  // (must be the exact unique name, not a lossy slug) and `domId` is only for
-  // the DOM id attribute the grouped view sets manually below. Model names
-  // are unlikely to collide once slugged, but keying on the slug would still
-  // be one duplicate name away from blanking this table too.
+  // rowKey is the each-key for the flat path; domId is the DOM id attribute
+  // the grouped view sets manually below. Both use the lossless stableId hash
+  // (lib/dom-id.js) rather than the old punctuation-stripping slug, so two
+  // model names that collide once slugged ("qwen3:8b" vs a hypothetical
+  // "qwen3-8b") cannot resolve to the same DOM id. SortableTable additionally
+  // disambiguates any each-key collision as a last line of defence.
   function rowKey(m) {
     return m.name;
   }
   function domId(m) {
-    return `model-${cssId(m.name)}`;
-  }
-  function cssId(name) {
-    return String(name).replace(/[^a-z0-9]+/gi, '-');
+    return `model-${stableId(m.name)}`;
   }
 
   const orderedGroups = $derived(groupOrder(groups));
