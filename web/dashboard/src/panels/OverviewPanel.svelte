@@ -149,9 +149,9 @@
           {/snippet}
         </StatTile>
         <StatTile
-          label="Success rate"
+          label="Response rate"
           value={sys.success_rate}
-          sub="{fmtInt(sys.total_failures)} failures logged"
+          sub="counts any streamed response, regardless of HTTP status — {fmtInt(sys.total_failures)} failures logged"
         />
         <StatTile
           label="Avg latency"

@@ -124,6 +124,40 @@ describe('OverviewPanel glance table latency', () => {
   });
 });
 
+describe('OverviewPanel response-rate tile is honest about what it counts (D2)', () => {
+  // The underlying metric (proxy/core/base.go) counts any completed streamed
+  // response as success regardless of HTTP status, so an all-500 fleet can
+  // read 100%. Fixing that metric is PR 2; this asserts PR 1's job - the tile
+  // must not present an unqualified percentage. A title attribute is not
+  // enough (mouse-only, invisible to a scanning operator), so this checks the
+  // rendered text content, not an attribute.
+  it('does not label the tile "Success rate" and renders a visible caveat', async () => {
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshBoth([
+      { name: 'ep', status: 'healthy', success_rate: '99.0%', request_count: 7, avg_latency_ms: 5 },
+    ]);
+
+    // sysBody (module-level, shared by every test in this file) fixes the
+    // system-level success_rate at '99.0%' - that is the tile under test,
+    // not the per-endpoint figure in the glance table.
+    const tiles = [...document.querySelectorAll('.tile')];
+    const rateTile = tiles.find((t) => t.querySelector('.value')?.textContent.includes(sysBody.system.success_rate));
+    expect(rateTile).toBeTruthy();
+
+    // Not an unqualified "Success rate" label.
+    const label = rateTile.querySelector('.label')?.textContent;
+    expect(label).not.toBe('Success rate');
+
+    // The caveat is in the tile's own rendered text - no title attribute
+    // needed to find it, and no {@html} sink.
+    const tileText = rateTile.textContent;
+    expect(tileText).toMatch(/HTTP status/i);
+    expect(tileText).toMatch(/regardless/i);
+  });
+});
+
 describe('OverviewPanel security-violations tile (FR-3, spec §4.3.1)', () => {
   it('renders the security-violations count from sys.security_violations', async () => {
     component = mount(OverviewPanel, { target: document.body });
