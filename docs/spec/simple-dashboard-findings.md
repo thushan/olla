@@ -92,3 +92,16 @@ _(populated as work packages proceed)_
   CIDR/host allowlist at startup) without revisiting the route-mounting design.
   Severity: low (cosmetic observability gap).
 
+### WP-6 — Seeded Playwright verification
+
+- **`StatusTag` rendering for `busy`/`warming`/`config_error`/`rate_limited`
+  is unverified** (`web/dashboard/src/components/StatusTag.svelte`, statuses
+  from `internal/core/domain/endpoint.go`). These domain statuses have no
+  explicit entry in `StatusTag`'s STATUS map (per spec §4.4.1) and fall through
+  to a neutral glyph with the raw status text as the label. The seeded ollamock
+  fleet can only emit `healthy` and `offline`, so these intermediate states were
+  never exercised in the WP-6 browser pass (spec §8: do not fabricate one).
+  Untested, not broken. PR 2 should drive an endpoint into one of these states
+  (or unit-test `StatusTag` directly) before claiming coverage. Severity: low
+  (unlikely render path; the fallback is non-crashing).
+
