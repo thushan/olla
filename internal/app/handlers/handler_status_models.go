@@ -279,7 +279,10 @@ func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelS
 	return models
 }
 
-const modelTypeEmbeddings = "embeddings"
+const (
+	modelTypeEmbeddings = "embeddings"
+	modelTypeLLM        = "llm"
+)
 
 func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 	caps := make([]string, 0, 4)
@@ -290,7 +293,7 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 			caps = append(caps, "vision", "multimodal")
 		case modelTypeEmbeddings:
 			caps = append(caps, "embeddings", "vector_search")
-		case "llm":
+		case modelTypeLLM:
 			caps = append(caps, "text_generation", "chat")
 		}
 	}
