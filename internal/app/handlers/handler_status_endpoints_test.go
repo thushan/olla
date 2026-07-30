@@ -71,6 +71,7 @@ type mockStatusStatsCollector struct {
 	proxyStats         ports.ProxyStats
 	modelStats         map[string]ports.ModelStats
 	modelEndpointStats map[string]map[string]ports.EndpointModelStats
+	connectionStats    map[string]int64
 }
 
 func (m *mockStatusStatsCollector) RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
@@ -103,7 +104,12 @@ func (m *mockStatusStatsCollector) GetProxyStats() ports.ProxyStats { return m.p
 func (m *mockStatusStatsCollector) GetSecurityStats() ports.SecurityStats {
 	return ports.SecurityStats{}
 }
-func (m *mockStatusStatsCollector) GetConnectionStats() map[string]int64 { return nil }
+func (m *mockStatusStatsCollector) GetConnectionStats() map[string]int64 {
+	if m.connectionStats == nil {
+		return make(map[string]int64)
+	}
+	return m.connectionStats
+}
 func (m *mockStatusStatsCollector) RecordModelTokens(model string, inputTokens, outputTokens int64) {
 }
 
@@ -430,7 +436,7 @@ func TestBuildEndpointSummaryOptimised(t *testing.T) {
 
 	app := createTestStatusApplication([]*domain.Endpoint{endpoint})
 
-	summary := app.buildEndpointSummaryOptimised(endpoint, statsMap, modelMap)
+	summary := app.buildEndpointSummaryOptimised(endpoint, statsMap, nil, modelMap)
 
 	assert.Equal(t, "test-endpoint", summary.Name)
 	assert.Equal(t, "ollama", summary.Type)

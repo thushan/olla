@@ -32,18 +32,22 @@ var (
 )
 
 type SystemSummary struct {
-	Status             string `json:"status"`
-	EndpointsUp        string `json:"endpoints_up"`
-	SuccessRate        string `json:"success_rate"`
-	AvgLatency         string `json:"avg_latency"`
-	TotalTraffic       string `json:"total_traffic"`
-	UptimeHuman        string `json:"uptime"`
-	Version            string `json:"version"`
-	Commit             string `json:"commit"`
-	ActiveConnections  int64  `json:"active_connections"`
-	SecurityViolations int64  `json:"security_violations"`
-	TotalRequests      int64  `json:"total_requests"`
-	TotalFailures      int64  `json:"total_failures"`
+	// Additive (FR-13): absolute process start so the dashboard can compute a
+	// live uptime between polls without refetching. Not omitempty: always known
+	// once the process is up. Sits alongside the existing relative uptime string.
+	StartTime          time.Time `json:"start_time"`
+	Status             string    `json:"status"`
+	EndpointsUp        string    `json:"endpoints_up"`
+	SuccessRate        string    `json:"success_rate"`
+	AvgLatency         string    `json:"avg_latency"`
+	TotalTraffic       string    `json:"total_traffic"`
+	UptimeHuman        string    `json:"uptime"`
+	Version            string    `json:"version"`
+	Commit             string    `json:"commit"`
+	ActiveConnections  int64     `json:"active_connections"`
+	SecurityViolations int64     `json:"security_violations"`
+	TotalRequests      int64     `json:"total_requests"`
+	TotalFailures      int64     `json:"total_failures"`
 }
 
 type ProxySummary struct {
@@ -53,18 +57,28 @@ type ProxySummary struct {
 }
 
 type EndpointResponse struct {
-	Name        string                 `json:"name"`
-	Status      string                 `json:"status"`
-	SuccessRate string                 `json:"success_rate"`
-	AvgLatency  string                 `json:"avg_latency"`
-	Traffic     string                 `json:"traffic"`
-	LastCheck   string                 `json:"last_check"`
-	NextCheck   string                 `json:"next_check"`
-	Issues      string                 `json:"issues"`
-	Models      EndpointModelsResponse `json:"models"`
-	Priority    int                    `json:"priority"`
-	Connections int64                  `json:"connections"`
-	Requests    int64                  `json:"requests"`
+	AvgLatencyMs  *int64                 `json:"avg_latency_ms,omitempty"`
+	NextCheckAt   *time.Time             `json:"next_check_at,omitempty"`
+	HealthCheckAt *time.Time             `json:"health_check_at,omitempty"`
+	Models        EndpointModelsResponse `json:"models"`
+	Name          string                 `json:"name"`
+	Status        string                 `json:"status"`
+	SuccessRate   string                 `json:"success_rate"`
+	AvgLatency    string                 `json:"avg_latency"`
+	Traffic       string                 `json:"traffic"`
+	LastCheck     string                 `json:"last_check"`
+	NextCheck     string                 `json:"next_check"`
+	Issues        string                 `json:"issues"`
+	URL           string                 `json:"url"`
+	Priority      int                    `json:"priority"`
+	Connections   int64                  `json:"connections"`
+	Requests      int64                  `json:"requests"`
+	// Additive dashboard fields (FR-13: existing fields above are unchanged).
+	// active_connections is intentionally NOT duplicated here: Connections
+	// already carries the same value. last_model_sync_at is intentionally NOT
+	// duplicated: Models.LastUpdated already serialises as an RFC3339 absolute.
+	MinLatencyMs int64 `json:"min_latency_ms"`
+	MaxLatencyMs int64 `json:"max_latency_ms"`
 }
 
 type EndpointModelsResponse struct {
@@ -83,8 +97,8 @@ type SecurityViolation struct {
 }
 type StatusResponse struct {
 	Timestamp time.Time          `json:"timestamp"`
-	Endpoints []EndpointResponse `json:"endpoints"`
 	Proxy     ProxySummary       `json:"proxy"`
+	Endpoints []EndpointResponse `json:"endpoints"`
 	Security  SecuritySummary    `json:"security"`
 	System    SystemSummary      `json:"system"`
 }
@@ -212,6 +226,7 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 		TotalRequests:      proxy.TotalRequests,
 		TotalFailures:      proxy.FailedRequests,
 		UptimeHuman:        format.Duration2(time.Since(a.StartTime)),
+		StartTime:          a.StartTime,
 	}
 }
 
@@ -258,6 +273,27 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			NextCheck:   format.TimeUntil(endpoint.NextCheckTime),
 			Models:      modelDisco,
 			Issues:      a.getEndpointIssues(endpoint, stats, hasStats, successRate),
+			URL:         sanitiseDisplayURL(url),
+		}
+
+		// Additive absolute timestamps alongside the existing relative strings.
+		if !endpoint.LastChecked.IsZero() {
+			lc := endpoint.LastChecked
+			endpoints[i].HealthCheckAt = &lc
+		}
+		if !endpoint.NextCheckTime.IsZero() {
+			nc := endpoint.NextCheckTime
+			endpoints[i].NextCheckAt = &nc
+		}
+
+		// Raw latency in ms alongside the formatted AvgLatency string. Only
+		// meaningful under traffic; min/max match the plain-zero convention of
+		// Requests, avg is a pointer so a no-traffic endpoint omits the field.
+		if hasStats && stats.TotalRequests > 0 {
+			endpoints[i].MinLatencyMs = stats.MinLatency
+			endpoints[i].MaxLatencyMs = stats.MaxLatency
+			avgMs := stats.AverageLatency
+			endpoints[i].AvgLatencyMs = &avgMs
 		}
 	}
 

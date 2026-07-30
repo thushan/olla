@@ -301,6 +301,16 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 		return errors.New("endpoint URL cannot be empty")
 	}
 
+	// Reject embedded credentials (user:pass@host). url.URL.String() preserves
+	// userinfo verbatim, so without this check a credentialed URL would flow
+	// into endpoint.URLString and out through any status API that echoes it.
+	// The endorsed credential path is the auth config block (AuthConfig, held
+	// as json:"-" fields on domain.Endpoint), so this is never a legitimate
+	// config, only ever an accident.
+	if parsedURL, err := url.Parse(cfg.URL); err == nil && parsedURL.User != nil {
+		return fmt.Errorf("endpoint URL for %q must not embed credentials (user:pass@host); use the auth config block instead", cfg.Name)
+	}
+
 	// Allow empty health check and model URLs - they will get defaults from profile or fallback values
 	// in LoadFromConfig. This enables simpler configuration when using known profile types.
 

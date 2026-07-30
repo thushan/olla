@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"sort"
 	"time"
 
@@ -15,17 +16,29 @@ import (
 )
 
 type EndpointSummary struct {
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	Status        string `json:"status"`
-	LastModelSync string `json:"last_model_sync,omitempty"`
-	HealthCheck   string `json:"health_check"`
-	ResponseTime  string `json:"response_time,omitempty"`
-	SuccessRate   string `json:"success_rate"`
-	Issues        string `json:"issues,omitempty"`
-	Priority      int    `json:"priority"`
-	ModelCount    int    `json:"model_count"`
-	RequestCount  int64  `json:"request_count"`
+	AvgLatencyMs    *int64     `json:"avg_latency_ms,omitempty"`
+	NextCheckAt     *time.Time `json:"next_check_at,omitempty"`
+	HealthCheckAt   *time.Time `json:"health_check_at,omitempty"`
+	LastModelSyncAt *time.Time `json:"last_model_sync_at,omitempty"`
+	Name            string     `json:"name"`
+	Type            string     `json:"type"`
+	Status          string     `json:"status"`
+	LastModelSync   string     `json:"last_model_sync,omitempty"`
+	HealthCheck     string     `json:"health_check"`
+	ResponseTime    string     `json:"response_time,omitempty"`
+	SuccessRate     string     `json:"success_rate"`
+	Issues          string     `json:"issues,omitempty"`
+	URL             string     `json:"url"`
+	Priority        int        `json:"priority"`
+	ModelCount      int        `json:"model_count"`
+	RequestCount    int64      `json:"request_count"`
+	// Additive dashboard fields (FR-13: existing fields above are unchanged).
+	// min/max latency follow the same plain-zero convention as RequestCount
+	// for no-traffic endpoints; avg_latency_ms is a pointer so a no-traffic
+	// endpoint omits the field rather than emitting a misleading 0.
+	MinLatencyMs      int64 `json:"min_latency_ms"`
+	MaxLatencyMs      int64 `json:"max_latency_ms"`
+	ActiveConnections int64 `json:"active_connections"`
 }
 
 type EndpointStatusResponse struct {
@@ -51,11 +64,12 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	endpointStats := a.statsCollector.GetEndpointStats()
+	connectionStats := a.statsCollector.GetConnectionStats()
 	modelMap, _ := a.modelRegistry.GetEndpointModelMap(ctx)
 	summaries := make([]EndpointSummary, 0, len(allEndpoints))
 
 	for _, endpoint := range allEndpoints {
-		summary := a.buildEndpointSummaryOptimised(endpoint, endpointStats, modelMap)
+		summary := a.buildEndpointSummaryOptimised(endpoint, endpointStats, connectionStats, modelMap)
 		summaries = append(summaries, summary)
 	}
 
@@ -80,30 +94,41 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(response)
 }
 
-func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, statsMap map[string]ports.EndpointStats, modelMap map[string]*domain.EndpointModels) EndpointSummary {
+func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, statsMap map[string]ports.EndpointStats, connectionStats map[string]int64, modelMap map[string]*domain.EndpointModels) EndpointSummary {
 	url := endpoint.URLString
 	stats, hasStats := statsMap[url]
 	models := modelMap[url]
 
 	summary := EndpointSummary{
-		Name:     endpoint.Name,
-		Type:     endpoint.Type,
-		Status:   endpoint.Status.String(),
-		Priority: endpoint.Priority,
+		Name:              endpoint.Name,
+		Type:              endpoint.Type,
+		Status:            endpoint.Status.String(),
+		Priority:          endpoint.Priority,
+		URL:               sanitiseDisplayURL(url),
+		ActiveConnections: connectionStats[url],
 	}
 
 	if models != nil {
 		summary.ModelCount = len(models.Models)
 		if !models.LastUpdated.IsZero() {
 			summary.LastModelSync = format.TimeAgo(models.LastUpdated)
+			latm := models.LastUpdated
+			summary.LastModelSyncAt = &latm
 		}
 	}
 
 	if !endpoint.LastChecked.IsZero() {
 		summary.HealthCheck = format.TimeAgo(endpoint.LastChecked)
+		lc := endpoint.LastChecked
+		summary.HealthCheckAt = &lc
 		if endpoint.LastLatency > 0 {
 			summary.ResponseTime = format.Latency(endpoint.LastLatency.Milliseconds())
 		}
+	}
+
+	if !endpoint.NextCheckTime.IsZero() {
+		nc := endpoint.NextCheckTime
+		summary.NextCheckAt = &nc
 	}
 
 	if hasStats {
@@ -111,6 +136,13 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 		if stats.TotalRequests > 0 {
 			successRate := (float64(stats.SuccessfulRequests) * 100.0) / float64(stats.TotalRequests)
 			summary.SuccessRate = format.Percentage(successRate)
+			// Min/max/avg are only meaningful with traffic; min/max follow the
+			// plain-zero convention of RequestCount, avg is a pointer so it is
+			// omitted entirely when there is no traffic.
+			summary.MinLatencyMs = stats.MinLatency
+			summary.MaxLatencyMs = stats.MaxLatency
+			avg := stats.AverageLatency
+			summary.AvgLatencyMs = &avg
 		} else {
 			summary.SuccessRate = "N/A"
 		}
@@ -143,4 +175,28 @@ func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoin
 	}
 
 	return ""
+}
+
+// sanitiseDisplayURL strips userinfo, query and fragment from an endpoint URL
+// before it is surfaced in any status/dashboard JSON (FR-14). Credentials must
+// never appear in a URL string in responses; the endorsed credential path is
+// the auth config block, which is held as json:"-" fields on domain.Endpoint
+// and never reaches this layer. RawQuery and Fragment are stripped wholesale
+// rather than allowlisting "safe" params: query strings on inference backends
+// are not part of the operator-facing identity of an endpoint and a per-key
+// allowlist is a maintenance trap. On any parse error the original string is
+// returned unchanged so the operator still sees the value to diagnose it.
+func sanitiseDisplayURL(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	parsed.User = nil
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	parsed.RawFragment = ""
+	return parsed.String()
 }

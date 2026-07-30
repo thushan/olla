@@ -23,15 +23,17 @@ const (
 )
 
 type ModelSummary struct {
-	Name         string   `json:"name"`
-	Type         string   `json:"type,omitempty"`
-	Family       string   `json:"family,omitempty"`
-	Size         string   `json:"size,omitempty"`
-	Params       string   `json:"params,omitempty"`
-	Quant        string   `json:"quant,omitempty"`
-	Endpoints    []string `json:"endpoints"`
-	LastSeen     string   `json:"last_seen"`
-	Capabilities []string `json:"capabilities,omitempty"`
+	// Additive (FR-13): absolute form of LastSeen for the dashboard.
+	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
+	Name         string     `json:"name"`
+	Type         string     `json:"type,omitempty"`
+	Family       string     `json:"family,omitempty"`
+	Size         string     `json:"size,omitempty"`
+	Params       string     `json:"params,omitempty"`
+	Quant        string     `json:"quant,omitempty"`
+	LastSeen     string     `json:"last_seen"`
+	Endpoints    []string   `json:"endpoints"`
+	Capabilities []string   `json:"capabilities,omitempty"`
 }
 
 type ModelGroupSummary struct {
@@ -113,6 +115,10 @@ func (a *Application) buildModelSummaries(modelMap map[string]*domain.EndpointMo
 
 				if model.LastSeen.Unix() > parseTimeAgoOptimised(existing.LastSeen) {
 					existing.LastSeen = format.TimeAgo(model.LastSeen)
+					if !model.LastSeen.IsZero() {
+						ls := model.LastSeen
+						existing.LastSeenAt = &ls
+					}
 				}
 			}
 		}
@@ -120,6 +126,8 @@ func (a *Application) buildModelSummaries(modelMap map[string]*domain.EndpointMo
 
 	summaries := make([]ModelSummary, 0, len(uniqueModels))
 	for _, summary := range uniqueModels {
+		// FR-15: endpoint list order depends on map iteration; sort for stable output.
+		sort.Strings(summary.Endpoints)
 		summaries = append(summaries, *summary)
 	}
 
@@ -133,6 +141,10 @@ func (a *Application) createModelSummary(model *domain.ModelInfo, endpoints []st
 		Endpoints: endpoints,
 		// EndpointURLs: endpointURLs,
 		LastSeen: format.TimeAgo(model.LastSeen),
+	}
+	if !model.LastSeen.IsZero() {
+		ls := model.LastSeen
+		summary.LastSeenAt = &ls
 	}
 
 	if model.Details != nil {
@@ -226,7 +238,13 @@ func (a *Application) groupModelsByFamilyWithDetails(models []ModelSummary) []Mo
 
 func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelSummary {
 	sort.Slice(models, func(i, j int) bool {
-		return parseTimeAgoOptimised(models[i].LastSeen) > parseTimeAgoOptimised(models[j].LastSeen)
+		ti, tj := parseTimeAgoOptimised(models[i].LastSeen), parseTimeAgoOptimised(models[j].LastSeen)
+		if ti != tj {
+			return ti > tj
+		}
+		// FR-15: parseTimeAgoOptimised is coarse (many models share a bucket),
+		// so break ties by name for a stable, diffable order across polls.
+		return models[i].Name < models[j].Name
 	})
 
 	if len(models) > limit {
