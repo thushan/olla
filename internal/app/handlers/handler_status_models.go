@@ -103,7 +103,12 @@ func (a *Application) buildModelSummaries(modelMap map[string]*domain.EndpointMo
 	for endpointURL, endpointModels := range modelMap {
 		endpointName := endpointNames[endpointURL]
 		if endpointName == "" {
-			endpointName = endpointURL
+			// FR-14: an endpoint with no configured name, or a stale model-map
+			// entry with no repository match, falls back to the raw URL, which
+			// can carry credentials in a query string (e.g. ?api_key=secret).
+			// Sanitise it the same way sanitiseDisplayURL does for the other
+			// status handlers before it ever reaches a response.
+			endpointName = sanitiseDisplayURL(endpointURL)
 		}
 
 		for _, model := range endpointModels.Models {

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,5 +131,50 @@ func TestBuildModelSummaries_FallbackToURL(t *testing.T) {
 	// The fallback value is the URL itself — this is acceptable and documented behaviour.
 	if summaries[0].Endpoints[0] != "http://192.168.1.50:11434" {
 		t.Errorf("expected URL as fallback endpoint, got %q", summaries[0].Endpoints[0])
+	}
+}
+
+// TestBuildModelSummaries_FallbackToURL_Sanitised is the regression guard for
+// the query-string secret leak: when an endpoint has no configured name (or a
+// stale model-map entry has no repository match), the fallback to the raw URL
+// must go through sanitiseDisplayURL first. A URL like
+// "https://host/v1?api_key=secret#frag" must never surface its query string
+// or fragment in the response.
+func TestBuildModelSummaries_FallbackToURL_Sanitised(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{}
+
+	rawURL := "https://host/v1?api_key=secret#frag"
+	modelMap := map[string]*domain.EndpointModels{
+		rawURL: {
+			Models: []*domain.ModelInfo{
+				{Name: "phi3", LastSeen: time.Now()},
+			},
+		},
+	}
+
+	// No entry for this URL — triggers the nameless-endpoint fallback path.
+	endpointNames := map[string]string{}
+
+	summaries := app.buildModelSummaries(modelMap, endpointNames)
+
+	if len(summaries) != 1 {
+		t.Fatalf("expected 1 summary, got %d", len(summaries))
+	}
+	if len(summaries[0].Endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint entry, got %d", len(summaries[0].Endpoints))
+	}
+
+	got := summaries[0].Endpoints[0]
+	if strings.Contains(got, "api_key") || strings.Contains(got, "secret") {
+		t.Errorf("fallback endpoint leaked the query string: %q", got)
+	}
+	if strings.Contains(got, "frag") {
+		t.Errorf("fallback endpoint leaked the fragment: %q", got)
+	}
+	want := "https://host/v1"
+	if got != want {
+		t.Errorf("fallback endpoint = %q, want sanitised %q", got, want)
 	}
 }
