@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -133,5 +135,62 @@ func TestDefaultConfig_DashboardLoopbackDefault(t *testing.T) {
 	}
 	if err := cfg.Dashboard.Validate(); err != nil {
 		t.Fatalf("shipped default must validate clean: %v", err)
+	}
+}
+
+// captureSlog swaps slog.Default() for a text handler writing to a buffer, so
+// a test can assert on what startup validation logs. Returns a restore func.
+// Not parallel-safe: callers must not mark these tests t.Parallel() because
+// they mutate process-global logger state.
+func captureSlog(t *testing.T) (*bytes.Buffer, func()) {
+	t.Helper()
+	var buf bytes.Buffer
+	h := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})
+	prev := slog.Default()
+	slog.SetDefault(slog.New(h))
+	return &buf, func() { slog.SetDefault(prev) }
+}
+
+// C2: setting GateInternalAPI=true is inert on this branch (the wrapping is
+// PR 2 scope), so the operator deserves a startup warning naming the field.
+// Without it, an operator who sets the flag sees silent acceptance and
+// assumes the gate is active, then is surprised when /internal/* stays open.
+func TestDashboardConfig_Validate_GateInternalAPIWarnsWhenSetTrue(t *testing.T) {
+	buf, restore := captureSlog(t)
+	defer restore()
+
+	c := DashboardConfig{
+		Enabled: true,
+		AccessPolicy: AccessPolicyConfig{
+			AllowedCIDRs: []string{"127.0.0.0/8"},
+		},
+		GateInternalAPI: true,
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if !strings.Contains(buf.String(), "gate_internal_api") {
+		t.Fatalf("expected warning mentioning gate_internal_api when set true, got: %q", buf.String())
+	}
+}
+
+// C2 negative: when GateInternalAPI is false (the default), no warning fires.
+// The warning is specifically about the inert-but-set case, not the default.
+func TestDashboardConfig_Validate_NoGateWarnWhenFalse(t *testing.T) {
+	buf, restore := captureSlog(t)
+	defer restore()
+
+	c := DashboardConfig{
+		Enabled: true,
+		AccessPolicy: AccessPolicyConfig{
+			AllowedCIDRs: []string{"127.0.0.0/8"},
+		},
+		GateInternalAPI: false,
+	}
+	if err := c.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if strings.Contains(buf.String(), "gate_internal_api") {
+		t.Fatalf("expected no gate_internal_api warning when false, got: %q", buf.String())
 	}
 }

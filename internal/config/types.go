@@ -159,7 +159,19 @@ func (c *DashboardConfig) ParsedCIDRs() []*net.IPNet {
 // Validate parses the access policy's CIDRs so the request path doesn't have
 // to. No-op when the dashboard is disabled, so an explicit off switch validates
 // clean without forcing the operator to also populate the allowlists.
+//
+// GateInternalAPI is deliberately inert on this branch (the wrapping that
+// would extend AccessPolicy to the rest of /internal/* is PR 2 scope), so a
+// startup slog.Warn fires when it is set true. Without the warning an operator
+// who sets the flag sees silent acceptance, assumes the gate is active, and
+// is surprised when /internal/* stays open. The field itself is kept so PR 2
+// needs no config migration.
 func (c *DashboardConfig) Validate() error {
+	if c.GateInternalAPI {
+		slog.Warn("dashboard.gate_internal_api is set but inert on this build; /internal/* is NOT gated by the dashboard access policy",
+			"gate_internal_api", true,
+			"reason", "wrapping is not yet wired; treating the flag as a no-op to preserve existing monitoring scrapes")
+	}
 	if !c.Enabled {
 		return nil
 	}
