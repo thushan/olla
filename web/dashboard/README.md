@@ -18,7 +18,7 @@ endpoints:
 | Models    | `/internal/status/models` (detailed) | 15 s     |
 
 The panels never mutate state. There is no auth in this layer; access control is network-
-layer only (see `docs/spec/admin-dashboard.md` §6).
+layer only (see `docs/spec/simple-dashboard.md` §3, FR-11/FR-12).
 
 ## Quickstart
 
@@ -41,7 +41,8 @@ the Go side while you also want a fresh dashboard embedded.
 ## Architecture
 
 Component tree, polling model, formatting and theming are specified verbatim in
-`docs/spec/admin-dashboard.md` §7. The implementation lives here:
+`docs/spec/simple-dashboard.md` §5 (reuse plan) and §5.1 (frontend architecture notes).
+The implementation lives here:
 
 ```
 src/

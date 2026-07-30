@@ -1,15 +1,16 @@
 # Dashboard verification pass
 
 This document captures the manual verification done for the four poll-store states
-(spec §7.3 / §10 WP-4 acceptance criterion #2) and the other WP-4 acceptance criteria
-that aren't covered by automated tests.
+(the copied `poll-store.svelte.js` factory, WP-1a) and the other acceptance criteria
+from WP-1a/WP-3 (see `docs/spec/simple-dashboard.md` §7) that aren't covered by
+automated tests.
 
 ## Setup
 
 The verification was run against `npm run build` + `npm run preview`, with Playwright's
 `page.route()` intercepting the three `/internal/status*` endpoints so each state could be
 reproduced deterministically without standing up a real Olla backend. Mocks used the
-shapes documented in `internal/app/handlers/handler_status*.go` (post WP-1 / WP-2).
+shapes documented in `internal/app/handlers/handler_status*.go` (post WP-1b / WP-2).
 
 ## The four poll states
 
@@ -51,7 +52,7 @@ a while — showing the last good snapshot, retrying"). Data remains rendered bu
 
 Visually: amber banner, dimmed data, "last ok" timestamp in the banner's meta line.
 
-## Other WP-4 acceptance criteria
+## Other acceptance criteria verified manually
 
 ### Left-nav future-proofing
 
@@ -74,8 +75,11 @@ is not a poll). Three poll stores, one scheduler, as specified.
 
 `lib/stores/poll-store.svelte.js` sends `If-None-Match` whenever it has a prior ETag
 and treats `304 Not Modified` as a successful poll that bumps `lastUpdated` without
-touching `data`. Verified by code review; runtime verification requires a real Olla
-backend serving ETags (WP-2).
+touching `data`. This machinery is deliberately dormant on this branch (spec §4.1):
+the JSON status endpoints never send an `ETag`, so the `if (etag)` gate never fires
+and every poll behaves as a plain `200`. Verified by code review; runtime
+verification of the conditional-GET path itself is out of scope for PR 1 and waits
+on PR 2's eventual ETag re-enable.
 
 ### `prefers-reduced-motion`
 
