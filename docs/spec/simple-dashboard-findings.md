@@ -92,6 +92,54 @@ _(populated as work packages proceed)_
   CIDR/host allowlist at startup) without revisiting the route-mounting design.
   Severity: low (cosmetic observability gap).
 
+### FR-4 / §4.4 — Per-endpoint model list cut
+
+- **No per-endpoint model list in the Endpoints panel** (spec FR-4, §4.4 audit).
+  The Endpoints panel shows a model *count* per endpoint but not the model
+  names themselves. Cut because there is no prior art for it anywhere in the
+  copied frontend or in `handler_status_endpoints.go` — `EndpointSummary` only
+  ever carried `model_count`, never a name list — and the Models panel's own
+  `endpoints` column on each model already answers the inverse question
+  (which endpoints host a given model), so the two panels together cover the
+  same information without duplicating a name list in both directions.
+  Building it would mean a new additive field (an array of model names per
+  endpoint) plus frontend rendering, both beyond the additive-fields brief.
+  Severity: low (nice-to-have, not a gap in current capability).
+
+### §4.4 — `per_endpoint` tooltip data cut
+
+- **`per_endpoint` field (per-endpoint parameter size, used only for a pill
+  tooltip on the Models panel) not added** (spec §4.4 field-audit table).
+  `feature/dashboard-impl`'s frontend read a `per_endpoint` key off
+  `ModelSummary` to show a tooltip when the same model reports different
+  parameter sizes across endpoints, but there is no prior art for this field
+  on `main` — `ModelSummary` has never carried it, and it is not part of this
+  branch's additive-field list (§4.4). Cut the tooltip lookup rather than add
+  a new field for a single UI affordance nobody has asked for on this branch.
+  Same shape of finding as the FR-4 per-endpoint model list above: both are
+  two-sided design work (new backend field + new frontend rendering) that
+  belongs in PR 2 if wanted. Severity: low (cosmetic, tooltip-only).
+
+### §4.2 — Circuit breaker not wired to proxy-path failures
+
+- **The circuit breaker only trips on health-probe failures, never on live
+  proxy-traffic failures** (`internal/adapter/health/circuit_breaker.go`).
+  This is the underlying gap behind the decision to omit the
+  `circuit_breaker` column from the Endpoints panel entirely (§4.2): today, a
+  backend that returns 5xx to every proxied request but still answers health
+  probes cleanly keeps its breaker closed and keeps receiving traffic, so a
+  breaker-state column would misleadingly show "closed"/healthy while the
+  backend is actively failing every real request. This is distinct from the
+  StatusTag finding above (which documents dead *frontend* code, the
+  now-unreachable `kind="breaker"` branch) — this entry is the backend
+  behaviour that made adding that column pointless in the first place. Fixing
+  it means wiring HTTP 5xx observation from both proxy engines into the
+  breaker, which is explicitly forbidden on this branch (§2: zero edits under
+  `internal/adapter/proxy/` and `internal/adapter/health/`). PR 2 scope,
+  contingent on separate proxy-path changes. Severity: medium (operator-facing
+  correctness gap once a breaker-state column is eventually added, but no
+  regression on this branch since PR 1 never surfaces breaker state at all).
+
 ### WP-6 — Seeded Playwright verification
 
 - **`StatusTag` rendering for `busy`/`warming`/`config_error`/`rate_limited`
