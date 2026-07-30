@@ -118,7 +118,7 @@
         <td>{e.type}</td>
         <td class="num">{e.priority}</td>
         <td class="num">
-          <PctBar pct={e.success_rate_num} hasData={e.request_count > 0} />
+          <PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} />
         </td>
         <td class="num">
           <RangeBar
