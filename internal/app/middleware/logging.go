@@ -62,17 +62,55 @@ func IsProxyRequest(path string) bool {
 // internalPathPrefix is where the admin dashboard's status/health/stats polls
 // land. An open dashboard tab polls several of these every few seconds; at
 // info level that floods both the console log and the dedicated access log
-// with traffic that carries no operational signal, so it is demoted to debug
-// alongside the existing proxy hot-path treatment. The dashboard's own
-// /internal/ui/ asset navigations also match, which is fine: navigations are
-// infrequent and demoting them keeps the access log focused on proxy traffic.
+// with traffic that carries no operational signal, so successful polling is
+// demoted to debug alongside the existing proxy hot-path treatment. A 404,
+// wrong-method request, 5xx, or repeated 403 under /internal/ (e.g. the
+// dashboard's access-control gate being probed) must never be swallowed by
+// this, so quieting is conditioned on outcome, not just path — see
+// isQuietPollOutcome.
 const internalPathPrefix = "/internal/"
 
-// isQuietPollRoute reports whether path belongs to a route whose routine,
-// high-frequency traffic should log at debug rather than info: the proxy hot
-// path (already demoted) plus the dashboard's /internal/ polling surface.
-func isQuietPollRoute(path string) bool {
-	return IsProxyRequest(path) || strings.HasPrefix(path, internalPathPrefix)
+// isInternalPollMethod reports whether method is one a polling GET/HEAD
+// client would use. Anything else (POST, PUT, DELETE, ...) against
+// /internal/ is never routine polling traffic and must always log normally.
+func isInternalPollMethod(method string) bool {
+	return method == http.MethodGet || method == http.MethodHead
+}
+
+// isQuietPollRoute reports whether path/method belongs to a route whose
+// traffic is presumptively routine and high-frequency, for the PRE-request
+// log line where the response status does not exist yet: the proxy hot path
+// (already unconditionally demoted) plus a GET/HEAD request under /internal/.
+// This is deliberately optimistic — chosen approach (b): quiet the
+// pre-request line by method/path alone, and let the post-request line
+// (isQuietPollOutcome) apply the real, status-aware gate. The alternative,
+// deferring the pre-request decision entirely to the post-request call,
+// would mean either logging every dashboard poll's "started" line at Info
+// (reintroducing the flood this exists to prevent) or logging it at Debug
+// unconditionally including for non-GET/HEAD internal requests, which is a
+// worse trade for a line that carries no status/duration/diagnostic value
+// anyway. The "completed" line below is the one that must never hide a
+// real problem, and it does not depend on this pre-request line's decision.
+func isQuietPollRoute(method, path string) bool {
+	return IsProxyRequest(path) || (isInternalPollMethod(method) && strings.HasPrefix(path, internalPathPrefix))
+}
+
+// isQuietPollOutcome is the authoritative, status-aware gate applied once
+// the response is known: the POST-request log line and the single access-log
+// line both use this, not isQuietPollRoute. A /internal/ request is only
+// treated as quiet polling traffic when it is GET/HEAD AND the response was
+// 2xx or 304 — anything else (404, 4xx, 5xx, or a non-GET/HEAD method that
+// happened to succeed) logs at its normal level regardless of path, so a
+// probed dashboard access-control 403, a wrong-route 404, or a 500 is never
+// invisible at the default Info level just because it lives under /internal/.
+func isQuietPollOutcome(method, path string, status int) bool {
+	if IsProxyRequest(path) {
+		return true
+	}
+	if !isInternalPollMethod(method) || !strings.HasPrefix(path, internalPathPrefix) {
+		return false
+	}
+	return (status >= 200 && status < 300) || status == http.StatusNotModified
 }
 
 // responseWriter wraps http.ResponseWriter to capture response size and status
@@ -161,8 +199,13 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			// building the []any slice and calling formatBytes 2x per request is pure
 			// waste. Other requests log at Info, so they only pay the cost when
 			// info-level logging is actually enabled.
-			isProxy := isQuietPollRoute(r.URL.Path)
-			if isProxy {
+			//
+			// This pre-request line uses the optimistic, status-blind gate
+			// (isQuietPollRoute) since the response doesn't exist yet — see its
+			// doc comment for why. The post-request line below uses the
+			// status-aware gate (isQuietPollOutcome) instead.
+			preQuiet := isQuietPollRoute(r.Method, r.URL.Path)
+			if preQuiet {
 				if baseLogger.Enabled(ctx, slog.LevelDebug) {
 					baseLogger.Debug("HTTP request started",
 						"method", r.Method,
@@ -190,7 +233,12 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 
 			duration := time.Since(start)
 
-			if isProxy {
+			// The completed line is the one that must never hide a real problem,
+			// so it re-evaluates quietness with the response status known: a 404,
+			// 5xx, or non-GET/HEAD request under /internal/ always logs here at
+			// its normal level even if the pre-request line above was quieted.
+			postQuiet := isQuietPollOutcome(r.Method, r.URL.Path, wrapped.status)
+			if postQuiet {
 				if baseLogger.Enabled(ctx, slog.LevelDebug) {
 					baseLogger.Debug("HTTP request completed",
 						"method", r.Method,
@@ -252,13 +300,16 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 			// format.RFC3339 string, redactQuery output, and the variadic slice on every
 			// request when the file sink is not configured.
 			//
-			// Dashboard polls against /internal/ log at debug: an open tab hits
-			// several of these routes every few seconds and would otherwise
-			// dominate the access log with routine, non-operational traffic.
+			// Successful dashboard polls against /internal/ log at debug: an open
+			// tab hits several of these routes every few seconds and would
+			// otherwise dominate the access log with routine, non-operational
+			// traffic. The status is already known here, so isQuietPollOutcome's
+			// full method+status gate applies directly - a 404/4xx/5xx or a
+			// non-GET/HEAD request under /internal/ still logs at Info.
 			baseLogger := slog.Default()
 			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
 			level := slog.LevelInfo
-			if strings.HasPrefix(r.URL.Path, internalPathPrefix) {
+			if isQuietPollOutcome(r.Method, r.URL.Path, wrapped.status) {
 				level = slog.LevelDebug
 			}
 			if baseLogger.Enabled(detailedCtx, level) {
