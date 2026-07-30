@@ -15,18 +15,32 @@
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4) var(--space-2);
+  padding: var(--space-3) var(--space-4) var(--space-1);
   flex-wrap: wrap;
 }
 .brand {
   display: flex;
-  align-items: baseline;
+  align-items: flex-end;
   gap: var(--space-2);
   margin-right: auto;
 }
+/* Logo + wordmark lockup: the link carries the brand identity through to the
+   product page. Bottom-aligned so a taller logo reaches the header's lower
+   border instead of floating mid-line; height-only sizing keeps the aspect
+   ratio whatever the source asset. */
+.brand-link {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  text-decoration: none;
+  color: inherit;
+}
+.brand-link:hover .brand-logo {
+  opacity: 0.85;
+}
 .brand-logo {
   display: block;
-  height: 28px;
+  height: 54px;
   width: auto;
   flex-shrink: 0;
 }
@@ -81,23 +95,9 @@
   height: 26px;
   padding: 0;
 }
-.theme-auto-reset {
-  display: inline-flex;
-  align-items: center;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0 5px;
-  height: 26px;
-  cursor: pointer;
-  transition: border-color var(--transition-fast), color var(--transition-fast);
-}
-.theme-auto-reset:hover {
+/* Active segment of the theme group: the pressed mode reads as selected via
+   accent border + colour rather than only the aria-pressed attribute. */
+.theme-toggle.icon-only[aria-pressed='true'] {
   border-color: var(--accent);
   color: var(--accent);
 }
@@ -756,7 +756,7 @@ footer a {
     font-size: 0.95rem;
   }
   .brand-logo {
-    height: 22px;
+    height: 42px;
   }
   .status-strip {
     grid-template-columns: repeat(2, 1fr);

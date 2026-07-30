@@ -15,14 +15,16 @@
 
 <div class="brand-row">
   <div class="brand">
-    <img
-      class="brand-logo"
-      src={ollaThumb}
-      width="19"
-      height="28"
-      alt="Olla llama head logo"
-    />
-    <h1>OLLA</h1>
+    <a
+      class="brand-link"
+      href="https://tensorfoundry.io/products/olla"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Olla on TensorFoundry"
+    >
+      <img class="brand-logo" src={ollaThumb} alt="Olla llama head logo" />
+      <h1>OLLA</h1>
+    </a>
     <span class="tag">herd status</span>
   </div>
   <span class="clock" aria-live="off">{clockText}</span>

@@ -1,44 +1,29 @@
 <script>
   import { theme } from '../lib/stores/theme.svelte.js';
 
-  // Auto / light / dark. aria-pressed tracks whether a manual override is active.
-  const icon = $derived(
-    theme.mode === 'auto' ? '◐' : theme.mode === 'dark' ? '●' : '○'
-  );
-  const pressed = $derived(theme.mode !== 'auto');
-
-  // Every click must visibly change the theme, so the announced action is
-  // always "switch to the opposite of what's currently rendered" rather than
-  // a fixed next-in-cycle name that might already match the system.
-  const opposite = $derived(theme.resolved === 'dark' ? 'light' : 'dark');
-  const stateDescription = $derived(
-    theme.mode === 'auto'
-      ? `Theme: auto, following system, currently ${theme.resolved}.`
-      : `Theme: ${theme.mode}.`
-  );
-  const toggleLabel = $derived(`${stateDescription} Switch to ${opposite}.`);
+  // Three permanent states, one button each: system (follow the OS preference),
+  // light, dark. Replacing the old single-toggle-plus-conditional-"auto"-reset
+  // because that hid the mode you wanted behind a toggle-then-reset dance -
+  // every mode is now one click and always visible. The store already owns the
+  // mode, persistence and OS-preference reactivity.
+  const options = [
+    { mode: 'auto', icon: '◐', label: 'System theme (follow OS preference)' },
+    { mode: 'light', icon: '☀', label: 'Light theme' },
+    { mode: 'dark', icon: '☾', label: 'Dark theme' },
+  ];
 </script>
 
-<div class="theme-toggle-group">
-  <button
-    class="theme-toggle icon-only"
-    type="button"
-    aria-pressed={pressed ? 'true' : 'false'}
-    aria-label={toggleLabel}
-    title={toggleLabel}
-    onclick={() => theme.toggle()}
-  >
-    <span aria-hidden="true">{icon}</span>
-  </button>
-  {#if theme.mode !== 'auto'}
+<div class="theme-toggle-group" role="group" aria-label="Colour theme">
+  {#each options as opt (opt.mode)}
     <button
-      class="theme-auto-reset"
+      class="theme-toggle icon-only"
       type="button"
-      aria-label="Reset theme to follow system (auto)"
-      title="Reset theme to follow system (auto)"
-      onclick={() => theme.set('auto')}
+      aria-pressed={theme.mode === opt.mode ? 'true' : 'false'}
+      aria-label={opt.label}
+      title={opt.label}
+      onclick={() => theme.set(opt.mode)}
     >
-      auto
+      <span aria-hidden="true">{opt.icon}</span>
     </button>
-  {/if}
+  {/each}
 </div>
