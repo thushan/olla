@@ -70,9 +70,12 @@ type EndpointResponse struct {
 	NextCheck     string                 `json:"next_check"`
 	Issues        string                 `json:"issues"`
 	URL           string                 `json:"url"`
-	Priority      int                    `json:"priority"`
-	Connections   int64                  `json:"connections"`
-	Requests      int64                  `json:"requests"`
+	// ID is a stable identifier derived from the raw (unsanitised) endpoint
+	// URL; see stableEndpointID in handler_status_endpoints.go.
+	ID          string `json:"id"`
+	Priority    int    `json:"priority"`
+	Connections int64  `json:"connections"`
+	Requests    int64  `json:"requests"`
 	// Additive dashboard fields (FR-13: existing fields above are unchanged).
 	// active_connections is intentionally NOT duplicated here: Connections
 	// already carries the same value. last_model_sync_at is intentionally NOT
@@ -273,6 +276,7 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			NextCheck:   format.TimeUntil(endpoint.NextCheckTime),
 			Models:      modelDisco,
 			Issues:      a.getEndpointIssues(endpoint, stats, hasStats, successRate),
+			ID:          stableEndpointID(url),
 			URL:         sanitiseDisplayURL(url),
 		}
 
@@ -310,12 +314,15 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 		// Tie-breaker for deterministic ordering across polls: the input
 		// slice comes from map iteration, so without a final comparison
 		// equal-priority same-health endpoints reorder between polls purely
-		// from map-iteration randomisation. Name first, then URL for the
-		// pathological case of two endpoints sharing a name.
+		// from map-iteration randomisation. Name first, then ID for the
+		// pathological case of two endpoints sharing a name. ID (not the
+		// sanitised URL) because sanitisation strips query/fragment and two
+		// distinct endpoints can share a display URL, which would leave the
+		// comparison tied and ordering unstable again.
 		if endpoints[i].Name != endpoints[j].Name {
 			return endpoints[i].Name < endpoints[j].Name
 		}
-		return endpoints[i].URL < endpoints[j].URL
+		return endpoints[i].ID < endpoints[j].ID
 	})
 }
 

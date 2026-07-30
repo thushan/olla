@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
+	"hash/fnv"
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -29,9 +31,14 @@ type EndpointSummary struct {
 	SuccessRate     string     `json:"success_rate"`
 	Issues          string     `json:"issues,omitempty"`
 	URL             string     `json:"url"`
-	Priority        int        `json:"priority"`
-	ModelCount      int        `json:"model_count"`
-	RequestCount    int64      `json:"request_count"`
+	// ID is a stable identifier derived from the raw (unsanitised) endpoint
+	// URL, added because URL above has query/fragment stripped for display
+	// and can therefore collide across distinct endpoints. See
+	// stableEndpointID for the derivation and its collision caveat.
+	ID           string `json:"id"`
+	Priority     int    `json:"priority"`
+	ModelCount   int    `json:"model_count"`
+	RequestCount int64  `json:"request_count"`
 	// Additive dashboard fields (FR-13: existing fields above are unchanged).
 	// min/max latency follow the same plain-zero convention as RequestCount
 	// for no-traffic endpoints; avg_latency_ms is a pointer so a no-traffic
@@ -86,12 +93,15 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 		// Tie-breaker for deterministic ordering across polls: the input
 		// slice comes from map iteration, so without a final comparison
 		// equal-priority same-health endpoints reorder between polls purely
-		// from map-iteration randomisation. Name first, then URL for the
-		// pathological case of two endpoints sharing a name.
+		// from map-iteration randomisation. Name first, then ID for the
+		// pathological case of two endpoints sharing a name. ID (not the
+		// sanitised URL) because sanitisation strips query/fragment and two
+		// distinct endpoints can share a display URL, which would leave the
+		// comparison tied and ordering unstable again.
 		if summaries[i].Name != summaries[j].Name {
 			return summaries[i].Name < summaries[j].Name
 		}
-		return summaries[i].URL < summaries[j].URL
+		return summaries[i].ID < summaries[j].ID
 	})
 
 	// create a response with minimal mallocs
@@ -118,6 +128,7 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 		Type:              endpoint.Type,
 		Status:            endpoint.Status.String(),
 		Priority:          endpoint.Priority,
+		ID:                stableEndpointID(url),
 		URL:               sanitiseDisplayURL(url),
 		ActiveConnections: connectionStats[url],
 	}
@@ -189,6 +200,28 @@ func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoin
 	}
 
 	return ""
+}
+
+// stableEndpointID derives a stable, opaque identifier from the raw
+// (unsanitised) endpoint URL, shared by both the /internal/status and
+// /internal/status/endpoints handlers. It exists because sanitiseDisplayURL
+// strips RawQuery and Fragment before a URL reaches the frontend, so two
+// distinct endpoints (e.g. differing only by a query string) can render with
+// an identical display URL. The repository keys its endpoint map on the raw
+// URL string including query and fragment, so those two endpoints really are
+// distinct - the frontend needs an identity that survives sanitisation to
+// key rows on and to break sort ties deterministically.
+//
+// FNV-1a 32-bit rendered as base36 mirrors the stableId() hash the dashboard
+// already uses client-side for DOM ids (web/dashboard/src/lib/dom-id.js), so
+// both layers derive identity the same way. A 32-bit hash is not injective -
+// two distinct URLs can theoretically collide - but that is an acceptable,
+// collision-resistant trade-off at realistic fleet sizes (tens to low
+// hundreds of endpoints), not a correctness requirement.
+func stableEndpointID(raw string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(raw))
+	return strconv.FormatUint(uint64(h.Sum32()), 36)
 }
 
 // unparseableURLSentinel is returned by sanitiseDisplayURL when url.Parse
