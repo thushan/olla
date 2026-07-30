@@ -5,7 +5,15 @@
   // receiving the sorted row. Column sort state is owned here per-table
   // instance; the parent only describes the columns and provides the data.
   //
-  // `columns`: [{ key, label, sortable=false, num=false, sticky=false }]
+  // `columns`: [{ key, label, sortable=false, num=false, align, sticky=false }]
+  //   `num` is sort semantics only (numeric compare). `align` is the
+  //   presentation concern ('right' today) and is the ONLY thing that drives
+  //   right-alignment, on both the header and the cell - see `cellClass`
+  //   below. Keeping these separate means a future composite column (a bar,
+  //   chips) declares `align: 'right'` and gets a real alignment mechanism
+  //   (margin-left: auto on its flex child, via components.css) instead of
+  //   text-align, which only ever moved inline text and silently did nothing
+  //   for block/flex content (C10).
   // `rows`: array of objects keyed by column.key
   // `initialSort`: { key, dir: 'asc'|'desc' } or null
   // `rowId`: (row, i) => string, used as the tr KEY (defaults to index). Must
@@ -105,6 +113,20 @@
     if (!sort || sort.key !== c.key) return '↕';
     return sort.dir === 'asc' ? '▲' : '▼';
   }
+
+  // The single source of truth for a cell's classes, driven entirely by the
+  // column definition. Handed to rowSnippet/groupSnippet so callers stop
+  // hand-authoring "num align-right" literals on each <td> - the class a row
+  // renders can no longer drift from what its column declares.
+  function cellClass(key) {
+    const c = columns.find((col) => col.key === key);
+    if (!c) return '';
+    return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : ''].filter(Boolean).join(' ');
+  }
+
+  function headerClass(c) {
+    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : ''].filter(Boolean).join(' ');
+  }
 </script>
 
 <div class="table-scroll">
@@ -114,7 +136,7 @@
       <tr>
         {#each columns as c}
           <th
-            class="{c.num ? 'num ' : ''}{c.sticky ? 'col-sticky' : ''}"
+            class={headerClass(c)}
             aria-sort={c.sortable ? ariaSort(c) : undefined}
           >
             {#if c.sortable}
@@ -130,11 +152,11 @@
     </thead>
     <tbody>
       {#if groupSnippet}
-        {@render groupSnippet({ rows: sorted, sort, sortRows })}
+        {@render groupSnippet({ rows: sorted, sort, sortRows, cellClass })}
       {:else}
         {#each uniqueKeyed as kr, i (kr.key)}
           <tr id={rowDomId ? rowDomId(kr.row, i) : undefined} tabindex={rowDomId ? -1 : undefined}>
-            {@render rowSnippet({ row: kr.row })}
+            {@render rowSnippet({ row: kr.row, cellClass })}
           </tr>
         {/each}
       {/if}

@@ -372,17 +372,16 @@ thead th {
   white-space: nowrap;
   z-index: 2;
 }
-thead th.num,
-td.num {
+/* `align-right` is the ONLY thing that right-aligns a column, on both the
+   header and the cell - driven by `column.align` in SortableTable, never by
+   `num` (which is sort semantics only). `text-align: right` moves inline
+   text (Priority, Requests, Size, ...); composite cells whose children are
+   block/flex (PctBar, RangeBar, endpoint chips) additionally need the child
+   pushed right via auto margin, since text-align does nothing for them. */
+thead th.align-right,
+td.align-right {
   text-align: right;
 }
-/* Alignment is a presentation concern, separate from `num` (sort semantics).
-   `text-align: right` only moves inline content, so composite cells whose
-   children are block/flex (PctBar, RangeBar, endpoint chips) would ignore it
-   and sit hard left under a right-aligned header. The explicit `align-right`
-   marker pushes those flex children right via auto margin, so bar and chip
-   cells line up under their headers. Genuinely numeric text columns keep
-   using td.num's text-align. */
 td.align-right > .pct-cell,
 td.align-right > .range-wrap,
 td.align-right > .endpoint-pills {
@@ -406,7 +405,7 @@ td.align-right > .endpoint-pills {
   cursor: pointer;
   justify-content: flex-start;
 }
-thead th.num .sort-btn {
+thead th.align-right .sort-btn {
   justify-content: flex-end;
 }
 .sort-btn:hover {

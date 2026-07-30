@@ -35,7 +35,7 @@
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'status_rank', label: 'Status', sortable: true },
     { key: 'success_rate_num', label: 'Success', sortable: true, num: true, align: 'right' },
-    { key: 'avg_latency_ms', label: 'Avg latency', sortable: true, num: true },
+    { key: 'avg_latency_ms', label: 'Avg latency', sortable: true, num: true, align: 'right' },
   ];
 
   // Default sort is unhealthy-first: an ops glance view should surface the
@@ -198,7 +198,7 @@
         rowId={(row) => row.url ?? row.name}
         rowDomId={(row) => `glance-${stableId(row.url ?? row.name)}`}
       >
-        {#snippet rowSnippet({ row: e })}
+        {#snippet rowSnippet({ row: e, cellClass })}
           <td class="col-sticky">
             <button
               class="glance-link"
@@ -211,8 +211,8 @@
             </button>
           </td>
           <td><StatusTag status={e.status} /></td>
-          <td class="num align-right"><PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} /></td>
-          <td class="num">
+          <td class={cellClass('success_rate_num')}><PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} /></td>
+          <td class={cellClass('avg_latency_ms')}>
             {#if typeof e.avg_latency_ms === 'number' && e.request_count > 0}{fmtMs(e.avg_latency_ms)}{:else}<span class="dash">—</span>{/if}
           </td>
         {/snippet}

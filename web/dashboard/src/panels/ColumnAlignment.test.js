@@ -14,6 +14,15 @@ import ModelsPanel from './ModelsPanel.svelte';
 // children right via auto margin. jsdom does not lay out flex, so this asserts
 // the structural decision; visual confirmation is deferred to the browser
 // pass (WP6).
+//
+// Follow-up (post-remediation review): `column.align` was originally added to
+// the column definitions but never read anywhere - the `align-right` class on
+// each <td> was a hand-authored literal, so the field was documentation-only
+// and a future composite column could still be added without the guard doing
+// anything. `SortableTable` now derives both the header's and the cell's
+// class from `column.align` via a `cellClass` helper handed to the row/group
+// snippets, so panels no longer author "num align-right" literals at all -
+// asserted below via the header class alongside the cell class.
 
 let component;
 afterEach(() => {
@@ -75,6 +84,23 @@ describe('composite numeric cells carry an explicit alignment class', () => {
     expect(latencyCell.classList.contains('align-right')).toBe(true);
     // They remain `num` for sort semantics.
     expect(successCell.classList.contains('num')).toBe(true);
+
+    // The header carries the same `align-right` class, driven by the same
+    // column.align field the cell class came from - not a separately
+    // hand-maintained header class.
+    const headers = [...document.querySelectorAll('thead th')];
+    const successHeader = headers.find((th) => th.textContent.includes('Success'));
+    const latencyHeader = headers.find((th) => th.textContent.includes('Latency'));
+    expect(successHeader.classList.contains('align-right')).toBe(true);
+    expect(latencyHeader.classList.contains('align-right')).toBe(true);
+
+    // A genuinely numeric text column (Priority) is also driven by
+    // column.align now, not by `num` alone - proving `num` no longer does
+    // double duty as an alignment flag anywhere in the table.
+    const priorityHeader = headers.find((th) => th.textContent.includes('Priority'));
+    expect(priorityHeader.classList.contains('align-right')).toBe(true);
+    const priorityCell = tds[headers.indexOf(priorityHeader)];
+    expect(priorityCell.classList.contains('align-right')).toBe(true);
   });
 
   it('marks the Endpoints (chips) cell align-right in ModelsPanel', async () => {
@@ -114,5 +140,14 @@ describe('composite numeric cells carry an explicit alignment class', () => {
       td.querySelector('.endpoint-pills')
     );
     expect(chipsCell.classList.contains('align-right')).toBe(true);
+
+    // Same guard as EndpointsPanel: the Endpoints column's header carries
+    // the matching align-right class, both driven by the one `align: 'right'`
+    // on the column definition rather than two things a caller must keep in
+    // sync by hand.
+    const endpointsHeader = [...document.querySelectorAll('thead th')].find((th) =>
+      th.textContent.includes('Endpoints')
+    );
+    expect(endpointsHeader.classList.contains('align-right')).toBe(true);
   });
 });

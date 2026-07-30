@@ -39,12 +39,12 @@
   const columns = [
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'type', label: 'Type', sortable: true },
-    { key: 'priority', label: 'Priority', sortable: true, num: true },
+    { key: 'priority', label: 'Priority', sortable: true, num: true, align: 'right' },
     { key: 'success_rate_num', label: 'Success', sortable: true, num: true, align: 'right' },
     { key: 'avg_latency_ms', label: 'Latency', sortable: true, num: true, align: 'right' },
-    { key: 'model_count', label: 'Models', sortable: true, num: true },
-    { key: 'request_count', label: 'Requests', sortable: true, num: true },
-    { key: 'active_connections', label: 'Conn', sortable: true, num: true },
+    { key: 'model_count', label: 'Models', sortable: true, num: true, align: 'right' },
+    { key: 'request_count', label: 'Requests', sortable: true, num: true, align: 'right' },
+    { key: 'active_connections', label: 'Conn', sortable: true, num: true, align: 'right' },
     { key: 'url', label: 'URL', sortable: false },
     { key: 'health_check_at', label: 'Last chk', sortable: false },
     { key: 'next_check_at', label: 'Next chk', sortable: false },
@@ -105,7 +105,7 @@
       {rowId}
       {rowDomId}
     >
-      {#snippet rowSnippet({ row: e })}
+      {#snippet rowSnippet({ row: e, cellClass })}
         <td class="col-sticky">
           <div class="endpoint-cell">
             <span class="ep-name">
@@ -115,11 +115,11 @@
           </div>
         </td>
         <td>{e.type}</td>
-        <td class="num">{e.priority}</td>
-        <td class="num align-right">
+        <td class={cellClass('priority')}>{e.priority}</td>
+        <td class={cellClass('success_rate_num')}>
           <PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} />
         </td>
-        <td class="num align-right">
+        <td class={cellClass('avg_latency_ms')}>
           <RangeBar
             min={e.min_latency_ms ?? 0}
             avg={e.avg_latency_ms}
@@ -128,9 +128,9 @@
             label="latency"
           />
         </td>
-        <td class="num">{#if e.model_count === 0}<span class="dash">0</span>{:else}{e.model_count}{/if}</td>
-        <td class="num">{e.request_count?.toLocaleString('en-AU') ?? 0}</td>
-        <td class="num">{#if e.active_connections > 0}{e.active_connections}{:else}<span class="dash">0</span>{/if}</td>
+        <td class={cellClass('model_count')}>{#if e.model_count === 0}<span class="dash">0</span>{:else}{e.model_count}{/if}</td>
+        <td class={cellClass('request_count')}>{e.request_count?.toLocaleString('en-AU') ?? 0}</td>
+        <td class={cellClass('active_connections')}>{#if e.active_connections > 0}{e.active_connections}{:else}<span class="dash">0</span>{/if}</td>
         <td class="url-cell" title={e.url}>{e.url || '—'}</td>
         <td>{fmtAgo(e.health_check_at, now) || 'never'}</td>
         <td>{fmtUntil(e.next_check_at, now) || '—'}</td>

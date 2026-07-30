@@ -25,7 +25,7 @@
     { key: 'name', label: 'Model', sortable: true, sticky: true },
     { key: 'params', label: 'Params', sortable: true },
     { key: 'quant', label: 'Quant', sortable: true },
-    { key: 'size_bytes', label: 'Size', sortable: true, num: true },
+    { key: 'size_bytes', label: 'Size', sortable: true, num: true, align: 'right' },
     { key: 'endpoints_count', label: 'Endpoints', sortable: true, num: true, align: 'right' },
     { key: 'last_seen_at', label: 'Last seen', sortable: false },
   ];
@@ -99,7 +99,7 @@
       initialSort={null}
       showScrollHint={true}
     >
-      {#snippet groupSnippet({ sortRows })}
+      {#snippet groupSnippet({ sortRows, cellClass })}
         <!-- The grouped layout is rendered by iterating families here; each
              group's own row list is run through sortRows() so a header click
              (which flips the table's aria-sort) actually reorders rows,
@@ -118,8 +118,8 @@
               <td class="col-sticky"><strong>{m.name}</strong></td>
               <td>{m.params || '—'}</td>
               <td>{m.quant || '—'}</td>
-              <td class="num">{m.size || '—'}</td>
-              <td class="num align-right">
+              <td class={cellClass('size_bytes')}>{m.size || '—'}</td>
+              <td class={cellClass('endpoints_count')}>
                 {#if m.endpoints?.length}
                   <div class="endpoint-pills">
                     {#each m.endpoints as ep}
@@ -138,12 +138,12 @@
     </SortableTable>
   {:else if flatRecent.length}
     <SortableTable {columns} rows={flatRecent.map(normalise)} initialSort={{ key: 'name', dir: 'asc' }} rowId={rowKey}>
-      {#snippet rowSnippet({ row: m })}
+      {#snippet rowSnippet({ row: m, cellClass })}
         <td class="col-sticky"><strong>{m.name}</strong></td>
         <td>{m.params || '—'}</td>
         <td>{m.quant || '—'}</td>
-        <td class="num">{m.size || '—'}</td>
-        <td class="num align-right">
+        <td class={cellClass('size_bytes')}>{m.size || '—'}</td>
+        <td class={cellClass('endpoints_count')}>
           {#if m.endpoints?.length}
             <div class="endpoint-pills">
               {#each m.endpoints as ep}<span class="pill">{ep}</span>{/each}
