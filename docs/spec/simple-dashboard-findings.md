@@ -35,16 +35,21 @@ _(populated as work packages proceed)_
   (`internal/app/handlers/handler_status.go:157`, `a.Config.Proxy`). Pre-existing
   on main. Out of scope for the same reason. Severity: low.
 
-- **`parseTimeAgoOptimised` is a coarse heuristic**
-  (`internal/app/handlers/handler_status_models.go`). Pre-existing: it buckets
-  relative-time strings (e.g. every "N seconds" maps to `now-30s`, every
-  "N minutes" with single-digit N uses only the first character). WP-2 added a
-  name-based tiebreaker to `getRecentModels` so observable ordering is now
-  deterministic (FR-15), but the underlying precision loss in the comparator
-  remains. Replacing it with a real `time.Time` comparison would require
-  threading the absolute timestamp through `ModelSummary` as the sort key, which
-  is a refactor beyond the additive brief. Severity: low (cosmetic, only
-  affects recent-models ordering within a coarse time bucket).
+- **`parseTimeAgoOptimised` is a coarse heuristic** — **RESOLVED, not a PR 2
+  item.** (`internal/app/handlers/handler_status_models.go`). This entry
+  originally recorded a cosmetic precision-loss concern. A verified review
+  found the actual defect was worse than cosmetic: `parseTimeAgoOptimised`'s
+  substring checks (`"second"`, `"minute"`, `"hour"`, `"day"`) never matched
+  `format.TimeAgo`'s real compact output (`"10m ago"`, `"2h ago"`), so every
+  model fell into the same fallback bucket and `recent_models` was
+  unconditionally alphabetical, never actually recency-ordered, on any real
+  fleet. This branch introduced the bug (the handler and its call to
+  `format.TimeAgo` are new on this branch), so it was fixed here rather than
+  logged: sorting and multi-endpoint "which timestamp wins" comparisons now
+  use the real `time.Time` value (`ModelSummary.LastSeenAt`) instead of
+  round-tripping through the formatted string, and `parseTimeAgoOptimised` was
+  deleted (its only caller). See `newerModelTimestamp`/`modelLastSeenTime` in
+  the same file.
 
 ### WP-3 — Frontend trim and contract completion
 
@@ -192,3 +197,51 @@ _(populated as work packages proceed)_
   build-pipeline defects. Logged for PR 2 or a dedicated release-tooling
   pass. Severity: low (local convenience command only; does not affect
   actual tagged releases).
+
+### Post-review backend hardening pass — verified findings not fixed on this branch
+
+- **Endpoint ordering is unstable for ties.** The comparators in
+  `internal/app/handlers/handler_status_endpoints.go:76-81` and
+  `internal/app/handlers/handler_status.go:300-305` sort by priority and
+  health class but have no final name/URL tie-breaker, and their input comes
+  from map iteration. Two endpoints with equal priority in the same health
+  class (e.g. both healthy, same priority) can reorder between polls purely
+  from map-iteration randomisation, even though nothing about the fleet
+  changed. Verified byte-for-byte identical on `main`, so this predates this
+  branch and is not something the dashboard work introduced. The spec's
+  §4.4's FR-15 claim that these sorts satisfy "deterministic ordering" holds
+  only in the coarse priority/health-class sense — it does not mean "stable
+  across polls" for ties within a class. Severity: low (cosmetic table
+  jitter in the dashboard between polls; no data-correctness impact).
+
+- **Scoped IPv6 addresses cannot match configured CIDRs.**
+  `internal/app/handlers/dashboard/access.go:107-112,133-134` passes the raw
+  client IP (from `r.RemoteAddr`) straight to `net.ParseIP`, which returns
+  `nil` for a zone-scoped literal like `fe80::1%eth0`. `net.ParseIP` rejects
+  the `%zone` suffix outright. This fails closed: a legitimate link-local
+  IPv6 client gets a self-diagnosing 403 (per `access.go`'s `reject()`), not
+  a bypass of the access policy — so it is a usability gap, not a security
+  hole. Fix would be stripping everything from `%` onward before calling
+  `ParseIP` in both `ipInAnyCIDR` and wherever the client IP is first
+  extracted. Not fixed here because it is a behavioural change to the access
+  policy beyond this pass's four scoped defects. Severity: low (only affects
+  operators reaching the dashboard over a link-local IPv6 address with a
+  zone identifier, an uncommon deployment shape).
+
+- **`{@html}` sinks in `StatTile.svelte` are inert today but are a latent XSS
+  path.** All three `{@html}` call sites in
+  `web/dashboard/src/components/StatTile.svelte` (via its `valueHtml`/
+  `subHtml` props) are currently fed only closed, server-controlled enum
+  values or operator-configured strings — never raw endpoint names, model
+  names, or any other value that could originate from an untrusted or
+  externally-influenced source. So there is no exploitable path today. A
+  future contributor who pipes an endpoint name or model name through
+  `valueHtml`/`subHtml` (e.g. to add inline formatting to a table cell)
+  would introduce a real stored-XSS surface, since neither prop is escaped.
+  Not fixed here because it requires no code change today — the risk is in
+  how the component could be used, not how it is used — and locking down
+  the prop contract (e.g. splitting a plain-text prop from a
+  deliberately-unescaped one) is a `web/dashboard/` change outside this
+  pass's backend-only scope. Severity: low today, escalating to medium the
+  moment any call site starts passing endpoint/model-derived strings through
+  it — flagged so a future PR checks this before doing so.
