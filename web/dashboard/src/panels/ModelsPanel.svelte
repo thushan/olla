@@ -56,7 +56,15 @@
     });
   }
 
-  function rowId(m) {
+  // Decoupled per the same fix as EndpointsPanel: `rowKey` is the each-key
+  // (must be the exact unique name, not a lossy slug) and `domId` is only for
+  // the DOM id attribute the grouped view sets manually below. Model names
+  // are unlikely to collide once slugged, but keying on the slug would still
+  // be one duplicate name away from blanking this table too.
+  function rowKey(m) {
+    return m.name;
+  }
+  function domId(m) {
     return `model-${cssId(m.name)}`;
   }
   function cssId(name) {
@@ -107,7 +115,7 @@
             </th>
           </tr>
           {#each sorted as m (m.name)}
-            <tr id={rowId(m)}>
+            <tr id={domId(m)}>
               <td class="col-sticky"><strong>{m.name}</strong></td>
               <td>{m.params || '—'}</td>
               <td>{m.quant || '—'}</td>
@@ -130,7 +138,7 @@
       {/snippet}
     </SortableTable>
   {:else if flatRecent.length}
-    <SortableTable {columns} rows={flatRecent.map(normalise)} initialSort={{ key: 'name', dir: 'asc' }} rowId={rowId}>
+    <SortableTable {columns} rows={flatRecent.map(normalise)} initialSort={{ key: 'name', dir: 'asc' }} rowId={rowKey}>
       {#snippet rowSnippet({ row: m })}
         <td class="col-sticky"><strong>{m.name}</strong></td>
         <td>{m.params || '—'}</td>

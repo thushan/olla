@@ -50,7 +50,16 @@
     { key: 'issues', label: 'Issues', sortable: false },
   ];
 
+  // Svelte's keyed-each identity must be the endpoint's exact, unique name -
+  // not the CSS-safe slug. Two endpoints named "node.a" and "node-a" both
+  // slug to "node-a", so keying on the slug threw each_key_duplicate and
+  // blanked the whole table. The slug is still useful as a DOM id (so
+  // OverviewPanel's "jump to endpoint" can find a row to scroll to), so it's
+  // kept for that purpose only, under its own name.
   function rowId(row) {
+    return row.name;
+  }
+  function rowDomId(row) {
     return `ep-${cssId(row.name)}`;
   }
   function cssId(name) {
@@ -91,6 +100,7 @@
       {rows}
       initialSort={{ key: 'priority', dir: 'desc' }}
       {rowId}
+      {rowDomId}
     >
       {#snippet rowSnippet({ row: e })}
         <td class="col-sticky">
