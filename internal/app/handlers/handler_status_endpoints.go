@@ -177,6 +177,16 @@ func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoin
 	return ""
 }
 
+// unparseableURLSentinel is returned by sanitiseDisplayURL when url.Parse
+// rejects the input. It must never be the raw string: a parse failure can
+// occur on a credentialed URL (e.g. a space inside the password), and
+// returning the input verbatim would surface those credentials in the
+// status/dashboard JSON. The sentinel is a value an operator can still
+// recognise as "this endpoint's URL is malformed" without exposing what was
+// inside it. Config-load validation only catches URLs that parse, so an
+// unparseable credentialed URL is reachable here.
+const unparseableURLSentinel = "[unparseable url]"
+
 // sanitiseDisplayURL strips userinfo, query and fragment from an endpoint URL
 // before it is surfaced in any status/dashboard JSON (FR-14). Credentials must
 // never appear in a URL string in responses; the endorsed credential path is
@@ -184,15 +194,16 @@ func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoin
 // and never reaches this layer. RawQuery and Fragment are stripped wholesale
 // rather than allowlisting "safe" params: query strings on inference backends
 // are not part of the operator-facing identity of an endpoint and a per-key
-// allowlist is a maintenance trap. On any parse error the original string is
-// returned unchanged so the operator still sees the value to diagnose it.
+// allowlist is a maintenance trap. On any parse error the sentinel above is
+// returned so the operator sees a diagnosable placeholder, never the raw
+// input: a credential-bearing URL that fails to parse must not leak.
 func sanitiseDisplayURL(raw string) string {
 	if raw == "" {
 		return ""
 	}
 	parsed, err := url.Parse(raw)
 	if err != nil {
-		return raw
+		return unparseableURLSentinel
 	}
 	parsed.User = nil
 	parsed.RawQuery = ""

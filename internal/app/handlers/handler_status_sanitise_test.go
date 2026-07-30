@@ -63,3 +63,20 @@ func TestSanitiseDisplayURL_NeverLeaksCredentials(t *testing.T) {
 	assert.NotContains(t, got, "user")
 	assert.NotContains(t, got, "k=v")
 }
+
+// C1 regression: a parse error (here caused by a space in the password) must
+// fail closed. The previous implementation returned the raw string on parse
+// error, leaking credentials into the response JSON when url.Parse rejected
+// the input. Config-load validation only catches URLs that parse, so an
+// unparseable credentialed URL reaches this path. A non-empty sentinel must
+// be returned so the operator sees a diagnosable placeholder, never the raw
+// input.
+func TestSanitiseDisplayURL_FailClosedOnParseError(t *testing.T) {
+	const raw = "http://user:p a s s@host/v1"
+	got := sanitiseDisplayURL(raw)
+
+	assert.NotEqual(t, raw, got, "raw credentialed URL must not be returned verbatim on parse error")
+	assert.NotContains(t, got, "user", "userinfo must not leak through parse-error path")
+	assert.NotContains(t, got, "p a s s", "password must not leak through parse-error path")
+	assert.NotEmpty(t, got, "sentinel must be non-empty so the operator sees a diagnosable placeholder")
+}
