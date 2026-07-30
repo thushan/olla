@@ -7,7 +7,7 @@ automated tests.
 
 ## Setup
 
-The verification was run against `npm run build` + `npm run preview`, with Playwright's
+The verification was run against `bun run build` + `bun run preview`, with Playwright's
 `page.route()` intercepting the three `/internal/status*` endpoints so each state could be
 reproduced deterministically without standing up a real Olla backend. Mocks used the
 shapes documented in `internal/app/handlers/handler_status*.go` (post WP-1b / WP-2).
@@ -103,7 +103,7 @@ Verified by focusing the tablist and pressing Arrow Right, End, Home in sequence
 
 `src/lib/contrast.test.js` computes contrast ratios for every text/background pair in
 both themes and asserts each meets the WCAG AA threshold (4.5:1 for body text, 3:1 for
-the `text-faint` colour reserved for non-essential labels). Run with `npm run test`.
+the `text-faint` colour reserved for non-essential labels). Run with `bun run test`.
 
 ### Sortable columns
 
@@ -114,5 +114,5 @@ Endpoints panel and observing the aria-sort state flip from `descending` (initia
 
 ### Build
 
-`npm run build` produces a clean output in `dist/` (~70 KB JS gzipped to ~26 KB, ~19 KB
+`bun run build` produces a clean output in `dist/` (~70 KB JS gzipped to ~26 KB, ~19 KB
 CSS gzipped to ~5 KB, plus three self-hosted woff2 fonts).

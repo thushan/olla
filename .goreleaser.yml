@@ -1,11 +1,11 @@
 # Local verification of a release snapshot. Run on a host that has Go,
-# Node/npm and make installed (the before.hooks run `make build-web`),
+# Bun and make installed (the before.hooks run `make build-web`),
 # then from the repo root:
 #   $ goreleaser release --snapshot --clean
-# The bare goreleaser/goreleaser container image lacks Go, Node and make,
+# The bare goreleaser/goreleaser container image lacks Go, Bun and make,
 # so it cannot satisfy the hooks. Tagged releases are cut by the
 # GitHub Actions workflow at .github/workflows/release.yml, which pins
-# setup-node before invoking goreleaser.
+# setup-bun before invoking goreleaser.
 
 version: 2
 

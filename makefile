@@ -9,12 +9,12 @@ TOOL := "make"
 # Tool versions (pinned)
 GOLANGCI_LINT_VERSION := v2.11.4
 BETTERALIGN_VERSION := v0.8.2
-NODE_VERSION := 20
+BUN_VERSION := 1.1.0
 
 # Frontend locations. WEB_DIR is the Svelte source tree; EMBED_DIST is the
 # go:embed source the binary ships. It is gitignored and regenerated at build
 # time by build-web; only a .gitkeep sentinel stays committed so a fresh
-# checkout compiles without Node.
+# checkout compiles without Bun.
 WEB_DIR := web/dashboard
 EMBED_DIST := internal/app/handlers/dashboard/dist
 
@@ -273,14 +273,14 @@ goreleaser-check:
 # produced: build, build-release, docker-build-local, run, run-debug and dev
 # depend on build-web, and goreleaser runs build-web via its before.hooks
 # (covering build-local, build-snapshot and release). test, vet, lint, align
-# and ready stay Node-free: a committed .gitkeep sentinel keeps //go:embed
+# and ready stay Bun-free: a committed .gitkeep sentinel keeps //go:embed
 # non-empty so a fresh checkout compiles, and the embed handler serves a loud
 # 503 if a binary was built without the SPA.
 
-# Install frontend deps (npm ci). Requires Node $(NODE_VERSION)+ LTS.
+# Install frontend deps (bun install). Requires Bun 1.1+.
 install-web:
-	@echo "Installing frontend dependencies (npm ci)..."
-	@cd $(WEB_DIR) && npm ci
+	@echo "Installing frontend dependencies (bun install --frozen-lockfile)..."
+	@cd $(WEB_DIR) && bun install --frozen-lockfile
 	@echo "Frontend dependencies installed."
 
 # Build the SPA. Vite's outDir points straight at the gitignored go:embed
@@ -289,20 +289,20 @@ install-web:
 # .gitkeep sentinel emptyOutDir wipes on every build.
 build-web: install-web
 	@echo "Building frontend into embed source..."
-	@cd $(WEB_DIR) && npm run build
+	@cd $(WEB_DIR) && bun run build
 	@echo "Embed source regenerated (gitignored). Rebuild the binary to embed it."
 
 # Run svelte-check (type/syntax checks) on the SPA.
 lint-web: install-web
 	@echo "Running svelte-check..."
-	@cd $(WEB_DIR) && npm run check
+	@cd $(WEB_DIR) && bun run check
 
 # Run vitest unit tests on the SPA.
 test-web: install-web
 	@echo "Running frontend tests..."
-	@cd $(WEB_DIR) && npm run test
+	@cd $(WEB_DIR) && bun run test
 
-# Remove Vite's npm cache and the generated embed source (leaving only the
+# Remove Vite's cache and the generated embed source (leaving only the
 # committed .gitkeep sentinel behind). Vite now writes straight into
 # $(EMBED_DIST) (see build-web), so there is no separate $(WEB_DIR)/dist to
 # clean any more.
@@ -343,7 +343,7 @@ check-fonts-web: build-web
 # so a clean checkout gets node_modules installed once (Make runs a shared
 # prerequisite only once per invocation) before any of the three run, and a
 # broken component still fails fast without waiting on the Vite build.
-# Deliberately NOT a dependency of `ready`: a fresh clone with no Node
+# Deliberately NOT a dependency of `ready`: a fresh clone with no Bun
 # toolchain must still pass the Go gate, so these only run from `ci`/`ci-web`
 # and the GitHub Actions workflow.
 ci-web: test-web lint-web build-web check-fonts-web
@@ -400,19 +400,22 @@ install-deps:
 	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	@echo "  Installing betteralign $(BETTERALIGN_VERSION)..."
 	@go install github.com/dkorunic/betteralign/cmd/betteralign@$(BETTERALIGN_VERSION)
-	@echo "Checking Node toolchain (needed for build-web / install-web)..."
-	@if command -v node > /dev/null 2>&1; then \
-		INSTALLED=$$(node --version 2>/dev/null | sed 's/^v//'); \
+	@echo "Checking Bun toolchain (needed for build-web / install-web)..."
+	@if command -v bun > /dev/null 2>&1; then \
+		INSTALLED=$$(bun --version 2>/dev/null); \
 		MAJOR=$$(echo $$INSTALLED | cut -d. -f1); \
-		if [ "$$MAJOR" -ge "$(NODE_VERSION)" ]; then \
-			printf "  node: v%s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		MINOR=$$(echo $$INSTALLED | cut -d. -f2); \
+		REQ_MAJOR=$$(echo "$(BUN_VERSION)" | cut -d. -f1); \
+		REQ_MINOR=$$(echo "$(BUN_VERSION)" | cut -d. -f2); \
+		if [ "$$MAJOR" -gt "$$REQ_MAJOR" ] || ([ "$$MAJOR" -eq "$$REQ_MAJOR" ] && [ "$$MINOR" -ge "$$REQ_MINOR" ]); then \
+			printf "  bun: %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
 		else \
-			printf "  node: v%s [require: v%s+ LTS \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(NODE_VERSION)"; \
-			echo "  Install Node $(NODE_VERSION)+ LTS via nvm or https://nodejs.org/"; \
+			printf "  bun: %s [require: %s+ \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(BUN_VERSION)"; \
+			echo "  Install Bun $(BUN_VERSION)+ via https://bun.sh"; \
 		fi; \
 	else \
-		printf "  node: not installed [require: v%s+ LTS \033[31m(pinned)\033[0m]\n" "$(NODE_VERSION)"; \
-		echo "  Install Node $(NODE_VERSION)+ LTS via nvm or https://nodejs.org/"; \
+		printf "  bun: not installed [require: %s+ \033[31m(pinned)\033[0m]\n" "$(BUN_VERSION)"; \
+		echo "  Install Bun $(BUN_VERSION)+ via https://bun.sh"; \
 	fi
 	@echo "Dependencies installed successfully!"
 
@@ -439,16 +442,19 @@ check-deps:
 	else \
 		printf "  betteralign: not installed [require: %s \033[31m(pinned)\033[0m]\n" "$(BETTERALIGN_VERSION)"; \
 	fi
-	@if command -v node > /dev/null 2>&1; then \
-		INSTALLED=$$(node --version 2>/dev/null | sed 's/^v//'); \
+	@if command -v bun > /dev/null 2>&1; then \
+		INSTALLED=$$(bun --version 2>/dev/null); \
 		MAJOR=$$(echo $$INSTALLED | cut -d. -f1); \
-		if [ "$$MAJOR" -ge "$(NODE_VERSION)" ]; then \
-			printf "  node:         v%s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		MINOR=$$(echo $$INSTALLED | cut -d. -f2); \
+		REQ_MAJOR=$$(echo "$(BUN_VERSION)" | cut -d. -f1); \
+		REQ_MINOR=$$(echo "$(BUN_VERSION)" | cut -d. -f2); \
+		if [ "$$MAJOR" -gt "$$REQ_MAJOR" ] || ([ "$$MAJOR" -eq "$$REQ_MAJOR" ] && [ "$$MINOR" -ge "$$REQ_MINOR" ]); then \
+			printf "  bun:          %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
 		else \
-			printf "  node:         v%s [require: v%s+ LTS \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(NODE_VERSION)"; \
+			printf "  bun:          %s [require: %s+ \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(BUN_VERSION)"; \
 		fi \
 	else \
-		printf "  node:         not installed [require: v%s+ LTS \033[31m(pinned)\033[0m]\n" "$(NODE_VERSION)"; \
+		printf "  bun:          not installed [require: %s+ \033[31m(pinned)\033[0m]\n" "$(BUN_VERSION)"; \
 	fi
 
 # Development build (no optimisations). build-web first so the dashboard
@@ -459,7 +465,7 @@ dev: build-web
 
 # Run full CI pipeline locally. ci-web is included here (not in `ready`) so
 # `make ci` matches what the GitHub Actions workflow gates on; ready stays
-# Node-free for a fresh clone with no Node toolchain.
+# Bun-free for a fresh clone with no Bun toolchain.
 ci: deps fmt vet lint test-race test-cover build ci-web
 	@echo "CI pipeline completed successfully!"
 
@@ -584,11 +590,11 @@ help:
 	@echo ""
 	@echo "Frontend:"
 	@echo "  build-web       - Build SPA into the gitignored embed source (run by build/release)"
-	@echo "  install-web     - Install frontend deps (npm ci)"
-	@echo "  clean-web       - Remove Vite output, npm cache, and generated embed source"
+	@echo "  install-web     - Install frontend deps (bun install)"
+	@echo "  clean-web       - Remove Vite output, cache, and generated embed source"
 	@echo "  lint-web        - Run svelte-check on the SPA"
 	@echo "  test-web        - Run vitest unit tests on the SPA"
 	@echo "  check-fonts-web - Fail if any .woff2 is missing the WOFF2 magic bytes"
-	@echo "  ci-web          - CI gate: vitest + svelte-check + build + font-integrity (requires Node; run by 'make ci', not 'make ready')"
+	@echo "  ci-web          - CI gate: vitest + svelte-check + build + font-integrity (requires Bun; run by 'make ci', not 'make ready')"
 	@echo ""
 	@echo "  help            - Show this help"

@@ -22,15 +22,15 @@ layer only (see `docs/spec/simple-dashboard.md` §3, FR-11/FR-12).
 
 ## Quickstart
 
-Requires Node 20 LTS or newer and npm 10+.
+Requires Bun 1.1 or newer.
 
 ```bash
 cd web/dashboard
-npm install
-npm run dev          # vite dev server on http://localhost:5173/internal/ui/
-npm run build        # outputs dist/ (consumed by go:embed)
-npm run test         # format byte-match + WCAG AA contrast tests
-npm run preview      # serve the built dist/ locally
+bun install
+bun run dev          # vite dev server on http://localhost:5173/internal/ui/
+bun run build        # outputs dist/ (consumed by go:embed)
+bun run test         # format byte-match + WCAG AA contrast tests
+bun run preview      # serve the built dist/ locally
 ```
 
 `make build-web` regenerates `internal/app/handlers/dashboard/dist/` (the gitignored embed

@@ -94,15 +94,15 @@ treat that as unverified territory rather than assuming it works.
 
 The SPA is built from `web/dashboard/` and emitted into
 `internal/app/handlers/dashboard/dist/`, which is embedded via `go:embed`. Building the
-SPA requires Node 20+ and npm:
+SPA requires Bun 1.1+:
 
 ```bash
-make install-web   # npm ci
-make build-web     # npm run build, then populate the embed directory
+make install-web   # bun install --frozen-lockfile
+make build-web     # bun run build, then populate the embed directory
 ```
 
 `make build`, `make run`, and the release targets run `build-web` automatically. A plain
-`go build ./...`, `make ready`, or `make test` does **not** require Node: a committed
+`go build ./...`, `make ready`, or `make test` does **not** require Bun: a committed
 `.gitkeep` sentinel keeps the embed non-empty, and a binary built without the SPA step
 serves an explanatory `503` at `/internal/ui/` rather than failing to compile.
 

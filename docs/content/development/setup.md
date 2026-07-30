@@ -23,19 +23,19 @@ This guide covers setting up a complete development environment for Olla.
 - **[air](https://github.com/cosmtrek/air)**: Hot reload for development
 - **Docker**: For testing with real backends
 
-### Optional: Node 20+ for the admin dashboard
+### Optional: Bun 1.1+ for the admin dashboard
 
 The embedded admin dashboard SPA (`/internal/ui/`) is built from `web/dashboard/` and
-needs Node 20+ and npm. Install and build it with:
+needs Bun 1.1+. Install and build it with:
 
 ```bash
-make install-web   # npm ci
+make install-web   # bun install --frozen-lockfile
 make build-web     # build the SPA into the embed directory
 ```
 
 `make build`, `make run`, and the release targets run `build-web` automatically, so a
 normal build ships a current SPA. A plain `go build ./...`, `make ready`, or `make test`
-does **not** require Node: the embed stays non-empty via a committed sentinel, and a
+does **not** require Bun: the embed stays non-empty via a committed sentinel, and a
 binary built that way serves an explanatory `503` at `/internal/ui/` instead of the
 dashboard. See the [Admin Dashboard guide](../configuration/dashboard.md) for details.
 
