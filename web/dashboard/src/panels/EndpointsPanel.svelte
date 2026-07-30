@@ -51,22 +51,25 @@
     { key: 'issues', label: 'Issues', sortable: false },
   ];
 
-  // Svelte's keyed-each identity must be structurally unique. The endpoint's
-  // URL is the right key: the backend keys its endpoint map by URL
-  // (repository.go: `newEndpoints[urlString]`), so duplicates collapse before
-  // the frontend ever sees them. Keying on name blanks the table when two
-  // endpoints share a name (or both have empty names) - each_key_duplicate,
-  // with no error boundary to contain it. SortableTable additionally
-  // disambiguates any residual collision as a last line of defence.
+  // Svelte's keyed-each identity must be structurally unique. `row.id` is a
+  // stable identifier the backend derives from the RAW (pre-sanitisation)
+  // endpoint URL (see stableEndpointID in handler_status_endpoints.go) - it
+  // survives sanitiseDisplayURL stripping query/fragment from `url`, so two
+  // endpoints differing only by query string (both arriving with the same
+  // displayed url) still get distinct rows. Falls back to url/name for
+  // backends that predate the `id` field. Keying on name alone blanks the
+  // table when two endpoints share a name (or both have empty names) -
+  // each_key_duplicate, with no error boundary to contain it. SortableTable
+  // additionally disambiguates any residual collision as a last line of
+  // defence.
   function rowId(row) {
-    return row.url ?? row.name;
+    return row.id ?? row.url ?? row.name;
   }
-  // DOM id derived from the endpoint's unique identity (url, falling back to
-  // name) via a collision-resistant hash - NOT the lossy cssId slug, which made "node.a"
-  // and "node-a" both resolve to ep-node-a so getElementById returned the
-  // wrong row. See lib/dom-id.js.
+  // DOM id derived from the same identity via a collision-resistant hash -
+  // NOT the lossy cssId slug, which made "node.a" and "node-a" both resolve
+  // to ep-node-a so getElementById returned the wrong row. See lib/dom-id.js.
   function rowDomId(row) {
-    return `ep-${stableId(row.url ?? row.name)}`;
+    return `ep-${stableId(row.id ?? row.url ?? row.name)}`;
   }
 
   function issueList(issues) {

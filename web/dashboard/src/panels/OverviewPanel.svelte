@@ -89,13 +89,15 @@
   // never scrolled anywhere, and the clicked button (now removed from the
   // DOM) dropped keyboard focus to <body> with no replacement.
   //
-  // The DOM id is computed from the endpoint's unique identity (url) via the
-  // same collision-resistant hash EndpointsPanel uses, so the lookup resolves to the
-  // matching row even when two names collide once punctuation is stripped.
+  // The DOM id is computed from the endpoint's unique identity (id, falling
+  // back to url/name for backends predating the field) via the same
+  // collision-resistant hash EndpointsPanel uses, so the lookup resolves to
+  // the matching row even when two endpoints share a display url once query
+  // strings are stripped.
   async function jumpToEndpoints(e) {
     onJumpToEndpoints();
     await tick();
-    const el = document.getElementById(`ep-${stableId(e.url ?? e.name)}`);
+    const el = document.getElementById(`ep-${stableId(e.id ?? e.url ?? e.name)}`);
     if (!el) return;
     el.scrollIntoView({ block: 'center' });
     el.focus();
@@ -195,8 +197,8 @@
         columns={glanceColumns}
         rows={glanceRows}
         initialSort={{ key: 'status_rank', dir: 'asc' }}
-        rowId={(row) => row.url ?? row.name}
-        rowDomId={(row) => `glance-${stableId(row.url ?? row.name)}`}
+        rowId={(row) => row.id ?? row.url ?? row.name}
+        rowDomId={(row) => `glance-${stableId(row.id ?? row.url ?? row.name)}`}
       >
         {#snippet rowSnippet({ row: e, cellClass })}
           <td class="col-sticky">
