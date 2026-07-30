@@ -73,8 +73,8 @@
     <dd>{has ? sys.endpoints_up : '—'}</dd>
   </div>
   <div class="status-cell">
-    <dt>Success</dt>
-    <dd>{has ? sys.success_rate : '—'}</dd>
+    <dt>Resp. rate</dt>
+    <dd title="Counts any streamed response, regardless of HTTP status">{has ? sys.success_rate : '—'}</dd>
   </div>
   <div class="status-cell">
     <dt>Avg latency</dt>

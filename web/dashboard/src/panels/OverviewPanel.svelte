@@ -34,7 +34,14 @@
   const glanceColumns = [
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'status_rank', label: 'Status', sortable: true },
-    { key: 'success_rate_num', label: 'Success', sortable: true, num: true, align: 'right' },
+    {
+      key: 'success_rate_num',
+      label: 'Resp. rate',
+      sortable: true,
+      num: true,
+      align: 'right',
+      title: 'Counts any streamed response, regardless of HTTP status',
+    },
     { key: 'avg_latency_ms', label: 'Avg latency', sortable: true, num: true, align: 'right' },
   ];
 

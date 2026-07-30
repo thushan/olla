@@ -5,8 +5,10 @@
   // receiving the sorted row. Column sort state is owned here per-table
   // instance; the parent only describes the columns and provides the data.
   //
-  // `columns`: [{ key, label, sortable=false, num=false, align, sticky=false }]
-  //   `num` is sort semantics only (numeric compare). `align` is the
+  // `columns`: [{ key, label, sortable=false, num=false, align, sticky=false, title }]
+  //   `title` is an optional caveat rendered as the header's native tooltip -
+  //   e.g. qualifying a metric's real meaning when the label alone doesn't
+  //   have room to. `num` is sort semantics only (numeric compare). `align` is the
   //   presentation concern ('right' today) and is the ONLY thing that drives
   //   right-alignment, on both the header and the cell - see `cellClass`
   //   below. Keeping these separate means a future composite column (a bar,
@@ -138,6 +140,7 @@
           <th
             class={headerClass(c)}
             aria-sort={c.sortable ? ariaSort(c) : undefined}
+            title={c.title}
           >
             {#if c.sortable}
               <button class="sort-btn" type="button" onclick={() => toggle(c.key)}>

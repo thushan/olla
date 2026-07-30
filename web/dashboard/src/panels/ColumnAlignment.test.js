@@ -73,25 +73,25 @@ describe('composite numeric cells carry an explicit alignment class', () => {
     const row = document.querySelector('tbody tr');
     const tds = [...row.querySelectorAll('td')];
 
-    const successCell = tds.find((td) => td.querySelector('.pct-cell'));
+    const respRateCell = tds.find((td) => td.querySelector('.pct-cell'));
     const latencyCell = tds.find((td) => td.querySelector('.range-wrap'));
-    expect(successCell).toBeTruthy();
+    expect(respRateCell).toBeTruthy();
     expect(latencyCell).toBeTruthy();
 
     // Composite cells: alignment is explicit, decoupled from the `num` sort
     // flag. The flex-child CSS rule keys off this class.
-    expect(successCell.classList.contains('align-right')).toBe(true);
+    expect(respRateCell.classList.contains('align-right')).toBe(true);
     expect(latencyCell.classList.contains('align-right')).toBe(true);
     // They remain `num` for sort semantics.
-    expect(successCell.classList.contains('num')).toBe(true);
+    expect(respRateCell.classList.contains('num')).toBe(true);
 
     // The header carries the same `align-right` class, driven by the same
     // column.align field the cell class came from - not a separately
     // hand-maintained header class.
     const headers = [...document.querySelectorAll('thead th')];
-    const successHeader = headers.find((th) => th.textContent.includes('Success'));
+    const respRateHeader = headers.find((th) => th.textContent.includes('Resp. rate'));
     const latencyHeader = headers.find((th) => th.textContent.includes('Latency'));
-    expect(successHeader.classList.contains('align-right')).toBe(true);
+    expect(respRateHeader.classList.contains('align-right')).toBe(true);
     expect(latencyHeader.classList.contains('align-right')).toBe(true);
 
     // A genuinely numeric text column (Priority) is also driven by
