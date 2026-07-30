@@ -143,6 +143,7 @@ nav:
           - Provider Metrics: concepts/provider-metrics.md
   - Configuration:
       - Overview: configuration/overview.md
+      - Admin Dashboard: configuration/dashboard.md
       - Endpoint Auth: configuration/endpoint-auth.md
       - Remote Backends (Experimental): configuration/endpoint-auth-remote.md
       - Filters: configuration/filters.md
