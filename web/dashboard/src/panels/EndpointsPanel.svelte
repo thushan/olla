@@ -40,8 +40,8 @@
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'type', label: 'Type', sortable: true },
     { key: 'priority', label: 'Priority', sortable: true, num: true },
-    { key: 'success_rate_num', label: 'Success', sortable: true, num: true },
-    { key: 'avg_latency_ms', label: 'Latency', sortable: true, num: true },
+    { key: 'success_rate_num', label: 'Success', sortable: true, num: true, align: 'right' },
+    { key: 'avg_latency_ms', label: 'Latency', sortable: true, num: true, align: 'right' },
     { key: 'model_count', label: 'Models', sortable: true, num: true },
     { key: 'request_count', label: 'Requests', sortable: true, num: true },
     { key: 'active_connections', label: 'Conn', sortable: true, num: true },
@@ -116,10 +116,10 @@
         </td>
         <td>{e.type}</td>
         <td class="num">{e.priority}</td>
-        <td class="num">
+        <td class="num align-right">
           <PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} />
         </td>
-        <td class="num">
+        <td class="num align-right">
           <RangeBar
             min={e.min_latency_ms ?? 0}
             avg={e.avg_latency_ms}

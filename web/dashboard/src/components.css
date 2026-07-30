@@ -376,6 +376,18 @@ thead th.num,
 td.num {
   text-align: right;
 }
+/* Alignment is a presentation concern, separate from `num` (sort semantics).
+   `text-align: right` only moves inline content, so composite cells whose
+   children are block/flex (PctBar, RangeBar, endpoint chips) would ignore it
+   and sit hard left under a right-aligned header. The explicit `align-right`
+   marker pushes those flex children right via auto margin, so bar and chip
+   cells line up under their headers. Genuinely numeric text columns keep
+   using td.num's text-align. */
+td.align-right > .pct-cell,
+td.align-right > .range-wrap,
+td.align-right > .endpoint-pills {
+  margin-left: auto;
+}
 .sort-btn {
   appearance: none;
   background: transparent;
@@ -591,8 +603,11 @@ tr.family-row:first-child th {
 .endpoint-pills {
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 3px;
-  max-width: 220px;
+  /* Capped so a model hosted on many endpoints does not blow the column wide
+     and leave the chips drifting far from a right-aligned header. */
+  max-width: 180px;
 }
 .pill {
   font-size: 0.65rem;

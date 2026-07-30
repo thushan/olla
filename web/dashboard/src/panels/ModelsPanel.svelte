@@ -26,7 +26,7 @@
     { key: 'params', label: 'Params', sortable: true },
     { key: 'quant', label: 'Quant', sortable: true },
     { key: 'size_bytes', label: 'Size', sortable: true, num: true },
-    { key: 'endpoints_count', label: 'Endpoints', sortable: true, num: true },
+    { key: 'endpoints_count', label: 'Endpoints', sortable: true, num: true, align: 'right' },
     { key: 'last_seen_at', label: 'Last seen', sortable: false },
   ];
 
@@ -119,7 +119,7 @@
               <td>{m.params || '—'}</td>
               <td>{m.quant || '—'}</td>
               <td class="num">{m.size || '—'}</td>
-              <td class="num">
+              <td class="num align-right">
                 {#if m.endpoints?.length}
                   <div class="endpoint-pills">
                     {#each m.endpoints as ep}
@@ -143,7 +143,7 @@
         <td>{m.params || '—'}</td>
         <td>{m.quant || '—'}</td>
         <td class="num">{m.size || '—'}</td>
-        <td class="num">
+        <td class="num align-right">
           {#if m.endpoints?.length}
             <div class="endpoint-pills">
               {#each m.endpoints as ep}<span class="pill">{ep}</span>{/each}

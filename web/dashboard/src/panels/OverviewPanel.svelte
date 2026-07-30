@@ -34,7 +34,7 @@
   const glanceColumns = [
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'status_rank', label: 'Status', sortable: true },
-    { key: 'success_rate_num', label: 'Success', sortable: true, num: true },
+    { key: 'success_rate_num', label: 'Success', sortable: true, num: true, align: 'right' },
     { key: 'avg_latency_ms', label: 'Avg latency', sortable: true, num: true },
   ];
 
@@ -211,7 +211,7 @@
             </button>
           </td>
           <td><StatusTag status={e.status} /></td>
-          <td class="num"><PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} /></td>
+          <td class="num align-right"><PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} /></td>
           <td class="num">
             {#if typeof e.avg_latency_ms === 'number' && e.request_count > 0}{fmtMs(e.avg_latency_ms)}{:else}<span class="dash">—</span>{/if}
           </td>
