@@ -1,8 +1,11 @@
-# To test / verify
-# macOS / Linux:
-# $ docker run -ti -v "$PWD:$PWD" -w "$PWD" goreleaser/goreleaser:latest release --snapshot --clean
-# windows (Git bash):
-# $ MSYS_NO_PATHCONV=1 docker run -ti -v "$PWD:$PWD" -w "$PWD" goreleaser/goreleaser:latest release --snapshot --clean
+# Local verification of a release snapshot. Run on a host that has Go,
+# Node/npm and make installed (the before.hooks run `make build-web`),
+# then from the repo root:
+#   $ goreleaser release --snapshot --clean
+# The bare goreleaser/goreleaser container image lacks Go, Node and make,
+# so it cannot satisfy the hooks. Tagged releases are cut by the
+# GitHub Actions workflow at .github/workflows/release.yml, which pins
+# setup-node before invoking goreleaser.
 
 version: 2
 
