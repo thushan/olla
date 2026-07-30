@@ -140,6 +140,7 @@ func TestWireShape_StatusResponse(t *testing.T) {
 		"priority":     "number",
 		"connections":  "number",
 		"requests":     "number",
+		"url":          "string",
 	})
 }
 
@@ -174,13 +175,17 @@ func TestWireShape_EndpointsStatusResponse(t *testing.T) {
 	}
 	require.NotNil(t, withTraffic, "no endpoint found")
 	assertKeysTyped(t, withTraffic, map[string]string{
-		"name":          "string",
-		"type":          "string",
-		"status":        "string",
-		"priority":      "number",
-		"model_count":   "number",
-		"request_count": "number",
-		"success_rate":  "string",
+		"name":            "string",
+		"type":            "string",
+		"status":          "string",
+		"priority":        "number",
+		"model_count":     "number",
+		"request_count":   "number",
+		"success_rate":    "string",
+		"last_model_sync": "string",
+		"health_check":    "string",
+		"response_time":   "string",
+		"issues":          "string",
 	})
 }
 
@@ -213,9 +218,15 @@ func TestWireShape_ModelsStatusResponse(t *testing.T) {
 	first, _ := recent[0].(map[string]interface{})
 	require.NotNil(t, first)
 	assertKeysTyped(t, first, map[string]string{
-		"name":      "string",
-		"endpoints": "array",
-		"last_seen": "string",
+		"name":         "string",
+		"endpoints":    "array",
+		"last_seen":    "string",
+		"type":         "string",
+		"family":       "string",
+		"size":         "string",
+		"params":       "string",
+		"quant":        "string",
+		"capabilities": "array",
 	})
 }
 
@@ -237,6 +248,10 @@ func seedWireShapeApp(t *testing.T) *Application {
 			LastChecked:   time.Now().Add(-30 * time.Second),
 			NextCheckTime: time.Now().Add(30 * time.Second),
 			LastLatency:   14 * time.Millisecond,
+			// Non-zero but still healthy: this is the endpoint the wire-shape
+			// tests pin optional fields against, and "issues" is omitempty, so
+			// it needs a non-empty value to appear in the response at all.
+			ConsecutiveFailures: 4,
 		},
 		{
 			Name:          "openai-1",
@@ -261,10 +276,12 @@ func seedWireShapeApp(t *testing.T) *Application {
 					Name:     "llama2:7b",
 					Type:     mtype,
 					LastSeen: time.Now().Add(-1 * time.Minute),
+					Size:     4_000_000_000,
 					Details: &domain.ModelDetails{
 						Family:            &family,
 						ParameterSize:     &paramSize,
 						QuantizationLevel: &quant,
+						Type:              &mtype,
 					},
 				},
 			},
