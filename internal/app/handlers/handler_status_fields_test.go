@@ -156,3 +156,27 @@ func TestStatusHandler_StartTimeAbsolute(t *testing.T) {
 	_, err := time.Parse(time.RFC3339, startTimeStr)
 	assert.NoError(t, err)
 }
+
+// C5 mirror: the /internal/status comparator in buildUnifiedEndpoints has
+// the same missing tie-breaker as the /internal/status/endpoints one.
+// Equal-priority same-health endpoints must order by name (then URL) so
+// polls are stable regardless of map-iteration order. Input is reverse-
+// alphabetical by name; without the tie-breaker the current comparator
+// leaves it in input order, so the alphabetical assertion fails until the
+// tie-breaker is appended.
+func TestBuildUnifiedEndpoints_TieBreakerStableOrder(t *testing.T) {
+	endpoints := []*domain.Endpoint{
+		{Name: "zebra", URLString: "http://z:11434", Status: domain.StatusHealthy, Priority: 5},
+		{Name: "mango", URLString: "http://m:11434", Status: domain.StatusHealthy, Priority: 5},
+		{Name: "alpha", URLString: "http://a:11434", Status: domain.StatusHealthy, Priority: 5},
+	}
+
+	app := createTestStatusApplication(endpoints)
+	out := make([]EndpointResponse, len(endpoints))
+	app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil)
+
+	require.Len(t, out, 3)
+	assert.Equal(t, "alpha", out[0].Name, "tie-breaker must sort equal-priority same-health endpoints by name")
+	assert.Equal(t, "mango", out[1].Name)
+	assert.Equal(t, "zebra", out[2].Name)
+}

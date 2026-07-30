@@ -77,7 +77,21 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 		if summaries[i].Priority != summaries[j].Priority {
 			return summaries[i].Priority > summaries[j].Priority
 		}
-		return summaries[i].Status == healthyStatus && summaries[j].Status != healthyStatus
+		// Within a priority band, healthy comes before anything else.
+		iHealthy := summaries[i].Status == healthyStatus
+		jHealthy := summaries[j].Status == healthyStatus
+		if iHealthy != jHealthy {
+			return iHealthy
+		}
+		// Tie-breaker for deterministic ordering across polls: the input
+		// slice comes from map iteration, so without a final comparison
+		// equal-priority same-health endpoints reorder between polls purely
+		// from map-iteration randomisation. Name first, then URL for the
+		// pathological case of two endpoints sharing a name.
+		if summaries[i].Name != summaries[j].Name {
+			return summaries[i].Name < summaries[j].Name
+		}
+		return summaries[i].URL < summaries[j].URL
 	})
 
 	// create a response with minimal mallocs

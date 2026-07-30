@@ -301,7 +301,21 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 		if endpoints[i].Priority != endpoints[j].Priority {
 			return endpoints[i].Priority > endpoints[j].Priority
 		}
-		return endpoints[i].Status == statusHealthy && endpoints[j].Status != statusHealthy
+		// Within a priority band, healthy comes before anything else.
+		iHealthy := endpoints[i].Status == statusHealthy
+		jHealthy := endpoints[j].Status == statusHealthy
+		if iHealthy != jHealthy {
+			return iHealthy
+		}
+		// Tie-breaker for deterministic ordering across polls: the input
+		// slice comes from map iteration, so without a final comparison
+		// equal-priority same-health endpoints reorder between polls purely
+		// from map-iteration randomisation. Name first, then URL for the
+		// pathological case of two endpoints sharing a name.
+		if endpoints[i].Name != endpoints[j].Name {
+			return endpoints[i].Name < endpoints[j].Name
+		}
+		return endpoints[i].URL < endpoints[j].URL
 	})
 }
 

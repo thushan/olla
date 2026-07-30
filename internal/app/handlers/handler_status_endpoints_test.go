@@ -411,6 +411,37 @@ func TestEndpointsStatusHandler_EmptyEndpoints(t *testing.T) {
 	assert.Empty(t, response.Endpoints)
 }
 
+// C5: equal-priority same-health endpoints must produce a deterministic order
+// across polls. The previous comparator sorted by priority then health class
+// only, and its input came from map iteration, so two endpoints with equal
+// priority in the same health class reordered between polls purely from
+// map-iteration randomisation. The name (then URL) tie-breaker makes the
+// order stable for ties without disturbing the priority/health ordering.
+// Input here is deliberately reverse-alphabetical: against the current
+// comparator (no tie-breaker) insertion sort preserves this input order, so
+// the alphabetical assertion fails until the tie-breaker is added.
+func TestEndpointsStatusHandler_TieBreakerStableOrder(t *testing.T) {
+	endpoints := []*domain.Endpoint{
+		{Name: "zebra", Type: "ollama", URLString: "http://z:11434", Status: domain.StatusHealthy, Priority: 5},
+		{Name: "mango", Type: "ollama", URLString: "http://m:11434", Status: domain.StatusHealthy, Priority: 5},
+		{Name: "alpha", Type: "ollama", URLString: "http://a:11434", Status: domain.StatusHealthy, Priority: 5},
+	}
+
+	app := createTestStatusApplication(endpoints)
+	req := httptest.NewRequest(http.MethodGet, "/internal/status/endpoints", nil)
+	w := httptest.NewRecorder()
+	app.endpointsStatusHandler(w, req)
+
+	var response EndpointStatusResponse
+	err := json.NewDecoder(w.Body).Decode(&response)
+	require.NoError(t, err)
+
+	require.Len(t, response.Endpoints, 3)
+	assert.Equal(t, "alpha", response.Endpoints[0].Name, "tie-breaker must sort equal-priority same-health endpoints by name")
+	assert.Equal(t, "mango", response.Endpoints[1].Name)
+	assert.Equal(t, "zebra", response.Endpoints[2].Name)
+}
+
 func TestBuildEndpointSummaryOptimised(t *testing.T) {
 	endpoint := &domain.Endpoint{
 		Name:      "test-endpoint",
