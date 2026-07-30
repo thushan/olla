@@ -112,7 +112,6 @@
               <StatusTag status={e.status} />
               <span class="name-text" title={e.name}>{e.name}</span>
             </span>
-            <span class="badge-type">{e.type}</span>
           </div>
         </td>
         <td>{e.type}</td>

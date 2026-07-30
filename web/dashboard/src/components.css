@@ -458,16 +458,6 @@ tbody tr:hover .col-sticky {
   white-space: nowrap;
   max-width: 240px;
 }
-.badge-type {
-  font-size: 0.62rem;
-  color: var(--text-dim);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  width: fit-content;
-}
 .mono-url {
   color: var(--text-faint);
   font-size: 0.72rem;
