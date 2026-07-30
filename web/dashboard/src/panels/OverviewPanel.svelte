@@ -189,7 +189,8 @@
         columns={glanceColumns}
         rows={glanceRows}
         initialSort={{ key: 'status_rank', dir: 'asc' }}
-        rowId={(row) => `glance-${cssId(row.name)}`}
+        rowId={(row) => row.name}
+        rowDomId={(row) => `glance-${cssId(row.name)}`}
       >
         {#snippet rowSnippet({ row: e })}
           <td class="col-sticky">
