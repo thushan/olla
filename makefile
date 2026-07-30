@@ -303,11 +303,13 @@ test-web: install-web
 	@echo "Running frontend tests..."
 	@cd $(WEB_DIR) && npm run test
 
-# Remove Vite's ephemeral build output, npm cache, and the generated embed
-# source (leaving only the committed .gitkeep sentinel behind).
+# Remove Vite's npm cache and the generated embed source (leaving only the
+# committed .gitkeep sentinel behind). Vite now writes straight into
+# $(EMBED_DIST) (see build-web), so there is no separate $(WEB_DIR)/dist to
+# clean any more.
 clean-web:
 	@echo "Cleaning frontend ephemeral build output..."
-	@rm -rf $(WEB_DIR)/dist $(WEB_DIR)/node_modules/.cache $(WEB_DIR)/coverage
+	@rm -rf $(WEB_DIR)/node_modules/.cache $(WEB_DIR)/coverage
 	@rm -rf $(EMBED_DIST)/*
 	@touch $(EMBED_DIST)/.gitkeep
 	@echo "Frontend ephemeral output and embed source cleaned."
