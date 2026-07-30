@@ -283,17 +283,14 @@ install-web:
 	@cd $(WEB_DIR) && npm ci
 	@echo "Frontend dependencies installed."
 
-# Build the SPA and write output into the gitignored go:embed source. The
-# .gitkeep sentinel is restored last so git status stays clean (it is the only
-# tracked file under EMBED_DIST; generated assets are gitignored).
+# Build the SPA. Vite's outDir points straight at the gitignored go:embed
+# source (see vite.config.js), so there is no separate copy step - that copy
+# used to rely on `cp -r`/`rm -rf`, which don't exist on native Windows. A
+# writeBundle plugin hook in vite.config.js restores the .gitkeep sentinel
+# emptyOutDir wipes on every build.
 build-web: install-web
 	@echo "Building frontend into embed source..."
 	@cd $(WEB_DIR) && npm run build
-	@echo "Copying built assets to $(EMBED_DIST)..."
-	@rm -rf $(EMBED_DIST)/*
-	@cp -r $(WEB_DIR)/dist/. $(EMBED_DIST)/
-	@rm -rf $(EMBED_DIST)/.vite
-	@touch $(EMBED_DIST)/.gitkeep
 	@echo "Embed source regenerated (gitignored). Rebuild the binary to embed it."
 
 # Run svelte-check (type/syntax checks) on the SPA.
