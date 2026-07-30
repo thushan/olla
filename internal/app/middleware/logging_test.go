@@ -430,3 +430,39 @@ func (m *mockStyledLogger) With(args ...any) logger.StyledLogger                
 func (m *mockStyledLogger) InfoWithContext(msg string, endpoint string, ctx logger.LogContext)  {}
 func (m *mockStyledLogger) WarnWithContext(msg string, endpoint string, ctx logger.LogContext)  {}
 func (m *mockStyledLogger) ErrorWithContext(msg string, endpoint string, ctx logger.LogContext) {}
+
+// TestAccessLogLevel pins the level the access log resolves to per outcome.
+// The access log is the operator's audit/diagnostic record: a proxy 4xx/5xx
+// must surface at the default Info level, while routine proxy success and
+// successful dashboard polls under /internal/ stay at Debug so they don't
+// drown the log. See accessLogLevel / isQuietAccessOutcome in logging.go.
+func TestAccessLogLevel(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		status int
+		want   slog.Level
+	}{
+		{"proxy success", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusOK, slog.LevelDebug},
+		{"proxy server error", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusInternalServerError, slog.LevelInfo},
+		{"proxy client error", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusBadRequest, slog.LevelInfo},
+		{"proxy not modified", http.MethodGet, "/olla/proxy/v1/models", http.StatusNotModified, slog.LevelDebug},
+		{"internal poll success", http.MethodGet, "/internal/health", http.StatusOK, slog.LevelDebug},
+		{"internal poll not found", http.MethodGet, "/internal/health", http.StatusNotFound, slog.LevelInfo},
+		{"non-proxy non-internal success", http.MethodGet, "/version", http.StatusOK, slog.LevelInfo},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := accessLogLevel(tc.method, tc.path, tc.status)
+			if got != tc.want {
+				t.Errorf("accessLogLevel(%q, %q, %d) = %v, want %v",
+					tc.method, tc.path, tc.status, got, tc.want)
+			}
+		})
+	}
+}

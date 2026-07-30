@@ -113,6 +113,36 @@ func isQuietPollOutcome(method, path string, status int) bool {
 	return (status >= 200 && status < 300) || status == http.StatusNotModified
 }
 
+// isQuietAccessOutcome is the access-log analogue of isQuietPollOutcome.
+// Unlike the console log, the access log is the operator's audit/diagnostic
+// record: a proxy 4xx/5xx MUST appear there at the default Info level so
+// failures are visible without raising verbosity. The console has dedicated
+// proxy-handler logging and main deliberately keeps the console proxy line
+// quiet regardless of status, so the console path stays on isQuietPollOutcome
+// (path-only for proxy). Here, proxy traffic is only quieted when the outcome
+// is routine (2xx or 304); a proxy 4xx/5xx logs at Info. /internal/ keeps the
+// same GET/HEAD + 2xx/304 rule as the console variant.
+func isQuietAccessOutcome(method, path string, status int) bool {
+	if IsProxyRequest(path) {
+		return (status >= 200 && status < 300) || status == http.StatusNotModified
+	}
+	if !isInternalPollMethod(method) || !strings.HasPrefix(path, internalPathPrefix) {
+		return false
+	}
+	return (status >= 200 && status < 300) || status == http.StatusNotModified
+}
+
+// accessLogLevel resolves the slog level the access log should emit at for a
+// given outcome, applying the status-aware isQuietAccessOutcome gate. Factored
+// out as a pure function so the level table is testable directly without a
+// capturing slog handler.
+func accessLogLevel(method, path string, status int) slog.Level {
+	if isQuietAccessOutcome(method, path, status) {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
+}
+
 // responseWriter wraps http.ResponseWriter to capture response size and status
 type responseWriter struct {
 	http.ResponseWriter
@@ -300,18 +330,13 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 			// format.RFC3339 string, redactQuery output, and the variadic slice on every
 			// request when the file sink is not configured.
 			//
-			// Successful dashboard polls against /internal/ log at debug: an open
-			// tab hits several of these routes every few seconds and would
-			// otherwise dominate the access log with routine, non-operational
-			// traffic. The status is already known here, so isQuietPollOutcome's
-			// full method+status gate applies directly - a 404/4xx/5xx or a
-			// non-GET/HEAD request under /internal/ still logs at Info.
+			// Unlike the console line, the access log is status-aware for proxy
+			// traffic: a proxy 4xx/5xx must surface at Info here (the access log is
+			// the operator's audit record), while routine proxy success and
+			// successful /internal/ polls stay at Debug. See isQuietAccessOutcome.
 			baseLogger := slog.Default()
 			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
-			level := slog.LevelInfo
-			if isQuietPollOutcome(r.Method, r.URL.Path, wrapped.status) {
-				level = slog.LevelDebug
-			}
+			level := accessLogLevel(r.Method, r.URL.Path, wrapped.status)
 			if baseLogger.Enabled(detailedCtx, level) {
 				baseLogger.Log(detailedCtx, level, "Access log",
 					"timestamp", start.Format(time.RFC3339),
