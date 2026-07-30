@@ -90,7 +90,7 @@
   // DOM) dropped keyboard focus to <body> with no replacement.
   //
   // The DOM id is computed from the endpoint's unique identity (url) via the
-  // same lossless hash EndpointsPanel uses, so the lookup resolves to the
+  // same collision-resistant hash EndpointsPanel uses, so the lookup resolves to the
   // matching row even when two names collide once punctuation is stripped.
   async function jumpToEndpoints(e) {
     onJumpToEndpoints();

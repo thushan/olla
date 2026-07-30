@@ -62,7 +62,7 @@
     return row.url ?? row.name;
   }
   // DOM id derived from the endpoint's unique identity (url, falling back to
-  // name) via a lossless hash - NOT the lossy cssId slug, which made "node.a"
+  // name) via a collision-resistant hash - NOT the lossy cssId slug, which made "node.a"
   // and "node-a" both resolve to ep-node-a so getElementById returned the
   // wrong row. See lib/dom-id.js.
   function rowDomId(row) {

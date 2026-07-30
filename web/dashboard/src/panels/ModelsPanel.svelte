@@ -58,7 +58,7 @@
   }
 
   // rowKey is the each-key for the flat path; domId is the DOM id attribute
-  // the grouped view sets manually below. Both use the lossless stableId hash
+  // the grouped view sets manually below. Both use the collision-resistant stableId hash
   // (lib/dom-id.js) rather than the old punctuation-stripping slug, so two
   // model names that collide once slugged ("qwen3:8b" vs a hypothetical
   // "qwen3-8b") cannot resolve to the same DOM id. SortableTable additionally

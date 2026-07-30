@@ -5,11 +5,13 @@
 // collapsed to the same DOM id. getElementById resolves to whichever row
 // rendered first, so "jump to endpoint" silently scrolled to the wrong row.
 //
-// This hash (FNV-1a 32-bit -> base36) never collapses two distinct strings to
-// the same id for any realistic fleet size, and emits only [0-9a-z] so the
-// result is always a legal HTML id. The id is a pure function of the input, so
-// OverviewPanel's jump lookup and EndpointsPanel's row id agree without either
-// panel needing to know the other's sort order.
+// This hash (FNV-1a 32-bit -> base36) is collision-resistant, not lossless -
+// a 32-bit space can theoretically map two distinct strings to the same id,
+// but at real fleet sizes (tens to low hundreds of endpoints/models) that is
+// negligible. It emits only [0-9a-z] so the result is always a legal HTML id,
+// and is a pure function of the input, so OverviewPanel's jump lookup and
+// EndpointsPanel's row id agree without either panel needing to know the
+// other's sort order.
 export function stableId(str) {
   let h = 0x811c9dc5;
   const s = String(str ?? '');
