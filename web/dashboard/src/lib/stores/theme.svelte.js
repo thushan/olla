@@ -70,6 +70,18 @@ class ThemeStore {
     this.set(this.resolved === 'dark' ? 'light' : 'dark');
   }
 
+  /**
+   * Wrapping 3-state cycle for the single-button theme control:
+   * auto -> light -> dark -> auto. Unlike toggle(), the icon-only button's
+   * glyph always reflects `mode` (not `resolved`), so each step is a visible
+   * change even when the resolved theme happens to match the next mode.
+   */
+  cycle() {
+    const order = ['auto', 'light', 'dark'];
+    const next = order[(order.indexOf(this.#mode) + 1) % order.length];
+    this.set(next);
+  }
+
   set(mode) {
     if (!MODES.includes(mode)) return;
     this.#mode = mode;

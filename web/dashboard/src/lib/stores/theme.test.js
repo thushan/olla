@@ -129,3 +129,23 @@ describe('theme toggle', () => {
     expect(theme.resolved).toBe('light');
   });
 });
+
+// The single header button cycles mode auto -> light -> dark -> auto, so
+// cycle() must always advance exactly one step regardless of the resolved
+// theme (the glyph tracks `mode`, not `resolved`, so every step is visible).
+describe('theme cycle', () => {
+  it('advances auto -> light -> dark -> auto, wrapping on the fourth click', async () => {
+    mockMatchMedia(false); // resolved light, but cycle keys off mode
+    const { theme } = await import('./theme.svelte.js');
+    expect(theme.mode).toBe('auto');
+
+    theme.cycle();
+    expect(theme.mode).toBe('light');
+    theme.cycle();
+    expect(theme.mode).toBe('dark');
+    theme.cycle();
+    expect(theme.mode).toBe('auto');
+    // Wraps cleanly rather than running off the end of the order array.
+    expect(localStorage.getItem('olla-theme')).toBeNull();
+  });
+});

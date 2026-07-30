@@ -44,25 +44,27 @@
   width: auto;
   flex-shrink: 0;
 }
+/* Wordmark column: OLLA stacked over the subtitle, bottom-aligned against
+   the logo so the lockup stays compact. */
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
 .brand h1 {
-  font-size: 1.05rem;
+  font-size: 1.4rem;
+  letter-spacing: 0.04em;
+  margin: 0;
 }
 .brand .tag {
   color: var(--text-faint);
-  font-size: 0.72rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 0 5px;
+  font-size: 0.68rem;
+  margin-top: 2px;
 }
 .clock {
   color: var(--text-faint);
   font-size: 0.75rem;
   white-space: nowrap;
-}
-.theme-toggle-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
 }
 .theme-toggle {
   display: inline-flex;
@@ -94,12 +96,6 @@
   width: 26px;
   height: 26px;
   padding: 0;
-}
-/* Active segment of the theme group: the pressed mode reads as selected via
-   accent border + colour rather than only the aria-pressed attribute. */
-.theme-toggle.icon-only[aria-pressed='true'] {
-  border-color: var(--accent);
-  color: var(--accent);
 }
 
 .status-strip {
@@ -757,7 +753,7 @@ footer a {
     font-size: 12.5px;
   }
   .brand h1 {
-    font-size: 0.95rem;
+    font-size: 1.15rem;
   }
   .brand-logo {
     height: 42px;

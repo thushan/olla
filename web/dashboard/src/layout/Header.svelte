@@ -23,9 +23,11 @@
       title="Olla on TensorFoundry"
     >
       <img class="brand-logo" src={ollaThumb} alt="Olla llama head logo" />
-      <h1>OLLA</h1>
+      <span class="brand-text">
+        <h1>OLLA</h1>
+        <span class="tag">herd status</span>
+      </span>
     </a>
-    <span class="tag">herd status</span>
   </div>
   <span class="clock" aria-live="off">{clockText}</span>
   <ThemeToggle />
