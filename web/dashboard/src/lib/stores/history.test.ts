@@ -122,7 +122,7 @@ describe('history.append delta math', () => {
 });
 
 describe('history.append restart detection', () => {
-  it('drops the buffer and re-seeds when start_time changes', () => {
+  it('keeps the buffer and re-seeds the baseline when start_time changes', () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
     history.append(makeStatus({ start_time: '2026-01-01T00:00:00Z', total_requests: 100 }));
@@ -130,12 +130,17 @@ describe('history.append restart detection', () => {
     history.append(makeStatus({ start_time: '2026-01-01T00:00:00Z', total_requests: 110 }));
     expect(history.length).toBe(2);
 
-    // Process restarted: new era, counters reset, history must drop.
+    // Process restarted: counters reset, but the history (and any outage
+    // markers) is retained so recovery doesn't hide what just happened.
+    // Only the delta baseline re-seeds, so the first post-restart sample
+    // is a zero-rate fresh start.
     vi.setSystemTime(11_000);
     history.append(makeStatus({ start_time: '2026-01-02T00:00:00Z', total_requests: 5 }));
-    expect(history.length).toBe(1);
-    expect(history.samples[0].totalRequests).toBe(5);
-    expect(history.samples[0].reqPerSec).toBe(0); // fresh zero-delta baseline
+    expect(history.length).toBe(3);
+    const last = history.samples[2];
+    expect(last.totalRequests).toBe(5);
+    expect(last.reqPerSec).toBe(0); // fresh zero-delta baseline
+    expect(history.samples[0].totalRequests).toBe(100); // pre-restart sample retained
   });
 
   it('re-seeds the baseline when the gap since the last sample is large', () => {

@@ -121,9 +121,10 @@ export const history = {
     const start = sys?.start_time ?? null;
 
     if (detectRestart(lastStartTime, start)) {
-      // Counters reset at the boundary: drop pre-restart history and re-seed
-      // a zero-delta baseline from this snapshot before recording it.
-      samples = [];
+      // Counters reset at the restart boundary, so re-seed the delta
+      // baseline. The history itself is kept: past samples and outage
+      // markers stay visible across a restart, so recovery doesn't erase
+      // the outage the operator just lived through.
       prev = null;
     }
 
