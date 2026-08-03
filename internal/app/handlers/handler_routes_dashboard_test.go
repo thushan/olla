@@ -129,7 +129,7 @@ func TestFullRouteTable_DashboardMiddlewareStaysScoped(t *testing.T) {
 // TestDashboardRoute_ReachableFromLoopback confirms a loopback request gets
 // through the access gate. The embedded dist carries only the .gitkeep
 // sentinel in this checkout (no `make build-web` ran), so the underlying
-// handler serves the FR-10 not-built 503 - we assert the request reached the
+// handler serves the not-built 503 - we assert the request reached the
 // dashboard handler (not 403) rather than the asset body.
 func TestDashboardRoute_ReachableFromLoopback(t *testing.T) {
 	t.Parallel()

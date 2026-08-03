@@ -1,4 +1,4 @@
-// Single scheduler for all poll stores. Spec §7.3 forbids one setInterval per
+// Single scheduler for all poll stores, rather than one setInterval per
 // store; this is the one-and-only timer owner (grep-provable: search for
 // setInterval / setTimeout in src/ and they only appear here).
 //
@@ -7,7 +7,7 @@
 //   - back off to BACKGROUND_BACKOFF when the document is hidden
 //   - fire an immediate refresh for every job when visibility returns
 //   - abort an in-flight request before starting the next tick
-//   - per-job start/stop so an inactive panel's store stops polling (WP-B3).
+//   - per-job start/stop so an inactive panel's store stops polling.
 //     The global start()/stop() still gates the visibility listener and the
 //     whole machinery; individual jobs are only scheduled while both the
 //     scheduler is globally started AND the job is activated via start(name).
@@ -42,8 +42,8 @@ class PollScheduler {
 
   /** With no argument: globally start the scheduler - attach the visibility
    *  listener and kick every currently-active job. With a name: activate just
-   *  that job and fire it immediately. Per-job activation is the WP-B3 path
-   *  that lets inactive panels stop polling without tearing down the scheduler. */
+   *  that job and fire it immediately. Per-job activation is what lets
+   *  inactive panels stop polling without tearing down the scheduler. */
   start(name?: string): void {
     if (name !== undefined) {
       this.#active.add(name);

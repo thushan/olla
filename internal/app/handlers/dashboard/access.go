@@ -1,6 +1,6 @@
 // Package dashboard wires the embedded admin dashboard into Olla's HTTP mux.
 //
-// This file holds the access-control middleware (spec §6) and the registration
+// This file holds the access-control middleware and the registration
 // helper that mounts the dashboard subtree. The static-asset handler itself
 // lives in embed.go.
 //
@@ -9,14 +9,14 @@
 //  1. the TCP source (r.RemoteAddr, never a proxy header) is inside an allowed
 //     CIDR;
 //  2. r.Host (port stripped, case-insensitive) is either an IP literal or
-//     appears in allowed_hosts (FR-11: IP-literal Hosts are always accepted
-//     because DNS rebinding requires the browser to have resolved a hostname).
+//     appears in allowed_hosts (IP-literal Hosts are always accepted because
+//     DNS rebinding requires the browser to have resolved a hostname).
 //
 // A rejected request receives a self-diagnosing 403: the body states which
-// check failed and names the rejected client IP and Host. The spec is explicit
-// (§6.2) that there is no auth secret to protect by staying silent, and the
-// operator is entitled to see the rejected IP/Host so the Docker first-run 403
-// doesn't resolve to "just set 0.0.0.0/0".
+// check failed and names the rejected client IP and Host. There is no auth
+// secret to protect by staying silent, and the operator is entitled to see
+// the rejected IP/Host so the Docker first-run 403 doesn't resolve to "just
+// set 0.0.0.0/0".
 package dashboard
 
 import (
@@ -34,8 +34,8 @@ import (
 // treats the trailing slash as a catch-all, so this single registration covers
 // /internal/ui/ and every sub-path. Mounted under /internal/ so its assets
 // share the same access-policy zone as the data they display, and so no
-// profile-driven provider route can collide (provider routes are always under
-// /olla/, see spec §3).
+// profile-driven provider route can collide (provider routes are always
+// under /olla/).
 const DashboardRoute = "/internal/ui/"
 
 // AccessMiddleware returns a handler that enforces the dashboard's
@@ -69,9 +69,9 @@ func AccessMiddleware(cfg config.DashboardConfig, log logger.StyledLogger, next 
 	})
 }
 
-// hostAccepted implements FR-11: any Host that parses as an IP literal is
-// accepted unconditionally, regardless of allowed_hosts. A non-IP Host must
-// appear in the allowlist (case-insensitive, port-stripped on both sides).
+// hostAccepted: any Host that parses as an IP literal is accepted
+// unconditionally, regardless of allowed_hosts. A non-IP Host must appear in
+// the allowlist (case-insensitive, port-stripped on both sides).
 func hostAccepted(normalisedHost string, allowedHosts map[string]struct{}) bool {
 	if net.ParseIP(normalisedHost) != nil {
 		return true

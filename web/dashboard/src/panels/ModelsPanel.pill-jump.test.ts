@@ -5,7 +5,7 @@ import { navigation } from '../lib/stores/navigation.svelte';
 import { stableId } from '../lib/dom-id';
 import ModelsPanel from './ModelsPanel.svelte';
 
-// WP-B2 coverage: endpoint pills click-through to the matching EndpointsPanel
+// Coverage: endpoint pills click-through to the matching EndpointsPanel
 // row by STABLE ID (not display name). Two endpoints can share a display name
 // (EndpointsPanel.dup-names.test), so a name->id lookup is forbidden; the
 // backend pairs endpoints[i] with endpoint_ids[i], and each pill resolves to
@@ -59,7 +59,7 @@ async function refreshWith(payload: Record<string, unknown>, ready: () => void) 
   flushSync();
 }
 
-describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
+describe('ModelsPanel endpoint pill click-through', () => {
   it('renders each pill as a button keyed on endpoint_ids, not display name', async () => {
     // Both endpoints share the SAME display name but have distinct ids. A
     // name-keyed lookup would resolve both pills to the same row.
@@ -256,7 +256,7 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
   });
 });
 
-describe('ModelsPanel aliases subtext (WP-B2)', () => {
+describe('ModelsPanel aliases subtext', () => {
   it('renders aliases as quiet subtext under the model name when present', async () => {
     const payload = {
       model_groups: [

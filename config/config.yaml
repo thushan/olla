@@ -202,8 +202,8 @@ engineering:
 # decision, so a reverse proxy on the same host defeats the loopback check.
 # Loopback-only default matches the bare-metal first-run; Docker operators
 # typically need to widen access_policy.allowed_cidrs to the bridge gateway's
-# subnet. IP-literal Hosts (127.0.0.1, [::1]) are auto-accepted by FR-11, so
-# only the non-IP "localhost" needs to appear in allowed_hosts.
+# subnet. IP-literal Hosts (127.0.0.1, [::1]) are auto-accepted, so only the
+# non-IP "localhost" needs to appear in allowed_hosts.
 dashboard:
   enabled: true
   access_policy:
@@ -212,8 +212,8 @@ dashboard:
       - "::1/128"
     allowed_hosts:
       - "localhost"
-  # gate_internal_api is reserved for a future PR and is inert on this branch:
-  # setting it true has no effect. When wired (PR 2), it will extend the same
+  # gate_internal_api is reserved for a later change and is inert for now:
+  # setting it true has no effect. Once wired, it will extend the same
   # access_policy to the rest of /internal/* and /version.
   gate_internal_api: false
 

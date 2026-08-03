@@ -23,7 +23,7 @@
   const loading = $derived(models.status === 'loading');
   // Mounted only when active (App.svelte does the routing).
 
-  // WP-B3: this panel owns the models store lifecycle. The models payload is
+  // This panel owns the models store lifecycle. The models payload is
   // the heaviest (detailed+group), so it must only poll while Models is open.
   // start() fires an immediate tick on mount; stop() deactivates and aborts
   // any in-flight request on unmount.
@@ -40,10 +40,10 @@
   // Re-evaluated each tick so last_seen_at stays "Xs ago" live.
   const now = $derived(liveNow());
 
-  // Discovery-only columns (spec §4.3). Per-model traffic figures
-  // (requests/success/p95/p99) are intentionally absent: nothing on the
-  // proxy path populates them on main, so they would always read zero and
-  // mislead the operator. Wiring that is PR 2 proxy-engine scope.
+  // Discovery-only columns. Per-model traffic figures (requests/success/
+  // p95/p99) are intentionally absent: nothing on the proxy path populates
+  // them, so they would always read zero and mislead the operator. Wiring
+  // that up on the proxy path is deferred to a later change.
   const columns: Column[] = [
     { key: 'name', label: 'Model', sortable: true, sticky: true },
     { key: 'params', label: 'Params', sortable: true },
@@ -55,7 +55,7 @@
 
   // Derive a numeric size for sort/aria from the model's own size string.
   // Previously this preferred a summed per_endpoint bytes total, but
-  // per_endpoint has no prior art on main (spec §4.4.1) and was cut.
+  // per_endpoint has no prior art in the backend response and was cut.
   function sizeBytesOf(m: ModelSummary): number {
     if (!m.size) return 0;
     const u: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };

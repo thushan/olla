@@ -4,12 +4,11 @@ import { models } from '../lib/stores/models.svelte';
 import { stableId } from '../lib/dom-id';
 import ModelsPanel from './ModelsPanel.svelte';
 
-// WP-3 coverage: the Models panel was trimmed to discovery-only columns
+// Coverage: the Models panel was trimmed to discovery-only columns
 // (name, params, quant, size, endpoints, last seen). Per-model traffic
-// columns and the per_endpoint tooltip lookup were removed (spec §4.3,
-// §4.4.1) because nothing on the proxy path populates those figures on
-// main and per_endpoint has no prior art. These tests pin the trim so a
-// future revert is caught.
+// columns and the per_endpoint tooltip lookup were removed because nothing
+// on the proxy path populates those figures and per_endpoint has no prior
+// art. These tests pin the trim so a future revert is caught.
 
 let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
@@ -109,7 +108,7 @@ describe('ModelsPanel trim (discovery-only)', () => {
     for (const label of ['Model', 'Params', 'Quant', 'Size', 'Endpoints', 'Last seen']) {
       expect(labels).toContain(label);
     }
-    // Traffic columns removed by WP-3 must not come back.
+    // Traffic columns removed during the discovery-only trim must not come back.
     for (const label of ['Requests', 'Success', 'p95', 'p99']) {
       expect(labels).not.toContain(label);
     }

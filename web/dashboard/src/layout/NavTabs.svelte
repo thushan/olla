@@ -1,9 +1,9 @@
 <script lang="ts">
-  // Tab presentation over the shared navigation store (spec §7.2.1: panels
-  // never import this directly, only App.svelte's router and this component
-  // do) - the store is what would swap to a sidebar presenter later without
-  // any panel change. navigatePanel also pushes a history entry so browser
-  // back/forward traverses panel switches.
+  // Tab presentation over the shared navigation store. Panels never import
+  // this store directly, only App.svelte's router and this component do -
+  // that indirection is what would let a sidebar presenter replace tabs
+  // later without any panel change. navigatePanel also pushes a history
+  // entry so browser back/forward traverses panel switches.
   import { navigation, type Section } from '../lib/stores/navigation.svelte';
   import { navigatePanel } from '../lib/router';
 

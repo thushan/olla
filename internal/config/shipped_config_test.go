@@ -160,8 +160,8 @@ func TestShippedConfig_DashboardPopulated(t *testing.T) {
 		}
 	}
 
-	// localhost is a hostname (not an IP literal) and is rejected by FR-11
-	// unless allowlisted, so the shipped default must list it for
+	// localhost is a hostname (not an IP literal) and is rejected unless
+	// allowlisted, so the shipped default must list it for
 	// http://localhost:40114/... to work out of the box. IP-literal loopback
 	// Hosts (127.0.0.1, [::1]) need no entry; their presence is harmless but
 	// redundant, so we assert only the non-IP name.

@@ -1,8 +1,8 @@
 // Shared factory for the three poll stores. Each store wraps a single endpoint
 // and exposes the same getter shape (data/status/lastUpdated/error) so the
-// panels can render states uniformly. The status state machine (spec §7.3)
-// lives here: loading -> ok on first success; error/stale on failure, with
-// the last known-good data preserved and greyed rather than blanked.
+// panels can render states uniformly. The status state machine lives here:
+// loading -> ok on first success; error/stale on failure, with the last
+// known-good data preserved and greyed rather than blanked.
 
 import type { PollStatus } from '../types';
 import { pollScheduler, STALE_MULTIPLIER } from '../poll-scheduler';
@@ -32,7 +32,7 @@ export interface PollStore<T> {
   readonly lastUpdated: Date | null;
   readonly hasData: boolean;
   /** Activate this store's scheduler job and fire an immediate tick. Pair
-   *  with stop() on panel unmount so inactive panels stop polling (WP-B3). */
+   *  with stop() on panel unmount so inactive panels stop polling. */
   start(): void;
   /** Deactivate this store's job, clear its timer and abort any in-flight tick. */
   stop(): void;

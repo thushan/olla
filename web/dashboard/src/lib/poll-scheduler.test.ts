@@ -91,11 +91,11 @@ describe('pollScheduler.refresh', () => {
   });
 });
 
-// WP-B3: per-job start/stop. A job only polls while activated via start(name);
+// Per-job start/stop. A job only polls while activated via start(name);
 // stop(name) deactivates it and aborts the in-flight tick. The global start()
 // /stop() still gates the visibility listener, but no longer schedules every
 // registered job - only the active subset.
-describe('pollScheduler per-job start/stop (WP-B3)', () => {
+describe('pollScheduler per-job start/stop', () => {
   it('start(name) activates only that job; the others never fire', async () => {
     const { pollScheduler } = await import('./poll-scheduler');
 

@@ -9,7 +9,7 @@ import (
 	"github.com/thushan/olla/internal/config"
 )
 
-// FR-14 config-validation half: an endpoint URL containing user:pass@host
+// Config-validation half: an endpoint URL containing user:pass@host
 // must be rejected at load time, with an error that points the operator at
 // the auth config block. The display-side sanitisation (stripping userinfo
 // from the url field surfaced in JSON) lives in the handlers; this is the

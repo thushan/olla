@@ -160,14 +160,14 @@ func DefaultConfig() *Config {
 			Enabled: true,
 			AccessPolicy: AccessPolicyConfig{
 				AllowedCIDRs: []string{"127.0.0.0/8", "::1/128"},
-				// "localhost" is a hostname, not an IP literal, so FR-11's
-				// auto-accept does not cover it. DefaultHost is itself
-				// "localhost", so a no-config-file startup (go install, curl
-				// installer) serving on 0.0.0.0 must not 403 its own default.
+				// "localhost" is a hostname, not an IP literal, so the
+				// auto-accept for IP-literal Hosts does not cover it. DefaultHost
+				// is itself "localhost", so a no-config-file startup (go install,
+				// curl installer) serving on 0.0.0.0 must not 403 its own default.
 				AllowedHosts: []string{"localhost"},
 			},
-			// Inert on this branch: the GateInternalAPI wrapping is PR 2 scope.
-			// The field ships now so PR 2 needs no config migration.
+			// Inert for now: the GateInternalAPI wrapping is not implemented yet.
+			// The field ships now so a later change needs no config migration.
 			GateInternalAPI: false,
 		},
 		Translators: TranslatorsConfig{

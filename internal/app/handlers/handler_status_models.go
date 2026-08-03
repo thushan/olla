@@ -23,7 +23,8 @@ const (
 )
 
 type ModelSummary struct {
-	// Additive (FR-13): absolute form of LastSeen for the dashboard.
+	// Additive field, keep JSON contract backward-compatible: absolute form
+	// of LastSeen for the dashboard.
 	LastSeenAt   *time.Time `json:"last_seen_at,omitempty"`
 	Name         string     `json:"name"`
 	Type         string     `json:"type,omitempty"`
@@ -139,7 +140,7 @@ func (a *Application) buildModelSummaries(
 	for endpointURL, endpointModels := range modelMap {
 		endpointName := endpointNames[endpointURL]
 		if endpointName == "" {
-			// FR-14: an endpoint with no configured name, or a stale model-map
+			// An endpoint with no configured name, or a stale model-map
 			// entry with no repository match, falls back to the raw URL, which
 			// can carry credentials in a query string (e.g. ?api_key=secret).
 			// Sanitise it the same way sanitiseDisplayURL does for the other
@@ -445,7 +446,8 @@ func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelS
 		if !ti.Equal(tj) {
 			return ti.After(tj)
 		}
-		// FR-15: break ties by name for a stable, diffable order across polls.
+		// Break ties by name for a stable, diffable order across polls
+		// (deterministic ordering matters for ETag hashing too).
 		return models[i].Name < models[j].Name
 	})
 

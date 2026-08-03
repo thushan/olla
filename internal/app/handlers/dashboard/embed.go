@@ -74,7 +74,7 @@ var mimeOverrides = map[string]string{
 // length to survive future config changes.
 var hashedAsset = regexp.MustCompile(`-[A-Za-z0-9_-]{6,}\.(js|mjs|css|woff2?|png|svg|ico|webp|json)$`)
 
-// Handler serves the embedded dashboard. It is the value WP-3 passes to
+// Handler serves the embedded dashboard. It is the value passed to
 // RegisterRoutes so the access middleware applies uniformly to /dashboard/
 // and every sub-path. The handler is safe for concurrent use; the embedded FS
 // is read-only and the per-file ETag is derived deterministically from bytes.

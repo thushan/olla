@@ -14,9 +14,9 @@ import (
 	"github.com/thushan/olla/internal/core/ports"
 )
 
-// Wire-shape pinning test for FR-13: no pre-existing field on
-// /internal/status, /internal/status/endpoints or /internal/status/models
-// may be renamed, retyped or removed by the additive dashboard fields.
+// Wire-shape pinning test: no pre-existing field on /internal/status,
+// /internal/status/endpoints or /internal/status/models may be renamed,
+// retyped or removed by the additive dashboard fields.
 //
 // The expected maps below were captured from main's handlers (the branch had
 // not touched these files when this test was written). Each entry pins a JSON

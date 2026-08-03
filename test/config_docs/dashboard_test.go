@@ -58,9 +58,9 @@ func TestDocsSnippet_Disabled(t *testing.T) {
 // TestDocsSnippet_Default is the shipped loopback-only default shown in the
 // docs as both the literal default and the "enable and disable" intro example.
 // It mirrors DefaultConfig: loopback CIDRs and "localhost" in allowed_hosts
-// (localhost is a hostname, not an IP literal, so FR-11's auto-accept does
-// not cover it; FR-12 puts it in the default so a no-config install is not
-// 403'd against Olla's shipped 0.0.0.0 bind).
+// (localhost is a hostname, not an IP literal, so the auto-accept for
+// IP-literal Hosts does not cover it; it's in the default so a no-config
+// install is not 403'd against Olla's shipped 0.0.0.0 bind).
 func TestDocsSnippet_Default(t *testing.T) {
 	const yamlStr = `dashboard:
   enabled: true
@@ -77,8 +77,8 @@ func TestDocsSnippet_Default(t *testing.T) {
 
 // TestDocsSnippet_LAN is the LAN widening example from the docs, adding a
 // /24 plus an internal hostname. The internal hostname MUST be listed because
-// it does not parse as an IP literal (FR-11 only auto-accepts IP-literal Hosts).
-// gate_internal_api stays false: it is inert this PR.
+// it does not parse as an IP literal (only IP-literal Hosts are auto-accepted).
+// gate_internal_api stays false: it has no effect yet, wiring it up is deferred.
 func TestDocsSnippet_LAN(t *testing.T) {
 	const yamlStr = `dashboard:
   enabled: true

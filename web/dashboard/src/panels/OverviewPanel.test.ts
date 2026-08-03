@@ -224,10 +224,11 @@ describe('OverviewPanel glance table latency', () => {
 describe('OverviewPanel response-rate tile is honest about what it counts (D2)', () => {
   // The underlying metric (proxy/core/base.go) counts any completed streamed
   // response as success regardless of HTTP status, so an all-500 fleet can
-  // read 100%. Fixing that metric is PR 2; this asserts PR 1's job - the tile
-  // must not present an unqualified percentage. A title attribute is not
-  // enough (mouse-only, invisible to a scanning operator), so this checks the
-  // rendered text content, not an attribute.
+  // read 100%. Fixing that metric is deferred to a later change; this only
+  // asserts the dashboard's own job - the tile must not present an
+  // unqualified percentage. A title attribute is not enough (mouse-only,
+  // invisible to a scanning operator), so this checks the rendered text
+  // content, not an attribute.
   it('does not label the tile "Success rate" and renders a visible caveat', async () => {
     component = mount(OverviewPanel, { target: document.body });
     flushSync();
@@ -255,7 +256,7 @@ describe('OverviewPanel response-rate tile is honest about what it counts (D2)',
   });
 });
 
-describe('OverviewPanel security-violations tile (FR-3, spec §4.3.1)', () => {
+describe('OverviewPanel security-violations tile', () => {
   it('renders the security-violations count from sys.security_violations', async () => {
     component = mount(OverviewPanel, { target: document.body });
     flushSync();

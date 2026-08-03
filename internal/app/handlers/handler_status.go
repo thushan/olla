@@ -35,9 +35,10 @@ var (
 )
 
 type SystemSummary struct {
-	// Additive (FR-13): absolute process start so the dashboard can compute a
-	// live uptime between polls without refetching. Not omitempty: always known
-	// once the process is up. Sits alongside the existing relative uptime string.
+	// Additive field, keep JSON contract backward-compatible: absolute process
+	// start so the dashboard can compute a live uptime between polls without
+	// refetching. Not omitempty: always known once the process is up. Sits
+	// alongside the existing relative uptime string.
 	StartTime          time.Time `json:"start_time"`
 	Status             string    `json:"status"`
 	EndpointsUp        string    `json:"endpoints_up"`
@@ -79,7 +80,7 @@ type EndpointResponse struct {
 	Priority    int    `json:"priority"`
 	Connections int64  `json:"connections"`
 	Requests    int64  `json:"requests"`
-	// Additive dashboard fields (FR-13: existing fields above are unchanged).
+	// Additive dashboard fields, existing fields above are unchanged.
 	// active_connections is intentionally NOT duplicated here: Connections
 	// already carries the same value. last_model_sync_at is intentionally NOT
 	// duplicated: Models.LastUpdated already serialises as an RFC3339 absolute.

@@ -23,8 +23,9 @@
   // right panel while the tab bar kept announcing the old one.
 
   // Lifecycle: start the shared scheduler on mount, stop on teardown. The
-  // scheduler owns every setInterval/setTimeout in the SPA (spec §7.3).
-  // The clock registers + activates first; overview is always-on; endpoints
+  // scheduler owns every setInterval/setTimeout in the SPA - nothing else
+  // should call them directly. The clock registers + activates first;
+  // overview is always-on; endpoints
   // and models are activated by their panels' own mount/unmount effects.
   $effect(() => {
     startClock();

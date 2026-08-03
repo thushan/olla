@@ -15,10 +15,9 @@ import (
 )
 
 // Asserts the additive dashboard fields render on /internal/status/endpoints
-// with the types and zero-traffic conventions agreed in spec §4.4 / A3:
-// min/max latency are plain int64 zeros, avg_latency_ms is omitted when there
-// is no traffic, and absolute timestamps are RFC3339 alongside the relative
-// strings.
+// with the agreed types and zero-traffic conventions: min/max latency are
+// plain int64 zeros, avg_latency_ms is omitted when there is no traffic, and
+// absolute timestamps are RFC3339 alongside the relative strings.
 func TestEndpointsStatusHandler_AdditiveFields(t *testing.T) {
 	const trafficURL = "http://localhost:11434"
 	const idleURL = "http://localhost:8080"

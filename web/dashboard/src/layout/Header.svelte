@@ -5,9 +5,8 @@
 
   // Live clock ticking once per second, grounding the operator that "this
   // view is live, the data is from N seconds ago". Sourced from the shared
-  // clock (spec §7.3: the scheduler owns every timer in the SPA) rather than
-  // a component-local setInterval, so it gets the visibility backoff for
-  // free like every other live-updating value.
+  // clock rather than a component-local setInterval, so it gets the
+  // visibility backoff for free like every other live-updating value.
   const clockText = $derived(
     new Date(getNow()).toLocaleTimeString('en-AU', { hour12: false })
   );

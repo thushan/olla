@@ -3,9 +3,10 @@ import type { StatusResponse } from '../types';
 
 // Covers the 304 / If-None-Match / ETag-capture path, which is the only
 // machinery the store keeps beyond a straightforward 200 fetch. The server
-// side of the 304 (ETag emission) lands in WP-B1; this test pins the client
-// side: on a 304 the cached payload survives, the ETag is re-captured, and
-// the success clock advances so a later failure can still escalate.
+// side of the 304 (ETag emission) is separate backend work; this test pins
+// the client side: on a 304 the cached payload survives, the ETag is
+// re-captured, and the success clock advances so a later failure can still
+// escalate.
 
 beforeEach(() => {
   vi.resetModules();

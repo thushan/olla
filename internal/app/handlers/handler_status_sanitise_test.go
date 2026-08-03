@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// FR-14 sanitisation half: the display URL surfaced in JSON must strip
+// Sanitisation half: the display URL surfaced in JSON must strip
 // userinfo and the query/fragment wholesale. The config-validation half
 // (rejecting userinfo at load time) lives in internal/adapter/discovery.
 func TestSanitiseDisplayURL(t *testing.T) {

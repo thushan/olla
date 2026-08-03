@@ -103,8 +103,7 @@ func (c *CorsConfig) Validate() error {
 
 // AccessPolicyConfig is a network-layer allow rule shared by the dashboard's
 // gated zones. A request must pass both checks; there is no auth behind them,
-// so network restriction is the only control. The dashboard's threat model is
-// documented in docs/spec/simple-dashboard.md.
+// so network restriction is the only control.
 type AccessPolicyConfig struct {
 	// AllowedCIDRs is matched against the TCP-layer source from r.RemoteAddr
 	// only. Proxy headers (X-Forwarded-For, X-Real-IP) are never consulted,
@@ -116,7 +115,7 @@ type AccessPolicyConfig struct {
 
 	// AllowedHosts is matched against r.Host with the :port suffix stripped
 	// and the comparison case-insensitive. May be empty: any Host that parses
-	// as an IP literal is always accepted (FR-11), so an operator browsing
+	// as an IP literal is always accepted, so an operator browsing
 	// via http://192.168.1.10:40114/internal/ui/ needs no entry here. List
 	// only the non-IP hostnames you want to allow (e.g. a LAN mDNS name).
 	AllowedHosts []string `yaml:"allowed_hosts"`
@@ -140,12 +139,12 @@ type DashboardConfig struct {
 	// governs whether they are ever served.
 	Enabled bool `yaml:"enabled"`
 
-	// GateInternalAPI is reserved for a future PR that opts the rest of
-	// /internal/* (and /version) into the same AccessPolicy. It is INERT on
-	// this branch: setting it true has no effect. Defaults to false because
+	// GateInternalAPI is reserved for a later change that opts the rest of
+	// /internal/* (and /version) into the same AccessPolicy. It is INERT for
+	// now: setting it true has no effect. Defaults to false because
 	// defaulting it on would silently break existing deployments that scrape
 	// /internal/metrics or poll /internal/health from hosts the policy would
-	// reject. The field ships now so PR 2 needs no config migration.
+	// reject. The field ships now so that later change needs no config migration.
 	GateInternalAPI bool `yaml:"gate_internal_api"`
 }
 
@@ -160,12 +159,12 @@ func (c *DashboardConfig) ParsedCIDRs() []*net.IPNet {
 // to. No-op when the dashboard is disabled, so an explicit off switch validates
 // clean without forcing the operator to also populate the allowlists.
 //
-// GateInternalAPI is deliberately inert on this branch (the wrapping that
-// would extend AccessPolicy to the rest of /internal/* is PR 2 scope), so a
+// GateInternalAPI is deliberately inert for now (the wrapping that would
+// extend AccessPolicy to the rest of /internal/* isn't implemented yet), so a
 // startup slog.Warn fires when it is set true. Without the warning an operator
 // who sets the flag sees silent acceptance, assumes the gate is active, and
-// is surprised when /internal/* stays open. The field itself is kept so PR 2
-// needs no config migration.
+// is surprised when /internal/* stays open. The field itself is kept so that
+// later change needs no config migration.
 func (c *DashboardConfig) Validate() error {
 	if c.GateInternalAPI {
 		slog.Warn("dashboard.gate_internal_api is set but inert on this build; /internal/* is NOT gated by the dashboard access policy",

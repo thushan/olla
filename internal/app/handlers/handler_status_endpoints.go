@@ -38,7 +38,7 @@ type EndpointSummary struct {
 	Priority     int    `json:"priority"`
 	ModelCount   int    `json:"model_count"`
 	RequestCount int64  `json:"request_count"`
-	// Additive dashboard fields (FR-13: existing fields above are unchanged).
+	// Additive dashboard fields, existing fields above are unchanged.
 	// min/max latency follow the same plain-zero convention as RequestCount
 	// for no-traffic endpoints; avg_latency_ms is a pointer so a no-traffic
 	// endpoint omits the field rather than emitting a misleading 0.
@@ -276,7 +276,7 @@ func hashEndpointSummary(h hash.Hash, s *EndpointSummary) {
 const unparseableURLSentinel = "[unparseable url]"
 
 // sanitiseDisplayURL strips userinfo, query and fragment from an endpoint URL
-// before it is surfaced in any status/dashboard JSON (FR-14). Credentials must
+// before it is surfaced in any status/dashboard JSON. Credentials must
 // never appear in a URL string in responses; the endorsed credential path is
 // the auth config block, which is held as json:"-" fields on domain.Endpoint
 // and never reaches this layer. RawQuery and Fragment are stripped wholesale

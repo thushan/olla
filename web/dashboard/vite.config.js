@@ -25,9 +25,9 @@ function restoreGitkeep() {
   };
 }
 
-// Served at /internal/ui/ on the proxy listener (spec FR-1). WP-3 mounts the
-// go:embed handler under that subpath, so the SPA must request its hashed
-// assets from /internal/ui/assets/... rather than the site root.
+// Served at /internal/ui/ on the proxy listener. The Go go:embed handler
+// mounts under that subpath, so the SPA must request its hashed assets from
+// /internal/ui/assets/... rather than the site root.
 export default defineConfig({
   base: '/internal/ui/',
   plugins: [svelte(), tailwindcss(), restoreGitkeep()],

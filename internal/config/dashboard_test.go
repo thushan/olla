@@ -35,9 +35,9 @@ func TestDashboardConfig_Validate_EnabledRequiresCIDRs(t *testing.T) {
 	}
 }
 
-// TestDashboardConfig_Validate_EmptyHostsAllowed confirms the revised spec's
-// drop of the pre-revision "hosts must be non-empty" rule: IP-literal Hosts are
-// always accepted (FR-11), so an empty allowed_hosts is a legitimate config.
+// TestDashboardConfig_Validate_EmptyHostsAllowed confirms there is no
+// "hosts must be non-empty" rule: IP-literal Hosts are always accepted,
+// so an empty allowed_hosts is a legitimate config.
 func TestDashboardConfig_Validate_EmptyHostsAllowed(t *testing.T) {
 	t.Parallel()
 
@@ -125,7 +125,7 @@ func TestDefaultConfig_DashboardLoopbackDefault(t *testing.T) {
 		t.Fatalf("default CIDRs must be loopback-only, got %v", ap.AllowedCIDRs)
 	}
 	// "localhost" must be present: it's a hostname, not an IP literal, so
-	// FR-11's auto-accept doesn't cover it, and DefaultHost is itself
+	// the auto-accept for IP-literal Hosts doesn't cover it, and DefaultHost is itself
 	// "localhost" - a no-config-file startup (go install, curl installer)
 	// must not 403 its own default. This was finding 9: the shipped
 	// config/config.yaml always carried "localhost" but DefaultConfig() did
@@ -151,10 +151,10 @@ func captureSlog(t *testing.T) (*bytes.Buffer, func()) {
 	return &buf, func() { slog.SetDefault(prev) }
 }
 
-// C2: setting GateInternalAPI=true is inert on this branch (the wrapping is
-// PR 2 scope), so the operator deserves a startup warning naming the field.
-// Without it, an operator who sets the flag sees silent acceptance and
-// assumes the gate is active, then is surprised when /internal/* stays open.
+// Setting GateInternalAPI=true is inert for now (the wrapping isn't
+// implemented yet), so the operator deserves a startup warning naming the
+// field. Without it, an operator who sets the flag sees silent acceptance
+// and assumes the gate is active, then is surprised when /internal/* stays open.
 func TestDashboardConfig_Validate_GateInternalAPIWarnsWhenSetTrue(t *testing.T) {
 	buf, restore := captureSlog(t)
 	defer restore()

@@ -26,8 +26,8 @@
   // short reason from real endpoint data (offline count) rather than
   // fabricate one; when healthy or when we have no endpoint data yet, say
   // nothing so the strip stays quiet. Breaker state is deliberately not
-  // consulted: on main it trips only on health-probe failures, not live
-  // proxy traffic, so it would under-report real failures (spec §4.2).
+  // consulted: it trips only on health-probe failures, not live proxy
+  // traffic, so it would under-report real failures.
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
   const degradedReason = $derived(reasonFor(sys?.status, endpointList));
 

@@ -113,7 +113,7 @@ func TestAccessMiddleware_RejectionMatrix(t *testing.T) {
 		{"XFF with embedded tab", "203.0.113.9:54321", "localhost", "127.0.0.1\t,10.0.0.1", "", http.StatusForbidden, "203.0.113.9"},
 		{"XFF via Forwarded RFC 7239 style", "203.0.113.9:54321", "localhost", "for=127.0.0.1", "", http.StatusForbidden, "203.0.113.9"},
 		{"IPv6 XFF spoof", "203.0.113.9:54321", "localhost", "::1", "", http.StatusForbidden, "203.0.113.9"},
-		// FR-11: any Host that parses as an IP literal is accepted regardless of
+		// Any Host that parses as an IP literal is accepted regardless of
 		// allowed_hosts. DNS rebinding requires a hostname resolution, so an
 		// IP-literal Host is by definition the address the browser dialled and
 		// cannot be the vehicle for a rebinding attack. The loopbackConfig()
@@ -161,10 +161,10 @@ func TestAccessMiddleware_RejectionMatrix(t *testing.T) {
 	}
 }
 
-// TestAccessMiddleware_IPLiteralHostAccepted is the dedicated FR-11 proof:
+// TestAccessMiddleware_IPLiteralHostAccepted is the dedicated proof that
 // with an empty allowed_hosts, an IP-literal Host still passes because DNS
-// rebinding cannot ride an IP address. This matches the spec's Docker widening
-// snippet (§5.5), where allowed_hosts is empty and the operator browses by IP.
+// rebinding cannot ride an IP address. This matches a Docker setup where
+// allowed_hosts is empty and the operator browses by IP.
 func TestAccessMiddleware_IPLiteralHostAccepted(t *testing.T) {
 	t.Parallel()
 
@@ -172,8 +172,7 @@ func TestAccessMiddleware_IPLiteralHostAccepted(t *testing.T) {
 		Enabled: true,
 		AccessPolicy: config.AccessPolicyConfig{
 			AllowedCIDRs: []string{"127.0.0.0/8", "::1/128", "192.168.1.0/24"},
-			// allowed_hosts deliberately empty: FR-11 says IP-literal Hosts
-			// must still pass.
+			// allowed_hosts deliberately empty: IP-literal Hosts must still pass.
 		},
 	}
 	if err := cfg.Validate(); err != nil {
@@ -272,8 +271,8 @@ func TestRegisterRoutes_EnabledMountsDashboardSubtree(t *testing.T) {
 	}
 }
 
-// TestRegisterRoutes_DoesNotTouchOtherRoutes is the regression test for the
-// prior prototype's documented defect (spec §2): that branch modified the
+// TestRegisterRoutes_DoesNotTouchOtherRoutes is the regression test for a
+// prior prototype's documented defect: that branch modified the
 // registry's wiring logic and removed size-limit enforcement from every
 // non-proxy route as a side effect of mounting the dashboard. This test wires
 // a representative set of existing non-proxy routes alongside the dashboard and
