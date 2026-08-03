@@ -24,6 +24,11 @@ export interface PollStore<T> {
   readonly error: Error | null;
   readonly lastUpdated: Date | null;
   readonly hasData: boolean;
+  /** Activate this store's scheduler job and fire an immediate tick. Pair
+   *  with stop() on panel unmount so inactive panels stop polling (WP-B3). */
+  start(): void;
+  /** Deactivate this store's job, clear its timer and abort any in-flight tick. */
+  stop(): void;
   refresh(): void;
 }
 
@@ -129,6 +134,15 @@ export function createPollStore<T>(opts: PollStoreOptions<T>): PollStore<T> {
     /** True if the store has at least one successful poll under its belt. */
     get hasData() {
       return data !== null;
+    },
+    /** Activate the scheduler job and fire an immediate tick. Called by the
+     *  owning panel on mount so a tab switch doesn't sit on stale data. */
+    start() {
+      pollScheduler.start(name);
+    },
+    /** Deactivate the scheduler job; in-flight ticks are aborted by the scheduler. */
+    stop() {
+      pollScheduler.stop(name);
     },
     /** Force an immediate refresh (used by "retry now" buttons). */
     refresh() {

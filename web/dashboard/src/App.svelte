@@ -8,9 +8,10 @@
   import { startClock } from './lib/clock.svelte';
   import { theme } from './lib/stores/theme.svelte';
   import { navigation } from './lib/stores/navigation.svelte';
-
-  // Importing the stores registers them with the scheduler (module side-effect).
-  import './lib/stores/overview.svelte';
+  // Overview is always-on (StatusStrip renders on every panel), so App owns
+  // its lifecycle. Endpoints/models stores are started/stopped by their panels.
+  import { overview } from './lib/stores/overview.svelte';
+  // Module side-effect: registers endpoints/models jobs with the scheduler.
   import './lib/stores/endpoints.svelte';
   import './lib/stores/models.svelte';
 
@@ -21,9 +22,11 @@
 
   // Lifecycle: start the shared scheduler on mount, stop on teardown. The
   // scheduler owns every setInterval/setTimeout in the SPA (spec §7.3).
-  // The clock registers first so its job is in the map before start().
+  // The clock registers + activates first; overview is always-on; endpoints
+  // and models are activated by their panels' own mount/unmount effects.
   $effect(() => {
     startClock();
+    overview.start();
     pollScheduler.start();
     return () => {
       pollScheduler.stop();

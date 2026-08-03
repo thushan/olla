@@ -21,6 +21,10 @@ export function startClock(): void {
   if (registered) return;
   registered = true;
   pollScheduler.register(CLOCK_JOB_NAME, CLOCK_INTERVAL_MS, tick);
+  // The clock is always-on: activate the job directly. It must NOT be subject
+  // to per-panel start/stop (WP-B3) - every panel's relative-time labels rely
+  // on it ticking once per second regardless of which data store is polling.
+  pollScheduler.start(CLOCK_JOB_NAME);
   // Kick once immediately so the first paint isn't up to 1s stale.
   tick();
 }

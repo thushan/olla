@@ -22,6 +22,15 @@
   const loading = $derived(models.status === 'loading');
   // Mounted only when active (App.svelte does the routing).
 
+  // WP-B3: this panel owns the models store lifecycle. The models payload is
+  // the heaviest (detailed+group), so it must only poll while Models is open.
+  // start() fires an immediate tick on mount; stop() deactivates and aborts
+  // any in-flight request on unmount.
+  $effect(() => {
+    models.start();
+    return () => models.stop();
+  });
+
   // Detailed+group form: model_groups is populated. Fall back to recent_models
   // if the backend didn't honour the query params.
   const groups = $derived(models.data?.model_groups ?? []);

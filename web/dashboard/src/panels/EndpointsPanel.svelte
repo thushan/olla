@@ -27,6 +27,16 @@
   // App.svelte only mounts this panel when it is the active one, so the panel
   // is always rendered active once it appears.
 
+  // WP-B3: this panel is the lifecycle owner of the endpoints store. Mount
+  // activates the job (start() fires an immediate tick, so a tab switch
+  // refreshes rather than showing stale data); unmount stops it so the
+  // endpoints payload stops firing while Overview or Models is open. The
+  // scheduler handles aborting the in-flight tick on stop.
+  $effect(() => {
+    endpoints.start();
+    return () => endpoints.stop();
+  });
+
   const globalLatencyMax = $derived(data.reduce((m, e) => Math.max(m, e.max_latency_ms ?? 0), 0));
 
   // success_rate arrives pre-formatted ("98.5%") so we expose a numeric
