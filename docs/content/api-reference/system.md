@@ -2,6 +2,8 @@
 
 Internal endpoints for health monitoring, system status, and process information.
 
+> :memo: For a glanceable view of most of this data, see the [Admin Dashboard](../configuration/dashboard.md), a read-only web UI served at `/internal/ui/`.
+
 ## Endpoints Overview
 
 | Method | URI | Description |
