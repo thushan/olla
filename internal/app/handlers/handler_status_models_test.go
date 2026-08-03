@@ -435,16 +435,17 @@ func TestBuildModelSummaries_EndpointIDsDistinctForCollidingNames(t *testing.T) 
 // guard (production code must not panic): a ModelSummary whose Endpoints and
 // EndpointIDs slices have desynced lengths - which should never happen given
 // buildModelSummaries' lockstep appends, but the invariant is only assumed,
-// not enforced by the type system - must not crash the paired sort. The
-// simpler of the two fallbacks is chosen: skip the sort and leave the pair
-// exactly as built.
+// not enforced by the type system - must not crash the paired sort. Rather
+// than skip the sort entirely (which would leave order at the mercy of
+// randomised map iteration, churning the ETag every poll for no real reason),
+// the sort runs over the common (shorter) prefix.
 func TestSortModelSummaryEndpoints_DesyncedLengthsDoNotPanic(t *testing.T) {
 	t.Parallel()
 
 	summary := &ModelSummary{
 		Name:        "desynced",
 		Endpoints:   []string{"zeta", "alpha", "mid"},
-		EndpointIDs: []string{"id-zeta"}, // deliberately shorter than Endpoints
+		EndpointIDs: []string{"id-zeta", "id-alpha"}, // deliberately shorter than Endpoints
 	}
 
 	defer func() {
@@ -455,12 +456,16 @@ func TestSortModelSummaryEndpoints_DesyncedLengthsDoNotPanic(t *testing.T) {
 
 	sortModelSummaryEndpoints(summary)
 
-	wantEndpoints := []string{"zeta", "alpha", "mid"}
+	// Only the common prefix (length 2) is sorted: "alpha" before "zeta",
+	// with EndpointIDs following the same swap. The out-of-range tail element
+	// ("mid") is left untouched.
+	wantEndpoints := []string{"alpha", "zeta", "mid"}
 	if !equalStrings(summary.Endpoints, wantEndpoints) {
-		t.Errorf("expected Endpoints left as-built when lengths mismatch, got %v", summary.Endpoints)
+		t.Errorf("expected the common prefix sorted and the tail left as-built, got %v", summary.Endpoints)
 	}
-	if !equalStrings(summary.EndpointIDs, []string{"id-zeta"}) {
-		t.Errorf("expected EndpointIDs left as-built when lengths mismatch, got %v", summary.EndpointIDs)
+	wantIDs := []string{"id-alpha", "id-zeta"}
+	if !equalStrings(summary.EndpointIDs, wantIDs) {
+		t.Errorf("expected EndpointIDs sorted in step with the common prefix, got %v", summary.EndpointIDs)
 	}
 }
 

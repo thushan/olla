@@ -189,10 +189,13 @@
       <span class="spark-hint">gathering data</span>
     {/if}
   </div>
-  <!-- Rendered unconditionally at fixed height (see .spark-readout) so the
-       first sample landing does not add a line and shift the header strip,
-       which in turn shifts every panel below it. The em-dash placeholder
-       matches the rest of the dashboard's no-data convention. -->
+  <!-- Rendered unconditionally (never behind {#if latest}) so the first
+       sample landing does not add a line and shift the header strip, which in
+       turn shifts every panel below it. Height stays constant because the
+       span is always a single nowrap line at a fixed line-height (see
+       .spark-readout) - placeholder or reading, never zero versus one line.
+       The em-dash placeholder matches the rest of the dashboard's no-data
+       convention. -->
   <span class="spark-readout">
     {#if latest}
       {#if latest.error}

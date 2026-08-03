@@ -206,19 +206,23 @@ func (a *Application) buildModelSummaries(
 // name, so a single slice of pairs is sorted and split back.
 //
 // buildModelSummaries always appends to both slices together, so lengths
-// should never differ in practice - but production code must not panic, so
-// this guards the invariant rather than trusting it and skips the sort
-// (leaving the pair as-built) when it does not hold.
+// should never differ in practice - but the invariant is only assumed, not
+// enforced by the type system, so this guards it rather than indexing out of
+// range. On a mismatch the sort still runs over the common (shorter) prefix:
+// leaving the pair entirely as-built would mean map iteration order - which
+// is randomised per run - decides the response order, churning the ETag on
+// every poll even though nothing actually changed.
 func sortModelSummaryEndpoints(summary *ModelSummary) {
-	if len(summary.Endpoints) != len(summary.EndpointIDs) {
-		return
+	n := len(summary.Endpoints)
+	if len(summary.EndpointIDs) < n {
+		n = len(summary.EndpointIDs)
 	}
-	pairs := make([]endpointNameID, len(summary.Endpoints))
-	for i := range summary.Endpoints {
+	pairs := make([]endpointNameID, n)
+	for i := 0; i < n; i++ {
 		pairs[i] = endpointNameID{Name: summary.Endpoints[i], ID: summary.EndpointIDs[i]}
 	}
 	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Name < pairs[j].Name })
-	for i := range pairs {
+	for i := 0; i < n; i++ {
 		summary.Endpoints[i] = pairs[i].Name
 		summary.EndpointIDs[i] = pairs[i].ID
 	}
