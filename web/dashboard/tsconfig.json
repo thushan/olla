@@ -10,8 +10,9 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": false,
+    "verbatimModuleSyntax": true,
     "allowSyntheticDefaultImports": true,
+    "types": [],
     "noEmit": true
   },
   "include": ["src/**/*.js", "src/**/*.svelte", "src/**/*.ts"]
