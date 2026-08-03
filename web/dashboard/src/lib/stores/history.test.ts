@@ -39,6 +39,7 @@ function makeStatus(opts: {
       security_violations: 0,
       total_requests: opts.total_requests ?? 0,
       total_failures: 0,
+      has_traffic: (opts.total_requests ?? 0) > 0,
     },
   };
 }
