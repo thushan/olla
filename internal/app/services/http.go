@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/thushan/olla/internal/app/handlers"
@@ -195,7 +196,47 @@ func (s *HTTPService) Start(ctx context.Context) error {
 	s.logger.Info("Olla started, waiting for requests...", "bind", addr)
 
 	s.printWarnings()
+	s.printDashboardURL(addr)
 	return nil
+}
+
+// printDashboardURL logs a standout line pointing at the admin dashboard once
+// the server is otherwise fully up. It runs after printWarnings so it is the
+// last thing an operator sees at the bottom of the startup log, mirroring the
+// InfoWithStatus "[ OK ]" treatment Stop() already uses for its loudest line.
+// Skipped silently if the bind address can't be turned into a URL - this is
+// cosmetic, not worth failing startup over.
+func (s *HTTPService) printDashboardURL(bindAddr string) {
+	if !s.fullConfig.Dashboard.Enabled {
+		return
+	}
+
+	url, ok := dashboardURL(bindAddr)
+	if !ok {
+		return
+	}
+
+	s.logger.InfoWithStatus(fmt.Sprintf("Admin dashboard available at %s", url), "ENABLED")
+}
+
+// dashboardURL derives a clickable dashboard URL from a listener bind address.
+// An unspecified host (0.0.0.0, ::, [::], or an empty host) isn't something a
+// browser can open, so it's substituted with localhost. IPv6 literals are
+// bracketed for a valid URL authority.
+func dashboardURL(bindAddr string) (string, bool) {
+	host, port, err := net.SplitHostPort(bindAddr)
+	if err != nil || port == "" {
+		return "", false
+	}
+
+	// net.JoinHostPort brackets IPv6 literals itself, so displayHost is left
+	// unbracketed here regardless of address family.
+	displayHost := host
+	if addr, perr := netip.ParseAddr(host); host == "" || (perr == nil && addr.IsUnspecified()) {
+		displayHost = "localhost"
+	}
+
+	return fmt.Sprintf("http://%s/internal/ui/", net.JoinHostPort(displayHost, port)), true
 }
 
 // applyCORS wraps the root handler with CORS as the outermost layer so that
