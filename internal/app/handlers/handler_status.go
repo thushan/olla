@@ -52,6 +52,14 @@ type SystemSummary struct {
 	SecurityViolations int64     `json:"security_violations"`
 	TotalRequests      int64     `json:"total_requests"`
 	TotalFailures      int64     `json:"total_failures"`
+	// HasTraffic lets the dashboard branch on the no-traffic state without
+	// parsing SuccessRate. Always present (not omitempty): it is derivable from
+	// TotalRequests, which is itself always emitted, so every payload carries
+	// an explicit true/false. SuccessRate becomes "N/A" when this is false,
+	// mirroring the endpoint-level convention in handler_status_endpoints.go;
+	// previously it reported "0%" on a healthy fresh boot, which coupled with
+	// the legacy status threshold produced a misleading "critical" verdict.
+	HasTraffic bool `json:"has_traffic"`
 }
 
 type ProxySummary struct {
@@ -209,29 +217,53 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 
 	// ratios
 	healthyRatio := float64(len(healthy)) / float64(len(all))
-	var systemSuccessRate float64
-	if proxy.TotalRequests > 0 {
-		systemSuccessRate = float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
-	}
+	hasTraffic := proxy.TotalRequests > 0
 
 	var status string
-	switch {
-	case healthyRatio < 0.5 || systemSuccessRate < 90.0:
-		status = statusCritical
-	case healthyRatio < 0.8 || systemSuccessRate < 95.0:
-		status = statusDegraded
-	default:
-		status = statusHealthy
+	if hasTraffic {
+		// Dual-threshold verdict: a healthy fleet cannot mask a failing proxy
+		// and high failure rates cannot mask healthy endpoints.
+		systemSuccessRate := float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
+		switch {
+		case healthyRatio < 0.5 || systemSuccessRate < 90.0:
+			status = statusCritical
+		case healthyRatio < 0.8 || systemSuccessRate < 95.0:
+			status = statusDegraded
+		default:
+			status = statusHealthy
+		}
+	} else {
+		// Fresh boot (or no requests yet): the proxy success rate is undefined,
+		// so derive status purely from endpoint health. Without this branch a
+		// perfectly healthy zero-traffic fleet fell through to the legacy
+		// < 90.0 success-rate clause and reported critical.
+		switch {
+		case healthyRatio < 0.5:
+			status = statusCritical
+		case healthyRatio < 0.8:
+			status = statusDegraded
+		default:
+			status = statusHealthy
+		}
 	}
 
 	totalViolations := security.RateLimitViolations + security.SizeLimitViolations
+
+	// No traffic means the success rate is undefined; "N/A" mirrors the
+	// endpoint-level convention in handler_status_endpoints.go and stops the
+	// dashboard rendering a misleading "0%" on a fresh boot.
+	successRateStr := "N/A"
+	if hasTraffic {
+		systemSuccessRate := float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
+		successRateStr = format.Percentage(systemSuccessRate)
+	}
 
 	return SystemSummary{
 		Version:            version.Version,
 		Commit:             version.Commit,
 		Status:             status,
 		EndpointsUp:        format.EndpointsUp(len(healthy), len(all)),
-		SuccessRate:        format.Percentage(systemSuccessRate),
+		SuccessRate:        successRateStr,
 		AvgLatency:         format.Latency(proxy.AverageLatency),
 		ActiveConnections:  totalConnections,
 		SecurityViolations: totalViolations,
@@ -240,6 +272,7 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 		TotalFailures:      proxy.FailedRequests,
 		UptimeHuman:        format.Duration2(time.Since(a.StartTime)),
 		StartTime:          a.StartTime,
+		HasTraffic:         hasTraffic,
 	}
 }
 
