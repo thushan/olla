@@ -104,6 +104,8 @@ function buildStatus(over: Partial<StatusResponse> = {}): StatusResponse {
       total_requests: 40,
       total_failures: 0,
       security_violations: 7,
+      min_latency_ms: 0,
+      max_latency_ms: 0,
       ...over.system,
     },
   };
@@ -367,6 +369,43 @@ describe('OverviewPanel latency-range tile', () => {
     // a "0ms-80ms" floor. "80ms" itself contains the substring "0ms", so the
     // exact equality is the load-bearing assertion here, not a substring deny.
     expect(value).toBe('12ms–80ms');
+  });
+});
+
+describe('OverviewPanel latency-range tile proxy-wide sub-caption (WP-A3)', () => {
+  it('shows the proxy-wide figures when max_latency_ms is populated', async () => {
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshTyped(
+      buildStatus({ system: { min_latency_ms: 12, max_latency_ms: 840 } }),
+      [buildEndpoint({ name: 'a', min_latency_ms: 12, max_latency_ms: 80 })]
+    );
+
+    const tile = tileByLabel('Latency range');
+    expect(tile).toBeTruthy();
+    const sub = tile!.querySelector('.sub')?.textContent?.trim();
+    expect(sub).toContain('proxy 12ms–840ms');
+  });
+
+  it('hides the proxy-wide sub-caption on an idle fleet (bare zeros)', async () => {
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshTyped(
+      // Distinct status from the previous test in this file: refreshTyped's
+      // waitFor gates on system.status, and both tests otherwise default to
+      // 'healthy' - without a distinguishing value the wait resolves against
+      // the still-stale prior fixture before this fetch lands.
+      buildStatus({ system: { status: 'degraded', min_latency_ms: 0, max_latency_ms: 0 } }),
+      [buildEndpoint({ name: 'a', min_latency_ms: 0, max_latency_ms: 0 })]
+    );
+
+    const tile = tileByLabel('Latency range');
+    expect(tile).toBeTruthy();
+    const sub = tile!.querySelector('.sub')?.textContent?.trim();
+    expect(sub).not.toContain('proxy');
+    expect(sub).not.toContain('0ms–0ms');
   });
 });
 
