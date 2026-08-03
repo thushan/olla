@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
-import { models } from '../lib/stores/models.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte';
+import { models } from '../lib/stores/models.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
 import ModelsPanel from './ModelsPanel.svelte';
 
@@ -24,13 +24,13 @@ import ModelsPanel from './ModelsPanel.svelte';
 // snippets, so panels no longer author "num align-right" literals at all -
 // asserted below via the header class alongside the cell class.
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -70,11 +70,11 @@ describe('composite numeric cells carry an explicit alignment class', () => {
     await vi.waitFor(() => expect(endpoints.data?.endpoints?.[0]?.name).toBe('ollama-1'));
     flushSync();
 
-    const row = document.querySelector('tbody tr');
+    const row = document.querySelector('tbody tr')!;
     const tds = [...row.querySelectorAll('td')];
 
-    const respRateCell = tds.find((td) => td.querySelector('.pct-cell'));
-    const latencyCell = tds.find((td) => td.querySelector('.range-wrap'));
+    const respRateCell = tds.find((td) => td.querySelector('.pct-cell'))!;
+    const latencyCell = tds.find((td) => td.querySelector('.range-wrap'))!;
     expect(respRateCell).toBeTruthy();
     expect(latencyCell).toBeTruthy();
 
@@ -89,17 +89,17 @@ describe('composite numeric cells carry an explicit alignment class', () => {
     // column.align field the cell class came from - not a separately
     // hand-maintained header class.
     const headers = [...document.querySelectorAll('thead th')];
-    const respRateHeader = headers.find((th) => th.textContent.includes('Resp. rate'));
-    const latencyHeader = headers.find((th) => th.textContent.includes('Latency'));
+    const respRateHeader = headers.find((th) => th.textContent!.includes('Resp. rate'))!;
+    const latencyHeader = headers.find((th) => th.textContent!.includes('Latency'))!;
     expect(respRateHeader.classList.contains('align-right')).toBe(true);
     expect(latencyHeader.classList.contains('align-right')).toBe(true);
 
     // A genuinely numeric text column (Priority) is also driven by
     // column.align now, not by `num` alone - proving `num` no longer does
     // double duty as an alignment flag anywhere in the table.
-    const priorityHeader = headers.find((th) => th.textContent.includes('Priority'));
+    const priorityHeader = headers.find((th) => th.textContent!.includes('Priority'))!;
     expect(priorityHeader.classList.contains('align-right')).toBe(true);
-    const priorityCell = tds[headers.indexOf(priorityHeader)];
+    const priorityCell = tds[headers.indexOf(priorityHeader)]!;
     expect(priorityCell.classList.contains('align-right')).toBe(true);
   });
 
@@ -134,11 +134,11 @@ describe('composite numeric cells carry an explicit alignment class', () => {
 
     const row = [...document.querySelectorAll('tbody tr')].find((tr) =>
       tr.querySelector('.endpoint-pills')
-    );
+    )!;
     expect(row).toBeTruthy();
     const chipsCell = [...row.querySelectorAll('td')].find((td) =>
       td.querySelector('.endpoint-pills')
-    );
+    )!;
     expect(chipsCell.classList.contains('align-right')).toBe(true);
 
     // Same guard as EndpointsPanel: the Endpoints column's header carries
@@ -146,8 +146,8 @@ describe('composite numeric cells carry an explicit alignment class', () => {
     // on the column definition rather than two things a caller must keep in
     // sync by hand.
     const endpointsHeader = [...document.querySelectorAll('thead th')].find((th) =>
-      th.textContent.includes('Endpoints')
-    );
+      th.textContent!.includes('Endpoints')
+    )!;
     expect(endpointsHeader.classList.contains('align-right')).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { overview } from '../lib/stores/overview.svelte.ts';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { overview } from '../lib/stores/overview.svelte';
+import { endpoints } from '../lib/stores/endpoints.svelte';
 import OverviewPanel from './OverviewPanel.svelte';
 
 // Regression coverage for finding 8: the glance table rendered fmtMs(0) as a
@@ -12,13 +12,13 @@ import OverviewPanel from './OverviewPanel.svelte';
 // and avg_latency_ms absent/null (once the backend field becomes *int64 with
 // omitempty).
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -45,8 +45,8 @@ const sysBody = {
   proxy: { engine: 'olla', balancer: 'priority' },
 };
 
-async function refreshBoth(endpointList) {
-  global.fetch = vi.fn(async (url) => {
+async function refreshBoth(endpointList: Record<string, unknown>[]) {
+  global.fetch = vi.fn(async (url: RequestInfo | URL) => {
     if (String(url).includes('/internal/status/endpoints')) {
       return jsonResponse({
         endpoints: endpointList,
@@ -83,8 +83,8 @@ describe('OverviewPanel glance table latency', () => {
     ]);
 
     const cell = document.querySelector('.glance-link .txt')?.closest('tr')?.querySelectorAll('td.num')[1];
-    expect(cell.textContent.trim()).toBe('—');
-    expect(cell.textContent.trim()).not.toBe('0ms');
+    expect(cell!.textContent!.trim()).toBe('—');
+    expect(cell!.textContent!.trim()).not.toBe('0ms');
   });
 
   it('shows a no-data placeholder when avg_latency_ms is absent (nullable backend field)', async () => {
@@ -102,7 +102,7 @@ describe('OverviewPanel glance table latency', () => {
     ]);
 
     const cell = document.querySelector('.glance-link .txt')?.closest('tr')?.querySelectorAll('td.num')[1];
-    expect(cell.textContent.trim()).toBe('—');
+    expect(cell!.textContent!.trim()).toBe('—');
   });
 
   it('still renders a real latency figure for an endpoint with actual traffic', async () => {
@@ -120,7 +120,7 @@ describe('OverviewPanel glance table latency', () => {
     ]);
 
     const cell = document.querySelector('.glance-link .txt')?.closest('tr')?.querySelectorAll('td.num')[1];
-    expect(cell.textContent.trim()).toBe('55ms');
+    expect(cell!.textContent!.trim()).toBe('55ms');
   });
 });
 
@@ -143,7 +143,7 @@ describe('OverviewPanel response-rate tile is honest about what it counts (D2)',
     // system-level success_rate at '99.0%' - that is the tile under test,
     // not the per-endpoint figure in the glance table.
     const tiles = [...document.querySelectorAll('.tile')];
-    const rateTile = tiles.find((t) => t.querySelector('.value')?.textContent.includes(sysBody.system.success_rate));
+    const rateTile = tiles.find((t) => t.querySelector('.value')?.textContent!.includes(sysBody.system.success_rate))!;
     expect(rateTile).toBeTruthy();
 
     // Not an unqualified "Success rate" label.
@@ -152,7 +152,7 @@ describe('OverviewPanel response-rate tile is honest about what it counts (D2)',
 
     // The caveat is in the tile's own rendered text - no title attribute
     // needed to find it, and no {@html} sink.
-    const tileText = rateTile.textContent;
+    const tileText = rateTile.textContent!;
     expect(tileText).toMatch(/HTTP status/i);
     expect(tileText).toMatch(/regardless/i);
   });
@@ -170,8 +170,8 @@ describe('OverviewPanel security-violations tile (FR-3, spec §4.3.1)', () => {
     const tiles = [...document.querySelectorAll('.stat-tile, .tile')];
     // Match by label text across whatever wrapper class the StatTile component
     // renders, so this does not break on a class rename.
-    const sec = tiles.find((t) => t.textContent.includes('Security violations'));
+    const sec = tiles.find((t) => t.textContent!.includes('Security violations'))!;
     expect(sec).toBeTruthy();
-    expect(sec.textContent).toContain('7');
+    expect(sec.textContent!).toContain('7');
   });
 });

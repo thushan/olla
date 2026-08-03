@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
 
 // Regression coverage: sanitiseDisplayURL (server-side) strips query and
@@ -17,13 +17,13 @@ import EndpointsPanel from './EndpointsPanel.svelte';
 // the panel actually uses it: distinct rows, distinct DOM ids, for two
 // endpoints sharing a display url.
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -32,7 +32,7 @@ function jsonResponse(body) {
   };
 }
 
-async function refreshWithEndpoints(endpointList) {
+async function refreshWithEndpoints(endpointList: Record<string, unknown>[]) {
   global.fetch = vi.fn(async () =>
     jsonResponse({
       endpoints: endpointList,
@@ -49,7 +49,7 @@ async function refreshWithEndpoints(endpointList) {
   flushSync();
 }
 
-function endpointWith(id, name) {
+function endpointWith(id: string | undefined, name: string) {
   return {
     id,
     name,
@@ -78,7 +78,7 @@ describe('EndpointsPanel row identity uses the stable id, not the display url', 
       endpointWith('id-xyz', 'shared-host-b'),
     ]);
 
-    const nameCells = [...document.querySelectorAll('.name-text')].map((el) => el.textContent.trim());
+    const nameCells = [...document.querySelectorAll<HTMLElement>('.name-text')].map((el) => el.textContent!.trim());
     expect(nameCells).toEqual(expect.arrayContaining(['shared-host-a', 'shared-host-b']));
     expect(nameCells.length).toBe(2);
 
@@ -98,7 +98,7 @@ describe('EndpointsPanel row identity uses the stable id, not the display url', 
 
     await refreshWithEndpoints([noIdEndpoint]);
 
-    const nameCells = [...document.querySelectorAll('.name-text')].map((el) => el.textContent.trim());
+    const nameCells = [...document.querySelectorAll<HTMLElement>('.name-text')].map((el) => el.textContent!.trim());
     expect(nameCells).toEqual(['legacy-endpoint']);
   });
 });

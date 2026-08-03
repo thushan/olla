@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import App from './App.svelte';
-import { navigation } from './lib/stores/navigation.svelte.ts';
+import { navigation } from './lib/stores/navigation.svelte';
 
 // Regression coverage for finding 11: App.svelte used to hold its own
 // `current` state, separate from the `navigation` store NavTabs renders
@@ -19,7 +19,7 @@ global.fetch = vi.fn(async () => ({
   json: async () => ({}),
 }));
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
@@ -32,7 +32,7 @@ describe('App navigation authority', () => {
     flushSync();
 
     expect(document.getElementById('panel-overview')).not.toBeNull();
-    expect(document.getElementById('tab-overview').getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('tab-overview')!.getAttribute('aria-selected')).toBe('true');
 
     // Simulate a programmatic jump the way OverviewPanel's "jump to
     // endpoint" link does, via the same navigation authority App uses.
@@ -43,10 +43,10 @@ describe('App navigation authority', () => {
     expect(document.getElementById('panel-endpoints')).not.toBeNull();
     expect(document.getElementById('panel-overview')).toBeNull();
     // ...and the tab bar agrees, rather than still announcing Overview.
-    expect(document.getElementById('tab-endpoints').getAttribute('aria-selected')).toBe('true');
-    expect(document.getElementById('tab-overview').getAttribute('aria-selected')).toBe('false');
-    expect(document.getElementById('tab-endpoints').getAttribute('tabindex')).toBe('0');
-    expect(document.getElementById('tab-overview').getAttribute('tabindex')).toBe('-1');
+    expect(document.getElementById('tab-endpoints')!.getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('tab-overview')!.getAttribute('aria-selected')).toBe('false');
+    expect(document.getElementById('tab-endpoints')!.getAttribute('tabindex')).toBe('0');
+    expect(document.getElementById('tab-overview')!.getAttribute('tabindex')).toBe('-1');
   });
 
   it('arrow-key navigation continues from the correct tab after a programmatic jump', () => {
@@ -57,13 +57,13 @@ describe('App navigation authority', () => {
     flushSync();
 
     const tabs = document.querySelector('[role="tablist"]');
-    tabs.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+    tabs!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
     flushSync();
 
     // From endpoints (index 1 of [overview, endpoints, models]), ArrowRight
     // must land on models, not restart from wherever App's stale `current`
     // used to think the tab bar was.
     expect(document.getElementById('panel-models')).not.toBeNull();
-    expect(document.getElementById('tab-models').getAttribute('aria-selected')).toBe('true');
+    expect(document.getElementById('tab-models')!.getAttribute('aria-selected')).toBe('true');
   });
 });

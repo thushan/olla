@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { models } from '../lib/stores/models.svelte.ts';
+import { models } from '../lib/stores/models.svelte';
 import { stableId } from '../lib/dom-id';
 import ModelsPanel from './ModelsPanel.svelte';
 
@@ -11,13 +11,13 @@ import ModelsPanel from './ModelsPanel.svelte';
 // main and per_endpoint has no prior art. These tests pin the trim so a
 // future revert is caught.
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -26,7 +26,7 @@ function jsonResponse(body) {
   };
 }
 
-async function refreshWith(payload, ready) {
+async function refreshWith(payload: Record<string, unknown>, ready: () => void) {
   global.fetch = vi.fn(async () => jsonResponse(payload));
   models.refresh();
   // Wait for the specific payload via a caller-supplied sentinel rather
@@ -92,7 +92,7 @@ function headerLabels() {
   // SortableTable renders the indicator glyph (↕/▲/▼) inside the button;
   // strip it so label assertions compare against the bare column label.
   return [...document.querySelectorAll('thead th')].map((th) =>
-    th.textContent.trim().replace(/[↕▲▼]/g, '').trim()
+    th.textContent!.trim().replace(/[↕▲▼]/g, '').trim()
   );
 }
 
@@ -125,7 +125,7 @@ describe('ModelsPanel trim (discovery-only)', () => {
 
     const qwenRow = document.getElementById(`model-${stableId('qwen3:8b')}`);
     expect(qwenRow).toBeTruthy();
-    const cells = [...qwenRow.querySelectorAll('td')].map((td) => td.textContent.trim());
+    const cells = [...qwenRow!.querySelectorAll('td')].map((td) => td.textContent!.trim());
     // The legacy total_requests value must not surface anywhere in the row.
     expect(cells.some((c) => c.includes('999'))).toBe(false);
     expect(cells.some((c) => c.includes('99.0%'))).toBe(false);
@@ -142,7 +142,7 @@ describe('ModelsPanel trim (discovery-only)', () => {
     );
 
     const qwenRow = document.getElementById(`model-${stableId('qwen3:8b')}`);
-    const pills = [...qwenRow.querySelectorAll('.pill')];
+    const pills = [...qwenRow!.querySelectorAll('.pill')];
     expect(pills.length).toBe(1);
     // per_endpoint.parameter_size was '8B'; the trimmed pill must not leak it.
     expect(pills[0].getAttribute('title') || '').toBe('');
@@ -157,7 +157,7 @@ describe('ModelsPanel trim (discovery-only)', () => {
     );
 
     const familyRows = [...document.querySelectorAll('.family-row')].map((tr) =>
-      tr.textContent.trim()
+      tr.textContent!.trim()
     );
     expect(familyRows.length).toBe(2);
     // Alphabetical, with 'unknown' pushed to the end (matches backend ordering).
@@ -189,7 +189,7 @@ describe('ModelsPanel trim (discovery-only)', () => {
     // SortableTable path does not plant a DOM id on rows (only the grouped
     // path's snippet does); locate the row by its model name instead.
     expect(document.querySelectorAll('.family-row').length).toBe(0);
-    const rowText = [...document.querySelectorAll('tbody td')].map((td) => td.textContent.trim());
+    const rowText = [...document.querySelectorAll('tbody td')].map((td) => td.textContent!.trim());
     expect(rowText.some((t) => t === 'phi3')).toBe(true);
     // Discovery column still present in the header.
     expect(headerLabels()).toContain('Size');

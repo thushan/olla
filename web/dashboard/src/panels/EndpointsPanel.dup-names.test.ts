@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
 
 // Regression coverage for the each_key_duplicate blanking bug. The prior fix
@@ -12,13 +12,13 @@ import EndpointsPanel from './EndpointsPanel.svelte';
 // rows on row.url, which the backend guarantees unique (it keys its endpoint
 // map by URL), and makes SortableTable disambiguate any remaining collision.
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -27,7 +27,7 @@ function jsonResponse(body) {
   };
 }
 
-async function refreshWith(endpointList) {
+async function refreshWith(endpointList: Record<string, unknown>[]) {
   global.fetch = vi.fn(async () =>
     jsonResponse({
       endpoints: endpointList,
@@ -80,7 +80,7 @@ describe('EndpointsPanel exact-duplicate and empty names', () => {
     const rows = [...document.querySelectorAll('tbody tr')];
     expect(rows.length).toBe(2);
     // No each_key_duplicate blanking: both URL cells are present.
-    const urls = rows.map((r) => r.querySelector('.url-cell')?.textContent.trim());
+    const urls = rows.map((r) => r.querySelector('.url-cell')?.textContent?.trim());
     expect(urls).toEqual(expect.arrayContaining(['http://node-a:11434', 'http://node-b:11434']));
   });
 

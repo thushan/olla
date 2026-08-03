@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
 
 // C8 regression: the Endpoints name cell rendered an inline badge-type span
@@ -8,13 +8,13 @@ import EndpointsPanel from './EndpointsPanel.svelte';
 // value twice per row. The fix drops the inline badge (the Type column is the
 // canonical place for it).
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -23,7 +23,7 @@ function jsonResponse(body) {
   };
 }
 
-async function refreshWith(endpoint) {
+async function refreshWith(endpoint: Record<string, unknown>) {
   global.fetch = vi.fn(async () =>
     jsonResponse({
       endpoints: [endpoint],
@@ -60,9 +60,9 @@ describe('EndpointsPanel type is shown exactly once per row', () => {
     expect(document.querySelector('.badge-type')).toBeNull();
 
     // The Type column still carries the value exactly once in the row's cells.
-    const row = document.querySelector('tbody tr');
-    const typeMentions = [...row.querySelectorAll('td')].filter((td) =>
-      td.textContent.trim() === 'ollama'
+    const row = document.querySelector('tbody tr')!;
+    const typeMentions = [...row.querySelectorAll<HTMLTableCellElement>('td')].filter((td) =>
+      td.textContent!.trim() === 'ollama'
     );
     expect(typeMentions.length).toBe(1);
   });

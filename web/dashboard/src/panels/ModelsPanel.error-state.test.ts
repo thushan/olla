@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { models } from '../lib/stores/models.svelte.ts';
+import { models } from '../lib/stores/models.svelte';
 import ModelsPanel from './ModelsPanel.svelte';
 
 // Regression coverage: on a first-load fetch failure, models.data stays null,
@@ -9,15 +9,15 @@ import ModelsPanel from './ModelsPanel.svelte';
 // StatusBanner's error banner. An operator reading both at once sees "the
 // backends genuinely have no models" rather than "the request failed".
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
 function emptyStateText() {
-  return [...document.querySelectorAll('.panel-intro')]
-    .map((el) => el.textContent.trim())
+  return [...document.querySelectorAll<HTMLElement>('.panel-intro')]
+    .map((el) => el.textContent!.trim())
     .join(' ');
 }
 

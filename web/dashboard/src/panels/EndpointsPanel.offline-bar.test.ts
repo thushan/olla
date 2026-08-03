@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
 
 // C7 regression: PctBar derived its colour purely from success_rate_num and
@@ -18,13 +18,13 @@ import EndpointsPanel from './EndpointsPanel.svelte';
 // (down, but we have a real figure): the latter keeps the number and real
 // fill width, muted, with no green/amber/red implication.
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -33,7 +33,7 @@ function jsonResponse(body) {
   };
 }
 
-async function refreshWith(endpoint) {
+async function refreshWith(endpoint: Record<string, unknown>) {
   global.fetch = vi.fn(async () =>
     jsonResponse({
       endpoints: [endpoint],
@@ -47,8 +47,11 @@ async function refreshWith(endpoint) {
   flushSync();
 }
 
-const pctCell = () => document.querySelector('.pct-cell');
-const pctFill = () => pctCell()?.querySelector('.fill');
+// Tests assert existence via toBeTruthy before touching attributes; the
+// non-null assertions here just encode that the DOM is populated by the time
+// they run.
+const pctCell = () => document.querySelector('.pct-cell')!;
+const pctFill = () => pctCell().querySelector('.fill')!;
 
 describe('EndpointsPanel success bar is gated on endpoint status', () => {
   it('mutes an offline endpoint with traffic but keeps its historical figure', async () => {

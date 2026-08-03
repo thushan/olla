@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
 
 // Regression coverage for finding 6: the panel used to derive the RangeBar's
@@ -15,13 +15,13 @@ import EndpointsPanel from './EndpointsPanel.svelte';
 // store is a module singleton, and resetting modules mid-file desyncs
 // Svelte's internal client runtime from the already-mounted component.
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -30,7 +30,7 @@ function jsonResponse(body) {
   };
 }
 
-async function refreshWithEndpoint(endpoint) {
+async function refreshWithEndpoint(endpoint: Record<string, unknown>) {
   global.fetch = vi.fn(async () =>
     jsonResponse({ endpoints: [endpoint], total_count: 1, healthy_count: 1, routable_count: 1 })
   );
@@ -42,7 +42,7 @@ async function refreshWithEndpoint(endpoint) {
   flushSync();
 }
 
-async function refreshWithEndpoints(endpointList) {
+async function refreshWithEndpoints(endpointList: Record<string, unknown>[]) {
   global.fetch = vi.fn(async () =>
     jsonResponse({
       endpoints: endpointList,
@@ -80,11 +80,11 @@ describe('EndpointsPanel latency column', () => {
       max_latency_ms: 90,
     });
 
-    const label = document.querySelector('.range-bar[role="img"]').getAttribute('aria-label');
+    const label = document.querySelector('.range-bar[role="img"]')!.getAttribute('aria-label');
     expect(label).toContain('average 42ms');
     // The old bug rendered "1ms" here (parseInt("1.5s", 10)).
     expect(label).not.toContain('average 1ms');
-    expect(document.querySelector('.range-labels').firstChild.textContent.trim()).toBe('42ms');
+    expect(document.querySelector('.range-labels')!.firstChild!.textContent!.trim()).toBe('42ms');
   });
 
   it('falls back to the no-data placeholder when avg_latency_ms is absent (backend not upgraded yet)', async () => {
@@ -105,7 +105,7 @@ describe('EndpointsPanel latency column', () => {
       max_latency_ms: 90,
     });
 
-    const avgText = document.querySelector('.range-labels').firstChild.textContent.trim();
+    const avgText = document.querySelector('.range-labels')!.firstChild!.textContent!.trim();
     expect(avgText).toBe('—');
     // Must not have silently coerced the missing field, or response_time, to 0/1.
     expect(avgText).not.toBe('0ms');
@@ -156,17 +156,17 @@ describe('EndpointsPanel latency column', () => {
 
     // globalLatencyMax across both rows is 800 (the second endpoint's max).
     const bars = [...document.querySelectorAll('.range-bar[role="img"]')];
-    const lowBar = bars.find((b) => b.getAttribute('aria-label').includes('average 100ms'));
-    const highBar = bars.find((b) => b.getAttribute('aria-label').includes('average 50ms'));
+    const lowBar = bars.find((b) => b.getAttribute('aria-label')!.includes('average 100ms'))!;
+    const highBar = bars.find((b) => b.getAttribute('aria-label')!.includes('average 50ms'))!;
     expect(lowBar).toBeTruthy();
     expect(highBar).toBeTruthy();
 
     // scalePct(avg, 800) = sqrt(avg/800)*100. With the pre-fix binding
     // globalMax defaults to 0 and both of these collapse to "0.0".
-    const lowFill = lowBar.querySelector('.fill').getAttribute('style');
-    const lowTick = lowBar.querySelector('.tick').getAttribute('style');
-    const highFill = highBar.querySelector('.fill').getAttribute('style');
-    const highTick = highBar.querySelector('.tick').getAttribute('style');
+    const lowFill = lowBar.querySelector('.fill')!.getAttribute('style');
+    const lowTick = lowBar.querySelector('.tick')!.getAttribute('style');
+    const highFill = highBar.querySelector('.fill')!.getAttribute('style');
+    const highTick = highBar.querySelector('.tick')!.getAttribute('style');
 
     expect(lowFill).toBe('width: 35.4%;');
     expect(lowTick).toBe('left: 50%;');

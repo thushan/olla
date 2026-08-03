@@ -1,9 +1,9 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import App from './App.svelte';
-import { navigation } from './lib/stores/navigation.svelte.ts';
-import { overview } from './lib/stores/overview.svelte.ts';
-import { endpoints } from './lib/stores/endpoints.svelte.ts';
+import { navigation } from './lib/stores/navigation.svelte';
+import { overview } from './lib/stores/overview.svelte';
+import { endpoints } from './lib/stores/endpoints.svelte';
 import { stableId } from './lib/dom-id';
 
 // Regression coverage: "jump to endpoint" on the Overview glance table looked
@@ -19,14 +19,14 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
   navigation.set('overview');
 });
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown) {
   return {
     status: 200,
     ok: true,
@@ -95,9 +95,9 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
 
     await seedData();
 
-    const jumpBtn = document.querySelector('.glance-link');
+    const jumpBtn = document.querySelector<HTMLElement>('.glance-link');
     expect(jumpBtn).toBeTruthy();
-    jumpBtn.click();
+    jumpBtn!.click();
 
     const row = await vi.waitFor(() => {
       const el = document.getElementById(`ep-${stableId('http://ollama-1:11434')}`);
@@ -176,8 +176,8 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     flushSync();
 
     // Both glance rows rendered - the panel did not blank on the collision.
-    const glanceLinks = [...document.querySelectorAll('.glance-link .txt')].map((el) =>
-      el.textContent.trim()
+    const glanceLinks = [...document.querySelectorAll<HTMLElement>('.glance-link .txt')].map((el) =>
+      el.textContent!.trim()
     );
     expect(glanceLinks).toEqual(expect.arrayContaining(['node.a', 'node-a']));
 
@@ -190,11 +190,11 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     expect(idA).not.toBe(idB);
 
     // Jump from node-a's glance row.
-    const jumpBtn = [...document.querySelectorAll('.glance-link')].find(
-      (btn) => btn.querySelector('.txt')?.textContent.trim() === 'node-a'
+    const jumpBtn = [...document.querySelectorAll<HTMLElement>('.glance-link')].find(
+      (btn) => btn.querySelector('.txt')?.textContent?.trim() === 'node-a'
     );
     expect(jumpBtn).toBeTruthy();
-    jumpBtn.click();
+    jumpBtn!.click();
 
     const row = await vi.waitFor(() => {
       const el = document.getElementById(idB);
@@ -210,7 +210,7 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     // Landed on node-a's row, NOT node.a's. Assert against the name cell's
     // exact text, not loose textContent: the URL "http://node-a:..." contains
     // the substring "node-a", which would mask the wrong-target failure.
-    const landedName = row.querySelector('.name-text')?.textContent.trim();
+    const landedName = row!.querySelector('.name-text')?.textContent?.trim();
     expect(landedName).toBe('node-a');
   });
 });
