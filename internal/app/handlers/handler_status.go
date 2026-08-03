@@ -51,12 +51,6 @@ type SystemSummary struct {
 	SecurityViolations int64     `json:"security_violations"`
 	TotalRequests      int64     `json:"total_requests"`
 	TotalFailures      int64     `json:"total_failures"`
-	// Additive (FR-13): fleet-wide latency rollup in raw ms alongside the
-	// formatted AvgLatency string. Plain int64 (not omitempty) so an idle
-	// fleet still serialises a zero, mirroring TotalRequests and the per
-	// endpoint MinLatencyMs/MaxLatencyMs convention.
-	MinLatencyMs int64 `json:"min_latency_ms"`
-	MaxLatencyMs int64 `json:"max_latency_ms"`
 }
 
 type ProxySummary struct {
@@ -240,8 +234,6 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 		TotalTraffic:       format.Bytes(util.SafeUint64(totalTraffic)),
 		TotalRequests:      proxy.TotalRequests,
 		TotalFailures:      proxy.FailedRequests,
-		MinLatencyMs:       proxy.MinLatency,
-		MaxLatencyMs:       proxy.MaxLatency,
 		UptimeHuman:        format.Duration2(time.Since(a.StartTime)),
 		StartTime:          a.StartTime,
 	}
@@ -523,8 +515,6 @@ func hashStatusResponse(resp *StatusResponse) string {
 	hashEtagInt64(h, resp.System.SecurityViolations)
 	hashEtagInt64(h, resp.System.TotalRequests)
 	hashEtagInt64(h, resp.System.TotalFailures)
-	hashEtagInt64(h, resp.System.MinLatencyMs)
-	hashEtagInt64(h, resp.System.MaxLatencyMs)
 
 	hashEtagString(h, resp.Security.Status)
 	hashEtagInt64(h, int64(resp.Security.BlockedIPs))
