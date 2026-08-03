@@ -90,13 +90,39 @@ func Handler() http.Handler {
 	return dashboardHandler(sub)
 }
 
+// AssetsBuilt reports whether the embedded dist carries a built index.html.
+// It is the same check dashboardHandler uses to pick between the SPA handler
+// and the not-built 503 handler, surfaced separately so startup logging can
+// distinguish a binary that carries real assets from one carrying only the
+// .gitkeep sentinel (e.g. a binary produced by `go install` without
+// `make build-web`). A false return is not an error: the route still mounts
+// and answers 503 with a clear message, the binary just should not claim the
+// dashboard is "ready".
+func AssetsBuilt() bool {
+	sub, err := fs.Sub(embeddedFS, distRoot)
+	if err != nil {
+		return false
+	}
+	return assetsBuiltIn(sub)
+}
+
+// assetsBuiltIn is the FS-level check both Handler (for route selection) and
+// AssetsBuilt (for startup logging) consult. Split out so the two call sites
+// cannot drift on what "built" means, and so tests can drive the sentinel-only
+// and populated branches via a synthetic fstest.MapFS without disturbing the
+// package-level embed.
+func assetsBuiltIn(root fs.FS) bool {
+	info, err := fs.Stat(root, indexFile)
+	return err == nil && !info.IsDir()
+}
+
 // dashboardHandler returns the SPA handler when the embedded dist carries a
 // built index.html. If only the .gitkeep sentinel is present (the binary was
 // compiled without `make build-web`), it returns a not-built handler that logs
 // a startup warning once and serves 503, so a stale or unbuilt dashboard is
 // obvious to the operator instead of silently serving a placeholder shell.
 func dashboardHandler(root fs.FS) http.Handler {
-	if _, err := fs.Stat(root, indexFile); err != nil {
+	if !assetsBuiltIn(root) {
 		return notBuiltHandler()
 	}
 	return &spaHandler{root: root}

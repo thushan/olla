@@ -551,3 +551,64 @@ func TestSecurityHeadersOnNotBuilt503(t *testing.T) {
 	}
 	assertDashboardSecurityHeaders(t, resp.Header)
 }
+
+// TestAssetsBuilt_SyntheticFS drives both branches of assetsBuiltIn via a
+// synthetic FS, so the decision startup logging depends on is covered without
+// coupling the test to whether the committed dist happens to ship a built
+// index.html.
+func TestAssetsBuilt_SyntheticFS(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		root fs.FS
+		want bool
+	}{
+		{
+			name: "sentinel only - not built",
+			root: fstest.MapFS{".gitkeep": &fstest.MapFile{Data: nil}},
+			want: false,
+		},
+		{
+			name: "empty FS - not built",
+			root: fstest.MapFS{},
+			want: false,
+		},
+		{
+			name: "index present - built",
+			root: fstest.MapFS{indexFile: &fstest.MapFile{Data: []byte("<html></html>")}},
+			want: true,
+		},
+		{
+			name: "index is a directory - not built",
+			root: fstest.MapFS{indexFile + "/": &fstest.MapFile{}},
+			want: false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := assetsBuiltIn(tc.root); got != tc.want {
+				t.Errorf("assetsBuiltIn = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestAssetsBuilt_MatchesRealEmbed confirms the package-level AssetsBuilt
+// (read from the production embed) agrees with assetsBuiltIn over the same
+// embed. They must never drift: startup logging and route selection use the
+// two respectively, and a mismatch would mean the startup line claims ready
+// while the route 503s (or vice versa).
+func TestAssetsBuilt_MatchesRealEmbed(t *testing.T) {
+	t.Parallel()
+
+	sub, err := fs.Sub(embeddedFS, distRoot)
+	if err != nil {
+		t.Fatalf("fs.Sub failed on the real embed: %v", err)
+	}
+	want := assetsBuiltIn(sub)
+	if got := AssetsBuilt(); got != want {
+		t.Errorf("AssetsBuilt() = %v but assetsBuiltIn(realEmbed) = %v; the two call sites have drifted", got, want)
+	}
+}

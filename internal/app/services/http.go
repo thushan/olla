@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/thushan/olla/internal/app/handlers"
+	"github.com/thushan/olla/internal/app/handlers/dashboard"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
@@ -22,6 +23,18 @@ const (
 	// attacks. A legitimate client sends its full header set well within 10 s; slow
 	// backends are handled by proxy.ConnectionTimeout which applies much later.
 	defaultReadHeaderTimeout = 10 * time.Second
+
+	// defaultMaxHeaderBytes caps the total request header bytes the server will
+	// accept. The status handlers and gzip middleware also bound the specific
+	// headers they parse (If-None-Match, Accept-Encoding), but the server-level
+	// cap is the structural ceiling that stops an oversized header set from
+	// driving unbounded work or memory before handlers run. 64 KiB is well above
+	// any legitimate browser/curl request and matches http.Server's documented
+	// default when MaxHeaderBytes is left at zero, EXCEPT that an explicit value
+	// is independent of ReadHeaderTimeout doubling, so a slow large header cannot
+	// slip past the cap during a slowloris window. Set explicitly so the cap is
+	// self-documenting at the construction site rather than implicit.
+	defaultMaxHeaderBytes = 64 * 1024
 )
 
 // HTTPService manages the HTTP server lifecycle and route registration. It coordinates
@@ -178,6 +191,7 @@ func (s *HTTPService) Start(ctx context.Context) error {
 		ReadHeaderTimeout: readHeaderTimeout,
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    defaultMaxHeaderBytes,
 	}
 
 	s.logger.Info("HTTP server listening",
@@ -206,6 +220,12 @@ func (s *HTTPService) Start(ctx context.Context) error {
 // InfoWithStatus "[ OK ]" treatment Stop() already uses for its loudest line.
 // Skipped silently if the bind address can't be turned into a URL - this is
 // cosmetic, not worth failing startup over.
+//
+// The line is honest about asset presence: a binary built without `make
+// build-web` (e.g. via `go install`) carries only the .gitkeep sentinel, so
+// the dashboard route would 503 on every request. Claiming "ready" there
+// sends the operator on a dead debugging loop. We log a separate line that
+// names the fix instead.
 func (s *HTTPService) printDashboardURL(bindAddr string) {
 	if !s.fullConfig.Dashboard.Enabled {
 		return
@@ -216,7 +236,17 @@ func (s *HTTPService) printDashboardURL(bindAddr string) {
 		return
 	}
 
-	s.logger.Info(fmt.Sprintf("Admin dashboard ready - %s", url))
+	s.logger.Info(dashboardStartupLine(url, dashboard.AssetsBuilt()))
+}
+
+// dashboardStartupLine renders the line printDashboardURL emits for a given
+// URL and asset-present flag. Split out so the decision is unit-testable
+// without standing up a logger.
+func dashboardStartupLine(url string, assetsBuilt bool) string {
+	if assetsBuilt {
+		return fmt.Sprintf("Admin dashboard ready - %s", url)
+	}
+	return fmt.Sprintf("Admin dashboard at %s (assets not built - run `make build-web` or use a release binary)", url)
 }
 
 // dashboardURL derives a clickable dashboard URL from a listener bind address.
