@@ -11,15 +11,15 @@
 </script>
 
 <script lang="ts">
-  // Hand-rolled inline-SVG sparkline with a req/s y-axis scale and a hover
-  // reading of the sample under the pointer. No chart library (hard rule).
-  // The strip samples once per overview poll tick by keying an $effect off
-  // overview.lastUpdated, which advances on BOTH the 200 and 304 paths (see
-  // poll-store.svelte.ts onSuccess). On a 304 the data object is unchanged,
-  // so the computed delta is naturally zero: the x-axis stays real time.
+  // Hand-rolled inline-SVG sparkline with a req/s y-axis scale, a pointer
+  // hover reading, and outage markers (red vertical lines at failed-poll
+  // ticks). No chart library (hard rule).
+  //
+  // Sampling is driven by the overview store's onTick callback wired in
+  // overview.svelte.ts, which feeds the history ring buffer on BOTH success
+  // and failure. This component is purely a view of history.samples; it does
+  // not sample or poll itself.
 
-  import { untrack } from 'svelte';
-  import { overview } from '../lib/stores/overview.svelte';
   import { history, type Sample } from '../lib/stores/history.svelte';
   import { fmtInt, fmtDuration } from '../lib/format';
 
@@ -31,85 +31,107 @@
 
   const view = $derived<Sample[]>(samples ?? history.samples);
 
-  // Sampling hook. untrack prevents the push inside history.append from
-  // adding history.samples as a dependency of this effect (write loop).
-  $effect(() => {
-    const lu = overview.lastUpdated;
-    if (!lu) return;
-    const data = overview.data;
-    if (data) untrack(() => history.append(data));
-  });
-
   // viewBox dimensions: arbitrary because preserveAspectRatio="none" stretches
   // the drawing to the container. The 100x30 box gives the path math a clean
   // range; rendered height is fixed by .spark-svg so there is no layout shift.
   const W = 100;
   const H = 30;
 
-  const reqSeries = $derived(view.map((s) => s.reqPerSec));
-  const connSeries = $derived(view.map((s) => s.activeConnections));
-  // Floor at 1 so a flat-zero series still scales (avoids div-by-zero).
-  const maxReq = $derived(Math.max(1, ...reqSeries));
-  const maxConn = $derived(Math.max(1, ...connSeries));
+  const step = $derived(view.length >= 2 ? W / (view.length - 1) : 0);
+  const maxReq = $derived(Math.max(1, ...view.map((s) => s.reqPerSec)));
+  const maxConn = $derived(Math.max(1, ...view.map((s) => s.activeConnections)));
 
-  // Ceiling label for the req/s axis: one decimal under 10, integer above,
-  // matching the precision of the live readout.
+  // Ceiling label for the req/s axis: one decimal under 10, integer above.
   const maxReqLabel = $derived(maxReq < 10 ? maxReq.toFixed(1) : Math.round(maxReq).toString());
 
-  function areaPath(reqs: number[]): string {
-    if (reqs.length < 2) return '';
-    const n = reqs.length;
-    const step = W / (n - 1);
+  // Area wash: one closed sub-path per run of consecutive non-error samples.
+  // Error samples produce a visual gap (the run is closed at the boundary)
+  // rather than bridging the outage with fabricated data.
+  function buildArea(list: Sample[], maxR: number): string {
+    const n = list.length;
+    if (n < 2) return '';
+    const s = W / (n - 1);
     let d = '';
+    let runStartX = 0;
+    let lastX = 0;
+    let inRun = false;
     for (let i = 0; i < n; i++) {
-      const x = i * step;
-      const y = H - (reqs[i] / maxReq) * H;
-      d += i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`;
+      const sample = list[i];
+      if (sample.error) {
+        if (inRun) {
+          d += ` L ${lastX} ${H} L ${runStartX} ${H} Z`;
+          inRun = false;
+        }
+        continue;
+      }
+      const x = i * s;
+      const y = H - (sample.reqPerSec / maxR) * H;
+      if (!inRun) {
+        d += ` M ${x} ${y}`;
+        runStartX = x;
+        inRun = true;
+      } else {
+        d += ` L ${x} ${y}`;
+      }
+      lastX = x;
     }
-    return `${d} L ${W} ${H} L 0 ${H} Z`;
+    if (inRun) {
+      d += ` L ${lastX} ${H} L ${runStartX} ${H} Z`;
+    }
+    return d.trim();
   }
 
-  function linePath(series: number[], max: number): string {
-    if (series.length < 2) return '';
-    const n = series.length;
-    const step = W / (n - 1);
+  // Stroke path (edge line or connections): open sub-paths per run of
+  // non-error samples. A lone M from a single-point run draws nothing.
+  function buildLine(list: Sample[], pick: (s: Sample) => number, max: number): string {
+    const n = list.length;
+    if (n < 2) return '';
+    const s = W / (n - 1);
     let d = '';
+    let inRun = false;
     for (let i = 0; i < n; i++) {
-      const x = i * step;
-      const y = H - (series[i] / max) * H;
-      d += i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`;
+      const sample = list[i];
+      if (sample.error) {
+        inRun = false;
+        continue;
+      }
+      const x = i * s;
+      const y = H - (pick(sample) / max) * H;
+      if (!inRun) {
+        d += ` M ${x} ${y}`;
+        inRun = true;
+      } else {
+        d += ` L ${x} ${y}`;
+      }
     }
-    return d;
+    return d.trim();
   }
 
-  const reqArea = $derived(areaPath(reqSeries));
-  // Crisp req/s edge over the wash. The area path closes along the baseline,
-  // so stroking it would underline the whole strip; a separate open path
-  // traces just the series top in solid accent for a readable primary line.
-  const reqLine = $derived(linePath(reqSeries, maxReq));
-  const connLine = $derived(linePath(connSeries, maxConn));
+  const reqAreaD = $derived(buildArea(view, maxReq));
+  const reqEdgeD = $derived(buildLine(view, (s) => s.reqPerSec, maxReq));
+  const connLineD = $derived(buildLine(view, (s) => s.activeConnections, maxConn));
+  const errorIndices = $derived(
+    view.length >= 2
+      ? view.map((s, i) => (s.error ? i : -1)).filter((i) => i >= 0)
+      : [],
+  );
 
   const latest = $derived(view.length > 0 ? view[view.length - 1] : null);
-  // Need >=2 points to draw any line, so the warm-up hint covers the first
-  // tick's lone sample even though its readout is available.
   const warming = $derived(view.length < 2);
 
   const ariaLabel = $derived(
     latest
-      ? `${latest.reqPerSec.toFixed(1)} requests per second, ${fmtInt(latest.activeConnections)} active connections`
+      ? latest.error
+        ? 'connection lost'
+        : `${latest.reqPerSec.toFixed(1)} requests per second, ${fmtInt(latest.activeConnections)} active connections`
       : 'gathering telemetry',
   );
 
   // --- hover reading (progressive enhancement for pointer users) ---
-  // The static readout + aria-label remain the non-pointer baseline; the
-  // hover adds a historical inspection layer without removing or depending
-  // on it. No keyboard coupling: the guide + tooltip are visual-only.
   let chartEl: HTMLElement | null = $state(null);
   let hoverIndex = $state<number | null>(null);
 
   const hoverSample = $derived(hoverIndex !== null ? view[hoverIndex] ?? null : null);
-  // Guide line sits at the exact sample x; the tooltip is clamped so its
-  // translateX(-50%) centre can't push it past either edge of the chart.
   const guidePct = $derived(
     hoverIndex !== null && view.length >= 2 ? (hoverIndex / (view.length - 1)) * 100 : 0,
   );
@@ -117,8 +139,6 @@
 
   function onPointerMove(e: PointerEvent): void {
     if (!chartEl || view.length < 2) return;
-    // preserveAspectRatio="none" stretches viewBox coords, so map via the
-    // container's real pixel rect, not the SVG's internal coordinate space.
     const rect = chartEl.getBoundingClientRect();
     if (rect.width <= 0) return;
     const fraction = (e.clientX - rect.left) / rect.width;
@@ -143,9 +163,12 @@
       {#if !warming}
         <line class="spark-grid" x1="0" y1="0" x2={W} y2="0" />
         <line class="spark-grid" x1="0" y1={H} x2={W} y2={H} />
-        <path class="spark-area" d={reqArea} />
-        <path class="spark-edge" d={reqLine} />
-        <path class="spark-line" d={connLine} />
+        <path class="spark-area" d={reqAreaD} />
+        <path class="spark-edge" d={reqEdgeD} />
+        <path class="spark-line" d={connLineD} />
+        {#each errorIndices as i}
+          <line class="spark-error" x1={i * step} y1="0" x2={i * step} y2={H} />
+        {/each}
       {/if}
     </svg>
     {#if !warming}
@@ -153,9 +176,13 @@
       <span class="spark-axis spark-axis-bottom">0</span>
     {/if}
     {#if hoverSample && view.length >= 2}
-      <div class="spark-guide" style="left: {guidePct}%"></div>
+      <div class="spark-guide" class:is-error={hoverSample.error} style="left: {guidePct}%"></div>
       <div class="spark-tooltip" style="left: {tooltipPct}%">
-        {hoverSample.reqPerSec.toFixed(1)} req/s · {fmtInt(hoverSample.activeConnections)} conns · {fmtDuration(Date.now() - hoverSample.t)} ago
+        {#if hoverSample.error}
+          connection lost · {fmtDuration(Date.now() - hoverSample.t)} ago
+        {:else}
+          {hoverSample.reqPerSec.toFixed(1)} req/s · {fmtInt(hoverSample.activeConnections)} conns · {fmtDuration(Date.now() - hoverSample.t)} ago
+        {/if}
       </div>
     {/if}
     {#if warming}
@@ -164,14 +191,16 @@
   </div>
   {#if latest}
     <span class="spark-readout">
-      {latest.reqPerSec.toFixed(1)} req/s · {fmtInt(latest.activeConnections)} conns
+      {#if latest.error}
+        connection lost
+      {:else}
+        {latest.reqPerSec.toFixed(1)} req/s · {fmtInt(latest.activeConnections)} conns
+      {/if}
     </span>
   {/if}
 </div>
 
 <style>
-  /* Tile chrome: same surface, border and padding as StatTile so the strip
-     reads as part of the grid rather than an injected widget. */
   .spark-strip {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
@@ -183,50 +212,38 @@
   .spark-chart {
     position: relative;
     width: 100%;
-    /* Fixed from first render so accumulating samples never shift layout.
-       Roomy enough that the series and axis labels don't read as squashed
-       now the strip spans the full content width above the tabs. */
     height: 88px;
   }
   .spark-svg {
     width: 100%;
     height: 100%;
     display: block;
-    /* Let gridline strokes at the viewBox boundary render fully instead of
-       being half-clipped at the top/bottom edge. */
     overflow: visible;
   }
-  /* Area wash: the theme-aware accent at low opacity. The pale accent-soft
-     tint vanished on the cream light background, so the primary series had
-     no contrast; accent-at-opacity keeps a visible teal wash on light and a
-     soft glow on dark, since --accent itself flips per theme. The solid edge
-     line below carries the actual shape. */
   .spark-area {
     fill: var(--accent);
     fill-opacity: 0.2;
     stroke: none;
   }
-  /* Solid accent edge over the wash: the crisp, high-contrast primary line. */
   .spark-edge {
     fill: none;
     stroke: var(--accent);
     stroke-width: 1.5;
     vector-effect: non-scaling-stroke;
   }
-  /* Secondary line: the neutral token is the dashboard's muted foreground, the
-     same grey used for non-committal status pills, so connections stay legible
-     over the accent-soft area without demanding equal weight. */
   .spark-line {
     fill: none;
     stroke: var(--neutral);
     stroke-width: 1.5;
     vector-effect: non-scaling-stroke;
   }
-  /* Faint horizontal gridlines at the labelled values (ceiling + zero
-     baseline). --border is the same token the tile grid uses for its rules,
-     so the lines read in both themes without competing with the series. */
   .spark-grid {
     stroke: var(--border);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .spark-error {
+    stroke: var(--red);
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
   }
@@ -237,7 +254,6 @@
     line-height: 1;
     color: var(--text-faint);
     pointer-events: none;
-    /* Semi-opaque surface so the label stays legible over the area fill. */
     padding: 0 3px;
     background: color-mix(in srgb, var(--bg-elevated) 80%, transparent);
     border-radius: 1px;
@@ -255,6 +271,9 @@
     width: 1px;
     background: var(--text-faint);
     pointer-events: none;
+  }
+  .spark-guide.is-error {
+    background: var(--red);
   }
   .spark-tooltip {
     position: absolute;
@@ -285,8 +304,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    /* The chart is static; no animated transitions to throttle. Included so
-       any future transition on the guide/tooltip respects the preference. */
     .spark-guide,
     .spark-tooltip {
       transition: none;

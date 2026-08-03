@@ -1,8 +1,8 @@
 // Ring-buffer of overview snapshots for the SparkStrip. One sample per poll
-// tick (200 AND 304 - see poll-store onSuccess, which advances lastUpdated in
-// both branches). The 304 path is the reason this store keys off lastUpdated
-// rather than data identity: on a 304 the data object is the SAME reference,
-// so reading it alone would not retrigger the strip's sampling effect.
+// tick (success AND failure) via the overview store's onTick callback. Failed
+// ticks push an error sample (error: true, no counter data); the chart draws
+// a red marker at each error sample's x position and breaks the area/line
+// paths around it so the outage is visible rather than bridged over.
 //
 // Singleton module-scope state so every importer (component + tests) shares
 // one buffer, matching how overview/theme are wired elsewhere.
@@ -18,14 +18,19 @@ export interface Sample {
   // derived per-tick rates
   reqPerSec: number;
   bytesPerSec: number;
+  // true on a failed-poll marker. Error samples carry no counter data and
+  // must not feed the delta baseline or restart detection.
+  error?: boolean;
 }
 
 // ~15 min of samples at the 5 s overview cadence.
 export const MAX_SAMPLES = 180;
 
-// If the gap between samples exceeds this, the previous baseline is stale
-// (panel was hidden, tab backgrounded) and the next delta would misrepresent
-// the rate. Re-seed the baseline silently rather than emitting a spike.
+// If no sample at all (success or error) arrives within this window, the
+// panel was hidden or the tab was backgrounded beyond the scheduler's backoff
+// cadence, so the delta baseline is stale. Error ticks update lastSampleT so
+// a visible outage (where error ticks keep firing) does NOT trip this guard:
+// the next successful sample legitimately deltas across the outage window.
 const STALE_GAP_MS = 30_000;
 
 // --- pure helpers (exported for unit testing) ---
@@ -70,11 +75,14 @@ export function parseTrafficBytes(s: string | undefined): number {
 // --- singleton state ---
 
 let samples: Sample[] = $state([]);
-// Previous sample drives delta computation for the next. Plain module var,
-// not reactive: only `samples` is read by the SVG.
+// Previous SUCCESSFUL sample drives delta computation for the next. Plain
+// module var, not reactive: only `samples` is read by the SVG.
 let prev: Sample | null = null;
 // Tracked across ticks to detect process restarts (start_time change).
 let lastStartTime: string | null = null;
+// t of the most recent sample of any kind (success or error). Drives the
+// stale-gap guard: if this goes silent for >30s the panel was hidden.
+let lastSampleT = 0;
 
 function buildSample(data: StatusResponse, now: number): Sample {
   const sys = data.system;
@@ -106,8 +114,7 @@ export const history = {
     return samples.length;
   },
   /** Derive a sample from the latest status response and append it. A null
-   *  body (e.g. the poll store handing us nothing on a fresh mount) is a
-   *  no-op so callers can wire this directly to the tick hook. */
+   *  body is a no-op so callers can wire this directly to the tick callback. */
   append(data: StatusResponse | null): void {
     if (data === null) return;
     const sys = data.system;
@@ -121,7 +128,11 @@ export const history = {
     }
 
     const now = Date.now();
-    if (prev !== null && now - prev.t > STALE_GAP_MS) {
+    // Stale-gap guard: only fires when NO sample (success or error) arrived
+    // for STALE_GAP_MS, meaning the panel was hidden. Error ticks during an
+    // outage keep lastSampleT current so this guard does not fire across a
+    // visible outage and the next good sample produces a real rate.
+    if (prev !== null && now - lastSampleT > STALE_GAP_MS) {
       prev = null;
     }
 
@@ -130,12 +141,35 @@ export const history = {
     if (samples.length > MAX_SAMPLES) samples.shift();
     prev = sample;
     lastStartTime = start;
+    lastSampleT = now;
+  },
+  /** Append a failed-poll marker. Error samples carry no counter data and
+   *  deliberately do NOT update prev or lastStartTime: the next successful
+   *  sample deltas against the last good prev, yielding a real rate across
+   *  the outage window rather than a counter-reset spike. */
+  appendError(): void {
+    const now = Date.now();
+    const sample: Sample = {
+      t: now,
+      totalRequests: 0,
+      totalBytes: 0,
+      activeConnections: 0,
+      reqPerSec: 0,
+      bytesPerSec: 0,
+      error: true,
+    };
+    samples.push(sample);
+    if (samples.length > MAX_SAMPLES) samples.shift();
+    // Update lastSampleT so the stale-gap guard sees a live timeline even
+    // during an outage. Do NOT touch prev or lastStartTime.
+    lastSampleT = now;
   },
   /** Drop everything: samples, delta baseline, start_time tracking. */
   reset(): void {
     samples = [];
     prev = null;
     lastStartTime = null;
+    lastSampleT = 0;
   },
   /** Drop only the rendered samples, keeping the delta baseline. Useful for
    *  tests that want a clean array without resetting the rate tracking. */

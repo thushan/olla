@@ -14,6 +14,13 @@ export interface PollStoreOptions<T> {
   url: string;
   /** foreground poll interval */
   intervalMs: number;
+  /** Fires on every completed tick, success or failure. ok=true for 200/304
+   *  (data is the parsed body on 200, null on 304); ok=false on failure.
+   *  Optional and additive, so stores that don't care (endpoints/models) are
+   *  unaffected. The overview store uses this to push per-tick samples into
+   *  the history ring buffer, including failed ticks so the chart can render
+   *  outage markers. */
+  onTick?: (data: T | null, ok: boolean) => void;
 }
 
 export interface PollStore<T> {
@@ -33,7 +40,7 @@ export interface PollStore<T> {
 }
 
 export function createPollStore<T>(opts: PollStoreOptions<T>): PollStore<T> {
-  const { name, url, intervalMs } = opts;
+  const { name, url, intervalMs, onTick } = opts;
 
   let data: T | null = $state(null);
   let status: PollStatus = $state('loading');
@@ -92,6 +99,7 @@ export function createPollStore<T>(opts: PollStoreOptions<T>): PollStore<T> {
     status = 'ok';
     lastUpdated = new Date();
     lastSuccessAt = Date.now();
+    onTick?.(body, true);
   }
 
   function onFailure(err: Error): void {
@@ -107,6 +115,7 @@ export function createPollStore<T>(opts: PollStoreOptions<T>): PollStore<T> {
       // panel to surface the error rather than sit on a blank skeleton.
       status = 'error';
     }
+    onTick?.(null, false);
   }
 
   // Register with the shared scheduler. Caller (App.svelte) starts it.

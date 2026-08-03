@@ -200,3 +200,112 @@ describe('SparkStrip', () => {
     expect(document.querySelector('.spark-tooltip')).toBeNull();
   });
 });
+
+describe('SparkStrip outage markers', () => {
+  it('draws a red line at each error sample x and breaks the area path', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 5, activeConnections: 3 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 4, activeConnections: 1 }),
+        makeSample({ reqPerSec: 2, activeConnections: 2 }),
+      ],
+    });
+    // One red error line at index 2.
+    const errorLines = document.querySelectorAll('.spark-error');
+    expect(errorLines.length).toBe(1);
+    // x = index * step, step = 100 / (5-1) = 25, so index 2 -> x = 50.
+    const line = errorLines[0] as SVGLineElement;
+    expect(line.getAttribute('x1')).toBe('50');
+    expect(line.getAttribute('x2')).toBe('50');
+
+    // The area path must contain two M commands (two runs of non-error
+    // samples: indices 0-1 and 3-4), confirming the break.
+    const area = document.querySelector('.spark-area') as SVGPathElement;
+    const mCount = (area.getAttribute('d') ?? '').match(/M/g)?.length ?? 0;
+    expect(mCount).toBe(2);
+
+    // The edge line and connections line also break.
+    const edge = document.querySelector('.spark-edge') as SVGPathElement;
+    expect((edge.getAttribute('d') ?? '').match(/M/g)?.length ?? 0).toBe(2);
+    const connLine = document.querySelector('.spark-line') as SVGPathElement;
+    expect((connLine.getAttribute('d') ?? '').match(/M/g)?.length ?? 0).toBe(2);
+  });
+
+  it('does not draw an error line when there are no error samples', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 5, activeConnections: 3 }),
+      ],
+    });
+    expect(document.querySelectorAll('.spark-error').length).toBe(0);
+    // Single continuous run: one M in the area path.
+    const area = document.querySelector('.spark-area') as SVGPathElement;
+    expect((area.getAttribute('d') ?? '').match(/M/g)?.length ?? 0).toBe(1);
+  });
+
+  it('shows "connection lost" in the tooltip when hovering an error sample', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true, t: Date.now() - 10000 }),
+        makeSample({ reqPerSec: 4, activeConnections: 1 }),
+      ],
+    });
+    const chart = stubChartRect(100);
+    // x=50 -> fraction 0.5 -> nearestSampleIndex(0.5, 3) = round(1) = 1, the
+    // error sample.
+    chart.dispatchEvent(new MouseEvent('pointermove', { clientX: 50, bubbles: true }));
+    flushSync();
+
+    const tooltip = document.querySelector('.spark-tooltip') as HTMLElement | null;
+    expect(tooltip).toBeTruthy();
+    expect(tooltip!.textContent).toContain('connection lost');
+    expect(tooltip!.textContent).not.toContain('req/s');
+    // Guide line picks up the error colour.
+    expect(document.querySelector('.spark-guide')?.classList.contains('is-error')).toBe(true);
+  });
+
+  it('resumes normal values after recovery (hover a post-error sample)', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 4.2, activeConnections: 5 }),
+      ],
+    });
+    const chart = stubChartRect(100);
+    // x=100 -> fraction 1 -> index 2, the post-recovery sample.
+    chart.dispatchEvent(new MouseEvent('pointermove', { clientX: 100, bubbles: true }));
+    flushSync();
+
+    const tooltip = document.querySelector('.spark-tooltip') as HTMLElement | null;
+    expect(tooltip).toBeTruthy();
+    expect(tooltip!.textContent).toContain('4.2 req/s');
+    expect(tooltip!.textContent).toContain('5 conns');
+    expect(document.querySelector('.spark-guide')?.classList.contains('is-error')).toBe(false);
+  });
+
+  it('aria-label says "connection lost" when the latest sample is an error', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+      ],
+    });
+    const chart = document.querySelector('.spark-chart') as HTMLElement;
+    expect(chart.getAttribute('aria-label')).toBe('connection lost');
+  });
+
+  it('readout shows "connection lost" when the latest sample is an error', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+      ],
+    });
+    expect(document.querySelector('.spark-readout')?.textContent).toContain('connection lost');
+  });
+});
