@@ -535,7 +535,7 @@ func TestBuildModelSummaries_AliasesAttached(t *testing.T) {
 
 // TestModelsStatusHandler_AliasesAbsentGraceful drives the full handler with a
 // registry that does not satisfy unifiedModelsGetter. The response must still
-// be 200 with the model present, and aliases omitted entirely — never an
+// be 200 with the model present, and aliases omitted entirely, never an
 // error or empty body.
 func TestModelsStatusHandler_AliasesAbsentGraceful(t *testing.T) {
 	t.Parallel()
