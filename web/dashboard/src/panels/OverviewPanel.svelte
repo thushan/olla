@@ -28,6 +28,14 @@
 
   const successPctNum = $derived(parseFloat(sys?.success_rate ?? '') || 0);
   const trafficBytes = $derived(parseTrafficBytes(sys?.total_traffic));
+  // Backend signals no-traffic explicitly so we don't mistake "N/A" / "0%" for
+  // a real 0% success rate. Both the response-rate and failure tiles branch on
+  // this; total_requests===0 is a fallback for older builds without the flag.
+  const hasTraffic = $derived(sys?.has_traffic === true || (sys?.total_requests ?? 0) > 0);
+  // Pre-formatted so the tile stays on the plain sub= prop (no snippet needed).
+  const failuresSub = $derived(
+    hasTraffic ? `${(100 - successPctNum).toFixed(1)}% of traffic` : 'no traffic yet'
+  );
 
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
 
@@ -207,11 +215,18 @@
             {up}<span class="unit">/ {total}</span>
           {/snippet}
         </StatTile>
-        <StatTile label="Response rate" value={sys.success_rate}>
+        <StatTile label="Response rate">
+          {#snippet children()}
+            {#if hasTraffic}{sys.success_rate}{:else}<span class="dash">—</span>{/if}
+          {/snippet}
           {#snippet subSnippet()}
-            <span title="Counts any streamed response, regardless of HTTP status"
-              >{fmtInt(sys.total_failures)} failures logged</span
-            >
+            {#if hasTraffic}
+              <span title="Counts any streamed response, regardless of HTTP status"
+                >{fmtInt(sys.total_failures)} failures logged</span
+              >
+            {:else}
+              no traffic yet
+            {/if}
           {/snippet}
         </StatTile>
         <StatTile
@@ -237,7 +252,7 @@
         <StatTile
           label="Total failures"
           value={fmtInt(sys.total_failures)}
-          sub="{(100 - successPctNum).toFixed(1)}% of traffic"
+          sub={failuresSub}
         />
         <StatTile label="Security violations" value={fmtInt(sys.security_violations)}>
           {#snippet subSnippet()}
