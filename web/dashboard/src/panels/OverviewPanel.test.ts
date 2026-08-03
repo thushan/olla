@@ -248,11 +248,12 @@ describe('OverviewPanel response-rate tile is honest about what it counts (D2)',
     const label = rateTile.querySelector('.label')?.textContent;
     expect(label).not.toBe('Success rate');
 
-    // The caveat is in the tile's own rendered text - no title attribute
-    // needed to find it, and no {@html} sink.
-    const tileText = rateTile.textContent!;
-    expect(tileText).toMatch(/HTTP status/i);
-    expect(tileText).toMatch(/regardless/i);
+    // The caveat lives on the sub line's hover title (the visible text was
+    // deliberately shortened to keep the tile quiet), so the honesty
+    // guarantee is the attribute, not rendered text - still no {@html} sink.
+    const caveat = rateTile.querySelector('.sub span[title]')?.getAttribute('title');
+    expect(caveat).toMatch(/HTTP status/i);
+    expect(caveat).toMatch(/regardless/i);
   });
 });
 
