@@ -21,6 +21,12 @@
     overview.status === 'stale' ? 'stale' : overview.status === 'error' ? 'unreachable' : null
   );
 
+  // No-traffic signal mirroring OverviewPanel: the WP-4 has_traffic flag is
+  // always present, with total_requests===0 as a fallback for older backends.
+  // Used to drop the Resp. rate cell to a no-data dash so the strip matches
+  // the OverviewPanel tile rather than showing a literal "N/A".
+  const hasTraffic = $derived(sys?.has_traffic === true || (sys?.total_requests ?? 0) > 0);
+
   // "degraded" on its own tells the operator nothing actionable. Derive a
   // short reason from real endpoint data (offline count) rather than
   // fabricate one; when healthy or when we have no endpoint data yet, say
@@ -77,7 +83,7 @@
   </div>
   <div class="status-cell">
     <dt>Resp. rate</dt>
-    <dd title="Counts any streamed response, regardless of HTTP status">{sys ? sys.success_rate : '—'}</dd>
+    <dd title="Counts any streamed response, regardless of HTTP status">{#if sys}{#if hasTraffic}{sys.success_rate}{:else}<span class="dash">—</span>{/if}{:else}—{/if}</dd>
   </div>
   <div class="status-cell">
     <dt>Avg latency</dt>

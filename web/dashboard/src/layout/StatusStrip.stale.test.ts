@@ -72,6 +72,10 @@ afterEach(() => {
   document.body.innerHTML = '';
   holder.status = 'ok';
   holder.endpoints = [];
+  holder.sys.has_traffic = false;
+  holder.sys.total_requests = 0;
+  holder.sys.success_rate = '99.0%';
+  holder.sys.status = 'healthy';
 });
 
 describe('StatusStrip staleness indicator', () => {
@@ -158,5 +162,46 @@ describe('StatusStrip degraded reason', () => {
 
     const reason = document.querySelector('.status-strip .status-reason');
     expect(reason).toBeNull();
+  });
+});
+
+describe('StatusStrip response-rate cell', () => {
+  // Coherent no-traffic UX: when the WP-4 has_traffic flag is false the
+  // backend emits success_rate as "N/A", which the strip used to render
+  // literally. Mirror OverviewPanel's dash so both surfaces agree.
+
+  function respRateCell(): Element | null {
+    const cells = document.querySelectorAll('.status-strip .status-cell');
+    return [...cells].find((c) => c.querySelector('dt')?.textContent?.trim() === 'Resp. rate') ?? null;
+  }
+
+  it('renders a no-data dash when has_traffic is false', () => {
+    holder.status = 'ok';
+    holder.sys.has_traffic = false;
+    holder.sys.total_requests = 0;
+    holder.sys.success_rate = 'N/A';
+    component = mount(StatusStrip, { target: document.body });
+    flushSync();
+
+    const cell = respRateCell();
+    expect(cell).toBeTruthy();
+    const dd = cell!.querySelector('dd')!;
+    expect(dd.querySelector('.dash')?.textContent?.trim()).toBe('—');
+    expect(dd.textContent).not.toContain('N/A');
+  });
+
+  it('renders the live success_rate when has_traffic is true', () => {
+    holder.status = 'ok';
+    holder.sys.has_traffic = true;
+    holder.sys.total_requests = 50;
+    holder.sys.success_rate = '97.5%';
+    component = mount(StatusStrip, { target: document.body });
+    flushSync();
+
+    const cell = respRateCell();
+    expect(cell).toBeTruthy();
+    const dd = cell!.querySelector('dd')!;
+    expect(dd.textContent?.trim()).toBe('97.5%');
+    expect(dd.querySelector('.dash')).toBeNull();
   });
 });
