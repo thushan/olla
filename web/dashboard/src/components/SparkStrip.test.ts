@@ -119,9 +119,12 @@ describe('SparkStrip', () => {
     expect(document.body.textContent).toContain('3 conns');
   });
 
-  it('omits the readout entirely when no samples exist yet', () => {
+  it('renders a placeholder readout (not omitted) when no samples exist yet, to avoid header layout shift', () => {
     render({ samples: [] });
-    expect(document.body.textContent).not.toContain('req/s');
+    const readout = document.querySelector('.spark-readout');
+    expect(readout).toBeTruthy();
+    expect(readout!.textContent).not.toContain('req/s');
+    expect(readout!.textContent?.trim()).toBe('—');
   });
 
   it('renders the req/s y-axis ceiling label and a 0 baseline', () => {
