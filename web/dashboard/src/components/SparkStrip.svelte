@@ -83,6 +83,10 @@
   }
 
   const reqArea = $derived(areaPath(reqSeries));
+  // Crisp req/s edge over the wash. The area path closes along the baseline,
+  // so stroking it would underline the whole strip; a separate open path
+  // traces just the series top in solid accent for a readable primary line.
+  const reqLine = $derived(linePath(reqSeries, maxReq));
   const connLine = $derived(linePath(connSeries, maxConn));
 
   const latest = $derived(view.length > 0 ? view[view.length - 1] : null);
@@ -140,6 +144,7 @@
         <line class="spark-grid" x1="0" y1="0" x2={W} y2="0" />
         <line class="spark-grid" x1="0" y1={H} x2={W} y2={H} />
         <path class="spark-area" d={reqArea} />
+        <path class="spark-edge" d={reqLine} />
         <path class="spark-line" d={connLine} />
       {/if}
     </svg>
@@ -191,12 +196,22 @@
        being half-clipped at the top/bottom edge. */
     overflow: visible;
   }
-  /* Area fill: accent-soft (the light tint of the primary accent) so it reads
-     as the same family as the tile glyphs and status pills without competing
-     with the value text. */
+  /* Area wash: the theme-aware accent at low opacity. The pale accent-soft
+     tint vanished on the cream light background, so the primary series had
+     no contrast; accent-at-opacity keeps a visible teal wash on light and a
+     soft glow on dark, since --accent itself flips per theme. The solid edge
+     line below carries the actual shape. */
   .spark-area {
-    fill: var(--accent-soft);
+    fill: var(--accent);
+    fill-opacity: 0.2;
     stroke: none;
+  }
+  /* Solid accent edge over the wash: the crisp, high-contrast primary line. */
+  .spark-edge {
+    fill: none;
+    stroke: var(--accent);
+    stroke-width: 1.5;
+    vector-effect: non-scaling-stroke;
   }
   /* Secondary line: the neutral token is the dashboard's muted foreground, the
      same grey used for non-committal status pills, so connections stay legible
