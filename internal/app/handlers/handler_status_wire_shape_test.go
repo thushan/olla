@@ -55,7 +55,7 @@ func assertKeysTyped(t *testing.T, obj map[string]interface{}, expected map[stri
 	t.Helper()
 	for key, wantType := range expected {
 		got, ok := obj[key]
-		require.True(t, ok, "missing pinned key %q (FR-13 regression)", key)
+		require.True(t, ok, "missing pinned key %q (additive-field wire-shape guarantee regression)", key)
 		switch wantType {
 		case "string":
 			_, ok := got.(string)

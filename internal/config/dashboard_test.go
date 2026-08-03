@@ -49,7 +49,7 @@ func TestDashboardConfig_Validate_EmptyHostsAllowed(t *testing.T) {
 		},
 	}
 	if err := c.Validate(); err != nil {
-		t.Fatalf("empty allowed_hosts must validate clean per FR-11, got %v", err)
+		t.Fatalf("IP-literal hosts are auto-accepted, so empty allowed_hosts must validate clean, got %v", err)
 	}
 }
 
