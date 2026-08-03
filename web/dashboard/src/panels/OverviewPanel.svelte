@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import { overview } from '../lib/stores/overview.svelte';
   import { endpoints } from '../lib/stores/endpoints.svelte';
   import StatTile from '../components/StatTile.svelte';
@@ -10,16 +9,9 @@
   import type { Column, SortState } from '../components/SortableTable.svelte';
   import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format';
   import { stableId } from '../lib/dom-id';
+  import { jumpToEndpoint } from '../lib/jump-to-endpoint';
   import { getNow as liveNow } from '../lib/clock.svelte';
   import type { EndpointSummary } from '../lib/types';
-
-  interface Props {
-    onJumpToEndpoints?: () => void;
-  }
-
-  // Cross-panel navigation is delegated to App.svelte so this panel never
-  // imports the navigation store (spec §7.2.1).
-  let { onJumpToEndpoints = () => {} }: Props = $props();
 
   const sys = $derived(overview.data?.system);
   const proxy = $derived(overview.data?.proxy);
@@ -162,29 +154,14 @@
     return parseFloat(m[1]) * units[m[2]];
   }
 
-  // onJumpToEndpoints() swaps the active panel (App.svelte unmounts this one
-  // entirely), so `await tick()` before touching the DOM - without it the
-  // lookup below always missed, because EndpointsPanel's row for this endpoint
-  // hadn't been rendered yet: the panel swap and this call raced, the jump
-  // never scrolled anywhere, and the clicked button (now removed from the
-  // DOM) dropped keyboard focus to <body> with no replacement.
-  //
-  // The DOM id is computed from the endpoint's unique identity (id, falling
-  // back to url/name for backends predating the field) via the same
-  // collision-resistant hash EndpointsPanel uses, so the lookup resolves to
-  // the matching row even when two endpoints share a display url once query
-  // strings are stripped.
-  // Accepts the structural identity shape rather than the full EndpointSummary:
-  // GlanceRow's avg_latency_ms (number | null) is deliberately incompatible with
-  // EndpointSummary's (number | undefined), so typing the param against the
-  // contract would reject the row. The jump only needs identity fields.
-  async function jumpToEndpoints(e: { id?: string; url?: string; name: string }): Promise<void> {
-    onJumpToEndpoints();
-    await tick();
-    const el = document.getElementById(`ep-${stableId(e.id ?? e.url ?? e.name)}`);
-    if (!el) return;
-    el.scrollIntoView({ block: 'center' });
-    el.focus();
+  // Identity resolution lives here (the panel knows the row's id/url/name
+  // fallback chain); everything else - panel swap, hash push, the bounded
+  // retry that covers the first-navigation fetch race, scroll, focus, and the
+  // flash highlight - is shared with the Models pills via jumpToEndpoint. See
+  // lib/jump-to-endpoint for why the retry and flash can't collapse to a
+  // single getElementById.
+  function endpointIdentity(e: { id?: string; url?: string; name: string }): string {
+    return e.id ?? e.url ?? e.name;
   }
 </script>
 
@@ -309,7 +286,8 @@
             <button
               class="glance-link"
               type="button"
-              onclick={() => jumpToEndpoints(e)}
+              data-endpoint-id={endpointIdentity(e)}
+              onclick={() => jumpToEndpoint(endpointIdentity(e))}
               title="Open {e.name} in the Endpoints panel"
             >
               <span class="glyph g-{statusCls(e.status)}" aria-hidden="true">{statusGlyph(e.status)}</span>

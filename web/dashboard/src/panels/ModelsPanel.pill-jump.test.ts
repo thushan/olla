@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import { models } from '../lib/stores/models.svelte';
+import { navigation } from '../lib/stores/navigation.svelte';
 import { stableId } from '../lib/dom-id';
 import ModelsPanel from './ModelsPanel.svelte';
 
@@ -32,6 +33,9 @@ afterEach(() => {
   if (component) unmount(component);
   component = undefined;
   document.body.innerHTML = '';
+  navigation.set('overview');
+  history.replaceState(null, '', '#overview');
+  vi.useRealTimers();
 });
 
 function jsonResponse(body: unknown) {
@@ -99,8 +103,7 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
     expect(idA).not.toBe(idB);
   });
 
-  it('fires onJumpToEndpoints and targets the clicked pill endpoint id', async () => {
-    const onJump = vi.fn(() => {});
+  it('navigates to endpoints and targets the clicked pill endpoint id', async () => {
     // Plant the two target rows in the DOM so jumpToEndpoint's getElementById
     // resolves, and capture which id was looked up. Rows use the production
     // double-hash: server opaque token -> client stableId -> DOM id.
@@ -135,10 +138,7 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
       ],
     };
 
-    component = mount(ModelsPanel, {
-      target: document.body,
-      props: { onJumpToEndpoints: onJump },
-    });
+    component = mount(ModelsPanel, { target: document.body });
     flushSync();
     await refreshWith(payload, () =>
       expect(models.data?.model_groups?.[0]?.models?.[0]?.name).toBe('collide-beta')
@@ -150,22 +150,27 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
     // Click the second pill (sid-bbb). The jump must target idB, NOT idA - a
     // name-keyed lookup would resolve both to whichever row sorts first.
     pills[1]!.click();
-    // jumpToEndpoint is async (await tick() inside); wait for the side-effect
-    // that happens AFTER the await, not just onJump which fires before it.
+    // The shared helper is async (tick + retry); wait for the side-effect
+    // that happens once the row resolves.
     await vi.waitFor(() =>
       expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
     );
-    expect(onJump).toHaveBeenCalledTimes(1);
+    expect(navigation.current).toBe('endpoints');
+    expect(location.hash).toBe(`#endpoints/${idB}`);
     // Focus landed on sid-bbb's row, the distinct target for this pill.
     expect(document.activeElement).toBe(rowB);
+    // Pills carry the endpoint id in the DOM so the click target is
+    // inspectable, not buried in the JS closure.
+    expect(pills[1]!.getAttribute('data-endpoint-id')).toBe('sid-bbb');
   });
 
   it('retries the row lookup when the Endpoints panel fetch lands after the click', async () => {
     // First-navigation race: EndpointsPanel only starts its store on mount and
     // the fetch is async, so the target row is absent immediately after the
-    // panel swap. jumpToEndpoint must retry until the row appears, then focus
-    // it - otherwise the jump silently no-ops (panel swaps, no scroll/focus).
-    const onJump = vi.fn(() => {});
+    // panel swap. The shared helper must retry until the row appears, then
+    // focus it - otherwise the jump silently no-ops (panel swaps, no
+    // scroll/focus). Fake timers make the retry deterministic.
+    vi.useFakeTimers();
     const idB = `ep-${stableId('sid-bbb')}`;
     const rowB = document.createElement('div');
     rowB.id = idB;
@@ -192,10 +197,7 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
       ],
     };
 
-    component = mount(ModelsPanel, {
-      target: document.body,
-      props: { onJumpToEndpoints: onJump },
-    });
+    component = mount(ModelsPanel, { target: document.body });
     flushSync();
     await refreshWith(payload, () =>
       expect(models.data?.model_groups?.[0]?.models?.[0]?.name).toBe('race-eta')
@@ -205,20 +207,19 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
     expect(pills.length).toBe(2);
 
     // Click BEFORE the target row exists - mirroring the first-nav race where
-    // EndpointsPanel's fetch hasn't resolved yet. Plant the row after a short
-    // delay so the initial lookup misses and the retry loop has to find it.
-    pills[1]!.click();
-    setTimeout(() => document.body.append(rowB), 80);
+    // EndpointsPanel's fetch hasn't resolved yet.
+    const p = Promise.resolve(pills[1]!.click());
+    // Drain the tick + first retries (all miss because rowB is absent).
+    await vi.advanceTimersByTimeAsync(110);
+    expect(document.activeElement).not.toBe(rowB);
+    // The fetch lands; the next retry finds rowB.
+    document.body.append(rowB);
+    await vi.advanceTimersByTimeAsync(60);
+    await p;
 
-    // scrollIntoView + focus fire only once the retry finds rowB. Asserting
-    // both inside waitFor sidesteps any microtask ordering between the retry
-    // resolving and the focus call landing. The default 1s timeout
-    // comfortably exceeds the 80ms plant + ~50ms retry tick.
-    await vi.waitFor(() => {
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
-      expect(document.activeElement).toBe(rowB);
-    });
-    expect(onJump).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+    expect(document.activeElement).toBe(rowB);
+    expect(navigation.current).toBe('endpoints');
   });
 
   it('falls back to plain span pills when endpoint_ids is absent (old server)', async () => {

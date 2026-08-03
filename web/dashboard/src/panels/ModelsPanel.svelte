@@ -1,21 +1,13 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import { models } from '../lib/stores/models.svelte';
   import SortableTable from '../components/SortableTable.svelte';
   import type { Column, SortState } from '../components/SortableTable.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import { fmtAgo } from '../lib/format';
   import { stableId } from '../lib/dom-id';
+  import { jumpToEndpoint } from '../lib/jump-to-endpoint';
   import { getNow as liveNow } from '../lib/clock.svelte';
   import type { ModelSummary } from '../lib/types';
-
-  interface Props {
-    onJumpToEndpoints?: () => void;
-  }
-
-  // Cross-panel navigation is delegated to App.svelte (spec §7.2.1) - this
-  // panel never imports the navigation store, mirroring OverviewPanel.
-  let { onJumpToEndpoints = () => {} }: Props = $props();
 
   // View-model row: the contract row plus derived numeric fields the table
   // sorts on (size_bytes from the size string, endpoints_count from the
@@ -79,36 +71,13 @@
     };
   }
 
-  // Pill click-through: resolves to the EndpointsPanel row whose DOM id is
-  // ep-${stableId(id)} (see EndpointsPanel.rowDomId). Endpoint display names
-  // are legitimately non-unique (EndpointsPanel.dup-names.test), so the
-  // target must be keyed on the per-model endpoint_ids array, not a
-  // name->id lookup. The backend sorts endpoint_ids positionally against
-  // endpoints, so endpoints[i] is hosted on endpoint_ids[i].
-  //
-  // The panel swap unmounts ModelsPanel; await tick() so EndpointsPanel's
-  // row exists in the DOM before we look it up - without it the lookup
-  // always missed (App.jump-focus.test documents the race in Overview).
-  //
-  // On the FIRST navigation to Endpoints, the panel only starts the store
-  // on mount and its fetch is async, so the row may still be absent after
-  // tick(). OverviewPanel mitigates the same race by pre-warming the store,
-  // but the very first nav can still lose the race; a bounded retry covers
-  // it without a busy-windmill. ~8 tries x ~50ms caps the wait near 400ms,
-  // returning the instant the row appears.
-  async function jumpToEndpoint(id: string): Promise<void> {
-    onJumpToEndpoints();
-    await tick();
-    const target = `ep-${stableId(id)}`;
-    let el = document.getElementById(target);
-    for (let attempt = 0; !el && attempt < 8; attempt++) {
-      await new Promise((r) => setTimeout(r, 50));
-      el = document.getElementById(target);
-    }
-    if (!el) return;
-    el.scrollIntoView({ block: 'center' });
-    el.focus();
-  }
+  // Pill click-through delegates to the shared jumpToEndpoint helper
+  // (lib/jump-to-endpoint). Endpoint display names are legitimately
+  // non-unique (EndpointsPanel.dup-names.test), so the target must be keyed
+  // on the per-model endpoint_ids array, not a name->id lookup. The backend
+  // sorts endpoint_ids positionally against endpoints, so endpoints[i] is
+  // hosted on endpoint_ids[i]. The helper owns the retry/scroll/focus/flash
+  // concerns; see its header comment for the first-navigation fetch race.
 
   // Group order: alphabetical, with "unknown" pushed to the end (matches backend).
   function groupOrder(g: typeof groups): typeof groups {
@@ -202,6 +171,7 @@
                         <button
                           type="button"
                           class="pill pill-link"
+                          data-endpoint-id={id}
                           title="Open {ep} in the Endpoints panel"
                           onclick={() => jumpToEndpoint(id)}
                         >{ep}</button>
@@ -241,6 +211,7 @@
                   <button
                     type="button"
                     class="pill pill-link"
+                    data-endpoint-id={id}
                     title="Open {ep} in the Endpoints panel"
                     onclick={() => jumpToEndpoint(id)}
                   >{ep}</button>

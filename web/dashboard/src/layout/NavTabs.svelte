@@ -2,13 +2,15 @@
   // Tab presentation over the shared navigation store (spec §7.2.1: panels
   // never import this directly, only App.svelte's router and this component
   // do) - the store is what would swap to a sidebar presenter later without
-  // any panel change.
+  // any panel change. navigatePanel also pushes a history entry so browser
+  // back/forward traverses panel switches.
   import { navigation, type Section } from '../lib/stores/navigation.svelte';
+  import { navigatePanel } from '../lib/router';
 
   const LABELS: Record<Section, string> = { overview: 'Overview', endpoints: 'Endpoints', models: 'Models' };
 
   function activate(name: Section): void {
-    navigation.set(name);
+    navigatePanel(name);
     // Move focus to the newly-active tab once the DOM has updated.
     queueMicrotask(() => {
       document.getElementById(`tab-${name}`)?.focus();
