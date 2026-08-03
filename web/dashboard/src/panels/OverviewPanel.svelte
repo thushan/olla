@@ -3,6 +3,7 @@
   import { overview } from '../lib/stores/overview.svelte';
   import { endpoints } from '../lib/stores/endpoints.svelte';
   import StatTile from '../components/StatTile.svelte';
+  import SparkStrip from '../components/SparkStrip.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import StatusTag from '../components/StatusTag.svelte';
   import PctBar from '../components/PctBar.svelte';
@@ -162,6 +163,9 @@
       {#each Array(4) as _, i}<div class="skeleton row-skel"></div>{/each}
     </div>
   {:else if sys}
+    <div class="section">
+      <SparkStrip />
+    </div>
     <div class="section">
       <div class="tile-grid">
         <StatTile label="System status">
