@@ -121,11 +121,6 @@
   tabindex="0"
   data-state={endpoints.status === 'error' || endpoints.status === 'stale' ? endpoints.status : null}
 >
-  <h2>Endpoints</h2>
-  <p class="panel-intro">
-    Every configured backend, its health-check state and routing weight.
-  </p>
-
   <StatusBanner store={endpoints} />
 
   {#if loading}

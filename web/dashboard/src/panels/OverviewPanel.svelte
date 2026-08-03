@@ -173,12 +173,6 @@
   tabindex="0"
   data-state={overview.status === 'error' || overview.status === 'stale' ? overview.status : null}
 >
-  <h2>Overview</h2>
-  <p class="panel-intro">
-    System-wide health for the herd, polled from Olla's internal status endpoint. All figures are
-    read-only snapshots: no controls here mutate configuration or traffic.
-  </p>
-
   <StatusBanner store={overview} />
 
   {#if loading}

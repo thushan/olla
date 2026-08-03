@@ -119,11 +119,6 @@
   tabindex="0"
   data-state={models.status === 'error' || models.status === 'stale' ? models.status : null}
 >
-  <h2>Models</h2>
-  <p class="panel-intro">
-    Models discovered across the herd, grouped by family. Sorting applies within each family group.
-  </p>
-
   <StatusBanner store={models} />
 
   {#if loading}
