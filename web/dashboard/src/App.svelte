@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import './app.css';
   import DashboardLayout from './layout/DashboardLayout.svelte';
   import OverviewPanel from './panels/OverviewPanel.svelte';
@@ -6,13 +6,13 @@
   import ModelsPanel from './panels/ModelsPanel.svelte';
   import { pollScheduler } from './lib/poll-scheduler';
   import { startClock } from './lib/clock.svelte';
-  import { theme } from './lib/stores/theme.svelte.ts';
-  import { navigation } from './lib/stores/navigation.svelte.ts';
+  import { theme } from './lib/stores/theme.svelte';
+  import { navigation } from './lib/stores/navigation.svelte';
 
   // Importing the stores registers them with the scheduler (module side-effect).
-  import './lib/stores/overview.svelte.ts';
-  import './lib/stores/endpoints.svelte.ts';
-  import './lib/stores/models.svelte.ts';
+  import './lib/stores/overview.svelte';
+  import './lib/stores/endpoints.svelte';
+  import './lib/stores/models.svelte';
 
   // App is the router: it reads the same navigation store NavTabs does,
   // rather than keeping its own separate `current`. Two sources of truth for
@@ -31,7 +31,7 @@
     };
   });
 
-  function jumpToEndpoints() {
+  function jumpToEndpoints(): void {
     navigation.set('endpoints');
   }
 </script>

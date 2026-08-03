@@ -3,9 +3,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { overview } from '../lib/stores/overview.svelte';
 import { endpoints } from '../lib/stores/endpoints.svelte';
 import OverviewPanel from '../panels/OverviewPanel.svelte';
-// Vite's ?raw suffix inlines the file's source as a string; no ambient decl
-// ships with this tsconfig so the import specifier is untyped.
-// @ts-expect-error - Vite ?raw import has no type declaration here
+// Vite's ?raw suffix inlines the file's source as a string; the ambient
+// declaration comes from src/vite-env.d.ts (vite/client types).
 import statTileSrc from './StatTile.svelte?raw';
 
 // C4 regression: StatTile exposed valueHtml/subHtml props that bypassed

@@ -1,10 +1,23 @@
-<script>
-  import { models } from '../lib/stores/models.svelte.ts';
+<script lang="ts">
+  import { models } from '../lib/stores/models.svelte';
   import SortableTable from '../components/SortableTable.svelte';
+  import type { Column, SortState } from '../components/SortableTable.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import { fmtAgo } from '../lib/format';
   import { stableId } from '../lib/dom-id';
   import { getNow as liveNow } from '../lib/clock.svelte';
+  import type { ModelSummary } from '../lib/types';
+
+  // View-model row: the contract row plus derived numeric fields the table
+  // sorts on (size_bytes from the size string, endpoints_count from the
+  // endpoints list length). Omit+intersect so the row type flows through a
+  // mapped type, which picks up the implicit index signature required by
+  // SortableTable's `Row extends Record<string, unknown>` constraint; a
+  // plain `ModelSummary & {...}` intersection does not.
+  type ModelRow = Omit<ModelSummary, never> & {
+    size_bytes: number;
+    endpoints_count: number;
+  };
 
   const loading = $derived(models.status === 'loading');
   // Mounted only when active (App.svelte does the routing).
@@ -21,7 +34,7 @@
   // (requests/success/p95/p99) are intentionally absent: nothing on the
   // proxy path populates them on main, so they would always read zero and
   // mislead the operator. Wiring that is PR 2 proxy-engine scope.
-  const columns = [
+  const columns: Column[] = [
     { key: 'name', label: 'Model', sortable: true, sticky: true },
     { key: 'params', label: 'Params', sortable: true },
     { key: 'quant', label: 'Quant', sortable: true },
@@ -33,14 +46,14 @@
   // Derive a numeric size for sort/aria from the model's own size string.
   // Previously this preferred a summed per_endpoint bytes total, but
   // per_endpoint has no prior art on main (spec §4.4.1) and was cut.
-  function sizeBytesOf(m) {
+  function sizeBytesOf(m: ModelSummary): number {
     if (!m.size) return 0;
-    const u = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };
+    const u: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };
     const match = String(m.size).match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
     return match ? parseFloat(match[1]) * u[match[2]] : 0;
   }
 
-  function normalise(m) {
+  function normalise(m: ModelSummary): ModelRow {
     return {
       ...m,
       size_bytes: sizeBytesOf(m),
@@ -49,8 +62,8 @@
   }
 
   // Group order: alphabetical, with "unknown" pushed to the end (matches backend).
-  function groupOrder(groups) {
-    return [...groups].sort((a, b) => {
+  function groupOrder(g: typeof groups): typeof groups {
+    return [...g].sort((a, b) => {
       if (a.family === 'unknown') return 1;
       if (b.family === 'unknown') return -1;
       return a.family < b.family ? -1 : a.family > b.family ? 1 : 0;
@@ -59,18 +72,25 @@
 
   // rowKey is the each-key for the flat path; domId is the DOM id attribute
   // the grouped view sets manually below. Both use the collision-resistant stableId hash
-  // (lib/dom-id.js) rather than the old punctuation-stripping slug, so two
+  // (lib/dom-id) rather than the old punctuation-stripping slug, so two
   // model names that collide once slugged ("qwen3:8b" vs a hypothetical
   // "qwen3-8b") cannot resolve to the same DOM id. SortableTable additionally
   // disambiguates any each-key collision as a last line of defence.
-  function rowKey(m) {
+  function rowKey(m: ModelRow): string {
     return m.name;
   }
-  function domId(m) {
+  function domId(m: ModelRow): string {
     return `model-${stableId(m.name)}`;
   }
 
   const orderedGroups = $derived(groupOrder(groups));
+
+  // Empty rows literal typed against ModelRow so the generic table infers
+  // Row = ModelRow. Without this, `rows={[]}` collapses inference to `never`
+  // and the groupSnippet's sortRows(list: never[]) cannot accept the
+  // normalised model list.
+  const emptyRows: ModelRow[] = [];
+  const flatInitialSort: SortState = { key: 'name', dir: 'asc' };
 </script>
 
 <div
@@ -95,7 +115,7 @@
   {:else if orderedGroups.length}
     <SortableTable
       {columns}
-      rows={[]}
+      rows={emptyRows}
       initialSort={null}
       showScrollHint={true}
     >
@@ -137,7 +157,7 @@
       {/snippet}
     </SortableTable>
   {:else if flatRecent.length}
-    <SortableTable {columns} rows={flatRecent.map(normalise)} initialSort={{ key: 'name', dir: 'asc' }} rowId={rowKey}>
+    <SortableTable {columns} rows={flatRecent.map(normalise)} initialSort={flatInitialSort} rowId={rowKey}>
       {#snippet rowSnippet({ row: m, cellClass })}
         <td class="col-sticky"><strong>{m.name}</strong></td>
         <td>{m.params || '—'}</td>
