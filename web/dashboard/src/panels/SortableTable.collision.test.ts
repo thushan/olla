@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
-import { models } from '../lib/stores/models.svelte.ts';
-import { overview } from '../lib/stores/overview.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte';
+import { models } from '../lib/stores/models.svelte';
+import { overview } from '../lib/stores/overview.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
 import ModelsPanel from './ModelsPanel.svelte';
 import OverviewPanel from './OverviewPanel.svelte';
@@ -22,7 +22,12 @@ import OverviewPanel from './OverviewPanel.svelte';
 
 const COLLIDING_NAMES = ['node.a', 'node-a'];
 
-function jsonResponse(body) {
+function jsonResponse(body: unknown): {
+  status: number;
+  ok: boolean;
+  headers: { get: () => string | null };
+  json: () => Promise<unknown>;
+} {
   return {
     status: 200,
     ok: true,
@@ -49,7 +54,7 @@ const sysBody = {
   proxy: { engine: 'olla', balancer: 'priority' },
 };
 
-function endpointNamed(name) {
+function endpointNamed(name: string) {
   return {
     name,
     type: 'ollama',
@@ -64,7 +69,7 @@ function endpointNamed(name) {
   };
 }
 
-function modelNamed(name) {
+function modelNamed(name: string) {
   return {
     name,
     params: '8B',
@@ -75,10 +80,20 @@ function modelNamed(name) {
   };
 }
 
-const cases = [
+// Component type is intentionally loose: the panels carry their own prop
+// shapes, and the harness only mounts with a target (no props).
+type AnyPanel = new (...args: unknown[]) => unknown;
+interface Case {
+  label: string;
+  Component: AnyPanel;
+  seed(): Promise<void>;
+  renderedNames(): string[];
+}
+
+const cases: Case[] = [
   {
     label: 'EndpointsPanel',
-    Component: EndpointsPanel,
+    Component: EndpointsPanel as unknown as AnyPanel,
     async seed() {
       global.fetch = vi.fn(async () =>
         jsonResponse({
@@ -93,12 +108,14 @@ const cases = [
       flushSync();
     },
     renderedNames() {
-      return [...document.querySelectorAll('.name-text')].map((el) => el.textContent.trim());
+      return [...document.querySelectorAll<HTMLElement>('.name-text')].map((el) =>
+        el.textContent!.trim()
+      );
     },
   },
   {
     label: 'ModelsPanel (grouped)',
-    Component: ModelsPanel,
+    Component: ModelsPanel as unknown as AnyPanel,
     async seed() {
       global.fetch = vi.fn(async () =>
         jsonResponse({
@@ -117,27 +134,33 @@ const cases = [
       flushSync();
     },
     renderedNames() {
-      return [...document.querySelectorAll('tbody td.col-sticky strong')].map((el) => el.textContent.trim());
+      return [...document.querySelectorAll<HTMLElement>('tbody td.col-sticky strong')].map((el) =>
+        el.textContent!.trim()
+      );
     },
   },
   {
     label: 'ModelsPanel (flat recent_models)',
-    Component: ModelsPanel,
+    Component: ModelsPanel as unknown as AnyPanel,
     async seed() {
-      global.fetch = vi.fn(async () => jsonResponse({ recent_models: COLLIDING_NAMES.map(modelNamed) }));
+      global.fetch = vi.fn(async () =>
+        jsonResponse({ recent_models: COLLIDING_NAMES.map(modelNamed) })
+      );
       models.refresh();
       await vi.waitFor(() => expect(models.data?.recent_models?.length).toBe(2));
       flushSync();
     },
     renderedNames() {
-      return [...document.querySelectorAll('tbody td.col-sticky strong')].map((el) => el.textContent.trim());
+      return [...document.querySelectorAll<HTMLElement>('tbody td.col-sticky strong')].map((el) =>
+        el.textContent!.trim()
+      );
     },
   },
   {
     label: 'OverviewPanel (glance table)',
-    Component: OverviewPanel,
+    Component: OverviewPanel as unknown as AnyPanel,
     async seed() {
-      global.fetch = vi.fn(async (url) => {
+      global.fetch = vi.fn(async (url: RequestInfo | URL) => {
         if (String(url).includes('/internal/status/endpoints')) {
           return jsonResponse({
             endpoints: COLLIDING_NAMES.map(endpointNamed),
@@ -157,20 +180,22 @@ const cases = [
       flushSync();
     },
     renderedNames() {
-      return [...document.querySelectorAll('.glance-link .txt')].map((el) => el.textContent.trim());
+      return [...document.querySelectorAll<HTMLElement>('.glance-link .txt')].map((el) =>
+        el.textContent!.trim()
+      );
     },
   },
 ];
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-describe.each(cases)('$label row keys survive a slug collision', ({ Component, seed, renderedNames }) => {
+describe.each(cases)('$label row keys survive a slug collision', ({ Component, seed, renderedNames }: Case) => {
   it('renders both colliding rows without throwing each_key_duplicate', async () => {
-    component = mount(Component, { target: document.body });
+    component = mount(Component as never, { target: document.body });
     flushSync();
 
     await seed();

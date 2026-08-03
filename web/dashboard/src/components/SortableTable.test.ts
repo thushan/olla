@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach } from 'vitest';
 import Fixture from './SortableTable.grouped-fixture.svelte';
+import type { Column } from './SortableTable.svelte';
 
 // Regression coverage for finding 8: the Models panel's grouped view passed
 // rows={[]} to SortableTable and rendered its own closure-local, never-sorted
@@ -8,7 +9,17 @@ import Fixture from './SortableTable.grouped-fixture.svelte';
 // aria-sort, but the DOM order never moved - also an a11y defect, since
 // aria-sort then announced a state the rows didn't reflect.
 
-const columns = [
+interface FixtureRow extends Record<string, unknown> {
+  id: string;
+  name: string;
+  n: number;
+}
+interface FixtureGroup {
+  id: string;
+  rows: FixtureRow[];
+}
+
+const columns: Column[] = [
   { key: 'name', label: 'Name', sortable: true },
   { key: 'n', label: 'Count', sortable: true, num: true },
 ];
@@ -16,7 +27,7 @@ const columns = [
 // Values chosen so lexicographic string sort ("100" < "2" < "9") and numeric
 // sort (2 < 9 < 100) disagree - this is what catches a sort that silently
 // fell back to comparing formatted strings.
-const groups = [
+const groups: FixtureGroup[] = [
   {
     id: 'alpha',
     rows: [
@@ -34,17 +45,17 @@ const groups = [
   },
 ];
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function rowIdsFor(group) {
-  return Array.from(document.querySelectorAll(`tr[data-testid="row"][data-group="${group}"]`)).map(
-    (el) => el.dataset.id
-  );
+function rowIdsFor(group: string): string[] {
+  return Array.from(
+    document.querySelectorAll<HTMLTableRowElement>(`tr[data-testid="row"][data-group="${group}"]`)
+  ).map((el) => el.dataset.id as string);
 }
 
 describe('SortableTable grouped sorting', () => {
@@ -55,17 +66,17 @@ describe('SortableTable grouped sorting', () => {
     // Unsorted: fixture order as given.
     expect(rowIdsFor('alpha')).toEqual(['a-100', 'a-9', 'a-2']);
 
-    const header = Array.from(document.querySelectorAll('button.sort-btn')).find((b) =>
-      b.textContent.includes('Count')
+    const header = Array.from(document.querySelectorAll<HTMLButtonElement>('button.sort-btn')).find(
+      (b) => b.textContent?.includes('Count')
     );
-    header.click();
+    header!.click();
     flushSync();
 
     // First click sorts descending (SortableTable's toggle() default).
     expect(rowIdsFor('alpha')).toEqual(['a-100', 'a-9', 'a-2']);
     expect(rowIdsFor('beta')).toEqual(['b-50', 'b-1']);
 
-    header.click();
+    header!.click();
     flushSync();
 
     // Second click flips to ascending - numerically, not lexicographically
@@ -78,19 +89,19 @@ describe('SortableTable grouped sorting', () => {
     component = mount(Fixture, { target: document.body, props: { columns, groups } });
     flushSync();
 
-    const th = Array.from(document.querySelectorAll('th[aria-sort]')).find((t) =>
-      t.textContent.includes('Count')
+    const th = Array.from(document.querySelectorAll<HTMLTableHeaderCellElement>('th[aria-sort]')).find(
+      (t) => t.textContent?.includes('Count')
     );
-    const header = th.querySelector('button.sort-btn');
+    const header = th!.querySelector<HTMLButtonElement>('button.sort-btn')!;
 
     header.click();
     flushSync();
-    expect(th.getAttribute('aria-sort')).toBe('descending');
+    expect(th!.getAttribute('aria-sort')).toBe('descending');
     expect(rowIdsFor('beta')).toEqual(['b-50', 'b-1']); // descending
 
     header.click();
     flushSync();
-    expect(th.getAttribute('aria-sort')).toBe('ascending');
+    expect(th!.getAttribute('aria-sort')).toBe('ascending');
     expect(rowIdsFor('beta')).toEqual(['b-1', 'b-50']); // ascending
   });
 });
