@@ -756,6 +756,17 @@ footer a {
   font-family: var(--font-sans);
 }
 
+/* The panel-wide [data-state='stale'|'error'] rule in app.css dims the data
+   region during an outage so the operator sees the figures are frozen. The
+   StatusBanner lives inside that wrapper and carries the "retry now" button
+   the operator needs precisely then, so it must stay at full contrast.
+   Override the cascade for the banner subtree only. */
+[data-state='stale'] .banner,
+[data-state='error'] .banner {
+  opacity: 1;
+  filter: none;
+}
+
 /* SKELETON (loading state) */
 .skeleton {
   background: linear-gradient(
