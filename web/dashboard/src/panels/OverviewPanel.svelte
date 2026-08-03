@@ -3,7 +3,6 @@
   import { overview } from '../lib/stores/overview.svelte';
   import { endpoints } from '../lib/stores/endpoints.svelte';
   import StatTile from '../components/StatTile.svelte';
-  import SparkStrip from '../components/SparkStrip.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import StatusTag from '../components/StatusTag.svelte';
   import PctBar from '../components/PctBar.svelte';
@@ -40,6 +39,17 @@
 
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
 
+  // Overview shares the endpoints store with EndpointsPanel: the glance table
+  // and the Discovered models / Latency range / Backend types tiles all derive
+  // from it. Without starting the store here, a fresh load landing on Overview
+  // renders misleading zeros until the operator clicks the Endpoints tab.
+  // App.svelte renders only one panel at a time, so this cannot race the
+  // EndpointsPanel lifecycle owner.
+  $effect(() => {
+    endpoints.start();
+    return () => endpoints.stop();
+  });
+
   // Aggregate fields already present on EndpointSummary but not previously
   // surfaced. Each tiles out into its own derived so a partial payload never
   // throws and the no-data states stay explicit.
@@ -47,17 +57,21 @@
     endpointList.reduce((n, e) => n + (e.model_count ?? 0), 0)
   );
 
-  // Fleet latency range = min of per-endpoint min, max of per-endpoint max.
-  // An idle fleet reports zeros across the board; we must NOT render that as
-  // "0ms-0ms" implying a real measurement. Gate on the fleet max being > 0,
-  // mirroring the glance table's request_count guard.
+  // Fleet latency range = min of per-endpoint min, max of per-endpoint max,
+  // considering only endpoints that actually saw traffic. An idle endpoint
+  // arrives as min=max=0; if it fed the min reduction the fleet would render
+  // "0ms-..." implying a real fast measurement. Gate on max_latency_ms > 0
+  // (mirror of the glance table's request_count guard) so idle endpoints drop
+  // out of both the min and max, and an all-idle fleet falls through to the
+  // no-data dash via hasFleetLatency.
+  const activeForLatency = $derived(endpointList.filter((e) => (e.max_latency_ms ?? 0) > 0));
   const fleetMinLatency = $derived(
-    endpointList.reduce((m, e) => Math.min(m, e.min_latency_ms ?? 0), Infinity)
+    activeForLatency.reduce((m, e) => Math.min(m, e.min_latency_ms ?? 0), Infinity)
   );
   const fleetMaxLatency = $derived(
-    endpointList.reduce((m, e) => Math.max(m, e.max_latency_ms ?? 0), 0)
+    activeForLatency.reduce((m, e) => Math.max(m, e.max_latency_ms ?? 0), 0)
   );
-  const hasFleetLatency = $derived(endpointList.length > 0 && fleetMaxLatency > 0);
+  const hasFleetLatency = $derived(activeForLatency.length > 0);
 
   // Backend-type histogram, sorted by count desc then name for deterministic
   // output. Empty fleet renders as the no-data dash inside the tile.
@@ -201,9 +215,6 @@
       {#each Array(4) as _, i}<div class="skeleton row-skel"></div>{/each}
     </div>
   {:else if sys}
-    <div class="section">
-      <SparkStrip />
-    </div>
     <div class="section">
       <div class="tile-grid">
         <StatTile label="System status">

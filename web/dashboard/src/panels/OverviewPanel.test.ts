@@ -344,6 +344,30 @@ describe('OverviewPanel latency-range tile', () => {
     const value = tile!.querySelector('.value')?.textContent?.trim();
     expect(value).toBe('12ms–1.5s');
   });
+
+  it('ignores idle endpoints when reducing the fleet min (mixed idle/busy)', async () => {
+    // An idle endpoint arrives as min=max=0; if it entered the min reduction
+    // the tile would read "0ms-80ms", presenting an empty measurement as a
+    // real fast request. The fleet min must come from endpoints with traffic.
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshTyped(
+      buildStatus(),
+      [
+        buildEndpoint({ name: 'idle', min_latency_ms: 0, max_latency_ms: 0 }),
+        buildEndpoint({ name: 'busy', min_latency_ms: 12, max_latency_ms: 80 }),
+      ]
+    );
+
+    const tile = tileByLabel('Latency range');
+    expect(tile).toBeTruthy();
+    const value = tile!.querySelector('.value')?.textContent?.trim();
+    // Exact-match: any "0ms" leaking from the idle endpoint would surface as
+    // a "0ms-80ms" floor. "80ms" itself contains the substring "0ms", so the
+    // exact equality is the load-bearing assertion here, not a substring deny.
+    expect(value).toBe('12ms–80ms');
+  });
 });
 
 describe('OverviewPanel backend-types tile', () => {
