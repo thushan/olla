@@ -46,11 +46,6 @@ export interface SystemSummary {
   security_violations: number;
   total_requests: number;
   total_failures: number;
-  // Proxy-wide latency rollup (WP-A3): plain int64 on the Go side, no
-  // omitempty, so both are always present - an idle fleet serialises bare
-  // zeros rather than omitting the fields.
-  min_latency_ms: number;
-  max_latency_ms: number;
 }
 
 export interface EndpointModelsResponse {

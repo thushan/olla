@@ -252,9 +252,7 @@
           {#snippet children()}
             {#if hasFleetLatency}{fmtMs(fleetMinLatency)}–{fmtMs(fleetMaxLatency)}{:else}<span class="dash">—</span>{/if}
           {/snippet}
-          {#snippet subSnippet()}
-            fleet min–max{#if (sys.max_latency_ms ?? 0) > 0}{' · '}proxy {fmtMs(sys.min_latency_ms)}–{fmtMs(sys.max_latency_ms)}{/if}
-          {/snippet}
+          {#snippet subSnippet()}fleet min–max{/snippet}
         </StatTile>
         <StatTile label="Backend types">
           {#snippet children()}

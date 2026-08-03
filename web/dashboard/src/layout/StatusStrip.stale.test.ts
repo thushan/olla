@@ -33,8 +33,6 @@ const holder = vi.hoisted<Holder>(() => ({
     security_violations: 0,
     total_requests: 0,
     total_failures: 0,
-    min_latency_ms: 0,
-    max_latency_ms: 0,
   },
 }));
 

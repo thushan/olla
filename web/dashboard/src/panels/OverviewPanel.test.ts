@@ -9,7 +9,6 @@ import type {
   SecuritySummary,
   SecurityViolation,
   StatusResponse,
-  SystemSummary,
 } from '../lib/types';
 
 // Regression coverage for finding 8: the glance table rendered fmtMs(0) as a
@@ -78,27 +77,13 @@ async function refreshBoth(endpointList: Record<string, unknown>[]) {
 // Typed variant for the new-tile coverage: full StatusResponse and
 // EndpointSummary fixtures, no `any`, so this compiles under strict TS and
 // stays in lockstep with the contract if it shifts.
-// Deep-partial override for the two nested contract objects - a caller
-// exercising one field (e.g. min_latency_ms) should not have to restate every
-// other required field on SystemSummary/SecuritySummary just to satisfy the
-// type checker.
-type StatusOverride = Partial<Omit<StatusResponse, 'system' | 'security'>> & {
-  system?: Partial<SystemSummary>;
-  security?: Partial<Omit<SecuritySummary, 'violations'>> & { violations?: Partial<SecurityViolation> };
-};
-
-function buildStatus(over: StatusOverride = {}): StatusResponse {
-  // Split violations out of the security override before spreading the rest:
-  // spreading a still-partial `violations` back over the fully-defaulted one
-  // below would reintroduce the same "possibly missing fields" type error
-  // this override type exists to avoid.
-  const { violations: violationsOverride, ...securityRest } = over.security ?? {};
-  const violations: SecurityViolation = { rate_limits: 3, size_limits: 4, ...violationsOverride };
+function buildStatus(over: Partial<StatusResponse> = {}): StatusResponse {
+  const violations: SecurityViolation = { rate_limits: 3, size_limits: 4, ...over.security?.violations };
   const security: SecuritySummary = {
     status: 'normal',
     blocked_ips: 0,
     violations,
-    ...securityRest,
+    ...over.security,
   };
   return {
     timestamp: new Date().toISOString(),
@@ -119,8 +104,6 @@ function buildStatus(over: StatusOverride = {}): StatusResponse {
       total_requests: 40,
       total_failures: 0,
       security_violations: 7,
-      min_latency_ms: 0,
-      max_latency_ms: 0,
       ...over.system,
     },
   };
@@ -384,43 +367,6 @@ describe('OverviewPanel latency-range tile', () => {
     // a "0ms-80ms" floor. "80ms" itself contains the substring "0ms", so the
     // exact equality is the load-bearing assertion here, not a substring deny.
     expect(value).toBe('12ms–80ms');
-  });
-});
-
-describe('OverviewPanel latency-range tile proxy-wide sub-caption (WP-A3)', () => {
-  it('shows the proxy-wide figures when max_latency_ms is populated', async () => {
-    component = mount(OverviewPanel, { target: document.body });
-    flushSync();
-
-    await refreshTyped(
-      buildStatus({ system: { min_latency_ms: 12, max_latency_ms: 840 } }),
-      [buildEndpoint({ name: 'a', min_latency_ms: 12, max_latency_ms: 80 })]
-    );
-
-    const tile = tileByLabel('Latency range');
-    expect(tile).toBeTruthy();
-    const sub = tile!.querySelector('.sub')?.textContent?.trim();
-    expect(sub).toContain('proxy 12ms–840ms');
-  });
-
-  it('hides the proxy-wide sub-caption on an idle fleet (bare zeros)', async () => {
-    component = mount(OverviewPanel, { target: document.body });
-    flushSync();
-
-    await refreshTyped(
-      // Distinct status from the previous test in this file: refreshTyped's
-      // waitFor gates on system.status, and both tests otherwise default to
-      // 'healthy' - without a distinguishing value the wait resolves against
-      // the still-stale prior fixture before this fetch lands.
-      buildStatus({ system: { status: 'degraded', min_latency_ms: 0, max_latency_ms: 0 } }),
-      [buildEndpoint({ name: 'a', min_latency_ms: 0, max_latency_ms: 0 })]
-    );
-
-    const tile = tileByLabel('Latency range');
-    expect(tile).toBeTruthy();
-    const sub = tile!.querySelector('.sub')?.textContent?.trim();
-    expect(sub).not.toContain('proxy');
-    expect(sub).not.toContain('0ms–0ms');
   });
 });
 
