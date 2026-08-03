@@ -489,33 +489,68 @@ func hashEtagStringSlice(h hash.Hash, s []string) {
 	_, _ = h.Write(etagSep)
 }
 
-// formatEtag renders the FNV-1a sum as a quoted strong validator. Base36
-// mirrors the style of stableEndpointID so client and server identity formats
-// read the same.
+// formatEtag renders the FNV-1a sum as a quoted WEAK validator per RFC 7232:
+// the hashed fields exclude every per-second-rendered relative string and the
+// wall-clock timestamp, so two payloads a second apart under unchanged state
+// hash identically - but the hash still intentionally omits some fields that
+// could change without changing the operator-visible answer (e.g. field
+// ordering), so it is not a true content identity. Weak is the honest claim:
+// clients may use it for If-None-Match but must not collapse two distinct
+// payloads based on byte-for-byte identity. Base36 mirrors the style of
+// stableEndpointID so client and server identity formats read the same.
 func formatEtag(h hash.Hash32) string {
-	return `"` + strconv.FormatUint(uint64(h.Sum32()), 36) + `"`
+	return `W/"` + strconv.FormatUint(uint64(h.Sum32()), 36) + `"`
 }
 
+// maxIfNoneMatchBytes bounds the size of an If-None-Match header we are willing
+// to parse. A legitimate client lists at most a handful of validators; an
+// oversized header is always pathological (or hostile), so short-circuiting it
+// stops a multi-MB If-None-Match from driving an unbounded split before the
+// server-level MaxHeaderBytes cap was in place. 1 KiB is far above any real
+// browser/curl request.
+const maxIfNoneMatchBytes = 1 << 10 // 1 KiB
+
 // etagMatches implements the If-None-Match comparison: a bare "*" matches any
-// current representation, otherwise each listed validator is compared for
-// exact equality against the response ETag. Weak validators (W/"...") are not
-// emitted by these handlers, so strong-vs-weak comparison rules do not apply.
+// current representation, otherwise each listed validator is compared using
+// weak equivalence per RFC 7232 s3.2: the W/ prefix is stripped from BOTH the
+// header value and the current ETag before comparing, so a client that echoes
+// our W/"..." verbatim matches, and a hypothetical client sending a strong
+// "..." form against our current weak value also matches. Weak equivalence is
+// the correct comparison for the If-None-Match purpose these handlers use
+// (cache freshness), and is what the spec's examples assume once the server
+// emits weak validators. The bare "*" wildcard is unchanged.
 func etagMatches(ifNoneMatch, etag string) bool {
 	if ifNoneMatch == "" {
+		return false
+	}
+	if len(ifNoneMatch) > maxIfNoneMatchBytes {
+		// An oversized If-None-Match is never a legitimate match; treat it as
+		// no match so the handler falls through to a full 200 rather than
+		// spending unbounded time splitting a multi-MB header.
 		return false
 	}
 	if ifNoneMatch == "*" {
 		return true
 	}
+	cmpCur := stripWeakPrefix(etag)
 	for _, t := range strings.Split(ifNoneMatch, ",") {
-		if strings.TrimSpace(t) == etag {
+		if stripWeakPrefix(strings.TrimSpace(t)) == cmpCur {
 			return true
 		}
 	}
 	return false
 }
 
-// writeJSONWithETag emits a buffered JSON body with a strong-validator ETag,
+// stripWeakPrefix removes the leading W/ weak-validator marker so two
+// validators can be compared by opaque-token alone, exactly as RFC 7232's
+// weak comparison rule requires. A bare * wildcard is preserved untouched so
+// the wildcard path above keeps working; this helper is only reached for the
+// per-token comparison branch.
+func stripWeakPrefix(v string) string {
+	return strings.TrimPrefix(v, "W/")
+}
+
+// writeJSONWithETag emits a buffered JSON body with a weak-validator ETag,
 // returning a bare 304 (no body, no Content-Encoding) when the client's
 // If-None-Match matches. Headers are set before WriteHeader so they reach the
 // client on both 200 and 304 paths.
