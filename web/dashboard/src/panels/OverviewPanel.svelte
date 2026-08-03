@@ -194,7 +194,7 @@
             {sys.status}
           {/snippet}
           {#snippet subSnippet()}
-            <strong>{proxy?.engine ?? 'olla'}</strong> engine · <strong>{proxy?.balancer ?? 'priority'}</strong> balancing{#if proxy?.profile} · <strong>{proxy.profile}</strong> profile{/if}
+            <strong>{proxy?.engine ?? 'olla'}</strong> engine · <strong>{proxy?.balancer ?? 'priority'}</strong> balancing{#if proxy?.profile}{' · '}<strong>{proxy.profile}</strong> profile{/if}
           {/snippet}
         </StatTile>
         <StatTile
