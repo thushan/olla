@@ -383,30 +383,35 @@ func TestHandlerRejectsWhenNotBuilt(t *testing.T) {
 }
 
 // TestServeIndexMissingGuardsNoPanic documents the failure mode if the embed
-// ever ships without an index.html: we return 404, not a panic. The guard is
-// here so a future packaging mistake degrades rather than crashes.
+// ever ships without an index.html: handler construction degrades to the
+// not-built handler rather than panicking at request time. Previously this was
+// a per-request 404 from serveIndex; now the index is pre-cached at handler
+// construction and missing-index is caught at dashboardHandler time, so the
+// invariant under test moves from "serveIndex returns 404" to "construction
+// falls back to notBuilt without panicking".
 func TestServeIndexMissingGuardsNoPanic(t *testing.T) {
-	h := &spaHandler{root: fstestFS{}}
-	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/", nil)
-
 	defer func() {
 		if x := recover(); x != nil {
-			t.Fatalf("serveIndex panicked on missing index: %v", x)
+			t.Fatalf("dashboardHandler panicked on missing index: %v", x)
 		}
 	}()
-	h.serveIndex(w, r)
 
-	if w.Code != http.StatusNotFound {
-		t.Errorf("missing index: got %d, want 404", w.Code)
+	// root has assets but no index.html - newSPAHandler would construct a
+	// populated map but fail to find indexFile, which must surface as a
+	// not-built fallback (503) rather than a panic.
+	root := fstest.MapFS{
+		"assets/payload.js": &fstest.MapFile{Data: []byte("console.log(1)")},
+	}
+	h := dashboardHandler(root)
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("missing index: got %d, want 503 (not-built fallback)", w.Code)
 	}
 }
-
-// fstestFS is a minimal fs.FS that always errors, used only to prove the
-// missing-index path returns 404 rather than panicking.
-type fstestFS struct{}
-
-func (fstestFS) Open(string) (fs.File, error) { return nil, fs.ErrNotExist }
 
 // TestSecurityHeadersOnAsset confirms an ordinary static asset response
 // (e.g. the built JS bundle) carries the browser-hardening headers: MIME
@@ -610,5 +615,26 @@ func TestAssetsBuilt_MatchesRealEmbed(t *testing.T) {
 	want := assetsBuiltIn(sub)
 	if got := AssetsBuilt(); got != want {
 		t.Errorf("AssetsBuilt() = %v but assetsBuiltIn(realEmbed) = %v; the two call sites have drifted", got, want)
+	}
+}
+
+// BenchmarkSPAHandler_AssetServing measures the per-request cost of serving a
+// cached asset. The pre-construction cache means this should be a pure map
+// lookup plus http.ServeContent over a bytes.Reader, with no per-request file
+// I/O or SHA-256 computation. Documented so a regression that re-introduces
+// io.ReadAll + sha256 on the hot path would surface as an allocation count
+// spike here.
+func BenchmarkSPAHandler_AssetServing(b *testing.B) {
+	h := dashboardHandler(populatedFS)
+	req := httptest.NewRequest(http.MethodGet, "/assets/index-AbC123.js", nil)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			b.Fatalf("status: %d", w.Code)
+		}
 	}
 }
