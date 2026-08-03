@@ -89,10 +89,22 @@
   // The panel swap unmounts ModelsPanel; await tick() so EndpointsPanel's
   // row exists in the DOM before we look it up - without it the lookup
   // always missed (App.jump-focus.test documents the race in Overview).
+  //
+  // On the FIRST navigation to Endpoints, the panel only starts the store
+  // on mount and its fetch is async, so the row may still be absent after
+  // tick(). OverviewPanel mitigates the same race by pre-warming the store,
+  // but the very first nav can still lose the race; a bounded retry covers
+  // it without a busy-windmill. ~8 tries x ~50ms caps the wait near 400ms,
+  // returning the instant the row appears.
   async function jumpToEndpoint(id: string): Promise<void> {
     onJumpToEndpoints();
     await tick();
-    const el = document.getElementById(`ep-${stableId(id)}`);
+    const target = `ep-${stableId(id)}`;
+    let el = document.getElementById(target);
+    for (let attempt = 0; !el && attempt < 8; attempt++) {
+      await new Promise((r) => setTimeout(r, 50));
+      el = document.getElementById(target);
+    }
     if (!el) return;
     el.scrollIntoView({ block: 'center' });
     el.focus();

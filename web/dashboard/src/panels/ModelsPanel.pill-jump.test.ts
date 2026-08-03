@@ -8,9 +8,18 @@ import ModelsPanel from './ModelsPanel.svelte';
 // row by STABLE ID (not display name). Two endpoints can share a display name
 // (EndpointsPanel.dup-names.test), so a name->id lookup is forbidden; the
 // backend pairs endpoints[i] with endpoint_ids[i], and each pill resolves to
-// ep-${stableId(endpoint_id)}. The same-name collision case below must land on
-// DISTINCT rows via the two distinct ids - the exact failure mode a name-keyed
-// lookup would silently get wrong.
+// ep-${stableId(endpoint_id)}.
+//
+// Production double-hash: the server emits endpoint_ids as ALREADY-hashed
+// opaque tokens (Go's stableEndpointID(url), e.g. "w5c2gc"), and EndpointsPanel
+// renders each row's DOM id as ep-${stableId(endpoint_id)} - i.e. the client
+// applies stableId to the server's opaque id. So endpoint_ids in these tests
+// carry distinct opaque tokens (sid-aaa / sid-bbb, NOT raw urls), and planted
+// target rows use ep-${stableId('sid-aaa')} etc. This mirrors the wire path
+// pill -> stableId(endpoint_id) -> row, and would catch a regression in either
+// hash. The same-name collision case below must land on DISTINCT rows via the
+// two distinct ids - the exact failure mode a name-keyed lookup would silently
+// get wrong.
 
 // jsdom doesn't implement scrollIntoView; stub it so the jump helper doesn't
 // throw and so the test can assert it ran.
@@ -63,7 +72,7 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
               quant: 'q4_k_m',
               size: '4.5 GB',
               endpoints: ['ollama', 'ollama'],
-              endpoint_ids: ['http://node-a:11434', 'http://node-b:11434'],
+              endpoint_ids: ['sid-aaa', 'sid-bbb'],
               last_seen_at: new Date().toISOString(),
             },
           ],
@@ -82,17 +91,21 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
 
     // Both pills carry the same visible label but target DISTINCT ids: the
     // crux of the locked decision. A name-based lookup would collapse these.
-    const idA = `ep-${stableId('http://node-a:11434')}`;
-    const idB = `ep-${stableId('http://node-b:11434')}`;
+    // The ids mirror the production wire path: the server's opaque token is
+    // hashed again by EndpointsPanel's rowDomId, so we assert against that
+    // double-hashed DOM id, not against the raw token.
+    const idA = `ep-${stableId('sid-aaa')}`;
+    const idB = `ep-${stableId('sid-bbb')}`;
     expect(idA).not.toBe(idB);
   });
 
   it('fires onJumpToEndpoints and targets the clicked pill endpoint id', async () => {
     const onJump = vi.fn(() => {});
     // Plant the two target rows in the DOM so jumpToEndpoint's getElementById
-    // resolves, and capture which id was looked up.
-    const idA = `ep-${stableId('http://node-a:11434')}`;
-    const idB = `ep-${stableId('http://node-b:11434')}`;
+    // resolves, and capture which id was looked up. Rows use the production
+    // double-hash: server opaque token -> client stableId -> DOM id.
+    const idA = `ep-${stableId('sid-aaa')}`;
+    const idB = `ep-${stableId('sid-bbb')}`;
     const rowA = document.createElement('div');
     rowA.id = idA;
     rowA.tabIndex = -1;
@@ -114,7 +127,7 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
               quant: 'q4_k_m',
               size: '4.5 GB',
               endpoints: ['ollama', 'ollama'],
-              endpoint_ids: ['http://node-a:11434', 'http://node-b:11434'],
+              endpoint_ids: ['sid-aaa', 'sid-bbb'],
               last_seen_at: new Date().toISOString(),
             },
           ],
@@ -134,7 +147,7 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
     const pills = [...document.querySelectorAll<HTMLButtonElement>('button.pill-link')];
     expect(pills.length).toBe(2);
 
-    // Click the second pill (node-b). The jump must target idB, NOT idA - a
+    // Click the second pill (sid-bbb). The jump must target idB, NOT idA - a
     // name-keyed lookup would resolve both to whichever row sorts first.
     pills[1]!.click();
     // jumpToEndpoint is async (await tick() inside); wait for the side-effect
@@ -143,8 +156,69 @@ describe('ModelsPanel endpoint pill click-through (WP-B2)', () => {
       expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
     );
     expect(onJump).toHaveBeenCalledTimes(1);
-    // Focus landed on node-b's row, the distinct target for this pill.
+    // Focus landed on sid-bbb's row, the distinct target for this pill.
     expect(document.activeElement).toBe(rowB);
+  });
+
+  it('retries the row lookup when the Endpoints panel fetch lands after the click', async () => {
+    // First-navigation race: EndpointsPanel only starts its store on mount and
+    // the fetch is async, so the target row is absent immediately after the
+    // panel swap. jumpToEndpoint must retry until the row appears, then focus
+    // it - otherwise the jump silently no-ops (panel swaps, no scroll/focus).
+    const onJump = vi.fn(() => {});
+    const idB = `ep-${stableId('sid-bbb')}`;
+    const rowB = document.createElement('div');
+    rowB.id = idB;
+    rowB.tabIndex = -1;
+
+    const payload = {
+      model_groups: [
+        {
+          family: 'qwen',
+          model_count: 1,
+          endpoints: ['ollama', 'ollama'],
+          models: [
+            {
+              name: 'race-eta',
+              params: '8B',
+              quant: 'q4_k_m',
+              size: '4.5 GB',
+              endpoints: ['ollama', 'ollama'],
+              endpoint_ids: ['sid-aaa', 'sid-bbb'],
+              last_seen_at: new Date().toISOString(),
+            },
+          ],
+        },
+      ],
+    };
+
+    component = mount(ModelsPanel, {
+      target: document.body,
+      props: { onJumpToEndpoints: onJump },
+    });
+    flushSync();
+    await refreshWith(payload, () =>
+      expect(models.data?.model_groups?.[0]?.models?.[0]?.name).toBe('race-eta')
+    );
+
+    const pills = [...document.querySelectorAll<HTMLButtonElement>('button.pill-link')];
+    expect(pills.length).toBe(2);
+
+    // Click BEFORE the target row exists - mirroring the first-nav race where
+    // EndpointsPanel's fetch hasn't resolved yet. Plant the row after a short
+    // delay so the initial lookup misses and the retry loop has to find it.
+    pills[1]!.click();
+    setTimeout(() => document.body.append(rowB), 80);
+
+    // scrollIntoView + focus fire only once the retry finds rowB. Asserting
+    // both inside waitFor sidesteps any microtask ordering between the retry
+    // resolving and the focus call landing. The default 1s timeout
+    // comfortably exceeds the 80ms plant + ~50ms retry tick.
+    await vi.waitFor(() => {
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+      expect(document.activeElement).toBe(rowB);
+    });
+    expect(onJump).toHaveBeenCalledTimes(1);
   });
 
   it('falls back to plain span pills when endpoint_ids is absent (old server)', async () => {
