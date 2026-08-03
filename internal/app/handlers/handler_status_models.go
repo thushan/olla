@@ -218,11 +218,11 @@ func sortModelSummaryEndpoints(summary *ModelSummary) {
 		n = len(summary.EndpointIDs)
 	}
 	pairs := make([]endpointNameID, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		pairs[i] = endpointNameID{Name: summary.Endpoints[i], ID: summary.EndpointIDs[i]}
 	}
 	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Name < pairs[j].Name })
-	for i := 0; i < n; i++ {
+	for i := range n {
 		summary.Endpoints[i] = pairs[i].Name
 		summary.EndpointIDs[i] = pairs[i].ID
 	}
