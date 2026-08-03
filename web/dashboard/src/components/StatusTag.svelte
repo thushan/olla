@@ -1,9 +1,14 @@
-<script>
+<script lang="ts">
   // Single component enforcing "glyph + colour + text" for every status
   // indicator. Never colour alone (colour-blind / greyscale).
-  let { status = 'healthy' } = $props();
+  interface Props {
+    status?: string;
+  }
+  let { status = 'healthy' }: Props = $props();
 
-  const STATUS = {
+  type Meta = { glyph: string; cls: string; label: string };
+
+  const STATUS: Record<string, Meta> = {
     healthy: { glyph: '●', cls: 'green', label: 'healthy' },
     degraded: { glyph: '◐', cls: 'amber', label: 'degraded' },
     unhealthy: { glyph: '◐', cls: 'amber', label: 'unhealthy' },
@@ -12,7 +17,7 @@
     unknown: { glyph: '○', cls: 'neutral', label: 'unknown' },
   };
 
-  const meta = $derived(STATUS[status] ?? { glyph: '○', cls: 'neutral', label: status || 'unknown' });
+  const meta: Meta = $derived(STATUS[status] ?? { glyph: '○', cls: 'neutral', label: status || 'unknown' });
 </script>
 
 <span class="status-tag st-{meta.cls}">

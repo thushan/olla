@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { resolve, dirname } from 'node:path';
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { overview } from '../lib/stores/overview.svelte.ts';
-import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { overview } from '../lib/stores/overview.svelte';
+import { endpoints } from '../lib/stores/endpoints.svelte';
 import OverviewPanel from '../panels/OverviewPanel.svelte';
+// Vite's ?raw suffix inlines the file's source as a string; no ambient decl
+// ships with this tsconfig so the import specifier is untyped.
+// @ts-expect-error - Vite ?raw import has no type declaration here
+import statTileSrc from './StatTile.svelte?raw';
 
 // C4 regression: StatTile exposed valueHtml/subHtml props that bypassed
 // Svelte's escaping via {@html}. Inert today (only closed server-controlled
@@ -13,14 +14,19 @@ import OverviewPanel from '../panels/OverviewPanel.svelte';
 // component. The fix expresses the same rich markup through Svelte snippets,
 // which compose into the DOM as normal content (escaped, no raw HTML sink).
 
-const here = dirname(fileURLToPath(import.meta.url));
-const statTileSrc = readFileSync(resolve(here, './StatTile.svelte'), 'utf8');
-
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
+
+// Partial Response shape the mock returns; only the fields the stores read.
+type MockResponse = {
+  status: number;
+  ok: boolean;
+  headers: { get: () => string | null };
+  json: () => Promise<unknown>;
+};
 
 describe('StatTile has no {@html} sink', () => {
   // Fail-first: the current StatTile source carries {@html} and the
@@ -56,7 +62,7 @@ describe('StatTile has no {@html} sink', () => {
       },
       proxy: { engine: 'olla', balancer: 'priority' },
     };
-    global.fetch = vi.fn(async (url) => {
+    global.fetch = vi.fn(async (url: RequestInfo | URL): Promise<MockResponse> => {
       if (String(url).includes('/internal/status/endpoints')) {
         return {
           status: 200,
@@ -76,15 +82,15 @@ describe('StatTile has no {@html} sink', () => {
 
     const statusTile = tiles.find((t) => t.querySelector('.label')?.textContent === 'System status');
     expect(statusTile).toBeTruthy();
-    const statusValue = statusTile.querySelector('.value');
+    const statusValue = statusTile!.querySelector('.value')!;
     expect(statusValue.querySelector('.glyph')).toBeTruthy();
     expect(statusValue.textContent).toContain('degraded');
-    const statusSub = statusTile.querySelector('.sub');
+    const statusSub = statusTile!.querySelector('.sub')!;
     expect(statusSub.querySelector('strong')).toBeTruthy();
     expect(statusSub.textContent).toContain('olla');
 
     const epTile = tiles.find((t) => t.querySelector('.label')?.textContent === 'Endpoints up');
-    expect(epTile.querySelector('.value .unit')).toBeTruthy();
-    expect(epTile.querySelector('.value').textContent.replace(/\s+/g, ' ').trim()).toBe('1/ 2');
+    expect(epTile!.querySelector('.value .unit')).toBeTruthy();
+    expect(epTile!.querySelector('.value')!.textContent!.replace(/\s+/g, ' ').trim()).toBe('1/ 2');
   });
 });

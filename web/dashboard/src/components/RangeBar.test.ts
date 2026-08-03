@@ -8,14 +8,22 @@ import RangeBar from './RangeBar.svelte';
 // a no-data placeholder - and the caller had derived that 0 by parseInt()-ing
 // a health-check latency string in the first place (see EndpointsPanel).
 
-let component;
+interface RangeBarProps {
+  min?: number;
+  avg?: number | null;
+  max?: number;
+  globalMax?: number;
+  label?: string;
+}
+
+let component: ReturnType<typeof mount> | undefined;
 
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
 
-function render(props) {
+function render(props: RangeBarProps): void {
   component = mount(RangeBar, { target: document.body, props });
   flushSync();
 }
@@ -25,7 +33,7 @@ describe('RangeBar', () => {
     render({ min: 10, avg: 288, max: 900, globalMax: 900 });
     expect(document.body.textContent).toContain('288ms');
     expect(document.body.textContent).toContain('900ms');
-    const bar = document.querySelector('[role="img"]');
+    const bar = document.querySelector('[role="img"]')!;
     expect(bar.getAttribute('aria-label')).toBe('latency: average 288ms, range 10ms to 900ms');
   });
 
@@ -36,15 +44,15 @@ describe('RangeBar', () => {
 
   it('shows a placeholder, not "0ms", when avg_latency_ms is null (no traffic yet)', () => {
     render({ min: 0, avg: null, max: 500, globalMax: 500 });
-    const avgText = document.querySelector('.range-labels').firstChild.textContent.trim();
+    const avgText = document.querySelector('.range-labels')!.firstChild!.textContent!.trim();
     expect(avgText).toBe('—');
-    const bar = document.querySelector('[role="img"]');
+    const bar = document.querySelector('[role="img"]')!;
     expect(bar.getAttribute('aria-label')).toBe('latency: average —, range 0ms to 500ms');
   });
 
   it('shows a placeholder when avg_latency_ms is absent entirely (older backend)', () => {
     render({ min: 0, max: 500, globalMax: 500 });
-    const avgText = document.querySelector('.range-labels').firstChild.textContent.trim();
+    const avgText = document.querySelector('.range-labels')!.firstChild!.textContent!.trim();
     expect(avgText).toBe('—');
   });
 
