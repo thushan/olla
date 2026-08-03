@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -174,9 +177,12 @@ func (a *Application) statusHandler(w http.ResponseWriter, r *http.Request) {
 
 	response := a.buildStatusResponse(snapshot)
 
-	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(response)
+	body, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	writeJSONWithETag(w, r, body, hashStatusResponse(&response))
 }
 
 func (a *Application) buildProxySummary(proxyConfig config.ProxyConfig) ProxySummary {
@@ -384,4 +390,163 @@ func (a *Application) getEndpointCounts(ctx context.Context) (all, healthy, rout
 		return
 	}
 	return
+}
+
+// etagSep terminates each hashed field so adjacent fields cannot collide:
+// without it ("ab"+"c") and ("a"+"bc") would feed the hash identical bytes.
+var etagSep = []byte{0}
+
+// hashEtagString writes a string field to the ETag hasher. Writes never error
+// for fnv's hasher, the discarded error keeps the hash.Hash contract visible.
+func hashEtagString(h hash.Hash, s string) {
+	_, _ = h.Write([]byte(s))
+	_, _ = h.Write(etagSep)
+}
+
+// hashEtagInt64 writes an integer field in base 10. Locale-independent so the
+// ETag stays stable regardless of runtime environment.
+func hashEtagInt64(h hash.Hash, v int64) {
+	var buf [20]byte
+	_, _ = h.Write(strconv.AppendInt(buf[:0], v, 10))
+	_, _ = h.Write(etagSep)
+}
+
+// hashEtagInt64Ptr encodes presence: a nil pointer emits a distinct field
+// boundary from a zero, mirroring omitempty semantics in the wire payload.
+func hashEtagInt64Ptr(h hash.Hash, v *int64) {
+	if v == nil {
+		_, _ = h.Write(etagSep)
+		return
+	}
+	hashEtagInt64(h, *v)
+}
+
+// hashEtagTime encodes a wall-clock instant via UnixNano. Only absolute event
+// times reach this path; the relative time-ago / time-until renderings used in
+// the dashboard (uptime, last_check, next_check, last_seen, last_model_sync)
+// are deliberately excluded from the hash because their one-second granularity
+// would change on every poll and defeat the ETag.
+func hashEtagTime(h hash.Hash, t time.Time) {
+	if t.IsZero() {
+		_, _ = h.Write(etagSep)
+		return
+	}
+	hashEtagInt64(h, t.UnixNano())
+}
+
+func hashEtagTimePtr(h hash.Hash, t *time.Time) {
+	if t == nil {
+		_, _ = h.Write(etagSep)
+		return
+	}
+	hashEtagTime(h, *t)
+}
+
+// hashEtagStringSlice encodes a slice in order. Callers must guarantee the
+// slice is already sorted deterministically; the dashboard's model/endpoint
+// slices all sort before serialisation for diffable output across polls.
+func hashEtagStringSlice(h hash.Hash, s []string) {
+	for _, x := range s {
+		hashEtagString(h, x)
+	}
+	_, _ = h.Write(etagSep)
+}
+
+// formatEtag renders the FNV-1a sum as a quoted strong validator. Base36
+// mirrors the style of stableEndpointID so client and server identity formats
+// read the same.
+func formatEtag(h hash.Hash32) string {
+	return `"` + strconv.FormatUint(uint64(h.Sum32()), 36) + `"`
+}
+
+// etagMatches implements the If-None-Match comparison: a bare "*" matches any
+// current representation, otherwise each listed validator is compared for
+// exact equality against the response ETag. Weak validators (W/"...") are not
+// emitted by these handlers, so strong-vs-weak comparison rules do not apply.
+func etagMatches(ifNoneMatch, etag string) bool {
+	if ifNoneMatch == "" {
+		return false
+	}
+	if ifNoneMatch == "*" {
+		return true
+	}
+	for _, t := range strings.Split(ifNoneMatch, ",") {
+		if strings.TrimSpace(t) == etag {
+			return true
+		}
+	}
+	return false
+}
+
+// writeJSONWithETag emits a buffered JSON body with a strong-validator ETag,
+// returning a bare 304 (no body, no Content-Encoding) when the client's
+// If-None-Match matches. Headers are set before WriteHeader so they reach the
+// client on both 200 and 304 paths.
+func writeJSONWithETag(w http.ResponseWriter, r *http.Request, body []byte, etag string) {
+	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	w.Header().Set("ETag", etag)
+	if etagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(body)
+}
+
+// hashStatusResponse computes the FNV-1a ETag over the stable fields of a
+// StatusResponse, deliberately excluding the top-level Timestamp and every
+// relative time-ago string. Absolute event times (start_time, health_check_at,
+// next_check_at, models.last_updated) are stable real data and stay in.
+func hashStatusResponse(resp *StatusResponse) string {
+	h := fnv.New32a()
+	hashEtagString(h, resp.Proxy.Engine)
+	hashEtagString(h, resp.Proxy.Profile)
+	hashEtagString(h, resp.Proxy.Balancer)
+
+	hashEtagTime(h, resp.System.StartTime)
+	hashEtagString(h, resp.System.Status)
+	hashEtagString(h, resp.System.EndpointsUp)
+	hashEtagString(h, resp.System.SuccessRate)
+	hashEtagString(h, resp.System.AvgLatency)
+	hashEtagString(h, resp.System.TotalTraffic)
+	hashEtagString(h, resp.System.Version)
+	hashEtagString(h, resp.System.Commit)
+	hashEtagInt64(h, resp.System.ActiveConnections)
+	hashEtagInt64(h, resp.System.SecurityViolations)
+	hashEtagInt64(h, resp.System.TotalRequests)
+	hashEtagInt64(h, resp.System.TotalFailures)
+
+	hashEtagString(h, resp.Security.Status)
+	hashEtagInt64(h, int64(resp.Security.BlockedIPs))
+	hashEtagInt64(h, resp.Security.Violations.RateLimits)
+	hashEtagInt64(h, resp.Security.Violations.SizeLimits)
+
+	for i := range resp.Endpoints {
+		hashEndpointResponse(h, &resp.Endpoints[i])
+	}
+	return formatEtag(h)
+}
+
+// hashEndpointResponse feeds the stable fields of one EndpointResponse to the
+// hasher. Relative strings (last_check, next_check) are skipped because they
+// render with one-second granularity and would change on every poll.
+func hashEndpointResponse(h hash.Hash, ep *EndpointResponse) {
+	hashEtagString(h, ep.ID)
+	hashEtagString(h, ep.Name)
+	hashEtagString(h, ep.Status)
+	hashEtagString(h, ep.URL)
+	hashEtagString(h, ep.SuccessRate)
+	hashEtagString(h, ep.AvgLatency)
+	hashEtagString(h, ep.Traffic)
+	hashEtagString(h, ep.Issues)
+	hashEtagInt64(h, int64(ep.Priority))
+	hashEtagInt64(h, ep.Connections)
+	hashEtagInt64(h, ep.Requests)
+	hashEtagInt64(h, ep.MinLatencyMs)
+	hashEtagInt64(h, ep.MaxLatencyMs)
+	hashEtagInt64Ptr(h, ep.AvgLatencyMs)
+	hashEtagTimePtr(h, ep.NextCheckAt)
+	hashEtagTimePtr(h, ep.HealthCheckAt)
+	hashEtagTime(h, ep.Models.LastUpdated)
+	hashEtagInt64(h, ep.Models.Count)
 }
