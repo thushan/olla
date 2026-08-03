@@ -306,9 +306,28 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 	// into endpoint.URLString and out through any status API that echoes it.
 	// The endorsed credential path is the auth config block (AuthConfig, held
 	// as json:"-" fields on domain.Endpoint), so this is never a legitimate
-	// config, only ever an accident.
+	// config, only ever an accident. The error string spells out the exact
+	// rewrite so a failed boot is a copy-paste fix rather than a guessing game:
+	// we mirror the user/pass pair into the equivalent auth block and surface
+	// the _file variants so secrets can be kept out of config.
 	if parsedURL, err := url.Parse(cfg.URL); err == nil && parsedURL.User != nil {
-		return fmt.Errorf("endpoint URL for %q must not embed credentials (user:pass@host); use the auth config block instead", cfg.Name)
+		user := parsedURL.User.Username()
+		pass, hasPass := parsedURL.User.Password()
+		host := parsedURL.Host
+		example := fmt.Sprintf("url: %s://%s", parsedURL.Scheme, host)
+		if parsedURL.Path != "" {
+			example += parsedURL.Path
+		}
+		example += fmt.Sprintf("\nauth:\n  type: basic\n  username: %s", user)
+		if hasPass {
+			example += fmt.Sprintf("\n  password: %s", pass)
+		}
+		example += "\n  # or username_file / password_file to read from a file"
+		return fmt.Errorf(
+			"endpoint URL for %q must not embed credentials (user:pass@host); "+
+				"move them to the auth config block. Rewrite\n  %s\nas\n  %s",
+			cfg.Name, cfg.URL, example,
+		)
 	}
 
 	// Allow empty health check and model URLs - they will get defaults from profile or fallback values
