@@ -52,13 +52,13 @@
   line-height: 1;
 }
 .brand h1 {
-  font-size: 1.4rem;
+  font-size: 2.1rem;
   letter-spacing: 0.04em;
   margin: 0;
 }
 .brand .tag {
   color: var(--text-faint);
-  font-size: 0.68rem;
+  font-size: 0.85rem;
   margin-top: 2px;
 }
 .clock {
@@ -752,8 +752,13 @@ footer a {
   body {
     font-size: 12.5px;
   }
+  /* The enlarged wordmark wraps the header below ~480px, so shrink the
+     brand block back to keep the header to a single compact row. */
   .brand h1 {
     font-size: 1.15rem;
+  }
+  .brand .tag {
+    font-size: 0.68rem;
   }
   .brand-logo {
     height: 42px;
