@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import SparkStrip, { nearestSampleIndex } from './SparkStrip.svelte';
+import { history } from '../lib/stores/history.svelte';
 import type { Sample } from '../lib/stores/history.svelte';
 
 // Samples are injected via the `samples` prop rather than the singleton store
@@ -13,6 +14,11 @@ let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
+  // history is a module-scoped singleton shared across every test in this
+  // file. Without reset, samples appended by a mount that bypassed the prop
+  // (or by the $effect firing on an unstubbed overview tick) leak into the
+  // next test and corrupt its view-derived assertions.
+  history.reset();
 });
 
 function render(props?: { samples?: Sample[] }): void {

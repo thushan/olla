@@ -3,6 +3,7 @@
   import Header from './Header.svelte';
   import StatusStrip from './StatusStrip.svelte';
   import NavTabs from './NavTabs.svelte';
+  import SparkStrip from '../components/SparkStrip.svelte';
 
   let { children }: { children: Snippet<[]> } = $props();
 </script>
@@ -10,6 +11,7 @@
 <header class="site-header">
   <Header />
   <StatusStrip />
+  <SparkStrip />
   <NavTabs />
 </header>
 

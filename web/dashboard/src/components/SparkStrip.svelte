@@ -178,8 +178,10 @@
   .spark-chart {
     position: relative;
     width: 100%;
-    /* Fixed from first render so accumulating samples never shift layout. */
-    height: 48px;
+    /* Fixed from first render so accumulating samples never shift layout.
+       Roomy enough that the series and axis labels don't read as squashed
+       now the strip spans the full content width above the tabs. */
+    height: 88px;
   }
   .spark-svg {
     width: 100%;
