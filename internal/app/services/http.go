@@ -216,7 +216,7 @@ func (s *HTTPService) printDashboardURL(bindAddr string) {
 		return
 	}
 
-	s.logger.InfoWithStatus(fmt.Sprintf("Admin dashboard available at %s", url), "ENABLED")
+	s.logger.Info(fmt.Sprintf("Admin dashboard ready - %s", url))
 }
 
 // dashboardURL derives a clickable dashboard URL from a listener bind address.
