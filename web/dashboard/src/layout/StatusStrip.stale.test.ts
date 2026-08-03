@@ -1,5 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import type { SystemSummary, EndpointSummary, PollStatus } from '../lib/types';
 
 // C6 regression: StatusStrip read overview.data without consulting
 // overview.status, so during an outage it displayed confident numbers while
@@ -11,19 +12,31 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 // test substitutes a controllable fake store to exercise the component's
 // reaction to each status value in isolation.
 
-const holder = vi.hoisted(() => ({
+interface Holder {
+  status: PollStatus;
+  sys: SystemSummary;
+}
+
+const holder = vi.hoisted<Holder>(() => ({
   status: 'ok',
   sys: {
     status: 'healthy',
     endpoints_up: '2/2',
     success_rate: '99.0%',
     avg_latency: '20ms',
+    total_traffic: '0',
+    uptime: '0s',
     version: 'v0.0.29',
+    commit: 'abc',
     start_time: new Date().toISOString(),
+    active_connections: 0,
+    security_violations: 0,
+    total_requests: 0,
+    total_failures: 0,
   },
 }));
 
-vi.mock('../lib/stores/overview.svelte.ts', () => ({
+vi.mock('../lib/stores/overview.svelte', () => ({
   overview: {
     get data() {
       return { system: holder.sys };
@@ -34,10 +47,10 @@ vi.mock('../lib/stores/overview.svelte.ts', () => ({
   },
 }));
 
-vi.mock('../lib/stores/endpoints.svelte.ts', () => ({
+vi.mock('../lib/stores/endpoints.svelte', () => ({
   endpoints: {
     get data() {
-      return { endpoints: [] };
+      return { endpoints: [] as EndpointSummary[] };
     },
   },
 }));
@@ -46,7 +59,7 @@ vi.mock('../lib/stores/endpoints.svelte.ts', () => ({
 const StatusStripModule = await import('./StatusStrip.svelte');
 const StatusStrip = StatusStripModule.default;
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
@@ -63,9 +76,9 @@ describe('StatusStrip staleness indicator', () => {
     expect(strip).toBeTruthy();
     // data-state mirrors the panels' pattern so CSS/AT can distinguish a
     // confident strip from a stale one.
-    expect(strip.getAttribute('data-state')).toBe('stale');
+    expect(strip!.getAttribute('data-state')).toBe('stale');
     // A visible stale marker is surfaced, not just an attribute.
-    expect(strip.querySelector('[data-stale]').textContent.trim().length).toBeGreaterThan(0);
+    expect(strip!.querySelector('[data-stale]')!.textContent!.trim().length).toBeGreaterThan(0);
   });
 
   it('shows an error indicator when overview.status is "error"', () => {
@@ -73,7 +86,7 @@ describe('StatusStrip staleness indicator', () => {
     component = mount(StatusStrip, { target: document.body });
     flushSync();
 
-    const strip = document.querySelector('.status-strip');
+    const strip = document.querySelector('.status-strip')!;
     expect(strip.getAttribute('data-state')).toBe('error');
     expect(strip.querySelector('[data-stale]')).toBeTruthy();
   });
@@ -83,7 +96,7 @@ describe('StatusStrip staleness indicator', () => {
     component = mount(StatusStrip, { target: document.body });
     flushSync();
 
-    const strip = document.querySelector('.status-strip');
+    const strip = document.querySelector('.status-strip')!;
     expect(strip.getAttribute('data-state')).toBeNull();
     expect(strip.querySelector('[data-stale]')).toBeNull();
   });

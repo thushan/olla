@@ -1,9 +1,10 @@
-<script>
+<script lang="ts">
+  import type { Snippet } from 'svelte';
   import Header from './Header.svelte';
   import StatusStrip from './StatusStrip.svelte';
   import NavTabs from './NavTabs.svelte';
 
-  let { children } = $props();
+  let { children }: { children: Snippet<[]> } = $props();
 </script>
 
 <header class="site-header">

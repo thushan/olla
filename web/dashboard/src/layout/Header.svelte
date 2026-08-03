@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import ThemeToggle from '../components/ThemeToggle.svelte';
   import ollaThumb from '../assets/logo/olla-thumb.png';
   import { getNow } from '../lib/clock.svelte';

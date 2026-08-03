@@ -10,7 +10,7 @@ import { pollScheduler } from '../lib/poll-scheduler';
 // timer in the SPA - and quietly skipping the visibility backoff every
 // other live value gets for free.
 
-let component;
+let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
@@ -27,7 +27,7 @@ describe('Header clock', () => {
 
     expect(setIntervalSpy).not.toHaveBeenCalled();
 
-    const before = document.querySelector('.clock').textContent;
+    const before = document.querySelector('.clock')?.textContent;
 
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-06-15T10:20:30Z'));
@@ -37,7 +37,7 @@ describe('Header clock', () => {
     pollScheduler.refresh('clock');
     flushSync();
 
-    const after = document.querySelector('.clock').textContent;
+    const after = document.querySelector('.clock')?.textContent;
     expect(after).not.toBe(before);
 
     setIntervalSpy.mockRestore();

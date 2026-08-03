@@ -1,14 +1,14 @@
-<script>
-  import { overview } from '../lib/stores/overview.svelte.ts';
-  import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+<script lang="ts">
+  import { overview } from '../lib/stores/overview.svelte';
+  import { endpoints } from '../lib/stores/endpoints.svelte';
   import { fmtUptime } from '../lib/format';
   import { getNow as liveNow } from '../lib/clock.svelte';
+  import type { EndpointSummary } from '../lib/types';
 
   // The strip renders from whatever the overview store last saw. Before the
   // first poll lands, render dashes so the operator can see "pending" rather
   // than a structurally empty header.
   const sys = $derived(overview.data?.system);
-  const has = $derived(!!sys);
 
   // Without consulting overview.status the strip would display confident
   // numbers during an outage while the panels below report unreachable. The
@@ -31,10 +31,10 @@
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
   const degradedReason = $derived(reasonFor(sys?.status, endpointList));
 
-  function reasonFor(status, list) {
+  function reasonFor(status: string | undefined, list: EndpointSummary[]): string | null {
     if (!status || status === 'healthy' || !list.length) return null;
     const offline = list.filter((e) => e.status === 'offline' || e.status === 'critical').length;
-    const parts = [];
+    const parts: string[] = [];
     if (offline) parts.push(`${offline} offline`);
     return parts.length ? parts.join(', ') : null;
   }
@@ -46,10 +46,10 @@
 
   // Tiny lookups inlined to avoid pulling StatusTag (pill-styled, too noisy
   // for the compact strip).
-  function glyph(s) {
+  function glyph(s: string | undefined): string {
     return s === 'healthy' ? '●' : s === 'degraded' || s === 'unhealthy' ? '◐' : '○';
   }
-  function cls(s) {
+  function cls(s: string | undefined): string {
     return s === 'healthy' ? 'green' : s === 'degraded' || s === 'unhealthy' ? 'amber' : 'red';
   }
 </script>
@@ -58,7 +58,7 @@
   <div class="status-cell system-status">
     <dt>Status</dt>
     <dd>
-      {#if has}
+      {#if sys}
         <span class="glyph g-{cls(sys.status)}" aria-hidden="true">{glyph(sys.status)}</span>{sys.status}
       {:else}<span class="dash">—</span>{/if}
     </dd>
@@ -70,22 +70,22 @@
   </div>
   <div class="status-cell">
     <dt>Endpoints</dt>
-    <dd>{has ? sys.endpoints_up : '—'}</dd>
+    <dd>{sys ? sys.endpoints_up : '—'}</dd>
   </div>
   <div class="status-cell">
     <dt>Resp. rate</dt>
-    <dd title="Counts any streamed response, regardless of HTTP status">{has ? sys.success_rate : '—'}</dd>
+    <dd title="Counts any streamed response, regardless of HTTP status">{sys ? sys.success_rate : '—'}</dd>
   </div>
   <div class="status-cell">
     <dt>Avg latency</dt>
-    <dd>{has ? sys.avg_latency : '—'}</dd>
+    <dd>{sys ? sys.avg_latency : '—'}</dd>
   </div>
   <div class="status-cell">
     <dt>Uptime</dt>
-    <dd>{has ? (uptime ?? '—') : '—'}</dd>
+    <dd>{sys ? (uptime ?? '—') : '—'}</dd>
   </div>
   <div class="status-cell">
     <dt>Version</dt>
-    <dd>{has ? sys.version : '—'}</dd>
+    <dd>{sys ? sys.version : '—'}</dd>
   </div>
 </dl>
