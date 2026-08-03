@@ -431,6 +431,39 @@ func TestBuildModelSummaries_EndpointIDsDistinctForCollidingNames(t *testing.T) 
 	}
 }
 
+// TestSortModelSummaryEndpoints_DesyncedLengthsDoNotPanic is the house-rule
+// guard (production code must not panic): a ModelSummary whose Endpoints and
+// EndpointIDs slices have desynced lengths - which should never happen given
+// buildModelSummaries' lockstep appends, but the invariant is only assumed,
+// not enforced by the type system - must not crash the paired sort. The
+// simpler of the two fallbacks is chosen: skip the sort and leave the pair
+// exactly as built.
+func TestSortModelSummaryEndpoints_DesyncedLengthsDoNotPanic(t *testing.T) {
+	t.Parallel()
+
+	summary := &ModelSummary{
+		Name:        "desynced",
+		Endpoints:   []string{"zeta", "alpha", "mid"},
+		EndpointIDs: []string{"id-zeta"}, // deliberately shorter than Endpoints
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("sortModelSummaryEndpoints panicked on desynced slice lengths: %v", r)
+		}
+	}()
+
+	sortModelSummaryEndpoints(summary)
+
+	wantEndpoints := []string{"zeta", "alpha", "mid"}
+	if !equalStrings(summary.Endpoints, wantEndpoints) {
+		t.Errorf("expected Endpoints left as-built when lengths mismatch, got %v", summary.Endpoints)
+	}
+	if !equalStrings(summary.EndpointIDs, []string{"id-zeta"}) {
+		t.Errorf("expected EndpointIDs left as-built when lengths mismatch, got %v", summary.EndpointIDs)
+	}
+}
+
 // TestBuildAliasLookup_IncludesCanonicalAndExcludesSelf verifies that for a
 // model with sibling aliases and a distinct canonical ID, looking up by an
 // alias name returns the other aliases plus the canonical ID, sorted, with

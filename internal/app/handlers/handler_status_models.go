@@ -190,19 +190,7 @@ func (a *Application) buildModelSummaries(
 
 	summaries := make([]ModelSummary, 0, len(uniqueModels))
 	for _, summary := range uniqueModels {
-		// Paired sort: Endpoints[i] and EndpointIDs[i] must stay positionally
-		// aligned. Two independent sorts would desync them whenever two
-		// endpoints share a display name. Sort a single slice of pairs by
-		// Name, then split back. The dashboard click-through relies on this.
-		pairs := make([]endpointNameID, len(summary.Endpoints))
-		for i := range summary.Endpoints {
-			pairs[i] = endpointNameID{Name: summary.Endpoints[i], ID: summary.EndpointIDs[i]}
-		}
-		sort.Slice(pairs, func(i, j int) bool { return pairs[i].Name < pairs[j].Name })
-		for i := range pairs {
-			summary.Endpoints[i] = pairs[i].Name
-			summary.EndpointIDs[i] = pairs[i].ID
-		}
+		sortModelSummaryEndpoints(summary)
 		if len(summary.Aliases) > 0 {
 			sort.Strings(summary.Aliases)
 		}
@@ -210,6 +198,30 @@ func (a *Application) buildModelSummaries(
 	}
 
 	return summaries
+}
+
+// sortModelSummaryEndpoints sorts Endpoints and EndpointIDs together by name,
+// keeping the positional pairing the dashboard click-through relies on. Two
+// independent sorts would desync them whenever two endpoints share a display
+// name, so a single slice of pairs is sorted and split back.
+//
+// buildModelSummaries always appends to both slices together, so lengths
+// should never differ in practice - but production code must not panic, so
+// this guards the invariant rather than trusting it and skips the sort
+// (leaving the pair as-built) when it does not hold.
+func sortModelSummaryEndpoints(summary *ModelSummary) {
+	if len(summary.Endpoints) != len(summary.EndpointIDs) {
+		return
+	}
+	pairs := make([]endpointNameID, len(summary.Endpoints))
+	for i := range summary.Endpoints {
+		pairs[i] = endpointNameID{Name: summary.Endpoints[i], ID: summary.EndpointIDs[i]}
+	}
+	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Name < pairs[j].Name })
+	for i := range pairs {
+		summary.Endpoints[i] = pairs[i].Name
+		summary.EndpointIDs[i] = pairs[i].ID
+	}
 }
 
 // buildAliasLookup resolves every alias NAME (plus the canonical unified ID
