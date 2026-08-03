@@ -24,6 +24,10 @@
 
   const sys = $derived(overview.data?.system);
   const proxy = $derived(overview.data?.proxy);
+  // security sits at the StatusResponse root, not on system; surface it here so
+  // the Security violations tile can show status/blocked/rate-vs-size detail
+  // without a second fetch.
+  const sec = $derived(overview.data?.security);
   const loading = $derived(overview.status === 'loading');
 
   // endpoints_up arrives as a pre-formatted "x/y" string; split for the tile.
@@ -35,6 +39,40 @@
   const trafficBytes = $derived(parseTrafficBytes(sys?.total_traffic));
 
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
+
+  // Aggregate fields already present on EndpointSummary but not previously
+  // surfaced. Each tiles out into its own derived so a partial payload never
+  // throws and the no-data states stay explicit.
+  const totalDiscoveredModels = $derived(
+    endpointList.reduce((n, e) => n + (e.model_count ?? 0), 0)
+  );
+
+  // Fleet latency range = min of per-endpoint min, max of per-endpoint max.
+  // An idle fleet reports zeros across the board; we must NOT render that as
+  // "0ms-0ms" implying a real measurement. Gate on the fleet max being > 0,
+  // mirroring the glance table's request_count guard.
+  const fleetMinLatency = $derived(
+    endpointList.reduce((m, e) => Math.min(m, e.min_latency_ms ?? 0), Infinity)
+  );
+  const fleetMaxLatency = $derived(
+    endpointList.reduce((m, e) => Math.max(m, e.max_latency_ms ?? 0), 0)
+  );
+  const hasFleetLatency = $derived(endpointList.length > 0 && fleetMaxLatency > 0);
+
+  // Backend-type histogram, sorted by count desc then name for deterministic
+  // output. Empty fleet renders as the no-data dash inside the tile.
+  const backendBreakdown = $derived(
+    Object.entries(
+      endpointList.reduce<Record<string, number>>((acc, e) => {
+        const t = e.type || 'unknown';
+        acc[t] = (acc[t] ?? 0) + 1;
+        return acc;
+      }, {})
+    )
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([type, n]) => `${n} ${type}`)
+      .join(' · ')
+  );
 
   // Glance view-model row: the endpoint contract plus the sort/scale fields
   // the glance table presents (status_rank drives the default unhealthy-first
@@ -174,7 +212,7 @@
             {sys.status}
           {/snippet}
           {#snippet subSnippet()}
-            <strong>{proxy?.engine ?? 'olla'}</strong> engine · <strong>{proxy?.balancer ?? 'priority'}</strong> balancing
+            <strong>{proxy?.engine ?? 'olla'}</strong> engine · <strong>{proxy?.balancer ?? 'priority'}</strong> balancing{#if proxy?.profile} · <strong>{proxy.profile}</strong> profile{/if}
           {/snippet}
         </StatTile>
         <StatTile
@@ -215,11 +253,31 @@
           value={fmtInt(sys.total_failures)}
           sub="{(100 - successPctNum).toFixed(1)}% of traffic"
         />
-        <StatTile
-          label="Security violations"
-          value={fmtInt(sys.security_violations)}
-          sub="rejected by security layer"
+        <StatTile label="Security violations" value={fmtInt(sys.security_violations)}>
+          {#snippet subSnippet()}
+            {#if sec}
+              {sec.status ?? 'normal'} status{#if sec.blocked_ips > 0} · {fmtInt(sec.blocked_ips)} blocked IPs{/if}
+              · {fmtInt(sec.violations?.rate_limits ?? 0)} rate / {fmtInt(sec.violations?.size_limits ?? 0)} size
+            {:else}
+              rejected by security layer
+            {/if}
+          {/snippet}
+        </StatTile>
+        <StatTile label="Discovered models" value={fmtInt(totalDiscoveredModels)}
+          sub="across {fmtInt(endpointList.length)} endpoints"
         />
+        <StatTile label="Latency range">
+          {#snippet children()}
+            {#if hasFleetLatency}{fmtMs(fleetMinLatency)}–{fmtMs(fleetMaxLatency)}{:else}<span class="dash">—</span>{/if}
+          {/snippet}
+          {#snippet subSnippet()}fleet min–max{/snippet}
+        </StatTile>
+        <StatTile label="Backend types">
+          {#snippet children()}
+            {backendBreakdown || '—'}
+          {/snippet}
+          {#snippet subSnippet()}{fmtInt(endpointList.length)} endpoints{/snippet}
+        </StatTile>
       </div>
     </div>
 
