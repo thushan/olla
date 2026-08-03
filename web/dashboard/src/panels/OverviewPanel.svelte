@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import { overview } from '../lib/stores/overview.svelte';
   import { endpoints } from '../lib/stores/endpoints.svelte';
   import StatTile from '../components/StatTile.svelte';
@@ -10,19 +9,16 @@
   import type { Column, SortState } from '../components/SortableTable.svelte';
   import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format';
   import { stableId } from '../lib/dom-id';
+  import { jumpToEndpoint } from '../lib/jump-to-endpoint';
   import { getNow as liveNow } from '../lib/clock.svelte';
   import type { EndpointSummary } from '../lib/types';
 
-  interface Props {
-    onJumpToEndpoints?: () => void;
-  }
-
-  // Cross-panel navigation is delegated to App.svelte so this panel never
-  // imports the navigation store (spec §7.2.1).
-  let { onJumpToEndpoints = () => {} }: Props = $props();
-
   const sys = $derived(overview.data?.system);
   const proxy = $derived(overview.data?.proxy);
+  // security sits at the StatusResponse root, not on system; surface it here so
+  // the Security violations tile can show status/blocked/rate-vs-size detail
+  // without a second fetch.
+  const sec = $derived(overview.data?.security);
   const loading = $derived(overview.status === 'loading');
 
   // endpoints_up arrives as a pre-formatted "x/y" string; split for the tile.
@@ -34,6 +30,55 @@
   const trafficBytes = $derived(parseTrafficBytes(sys?.total_traffic));
 
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
+
+  // Overview shares the endpoints store with EndpointsPanel: the glance table
+  // and the Discovered models / Latency range / Backend types tiles all derive
+  // from it. Without starting the store here, a fresh load landing on Overview
+  // renders misleading zeros until the operator clicks the Endpoints tab.
+  // App.svelte renders only one panel at a time, so this cannot race the
+  // EndpointsPanel lifecycle owner.
+  $effect(() => {
+    endpoints.start();
+    return () => endpoints.stop();
+  });
+
+  // Aggregate fields already present on EndpointSummary but not previously
+  // surfaced. Each tiles out into its own derived so a partial payload never
+  // throws and the no-data states stay explicit.
+  const totalDiscoveredModels = $derived(
+    endpointList.reduce((n, e) => n + (e.model_count ?? 0), 0)
+  );
+
+  // Fleet latency range = min of per-endpoint min, max of per-endpoint max,
+  // considering only endpoints that actually saw traffic. An idle endpoint
+  // arrives as min=max=0; if it fed the min reduction the fleet would render
+  // "0ms-..." implying a real fast measurement. Gate on max_latency_ms > 0
+  // (mirror of the glance table's request_count guard) so idle endpoints drop
+  // out of both the min and max, and an all-idle fleet falls through to the
+  // no-data dash via hasFleetLatency.
+  const activeForLatency = $derived(endpointList.filter((e) => (e.max_latency_ms ?? 0) > 0));
+  const fleetMinLatency = $derived(
+    activeForLatency.reduce((m, e) => Math.min(m, e.min_latency_ms ?? 0), Infinity)
+  );
+  const fleetMaxLatency = $derived(
+    activeForLatency.reduce((m, e) => Math.max(m, e.max_latency_ms ?? 0), 0)
+  );
+  const hasFleetLatency = $derived(activeForLatency.length > 0);
+
+  // Backend-type histogram, sorted by count desc then name for deterministic
+  // output. Empty fleet renders as the no-data dash inside the tile.
+  const backendBreakdown = $derived(
+    Object.entries(
+      endpointList.reduce<Record<string, number>>((acc, e) => {
+        const t = e.type || 'unknown';
+        acc[t] = (acc[t] ?? 0) + 1;
+        return acc;
+      }, {})
+    )
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([type, n]) => `${n} ${type}`)
+      .join(' · ')
+  );
 
   // Glance view-model row: the endpoint contract plus the sort/scale fields
   // the glance table presents (status_rank drives the default unhealthy-first
@@ -109,29 +154,14 @@
     return parseFloat(m[1]) * units[m[2]];
   }
 
-  // onJumpToEndpoints() swaps the active panel (App.svelte unmounts this one
-  // entirely), so `await tick()` before touching the DOM - without it the
-  // lookup below always missed, because EndpointsPanel's row for this endpoint
-  // hadn't been rendered yet: the panel swap and this call raced, the jump
-  // never scrolled anywhere, and the clicked button (now removed from the
-  // DOM) dropped keyboard focus to <body> with no replacement.
-  //
-  // The DOM id is computed from the endpoint's unique identity (id, falling
-  // back to url/name for backends predating the field) via the same
-  // collision-resistant hash EndpointsPanel uses, so the lookup resolves to
-  // the matching row even when two endpoints share a display url once query
-  // strings are stripped.
-  // Accepts the structural identity shape rather than the full EndpointSummary:
-  // GlanceRow's avg_latency_ms (number | null) is deliberately incompatible with
-  // EndpointSummary's (number | undefined), so typing the param against the
-  // contract would reject the row. The jump only needs identity fields.
-  async function jumpToEndpoints(e: { id?: string; url?: string; name: string }): Promise<void> {
-    onJumpToEndpoints();
-    await tick();
-    const el = document.getElementById(`ep-${stableId(e.id ?? e.url ?? e.name)}`);
-    if (!el) return;
-    el.scrollIntoView({ block: 'center' });
-    el.focus();
+  // Identity resolution lives here (the panel knows the row's id/url/name
+  // fallback chain); everything else - panel swap, hash push, the bounded
+  // retry that covers the first-navigation fetch race, scroll, focus, and the
+  // flash highlight - is shared with the Models pills via jumpToEndpoint. See
+  // lib/jump-to-endpoint for why the retry and flash can't collapse to a
+  // single getElementById.
+  function endpointIdentity(e: { id?: string; url?: string; name: string }): string {
+    return e.id ?? e.url ?? e.name;
   }
 </script>
 
@@ -143,12 +173,6 @@
   tabindex="0"
   data-state={overview.status === 'error' || overview.status === 'stale' ? overview.status : null}
 >
-  <h2>Overview</h2>
-  <p class="panel-intro">
-    System-wide health for the herd, polled from Olla's internal status endpoint. All figures are
-    read-only snapshots: no controls here mutate configuration or traffic.
-  </p>
-
   <StatusBanner store={overview} />
 
   {#if loading}
@@ -170,7 +194,7 @@
             {sys.status}
           {/snippet}
           {#snippet subSnippet()}
-            <strong>{proxy?.engine ?? 'olla'}</strong> engine · <strong>{proxy?.balancer ?? 'priority'}</strong> balancing
+            <strong>{proxy?.engine ?? 'olla'}</strong> engine · <strong>{proxy?.balancer ?? 'priority'}</strong> balancing{#if proxy?.profile}{' · '}<strong>{proxy.profile}</strong> profile{/if}
           {/snippet}
         </StatTile>
         <StatTile
@@ -211,11 +235,31 @@
           value={fmtInt(sys.total_failures)}
           sub="{(100 - successPctNum).toFixed(1)}% of traffic"
         />
-        <StatTile
-          label="Security violations"
-          value={fmtInt(sys.security_violations)}
-          sub="rejected by security layer"
+        <StatTile label="Security violations" value={fmtInt(sys.security_violations)}>
+          {#snippet subSnippet()}
+            {#if sec}
+              {sec.status ?? 'normal'} status{#if sec.blocked_ips > 0} · {fmtInt(sec.blocked_ips)} blocked IPs{/if}
+              · {fmtInt(sec.violations?.rate_limits ?? 0)} rate / {fmtInt(sec.violations?.size_limits ?? 0)} size
+            {:else}
+              rejected by security layer
+            {/if}
+          {/snippet}
+        </StatTile>
+        <StatTile label="Discovered models" value={fmtInt(totalDiscoveredModels)}
+          sub="across {fmtInt(endpointList.length)} endpoints"
         />
+        <StatTile label="Latency range">
+          {#snippet children()}
+            {#if hasFleetLatency}{fmtMs(fleetMinLatency)}–{fmtMs(fleetMaxLatency)}{:else}<span class="dash">—</span>{/if}
+          {/snippet}
+          {#snippet subSnippet()}fleet min–max{/snippet}
+        </StatTile>
+        <StatTile label="Backend types">
+          {#snippet children()}
+            {backendBreakdown || '—'}
+          {/snippet}
+          {#snippet subSnippet()}{fmtInt(endpointList.length)} endpoints{/snippet}
+        </StatTile>
       </div>
     </div>
 
@@ -236,7 +280,8 @@
             <button
               class="glance-link"
               type="button"
-              onclick={() => jumpToEndpoints(e)}
+              data-endpoint-id={endpointIdentity(e)}
+              onclick={() => jumpToEndpoint(endpointIdentity(e))}
               title="Open {e.name} in the Endpoints panel"
             >
               <span class="glyph g-{statusCls(e.status)}" aria-hidden="true">{statusGlyph(e.status)}</span>

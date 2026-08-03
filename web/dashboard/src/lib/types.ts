@@ -128,6 +128,12 @@ export interface ModelSummary {
   quant?: string;
   last_seen: string;
   endpoints: string[];
+  // Positional pair of `endpoints`: endpoints[i] is hosted on endpoint_ids[i].
+  // The backend emits both omitempty, so either may be absent on older builds;
+  // when present the ids are the keys to EndpointsPanel's ep-${stableId(id)}
+  // row ids (display names are NOT unique - see EndpointsPanel.dup-names.test).
+  endpoint_ids?: string[];
+  aliases?: string[];
   capabilities?: string[];
 }
 

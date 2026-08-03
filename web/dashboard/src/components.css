@@ -436,6 +436,38 @@ tbody tr:last-child td {
   border-bottom: none;
 }
 
+/* JUMP HIGHLIGHT (jump-to-endpoint + URL restore). The class is applied to
+   the <tr> but the visible bg lives on its <td>s, mirroring the hover rule
+   above. The left accent bar is an inset box-shadow rather than a border so
+   the row's box size never changes and no adjacent cell reflows. The keyframe
+   holds the tint for ~1s then fades to transparent; the JS helper removes
+   the class once the same envelope elapses, so the two stay in sync. */
+@keyframes ep-flash {
+  0%,
+  55% {
+    background-color: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 3px 0 0 transparent;
+  }
+}
+tbody tr.ep-flash td {
+  animation: ep-flash 1.8s ease-out forwards;
+}
+/* Reduced motion: skip the animated fade but keep the row findable - hold the
+   highlighted state statically. The JS helper still removes the class after
+   the same 1.8s envelope, so the highlight disappears on time, just without
+   the animated transition (mirrors SparkStrip's reduced-motion handling). */
+@media (prefers-reduced-motion: reduce) {
+  tbody tr.ep-flash td {
+    animation: none;
+    background-color: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+}
+
 .col-sticky {
   position: sticky;
   left: 0;

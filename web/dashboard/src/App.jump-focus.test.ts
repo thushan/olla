@@ -24,6 +24,7 @@ afterEach(() => {
   if (component) unmount(component);
   document.body.innerHTML = '';
   navigation.set('overview');
+  history.replaceState(null, '', '#overview');
 });
 
 function jsonResponse(body: unknown) {
@@ -212,5 +213,49 @@ describe('Overview "jump to endpoint" scroll and focus', () => {
     // the substring "node-a", which would mask the wrong-target failure.
     const landedName = row!.querySelector('.name-text')?.textContent?.trim();
     expect(landedName).toBe('node-a');
+  });
+});
+
+describe('URL hash restore on load', () => {
+  it('opens the endpoints panel and flashes the targeted row from the URL hash', async () => {
+    const id = 'http://ollama-1:11434';
+    const domId = `ep-${stableId(id)}`;
+    // Pre-seed the hash the way a shared link or refresh would, before App
+    // mounts, so the restore effect picks it up on first run.
+    history.replaceState(null, '', `#endpoints/${domId}`);
+
+    component = mount(App, { target: document.body });
+    flushSync();
+
+    await seedData();
+
+    // The restore effect switched to endpoints and ran the shared helper,
+    // whose retry covers EndpointsPanel's first-mount fetch. The row lands a
+    // flash that fades after ~1.8s; waitFor catches it while it's lit.
+    const row = await vi.waitFor(() => {
+      const el = document.getElementById(domId);
+      expect(el).toBeTruthy();
+      expect(el!.classList.contains('ep-flash')).toBe(true);
+      return el!;
+    });
+
+    expect(navigation.current).toBe('endpoints');
+    expect(document.getElementById('panel-endpoints')).not.toBeNull();
+    expect(document.getElementById('panel-overview')).toBeNull();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({ block: 'center' });
+    expect(document.activeElement).toBe(row);
+  });
+
+  it('opens the models panel from a panel-only hash', async () => {
+    history.replaceState(null, '', '#models');
+
+    component = mount(App, { target: document.body });
+    flushSync();
+
+    await seedData();
+
+    expect(navigation.current).toBe('models');
+    expect(document.getElementById('panel-models')).not.toBeNull();
+    expect(document.getElementById('panel-overview')).toBeNull();
   });
 });

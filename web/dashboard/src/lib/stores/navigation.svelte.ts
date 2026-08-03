@@ -4,9 +4,11 @@
 // can never drift apart (finding 11: App used to hold its own separate
 // `current` for programmatic jumps like "jump to endpoints from Overview",
 // so the tab bar kept announcing the old section over the new panel).
-// Panels themselves must still never import this (spec §7.2.1): they take a
-// plain callback prop instead (see OverviewPanel's onJumpToEndpoints), so the
-// nav presentation can be swapped to a left sidebar without touching them.
+// Panels may still reach navigation, but only via the shared jump helper
+// (lib/jump-to-endpoint.ts), which owns the panel swap, hash push, scroll and
+// focus as one unit. They must not call `navigation.set` directly for tab
+// switching - that stays with NavTabs and the router (including App's
+// boot-time hash restore).
 
 export const SECTIONS = Object.freeze(['overview', 'endpoints', 'models'] as const);
 export type Section = (typeof SECTIONS)[number];

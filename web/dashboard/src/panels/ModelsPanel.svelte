@@ -5,6 +5,7 @@
   import StatusBanner from '../components/StatusBanner.svelte';
   import { fmtAgo } from '../lib/format';
   import { stableId } from '../lib/dom-id';
+  import { jumpToEndpoint } from '../lib/jump-to-endpoint';
   import { getNow as liveNow } from '../lib/clock.svelte';
   import type { ModelSummary } from '../lib/types';
 
@@ -70,6 +71,14 @@
     };
   }
 
+  // Pill click-through delegates to the shared jumpToEndpoint helper
+  // (lib/jump-to-endpoint). Endpoint display names are legitimately
+  // non-unique (EndpointsPanel.dup-names.test), so the target must be keyed
+  // on the per-model endpoint_ids array, not a name->id lookup. The backend
+  // sorts endpoint_ids positionally against endpoints, so endpoints[i] is
+  // hosted on endpoint_ids[i]. The helper owns the retry/scroll/focus/flash
+  // concerns; see its header comment for the first-navigation fetch race.
+
   // Group order: alphabetical, with "unknown" pushed to the end (matches backend).
   function groupOrder(g: typeof groups): typeof groups {
     return [...g].sort((a, b) => {
@@ -110,11 +119,6 @@
   tabindex="0"
   data-state={models.status === 'error' || models.status === 'stale' ? models.status : null}
 >
-  <h2>Models</h2>
-  <p class="panel-intro">
-    Models discovered across the herd, grouped by family. Sorting applies within each family group.
-  </p>
-
   <StatusBanner store={models} />
 
   {#if loading}
@@ -144,15 +148,31 @@
           </tr>
           {#each sorted as m (m.name)}
             <tr id={domId(m)}>
-              <td class="col-sticky"><strong>{m.name}</strong></td>
+              <td class="col-sticky">
+                <strong>{m.name}</strong>
+                {#if m.aliases?.length}
+                  <div class="model-aliases">{m.aliases.join(', ')}</div>
+                {/if}
+              </td>
               <td>{m.params || '—'}</td>
               <td>{m.quant || '—'}</td>
               <td class={cellClass('size_bytes')}>{m.size || '—'}</td>
               <td class={cellClass('endpoints_count')}>
                 {#if m.endpoints?.length}
                   <div class="endpoint-pills">
-                    {#each m.endpoints as ep}
-                      <span class="pill">{ep}</span>
+                    {#each m.endpoints as ep, i}
+                      {@const id = m.endpoint_ids?.[i]}
+                      {#if id}
+                        <button
+                          type="button"
+                          class="pill pill-link"
+                          data-endpoint-id={id}
+                          title="Open {ep} in the Endpoints panel"
+                          onclick={() => jumpToEndpoint(id)}
+                        >{ep}</button>
+                      {:else}
+                        <span class="pill">{ep}</span>
+                      {/if}
                     {/each}
                   </div>
                 {:else}
@@ -168,14 +188,32 @@
   {:else if flatRecent.length}
     <SortableTable {columns} rows={flatRecent.map(normalise)} initialSort={flatInitialSort} rowId={rowKey}>
       {#snippet rowSnippet({ row: m, cellClass })}
-        <td class="col-sticky"><strong>{m.name}</strong></td>
+        <td class="col-sticky">
+          <strong>{m.name}</strong>
+          {#if m.aliases?.length}
+            <div class="model-aliases">{m.aliases.join(', ')}</div>
+          {/if}
+        </td>
         <td>{m.params || '—'}</td>
         <td>{m.quant || '—'}</td>
         <td class={cellClass('size_bytes')}>{m.size || '—'}</td>
         <td class={cellClass('endpoints_count')}>
           {#if m.endpoints?.length}
             <div class="endpoint-pills">
-              {#each m.endpoints as ep}<span class="pill">{ep}</span>{/each}
+              {#each m.endpoints as ep, i}
+                {@const id = m.endpoint_ids?.[i]}
+                {#if id}
+                  <button
+                    type="button"
+                    class="pill pill-link"
+                    data-endpoint-id={id}
+                    title="Open {ep} in the Endpoints panel"
+                    onclick={() => jumpToEndpoint(id)}
+                  >{ep}</button>
+                {:else}
+                  <span class="pill">{ep}</span>
+                {/if}
+              {/each}
             </div>
           {:else}<span class="dash">0</span>{/if}
         </td>
@@ -191,3 +229,28 @@
     <p class="panel-intro">No models discovered yet. Once backends respond to discovery, models will appear here.</p>
   {/if}
 </div>
+
+<style>
+  /* Clickable pill: visually identical to the plain span pill at rest, with a
+     quiet accent hover and the shared focus ring so keyboard users see where
+     focus landed. Background/font reset because <button> ships its own. */
+  .pill-link {
+    cursor: pointer;
+    background: transparent;
+    font: inherit;
+  }
+  .pill-link:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .pill-link:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: 1px;
+  }
+  /* Quiet alias subtext under the model name in the sticky cell. */
+  .model-aliases {
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    font-weight: normal;
+  }
+</style>

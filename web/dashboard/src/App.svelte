@@ -14,11 +14,13 @@
   // Module side-effect: registers endpoints/models jobs with the scheduler.
   import './lib/stores/endpoints.svelte';
   import './lib/stores/models.svelte';
+  import { startRouter, currentRoute, type Route } from './lib/router';
+  import { jumpToEndpointKey } from './lib/jump-to-endpoint';
 
   // App is the router: it reads the same navigation store NavTabs does,
   // rather than keeping its own separate `current`. Two sources of truth for
-  // the active section is exactly how a programmatic jump (below) used to
-  // render the right panel while the tab bar kept announcing the old one.
+  // the active section is exactly how a programmatic jump used to render the
+  // right panel while the tab bar kept announcing the old one.
 
   // Lifecycle: start the shared scheduler on mount, stop on teardown. The
   // scheduler owns every setInterval/setTimeout in the SPA (spec §7.3).
@@ -34,14 +36,26 @@
     };
   });
 
-  function jumpToEndpoints(): void {
-    navigation.set('endpoints');
-  }
+  // URL hash routing. On mount, restore the panel (and any targeted endpoint
+  // row) from the location hash so a refresh or shared link re-opens the
+  // exact view. The hashchange listener then covers back/forward and manual
+  // URL edits; pushState (used by tab clicks and jump-to-endpoint) is silent,
+  // so it never re-enters this path - that's the idempotency contract between
+  // click-driven nav and history-driven restore.
+  $effect(() => {
+    const restore = (r: Route) => {
+      if (r.endpointKey) void jumpToEndpointKey(r.endpointKey);
+    };
+    const initial = currentRoute();
+    navigation.set(initial.panel);
+    restore(initial);
+    return startRouter(restore);
+  });
 </script>
 
 <DashboardLayout>
   {#if navigation.current === 'overview'}
-    <OverviewPanel onJumpToEndpoints={jumpToEndpoints} />
+    <OverviewPanel />
   {:else if navigation.current === 'endpoints'}
     <EndpointsPanel />
   {:else if navigation.current === 'models'}

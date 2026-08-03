@@ -84,3 +84,98 @@ describe('createPollStore: 304 / ETag handling', () => {
     expect(store.status).toBe('ok');
   });
 });
+
+// onTick is the per-tick signal that lets the history ring buffer sample on
+// BOTH success and failure. Without it, a dropped poll produces no sample and
+// the chart silently bridges the gap. These tests pin the contract: ok=true
+// on 200/304 (data is body on 200, null on 304), ok=false on failure.
+describe('createPollStore: onTick callback', () => {
+  it('fires onTick(data, true) on a 200 success', async () => {
+    const ticks: Array<{ data: unknown; ok: boolean }> = [];
+    global.fetch = vi.fn(async () => jsonResponse(SAMPLE_BODY, { etag: '"v1"' }));
+
+    const { createPollStore } = await import('./poll-store.svelte');
+    const store = createPollStore<StatusResponse>({
+      name: 'test-ontick-200',
+      url: '/test',
+      intervalMs: 1000,
+      onTick: (data, ok) => ticks.push({ data, ok }),
+    });
+
+    store.refresh();
+    await vi.waitFor(() => expect(ticks.length).toBe(1));
+    expect(ticks[0].ok).toBe(true);
+    expect(ticks[0].data).toStrictEqual(SAMPLE_BODY);
+  });
+
+  it('fires onTick(null, true) on a 304 (body unchanged, data null)', async () => {
+    const ticks: Array<{ data: unknown; ok: boolean }> = [];
+    let call = 0;
+    global.fetch = vi.fn(async () => {
+      call++;
+      if (call === 1) return jsonResponse(SAMPLE_BODY, { etag: '"v1"' });
+      return jsonResponse(null, { status: 304, etag: '"v1"' });
+    });
+
+    const { createPollStore } = await import('./poll-store.svelte');
+    const store = createPollStore<StatusResponse>({
+      name: 'test-ontick-304',
+      url: '/test',
+      intervalMs: 1000,
+      onTick: (data, ok) => ticks.push({ data, ok }),
+    });
+
+    store.refresh();
+    await vi.waitFor(() => expect(ticks.length).toBe(1));
+    store.refresh();
+    await vi.waitFor(() => expect(ticks.length).toBe(2));
+    expect(ticks[1].ok).toBe(true);
+    expect(ticks[1].data).toBeNull();
+  });
+
+  it('fires onTick(null, false) on a network failure', async () => {
+    const ticks: Array<{ data: unknown; ok: boolean }> = [];
+    global.fetch = vi.fn(async () => {
+      throw new Error('network unreachable');
+    });
+
+    const { createPollStore } = await import('./poll-store.svelte');
+    const store = createPollStore<StatusResponse>({
+      name: 'test-ontick-fail',
+      url: '/test',
+      intervalMs: 1000,
+      onTick: (data, ok) => ticks.push({ data, ok }),
+    });
+
+    store.refresh();
+    await vi.waitFor(() => expect(ticks.length).toBe(1));
+    expect(ticks[0].ok).toBe(false);
+    expect(ticks[0].data).toBeNull();
+  });
+
+  it('does not fire onTick on an aborted tick (superseded by a newer poll)', async () => {
+    const ticks: Array<{ data: unknown; ok: boolean }> = [];
+    global.fetch = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      // Simulate the scheduler aborting the in-flight request mid-flight.
+      if (init?.signal) {
+        const controller = new AbortController();
+        setTimeout(() => controller.abort(), 0);
+        throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      }
+      return jsonResponse(SAMPLE_BODY);
+    });
+
+    const { createPollStore } = await import('./poll-store.svelte');
+    const store = createPollStore<StatusResponse>({
+      name: 'test-ontick-abort',
+      url: '/test',
+      intervalMs: 1000,
+      onTick: (data, ok) => ticks.push({ data, ok }),
+    });
+
+    store.refresh();
+    // Give the aborted fetch a moment to settle; onTick must NOT fire.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(ticks.length).toBe(0);
+  });
+});
