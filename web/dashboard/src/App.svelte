@@ -45,6 +45,6 @@
   {:else if navigation.current === 'endpoints'}
     <EndpointsPanel />
   {:else if navigation.current === 'models'}
-    <ModelsPanel />
+    <ModelsPanel onJumpToEndpoints={jumpToEndpoints} />
   {/if}
 </DashboardLayout>
