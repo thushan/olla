@@ -390,8 +390,17 @@ describe('OverviewPanel backend-types tile', () => {
 
     const tile = tileByLabel('Backend types');
     expect(tile).toBeTruthy();
-    const value = tile!.querySelector('.value')?.textContent?.trim();
-    expect(value).toBe('3 ollama · 2 lm-studio · 1 openai');
+
+    // Rendered as one chip per type, not a single wrapping line of prose -
+    // check both the chip count/order and each chip's own text, so a
+    // count/name transposition would fail even if the joined text matched.
+    const chips = [...tile!.querySelectorAll('.backend-type-chip')];
+    expect(chips).toHaveLength(3);
+    expect(chips.map((c) => c.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      '3 ollama',
+      '2 lm-studio',
+      '1 openai',
+    ]);
   });
 
   it('falls back to the no-data dash on an empty fleet', async () => {

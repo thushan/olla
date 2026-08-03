@@ -66,8 +66,11 @@
   const hasFleetLatency = $derived(activeForLatency.length > 0);
 
   // Backend-type histogram, sorted by count desc then name for deterministic
-  // output. Empty fleet renders as the no-data dash inside the tile.
-  const backendBreakdown = $derived(
+  // output. Empty fleet renders as the no-data dash inside the tile. Kept as
+  // structured {type, count} pairs (not a joined string) so the tile can
+  // render each as its own chip rather than one wrapping line of prose.
+  type BackendTypeCount = { type: string; count: number };
+  const backendBreakdown = $derived<BackendTypeCount[]>(
     Object.entries(
       endpointList.reduce<Record<string, number>>((acc, e) => {
         const t = e.type || 'unknown';
@@ -76,8 +79,7 @@
       }, {})
     )
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([type, n]) => `${n} ${type}`)
-      .join(' · ')
+      .map(([type, count]) => ({ type, count }))
   );
 
   // Glance view-model row: the endpoint contract plus the sort/scale fields
@@ -256,7 +258,17 @@
         </StatTile>
         <StatTile label="Backend types">
           {#snippet children()}
-            {backendBreakdown || '—'}
+            {#if backendBreakdown.length > 0}
+              <span class="backend-type-chips">
+                {#each backendBreakdown as bt (bt.type)}
+                  <span class="pill backend-type-chip">
+                    <strong class="count">{bt.count}</strong> {bt.type}
+                  </span>
+                {/each}
+              </span>
+            {:else}
+              <span class="dash">—</span>
+            {/if}
           {/snippet}
           {#snippet subSnippet()}{fmtInt(endpointList.length)} endpoints{/snippet}
         </StatTile>

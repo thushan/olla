@@ -333,6 +333,30 @@ main {
   border-color: var(--border);
 }
 
+/* BACKEND TYPE CHIPS (Overview "Backend types" tile). The tile's default
+   .value typography is a 1.5rem/700 heading built for a single number - a
+   fleet with several backend types rendered as one long joined string there
+   and wrapped to three loud lines. Chips borrow the endpoint-pill look
+   (.pill, below) instead of inventing a new visual language; the count is
+   the only thing bold enough to compete with a stat-tile figure. */
+.backend-type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.pill.backend-type-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+.backend-type-chip .count {
+  font-weight: 700;
+  color: var(--text);
+}
+
 /* TABLES */
 .table-scroll {
   overflow-x: auto;
