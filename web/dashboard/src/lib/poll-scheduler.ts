@@ -12,38 +12,45 @@ const JITTER = 0.12;
 const BACKGROUND_BACKOFF = 4; // multiplied against the configured interval
 export const STALE_MULTIPLIER = 3; // last success older than 3*interval => stale
 
-class PollScheduler {
-  #jobs = new Map(); // name -> { intervalMs, tick }
-  #timers = new Map(); // name -> timeout id (foreground cadence)
-  #inflight = new Map(); // name -> AbortController
-  #started = false;
-  #boundOnVisibility = () => this.#onVisibility();
+type TickFn = (signal: AbortSignal) => void | Promise<void>;
 
-  register(name, intervalMs, tick) {
+interface Job {
+  intervalMs: number;
+  tick: TickFn;
+}
+
+class PollScheduler {
+  #jobs = new Map<string, Job>(); // name -> { intervalMs, tick }
+  #timers = new Map<string, ReturnType<typeof setTimeout>>(); // name -> timeout id (foreground cadence)
+  #inflight = new Map<string, AbortController>(); // name -> AbortController
+  #started = false;
+  #boundOnVisibility = (): void => this.#onVisibility();
+
+  register(name: string, intervalMs: number, tick: TickFn): void {
     this.#jobs.set(name, { intervalMs, tick });
   }
 
-  start() {
+  start(): void {
     if (this.#started || typeof document === 'undefined') return;
     this.#started = true;
     document.addEventListener('visibilitychange', this.#boundOnVisibility);
     for (const name of this.#jobs.keys()) this.#scheduleNext(name, true);
   }
 
-  stop() {
+  stop(): void {
     if (!this.#started) return;
     this.#started = false;
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.#boundOnVisibility);
     }
-    for (const [name, id] of this.#timers) clearTimeout(id);
+    for (const [, id] of this.#timers) clearTimeout(id);
     this.#timers.clear();
     for (const [, ctrl] of this.#inflight) ctrl.abort();
     this.#inflight.clear();
   }
 
   /** Force an immediate refresh of one job (used by manual "retry now" buttons). */
-  refresh(name) {
+  refresh(name: string): void {
     if (!this.#jobs.has(name)) return;
     // Cancel the pending recurring timer before running, mirroring
     // #onVisibility(). Without this the original timer still fires later,
@@ -53,7 +60,7 @@ class PollScheduler {
     this.#run(name);
   }
 
-  #onVisibility() {
+  #onVisibility(): void {
     if (document.visibilityState === 'visible') {
       // Tab is back: fire every job immediately and resume foreground cadence.
       for (const name of this.#jobs.keys()) {
@@ -63,7 +70,7 @@ class PollScheduler {
     }
   }
 
-  #scheduleNext(name, immediate = false) {
+  #scheduleNext(name: string, immediate: boolean = false): void {
     if (!this.#started) return;
     const job = this.#jobs.get(name);
     if (!job) return;
@@ -80,7 +87,7 @@ class PollScheduler {
     this.#timers.set(name, id);
   }
 
-  async #run(name) {
+  async #run(name: string): Promise<void> {
     const job = this.#jobs.get(name);
     if (!job) return;
 
@@ -107,4 +114,4 @@ class PollScheduler {
   }
 }
 
-export const pollScheduler = new PollScheduler();
+export const pollScheduler: PollScheduler = new PollScheduler();

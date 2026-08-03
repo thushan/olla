@@ -12,7 +12,7 @@
 // and is a pure function of the input, so OverviewPanel's jump lookup and
 // EndpointsPanel's row id agree without either panel needing to know the
 // other's sort order.
-export function stableId(str) {
+export function stableId(str: string): string {
   let h = 0x811c9dc5;
   const s = String(str ?? '');
   for (let i = 0; i < s.length; i++) {

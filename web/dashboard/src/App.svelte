@@ -4,8 +4,8 @@
   import OverviewPanel from './panels/OverviewPanel.svelte';
   import EndpointsPanel from './panels/EndpointsPanel.svelte';
   import ModelsPanel from './panels/ModelsPanel.svelte';
-  import { pollScheduler } from './lib/poll-scheduler.js';
-  import { startClock } from './lib/clock.svelte.js';
+  import { pollScheduler } from './lib/poll-scheduler';
+  import { startClock } from './lib/clock.svelte';
   import { theme } from './lib/stores/theme.svelte.js';
   import { navigation } from './lib/stores/navigation.svelte.js';
 

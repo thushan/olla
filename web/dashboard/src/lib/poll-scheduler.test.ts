@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe('pollScheduler.refresh', () => {
   it('a burst of manual refreshes leaves exactly one live recurring chain', async () => {
-    const { pollScheduler } = await import('./poll-scheduler.js');
+    const { pollScheduler } = await import('./poll-scheduler');
 
     let calls = 0;
     const tick = vi.fn(async () => {
@@ -52,12 +52,12 @@ describe('pollScheduler.refresh', () => {
   });
 
   it('a superseded in-flight run does not also schedule a duplicate chain', async () => {
-    const { pollScheduler } = await import('./poll-scheduler.js');
+    const { pollScheduler } = await import('./poll-scheduler');
 
-    const resolvers = [];
+    const resolvers: Array<() => void> = [];
     const tick = vi.fn(
-      (signal) =>
-        new Promise((resolve) => {
+      (signal: AbortSignal) =>
+        new Promise<void>((resolve) => {
           resolvers.push(resolve);
           // Mirrors the real tick(): it catches AbortError internally from
           // the fetch and just returns, it never rejects.

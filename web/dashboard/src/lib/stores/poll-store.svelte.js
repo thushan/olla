@@ -4,7 +4,7 @@
 // here: loading -> ok on first success; error/stale on failure, with the last
 // known-good data preserved and greyed rather than blanked.
 
-import { pollScheduler, STALE_MULTIPLIER } from '../poll-scheduler.js';
+import { pollScheduler, STALE_MULTIPLIER } from '../poll-scheduler';
 
 /**
  * @param {object} opts

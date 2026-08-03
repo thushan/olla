@@ -1,5 +1,5 @@
 <script>
-  import { fmtPct, pctBucket } from '../lib/format.js';
+  import { fmtPct, pctBucket } from '../lib/format';
 
   // `status` gates the bar's COLOUR on endpoint health: a down backend
   // (offline, unhealthy, critical) with lifetime counters would otherwise

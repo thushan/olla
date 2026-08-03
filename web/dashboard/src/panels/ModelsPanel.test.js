@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { models } from '../lib/stores/models.svelte.js';
-import { stableId } from '../lib/dom-id.js';
+import { stableId } from '../lib/dom-id';
 import ModelsPanel from './ModelsPanel.svelte';
 
 // WP-3 coverage: the Models panel was trimmed to discovery-only columns

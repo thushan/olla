@@ -5,19 +5,19 @@
 // setInterval (spec §7.3 forbids that), this module is the one shared
 // clock. Reads via now() are reactive when consumed inside $derived.
 
-import { pollScheduler } from './poll-scheduler.js';
+import { pollScheduler } from './poll-scheduler';
 
 const CLOCK_INTERVAL_MS = 1000;
 const CLOCK_JOB_NAME = 'clock';
 
 let now = $state(Date.now());
 
-function tick() {
+function tick(): void {
   now = Date.now();
 }
 
 let registered = false;
-export function startClock() {
+export function startClock(): void {
   if (registered) return;
   registered = true;
   pollScheduler.register(CLOCK_JOB_NAME, CLOCK_INTERVAL_MS, tick);
@@ -26,6 +26,6 @@ export function startClock() {
 }
 
 /** Live "now" in epoch ms; read inside $derived so panels re-render per tick. */
-export function getNow() {
+export function getNow(): number {
   return now;
 }

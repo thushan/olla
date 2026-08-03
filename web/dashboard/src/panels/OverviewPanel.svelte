@@ -7,9 +7,9 @@
   import StatusTag from '../components/StatusTag.svelte';
   import PctBar from '../components/PctBar.svelte';
   import SortableTable from '../components/SortableTable.svelte';
-  import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format.js';
-  import { stableId } from '../lib/dom-id.js';
-  import { getNow as liveNow } from '../lib/clock.svelte.js';
+  import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format';
+  import { stableId } from '../lib/dom-id';
+  import { getNow as liveNow } from '../lib/clock.svelte';
 
   // Cross-panel navigation is delegated to App.svelte so this panel never
   // imports the navigation store (spec §7.2.1).

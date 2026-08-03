@@ -1,8 +1,8 @@
 <script>
   import { overview } from '../lib/stores/overview.svelte.js';
   import { endpoints } from '../lib/stores/endpoints.svelte.js';
-  import { fmtUptime } from '../lib/format.js';
-  import { getNow as liveNow } from '../lib/clock.svelte.js';
+  import { fmtUptime } from '../lib/format';
+  import { getNow as liveNow } from '../lib/clock.svelte';
 
   // The strip renders from whatever the overview store last saw. Before the
   // first poll lands, render dashes so the operator can see "pending" rather

@@ -2,9 +2,9 @@
   import { models } from '../lib/stores/models.svelte.js';
   import SortableTable from '../components/SortableTable.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
-  import { fmtAgo } from '../lib/format.js';
-  import { stableId } from '../lib/dom-id.js';
-  import { getNow as liveNow } from '../lib/clock.svelte.js';
+  import { fmtAgo } from '../lib/format';
+  import { stableId } from '../lib/dom-id';
+  import { getNow as liveNow } from '../lib/clock.svelte';
 
   const loading = $derived(models.status === 'loading');
   // Mounted only when active (App.svelte does the routing).

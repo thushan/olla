@@ -4,7 +4,7 @@ import App from './App.svelte';
 import { navigation } from './lib/stores/navigation.svelte.js';
 import { overview } from './lib/stores/overview.svelte.js';
 import { endpoints } from './lib/stores/endpoints.svelte.js';
-import { stableId } from './lib/dom-id.js';
+import { stableId } from './lib/dom-id';
 
 // Regression coverage: "jump to endpoint" on the Overview glance table looked
 // up `ep-<slug>` in the DOM, but the generic row path in SortableTable never

@@ -9,18 +9,18 @@ import {
   fmtAgo,
   fmtUntil,
   fmtUptime,
-} from './format.js';
+} from './format';
 
 // Fixed reference instant for the time tests; iso values below are computed
 // relative to this so the assertions don't depend on wall clock.
 const NOW = Date.UTC(2026, 6, 27, 12, 0, 0);
-const iso = (offsetMs) => new Date(NOW - offsetMs).toISOString();
-const isoFuture = (offsetMs) => new Date(NOW + offsetMs).toISOString();
+const iso = (offsetMs: number): string => new Date(NOW - offsetMs).toISOString();
+const isoFuture = (offsetMs: number): string => new Date(NOW + offsetMs).toISOString();
 
 // Byte values cross-checked against pkg/format.Bytes (see pkg/format/format.go).
 // Drift here means the UI disagrees with the API on the same number, so this
 // table is the contract.
-const BYTE_CASES = [
+const BYTE_CASES: Array<[number, string]> = [
   [0, '0 B'],
   [1, '1 B'],
   [999, '999 B'],
@@ -49,7 +49,7 @@ describe('fmtBytes', () => {
   it('treats non-finite / negative as zero', () => {
     expect(fmtBytes(NaN)).toBe('0 B');
     expect(fmtBytes(-1)).toBe('0 B');
-    expect(fmtBytes(undefined)).toBe('0 B');
+    expect(fmtBytes(undefined as unknown as number)).toBe('0 B');
   });
 });
 

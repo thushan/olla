@@ -9,7 +9,7 @@ const BYTES_UNIT = 1024;
  * - < 1024 -> "<n> B" (integer, single space, capital B)
  * - otherwise -> "<value>.2f <Unit>" with unit drawn from KB,MB,GB,TB,PB
  */
-export function fmtBytes(bytes) {
+export function fmtBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) bytes = 0;
   bytes = Math.floor(bytes);
 
@@ -33,7 +33,7 @@ export function fmtBytes(bytes) {
 const INT_LOCALE = 'en-AU';
 
 /** Integer with thousands separators. Pass null/undefined -> "0". */
-export function fmtInt(n) {
+export function fmtInt(n: number | null | undefined): string {
   if (n === null || n === undefined || Number.isNaN(n)) return '0';
   return Math.floor(Number(n)).toLocaleString(INT_LOCALE);
 }
@@ -43,7 +43,7 @@ export function fmtInt(n) {
  * values. The Go variant special-cases 0 and 100 to skip the decimal; this JS
  * version does too so the dashboard doesn't show "0.0%" vs the API's "0%".
  */
-export function fmtPct(value) {
+export function fmtPct(value: number): string {
   if (!Number.isFinite(value)) return '0%';
   if (value === 0) return '0%';
   if (value === 100) return '100%';
@@ -57,7 +57,7 @@ export function fmtPct(value) {
  * - < 10 -> single-digit form ("5ms" not "05ms"), but the JS path just prints
  *   the integer so we keep parity with the >9ms branch.
  */
-export function fmtMs(ms) {
+export function fmtMs(ms: number): string {
   if (!ms || ms <= 0) return '0ms';
   if (ms >= 1000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.floor(ms)}ms`;
@@ -68,13 +68,13 @@ export function fmtMs(ms) {
  * legible against a much larger max (a 28ms p95 vs a 29400ms p99 in the
  * same track). Matches the mockup's scalePct.
  */
-export function scalePct(value, max) {
+export function scalePct(value: number, max: number): number {
   if (!max || value <= 0) return 0;
   return Math.min(100, Math.sqrt(value / max) * 100);
 }
 
 /** Choose a status colour bucket given a percentage and whether we have data. */
-export function pctBucket(pct, hasData) {
+export function pctBucket(pct: number, hasData: boolean): 'neutral' | 'green' | 'amber' | 'red' {
   if (!hasData) return 'neutral';
   if (pct >= 99) return 'green';
   if (pct >= 90) return 'amber';
@@ -91,7 +91,7 @@ export function pctBucket(pct, hasData) {
  * Coarse duration compact form, mirroring pkg/format.TimeDuration:
  * <10s single-digit, then m/h/d. Used for both ago and until.
  */
-export function fmtDuration(ms) {
+export function fmtDuration(ms: number): string {
   if (!Number.isFinite(ms) || ms < 0) ms = 0;
   const s = ms / 1000;
   if (s < 60) {
@@ -109,7 +109,7 @@ export function fmtDuration(ms) {
  * back to a placeholder. Mirrors pkg/format.TimeAgo's "never" sentinel by
  * returning empty, leaving the placeholder decision at the call site.
  */
-export function fmtAgo(iso, nowMs = Date.now()) {
+export function fmtAgo(iso: string | null | undefined, nowMs: number = Date.now()): string {
   const t = parseIso(iso);
   if (t === null) return '';
   return `${fmtDuration(nowMs - t)} ago`;
@@ -119,7 +119,7 @@ export function fmtAgo(iso, nowMs = Date.now()) {
  * "in Xs" for a future instant (next_check_at); past or now -> "now".
  * Mirrors pkg/format.TimeUntil.
  */
-export function fmtUntil(iso, nowMs = Date.now()) {
+export function fmtUntil(iso: string | null | undefined, nowMs: number = Date.now()): string {
   const t = parseIso(iso);
   if (t === null) return '';
   const diff = t - nowMs;
@@ -132,7 +132,7 @@ export function fmtUntil(iso, nowMs = Date.now()) {
  * "<1h -> Xm", "<24h -> Xh Ym", else "Xd Yh". The herd runs for days so
  * the day/hour branch dominates in practice.
  */
-export function fmtUptime(iso, nowMs = Date.now()) {
+export function fmtUptime(iso: string | null | undefined, nowMs: number = Date.now()): string {
   const t = parseIso(iso);
   if (t === null) return '';
   const ms = Math.max(0, nowMs - t);
@@ -151,7 +151,7 @@ export function fmtUptime(iso, nowMs = Date.now()) {
 // Date.parse is too lenient (no format validation). Reject anything that
 // doesn't carry a timezone or isn't ISO-8601-ish so a malformed payload
 // doesn't silently render "53 years ago".
-function parseIso(iso) {
+function parseIso(iso: string | null | undefined): number | null {
   if (!iso || typeof iso !== 'string') return null;
   const t = Date.parse(iso);
   if (Number.isNaN(t)) return null;

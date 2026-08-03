@@ -1,7 +1,7 @@
 <script>
   import ThemeToggle from '../components/ThemeToggle.svelte';
   import ollaThumb from '../assets/logo/olla-thumb.png';
-  import { getNow } from '../lib/clock.svelte.js';
+  import { getNow } from '../lib/clock.svelte';
 
   // Live clock ticking once per second, grounding the operator that "this
   // view is live, the data is from N seconds ago". Sourced from the shared

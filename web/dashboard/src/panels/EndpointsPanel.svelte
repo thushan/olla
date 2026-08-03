@@ -5,9 +5,9 @@
   import StatusTag from '../components/StatusTag.svelte';
   import RangeBar from '../components/RangeBar.svelte';
   import PctBar from '../components/PctBar.svelte';
-  import { fmtAgo, fmtUntil } from '../lib/format.js';
-  import { stableId } from '../lib/dom-id.js';
-  import { getNow as liveNow } from '../lib/clock.svelte.js';
+  import { fmtAgo, fmtUntil } from '../lib/format';
+  import { stableId } from '../lib/dom-id';
+  import { getNow as liveNow } from '../lib/clock.svelte';
 
   const data = $derived(endpoints.data?.endpoints ?? []);
   const loading = $derived(endpoints.status === 'loading');

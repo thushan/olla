@@ -5,7 +5,7 @@
   // with no traffic yet. Never derive it from a health-check figure -
   // health-check latency (response_time) measures a different thing
   // entirely (see EndpointsPanel/OverviewPanel).
-  import { fmtMs, scalePct } from '../lib/format.js';
+  import { fmtMs, scalePct } from '../lib/format';
 
   let { min = 0, avg = null, max = 0, globalMax = 0, label = 'latency' } = $props();
 
