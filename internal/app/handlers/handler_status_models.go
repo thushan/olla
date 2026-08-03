@@ -92,13 +92,13 @@ func (a *Application) modelsStatusHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	endpointNames := make(map[string]string, len(endpoints))
-	endpointIDs := make(map[string]string, len(endpoints))
+	// IDs derive once from the endpoint set so colliding siblings get the
+	// same deterministic disambiguator the /internal/status/endpoints and
+	// /internal/status payloads emit, keeping model->endpoint click-through
+	// IDs aligned across every payload.
+	endpointIDs := buildEndpointIDs(endpoints)
 	for _, ep := range endpoints {
 		endpointNames[ep.URLString] = ep.Name
-		// Stable IDs back the dashboard's model->endpoint click-through; they
-		// must be derived from the same URL the name map uses so name and id
-		// stay in lockstep even when display names collide across endpoints.
-		endpointIDs[ep.URLString] = stableEndpointID(ep.URLString)
 	}
 
 	// Best-effort alias enrichment. Degrades to nil (no aliases surfaced)
@@ -149,8 +149,10 @@ func (a *Application) buildModelSummaries(
 		}
 		// The stable ID mirrors the name-resolution path so the two arrays
 		// line up positionally. For URLs without an explicit ID entry (a
-		// stale model-map key with no repository match) the raw URL is hashed
-		// directly, mirroring the sanitised-URL fallback for the name.
+		// stale model-map key with no repository match) the base hash of the
+		// sanitised URL is used, matching the fallback the name path takes.
+		// This path has no sibling context, so it cannot disambiguate
+		// collisions - the trade-off for not silently dropping the model.
 		endpointID := endpointIDs[endpointURL]
 		if endpointID == "" {
 			endpointID = stableEndpointID(endpointURL)

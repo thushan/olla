@@ -74,8 +74,8 @@ type EndpointResponse struct {
 	NextCheck     string                 `json:"next_check"`
 	Issues        string                 `json:"issues"`
 	URL           string                 `json:"url"`
-	// ID is a stable identifier derived from the raw (unsanitised) endpoint
-	// URL; see stableEndpointID in handler_status_endpoints.go.
+	// ID is a stable, opaque identifier derived from the SANITISED endpoint
+	// URL via buildEndpointIDs; see handler_status_endpoints.go.
 	ID          string `json:"id"`
 	Priority    int    `json:"priority"`
 	Connections int64  `json:"connections"`
@@ -163,7 +163,10 @@ func (a *Application) buildStatusResponse(snapshot *statusSnapshot) StatusRespon
 
 	response.Proxy = a.buildProxySummary(a.Config.Proxy)
 	response.System = a.buildSystemSummary(snapshot.all, snapshot.healthy, snapshot.proxyStats, snapshot.securityStats, snapshot.connectionStats, snapshot.endpointStats)
-	a.buildUnifiedEndpoints(snapshot.all, snapshot.endpointStats, snapshot.connectionStats, response.Endpoints, snapshot.endpointModels)
+	// IDs derive once from the same snapshot so every payload agrees and
+	// colliding siblings stay distinct via positional disambiguators.
+	endpointIDs := buildEndpointIDs(snapshot.all)
+	a.buildUnifiedEndpoints(snapshot.all, snapshot.endpointStats, snapshot.connectionStats, response.Endpoints, snapshot.endpointModels, endpointIDs)
 	response.Security = a.buildSecuritySummary(snapshot.securityStats)
 
 	return response
@@ -241,7 +244,7 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 }
 
 func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map[string]ports.EndpointStats,
-	connectionStats map[string]int64, endpoints []EndpointResponse, modelMap map[string]*domain.EndpointModels) {
+	connectionStats map[string]int64, endpoints []EndpointResponse, modelMap map[string]*domain.EndpointModels, endpointIDs map[string]string) {
 	for i, endpoint := range all {
 		url := endpoint.GetURLString()
 		stats, hasStats := statsMap[url]
@@ -283,7 +286,7 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			NextCheck:   format.TimeUntil(endpoint.NextCheckTime),
 			Models:      modelDisco,
 			Issues:      a.getEndpointIssues(endpoint, stats, hasStats, successRate),
-			ID:          stableEndpointID(url),
+			ID:          endpointIDs[url],
 			URL:         sanitiseDisplayURL(url),
 		}
 

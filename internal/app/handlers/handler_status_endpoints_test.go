@@ -512,7 +512,8 @@ func TestBuildEndpointSummaryOptimised(t *testing.T) {
 
 	app := createTestStatusApplication([]*domain.Endpoint{endpoint})
 
-	summary := app.buildEndpointSummaryOptimised(endpoint, statsMap, nil, modelMap)
+	endpointIDs := buildEndpointIDs([]*domain.Endpoint{endpoint})
+	summary := app.buildEndpointSummaryOptimised(endpoint, statsMap, nil, modelMap, endpointIDs[endpoint.URLString])
 
 	assert.Equal(t, "test-endpoint", summary.Name)
 	assert.Equal(t, "ollama", summary.Type)

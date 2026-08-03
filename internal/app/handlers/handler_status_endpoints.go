@@ -30,10 +30,12 @@ type EndpointSummary struct {
 	SuccessRate     string     `json:"success_rate"`
 	Issues          string     `json:"issues,omitempty"`
 	URL             string     `json:"url"`
-	// ID is a stable identifier derived from the raw (unsanitised) endpoint
-	// URL, added because URL above has query/fragment stripped for display
-	// and can therefore collide across distinct endpoints. See
-	// stableEndpointID for the derivation and its collision caveat.
+	// ID is a stable, opaque identifier derived from the SANITISED endpoint
+	// URL (scheme+host+port+path) via buildEndpointIDs, so credentials in the
+	// query string cannot influence it and credential rotation leaves it
+	// unchanged. Siblings that share a sanitised form get a positional
+	// disambiguator assigned by sorted (secret-independent) sibling order.
+	// See buildEndpointIDs and stableEndpointID.
 	ID           string `json:"id"`
 	Priority     int    `json:"priority"`
 	ModelCount   int    `json:"model_count"`
@@ -72,10 +74,15 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 	endpointStats := a.statsCollector.GetEndpointStats()
 	connectionStats := a.statsCollector.GetConnectionStats()
 	modelMap, _ := a.modelRegistry.GetEndpointModelMap(ctx)
+	// IDs are derived once from the full endpoint set so siblings that share
+	// a sanitised URL get deterministic positional disambiguators, and every
+	// payload (status/endpoints, status, status/models) sees the same ID for
+	// the same endpoint from the same snapshot.
+	endpointIDs := buildEndpointIDs(allEndpoints)
 	summaries := make([]EndpointSummary, 0, len(allEndpoints))
 
 	for _, endpoint := range allEndpoints {
-		summary := a.buildEndpointSummaryOptimised(endpoint, endpointStats, connectionStats, modelMap)
+		summary := a.buildEndpointSummaryOptimised(endpoint, endpointStats, connectionStats, modelMap, endpointIDs[endpoint.URLString])
 		summaries = append(summaries, summary)
 	}
 
@@ -120,7 +127,7 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 	writeJSONWithETag(w, r, body, hashEndpointStatusResponse(&response))
 }
 
-func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, statsMap map[string]ports.EndpointStats, connectionStats map[string]int64, modelMap map[string]*domain.EndpointModels) EndpointSummary {
+func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, statsMap map[string]ports.EndpointStats, connectionStats map[string]int64, modelMap map[string]*domain.EndpointModels, endpointID string) EndpointSummary {
 	url := endpoint.URLString
 	stats, hasStats := statsMap[url]
 	models := modelMap[url]
@@ -130,7 +137,7 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 		Type:              endpoint.Type,
 		Status:            endpoint.Status.String(),
 		Priority:          endpoint.Priority,
-		ID:                stableEndpointID(url),
+		ID:                endpointID,
 		URL:               sanitiseDisplayURL(url),
 		ActiveConnections: connectionStats[url],
 	}
@@ -204,15 +211,19 @@ func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoin
 	return ""
 }
 
-// stableEndpointID derives a stable, opaque identifier from the raw
-// (unsanitised) endpoint URL, shared by both the /internal/status and
-// /internal/status/endpoints handlers. It exists because sanitiseDisplayURL
-// strips RawQuery and Fragment before a URL reaches the frontend, so two
-// distinct endpoints (e.g. differing only by a query string) can render with
-// an identical display URL. The repository keys its endpoint map on the raw
-// URL string including query and fragment, so those two endpoints really are
-// distinct - the frontend needs an identity that survives sanitisation to
-// key rows on and to break sort ties deterministically.
+// stableEndpointID derives the base (no-sibling) stable identifier from the
+// SANITISED endpoint URL (scheme+host+port+path only). RawQuery and Fragment
+// are NOT part of the hash, so credentials embedded in the query string can
+// neither influence the public ID nor leak through it, and credential
+// rotation leaves the value unchanged. It is the fallback path for callers
+// that have no sibling context (e.g. a stale model-map key with no
+// repository match).
+//
+// Status handlers with the full endpoint set MUST call buildEndpointIDs
+// instead: when two configured endpoints collapse to the same sanitised form
+// (differing only by query string or fragment), buildEndpointIDs assigns each
+// a deterministic positional disambiguator so they remain distinct, which a
+// pure per-URL hash cannot do.
 //
 // FNV-1a 32-bit rendered as base36 mirrors the stableId() hash the dashboard
 // already uses client-side for DOM ids (web/dashboard/src/lib/dom-id.js), so
@@ -221,9 +232,75 @@ func (a *Application) getEndpointIssuesSummaryOptimised(endpoint *domain.Endpoin
 // collision-resistant trade-off at realistic fleet sizes (tens to low
 // hundreds of endpoints), not a correctness requirement.
 func stableEndpointID(raw string) string {
+	return hashIDString(sanitiseDisplayURL(raw))
+}
+
+// hashIDString renders the FNV-1a 32-bit hash of s as base36. The base and
+// disambiguated ID paths share this so every ID format is the same shape.
+func hashIDString(s string) string {
 	h := fnv.New32a()
-	_, _ = h.Write([]byte(raw))
+	_, _ = h.Write([]byte(s))
 	return strconv.FormatUint(uint64(h.Sum32()), 36)
+}
+
+// buildEndpointIDs derives a stable, opaque ID for every endpoint in the set
+// and returns a URL-keyed map for O(1) lookup by the status handlers.
+//
+// IDs are derived from the SANITISED URL (scheme+host+port+path) so
+// query-embedded secrets neither influence the value nor leak through a
+// public identifier, and credential rotation leaves the ID unchanged.
+//
+// Endpoints that collapse to the same sanitised form (differing only by query
+// string or fragment) get a deterministic positional suffix "base-N", where N
+// is the sibling's position in its collision group. Siblings are sorted on
+// the operator-chosen, secret-independent Name field so a credential
+// rotation in one sibling's query cannot reshuffle suffixes; the raw URL is
+// only a final tiebreaker for the pathological same-Name same-sanitised-URL
+// case, where the IDs remain distinct regardless of which sibling gets which
+// suffix.
+//
+// The same input set always yields the same mapping, so /internal/status,
+// /internal/status/endpoints and /internal/status/models emit identical IDs
+// for the same endpoint as long as they build from the same repository
+// snapshot. Nil endpoints are skipped (defensive; the repository does not
+// yield nil entries today).
+func buildEndpointIDs(endpoints []*domain.Endpoint) map[string]string {
+	if len(endpoints) == 0 {
+		return map[string]string{}
+	}
+
+	// Group endpoints by their sanitised form. Every group larger than one is
+	// a collision the display URL cannot break on its own.
+	groups := make(map[string][]*domain.Endpoint, len(endpoints))
+	for _, ep := range endpoints {
+		if ep == nil {
+			continue
+		}
+		key := sanitiseDisplayURL(ep.URLString)
+		groups[key] = append(groups[key], ep)
+	}
+
+	ids := make(map[string]string, len(endpoints))
+	for _, siblings := range groups {
+		base := hashIDString(sanitiseDisplayURL(siblings[0].URLString))
+		if len(siblings) == 1 {
+			ids[siblings[0].URLString] = base
+			continue
+		}
+		// Sort on Name so suffix assignment is secret-independent; raw URL is
+		// only a final tiebreaker for the same-Name same-sanitised-URL case,
+		// where IDs stay distinct regardless of the suffix each gets.
+		sort.Slice(siblings, func(i, j int) bool {
+			if siblings[i].Name != siblings[j].Name {
+				return siblings[i].Name < siblings[j].Name
+			}
+			return siblings[i].URLString < siblings[j].URLString
+		})
+		for i, ep := range siblings {
+			ids[ep.URLString] = base + "-" + strconv.Itoa(i)
+		}
+	}
+	return ids
 }
 
 // hashEndpointStatusResponse computes the FNV-1a ETag for the

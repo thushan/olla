@@ -172,7 +172,7 @@ func TestBuildUnifiedEndpoints_TieBreakerStableOrder(t *testing.T) {
 
 	app := createTestStatusApplication(endpoints)
 	out := make([]EndpointResponse, len(endpoints))
-	app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil)
+	app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil, buildEndpointIDs(endpoints))
 
 	require.Len(t, out, 3)
 	assert.Equal(t, "alpha", out[0].Name, "tie-breaker must sort equal-priority same-health endpoints by name")
@@ -203,7 +203,7 @@ func TestBuildUnifiedEndpoints_TieBreakerDeterministicOnCollidingDisplayURL(t *t
 	var firstWinner string
 	for i, endpoints := range orderings {
 		out := make([]EndpointResponse, len(endpoints))
-		app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil)
+		app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil, buildEndpointIDs(endpoints))
 
 		require.Len(t, out, 2)
 		assert.NotEqual(t, out[0].ID, out[1].ID)
