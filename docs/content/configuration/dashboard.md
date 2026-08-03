@@ -20,9 +20,9 @@ when you want to answer questions like "is my fleet healthy", "which backend is 
 - **Read-only.** No config editing, no endpoint enable or disable, no restart, no cache
   clearing. If a view changes state, it is not in the dashboard.
 - **Polled, not realtime.** The page fetches the same `/internal/status*` JSON the CLI
-  exposes. There is no WebSocket, no Server-Sent Events channel, no push. Every poll is a
-  plain `GET` that returns the full snapshot; this PR does not implement `ETag` or
-  conditional GET on the JSON endpoints, so there is no `304` short-circuit to tune.
+  exposes. There is no WebSocket, no Server-Sent Events channel, no push. Each request is a
+  conditional `GET` using `ETag`/`If-None-Match`, so an unchanged snapshot returns a `304`
+  with no body; the status endpoints also gzip their responses when the client accepts it.
 - **Same listener as the proxy.** It shares `server.host` and `server.port`. There is no
   second port to configure and no separate TLS posture.
 - **Three panels: Overview, Endpoints, Models.** Aggregate fleet health, per-endpoint
@@ -33,12 +33,11 @@ when you want to answer questions like "is my fleet healthy", "which backend is 
 - **No authentication.** No login, no token, no session. This is consistent with every
   other `/internal/*` endpoint in Olla today. See [Security model](#security-model) for
   what that means in practice.
-- **No circuit-breaker column.** The breaker on `main` trips only on health-probe
-  failures, not on live proxy traffic, so exposing it in the dashboard would under-report
-  real failures. It is cut from this PR.
+- **No circuit-breaker column.** The breaker trips only on health-probe failures, not on
+  live proxy traffic, so exposing it in the dashboard would under-report real failures.
 - **No per-model traffic figures.** The proxy engines do not currently record per-model
   request counts, so any such column would read as always zero. The Models panel shows
-  discovery data only.
+  discovery data only, plus any configured aliases.
 - **No mutation surface, no log streaming, no chat playground, no benchmark UI.** Those
   are separate efforts.
 
@@ -61,13 +60,19 @@ even one that resolves to an allowed IP - is rejected.
 
 | Panel | What it shows | Backed by | Poll interval |
 |-------|----------------|-----------|----------------|
-| Overview | Aggregate fleet status, success rate, average latency, total traffic, active connections, total requests, total failures, security violations, uptime, and proxy engine/balancer in use | `GET /internal/status` | 5s |
+| Overview | Aggregate fleet status, success rate, average latency, total traffic, active connections, total requests, total failures, security violations, uptime, proxy engine/balancer in use, and a live requests-per-second sparkline | `GET /internal/status` | 5s |
 | Endpoints | Per-endpoint name, type, status, priority, success rate, average/min/max proxy latency, request count, active connections, model count, last and next health check, last model sync, sanitised URL | `GET /internal/status/endpoints` | 5s |
-| Models | Discovered model inventory grouped by family: name, parameter size, quantisation, size on disk, which endpoints host each model, last seen | `GET /internal/status/models` | 15s |
+| Models | Discovered model inventory grouped by family: name, aliases, parameter size, quantisation, size on disk, which endpoints host each model, last seen | `GET /internal/status/models` | 15s |
 
-The Endpoints panel does **not** show a circuit-breaker column this PR, and the Models
-panel does **not** show per-model request, success-rate, or latency columns. Both are
-deliberate omissions; see [What it is not](#what-it-is-not).
+Clicking a model's host in the Models panel jumps to and highlights that endpoint's row in
+the Endpoints panel. The active panel, and any endpoint jumped to, is reflected in the URL
+hash, so a refresh or a shared link restores the same view. The dashboard follows the
+browser's light/dark preference by default, with a toggle to force light, dark, or back to
+automatic.
+
+The Endpoints panel does **not** show a circuit-breaker column, and the Models panel does
+**not** show per-model request, success-rate, or latency columns. Both are deliberate
+omissions; see [What it is not](#what-it-is-not).
 
 The dashboard reads a handful of additive fields the status handlers did not previously
 expose (`start_time` for live uptime, per-endpoint `active_connections`, min/max/average
@@ -144,7 +149,7 @@ so the absence is loud rather than a silent blank page.
 | `dashboard.enabled` | bool | `true` | Whether `/internal/ui/*` routes are registered at all |
 | `dashboard.access_policy.allowed_cidrs` | []string | `["127.0.0.0/8", "::1/128"]` | CIDR allowlist matched against the TCP source address. Required, non-empty, whenever `enabled` is true |
 | `dashboard.access_policy.allowed_hosts` | []string | `["localhost"]` | Hostname allowlist matched against the request `Host` header (port stripped, case-insensitive). May be empty: any Host that parses as an IP literal is always accepted, so you only need to list non-IP hostnames you intend to browse by |
-| `dashboard.gate_internal_api` | bool | `false` | **Inert this PR.** Reserved for a future release that extends the same `access_policy` to the rest of `/internal/*` and `/version`. Setting it `true` has no effect today; it ships now so the later change needs no config migration |
+| `dashboard.gate_internal_api` | bool | `false` | **Reserved, currently inert.** Intended for a future release that extends the same `access_policy` to the rest of `/internal/*` and `/version`. Setting it `true` has no effect today - Olla logs a startup warning and otherwise ignores it. It ships now so the later change needs no config migration |
 
 `access_policy.allowed_cidrs` is the only required field when the dashboard is enabled.
 Startup fails loudly if it is empty or if a CIDR does not parse - the dashboard never
@@ -236,21 +241,21 @@ proxy listener may legitimately bind `0.0.0.0` (the shipped `config.yaml` does e
 that), so "only listen on 127.0.0.1" is not an available control. The dashboard shares
 that listener.
 
-### The gate only covers `/internal/ui/` this PR
+### The gate only covers `/internal/ui/`
 
-The dashboard's `access_policy` gates `/internal/ui/*` and nothing else this release.
-The JSON endpoints the dashboard reads - `/internal/status`, `/internal/status/endpoints`,
+The dashboard's `access_policy` gates `/internal/ui/*` and nothing else. The JSON
+endpoints the dashboard reads - `/internal/status`, `/internal/status/endpoints`,
 `/internal/status/models`, `/internal/health`, `/internal/metrics`, `/version` - stay
 exactly as reachable as they already were. An attacker interested in fleet topology has
 no reason to load the SPA: they `curl /internal/status/endpoints` directly. Gating the
 dashboard's UI alone does not gate the data it renders.
 
 `gate_internal_api` exists in config to one day close that gap by extending the same
-`access_policy` to the rest of `/internal/*` and `/version`. It is **inert this PR**:
-setting it `true` parses cleanly but changes no behaviour. It is off by default, and
-defaulting it on would silently break deployments that scrape `/internal/metrics` from
-Prometheus or poll `/internal/health` from hosts the policy would reject. Wiring it is
-tracked for a later release.
+`access_policy` to the rest of `/internal/*` and `/version`. It is **currently inert**:
+setting it `true` parses cleanly, logs a startup warning, and changes no behaviour. It is
+off by default, and defaulting it on would silently break deployments that scrape
+`/internal/metrics` from Prometheus or poll `/internal/health` from hosts the policy would
+reject. Wiring it is tracked for a later release.
 
 ### The two checks
 
@@ -298,7 +303,7 @@ Stated plainly:
   convenience-for-exposure trade; do not make it casually.
 - **The rest of `/internal/*` and `/version` are reachable by anyone who can reach the
   listener**, regardless of the dashboard's own policy. `gate_internal_api` does nothing
-  about that this PR.
+  about that today.
 - **The dashboard's access policy is not authentication**, and it does not protect against
   anything the reverse-proxy bypass below already allows.
 
