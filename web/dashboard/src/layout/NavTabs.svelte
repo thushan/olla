@@ -1,13 +1,13 @@
-<script>
+<script lang="ts">
   // Tab presentation over the shared navigation store (spec §7.2.1: panels
   // never import this directly, only App.svelte's router and this component
   // do) - the store is what would swap to a sidebar presenter later without
   // any panel change.
-  import { navigation } from '../lib/stores/navigation.svelte.js';
+  import { navigation, type Section } from '../lib/stores/navigation.svelte';
 
-  const LABELS = { overview: 'Overview', endpoints: 'Endpoints', models: 'Models' };
+  const LABELS: Record<Section, string> = { overview: 'Overview', endpoints: 'Endpoints', models: 'Models' };
 
-  function activate(name) {
+  function activate(name: Section): void {
     navigation.set(name);
     // Move focus to the newly-active tab once the DOM has updated.
     queueMicrotask(() => {
@@ -15,9 +15,9 @@
     });
   }
 
-  function onKeydown(e) {
+  function onKeydown(e: KeyboardEvent): void {
     const idx = navigation.sections.indexOf(navigation.current);
-    let next = null;
+    let next: number | null = null;
     if (e.key === 'ArrowRight') next = (idx + 1) % navigation.sections.length;
     else if (e.key === 'ArrowLeft') next = (idx - 1 + navigation.sections.length) % navigation.sections.length;
     else if (e.key === 'Home') next = 0;

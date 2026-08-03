@@ -1,4 +1,25 @@
-<script>
+<script module lang="ts">
+  // Exported so callers (panels) can share the column / sort-state shape
+  // without re-declaring it. Lives in module scope: instance scope cannot
+  // hold `export` modifiers, and these types don't depend on `Row`.
+  export type SortDirection = 'asc' | 'desc';
+  export interface SortState {
+    key: string;
+    dir: SortDirection;
+  }
+  export interface Column {
+    key: string;
+    label: string;
+    sortable?: boolean;
+    num?: boolean;
+    align?: 'right';
+    sticky?: boolean;
+    title?: string;
+  }
+</script>
+
+<script lang="ts" generics="Row extends Record<string, unknown>">
+  import type { Snippet } from 'svelte';
   import { untrack } from 'svelte';
 
   // Generic column-driven table. Children are rendered via the `row` snippet,
@@ -33,22 +54,44 @@
   //   the table's current comparator/sort state to a group's own row array,
   //   so the header click that flips `aria-sort` also reorders each group.
 
+  interface Props {
+    columns?: Column[];
+    rows?: Row[];
+    initialSort?: SortState | null;
+    rowId?: (row: Row, i: number) => string;
+    rowDomId?: ((row: Row, i: number) => string) | null;
+    rowSnippet?: Snippet<[{ row: Row; cellClass: (key: string) => string }]> | null;
+    groupSnippet?:
+      | Snippet<
+          [
+            {
+              rows: Row[];
+              sort: SortState | null;
+              sortRows: (list: Row[]) => Row[];
+              cellClass: (key: string) => string;
+            }
+          ]
+        >
+      | null;
+    showScrollHint?: boolean;
+  }
+
   let {
     columns = [],
     rows = [],
     initialSort = null,
-    rowId = (_r, i) => `r-${i}`,
+    rowId = (_r: Row, i: number): string => `r-${i}`,
     rowDomId = null,
     rowSnippet = null,
     groupSnippet = null,
     showScrollHint = true,
-  } = $props();
+  }: Props = $props();
 
   // Initial sort seeds local state once; later prop changes are deliberately
   // ignored: the user owns sort state after mount.
-  let sort = $state(untrack(() => initialSort));
+  let sort: SortState | null = $state(untrack(() => initialSort));
 
-  function toggle(key) {
+  function toggle(key: string): void {
     if (!sort || sort.key !== key) {
       sort = { key, dir: 'desc' };
       return;
@@ -56,10 +99,15 @@
     sort = { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' };
   }
 
-  function compare(a, b) {
+  // Column-key-driven comparator. Runtime behaviour is unchanged: string
+  // branch lowercases both; otherwise null/undefined coalesces to 0; then a
+  // plain `<`/`>` compare. The narrowing just lets `unknown` from `Row[key]`
+  // type-check at the comparison point without changing what runs.
+  function compare(a: Row, b: Row): number {
     if (!sort) return 0;
-    let va = a[sort.key];
-    let vb = b[sort.key];
+    const key = sort.key;
+    let va: unknown = a[key];
+    let vb: unknown = b[key];
     if (typeof va === 'string') {
       va = va.toLowerCase();
       vb = String(vb ?? '').toLowerCase();
@@ -68,11 +116,17 @@
     } else if (va === null || va === undefined) {
       va = 0;
     }
-    const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+    // Both operands are now strings or numbers; cast to satisfy TS without
+    // altering the relational compare semantics.
+    const cmp = (va as string | number) < (vb as string | number)
+      ? -1
+      : (va as string | number) > (vb as string | number)
+        ? 1
+        : 0;
     return sort.dir === 'asc' ? cmp : -cmp;
   }
 
-  const sorted = $derived(sort ? [...rows].sort(compare) : rows);
+  const sorted: Row[] = $derived(sort ? [...rows].sort(compare) : rows);
 
   // Defence in depth against each_key_duplicate: Svelte throws (and, with no
   // error boundary, blanks the whole table body) the moment two rows share a
@@ -82,13 +136,16 @@
   // raw rowId is preserved for the non-colliding majority.
   const uniqueKeyed = $derived(dedupeKeys(sorted, rowId));
 
-  function dedupeKeys(list, keyFor) {
-    const totals = new Map();
+  function dedupeKeys(
+    list: Row[],
+    keyFor: (row: Row, i: number) => string
+  ): { row: Row; key: string }[] {
+    const totals = new Map<string, number>();
     for (const r of list) {
       const k = keyFor(r, 0);
       totals.set(k, (totals.get(k) ?? 0) + 1);
     }
-    const issued = new Map();
+    const issued = new Map<string, number>();
     return list.map((row, i) => {
       const k = keyFor(row, i);
       if ((totals.get(k) ?? 0) === 1) return { row, key: k };
@@ -103,15 +160,15 @@
   // click updates. Without this the group snippet has no way to see `sort`,
   // so clicking a header flipped the indicator/aria-sort but never touched
   // row order.
-  function sortRows(list) {
+  function sortRows(list: Row[]): Row[] {
     return sort ? [...list].sort(compare) : list;
   }
 
-  function ariaSort(c) {
+  function ariaSort(c: Column): 'none' | 'ascending' | 'descending' {
     if (!sort || sort.key !== c.key) return 'none';
     return sort.dir === 'asc' ? 'ascending' : 'descending';
   }
-  function indicator(c) {
+  function indicator(c: Column): string {
     if (!sort || sort.key !== c.key) return '↕';
     return sort.dir === 'asc' ? '▲' : '▼';
   }
@@ -120,14 +177,16 @@
   // column definition. Handed to rowSnippet/groupSnippet so callers stop
   // hand-authoring "num align-right" literals on each <td> - the class a row
   // renders can no longer drift from what its column declares.
-  function cellClass(key) {
+  function cellClass(key: string): string {
     const c = columns.find((col) => col.key === key);
     if (!c) return '';
     return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : ''].filter(Boolean).join(' ');
   }
 
-  function headerClass(c) {
-    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : ''].filter(Boolean).join(' ');
+  function headerClass(c: Column): string {
+    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : '']
+      .filter(Boolean)
+      .join(' ');
   }
 </script>
 
@@ -159,7 +218,7 @@
       {:else}
         {#each uniqueKeyed as kr, i (kr.key)}
           <tr id={rowDomId ? rowDomId(kr.row, i) : undefined} tabindex={rowDomId ? -1 : undefined}>
-            {@render rowSnippet({ row: kr.row, cellClass })}
+            {@render rowSnippet?.({ row: kr.row, cellClass })}
           </tr>
         {/each}
       {/if}

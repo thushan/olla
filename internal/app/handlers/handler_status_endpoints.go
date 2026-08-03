@@ -2,14 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"hash"
 	"hash/fnv"
 	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"time"
-
-	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/core/ports"
 
@@ -113,9 +112,12 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 		Endpoints:     summaries,
 	}
 
-	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	body, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	writeJSONWithETag(w, r, body, hashEndpointStatusResponse(&response))
 }
 
 func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, statsMap map[string]ports.EndpointStats, connectionStats map[string]int64, modelMap map[string]*domain.EndpointModels) EndpointSummary {
@@ -222,6 +224,45 @@ func stableEndpointID(raw string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(raw))
 	return strconv.FormatUint(uint64(h.Sum32()), 36)
+}
+
+// hashEndpointStatusResponse computes the FNV-1a ETag for the
+// /internal/status/endpoints payload, excluding the top-level Timestamp and
+// the relative time-ago renderings (health_check, last_model_sync) that change
+// every poll. Absolute event times stay in.
+func hashEndpointStatusResponse(resp *EndpointStatusResponse) string {
+	h := fnv.New32a()
+	for i := range resp.Endpoints {
+		hashEndpointSummary(h, &resp.Endpoints[i])
+	}
+	hashEtagInt64(h, int64(resp.TotalCount))
+	hashEtagInt64(h, int64(resp.HealthyCount))
+	hashEtagInt64(h, int64(resp.RoutableCount))
+	return formatEtag(h)
+}
+
+// hashEndpointSummary feeds the stable fields of one EndpointSummary. Relative
+// strings (HealthCheck, LastModelSync) are skipped; ResponseTime is kept as it
+// renders from endpoint.LastLatency, an absolute measurement, not the wall clock.
+func hashEndpointSummary(h hash.Hash, s *EndpointSummary) {
+	hashEtagString(h, s.ID)
+	hashEtagString(h, s.Name)
+	hashEtagString(h, s.Type)
+	hashEtagString(h, s.Status)
+	hashEtagString(h, s.URL)
+	hashEtagString(h, s.SuccessRate)
+	hashEtagString(h, s.ResponseTime)
+	hashEtagString(h, s.Issues)
+	hashEtagInt64(h, int64(s.Priority))
+	hashEtagInt64(h, int64(s.ModelCount))
+	hashEtagInt64(h, s.RequestCount)
+	hashEtagInt64(h, s.MinLatencyMs)
+	hashEtagInt64(h, s.MaxLatencyMs)
+	hashEtagInt64(h, s.ActiveConnections)
+	hashEtagInt64Ptr(h, s.AvgLatencyMs)
+	hashEtagTimePtr(h, s.NextCheckAt)
+	hashEtagTimePtr(h, s.HealthCheckAt)
+	hashEtagTimePtr(h, s.LastModelSyncAt)
 }
 
 // unparseableURLSentinel is returned by sanitiseDisplayURL when url.Parse

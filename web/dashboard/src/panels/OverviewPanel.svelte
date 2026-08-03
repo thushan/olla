@@ -1,19 +1,25 @@
-<script>
+<script lang="ts">
   import { tick } from 'svelte';
-  import { overview } from '../lib/stores/overview.svelte.js';
-  import { endpoints } from '../lib/stores/endpoints.svelte.js';
+  import { overview } from '../lib/stores/overview.svelte';
+  import { endpoints } from '../lib/stores/endpoints.svelte';
   import StatTile from '../components/StatTile.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import StatusTag from '../components/StatusTag.svelte';
   import PctBar from '../components/PctBar.svelte';
   import SortableTable from '../components/SortableTable.svelte';
-  import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format.js';
-  import { stableId } from '../lib/dom-id.js';
-  import { getNow as liveNow } from '../lib/clock.svelte.js';
+  import type { Column, SortState } from '../components/SortableTable.svelte';
+  import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format';
+  import { stableId } from '../lib/dom-id';
+  import { getNow as liveNow } from '../lib/clock.svelte';
+  import type { EndpointSummary } from '../lib/types';
+
+  interface Props {
+    onJumpToEndpoints?: () => void;
+  }
 
   // Cross-panel navigation is delegated to App.svelte so this panel never
   // imports the navigation store (spec §7.2.1).
-  let { onJumpToEndpoints = () => {} } = $props();
+  let { onJumpToEndpoints = () => {} }: Props = $props();
 
   const sys = $derived(overview.data?.system);
   const proxy = $derived(overview.data?.proxy);
@@ -24,14 +30,26 @@
   const up = $derived(Number(upTotal.split('/')[0]) || 0);
   const total = $derived(Number(upTotal.split('/')[1]) || 0);
 
-  const successPctNum = $derived(parseFloat(sys?.success_rate) || 0);
+  const successPctNum = $derived(parseFloat(sys?.success_rate ?? '') || 0);
   const trafficBytes = $derived(parseTrafficBytes(sys?.total_traffic));
 
   const endpointList = $derived(endpoints.data?.endpoints ?? []);
 
+  // Glance view-model row: the endpoint contract plus the sort/scale fields
+  // the glance table presents (status_rank drives the default unhealthy-first
+  // ordering; success_rate_num mirrors EndpointsPanel; avg_latency_ms is
+  // normalised to number|null so the cell can pick its no-data placeholder).
+  // Type alias (not interface) so it satisfies SortableTable's
+  // `Row extends Record<string, unknown>` via an implicit index signature.
+  type GlanceRow = Omit<EndpointSummary, 'avg_latency_ms'> & {
+    status_rank: number;
+    success_rate_num: number;
+    avg_latency_ms: number | null;
+  };
+
   // Glance table columns, wired through the shared SortableTable so the
   // interaction and aria-sort semantics match the Endpoints panel exactly.
-  const glanceColumns = [
+  const glanceColumns: Column[] = [
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'status_rank', label: 'Status', sortable: true },
     {
@@ -45,9 +63,11 @@
     { key: 'avg_latency_ms', label: 'Avg latency', sortable: true, num: true, align: 'right' },
   ];
 
+  const glanceInitialSort: SortState = { key: 'status_rank', dir: 'asc' };
+
   // Default sort is unhealthy-first: an ops glance view should surface the
   // backends that need attention before the ones already fine.
-  function statusRank(s) {
+  function statusRank(s: string): number {
     if (s === 'offline' || s === 'critical') return 0;
     if (s === 'degraded' || s === 'unhealthy') return 1;
     if (s === 'healthy') return 2;
@@ -58,7 +78,7 @@
   // derive it from response_time (last HEALTH-CHECK probe latency, a
   // different metric, and a formatted string like "1.5s" that parseInt
   // would silently mangle to 1).
-  const glanceRows = $derived(
+  const glanceRows: GlanceRow[] = $derived(
     endpointList.map((e) => ({
       ...e,
       status_rank: statusRank(e.status),
@@ -72,20 +92,20 @@
   const now = $derived(liveNow());
   const uptimeText = $derived(sys?.start_time ? fmtUptime(sys.start_time, now) : '—');
 
-  function statusGlyph(s) {
+  function statusGlyph(s: string): string {
     return s === 'healthy' ? '●' : s === 'degraded' || s === 'unhealthy' ? '◐' : '○';
   }
-  function statusCls(s) {
+  function statusCls(s: string): string {
     return s === 'healthy' ? 'green' : s === 'degraded' || s === 'unhealthy' ? 'amber' : 'red';
   }
 
   // total_traffic arrives formatted as e.g. "172.02 GB". Re-parse to bytes so
   // fmtBytes (our single formatting authority) renders it consistently.
-  function parseTrafficBytes(s) {
+  function parseTrafficBytes(s: string | undefined): number | null {
     if (!s) return null;
     const m = String(s).match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
     if (!m) return null;
-    const units = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };
+    const units: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };
     return parseFloat(m[1]) * units[m[2]];
   }
 
@@ -101,7 +121,11 @@
   // collision-resistant hash EndpointsPanel uses, so the lookup resolves to
   // the matching row even when two endpoints share a display url once query
   // strings are stripped.
-  async function jumpToEndpoints(e) {
+  // Accepts the structural identity shape rather than the full EndpointSummary:
+  // GlanceRow's avg_latency_ms (number | null) is deliberately incompatible with
+  // EndpointSummary's (number | undefined), so typing the param against the
+  // contract would reject the row. The jump only needs identity fields.
+  async function jumpToEndpoints(e: { id?: string; url?: string; name: string }): Promise<void> {
     onJumpToEndpoints();
     await tick();
     const el = document.getElementById(`ep-${stableId(e.id ?? e.url ?? e.name)}`);
@@ -203,7 +227,7 @@
       <SortableTable
         columns={glanceColumns}
         rows={glanceRows}
-        initialSort={{ key: 'status_rank', dir: 'asc' }}
+        initialSort={glanceInitialSort}
         rowId={(row) => row.id ?? row.url ?? row.name}
         rowDomId={(row) => `glance-${stableId(row.id ?? row.url ?? row.name)}`}
       >

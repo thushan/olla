@@ -2,12 +2,12 @@ package handlers
 
 import (
 	"encoding/json"
+	"hash"
+	"hash/fnv"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/pkg/format"
@@ -91,9 +91,12 @@ func (a *Application) modelsStatusHandler(w http.ResponseWriter, r *http.Request
 		response.ModelGroups = a.groupModelsByFamilyWithDetails(allModels)
 	}
 
-	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	body, err := json.Marshal(response)
+	if err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+	writeJSONWithETag(w, r, body, hashModelStatusResponse(&response))
 }
 
 func (a *Application) buildModelSummaries(modelMap map[string]*domain.EndpointModels, endpointNames map[string]string) []ModelSummary {
@@ -313,4 +316,60 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 		return nil
 	}
 	return caps
+}
+
+// hashModelStatusResponse computes the FNV-1a ETag for the
+// /internal/status/models payload, excluding the top-level Timestamp and the
+// relative last_seen string. Absolute event times (last_seen_at) stay in.
+// ModelsByFamily is a map; iteration order is randomised, so the family keys
+// are sorted before hashing to keep the ETag stable across polls (mirroring
+// what encoding/json does to map keys on the wire).
+func hashModelStatusResponse(resp *ModelStatusResponse) string {
+	h := fnv.New32a()
+
+	families := make([]string, 0, len(resp.ModelsByFamily))
+	for f := range resp.ModelsByFamily {
+		families = append(families, f)
+	}
+	sort.Strings(families)
+	for _, f := range families {
+		hashEtagString(h, f)
+		hashEtagStringSlice(h, resp.ModelsByFamily[f])
+	}
+
+	for i := range resp.RecentModels {
+		hashModelSummary(h, &resp.RecentModels[i])
+	}
+	for i := range resp.ModelGroups {
+		hashModelGroupSummary(h, &resp.ModelGroups[i])
+	}
+
+	hashEtagInt64(h, int64(resp.TotalModels))
+	hashEtagInt64(h, int64(resp.TotalFamilies))
+	hashEtagInt64(h, int64(resp.TotalEndpoints))
+	return formatEtag(h)
+}
+
+// hashModelSummary feeds the stable fields of one ModelSummary. LastSeen is
+// the relative time-ago rendering and is skipped; LastSeenAt is the absolute
+// instant and is kept.
+func hashModelSummary(h hash.Hash, m *ModelSummary) {
+	hashEtagString(h, m.Name)
+	hashEtagString(h, m.Type)
+	hashEtagString(h, m.Family)
+	hashEtagString(h, m.Size)
+	hashEtagString(h, m.Params)
+	hashEtagString(h, m.Quant)
+	hashEtagStringSlice(h, m.Endpoints)
+	hashEtagStringSlice(h, m.Capabilities)
+	hashEtagTimePtr(h, m.LastSeenAt)
+}
+
+func hashModelGroupSummary(h hash.Hash, g *ModelGroupSummary) {
+	hashEtagString(h, g.Family)
+	hashEtagInt64(h, int64(g.ModelCount))
+	hashEtagStringSlice(h, g.Endpoints)
+	for i := range g.Models {
+		hashModelSummary(h, &g.Models[i])
+	}
 }

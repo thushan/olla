@@ -1,18 +1,41 @@
-<script>
-  import { endpoints } from '../lib/stores/endpoints.svelte.js';
+<script lang="ts">
+  import { endpoints } from '../lib/stores/endpoints.svelte';
   import SortableTable from '../components/SortableTable.svelte';
+  import type { Column, SortState } from '../components/SortableTable.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import StatusTag from '../components/StatusTag.svelte';
   import RangeBar from '../components/RangeBar.svelte';
   import PctBar from '../components/PctBar.svelte';
-  import { fmtAgo, fmtUntil } from '../lib/format.js';
-  import { stableId } from '../lib/dom-id.js';
-  import { getNow as liveNow } from '../lib/clock.svelte.js';
+  import { fmtAgo, fmtUntil } from '../lib/format';
+  import { stableId } from '../lib/dom-id';
+  import { getNow as liveNow } from '../lib/clock.svelte';
+  import type { EndpointSummary } from '../lib/types';
+
+  // View-model row: the contract row plus the numeric variants the table sorts
+  // and the bars scale on. success_rate arrives pre-formatted ("98.5%") so a
+  // numeric sibling field drives sort/PctBar; avg_latency_ms is normalised to
+  // number|null so RangeBar can pick its no-data placeholder. Declared as a
+  // type alias (not an interface) so it picks up an implicit index signature
+  // and satisfies SortableTable's `Row extends Record<string, unknown>`.
+  type EndpointRow = Omit<EndpointSummary, 'avg_latency_ms'> & {
+    success_rate_num: number;
+    avg_latency_ms: number | null;
+  };
 
   const data = $derived(endpoints.data?.endpoints ?? []);
   const loading = $derived(endpoints.status === 'loading');
   // App.svelte only mounts this panel when it is the active one, so the panel
   // is always rendered active once it appears.
+
+  // WP-B3: this panel is the lifecycle owner of the endpoints store. Mount
+  // activates the job (start() fires an immediate tick, so a tab switch
+  // refreshes rather than showing stale data); unmount stops it so the
+  // endpoints payload stops firing while Overview or Models is open. The
+  // scheduler handles aborting the in-flight tick on stop.
+  $effect(() => {
+    endpoints.start();
+    return () => endpoints.stop();
+  });
 
   const globalLatencyMax = $derived(data.reduce((m, e) => Math.max(m, e.max_latency_ms ?? 0), 0));
 
@@ -23,7 +46,7 @@
   // unrelated metric. It may be absent (older backend) or null (no traffic
   // yet), in which case RangeBar shows the no-data placeholder rather than a
   // misleading 0.
-  const rows = $derived(
+  const rows: EndpointRow[] = $derived(
     data.map((e) => ({
       ...e,
       success_rate_num: parseFloat(e.success_rate) || 0,
@@ -36,7 +59,7 @@
   // the dependency on the shared clock.
   const now = $derived(liveNow());
 
-  const columns = [
+  const columns: Column[] = [
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'type', label: 'Type', sortable: true },
     { key: 'priority', label: 'Priority', sortable: true, num: true, align: 'right' },
@@ -58,6 +81,8 @@
     { key: 'issues', label: 'Issues', sortable: false },
   ];
 
+  const initialSort: SortState = { key: 'priority', dir: 'desc' };
+
   // Svelte's keyed-each identity must be structurally unique. `row.id` is a
   // stable identifier the backend derives from the RAW (pre-sanitisation)
   // endpoint URL (see stableEndpointID in handler_status_endpoints.go) - it
@@ -69,17 +94,17 @@
   // each_key_duplicate, with no error boundary to contain it. SortableTable
   // additionally disambiguates any residual collision as a last line of
   // defence.
-  function rowId(row) {
+  function rowId(row: EndpointRow): string {
     return row.id ?? row.url ?? row.name;
   }
   // DOM id derived from the same identity via a collision-resistant hash -
   // NOT the lossy cssId slug, which made "node.a" and "node-a" both resolve
-  // to ep-node-a so getElementById returned the wrong row. See lib/dom-id.js.
-  function rowDomId(row) {
+  // to ep-node-a so getElementById returned the wrong row. See lib/dom-id.
+  function rowDomId(row: EndpointRow): string {
     return `ep-${stableId(row.id ?? row.url ?? row.name)}`;
   }
 
-  function issueList(issues) {
+  function issueList(issues?: string): string[] {
     if (!issues) return [];
     return String(issues)
       .split(',')
@@ -111,7 +136,7 @@
     <SortableTable
       {columns}
       {rows}
-      initialSort={{ key: 'priority', dir: 'desc' }}
+      {initialSort}
       {rowId}
       {rowDomId}
     >

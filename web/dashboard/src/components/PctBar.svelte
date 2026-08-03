@@ -1,5 +1,5 @@
-<script>
-  import { fmtPct, pctBucket } from '../lib/format.js';
+<script lang="ts">
+  import { fmtPct, pctBucket } from '../lib/format';
 
   // `status` gates the bar's COLOUR on endpoint health: a down backend
   // (offline, unhealthy, critical) with lifetime counters would otherwise
@@ -9,7 +9,12 @@
   // that never took a request throws that history away exactly when an
   // operator needs it. Optional and backward-compatible - callers that omit
   // status get the original behaviour.
-  let { pct = 0, hasData = false, status } = $props();
+  interface Props {
+    pct?: number;
+    hasData?: boolean;
+    status?: string;
+  }
+  let { pct = 0, hasData = false, status = '' }: Props = $props();
 
   const DOWN = new Set(['offline', 'unhealthy', 'critical']);
   const down = $derived(DOWN.has(status));

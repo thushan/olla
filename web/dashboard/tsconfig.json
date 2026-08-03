@@ -3,16 +3,16 @@
     "module": "ESNext",
     "target": "ES2022",
     "moduleResolution": "bundler",
-    "allowJs": true,
-    "checkJs": false,
+    "allowJs": false,
     "strict": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": false,
+    "verbatimModuleSyntax": true,
     "allowSyntheticDefaultImports": true,
+    "types": [],
     "noEmit": true
   },
-  "include": ["src/**/*.js", "src/**/*.svelte", "src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.svelte"]
 }
