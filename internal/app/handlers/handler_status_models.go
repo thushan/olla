@@ -112,7 +112,7 @@ func (a *Application) modelsStatusHandler(w http.ResponseWriter, r *http.Request
 		TotalModels:    len(allModels),
 		TotalEndpoints: len(modelMap),
 		ModelsByFamily: a.groupModelsByFamily(allModels),
-		RecentModels:   a.getRecentModels(allModels, 10),
+		RecentModels:   a.getRecentModels(allModels),
 	}
 
 	response.TotalFamilies = len(response.ModelsByFamily)
@@ -516,7 +516,7 @@ func modelLastSeenTime(m ModelSummary) time.Time {
 	return time.Time{}
 }
 
-func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelSummary {
+func (a *Application) getRecentModels(models []ModelSummary) []ModelSummary {
 	sort.Slice(models, func(i, j int) bool {
 		ti, tj := modelLastSeenTime(models[i]), modelLastSeenTime(models[j])
 		if !ti.Equal(tj) {
@@ -527,8 +527,8 @@ func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelS
 		return models[i].Name < models[j].Name
 	})
 
-	if len(models) > limit {
-		return models[:limit]
+	if len(models) > recentModelsLimit {
+		return models[:recentModelsLimit]
 	}
 	return models
 }
@@ -536,6 +536,9 @@ func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelS
 const (
 	modelTypeEmbeddings = "embeddings"
 	modelTypeLLM        = "llm"
+	// recentModelsLimit caps the recent-models list surfaced in the models
+	// status payload.
+	recentModelsLimit = 10
 )
 
 func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {

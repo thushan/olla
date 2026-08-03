@@ -207,7 +207,7 @@ func TestGetRecentModels_SortsByRecencyNotName(t *testing.T) {
 		{Name: "charlie", LastSeenAt: &charlie},
 	}
 
-	got := app.getRecentModels(models, 10)
+	got := app.getRecentModels(models)
 
 	want := []string{"charlie", "bravo", "alpha"}
 	if len(got) != len(want) {
@@ -247,7 +247,7 @@ func TestGetRecentModels_Deterministic(t *testing.T) {
 		cp := make([]ModelSummary, len(base))
 		copy(cp, base)
 
-		got := app.getRecentModels(cp, 10)
+		got := app.getRecentModels(cp)
 		names := namesOf(got)
 
 		if first == nil {
@@ -835,7 +835,7 @@ func TestBuildModelSummaries_DeterministicAsymmetricFixture(t *testing.T) {
 			TotalModels:    1,
 			TotalEndpoints: 2,
 			ModelsByFamily: app.groupModelsByFamily(summaries),
-			RecentModels:   app.getRecentModels(append([]ModelSummary(nil), summaries...), 10),
+			RecentModels:   app.getRecentModels(append([]ModelSummary(nil), summaries...)),
 		}
 		resp.TotalFamilies = len(resp.ModelsByFamily)
 		etag := hashModelStatusResponse(resp)

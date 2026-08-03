@@ -249,10 +249,10 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 
 	totalViolations := security.RateLimitViolations + security.SizeLimitViolations
 
-	// No traffic means the success rate is undefined; "N/A" mirrors the
-	// endpoint-level convention in handler_status_endpoints.go and stops the
-	// dashboard rendering a misleading "0%" on a fresh boot.
-	successRateStr := "N/A"
+	// No traffic means the success rate is undefined; noTrafficSuccessRate
+	// mirrors the endpoint-level convention in handler_status_endpoints.go and
+	// stops the dashboard rendering a misleading "0%" on a fresh boot.
+	successRateStr := noTrafficSuccessRate
 	if hasTraffic {
 		systemSuccessRate := float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
 		successRateStr = format.Percentage(systemSuccessRate)

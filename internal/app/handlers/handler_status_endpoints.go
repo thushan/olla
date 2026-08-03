@@ -59,6 +59,9 @@ type EndpointStatusResponse struct {
 
 const (
 	healthyStatus = "healthy"
+	// noTrafficSuccessRate is surfaced for both endpoint- and system-level
+	// success_rate whenever there is no traffic to compute a real rate from.
+	noTrafficSuccessRate = "N/A"
 )
 
 func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Request) {
@@ -178,10 +181,10 @@ func (a *Application) buildEndpointSummaryOptimised(endpoint *domain.Endpoint, s
 			avg := stats.AverageLatency
 			summary.AvgLatencyMs = &avg
 		} else {
-			summary.SuccessRate = "N/A"
+			summary.SuccessRate = noTrafficSuccessRate
 		}
 	} else {
-		summary.SuccessRate = "N/A"
+		summary.SuccessRate = noTrafficSuccessRate
 	}
 
 	summary.Issues = a.getEndpointIssuesSummaryOptimised(endpoint, stats, hasStats)
