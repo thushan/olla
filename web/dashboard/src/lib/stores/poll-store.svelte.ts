@@ -50,7 +50,7 @@ export function createPollStore<T>(opts: PollStoreOptions<T>): PollStore<T> {
     try {
       resp = await fetch(url, { headers, signal, cache: 'no-store' });
     } catch (e) {
-      if (e && e instanceof Error && e.name === 'AbortError') return; // superseded by a newer tick
+      if (e instanceof Error && e.name === 'AbortError') return; // superseded by a newer tick
       onFailure(e instanceof Error ? e : new Error(String(e || 'network error')));
       return;
     }

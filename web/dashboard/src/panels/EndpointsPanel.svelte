@@ -13,7 +13,7 @@
 
   // View-model row: the contract row plus the numeric variants the table sorts
   // and the bars scale on. success_rate arrives pre-formatted ("98.5%") so a
-  // numeric companion drives sort/PctBar; avg_latency_ms is normalised to
+  // numeric sibling field drives sort/PctBar; avg_latency_ms is normalised to
   // number|null so RangeBar can pick its no-data placeholder. Declared as a
   // type alias (not an interface) so it picks up an implicit index signature
   // and satisfies SortableTable's `Row extends Record<string, unknown>`.
