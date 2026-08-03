@@ -9,6 +9,7 @@ import type {
   SecuritySummary,
   SecurityViolation,
   StatusResponse,
+  SystemSummary,
 } from '../lib/types';
 
 // Regression coverage for finding 8: the glance table rendered fmtMs(0) as a
@@ -77,13 +78,27 @@ async function refreshBoth(endpointList: Record<string, unknown>[]) {
 // Typed variant for the new-tile coverage: full StatusResponse and
 // EndpointSummary fixtures, no `any`, so this compiles under strict TS and
 // stays in lockstep with the contract if it shifts.
-function buildStatus(over: Partial<StatusResponse> = {}): StatusResponse {
-  const violations: SecurityViolation = { rate_limits: 3, size_limits: 4, ...over.security?.violations };
+// Deep-partial override for the two nested contract objects - a caller
+// exercising one field (e.g. min_latency_ms) should not have to restate every
+// other required field on SystemSummary/SecuritySummary just to satisfy the
+// type checker.
+type StatusOverride = Partial<Omit<StatusResponse, 'system' | 'security'>> & {
+  system?: Partial<SystemSummary>;
+  security?: Partial<Omit<SecuritySummary, 'violations'>> & { violations?: Partial<SecurityViolation> };
+};
+
+function buildStatus(over: StatusOverride = {}): StatusResponse {
+  // Split violations out of the security override before spreading the rest:
+  // spreading a still-partial `violations` back over the fully-defaulted one
+  // below would reintroduce the same "possibly missing fields" type error
+  // this override type exists to avoid.
+  const { violations: violationsOverride, ...securityRest } = over.security ?? {};
+  const violations: SecurityViolation = { rate_limits: 3, size_limits: 4, ...violationsOverride };
   const security: SecuritySummary = {
     status: 'normal',
     blocked_ips: 0,
     violations,
-    ...over.security,
+    ...securityRest,
   };
   return {
     timestamp: new Date().toISOString(),
