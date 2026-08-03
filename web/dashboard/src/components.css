@@ -456,6 +456,17 @@ tbody tr:last-child td {
 tbody tr.ep-flash td {
   animation: ep-flash 1.8s ease-out forwards;
 }
+/* Reduced motion: skip the animated fade but keep the row findable - hold the
+   highlighted state statically. The JS helper still removes the class after
+   the same 1.8s envelope, so the highlight disappears on time, just without
+   the animated transition (mirrors SparkStrip's reduced-motion handling). */
+@media (prefers-reduced-motion: reduce) {
+  tbody tr.ep-flash td {
+    animation: none;
+    background-color: var(--accent-soft);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+}
 
 .col-sticky {
   position: sticky;
