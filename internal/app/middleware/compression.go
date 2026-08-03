@@ -27,21 +27,33 @@ const gzipLevel = gzip.DefaultCompression
 // from a freshly-allocated one.
 var gzipWriterPool = sync.Pool{
 	New: func() any {
-		w, err := gzip.NewWriterLevel(io.Discard, gzipLevel)
-		if err != nil {
-			// Unreachable: gzipLevel is a constant valid level. Fall back to
-			// the no-arg constructor rather than panicking on the off-chance
-			// the constant is somehow invalid at runtime.
-			return gzip.NewWriter(io.Discard)
-		}
-		return w
+		return newGzipWriter()
 	},
 }
 
 func acquireGzipWriter(w io.Writer) *gzip.Writer {
-	gz := gzipWriterPool.Get().(*gzip.Writer)
-	gz.Reset(w)
-	return gz
+	v, ok := gzipWriterPool.Get().(*gzip.Writer)
+	if !ok || v == nil {
+		// Pool New never returns anything other than *gzip.Writer, but a
+		// checked assertion keeps forcetypeassert happy and is defensive
+		// against a future refactor of the pool's New func.
+		v = newGzipWriter()
+	}
+	v.Reset(w)
+	return v
+}
+
+// newGzipWriter builds a fresh gzip writer at the configured level. Split out
+// so acquireGzipWriter can fall back to it on the (unreachable) nil-pool path.
+func newGzipWriter() *gzip.Writer {
+	w, err := gzip.NewWriterLevel(io.Discard, gzipLevel)
+	if err != nil {
+		// Unreachable: gzipLevel is a constant valid level. Fall back to the
+		// no-arg constructor rather than panicking on the off-chance the
+		// constant is somehow invalid at runtime.
+		return gzip.NewWriter(io.Discard)
+	}
+	return w
 }
 
 func releaseGzipWriter(gz *gzip.Writer) {
@@ -138,9 +150,9 @@ func acceptsGzip(header string) bool {
 // Content-Encoding - the critical property that keeps a 304 a bare 304.
 type gzipResponseWriter struct {
 	http.ResponseWriter
+	gz            *gzip.Writer
 	status        int
 	headerWritten bool
-	gz            *gzip.Writer
 	useGzip       bool
 }
 

@@ -178,20 +178,20 @@ func TestAcceptsGzip_Parsing(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]bool{
-		"":                  false,
-		"identity":          false,
-		"gzip":              true,
-		"gzip, deflate":     true,
-		"deflate, gzip":     true,
-		"gzip;q=1.0":        true,
-		"gzip;q=0":          false,
-		"gzip;q=0.0":        false,
-		"*":                 true,
-		"*;q=0":             false,
-		"identity, *;q=0":   false,
-		"br":                false,
-		"  gzip  ":          true,
-		"gzip;q=0.001":      true,
+		"":                false,
+		"identity":        false,
+		"gzip":            true,
+		"gzip, deflate":   true,
+		"deflate, gzip":   true,
+		"gzip;q=1.0":      true,
+		"gzip;q=0":        false,
+		"gzip;q=0.0":      false,
+		"*":               true,
+		"*;q=0":           false,
+		"identity, *;q=0": false,
+		"br":              false,
+		"  gzip  ":        true,
+		"gzip;q=0.001":    true,
 	}
 	for header, want := range cases {
 		assert.Equal(t, want, acceptsGzip(header), "acceptsGzip(%q)", header)

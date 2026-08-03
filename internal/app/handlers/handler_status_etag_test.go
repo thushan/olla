@@ -129,13 +129,13 @@ func TestStatusResponse_ETagStableAcrossRelativeTimeChurn(t *testing.T) {
 			Commit:       "abc",
 		},
 		Endpoints: []EndpointResponse{{
-			ID:         "abc",
-			Name:       "ep1",
-			Status:     statusHealthy,
-			URL:        "http://localhost:11434",
+			ID:          "abc",
+			Name:        "ep1",
+			Status:      statusHealthy,
+			URL:         "http://localhost:11434",
 			SuccessRate: "100.0%",
-			LastCheck:  "5s ago", // excluded
-			NextCheck:  "in 25s", // excluded
+			LastCheck:   "5s ago", // excluded
+			NextCheck:   "in 25s", // excluded
 		}},
 	}
 
@@ -165,12 +165,12 @@ func TestEndpointStatusResponse_ETagStableAcrossRelativeTimeChurn(t *testing.T) 
 		HealthyCount:  1,
 		RoutableCount: 1,
 		Endpoints: []EndpointSummary{{
-			ID:          "abc",
-			Name:        "ep1",
-			Type:        "ollama",
-			Status:      healthyStatus,
-			URL:         "http://localhost:11434",
-			HealthCheck: "3s ago",   // excluded
+			ID:            "abc",
+			Name:          "ep1",
+			Type:          "ollama",
+			Status:        healthyStatus,
+			URL:           "http://localhost:11434",
+			HealthCheck:   "3s ago",  // excluded
 			LastModelSync: "10s ago", // excluded
 		}},
 	}
