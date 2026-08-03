@@ -1,5 +1,5 @@
 <script>
-  import { theme } from '../lib/stores/theme.svelte.js';
+  import { theme } from '../lib/stores/theme.svelte.ts';
 
   // One icon-only button that cycles auto -> light -> dark -> auto. The
   // glyph reflects `mode` (not `resolved`) so each step is a visible change

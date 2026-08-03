@@ -1,5 +1,5 @@
 <script>
-  import { endpoints } from '../lib/stores/endpoints.svelte.js';
+  import { endpoints } from '../lib/stores/endpoints.svelte.ts';
   import SortableTable from '../components/SortableTable.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import StatusTag from '../components/StatusTag.svelte';

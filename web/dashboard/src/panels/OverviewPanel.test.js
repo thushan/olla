@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { overview } from '../lib/stores/overview.svelte.js';
-import { endpoints } from '../lib/stores/endpoints.svelte.js';
+import { overview } from '../lib/stores/overview.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte.ts';
 import OverviewPanel from './OverviewPanel.svelte';
 
 // Regression coverage for finding 8: the glance table rendered fmtMs(0) as a

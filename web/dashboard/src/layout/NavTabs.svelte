@@ -3,7 +3,7 @@
   // never import this directly, only App.svelte's router and this component
   // do) - the store is what would swap to a sidebar presenter later without
   // any panel change.
-  import { navigation } from '../lib/stores/navigation.svelte.js';
+  import { navigation } from '../lib/stores/navigation.svelte.ts';
 
   const LABELS = { overview: 'Overview', endpoints: 'Endpoints', models: 'Models' };
 

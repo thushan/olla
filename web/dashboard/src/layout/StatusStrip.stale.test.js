@@ -23,7 +23,7 @@ const holder = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('../lib/stores/overview.svelte.js', () => ({
+vi.mock('../lib/stores/overview.svelte.ts', () => ({
   overview: {
     get data() {
       return { system: holder.sys };
@@ -34,7 +34,7 @@ vi.mock('../lib/stores/overview.svelte.js', () => ({
   },
 }));
 
-vi.mock('../lib/stores/endpoints.svelte.js', () => ({
+vi.mock('../lib/stores/endpoints.svelte.ts', () => ({
   endpoints: {
     get data() {
       return { endpoints: [] };

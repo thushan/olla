@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { models } from '../lib/stores/models.svelte.js';
+import { models } from '../lib/stores/models.svelte.ts';
 import { stableId } from '../lib/dom-id';
 import ModelsPanel from './ModelsPanel.svelte';
 

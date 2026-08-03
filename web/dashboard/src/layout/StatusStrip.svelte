@@ -1,6 +1,6 @@
 <script>
-  import { overview } from '../lib/stores/overview.svelte.js';
-  import { endpoints } from '../lib/stores/endpoints.svelte.js';
+  import { overview } from '../lib/stores/overview.svelte.ts';
+  import { endpoints } from '../lib/stores/endpoints.svelte.ts';
   import { fmtUptime } from '../lib/format';
   import { getNow as liveNow } from '../lib/clock.svelte';
 

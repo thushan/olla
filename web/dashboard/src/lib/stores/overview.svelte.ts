@@ -1,5 +1,6 @@
 // /internal/status poller. Drives the StatusStrip and OverviewPanel.
-import { createPollStore } from './poll-store.svelte.js';
+import type { StatusResponse } from '../types';
+import { createPollStore } from './poll-store.svelte';
 
 const OVERVIEW_INTERVAL_MS = 5000;
 
@@ -8,7 +9,7 @@ const OVERVIEW_INTERVAL_MS = 5000;
 // both dev and the embedded /internal/ui/ deployment.
 const URL = '/internal/status';
 
-export const overview = createPollStore({
+export const overview = createPollStore<StatusResponse>({
   name: 'overview',
   url: URL,
   intervalMs: OVERVIEW_INTERVAL_MS,

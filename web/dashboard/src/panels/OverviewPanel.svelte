@@ -1,7 +1,7 @@
 <script>
   import { tick } from 'svelte';
-  import { overview } from '../lib/stores/overview.svelte.js';
-  import { endpoints } from '../lib/stores/endpoints.svelte.js';
+  import { overview } from '../lib/stores/overview.svelte.ts';
+  import { endpoints } from '../lib/stores/endpoints.svelte.ts';
   import StatTile from '../components/StatTile.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import StatusTag from '../components/StatusTag.svelte';

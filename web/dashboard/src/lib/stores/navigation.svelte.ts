@@ -8,23 +8,24 @@
 // plain callback prop instead (see OverviewPanel's onJumpToEndpoints), so the
 // nav presentation can be swapped to a left sidebar without touching them.
 
-export const SECTIONS = Object.freeze(['overview', 'endpoints', 'models']);
+export const SECTIONS = Object.freeze(['overview', 'endpoints', 'models'] as const);
+export type Section = (typeof SECTIONS)[number];
 
 class NavigationStore {
-  #current = $state('overview');
+  #current: Section = $state('overview');
 
-  get current() {
+  get current(): Section {
     return this.#current;
   }
 
-  get sections() {
+  get sections(): readonly Section[] {
     return SECTIONS;
   }
 
-  set(section) {
+  set(section: Section): void {
     if (!SECTIONS.includes(section)) return;
     this.#current = section;
   }
 }
 
-export const navigation = new NavigationStore();
+export const navigation: NavigationStore = new NavigationStore();

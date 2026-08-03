@@ -3,8 +3,8 @@ import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { overview } from '../lib/stores/overview.svelte.js';
-import { endpoints } from '../lib/stores/endpoints.svelte.js';
+import { overview } from '../lib/stores/overview.svelte.ts';
+import { endpoints } from '../lib/stores/endpoints.svelte.ts';
 import OverviewPanel from '../panels/OverviewPanel.svelte';
 
 // C4 regression: StatTile exposed valueHtml/subHtml props that bypassed

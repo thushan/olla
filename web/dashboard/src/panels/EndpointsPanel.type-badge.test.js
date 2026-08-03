@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.js';
+import { endpoints } from '../lib/stores/endpoints.svelte.ts';
 import EndpointsPanel from './EndpointsPanel.svelte';
 
 // C8 regression: the Endpoints name cell rendered an inline badge-type span

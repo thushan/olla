@@ -2,15 +2,17 @@
 // piece of state. Lifted from the prior prototype's pattern, ported to a
 // proper class with private state.
 
-const STORAGE_KEY = 'olla-theme';
-const MODES = ['auto', 'light', 'dark'];
+export type ThemeMode = 'auto' | 'light' | 'dark';
 
-function systemPrefersDark() {
+const STORAGE_KEY = 'olla-theme';
+const MODES: readonly ThemeMode[] = ['auto', 'light', 'dark'];
+
+function systemPrefersDark(): boolean {
   if (typeof window === 'undefined' || !window.matchMedia) return false;
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
-function applyModeToDom(mode) {
+function applyModeToDom(mode: ThemeMode): void {
   const root = document.documentElement;
   if (mode === 'auto') {
     root.removeAttribute('data-theme');
@@ -19,23 +21,30 @@ function applyModeToDom(mode) {
   }
 }
 
-function readStored() {
+function readStored(): ThemeMode {
   if (typeof localStorage === 'undefined') return 'auto';
   const v = localStorage.getItem(STORAGE_KEY);
-  return MODES.includes(v) ? v : 'auto';
+  return MODES.includes(v as ThemeMode) ? (v as ThemeMode) : 'auto';
 }
 
+type MediaQueryListLike = {
+  matches: boolean;
+  media: string;
+  addEventListener(event: 'change', cb: (e: MediaQueryListEvent) => void): void;
+  removeEventListener(event: 'change', cb: (e: MediaQueryListEvent) => void): void;
+};
+
 class ThemeStore {
-  #mode = $state('auto');
+  #mode: ThemeMode = $state('auto');
   // Mirrors the OS preference as reactive state. `resolved` reading a plain
   // matchMedia() call (rather than this field) was the item-15 bug: Svelte
   // only reruns $derived/effects when a $state dependency changes, so a
   // getter that called window.matchMedia() directly never triggered a
   // recompute when the OS flipped mid-session, and the toggle's aria-label
   // went stale even though the CSS media query repainted the page correctly.
-  #systemDark = $state(systemPrefersDark());
-  #media = null;
-  #onSystemChange = (e) => {
+  #systemDark: boolean = $state(systemPrefersDark());
+  #media: MediaQueryListLike | null = null;
+  #onSystemChange = (e: MediaQueryListEvent): void => {
     this.#systemDark = e.matches;
   };
 
@@ -44,17 +53,17 @@ class ThemeStore {
     applyModeToDom(this.#mode);
 
     if (typeof window !== 'undefined' && window.matchMedia) {
-      this.#media = window.matchMedia('(prefers-color-scheme: dark)');
+      this.#media = window.matchMedia('(prefers-color-scheme: dark)') as MediaQueryListLike;
       this.#media.addEventListener('change', this.#onSystemChange);
     }
   }
 
-  get mode() {
+  get mode(): ThemeMode {
     return this.#mode;
   }
 
   /** The effective theme after resolving "auto" against the OS preference. */
-  get resolved() {
+  get resolved(): 'light' | 'dark' {
     return this.#mode === 'auto' ? (this.#systemDark ? 'dark' : 'light') : this.#mode;
   }
 
@@ -66,7 +75,7 @@ class ThemeStore {
    * against `resolved` instead guarantees every click changes what's
    * rendered, whether starting from auto or from an explicit override.
    */
-  toggle() {
+  toggle(): void {
     this.set(this.resolved === 'dark' ? 'light' : 'dark');
   }
 
@@ -76,13 +85,13 @@ class ThemeStore {
    * glyph always reflects `mode` (not `resolved`), so each step is a visible
    * change even when the resolved theme happens to match the next mode.
    */
-  cycle() {
-    const order = ['auto', 'light', 'dark'];
+  cycle(): void {
+    const order: ThemeMode[] = ['auto', 'light', 'dark'];
     const next = order[(order.indexOf(this.#mode) + 1) % order.length];
     this.set(next);
   }
 
-  set(mode) {
+  set(mode: ThemeMode): void {
     if (!MODES.includes(mode)) return;
     this.#mode = mode;
     if (typeof localStorage !== 'undefined') {
@@ -93,9 +102,9 @@ class ThemeStore {
   }
 
   /** Detaches the matchMedia listener. Call on app teardown to avoid leaks. */
-  destroy() {
+  destroy(): void {
     this.#media?.removeEventListener('change', this.#onSystemChange);
   }
 }
 
-export const theme = new ThemeStore();
+export const theme: ThemeStore = new ThemeStore();

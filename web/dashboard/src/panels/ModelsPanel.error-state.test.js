@@ -1,6 +1,6 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { models } from '../lib/stores/models.svelte.js';
+import { models } from '../lib/stores/models.svelte.ts';
 import ModelsPanel from './ModelsPanel.svelte';
 
 // Regression coverage: on a first-load fetch failure, models.data stays null,

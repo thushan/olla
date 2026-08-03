@@ -1,9 +1,9 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import App from './App.svelte';
-import { navigation } from './lib/stores/navigation.svelte.js';
-import { overview } from './lib/stores/overview.svelte.js';
-import { endpoints } from './lib/stores/endpoints.svelte.js';
+import { navigation } from './lib/stores/navigation.svelte.ts';
+import { overview } from './lib/stores/overview.svelte.ts';
+import { endpoints } from './lib/stores/endpoints.svelte.ts';
 import { stableId } from './lib/dom-id';
 
 // Regression coverage: "jump to endpoint" on the Overview glance table looked

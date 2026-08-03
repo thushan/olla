@@ -6,13 +6,13 @@
   import ModelsPanel from './panels/ModelsPanel.svelte';
   import { pollScheduler } from './lib/poll-scheduler';
   import { startClock } from './lib/clock.svelte';
-  import { theme } from './lib/stores/theme.svelte.js';
-  import { navigation } from './lib/stores/navigation.svelte.js';
+  import { theme } from './lib/stores/theme.svelte.ts';
+  import { navigation } from './lib/stores/navigation.svelte.ts';
 
   // Importing the stores registers them with the scheduler (module side-effect).
-  import './lib/stores/overview.svelte.js';
-  import './lib/stores/endpoints.svelte.js';
-  import './lib/stores/models.svelte.js';
+  import './lib/stores/overview.svelte.ts';
+  import './lib/stores/endpoints.svelte.ts';
+  import './lib/stores/models.svelte.ts';
 
   // App is the router: it reads the same navigation store NavTabs does,
   // rather than keeping its own separate `current`. Two sources of truth for

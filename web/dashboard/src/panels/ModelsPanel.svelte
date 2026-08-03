@@ -1,5 +1,5 @@
 <script>
-  import { models } from '../lib/stores/models.svelte.js';
+  import { models } from '../lib/stores/models.svelte.ts';
   import SortableTable from '../components/SortableTable.svelte';
   import StatusBanner from '../components/StatusBanner.svelte';
   import { fmtAgo } from '../lib/format';

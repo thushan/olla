@@ -1,7 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import App from './App.svelte';
-import { navigation } from './lib/stores/navigation.svelte.js';
+import { navigation } from './lib/stores/navigation.svelte.ts';
 
 // Regression coverage for finding 11: App.svelte used to hold its own
 // `current` state, separate from the `navigation` store NavTabs renders

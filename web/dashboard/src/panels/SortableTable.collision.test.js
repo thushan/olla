@@ -1,8 +1,8 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { endpoints } from '../lib/stores/endpoints.svelte.js';
-import { models } from '../lib/stores/models.svelte.js';
-import { overview } from '../lib/stores/overview.svelte.js';
+import { endpoints } from '../lib/stores/endpoints.svelte.ts';
+import { models } from '../lib/stores/models.svelte.ts';
+import { overview } from '../lib/stores/overview.svelte.ts';
 import EndpointsPanel from './EndpointsPanel.svelte';
 import ModelsPanel from './ModelsPanel.svelte';
 import OverviewPanel from './OverviewPanel.svelte';
