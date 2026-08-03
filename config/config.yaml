@@ -212,9 +212,10 @@ dashboard:
       - "::1/128"
     allowed_hosts:
       - "localhost"
-  # gate_internal_api is reserved for a later change and is inert for now:
-  # setting it true has no effect. Once wired, it will extend the same
-  # access_policy to the rest of /internal/* and /version.
+  # gate_internal_api is reserved for a future release and is inert today:
+  # setting it true has no effect (Olla logs a warning at startup if set).
+  # Once wired, it will extend the same access_policy to the rest of
+  # /internal/* and /version.
   gate_internal_api: false
 
 # Model aliases allow mapping a single virtual model name to multiple actual model names
