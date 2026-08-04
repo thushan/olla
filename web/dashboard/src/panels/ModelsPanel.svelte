@@ -117,10 +117,17 @@
   role="tabpanel"
   aria-labelledby="tab-models"
   tabindex="0"
-  data-state={models.status === 'error' || models.status === 'stale' ? models.status : null}
 >
   <StatusBanner store={models} />
 
+  <!-- data-state lives on this inner wrapper, not the panel root: opacity/
+       filter on an ancestor compound down the subtree, so putting it on the
+       root would also dim the StatusBanner and its retry control - the UI
+       the operator needs most during an outage. -->
+  <div
+    class="panel-data"
+    data-state={models.status === 'error' || models.status === 'stale' ? models.status : null}
+  >
   {#if loading}
     <div class="table-scroll"><div class="scroll-hint">loading…</div>
       {#each Array(6) as _, i}<div class="skeleton row-skel" style="margin:6px 10px"></div>{/each}
@@ -228,6 +235,7 @@
          request failed". -->
     <p class="panel-intro">No models discovered yet. Once backends respond to discovery, models will appear here.</p>
   {/if}
+  </div>
 </div>
 
 <style>

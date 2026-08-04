@@ -195,3 +195,35 @@ describe('ModelsPanel trim (discovery-only)', () => {
     expect(headerLabels()).not.toContain('p95');
   });
 });
+
+describe('ModelsPanel banner isolation from panel dim', () => {
+  // Structural regression, mirrors OverviewPanel's equivalent: opacity/filter
+  // on an ancestor compound down the subtree, so a CSS override on .banner is
+  // a no-op. The banner must live OUTSIDE the [data-state]-bearing wrapper to
+  // stay at full contrast during an outage. Assert the DOM structure, not
+  // computed style - jsdom has no layout.
+  it('renders the StatusBanner as a sibling of, not inside, the data-state wrapper', async () => {
+    component = mount(ModelsPanel, { target: document.body });
+    flushSync();
+
+    await refreshWith(groupedPayload, () => expect(models.data?.model_groups?.length).toBeGreaterThan(0));
+
+    // Force the store into error status so the wrapper carries data-state='error'.
+    global.fetch = vi.fn(async () => ({ status: 500, ok: false, headers: { get: () => null } }));
+    models.refresh();
+    await vi.waitFor(() => expect(models.status === 'error' || models.status === 'stale').toBe(true));
+    flushSync();
+
+    const panel = document.getElementById('panel-models')!;
+    expect(panel).toBeTruthy();
+    const dimmed = panel.querySelector('[data-state="stale"], [data-state="error"]');
+    expect(dimmed).toBeTruthy();
+
+    const banner = panel.querySelector('.banner');
+    expect(banner).toBeTruthy();
+    // The banner must NOT be inside the dimmed wrapper - it should be a
+    // sibling of it within the panel root.
+    expect(dimmed!.contains(banner)).toBe(false);
+    expect(banner!.parentElement).toBe(panel);
+  });
+});
