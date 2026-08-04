@@ -258,6 +258,52 @@ func TestStatusHandler_TrafficHighFailureRate_CriticalDespiteHealthyEndpoints(t 
 	assert.True(t, sys["has_traffic"].(bool))
 }
 
+// Regression: an empty fleet (zero configured endpoints, zero traffic)
+// divides 0/0 to NaN inside the healthy-ratio calculation; every NaN
+// comparison is false, so the old code fell through to its default healthy
+// branch and reported a proxy with nothing to route to as healthy. A proxy
+// serving no endpoints cannot serve traffic, so this must report critical.
+func TestStatusHandler_EmptyFleetZeroTraffic_Critical(t *testing.T) {
+	app := buildSystemStatusApp(t, nil, ports.ProxyStats{})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w := httptest.NewRecorder()
+	app.statusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	sys, _ := raw["system"].(map[string]interface{})
+	require.NotNil(t, sys)
+
+	assert.Equal(t, statusCritical, sys["status"], "a fleet with zero endpoints cannot be healthy")
+	assert.Equal(t, "N/A", sys["success_rate"])
+	assert.False(t, sys["has_traffic"].(bool))
+}
+
+// Guard against the zero-traffic fix overcorrecting: a single healthy
+// endpoint with no traffic yet must still report healthy, not critical.
+func TestStatusHandler_OneHealthyEndpointZeroTraffic_Healthy(t *testing.T) {
+	endpoints := []*domain.Endpoint{
+		{Name: "solo", Type: "ollama", URLString: "http://solo:11434", Status: domain.StatusHealthy, Priority: 1},
+	}
+	app := buildSystemStatusApp(t, endpoints, ports.ProxyStats{})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w := httptest.NewRecorder()
+	app.statusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	sys, _ := raw["system"].(map[string]interface{})
+	require.NotNil(t, sys)
+
+	assert.Equal(t, statusHealthy, sys["status"], "a single healthy endpoint with no traffic yet must still report healthy")
+}
+
 // C5 mirror: the /internal/status comparator in buildUnifiedEndpoints has
 // the same missing tie-breaker as the /internal/status/endpoints one.
 // Equal-priority same-health endpoints must order by name (then URL) so

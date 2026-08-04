@@ -215,35 +215,43 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 		}
 	}
 
-	// ratios
-	healthyRatio := float64(len(healthy)) / float64(len(all))
 	hasTraffic := proxy.TotalRequests > 0
 
 	var status string
-	if hasTraffic {
-		// Dual-threshold verdict: a healthy fleet cannot mask a failing proxy
-		// and high failure rates cannot mask healthy endpoints.
-		systemSuccessRate := float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
-		switch {
-		case healthyRatio < 0.5 || systemSuccessRate < 90.0:
-			status = statusCritical
-		case healthyRatio < 0.8 || systemSuccessRate < 95.0:
-			status = statusDegraded
-		default:
-			status = statusHealthy
-		}
+	if len(all) == 0 {
+		// len(healthy)/len(all) is 0/0 = NaN with zero endpoints, and every NaN
+		// comparison below is false, so both branches below would fall through
+		// to their default healthy case. A proxy with nothing to route to
+		// cannot be healthy regardless of traffic, so this is decided before
+		// the ratio is even computed.
+		status = statusCritical
 	} else {
-		// Fresh boot (or no requests yet): the proxy success rate is undefined,
-		// so derive status purely from endpoint health. Without this branch a
-		// perfectly healthy zero-traffic fleet fell through to the legacy
-		// < 90.0 success-rate clause and reported critical.
-		switch {
-		case healthyRatio < 0.5:
-			status = statusCritical
-		case healthyRatio < 0.8:
-			status = statusDegraded
-		default:
-			status = statusHealthy
+		healthyRatio := float64(len(healthy)) / float64(len(all))
+		if hasTraffic {
+			// Dual-threshold verdict: a healthy fleet cannot mask a failing proxy
+			// and high failure rates cannot mask healthy endpoints.
+			systemSuccessRate := float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
+			switch {
+			case healthyRatio < 0.5 || systemSuccessRate < 90.0:
+				status = statusCritical
+			case healthyRatio < 0.8 || systemSuccessRate < 95.0:
+				status = statusDegraded
+			default:
+				status = statusHealthy
+			}
+		} else {
+			// Fresh boot (or no requests yet): the proxy success rate is undefined,
+			// so derive status purely from endpoint health. Without this branch a
+			// perfectly healthy zero-traffic fleet fell through to the legacy
+			// < 90.0 success-rate clause and reported critical.
+			switch {
+			case healthyRatio < 0.5:
+				status = statusCritical
+			case healthyRatio < 0.8:
+				status = statusDegraded
+			default:
+				status = statusHealthy
+			}
 		}
 	}
 
