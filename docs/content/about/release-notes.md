@@ -46,11 +46,9 @@ status layer.
 For secrets kept out of config, use the `username_file` / `password_file` variants (see
 [Endpoint Authentication](../configuration/endpoint-auth.md)).
 
-The boot error mirrors the rejected URL into the equivalent `auth:` block verbatim, so
-the fix is a literal copy-paste. **Be aware the credentials will appear in the error
-string**: do not paste the failed startup line into a chat, issue, or public log. The
-credentials were already present in the rejected config, so the error leaks nothing the
-file did not already contain - but the audience may differ.
+The boot error rewrites the rejected URL into the equivalent `auth:` block, with the
+username and password replaced by placeholders, so the fix is a copy-paste away without
+the error ever echoing your real credentials.
 
 ### Breaking: zero-traffic status semantics changed
 

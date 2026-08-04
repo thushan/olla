@@ -307,26 +307,34 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 	// The endorsed credential path is the auth config block (AuthConfig, held
 	// as json:"-" fields on domain.Endpoint), so this is never a legitimate
 	// config, only ever an accident. The error string spells out the exact
-	// rewrite so a failed boot is a copy-paste fix rather than a guessing game:
-	// we mirror the user/pass pair into the equivalent auth block and surface
-	// the _file variants so secrets can be kept out of config.
+	// rewrite so a failed boot is a copy-paste fix rather than a guessing game.
+	// Both the username and password are redacted with placeholders - a
+	// username can itself be a secret (API-key-as-username schemes) - so the
+	// startup log never has the operator's real credentials sitting in it.
 	if parsedURL, err := url.Parse(cfg.URL); err == nil && parsedURL.User != nil {
-		user := parsedURL.User.Username()
-		pass, hasPass := parsedURL.User.Password()
+		_, hasPass := parsedURL.User.Password()
 		host := parsedURL.Host
-		example := fmt.Sprintf("url: %s://%s", parsedURL.Scheme, host)
+		plainURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, host)
 		if parsedURL.Path != "" {
-			example += parsedURL.Path
+			plainURL += parsedURL.Path
 		}
-		example += fmt.Sprintf("\nauth:\n  type: basic\n  username: %s", user)
+		userinfo := "<your username>"
 		if hasPass {
-			example += fmt.Sprintf("\n  password: %s", pass)
+			userinfo += ":<your password>"
+		}
+		redactedOriginal := fmt.Sprintf("%s://%s@%s", parsedURL.Scheme, userinfo, host)
+		if parsedURL.Path != "" {
+			redactedOriginal += parsedURL.Path
+		}
+		example := plainURL + "\nauth:\n  type: basic\n  username: <your username>"
+		if hasPass {
+			example += "\n  password: <your password>"
 		}
 		example += "\n  # or username_file / password_file to read from a file"
 		return fmt.Errorf(
 			"endpoint URL for %q must not embed credentials (user:pass@host); "+
 				"move them to the auth config block. Rewrite\n  %s\nas\n  %s",
-			cfg.Name, cfg.URL, example,
+			cfg.Name, redactedOriginal, example,
 		)
 	}
 

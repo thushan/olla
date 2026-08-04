@@ -17,10 +17,9 @@ for authenticating **Olla to the backend**. It has no bearing on how clients aut
     the URL, so the rejection exists to prevent a silent credential leak rather than to
     impose a new restriction.
 
-    The boot error mirrors the rejected URL into the equivalent `auth:` block verbatim,
-    so the fix is a copy-paste. **The credentials appear in the error string**: do not
-    paste a failed startup line into a chat or issue - the same credentials were already
-    in the rejected config, but the audience may differ.
+    The boot error rewrites the rejected URL into the equivalent `auth:` block, with the
+    username and password replaced by placeholders, so the fix is a copy-paste and the
+    error never echoes your real credentials.
 
     See [Release Notes: userinfo URLs](../about/release-notes.md#breaking-userinfo-urls-now-fail-startup)
     for the full rationale.
