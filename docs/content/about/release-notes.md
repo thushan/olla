@@ -67,9 +67,12 @@ per-model `endpoint_ids` on `/internal/status/models` are now derived from the s
 URL (scheme+host+port+path) with positional disambiguation for siblings that share a
 sanitised form. Credential rotation no longer changes the ID, because userinfo, query,
 and fragment are stripped before hashing. **Bookmarked dashboard deep-links to a specific
-endpoint row will change once after upgrading**, then stay stable. The IDs are base36
-FNV-1a, identical across all three status payloads for the same endpoint from the same
-repository snapshot.
+endpoint row will change once after upgrading**, then stay stable for endpoints with a
+distinct name or a distinct sanitised URL. IDs may change again if a sibling sharing the
+same sanitised URL is later added or removed, because the shared `-N` suffix is positional
+and gets renumbered (and the degenerate case of two endpoints sharing both name and
+sanitised URL is not immune either). The IDs are base36 FNV-1a, identical across all three
+status payloads for the same endpoint from the same repository snapshot.
 
 ### Added: weak ETags on status JSON
 
