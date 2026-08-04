@@ -287,6 +287,19 @@ func parseLevel(level string) slog.Level {
 	}
 }
 
+// IsValidLevel reports whether level is a recognised log level string
+// (case-insensitive). Callers that source a level from config or an env var
+// use this to warn and fall back rather than silently defaulting to info,
+// which is what parseLevel does for any unrecognised value.
+func IsValidLevel(level string) bool {
+	switch strings.ToLower(level) {
+	case LogLevelDebug, LogLevelInfo, LogLevelWarn, LogLevelWarning, LogLevelError:
+		return true
+	default:
+		return false
+	}
+}
+
 // convertToPTermLevel converts slog level to pterm level
 func convertToPTermLevel(level slog.Level) pterm.LogLevel {
 	switch level {
