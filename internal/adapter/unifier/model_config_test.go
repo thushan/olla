@@ -8,7 +8,73 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+
+	"github.com/thushan/olla/internal/logger"
 )
+
+// shippedConfigPath is config/models.yaml, relative to this package
+// (internal/adapter/unifier -> repo root is three levels up).
+const shippedConfigPath = "../../../config/models.yaml"
+
+// TestShippedConfigParses guards against issue #204: yaml.v3's double-quoted
+// scalars only accept a small fixed escape set, so a stray `\d` inside "..."
+// breaks the shipped file. loadConfigFromFile() swallows unmarshal errors and
+// silently falls back to embedded defaults, so a broken file was never caught
+// until now - this test fails loudly instead.
+func TestShippedConfigParses(t *testing.T) {
+	data, err := os.ReadFile(shippedConfigPath)
+	require.NoError(t, err, "config/models.yaml must exist")
+
+	var fromFile ModelUnificationConfig
+	require.NoError(t, yaml.Unmarshal(data, &fromFile), "config/models.yaml must be valid YAML")
+	require.NoError(t, fromFile.compilePatterns(), "config/models.yaml patterns must compile")
+}
+
+// TestShippedConfigMatchesDefaults is an equivalence guard between
+// config/models.yaml and getDefaultConfig(). Because loadConfigFromFile()
+// silently fell back to defaults on any parse error, the shipped file and
+// the embedded fallback drifted apart for years without anyone noticing
+// (issue #204). If this fails, reconcile the drift in both directions -
+// don't just update one side to make the test pass.
+func TestShippedConfigMatchesDefaults(t *testing.T) {
+	data, err := os.ReadFile(shippedConfigPath)
+	require.NoError(t, err)
+
+	var fromFile ModelUnificationConfig
+	require.NoError(t, yaml.Unmarshal(data, &fromFile))
+
+	defaults := getDefaultConfig()
+
+	assert.Equal(t, defaults.ModelExtraction.FamilyPatterns, fromFile.ModelExtraction.FamilyPatterns, "family_patterns drifted")
+	assert.Equal(t, defaults.ModelExtraction.ArchitectureMappings, fromFile.ModelExtraction.ArchitectureMappings, "architecture_mappings drifted")
+	assert.Equal(t, defaults.ModelExtraction.FamilyAliases, fromFile.ModelExtraction.FamilyAliases, "family_aliases drifted")
+	assert.Equal(t, defaults.ModelExtraction.PublisherMappings, fromFile.ModelExtraction.PublisherMappings, "publisher_mappings drifted")
+	assert.Equal(t, defaults.Quantization.Mappings, fromFile.Quantization.Mappings, "quantization mappings drifted")
+	assert.Equal(t, defaults.Capabilities.TypeCapabilities, fromFile.Capabilities.TypeCapabilities, "type_capabilities drifted")
+	assert.Equal(t, defaults.Capabilities.NamePatterns, fromFile.Capabilities.NamePatterns, "capability name_patterns drifted")
+	assert.Equal(t, defaults.Capabilities.ContextThresholds, fromFile.Capabilities.ContextThresholds, "context_thresholds drifted")
+	assert.ElementsMatch(t, defaults.SpecialRules.PreserveFamily, fromFile.SpecialRules.PreserveFamily, "preserve_family drifted")
+	assert.ElementsMatch(t, defaults.SpecialRules.GenericNames, fromFile.SpecialRules.GenericNames, "generic_names drifted")
+}
+
+// TestLogConfigStatus_ReportsShippedFileSource verifies LogConfigStatus surfaces
+// the real path when config/models.yaml loads cleanly, giving operators a
+// startup-log trail rather than the previous total silence.
+func TestLogConfigStatus_ReportsShippedFileSource(t *testing.T) {
+	oldConfigDir := os.Getenv("OLLA_CONFIG_DIR")
+	dir := filepath.Dir(shippedConfigPath)
+	require.NoError(t, os.Setenv("OLLA_CONFIG_DIR", dir))
+	defer os.Setenv("OLLA_CONFIG_DIR", oldConfigDir)
+
+	configOnce = sync.Once{}
+	configInstance, errConfig, configSource, configParseWarnings = nil, nil, "", nil
+
+	log, _, _ := logger.New(&logger.Config{Level: "debug", Theme: "default"})
+	LogConfigStatus(logger.NewPlainStyledLogger(log))
+
+	assert.Equal(t, filepath.Join(dir, "models.yaml"), ConfigSource())
+}
 
 func TestLoadModelConfig(t *testing.T) {
 	// Test loading default config when file doesn't exist

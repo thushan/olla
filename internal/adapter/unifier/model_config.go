@@ -5,9 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/thushan/olla/internal/logger"
 )
 
 // ModelUnificationConfig represents the model unification configuration.
@@ -59,12 +62,20 @@ var (
 	configInstance *ModelUnificationConfig
 	configOnce     sync.Once
 	errConfig      error
+
+	// configSource is the path models.yaml was loaded from, or "" when
+	// embedded defaults are in use. configParseWarnings records any
+	// candidate paths that were found but failed to parse, so a startup
+	// diagnostic can explain *why* defaults were used rather than leaving
+	// it silent (see issue #204).
+	configSource        string
+	configParseWarnings []string
 )
 
 // LoadModelConfig loads the model unification configuration
 func LoadModelConfig() (*ModelUnificationConfig, error) {
 	configOnce.Do(func() {
-		configInstance = loadConfigFromFile()
+		configInstance, configSource, configParseWarnings = loadConfigFromFile()
 		if configInstance != nil {
 			errConfig = configInstance.compilePatterns()
 		}
@@ -72,8 +83,45 @@ func LoadModelConfig() (*ModelUnificationConfig, error) {
 	return configInstance, errConfig
 }
 
-// loadConfigFromFile loads configuration from the YAML file
-func loadConfigFromFile() *ModelUnificationConfig {
+// ConfigSource returns the path models.yaml was loaded from, triggering the
+// load if it hasn't happened yet. An empty string means embedded defaults
+// are in use - check the returned warnings via LogConfigStatus to see why.
+func ConfigSource() string {
+	_, _ = LoadModelConfig()
+	return configSource
+}
+
+// LogConfigStatus reports where the model unification config came from.
+// Intended to be called once at startup (rather than relying on the lazy
+// first-use load) so a broken config/models.yaml is surfaced immediately
+// instead of silently degrading to embedded defaults on first inference
+// request.
+func LogConfigStatus(log logger.StyledLogger) {
+	_, err := LoadModelConfig()
+	if err != nil {
+		log.Error("model unification config: failed to compile patterns, using embedded defaults", "error", err)
+		return
+	}
+
+	if configSource != "" {
+		log.Debug("model unification config loaded", "source", configSource)
+		return
+	}
+
+	if len(configParseWarnings) > 0 {
+		log.Warn("model unification config: found models.yaml but could not parse it, falling back to embedded defaults",
+			"details", strings.Join(configParseWarnings, "; "))
+		return
+	}
+
+	log.Debug("model unification config: no models.yaml found, using embedded defaults")
+}
+
+// loadConfigFromFile loads configuration from the YAML file, trying each
+// candidate path in turn. Returns the loaded config, the path it came from
+// (empty if falling back to defaults), and any parse failures encountered
+// along the way for diagnostics.
+func loadConfigFromFile() (*ModelUnificationConfig, string, []string) {
 	paths := []string{
 		"models.yaml",
 		"config/models.yaml",
@@ -82,6 +130,8 @@ func loadConfigFromFile() *ModelUnificationConfig {
 		"../../config/models.yaml",
 		filepath.Join(os.Getenv("OLLA_CONFIG_DIR"), "models.yaml"),
 	}
+
+	var warnings []string
 
 	for _, path := range paths {
 		if path == "" {
@@ -95,13 +145,16 @@ func loadConfigFromFile() *ModelUnificationConfig {
 
 		var config ModelUnificationConfig
 		if err := yaml.Unmarshal(data, &config); err != nil {
+			// found the file but it doesn't parse - record why so LogConfigStatus
+			// can tell the operator instead of quietly using defaults
+			warnings = append(warnings, fmt.Sprintf("%s: %v", path, err))
 			continue
 		}
 
-		return &config
+		return &config, path, warnings
 	}
 
-	return getDefaultConfig()
+	return getDefaultConfig(), "", warnings
 }
 
 // compilePatterns compiles all regex patterns in the configuration
@@ -142,19 +195,19 @@ func getDefaultConfig() *ModelUnificationConfig {
 			Pattern:      `^(llama|gemma|phi|qwen)[-_]?(\d+(?:\.\d+)?)`,
 			FamilyGroup:  1,
 			VariantGroup: 2,
-			Description:  "Common families with versions",
+			Description:  "Common families with version numbers",
 		},
 		{
 			Pattern:      `^[^/]+/(phi|llama|gemma|qwen|mistral)[-_]?(\d+(?:\.\d+)?)`,
 			FamilyGroup:  1,
 			VariantGroup: 2,
-			Description:  "Publisher-prefixed models",
+			Description:  "Models with publisher prefix",
 		},
 		{
 			Pattern:      `^(codellama|starcoder|vicuna|falcon|yi)[-_]?(\d+[bB]?)`,
 			FamilyGroup:  1,
 			VariantGroup: 2,
-			Description:  "Code and specialized models",
+			Description:  "Code and specialised models",
 		},
 		{
 			Pattern:      `^(gpt)[-_]?(2|j|neox)?`,
@@ -168,6 +221,23 @@ func getDefaultConfig() *ModelUnificationConfig {
 			VariantGroup: 2,
 			Description:  "DeepSeek models",
 		},
+	}
+
+	config.ModelExtraction.FamilyAliases = map[string]string{
+		"llama3":    "llama",
+		"llama3.2":  "llama",
+		"llama3.3":  "llama",
+		"llama4":    "llama",
+		"gemma2":    "gemma",
+		"gemma3":    "gemma",
+		"phi3":      "phi",
+		"phi3.5":    "phi",
+		"phi4":      "phi",
+		"qwen2":     "qwen",
+		"qwen2.5":   "qwen",
+		"qwen3":     "qwen",
+		"deepseek2": "deepseek",
+		"devstral":  "mistral",
 	}
 
 	config.ModelExtraction.ArchitectureMappings = map[string]string{
@@ -230,6 +300,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"AWQ-4BIT":  "awq4",
 		"INT8":      "int8",
 		"INT4":      "int4",
+		"Q4_K_XL":   "q4kxl",
 	}
 
 	config.ModelExtraction.PublisherMappings = map[string]string{
@@ -243,6 +314,13 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"deepseek":  "deepseek",
 		"yi":        "01-ai",
 		"starcoder": "bigcode",
+		"falcon":    "tii",
+		"vicuna":    "lmsys",
+		"bloom":     "bigscience",
+		"opt":       "meta",
+		"gpt2":      "openai",
+		"gptj":      "eleutherai",
+		"gptneox":   "eleutherai",
 	}
 
 	config.Capabilities.TypeCapabilities = map[string][]string{
@@ -281,6 +359,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"ultra_long_context": 1000000,
 	}
 
+	config.SpecialRules.PreserveFamily = []string{"nomic-bert", "deepseek-coder-v2"}
 	config.SpecialRules.GenericNames = []string{"model", "unknown", "test", "temp", "default"}
 
 	return config

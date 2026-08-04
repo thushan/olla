@@ -27,6 +27,11 @@ func NewFactory(log logger.StyledLogger) *Factory {
 		logger:   log,
 	}
 
+	// Force the model unification config to load now, at startup, rather than
+	// lazily on first inference request - a broken models.yaml should show up
+	// in the boot logs, not silently degrade unification quality later.
+	LogConfigStatus(log)
+
 	// Register default unifier
 	factory.Register(DefaultUnifierType, func(l logger.StyledLogger) ports.ModelUnifier {
 		return NewDefaultUnifier()
