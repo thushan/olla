@@ -506,8 +506,13 @@ func hashEtagStringSlice(h hash.Hash, s []string) {
 // clients may use it for If-None-Match but must not collapse two distinct
 // payloads based on byte-for-byte identity. Base36 mirrors the style of
 // stableEndpointID so client and server identity formats read the same.
-func formatEtag(h hash.Hash32) string {
-	return `W/"` + strconv.FormatUint(uint64(h.Sum32()), 36) + `"`
+// 64-bit (not 32-bit): these ETags cover a growing, unbounded field set
+// (endpoints, models) where a 32-bit sum's collision odds stop being
+// negligible at realistic fleet sizes; stableEndpointID's 32-bit identity
+// hash is unrelated and deliberately left alone (wire-visible IDs, not
+// cache-validation hashes).
+func formatEtag(h hash.Hash64) string {
+	return `W/"` + strconv.FormatUint(h.Sum64(), 36) + `"`
 }
 
 // maxIfNoneMatchBytes bounds the size of an If-None-Match header we are willing
@@ -565,6 +570,12 @@ func stripWeakPrefix(v string) string {
 func writeJSONWithETag(w http.ResponseWriter, r *http.Request, body []byte, etag string) {
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.Header().Set("ETag", etag)
+	// private: this payload carries operator-only endpoint/traffic data, never
+	// suitable for a shared cache. no-cache (not no-store): the client may
+	// still store the body but must revalidate via If-None-Match before
+	// reusing it, which is exactly the 304 flow above/below - the two are not
+	// in tension.
+	w.Header().Set("Cache-Control", "private, no-cache")
 	if etagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -578,7 +589,7 @@ func writeJSONWithETag(w http.ResponseWriter, r *http.Request, body []byte, etag
 // relative time-ago string. Absolute event times (start_time, health_check_at,
 // next_check_at, models.last_updated) are stable real data and stay in.
 func hashStatusResponse(resp *StatusResponse) string {
-	h := fnv.New32a()
+	h := fnv.New64a()
 	hashEtagString(h, resp.Proxy.Engine)
 	hashEtagString(h, resp.Proxy.Profile)
 	hashEtagString(h, resp.Proxy.Balancer)

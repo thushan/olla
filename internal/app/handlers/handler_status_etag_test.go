@@ -27,6 +27,7 @@ func TestStatusHandler_ETag304OnMatch(t *testing.T) {
 	etag := w1.Header().Get("ETag")
 	require.NotEmpty(t, etag, "first response must carry an ETag")
 	assert.Contains(t, w1.Header().Get("Content-Type"), "application/json")
+	assert.Equal(t, "private, no-cache", w1.Header().Get("Cache-Control"), "200 must not be shared-cacheable")
 
 	req2 := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
 	req2.Header.Set("If-None-Match", etag)
@@ -36,6 +37,7 @@ func TestStatusHandler_ETag304OnMatch(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, w2.Code)
 	assert.Equal(t, etag, w2.Header().Get("ETag"))
 	assert.Empty(t, w2.Body.Bytes(), "304 must carry no body")
+	assert.Equal(t, "private, no-cache", w2.Header().Get("Cache-Control"), "304 must also carry Cache-Control")
 }
 
 // TestEndpointsStatusHandler_ETag304OnMatch is the same contract for the
@@ -52,6 +54,7 @@ func TestEndpointsStatusHandler_ETag304OnMatch(t *testing.T) {
 	require.Equal(t, http.StatusOK, w1.Code)
 	etag := w1.Header().Get("ETag")
 	require.NotEmpty(t, etag)
+	assert.Equal(t, "private, no-cache", w1.Header().Get("Cache-Control"))
 
 	req2 := httptest.NewRequest(http.MethodGet, "/internal/status/endpoints", nil)
 	req2.Header.Set("If-None-Match", etag)
@@ -61,6 +64,7 @@ func TestEndpointsStatusHandler_ETag304OnMatch(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, w2.Code)
 	assert.Equal(t, etag, w2.Header().Get("ETag"))
 	assert.Empty(t, w2.Body.Bytes())
+	assert.Equal(t, "private, no-cache", w2.Header().Get("Cache-Control"))
 }
 
 // TestModelsStatusHandler_ETag304OnMatch is the same contract for the
@@ -77,6 +81,7 @@ func TestModelsStatusHandler_ETag304OnMatch(t *testing.T) {
 	require.Equal(t, http.StatusOK, w1.Code)
 	etag := w1.Header().Get("ETag")
 	require.NotEmpty(t, etag)
+	assert.Equal(t, "private, no-cache", w1.Header().Get("Cache-Control"))
 
 	req2 := httptest.NewRequest(http.MethodGet, "/internal/status/models", nil)
 	req2.Header.Set("If-None-Match", etag)
@@ -86,6 +91,7 @@ func TestModelsStatusHandler_ETag304OnMatch(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, w2.Code)
 	assert.Equal(t, etag, w2.Header().Get("ETag"))
 	assert.Empty(t, w2.Body.Bytes())
+	assert.Equal(t, "private, no-cache", w2.Header().Get("Cache-Control"))
 }
 
 // TestStatusHandler_ETagMismatchReturns200 guards the inverse: a non-matching
