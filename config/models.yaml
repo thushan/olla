@@ -9,17 +9,17 @@ model_extraction:
       variant_group: 2
       description: "Mistral and Mixtral models"
       
-    - pattern: "^(llama|gemma|phi|qwen)[-_]?(\d+(?:\.\d+)?)"
+    - pattern: '^(llama|gemma|phi|qwen)[-_]?(\d+(?:\.\d+)?)'
       family_group: 1
       variant_group: 2
       description: "Common families with version numbers"
-      
-    - pattern: "^[^/]+/(phi|llama|gemma|qwen|mistral)[-_]?(\d+(?:\.\d+)?)"
+
+    - pattern: '^[^/]+/(phi|llama|gemma|qwen|mistral)[-_]?(\d+(?:\.\d+)?)'
       family_group: 1
       variant_group: 2
       description: "Models with publisher prefix"
-      
-    - pattern: "^(codellama|starcoder|vicuna|falcon|yi)[-_]?(\d+[bB]?)"
+
+    - pattern: '^(codellama|starcoder|vicuna|falcon|yi)[-_]?(\d+[bB]?)'
       family_group: 1
       variant_group: 2
       description: "Code and specialised models"
@@ -45,6 +45,7 @@ model_extraction:
     "llama3.1": llama
     "llama3.2": llama
     "llama3.3": llama
+    llama4: llama
     gemma: gemma
     gemma2: gemma
     gemma3: gemma
