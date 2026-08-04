@@ -115,7 +115,7 @@ discovery:
   static:
     endpoints:
       # See docs for details on configuring endpoints:
-      # http://127.0.0.1:8000/olla/configuration/overview/#endpoint-configuration
+      # https://thushan.github.io/olla/configuration/overview/#endpoint-configuration
       - url: "http://localhost:11434"
         name: "local-ollama"
         type: "ollama"
@@ -145,7 +145,7 @@ discovery:
       # out of status/dashboard JSON. Inline values support ${VAR}; use
       # username_file / password_file (or token_file / key_file for the other
       # types) to read from a file. See:
-      # http://127.0.0.1:8000/olla/configuration/endpoint-auth/
+      # https://thushan.github.io/olla/configuration/endpoint-auth/
       #
       # - url: "http://protected-llm:8080"
       #   name: "protected-llm"
