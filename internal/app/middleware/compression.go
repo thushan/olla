@@ -104,7 +104,9 @@ func Gzip(next http.Handler) http.Handler {
 // the per-request closure, so a fresh handler wrapper is not allocated on
 // every request.
 func GzipFunc(h http.HandlerFunc) http.HandlerFunc {
-	wrapped := Gzip(http.HandlerFunc(h))
+	// http.HandlerFunc satisfies http.Handler, so h passes to Gzip directly
+	// without an explicit conversion (which unconvert rightly flags).
+	wrapped := Gzip(h)
 	return func(w http.ResponseWriter, r *http.Request) {
 		wrapped.ServeHTTP(w, r)
 	}

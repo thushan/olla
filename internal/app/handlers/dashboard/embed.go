@@ -154,10 +154,10 @@ func notBuiltHandler() http.Handler {
 // from this map thereafter avoids io.ReadAll + sha256 on every request -
 // observable as a per-request allocation and hash on a hot polling path.
 type cachedAsset struct {
-	data         []byte
 	etag         string // strong, quoted: embed.FS bytes never change
 	contentType  string
 	cacheControl string
+	data         []byte
 }
 
 type spaHandler struct {

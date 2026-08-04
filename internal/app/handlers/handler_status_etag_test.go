@@ -286,6 +286,7 @@ func TestEtagMatches_AcceptsStar(t *testing.T) {
 //   - client echoes our W/"abc" verbatim -> match (the dashboard polling case),
 //   - client sends a strong "abc" against our weak W/"abc" -> match,
 //   - client sends a different opaque-tag -> no match regardless of weak/strong.
+//
 // Strong-to-strong and weak-to-weak fall out of the same strip-then-compare.
 func TestEtagMatches_WeakComparison(t *testing.T) {
 	t.Parallel()
