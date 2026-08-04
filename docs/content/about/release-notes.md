@@ -13,7 +13,7 @@ exact migration step if a behaviour change affects you.
 Breaking changes are tagged **Breaking**. Additions and fixes are tagged **Added** or
 **Fixed**. Quoted field names and config keys are the literal wire or YAML identifiers.
 
-## Dashboard remediation release
+## v0.0.29 (unreleased)
 
 ### Breaking: userinfo URLs now fail startup
 
@@ -73,6 +73,14 @@ same sanitised URL is later added or removed, because the shared `-N` suffix is 
 and gets renumbered (and the degenerate case of two endpoints sharing both name and
 sanitised URL is not immune either). The IDs are base36 FNV-1a, identical across all three
 status payloads for the same endpoint from the same repository snapshot.
+
+### Breaking: endpoint `url` in status responses is now sanitised
+
+The `url` field on `/internal/status`, `/internal/status/endpoints`, and
+`/internal/status/models` now has userinfo, query string, and fragment stripped before
+it is surfaced. Previously this field echoed the raw configured URL, which could include
+embedded credentials. Clients that compared this field against the raw config value for
+identity should switch to the `id` field, which is designed for that purpose.
 
 ### Added: weak ETags on status JSON
 
