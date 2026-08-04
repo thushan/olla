@@ -181,10 +181,18 @@
   role="tabpanel"
   aria-labelledby="tab-overview"
   tabindex="0"
-  data-state={overview.status === 'error' || overview.status === 'stale' ? overview.status : null}
 >
   <StatusBanner store={overview} />
 
+  <!-- The data-state attribute is deliberately on an inner wrapper, NOT the
+       panel root: opacity/filter on an ancestor compound down the subtree, so
+       placing it on the root would also dim the StatusBanner and its "retry
+       now" button - the very UI the operator needs during an outage. Keeping
+       the banner as a sibling above this wrapper leaves it at full contrast. -->
+  <div
+    class="panel-data"
+    data-state={overview.status === 'error' || overview.status === 'stale' ? overview.status : null}
+  >
   {#if loading}
     <div class="section">
       <div class="tile-grid">
@@ -326,4 +334,5 @@
       </SortableTable>
     </div>
   {/if}
+  </div>
 </div>

@@ -459,6 +459,49 @@ describe('OverviewPanel system-status tile (profile)', () => {
   });
 });
 
+describe('OverviewPanel banner isolation from panel dim', () => {
+  // Structural regression: opacity/filter on an ancestor compound down the
+  // subtree, so a CSS override on .banner is a no-op. The banner must live
+  // OUTSIDE the [data-state]-bearing wrapper to stay at full contrast during
+  // an outage. Assert the DOM structure, not computed style - jsdom has no
+  // layout, and the bug was exactly that the banner's own opacity was 1
+  // while its effective alpha was still dimmed by the ancestor.
+  it('renders the StatusBanner as a sibling of, not inside, the data-state wrapper', async () => {
+    // Force the panel into the stale state by driving the overview store to
+    // an error response, then asserting structure.
+    global.fetch = vi.fn(async () => jsonResponse({ system: { status: 'healthy' } }));
+    overview.refresh();
+    // Any completed fetch leaves overview.status reflecting the response; we
+    // just need the panel mounted so its DOM is queryable. Drive it stale by
+    // forcing the store's error path through a failed fetch on refresh.
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    // Plant stale data and force the store status to stale so the wrapper
+    // carries data-state='stale' and the banner renders.
+    await refreshTyped(buildStatus(), [buildEndpoint({ name: 'ep' })]);
+    // The store exposes status but no setter; swap fetch to a 500 and refresh
+    // to flip status to 'error', which the panel maps to data-state='error'.
+    global.fetch = vi.fn(async () => ({ status: 500, ok: false, headers: { get: () => null } }));
+    overview.refresh();
+    await vi.waitFor(() => expect(overview.status === 'error' || overview.status === 'stale').toBe(true));
+    flushSync();
+
+    const panel = document.getElementById('panel-overview')!;
+    expect(panel).toBeTruthy();
+    const dimmed = panel.querySelector('[data-state="stale"], [data-state="error"]');
+    expect(dimmed).toBeTruthy();
+    expect(dimmed!.getAttribute('data-state')).toMatch(/stale|error/);
+
+    const banner = panel.querySelector('.banner');
+    expect(banner).toBeTruthy();
+    // The banner must NOT be inside the dimmed wrapper - it should be a
+    // sibling of it within the panel root.
+    expect(dimmed!.contains(banner)).toBe(false);
+    expect(banner!.parentElement).toBe(panel);
+  });
+});
+
 describe('OverviewPanel no-traffic tile states', () => {
   // When the backend reports has_traffic=false the response rate arrives as
   // "N/A" and success_rate derived numbers become meaningless. The tiles must
