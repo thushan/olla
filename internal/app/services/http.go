@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -24,17 +25,12 @@ const (
 	// backends are handled by proxy.ConnectionTimeout which applies much later.
 	defaultReadHeaderTimeout = 10 * time.Second
 
-	// defaultMaxHeaderBytes caps the total request header bytes the server will
-	// accept. The status handlers and gzip middleware also bound the specific
-	// headers they parse (If-None-Match, Accept-Encoding), but the server-level
-	// cap is the structural ceiling that stops an oversized header set from
-	// driving unbounded work or memory before handlers run. 64 KiB is well above
-	// any legitimate browser/curl request and matches http.Server's documented
-	// default when MaxHeaderBytes is left at zero, EXCEPT that an explicit value
-	// is independent of ReadHeaderTimeout doubling, so a slow large header cannot
-	// slip past the cap during a slowloris window. Set explicitly so the cap is
-	// self-documenting at the construction site rather than implicit.
-	defaultMaxHeaderBytes = 64 * 1024
+	// minMaxHeaderBytes floors the derived MaxHeaderBytes. A configured value of
+	// zero or negative must not be read as "disable the cap" (Go's http.Server
+	// treats <=0 as "use the 1 MiB default", which is a reasonable fallback, but
+	// a small positive misconfiguration deserves a sane floor rather than
+	// crippling every request with oversized-but-legitimate headers).
+	minMaxHeaderBytes = 4 * 1024
 )
 
 // HTTPService manages the HTTP server lifecycle and route registration. It coordinates
@@ -191,7 +187,7 @@ func (s *HTTPService) Start(ctx context.Context) error {
 		ReadHeaderTimeout: readHeaderTimeout,
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
-		MaxHeaderBytes:    defaultMaxHeaderBytes,
+		MaxHeaderBytes:    maxHeaderBytesFromConfig(s.fullConfig.Server.RequestLimits.MaxHeaderSize),
 	}
 
 	s.logger.Info("HTTP server listening",
@@ -294,6 +290,33 @@ func bindListener(ctx context.Context, addr string) (net.Listener, error) {
 		return nil, fmt.Errorf("failed to bind %s: %w", addr, err)
 	}
 	return ln, nil
+}
+
+// maxHeaderBytesFromConfig derives http.Server's MaxHeaderBytes from the
+// configured server.request_limits.max_header_size (default 1 MiB; see
+// config/config.yaml). A zero or negative value is an unset/invalid config,
+// not an instruction to disable the cap, so it falls back to Go's own
+// http.DefaultMaxHeaderBytes (1 MiB) rather than leaving MaxHeaderBytes at
+// zero, which http.Server would otherwise also read as "use the default" but
+// only by accident. A small positive value is floored at minMaxHeaderBytes so
+// a misconfiguration cannot cripple every request's headers. No ceiling is
+// applied: request_limits is operator-supplied config, not attacker input,
+// and Go's header parsing bounds work to the configured limit rather than
+// pre-allocating it.
+func maxHeaderBytesFromConfig(configured int64) int {
+	if configured <= 0 {
+		return http.DefaultMaxHeaderBytes
+	}
+	if configured > math.MaxInt {
+		// Only reachable on a 32-bit build with a pathological config value;
+		// clamp rather than truncate via a silent int64->int wraparound.
+		return math.MaxInt
+	}
+	v := int(configured)
+	if v < minMaxHeaderBytes {
+		return minMaxHeaderBytes
+	}
+	return v
 }
 
 func (s *HTTPService) printWarnings() {
