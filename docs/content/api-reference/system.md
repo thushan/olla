@@ -198,7 +198,7 @@ curl -X GET http://localhost:40114/internal/status
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string | Stable opaque identifier derived from the sanitised URL (scheme+host+port+path). Unchanged by credential rotation; siblings that share a sanitised form get a `-N` positional suffix |
+| `id` | string | Opaque identifier derived from the sanitised URL (scheme+host+port+path). Stable across restarts and credential rotation for endpoints with a distinct name or a distinct sanitised URL. Siblings that share a sanitised form get a positional `-N` suffix, which can renumber if such a sibling is later added, removed, or renamed. Treat it as a process/config-relative anchor for the dashboard, not a durable database identifier |
 | `name` | string | Endpoint name from config |
 | `url` | string | Sanitised endpoint URL. Userinfo, query string, and fragment are stripped before this is surfaced, so credentials configured via `auth:` never appear here |
 | `status` | string | Endpoint health: `healthy`, `unhealthy`, `offline` |
@@ -311,7 +311,7 @@ curl -X GET http://localhost:40114/internal/status/endpoints
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string | Stable opaque identifier derived from the sanitised URL; identical to the `id` surfaced on `/internal/status` and `/internal/status/models` for the same endpoint from the same snapshot |
+| `id` | string | Opaque identifier derived from the sanitised URL; identical to the `id` surfaced on `/internal/status` and `/internal/status/models` for the same endpoint from the same snapshot. Stable across restarts and credential rotation for endpoints with a distinct name or a distinct sanitised URL, but positional `-N` suffixes can renumber when sanitised-URL siblings are added, removed, or renamed |
 | `name` | string | Endpoint name from config |
 | `url` | string | Sanitised endpoint URL (userinfo, query, and fragment stripped) |
 | `type` | string | Backend profile type (e.g. `ollama`, `vllm`, `lm-studio`) |
