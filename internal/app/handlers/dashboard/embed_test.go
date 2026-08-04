@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -616,6 +617,81 @@ func TestAssetsBuilt_MatchesRealEmbed(t *testing.T) {
 	if got := AssetsBuilt(); got != want {
 		t.Errorf("AssetsBuilt() = %v but assetsBuiltIn(realEmbed) = %v; the two call sites have drifted", got, want)
 	}
+}
+
+// TestRangeRequestOnCachedAsset proves the startup pre-cache (asset bytes
+// plus ETag computed once at construction, see newSPAHandler) didn't disturb
+// http.ServeContent's own semantics for Range and conditional requests - it
+// is still handed a fresh bytes.Reader per request, not a single shared
+// reader whose position would corrupt across concurrent requests.
+func TestRangeRequestOnCachedAsset(t *testing.T) {
+	// A dedicated asset long enough to exercise a genuine 100-byte slice;
+	// the shared populatedFS assets are all too short for that.
+	assetBody := strings.Repeat("0123456789", 20) // 200 bytes
+	root := fstest.MapFS{
+		indexFile:            &fstest.MapFile{Data: []byte(`<!doctype html><html></html>`)},
+		"assets/big-Ab12.js": &fstest.MapFile{Data: []byte(assetBody)},
+	}
+	ts := httptest.NewServer(mountedHandler(root))
+	defer ts.Close()
+
+	assetURL := ts.URL + "/internal/ui/assets/big-Ab12.js"
+
+	t.Run("partial range returns 206 with matching bytes", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, assetURL, nil)
+		req.Header.Set("Range", "bytes=0-99")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET with Range: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+
+		if resp.StatusCode != http.StatusPartialContent {
+			t.Fatalf("status: got %d, want 206", resp.StatusCode)
+		}
+		wantRange := fmt.Sprintf("bytes 0-99/%d", len(assetBody))
+		if got := resp.Header.Get("Content-Range"); got != wantRange {
+			t.Errorf("Content-Range: got %q, want %q", got, wantRange)
+		}
+		if got := resp.Header.Get("Content-Length"); got != "100" {
+			t.Errorf("Content-Length: got %q, want %q", got, "100")
+		}
+		if len(body) != 100 {
+			t.Fatalf("body length: got %d, want 100", len(body))
+		}
+		if string(body) != assetBody[:100] {
+			t.Errorf("body bytes do not match the asset's first 100 bytes")
+		}
+	})
+
+	t.Run("conditional If-None-Match returns 304", func(t *testing.T) {
+		first, err := http.Get(assetURL)
+		if err != nil {
+			t.Fatalf("first GET: %v", err)
+		}
+		etag := first.Header.Get("ETag")
+		io.Copy(io.Discard, first.Body)
+		first.Body.Close()
+		if etag == "" {
+			t.Fatal("no ETag on first response")
+		}
+
+		req, _ := http.NewRequest(http.MethodGet, assetURL, nil)
+		req.Header.Set("If-None-Match", etag)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("conditional GET: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotModified {
+			t.Fatalf("conditional GET: got %d, want 304", resp.StatusCode)
+		}
+		if body, _ := io.ReadAll(resp.Body); len(body) != 0 {
+			t.Errorf("conditional GET returned %d bytes, want empty body", len(body))
+		}
+	})
 }
 
 // BenchmarkSPAHandler_AssetServing measures the per-request cost of serving a
