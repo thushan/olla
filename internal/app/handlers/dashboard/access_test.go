@@ -271,6 +271,67 @@ func TestRegisterRoutes_EnabledMountsDashboardSubtree(t *testing.T) {
 	}
 }
 
+// TestSlashlessDashboardRoute_DisallowedClientGets403 is the regression test
+// for the redirect-bypasses-policy gap: without an explicit registration for
+// the exact "/internal/ui" path, Go's ServeMux answers it with its own
+// redirect before AccessMiddleware ever runs, so a disallowed client got a
+// 307 (revealing the mount exists) instead of the self-diagnosing 403 every
+// other dashboard path returns. A disallowed client hitting the slashless
+// path now gets the same 403 as any other dashboard path.
+func TestSlashlessDashboardRoute_DisallowedClientGets403(t *testing.T) {
+	t.Parallel()
+
+	reg := router.NewRouteRegistry(stubLogger{})
+	if !RegisterRoutes(reg, loopbackConfig(), nil, http.NotFoundHandler()) {
+		t.Fatal("RegisterRoutes must report true when enabled")
+	}
+
+	mux := http.NewServeMux()
+	reg.WireUp(mux)
+
+	req := httptest.NewRequest(http.MethodGet, slashlessDashboardRoute, nil)
+	req.RemoteAddr = "203.0.113.9:54321"
+	req.Host = "evil.example"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("disallowed client on %s: status=%d, want 403 (got a redirect instead of the policy check)", slashlessDashboardRoute, rec.Code)
+	}
+}
+
+// TestSlashlessDashboardRoute_AllowedClientRedirects confirms the positive
+// path: a client the access policy approves still gets the expected redirect
+// to the canonical trailing-slash route, with the same security headers as
+// every other dashboard response.
+func TestSlashlessDashboardRoute_AllowedClientRedirects(t *testing.T) {
+	t.Parallel()
+
+	reg := router.NewRouteRegistry(stubLogger{})
+	if !RegisterRoutes(reg, loopbackConfig(), nil, http.NotFoundHandler()) {
+		t.Fatal("RegisterRoutes must report true when enabled")
+	}
+
+	mux := http.NewServeMux()
+	reg.WireUp(mux)
+
+	req := httptest.NewRequest(http.MethodGet, slashlessDashboardRoute, nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "localhost"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("allowed client on %s: status=%d, want 307", slashlessDashboardRoute, rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != DashboardRoute {
+		t.Errorf("redirect Location=%q, want %q", loc, DashboardRoute)
+	}
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("slashless redirect must carry the standard dashboard security headers")
+	}
+}
+
 // TestRegisterRoutes_DoesNotTouchOtherRoutes is the regression test for a
 // prior prototype's documented defect: that branch modified the
 // registry's wiring logic and removed size-limit enforcement from every
