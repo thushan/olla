@@ -293,6 +293,12 @@ func buildEndpointIDs(endpoints []*domain.Endpoint) map[string]string {
 		// Sort on Name so suffix assignment is secret-independent; raw URL is
 		// only a final tiebreaker for the same-Name same-sanitised-URL case,
 		// where IDs stay distinct regardless of the suffix each gets.
+		// Accepted limitation: when siblings ALSO share the same Name, the
+		// raw-URL tiebreak means rotating a credential in one sibling's query
+		// string can swap which one gets "-0" vs "-1" (doubly-pathological:
+		// requires matching Name AND matching sanitised URL). Not fixed by
+		// hashing the query (reintroduces the secret-influence sanitisation
+		// removed) or persistent UUIDs (disproportionate for a DOM anchor).
 		sort.Slice(siblings, func(i, j int) bool {
 			if siblings[i].Name != siblings[j].Name {
 				return siblings[i].Name < siblings[j].Name
