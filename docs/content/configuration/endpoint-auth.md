@@ -9,6 +9,22 @@ keywords: olla auth, endpoint authentication, bearer token, api key, basic auth,
 Olla can attach outbound authentication headers to requests forwarded to a backend endpoint. This is
 for authenticating **Olla to the backend**. It has no bearing on how clients authenticate to Olla.
 
+!!! warning "Userinfo URLs are rejected at startup"
+    An endpoint URL with embedded credentials - `http://user:pass@host:8080` - fails config
+    load and the process exits with a clear error showing the exact `auth:` block to use
+    instead. Move credentials into an `auth:` block (see below). Without this check the
+    credentials would flow unchanged into every status/dashboard JSON surface that echoes
+    the URL, so the rejection exists to prevent a silent credential leak rather than to
+    impose a new restriction.
+
+    The boot error mirrors the rejected URL into the equivalent `auth:` block verbatim,
+    so the fix is a copy-paste. **The credentials appear in the error string**: do not
+    paste a failed startup line into a chat or issue - the same credentials were already
+    in the rejected config, but the audience may differ.
+
+    See [Release Notes: userinfo URLs](../about/release-notes.md#breaking-userinfo-urls-now-fail-startup)
+    for the full rationale.
+
 ## When to Use It
 
 Most local inference servers (Ollama, llama.cpp without `--api-key`) run without authentication.
@@ -54,7 +70,9 @@ value is written to the header with no scheme prefix -- use `bearer` if the back
 
 ### `basic`
 
-Sends `Authorization: Basic <base64(user:pass)>`.
+Sends `Authorization: Basic <base64(user:pass)>`. This is the replacement for the
+`http://user:pass@host` userinfo form, which is rejected at startup (see the warning
+above).
 
 ```yaml
       - url: "http://internal-llm:8080"
@@ -64,6 +82,19 @@ Sends `Authorization: Basic <base64(user:pass)>`.
           type: basic
           username: "admin"
           password: "s3cr3t"
+```
+
+For secrets kept out of config, use the `username_file` / `password_file` variants (see
+[File-Based Secrets](#file-based-secrets-_file-suffix)):
+
+```yaml
+      - url: "http://internal-llm:8080"
+        name: "llamacpp-basic"
+        type: "llamacpp"
+        auth:
+          type: basic
+          username_file: "/run/secrets/llamacpp_user"
+          password_file: "/run/secrets/llamacpp_pass"
 ```
 
 ## Environment Variable Interpolation
