@@ -205,7 +205,7 @@ describe('SparkStrip', () => {
 });
 
 describe('SparkStrip outage markers', () => {
-  it('draws a red line at each error sample x and breaks the area path', () => {
+  it('draws a muted-red outage band across an error sample and breaks the area path', () => {
     render({
       samples: [
         makeSample({ reqPerSec: 3, activeConnections: 2 }),
@@ -215,13 +215,19 @@ describe('SparkStrip outage markers', () => {
         makeSample({ reqPerSec: 2, activeConnections: 2 }),
       ],
     });
-    // One red error line at index 2.
-    const errorLines = document.querySelectorAll('.spark-error');
-    expect(errorLines.length).toBe(1);
-    // x = index * step, step = 100 / (5-1) = 25, so index 2 -> x = 50.
-    const line = errorLines[0] as SVGLineElement;
-    expect(line.getAttribute('x1')).toBe('50');
-    expect(line.getAttribute('x2')).toBe('50');
+    // One outage band covering the lone error at index 2.
+    const bands = document.querySelectorAll('.spark-outage');
+    expect(bands.length).toBe(1);
+    // step = 100/(5-1) = 25; index 2 sits at x=50, band spans a half-step
+    // either side -> x=37.5, width=25.
+    const band = bands[0] as SVGRectElement;
+    expect(parseFloat(band.getAttribute('x')!)).toBeCloseTo(37.5);
+    expect(parseFloat(band.getAttribute('width')!)).toBeCloseTo(25);
+    // A single-sample outage draws one down-edge tick at x=50; the recovery
+    // edge is suppressed because drop and recovery are the same poll.
+    const edges = document.querySelectorAll('.spark-outage-edge');
+    expect(edges.length).toBe(1);
+    expect((edges[0] as SVGLineElement).getAttribute('x1')).toBe('50');
 
     // The area path must contain two M commands (two runs of non-error
     // samples: indices 0-1 and 3-4), confirming the break.
@@ -236,14 +242,34 @@ describe('SparkStrip outage markers', () => {
     expect((connLine.getAttribute('d') ?? '').match(/M/g)?.length ?? 0).toBe(2);
   });
 
-  it('does not draw an error line when there are no error samples', () => {
+  it('coalesces consecutive error samples into a single band with drop and recovery edges', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 4, activeConnections: 1 }),
+      ],
+    });
+    // Three adjacent errors -> one band, not three.
+    expect(document.querySelectorAll('.spark-outage').length).toBe(1);
+    // Drop edge at index 1 (x=25), recovery edge at index 3 (x=75).
+    const edges = document.querySelectorAll('.spark-outage-edge');
+    expect(edges.length).toBe(2);
+    expect((edges[0] as SVGLineElement).getAttribute('x1')).toBe('25');
+    expect((edges[1] as SVGLineElement).getAttribute('x1')).toBe('75');
+  });
+
+  it('does not draw an outage band when there are no error samples', () => {
     render({
       samples: [
         makeSample({ reqPerSec: 3, activeConnections: 2 }),
         makeSample({ reqPerSec: 5, activeConnections: 3 }),
       ],
     });
-    expect(document.querySelectorAll('.spark-error').length).toBe(0);
+    expect(document.querySelectorAll('.spark-outage').length).toBe(0);
+    expect(document.querySelectorAll('.spark-outage-edge').length).toBe(0);
     // Single continuous run: one M in the area path.
     const area = document.querySelector('.spark-area') as SVGPathElement;
     expect((area.getAttribute('d') ?? '').match(/M/g)?.length ?? 0).toBe(1);

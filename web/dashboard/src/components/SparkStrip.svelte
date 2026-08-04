@@ -12,8 +12,9 @@
 
 <script lang="ts">
   // Hand-rolled inline-SVG sparkline with a req/s y-axis scale, a pointer
-  // hover reading, and outage markers (red vertical lines at failed-poll
-  // ticks). No chart library (hard rule).
+  // hover reading, and outage bands (a muted-red wash per run of failed-poll
+  // ticks, with a thin red edge at the drop and recovery points). No chart
+  // library (hard rule).
   //
   // Sampling is driven by the overview store's onTick callback wired in
   // overview.svelte.ts, which feeds the history ring buffer on BOTH success
@@ -116,6 +117,45 @@
       : [],
   );
 
+  // Coalesce contiguous error indices into one outage band per run, instead of
+  // a red line per failed tick. A multi-tick outage then reads as a single
+  // soft wash rather than a thicket of solid lines. Each band spans half a
+  // step either side of its error run so the wash covers the full duration;
+  // the down/up edges mark the exact drop and recovery poll timestamps.
+  interface OutageBand {
+    x: number;
+    width: number;
+    downX: number;
+    upX: number;
+    multi: boolean;
+  }
+  const outages = $derived.by<OutageBand[]>(() => {
+    const bands: OutageBand[] = [];
+    const idx = errorIndices;
+    if (idx.length === 0 || step <= 0) return bands;
+    const half = step / 2;
+    let start = idx[0];
+    let prev = idx[0];
+    const flush = (to: number): void => {
+      const downX = start * step;
+      const upX = to * step;
+      const xStart = Math.max(0, downX - half);
+      const xEnd = Math.min(W, upX + half);
+      bands.push({ x: xStart, width: Math.max(0, xEnd - xStart), downX, upX, multi: to > start });
+    };
+    for (let k = 1; k < idx.length; k++) {
+      if (idx[k] === prev + 1) {
+        prev = idx[k];
+      } else {
+        flush(prev);
+        start = idx[k];
+        prev = idx[k];
+      }
+    }
+    flush(prev);
+    return bands;
+  });
+
   const latest = $derived(view.length > 0 ? view[view.length - 1] : null);
   const warming = $derived(view.length < 2);
 
@@ -161,13 +201,17 @@
   >
     <svg class="spark-svg" viewBox="0 0 {W} {H}" preserveAspectRatio="none" aria-hidden="true">
       {#if !warming}
-        <line class="spark-grid" x1="0" y1="0" x2={W} y2="0" />
-        <line class="spark-grid" x1="0" y1={H} x2={W} y2={H} />
+        {#each outages as o}
+          <rect class="spark-outage" x={o.x} y="0" width={o.width} height={H} />
+        {/each}
         <path class="spark-area" d={reqAreaD} />
         <path class="spark-edge" d={reqEdgeD} />
         <path class="spark-line" d={connLineD} />
-        {#each errorIndices as i}
-          <line class="spark-error" x1={i * step} y1="0" x2={i * step} y2={H} />
+        {#each outages as o}
+          <line class="spark-outage-edge" x1={o.downX} y1="0" x2={o.downX} y2={H} />
+          {#if o.multi}
+            <line class="spark-outage-edge" x1={o.upX} y1="0" x2={o.upX} y2={H} />
+          {/if}
         {/each}
       {/if}
     </svg>
@@ -246,12 +290,11 @@
     stroke-width: 1.5;
     vector-effect: non-scaling-stroke;
   }
-  .spark-grid {
-    stroke: var(--border);
-    stroke-width: 1;
-    vector-effect: non-scaling-stroke;
+  .spark-outage {
+    fill: var(--red);
+    fill-opacity: 0.12;
   }
-  .spark-error {
+  .spark-outage-edge {
     stroke: var(--red);
     stroke-width: 1;
     vector-effect: non-scaling-stroke;
