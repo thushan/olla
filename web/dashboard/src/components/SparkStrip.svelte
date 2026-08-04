@@ -120,17 +120,22 @@
   // Coalesce contiguous error indices into one outage band per run, instead of
   // a red line per failed tick. A multi-tick outage then reads as a single
   // soft wash rather than a thicket of solid lines. Each band spans half a
-  // step either side of its error run so the wash covers the full duration;
-  // the down/up edges mark the exact drop and recovery poll timestamps.
+  // step either side of its error run so the wash covers the full duration.
+  // The drop edge always marks the first failed poll. The recovery edge is
+  // only drawn when recovery was actually observed: the sample after the run
+  // exists and is healthy, placed at that sample's x. An outage still in
+  // progress at the newest sample (or a history that failed throughout) has no
+  // recovery edge, so the chart never implies a recovery that did not occur.
   interface OutageBand {
     x: number;
     width: number;
     downX: number;
-    upX: number;
-    multi: boolean;
+    recoveryX: number;
+    recovered: boolean;
   }
   const outages = $derived.by<OutageBand[]>(() => {
     const bands: OutageBand[] = [];
+    const list = view;
     const idx = errorIndices;
     if (idx.length === 0 || step <= 0) return bands;
     const half = step / 2;
@@ -138,10 +143,17 @@
     let prev = idx[0];
     const flush = (to: number): void => {
       const downX = start * step;
-      const upX = to * step;
+      const recoveredAt = to + 1;
+      const recovered = recoveredAt < list.length && !list[recoveredAt].error;
       const xStart = Math.max(0, downX - half);
-      const xEnd = Math.min(W, upX + half);
-      bands.push({ x: xStart, width: Math.max(0, xEnd - xStart), downX, upX, multi: to > start });
+      const xEnd = Math.min(W, to * step + half);
+      bands.push({
+        x: xStart,
+        width: Math.max(0, xEnd - xStart),
+        downX,
+        recoveryX: recoveredAt * step,
+        recovered,
+      });
     };
     for (let k = 1; k < idx.length; k++) {
       if (idx[k] === prev + 1) {
@@ -159,11 +171,22 @@
   const latest = $derived(view.length > 0 ? view[view.length - 1] : null);
   const warming = $derived(view.length < 2);
 
+  // The SVG itself is hidden from AT (aria-hidden below); the chart container's
+  // aria-label is the only accessible description. Describing just the latest
+  // sample would make a historical outage band vanish from AT once service
+  // recovers, so fold the visible outage count into the name.
+  const outageCount = $derived(outages.length);
+  const outageSummary = $derived(
+    outageCount > 0
+      ? `, ${outageCount} ${outageCount === 1 ? 'outage' : 'outages'} in displayed period`
+      : '',
+  );
+
   const ariaLabel = $derived(
     latest
       ? latest.error
-        ? 'connection lost'
-        : `${latest.reqPerSec.toFixed(1)} requests per second, ${fmtInt(latest.activeConnections)} active connections`
+        ? `connection lost${outageSummary}`
+        : `${latest.reqPerSec.toFixed(1)} requests per second, ${fmtInt(latest.activeConnections)} active connections${outageSummary}`
       : 'gathering telemetry',
   );
 
@@ -209,8 +232,8 @@
         <path class="spark-line" d={connLineD} />
         {#each outages as o}
           <line class="spark-outage-edge" x1={o.downX} y1="0" x2={o.downX} y2={H} />
-          {#if o.multi}
-            <line class="spark-outage-edge" x1={o.upX} y1="0" x2={o.upX} y2={H} />
+          {#if o.recovered}
+            <line class="spark-outage-edge" x1={o.recoveryX} y1="0" x2={o.recoveryX} y2={H} />
           {/if}
         {/each}
       {/if}

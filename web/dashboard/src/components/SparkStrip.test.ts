@@ -223,11 +223,12 @@ describe('SparkStrip outage markers', () => {
     const band = bands[0] as SVGRectElement;
     expect(parseFloat(band.getAttribute('x')!)).toBeCloseTo(37.5);
     expect(parseFloat(band.getAttribute('width')!)).toBeCloseTo(25);
-    // A single-sample outage draws one down-edge tick at x=50; the recovery
-    // edge is suppressed because drop and recovery are the same poll.
+    // Drop edge at the failed poll (x=50), recovery edge at the next sample
+    // (index 3, x=75) which is healthy - so recovery is observed and drawn.
     const edges = document.querySelectorAll('.spark-outage-edge');
-    expect(edges.length).toBe(1);
+    expect(edges.length).toBe(2);
     expect((edges[0] as SVGLineElement).getAttribute('x1')).toBe('50');
+    expect((edges[1] as SVGLineElement).getAttribute('x1')).toBe('75');
 
     // The area path must contain two M commands (two runs of non-error
     // samples: indices 0-1 and 3-4), confirming the break.
@@ -254,11 +255,13 @@ describe('SparkStrip outage markers', () => {
     });
     // Three adjacent errors -> one band, not three.
     expect(document.querySelectorAll('.spark-outage').length).toBe(1);
-    // Drop edge at index 1 (x=25), recovery edge at index 3 (x=75).
+    // Drop edge at the first failed poll (index 1, x=25); recovery edge at the
+    // first healthy sample after the run (index 4, x=100), not at the last
+    // failed sample.
     const edges = document.querySelectorAll('.spark-outage-edge');
     expect(edges.length).toBe(2);
     expect((edges[0] as SVGLineElement).getAttribute('x1')).toBe('25');
-    expect((edges[1] as SVGLineElement).getAttribute('x1')).toBe('75');
+    expect((edges[1] as SVGLineElement).getAttribute('x1')).toBe('100');
   });
 
   it('does not draw an outage band when there are no error samples', () => {
@@ -317,6 +320,48 @@ describe('SparkStrip outage markers', () => {
     expect(document.querySelector('.spark-guide')?.classList.contains('is-error')).toBe(false);
   });
 
+  it('does not draw a recovery edge for an outage still in progress at the newest sample', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 5, activeConnections: 3 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+      ],
+    });
+    // One band for the trailing run (indices 2-4), extending to the right edge.
+    const bands = document.querySelectorAll('.spark-outage');
+    expect(bands.length).toBe(1);
+    const band = bands[0] as SVGRectElement;
+    expect(parseFloat(band.getAttribute('width')!)).toBeCloseTo(62.5);
+    // Only the drop edge (index 2, x=50). No recovery edge: there is no sample
+    // after the run, so recovery was never observed.
+    const edges = document.querySelectorAll('.spark-outage-edge');
+    expect(edges.length).toBe(1);
+    expect((edges[0] as SVGLineElement).getAttribute('x1')).toBe('50');
+  });
+
+  it('does not draw a recovery edge when the entire history failed', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+      ],
+    });
+    // One full-width band (indices 0-2 -> x=0, width=100).
+    const bands = document.querySelectorAll('.spark-outage');
+    expect(bands.length).toBe(1);
+    const band = bands[0] as SVGRectElement;
+    expect(parseFloat(band.getAttribute('x')!)).toBeCloseTo(0);
+    expect(parseFloat(band.getAttribute('width')!)).toBeCloseTo(100);
+    // Only the drop edge at the left edge (x=0); no recovery edge.
+    const edges = document.querySelectorAll('.spark-outage-edge');
+    expect(edges.length).toBe(1);
+    expect((edges[0] as SVGLineElement).getAttribute('x1')).toBe('0');
+  });
+
   it('aria-label says "connection lost" when the latest sample is an error', () => {
     render({
       samples: [
@@ -325,7 +370,27 @@ describe('SparkStrip outage markers', () => {
       ],
     });
     const chart = document.querySelector('.spark-chart') as HTMLElement;
-    expect(chart.getAttribute('aria-label')).toBe('connection lost');
+    // The in-progress outage is counted in the accessible name.
+    expect(chart.getAttribute('aria-label')).toContain('connection lost');
+    expect(chart.getAttribute('aria-label')).toContain('1 outage');
+  });
+
+  it('aria-label includes the historical outage count after recovery', () => {
+    render({
+      samples: [
+        makeSample({ reqPerSec: 3, activeConnections: 2 }),
+        makeSample({ reqPerSec: 0, activeConnections: 0, error: true }),
+        makeSample({ reqPerSec: 4, activeConnections: 1 }),
+        makeSample({ reqPerSec: 5, activeConnections: 2 }),
+      ],
+    });
+    const chart = document.querySelector('.spark-chart') as HTMLElement;
+    const label = chart.getAttribute('aria-label') ?? '';
+    // Latest sample is healthy, so the live reading is present...
+    expect(label).toContain('requests per second');
+    // ...and the recovered outage survives in the accessible description
+    // rather than vanishing from AT once service is restored.
+    expect(label).toContain('1 outage');
   });
 
   it('readout shows "connection lost" when the latest sample is an error', () => {
