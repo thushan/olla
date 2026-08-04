@@ -289,14 +289,14 @@ func TestSlashlessDashboardRoute_DisallowedClientGets403(t *testing.T) {
 	mux := http.NewServeMux()
 	reg.WireUp(mux)
 
-	req := httptest.NewRequest(http.MethodGet, slashlessDashboardRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, SlashlessDashboardRoute, nil)
 	req.RemoteAddr = "203.0.113.9:54321"
 	req.Host = "evil.example"
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusForbidden {
-		t.Fatalf("disallowed client on %s: status=%d, want 403 (got a redirect instead of the policy check)", slashlessDashboardRoute, rec.Code)
+		t.Fatalf("disallowed client on %s: status=%d, want 403 (got a redirect instead of the policy check)", SlashlessDashboardRoute, rec.Code)
 	}
 }
 
@@ -315,14 +315,14 @@ func TestSlashlessDashboardRoute_AllowedClientRedirects(t *testing.T) {
 	mux := http.NewServeMux()
 	reg.WireUp(mux)
 
-	req := httptest.NewRequest(http.MethodGet, slashlessDashboardRoute, nil)
+	req := httptest.NewRequest(http.MethodGet, SlashlessDashboardRoute, nil)
 	req.RemoteAddr = "127.0.0.1:54321"
 	req.Host = "localhost"
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusTemporaryRedirect {
-		t.Fatalf("allowed client on %s: status=%d, want 307", slashlessDashboardRoute, rec.Code)
+		t.Fatalf("allowed client on %s: status=%d, want 307", SlashlessDashboardRoute, rec.Code)
 	}
 	if loc := rec.Header().Get("Location"); loc != DashboardRoute {
 		t.Errorf("redirect Location=%q, want %q", loc, DashboardRoute)

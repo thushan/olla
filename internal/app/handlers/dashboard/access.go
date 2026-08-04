@@ -38,7 +38,7 @@ import (
 // under /olla/).
 const DashboardRoute = "/internal/ui/"
 
-// slashlessDashboardRoute is the exact-match path without the trailing slash.
+// SlashlessDashboardRoute is the exact-match path without the trailing slash.
 // Go's ServeMux answers a request for this path with its own redirect to the
 // trailing-slash subtree BEFORE any registered handler (and therefore before
 // AccessMiddleware) ever runs, so a disallowed client previously got a bare
@@ -46,7 +46,11 @@ const DashboardRoute = "/internal/ui/"
 // dashboard path returns - the policy still held on the canonical path, but
 // this one leaked its existence. Registering it explicitly, gated by the
 // same middleware, closes that gap.
-const slashlessDashboardRoute = "/internal/ui"
+//
+// Exported so callers registering routes ahead of the dashboard (see
+// server_routes.go's pre-registration collision check) can guard against
+// this path too, not just DashboardRoute.
+const SlashlessDashboardRoute = "/internal/ui"
 
 // AccessMiddleware returns a handler that enforces the dashboard's
 // network-layer policy before delegating to next. cfg must already be Validated
@@ -109,7 +113,7 @@ func RegisterRoutes(registry *router.RouteRegistry, cfg config.DashboardConfig, 
 	// headers, but its own registration so ServeMux never gets the chance to
 	// answer this exact path before AccessMiddleware runs.
 	slashlessGuarded := AccessMiddleware(cfg, log, http.HandlerFunc(redirectToDashboardRoot))
-	registry.RegisterWithMethod(slashlessDashboardRoute, http.HandlerFunc(slashlessGuarded.ServeHTTP), "Admin dashboard (redirect)", "GET")
+	registry.RegisterWithMethod(SlashlessDashboardRoute, http.HandlerFunc(slashlessGuarded.ServeHTTP), "Admin dashboard (redirect)", "GET")
 	return true
 }
 

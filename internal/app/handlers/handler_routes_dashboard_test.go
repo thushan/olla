@@ -228,6 +228,52 @@ func TestDashboardRoute_CollisionSkipsMount(t *testing.T) {
 	}
 }
 
+// TestSlashlessDashboardRoute_CollisionSkipsMount mirrors
+// TestDashboardRoute_CollisionSkipsMount for the exact slashless path
+// (/internal/ui, no trailing slash). RegisterRoutes claims this path too (the
+// redirect-to-canonical registration), and registerWithMethod stores routes
+// in a plain map keyed by pattern, so a pre-existing registration here would
+// otherwise be silently overwritten - last write wins, no panic - rather than
+// caught by the collision guard.
+func TestSlashlessDashboardRoute_CollisionSkipsMount(t *testing.T) {
+	t.Parallel()
+
+	reg := router.NewRouteRegistry(&mockStyledLogger{})
+	const collisionBody = "PRE-EXISTING-SLASHLESS"
+	reg.RegisterWithMethod(dashboard.SlashlessDashboardRoute, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(collisionBody))
+	}, "collision sentinel", http.MethodGet)
+
+	app := &Application{
+		Config:        &config.Config{Dashboard: enabledDashboardCfg(t)},
+		logger:        &mockStyledLogger{},
+		routeRegistry: reg,
+	}
+	app.registerRoutes()
+
+	mux := http.NewServeMux()
+	reg.WireUp(mux)
+
+	req := httptest.NewRequest(http.MethodGet, dashboard.SlashlessDashboardRoute, nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "localhost"
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("collision: status=%d, want 200 from sentinel handler", rec.Code)
+	}
+	if rec.Body.String() != collisionBody {
+		t.Errorf("collision: body=%q, want sentinel %q (dashboard overwrote it)", rec.Body.String(), collisionBody)
+	}
+
+	// The trailing-slash subtree must also stay unmounted: the collision
+	// guard skips the whole RegisterRoutes call, not just the colliding path.
+	if _, exists := reg.GetRoutes()[dashboard.DashboardRoute]; exists {
+		t.Errorf("collision on slashless route must also prevent %s from mounting", dashboard.DashboardRoute)
+	}
+}
+
 // TestDashboardRoute_ProxyAndInternalRoutesPresent is the regression guard
 // confirming mounting the dashboard last does not disturb the existing route
 // set: every static internal and proxy route is still present by name.

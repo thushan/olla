@@ -72,10 +72,16 @@ func (a *Application) registerRoutes() {
 // mountDashboard registers the dashboard subtree, gated by cfg.Enabled. The
 // collision check is belt-and-braces defence against a future regression:
 // every route registered above is either an /olla/ prefixed proxy route or a
-// fixed literal distinct from /internal/ui/, so this is never expected to
-// fire. On detecting a collision we log Error and skip mounting (fail safe:
-// never mount something shadowed, never take the server down over a
-// defensive check). See simple-dashboard.md §5.
+// fixed literal distinct from /internal/ui/ and /internal/ui, so this is
+// never expected to fire. On detecting a collision we log Error and skip
+// mounting (fail safe: never mount something shadowed, never take the server
+// down over a defensive check). See simple-dashboard.md §5.
+//
+// Both routes RegisterRoutes claims - the trailing-slash subtree and the
+// exact slashless redirect - are checked here. registerWithMethod stores
+// routes in a plain map keyed by pattern, so a pre-existing registration on
+// either path would otherwise be silently overwritten (last write wins, no
+// panic) rather than caught.
 //
 // dashboard.Handler() is only called from inside the enabled branch below,
 // not passed as an argument evaluated unconditionally: constructing it walks
@@ -85,9 +91,15 @@ func (a *Application) registerRoutes() {
 // obviously true by inspection rather than relying on evaluation-order
 // subtlety.
 func (a *Application) mountDashboard() {
-	if _, exists := a.routeRegistry.GetRoutes()[dashboard.DashboardRoute]; exists {
+	routes := a.routeRegistry.GetRoutes()
+	if _, exists := routes[dashboard.DashboardRoute]; exists {
 		a.logger.Error("dashboard route collision; skipping mount",
 			"route", dashboard.DashboardRoute)
+		return
+	}
+	if _, exists := routes[dashboard.SlashlessDashboardRoute]; exists {
+		a.logger.Error("dashboard route collision; skipping mount",
+			"route", dashboard.SlashlessDashboardRoute)
 		return
 	}
 	if !a.Config.Dashboard.Enabled {
