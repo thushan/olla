@@ -579,7 +579,7 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 // are sorted before hashing to keep the ETag stable across polls (mirroring
 // what encoding/json does to map keys on the wire).
 func hashModelStatusResponse(resp *ModelStatusResponse) string {
-	h := fnv.New32a()
+	h := fnv.New64a()
 
 	families := make([]string, 0, len(resp.ModelsByFamily))
 	for f := range resp.ModelsByFamily {

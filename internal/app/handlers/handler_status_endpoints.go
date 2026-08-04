@@ -311,7 +311,7 @@ func buildEndpointIDs(endpoints []*domain.Endpoint) map[string]string {
 // the relative time-ago renderings (health_check, last_model_sync) that change
 // every poll. Absolute event times stay in.
 func hashEndpointStatusResponse(resp *EndpointStatusResponse) string {
-	h := fnv.New32a()
+	h := fnv.New64a()
 	for i := range resp.Endpoints {
 		hashEndpointSummary(h, &resp.Endpoints[i])
 	}
