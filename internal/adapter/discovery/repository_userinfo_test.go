@@ -36,10 +36,13 @@ func TestEndpointConfigValidation_RejectsUserinfo(t *testing.T) {
 			wantAbsent:   []string{"alice", "s3cr3t"},
 		},
 		{
-			name:         "user only",
-			url:          "https://token@ollama.local:11434",
-			wantContains: []string{"ollama.local:11434", "type: basic", "<your username>"},
-			wantAbsent:   []string{"token"},
+			name: "user only",
+			url:  "https://s3cruser@ollama.local:11434",
+			wantContains: []string{
+				"ollama.local:11434", "type: basic", "<your username>", "<your password>",
+				"requires a password", "type: bearer", "<your token>",
+			},
+			wantAbsent: []string{"s3cruser"},
 		},
 		{
 			name:         "userinfo with path and query",

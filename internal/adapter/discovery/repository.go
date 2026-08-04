@@ -326,11 +326,18 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 		if parsedURL.Path != "" {
 			redactedOriginal += parsedURL.Path
 		}
-		example := plainURL + "\nauth:\n  type: basic\n  username: <your username>"
-		if hasPass {
-			example += "\n  password: <your password>"
+		// Basic auth requires both a username and a password - the username-only
+		// case (user:pass@host with no password) cannot become a valid basic
+		// block, so the example must still carry a password placeholder rather
+		// than a silently-invalid partial one.
+		example := plainURL + "\nauth:\n  type: basic\n  username: <your username>\n  password: <your password>" +
+			"\n  # or username_file / password_file to read from a file"
+		if !hasPass {
+			example += "\n\nBasic auth requires a password. If this was really a token " +
+				"(e.g. https://token@host), it is more likely bearer auth:\n  " +
+				plainURL + "\nauth:\n  type: bearer\n  token: <your token>" +
+				"\n  # or token_file to read from a file"
 		}
-		example += "\n  # or username_file / password_file to read from a file"
 		return fmt.Errorf(
 			"endpoint URL for %q must not embed credentials (user:pass@host); "+
 				"move them to the auth config block. Rewrite\n  %s\nas\n  %s",
