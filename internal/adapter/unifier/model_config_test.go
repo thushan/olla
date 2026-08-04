@@ -1,6 +1,8 @@
 package unifier
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -58,6 +60,16 @@ func TestShippedConfigMatchesDefaults(t *testing.T) {
 	assert.ElementsMatch(t, defaults.SpecialRules.GenericNames, fromFile.SpecialRules.GenericNames, "generic_names drifted")
 }
 
+// resetConfigSingleton clears the LoadModelConfig sync.Once cache so a test
+// can force a fresh load. Registered via t.Cleanup by every test that
+// touches the singleton, so a broken/mutated state from one test can't leak
+// into the next (LoadModelConfig's whole point is process-lifetime caching,
+// which fights individual test isolation otherwise).
+func resetConfigSingleton() {
+	configOnce = sync.Once{}
+	configInstance, errConfig, configSource, configParseWarnings = nil, nil, "", nil
+}
+
 // TestLogConfigStatus_ReportsShippedFileSource verifies LogConfigStatus surfaces
 // the real path when config/models.yaml loads cleanly, giving operators a
 // startup-log trail rather than the previous total silence.
@@ -67,13 +79,81 @@ func TestLogConfigStatus_ReportsShippedFileSource(t *testing.T) {
 	require.NoError(t, os.Setenv("OLLA_CONFIG_DIR", dir))
 	defer os.Setenv("OLLA_CONFIG_DIR", oldConfigDir)
 
-	configOnce = sync.Once{}
-	configInstance, errConfig, configSource, configParseWarnings = nil, nil, "", nil
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
 
 	log, _, _ := logger.New(&logger.Config{Level: "debug", Theme: "default"})
 	LogConfigStatus(logger.NewPlainStyledLogger(log))
 
 	assert.Equal(t, filepath.Join(dir, "models.yaml"), ConfigSource())
+}
+
+// brokenModelsYAML reproduces the exact issue #204 construct: a `\d` inside
+// a double-quoted YAML scalar. yaml.v3's double-quoted scalars only accept a
+// small fixed escape set, so this is invalid YAML, not just an unwanted regex.
+const brokenModelsYAML = `
+model_extraction:
+  family_patterns:
+    - pattern: "^(llama|gemma|phi|qwen)[-_]?(\d+(?:\.\d+)?)"
+      family_group: 1
+      variant_group: 2
+      description: "broken escape, matches issue #204"
+`
+
+// TestLoadConfigFromFile_BrokenYAMLFallsBackWithWarning is the failure-path
+// counterpart to TestShippedConfigParses. loadConfigFromFile() is called
+// directly (bypassing the LoadModelConfig sync.Once singleton) so the
+// behaviour under test is the loader itself, not caching. A directory whose
+// models.yaml has the issue #204 escape bug must still yield a usable
+// config - falling back to getDefaultConfig() without panicking - while
+// recording a parse warning that names the broken path.
+func TestLoadConfigFromFile_BrokenYAMLFallsBackWithWarning(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(brokenModelsYAML), 0644))
+
+	// t.Chdir makes the loader's first candidate path ("models.yaml") resolve
+	// into dir; OLLA_CONFIG_DIR is pointed at a second, empty temp dir so the
+	// env-derived candidate doesn't re-read the same file and double the
+	// warning count.
+	t.Chdir(dir)
+	t.Setenv("OLLA_CONFIG_DIR", t.TempDir())
+
+	config, source, warnings := loadConfigFromFile()
+
+	require.NotNil(t, config, "must fall back to a usable config, never nil")
+	assert.Equal(t, getDefaultConfig(), config, "must fall back to embedded defaults")
+	assert.Empty(t, source, "no path should be reported as successfully loaded")
+
+	require.Len(t, warnings, 1, "expected exactly one parse warning for the broken models.yaml")
+	assert.Contains(t, warnings[0], "models.yaml")
+	assert.Contains(t, warnings[0], "unknown escape character")
+
+	// the fallback config must itself still be usable - no panics downstream
+	require.NoError(t, config.compilePatterns())
+}
+
+// TestLogConfigStatus_WarnsOnBrokenShippedFile is the LogConfigStatus
+// counterpart: a models.yaml that exists but fails to parse must produce a
+// warning-level log line naming the file, not the same silence as the
+// "no file found" case.
+func TestLogConfigStatus_WarnsOnBrokenShippedFile(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(brokenModelsYAML), 0644))
+
+	t.Chdir(dir)
+	t.Setenv("OLLA_CONFIG_DIR", t.TempDir())
+
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
+
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	LogConfigStatus(logger.NewPlainStyledLogger(log))
+
+	out := buf.String()
+	assert.Contains(t, out, "level=WARN")
+	assert.Contains(t, out, "could not parse")
+	assert.Contains(t, out, "models.yaml")
 }
 
 func TestLoadModelConfig(t *testing.T) {
