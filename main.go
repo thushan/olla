@@ -49,7 +49,11 @@ func init() {
 	flag.BoolVar(&showVersion, "version", false, "Show version information")
 	flag.StringVar(&configFile, "c", "", "Config file path")
 	flag.StringVar(&configFile, "config", "", "Config file path")
-
+}
+func main() {
+	// flag.Parse must run here, not in init(): init() runs under `go test` too,
+	// and parsing the test binary's own flags (-test.*) against our flag set
+	// fails the build. main() only runs for the real binary.
 	flag.Parse()
 
 	if os.Getenv("OLLA_ENABLE_PROFILER") == "true" {
@@ -59,8 +63,7 @@ func init() {
 	if os.Getenv("OLLA_SHOW_VERSION") == "true" {
 		showVersion = true
 	}
-}
-func main() {
+
 	startTime := time.Now()
 	vlog := log.New(log.Writer(), "", 0)
 	profileAddress := "localhost:19841"
@@ -77,14 +80,18 @@ func main() {
 		vlog.Printf(theme.ColourProfiler("Profiling server started at http://%s/debug/pprof/\n"), profileAddress)
 	}
 
-	// Setup logging
+	// Setup logging. This is a bootstrap logger only: OLLA_LOG_LEVEL controls it,
+	// and it exists purely so pre-config messages (version banner, config load
+	// errors) have somewhere to go. Once the config file is loaded below, we
+	// rebuild the logger against logging.level so the file's setting actually
+	// takes effect instead of being silently ignored.
 	lcfg := buildLoggerConfig()
-	logInstance, styledLogger, cleanup, err := logger.NewWithTheme(lcfg)
+	logInstance, styledLogger, loggerCleanup, err := logger.NewWithTheme(lcfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to initialise logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer cleanup()
+	defer func() { loggerCleanup() }()
 
 	slog.SetDefault(logInstance)
 
@@ -118,6 +125,25 @@ func main() {
 	}
 
 	styledLogger.Info("Loaded configuration", "config", cfg.Filename)
+
+	// Now that the config file (and any OLLA_LOGGING_LEVEL override, applied
+	// inside config.Load) is known, swap the bootstrap logger for one running
+	// at the configured level. Only rebuild when the level actually changes,
+	// so a default-vs-default startup doesn't pay for a second handler/file init.
+	runtimeLevel := resolveRuntimeLogLevel(cfg.Logging.Level, styledLogger.Warn)
+	if runtimeLevel != lcfg.Level {
+		runtimeCfg := *lcfg
+		runtimeCfg.Level = runtimeLevel
+
+		newLogInstance, newStyledLogger, newCleanup, rebuildErr := logger.NewWithTheme(&runtimeCfg)
+		if rebuildErr != nil {
+			styledLogger.Warn("Failed to apply configured logging.level, keeping bootstrap logger", "level", runtimeLevel, "error", rebuildErr)
+		} else {
+			loggerCleanup()
+			logInstance, styledLogger, loggerCleanup = newLogInstance, newStyledLogger, newCleanup
+			slog.SetDefault(logInstance)
+		}
+	}
 
 	// Create and start service manager
 	serviceManager, err := app.CreateAndStartServiceManager(ctx, cfg, styledLogger)
@@ -200,6 +226,21 @@ func reportProcessStats(logger logger.StyledLogger, startTime time.Time) {
 		"uptime", format.Duration(stats.Uptime),
 		"avg_gc_pause", nerdstats.CalculateAverageGCPause(stats),
 	)
+}
+
+// resolveRuntimeLogLevel decides the level for the post-config logger. An
+// empty value (no logging.level in the file) keeps the built-in default.
+// An unrecognised value is a config mistake, not a reason to crash - warn
+// via the bootstrap logger and fall back so startup still succeeds.
+func resolveRuntimeLogLevel(configuredLevel string, warn func(msg string, args ...any)) string {
+	if configuredLevel == "" {
+		return DefaultLoggerLevel
+	}
+	if !logger.IsValidLevel(configuredLevel) {
+		warn("Invalid logging.level in config, falling back to default", "configured", configuredLevel, "default", DefaultLoggerLevel)
+		return DefaultLoggerLevel
+	}
+	return configuredLevel
 }
 
 func buildLoggerConfig() *logger.Config {
