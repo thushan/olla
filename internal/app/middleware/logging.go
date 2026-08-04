@@ -114,18 +114,18 @@ func isQuietPollOutcome(method, path string, status int) bool {
 }
 
 // isQuietAccessOutcome is the access-log analogue of isQuietPollOutcome.
-// Unlike the console log, the access log is the operator's audit/diagnostic
-// record: a proxy 4xx/5xx MUST appear there at the default Info level so
-// failures are visible without raising verbosity. The console has dedicated
-// proxy-handler logging and main deliberately keeps the console proxy line
-// quiet regardless of status, so the console path stays on isQuietPollOutcome
-// (path-only for proxy). Here, proxy traffic is only quieted when the outcome
-// is routine (2xx or 304); a proxy 4xx/5xx logs at Info. /internal/ keeps the
-// same GET/HEAD + 2xx/304 rule as the console variant.
+// The access log is the operator's audit record of every request that hit
+// Olla, so unlike the console path it must NOT quiet proxy traffic: a proxy
+// success is the audit-worthy outcome the security-practices doc promises to
+// record at the default Info level, and a proxy 4xx/5xx must never disappear
+// into Debug. Only the dashboard's own /internal/ polling surface is
+// routine enough to demote, and even then only for GET/HEAD + 2xx/304:
+// a 404, 403, 5xx, or non-GET/HEAD method under /internal/ stays loud so a
+// probed access-control gate or failing handler is visible at Info. The
+// console path (isQuietPollOutcome) intentionally still quiets proxy traffic
+// regardless of status because the console has dedicated proxy-handler
+// logging; do not unify the two.
 func isQuietAccessOutcome(method, path string, status int) bool {
-	if IsProxyRequest(path) {
-		return (status >= 200 && status < 300) || status == http.StatusNotModified
-	}
 	if !isInternalPollMethod(method) || !strings.HasPrefix(path, internalPathPrefix) {
 		return false
 	}

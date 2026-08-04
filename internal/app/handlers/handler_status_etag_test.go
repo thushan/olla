@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ func TestStatusHandler_ETag304OnMatch(t *testing.T) {
 	etag := w1.Header().Get("ETag")
 	require.NotEmpty(t, etag, "first response must carry an ETag")
 	assert.Contains(t, w1.Header().Get("Content-Type"), "application/json")
+	assert.Equal(t, "private, no-cache", w1.Header().Get("Cache-Control"), "200 must not be shared-cacheable")
 
 	req2 := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
 	req2.Header.Set("If-None-Match", etag)
@@ -35,6 +37,7 @@ func TestStatusHandler_ETag304OnMatch(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, w2.Code)
 	assert.Equal(t, etag, w2.Header().Get("ETag"))
 	assert.Empty(t, w2.Body.Bytes(), "304 must carry no body")
+	assert.Equal(t, "private, no-cache", w2.Header().Get("Cache-Control"), "304 must also carry Cache-Control")
 }
 
 // TestEndpointsStatusHandler_ETag304OnMatch is the same contract for the
@@ -51,6 +54,7 @@ func TestEndpointsStatusHandler_ETag304OnMatch(t *testing.T) {
 	require.Equal(t, http.StatusOK, w1.Code)
 	etag := w1.Header().Get("ETag")
 	require.NotEmpty(t, etag)
+	assert.Equal(t, "private, no-cache", w1.Header().Get("Cache-Control"))
 
 	req2 := httptest.NewRequest(http.MethodGet, "/internal/status/endpoints", nil)
 	req2.Header.Set("If-None-Match", etag)
@@ -60,6 +64,7 @@ func TestEndpointsStatusHandler_ETag304OnMatch(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, w2.Code)
 	assert.Equal(t, etag, w2.Header().Get("ETag"))
 	assert.Empty(t, w2.Body.Bytes())
+	assert.Equal(t, "private, no-cache", w2.Header().Get("Cache-Control"))
 }
 
 // TestModelsStatusHandler_ETag304OnMatch is the same contract for the
@@ -76,6 +81,7 @@ func TestModelsStatusHandler_ETag304OnMatch(t *testing.T) {
 	require.Equal(t, http.StatusOK, w1.Code)
 	etag := w1.Header().Get("ETag")
 	require.NotEmpty(t, etag)
+	assert.Equal(t, "private, no-cache", w1.Header().Get("Cache-Control"))
 
 	req2 := httptest.NewRequest(http.MethodGet, "/internal/status/models", nil)
 	req2.Header.Set("If-None-Match", etag)
@@ -85,6 +91,7 @@ func TestModelsStatusHandler_ETag304OnMatch(t *testing.T) {
 	assert.Equal(t, http.StatusNotModified, w2.Code)
 	assert.Equal(t, etag, w2.Header().Get("ETag"))
 	assert.Empty(t, w2.Body.Bytes())
+	assert.Equal(t, "private, no-cache", w2.Header().Get("Cache-Control"))
 }
 
 // TestStatusHandler_ETagMismatchReturns200 guards the inverse: a non-matching
@@ -101,6 +108,43 @@ func TestStatusHandler_ETagMismatchReturns200(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.NotEmpty(t, w.Body.Bytes())
+}
+
+// TestStatusHandler_ETagIsWeakAndRoundTrips confirms the ETag the server emits
+// is a weak validator (W/"..." prefix) and that a client echoing it verbatim
+// still gets a 304. This is the dashboard polling contract under the new
+// weak-validator wire format.
+func TestStatusHandler_ETagIsWeakAndRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	app := seedWireShapeApp(t)
+
+	req1 := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w1 := httptest.NewRecorder()
+	app.statusHandler(w1, req1)
+	require.Equal(t, http.StatusOK, w1.Code)
+
+	etag := w1.Header().Get("ETag")
+	require.NotEmpty(t, etag)
+	assert.True(t, strings.HasPrefix(etag, `W/"`),
+		"status ETag must be a weak validator (W/\"...\"), got: %q", etag)
+
+	// Echo the W/"..." value back exactly as a client would.
+	req2 := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	req2.Header.Set("If-None-Match", etag)
+	w2 := httptest.NewRecorder()
+	app.statusHandler(w2, req2)
+	assert.Equal(t, http.StatusNotModified, w2.Code)
+
+	// And confirm a hypothetical strong-form client validator with the same
+	// opaque-tag also matches under RFC 7232 weak comparison.
+	strong := strings.TrimPrefix(etag, "W/")
+	req3 := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	req3.Header.Set("If-None-Match", strong)
+	w3 := httptest.NewRecorder()
+	app.statusHandler(w3, req3)
+	assert.Equal(t, http.StatusNotModified, w3.Code,
+		"strong If-None-Match with same opaque-tag must match weak current ETag")
 }
 
 // TestStatusResponse_ETagStableAcrossRelativeTimeChurn is the load-bearing
@@ -240,4 +284,38 @@ func TestEtagMatches_AcceptsStar(t *testing.T) {
 	assert.False(t, etagMatches("", `"anything"`))
 	assert.True(t, etagMatches(`"x", "y"`, `"y"`))
 	assert.False(t, etagMatches(`"x"`, `"y"`))
+}
+
+// TestEtagMatches_WeakComparison locks in RFC 7232 weak comparison now that
+// the status ETag is a weak validator. The opaque-tag is compared after
+// stripping the W/ prefix from BOTH sides, so:
+//   - client echoes our W/"abc" verbatim -> match (the dashboard polling case),
+//   - client sends a strong "abc" against our weak W/"abc" -> match,
+//   - client sends a different opaque-tag -> no match regardless of weak/strong.
+//
+// Strong-to-strong and weak-to-weak fall out of the same strip-then-compare.
+func TestEtagMatches_WeakComparison(t *testing.T) {
+	t.Parallel()
+
+	const cur = `W/"abc"`
+	assert.True(t, etagMatches(`W/"abc"`, cur), "weak-to-weak same tag must match")
+	assert.True(t, etagMatches(`"abc"`, cur), "strong client against weak current must match under weak comparison")
+	assert.True(t, etagMatches(`W/"abc", W/"zzz"`, cur), "weak match in a multi-validator list")
+	assert.True(t, etagMatches(`"zzz", "abc"`, cur), "strong match in a multi-validator list")
+	assert.False(t, etagMatches(`W/"zzz"`, cur), "different opaque-tag must not match")
+	assert.False(t, etagMatches(`"zzz"`, cur), "different opaque-tag must not match even in strong form")
+}
+
+// TestEtagMatches_OversizedHeaderShortCircuits confirms an oversized
+// If-None-Match is treated as no-match rather than parsed, so a multi-MB
+// header cannot drive an unbounded split. The handler falls through to a full
+// 200 instead. This complements the server-level MaxHeaderBytes cap with a
+// handler-level bound that's independent of http.Server configuration.
+func TestEtagMatches_OversizedHeaderShortCircuits(t *testing.T) {
+	t.Parallel()
+
+	cur := `W/"abc"`
+	huge := `W/"` + strings.Repeat("a", 1<<16) + `"`
+	assert.False(t, etagMatches(huge, cur), "oversized If-None-Match must not match")
+	assert.False(t, etagMatches("", cur), "empty If-None-Match must not match")
 }

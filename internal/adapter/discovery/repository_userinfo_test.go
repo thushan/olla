@@ -9,19 +9,44 @@ import (
 	"github.com/thushan/olla/internal/config"
 )
 
-// Config-validation half: an endpoint URL containing user:pass@host
-// must be rejected at load time, with an error that points the operator at
-// the auth config block. The display-side sanitisation (stripping userinfo
-// from the url field surfaced in JSON) lives in the handlers; this is the
-// hard gate that prevents credentials ever entering the runtime URLString.
+// Config-validation half: an endpoint URL containing user:pass@host must be
+// rejected at load time, with an error that points the operator at the auth
+// config block AND spells out the exact rewrite so a failed boot is a
+// copy-paste fix. The display-side sanitisation (stripping userinfo from the
+// url field surfaced in JSON) lives in the handlers; this is the hard gate
+// that prevents credentials ever entering the runtime URLString.
+//
+// The error text must never echo the operator's real username or password:
+// a username can itself be a secret in API-key-as-username schemes, so both
+// are redacted to placeholders. Only the non-secret host/port/path survive
+// verbatim, kept so the rewrite stays copy-pasteable.
 func TestEndpointConfigValidation_RejectsUserinfo(t *testing.T) {
 	cases := []struct {
 		name string
 		url  string
+		// wantContains are substrings the rewritten error must carry.
+		wantContains []string
+		// wantAbsent are secrets that must never appear in the error text.
+		wantAbsent []string
 	}{
-		{"user and password", "https://alice:s3cr3t@ollama.local:11434"},
-		{"user only", "https://token@ollama.local:11434"},
-		{"userinfo with path and query", "http://u:p@host:8080/v1?x=1"},
+		{
+			name:         "user and password",
+			url:          "https://alice:s3cr3t@ollama.local:11434",
+			wantContains: []string{"ollama.local:11434", "type: basic", "<your username>", "<your password>"},
+			wantAbsent:   []string{"alice", "s3cr3t"},
+		},
+		{
+			name:         "user only",
+			url:          "https://token@ollama.local:11434",
+			wantContains: []string{"ollama.local:11434", "type: basic", "<your username>"},
+			wantAbsent:   []string{"token"},
+		},
+		{
+			name:         "userinfo with path and query",
+			url:          "http://u:p@host:8080/v1?x=1",
+			wantContains: []string{"host:8080", "type: basic", "<your username>", "<your password>"},
+			wantAbsent:   []string{"u:p@", ":p@"},
+		},
 	}
 
 	for _, tc := range cases {
@@ -45,6 +70,21 @@ func TestEndpointConfigValidation_RejectsUserinfo(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), "credentials") {
 				t.Errorf("error should mention credentials, got: %v", err)
+			}
+			// The fix should be spelled out: the username/password_file
+			// variants so secrets can be kept out of config too.
+			if !strings.Contains(err.Error(), "username_file") {
+				t.Errorf("error should mention username_file for secret-file resolution, got: %v", err)
+			}
+			for _, want := range tc.wantContains {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error should contain %q, got: %v", want, err)
+				}
+			}
+			for _, secret := range tc.wantAbsent {
+				if strings.Contains(err.Error(), secret) {
+					t.Errorf("error must not echo the real credential %q, got: %v", secret, err)
+				}
 			}
 		})
 	}

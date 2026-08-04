@@ -207,7 +207,7 @@ func TestGetRecentModels_SortsByRecencyNotName(t *testing.T) {
 		{Name: "charlie", LastSeenAt: &charlie},
 	}
 
-	got := app.getRecentModels(models, 10)
+	got := app.getRecentModels(models)
 
 	want := []string{"charlie", "bravo", "alpha"}
 	if len(got) != len(want) {
@@ -247,7 +247,7 @@ func TestGetRecentModels_Deterministic(t *testing.T) {
 		cp := make([]ModelSummary, len(base))
 		copy(cp, base)
 
-		got := app.getRecentModels(cp, 10)
+		got := app.getRecentModels(cp)
 		names := namesOf(got)
 
 		if first == nil {
@@ -684,5 +684,316 @@ func TestModelsStatusHandler_ETagStableAndAliasAware(t *testing.T) {
 	app.modelsStatusHandler(w3, req)
 	if got := w3.Header().Get("ETag"); got == etag1 {
 		t.Errorf("ETag must change when alias set changes, both = %q", etag1)
+	}
+}
+
+// richModelDetails is the rich half of the asymmetric fixture used by the
+// determinism and prefer-non-empty regression tests below: a model with full
+// scalar metadata. Returning a fresh copy each call keeps tests independent.
+func richModelDetails() *domain.ModelDetails {
+	family := "llama"
+	params := "8B"
+	quant := "Q4_0"
+	mtype := "llm"
+	return &domain.ModelDetails{
+		Family:            &family,
+		ParameterSize:     &params,
+		QuantizationLevel: &quant,
+		Type:              &mtype,
+	}
+}
+
+const (
+	richModelSize   int64 = 4 * 1024 * 1024 * 1024 // 4 GiB
+	richModelQuant        = "Q4_0"
+	richModelFamily       = "llama"
+	richModelParams       = "8B"
+	richModelType         = "llm"
+)
+
+// wantRichModelSummary is the single source of truth for what the merged
+// summary must equal after prefer-non-empty merging, regardless of map
+// iteration order. Both endpoints host the same model name; the rich one
+// supplies Family/Params/Quant/Type/Size/Capabilities, the minimal one
+// supplies none and must never overwrite a non-empty value.
+func wantRichModelSummary() ModelSummary {
+	return ModelSummary{
+		Name:         "shared-model",
+		Type:         richModelType,
+		Family:       richModelFamily,
+		Params:       richModelParams,
+		Quant:        richModelQuant,
+		Size:         "4.00 GB",
+		Capabilities: []string{"text_generation", "chat"},
+	}
+}
+
+// assertSummaryEqualsRich verifies the merged metadata equals the rich
+// endpoint's values, not the minimal endpoint's empty ones. Field-by-field
+// so a failure pinpoints exactly which scalar flipped.
+func assertSummaryEqualsRich(t *testing.T, s ModelSummary) {
+	t.Helper()
+	want := wantRichModelSummary()
+	if s.Family != want.Family {
+		t.Errorf("Family = %q, want rich %q (prefer-non-empty)", s.Family, want.Family)
+	}
+	if s.Params != want.Params {
+		t.Errorf("Params = %q, want rich %q (prefer-non-empty)", s.Params, want.Params)
+	}
+	if s.Quant != want.Quant {
+		t.Errorf("Quant = %q, want rich %q (prefer-non-empty)", s.Quant, want.Quant)
+	}
+	if s.Type != want.Type {
+		t.Errorf("Type = %q, want rich %q (prefer-non-empty)", s.Type, want.Type)
+	}
+	if s.Size != want.Size {
+		t.Errorf("Size = %q, want rich %q (prefer-non-empty)", s.Size, want.Size)
+	}
+	if !equalStrings(s.Capabilities, want.Capabilities) {
+		t.Errorf("Capabilities = %v, want rich %v (prefer-non-empty)", s.Capabilities, want.Capabilities)
+	}
+}
+
+// TestBuildModelSummaries_DeterministicAsymmetricFixture is the regression
+// for the flapping-metadata bug: a static asymmetric two-endpoint fleet
+// (the same model hosted once with rich metadata, once with minimal/empty
+// metadata) must produce byte-identical summaries - same Family, Params,
+// Quant, Type, Size, Capabilities, same endpoint order, same ETag - across
+// at least 50 builds. Before the fix, Go map iteration randomisation picked
+// whichever endpoint was visited first to supply the scalar metadata, so the
+// summary and its ETag flipped on roughly 3 in every 20 polls despite no real
+// state change. This test would have caught the original regression that
+// silently undid commit c709d5c.
+func TestBuildModelSummaries_DeterministicAsymmetricFixture(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{}
+	now := time.Now()
+
+	richURL := "http://node-rich:11434"
+	minimalURL := "http://node-minimal:11434"
+
+	modelMap := map[string]*domain.EndpointModels{
+		richURL: {
+			Models: []*domain.ModelInfo{{
+				Name:     "shared-model",
+				Type:     richModelType,
+				Size:     richModelSize,
+				LastSeen: now,
+				Details:  richModelDetails(),
+			}},
+		},
+		minimalURL: {
+			Models: []*domain.ModelInfo{{
+				// Minimal endpoint: no Details, no Type, no Size. Before the
+				// merge fix, reaching this endpoint first left the summary
+				// with empty scalar metadata for the whole fleet.
+				Name:     "shared-model",
+				LastSeen: now.Add(-time.Minute),
+			}},
+		},
+	}
+	endpointNames := map[string]string{
+		richURL:    "node-rich",
+		minimalURL: "node-minimal",
+	}
+	endpointIDs := map[string]string{
+		richURL:    stableEndpointID(richURL),
+		minimalURL: stableEndpointID(minimalURL),
+	}
+
+	var first *ModelSummary
+	var firstETag string
+	const iterations = 60
+
+	for range iterations {
+		summaries := app.buildModelSummaries(modelMap, endpointNames, endpointIDs, nil)
+		if len(summaries) != 1 {
+			t.Fatalf("expected 1 summary, got %d", len(summaries))
+		}
+		s := summaries[0]
+
+		// Prefer-non-empty: the merged metadata must equal the rich endpoint's
+		// values every iteration, regardless of which endpoint map iteration
+		// happened to visit first (which the sort now makes deterministic, but
+		// the assertion stands as the behavioural contract).
+		assertSummaryEqualsRich(t, s)
+
+		// Endpoint order must be stable (sorted by name, then ID).
+		wantEndpoints := []string{"node-minimal", "node-rich"}
+		if !equalStrings(s.Endpoints, wantEndpoints) {
+			t.Errorf("Endpoints = %v, want %v", s.Endpoints, wantEndpoints)
+		}
+		wantIDs := []string{stableEndpointID(minimalURL), stableEndpointID(richURL)}
+		if !equalStrings(s.EndpointIDs, wantIDs) {
+			t.Errorf("EndpointIDs = %v, want %v", s.EndpointIDs, wantIDs)
+		}
+
+		// ETag must be byte-identical across iterations. Build the same
+		// response projection the handler hashes and compare directly.
+		resp := &ModelStatusResponse{
+			TotalModels:    1,
+			TotalEndpoints: 2,
+			ModelsByFamily: app.groupModelsByFamily(summaries),
+			RecentModels:   app.getRecentModels(append([]ModelSummary(nil), summaries...)),
+		}
+		resp.TotalFamilies = len(resp.ModelsByFamily)
+		etag := hashModelStatusResponse(resp)
+
+		if first == nil {
+			cp := s
+			first = &cp
+			firstETag = etag
+			continue
+		}
+		if s.Family != first.Family || s.Params != first.Params || s.Quant != first.Quant ||
+			s.Type != first.Type || s.Size != first.Size ||
+			!equalStrings(s.Capabilities, first.Capabilities) ||
+			!equalStrings(s.Endpoints, first.Endpoints) ||
+			!equalStrings(s.EndpointIDs, first.EndpointIDs) {
+			t.Fatalf("non-deterministic summary at iteration %d:\n got=%+v\nwant=%+v", iterations, s, *first)
+		}
+		if etag != firstETag {
+			t.Fatalf("ETag churned across iterations: got %q, want %q", etag, firstETag)
+		}
+	}
+}
+
+// TestBuildModelSummaries_PrefersNonEmptyRegardlessOfSortedOrder proves the
+// prefer-non-empty merge holds in BOTH sorted visitation orders: the rich
+// endpoint can be alphabetically first (its summary seeds the map directly)
+// or alphabetically second (the minimal endpoint seeds first and the merge
+// backfills from the rich one). Both orders must yield the rich metadata.
+// This pins the contract independent of the URL-sort tie-breaker.
+func TestBuildModelSummaries_PrefersNonEmptyRegardlessOfSortedOrder(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{}
+	now := time.Now()
+
+	// Two parallel fixtures: rich URL sorts AFTER minimal in fixture A
+	// (minimal seeds, merge backfills) and BEFORE minimal in fixture B
+	// (rich seeds directly). Both must converge to rich metadata.
+	cases := []struct {
+		name       string
+		richURL    string
+		minimalURL string
+	}{
+		{"rich_sorts_after_minimal", "http://z-rich:11434", "http://a-minimal:11434"},
+		{"rich_sorts_before_minimal", "http://a-rich:11434", "http://z-minimal:11434"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			modelMap := map[string]*domain.EndpointModels{
+				tc.richURL: {
+					Models: []*domain.ModelInfo{{
+						Name:     "shared-model",
+						Type:     richModelType,
+						Size:     richModelSize,
+						LastSeen: now,
+						Details:  richModelDetails(),
+					}},
+				},
+				tc.minimalURL: {
+					Models: []*domain.ModelInfo{{
+						Name:     "shared-model",
+						LastSeen: now.Add(-time.Minute),
+					}},
+				},
+			}
+			endpointNames := map[string]string{
+				tc.richURL:    "rich-node",
+				tc.minimalURL: "minimal-node",
+			}
+			endpointIDs := map[string]string{
+				tc.richURL:    stableEndpointID(tc.richURL),
+				tc.minimalURL: stableEndpointID(tc.minimalURL),
+			}
+
+			summaries := app.buildModelSummaries(modelMap, endpointNames, endpointIDs, nil)
+			if len(summaries) != 1 {
+				t.Fatalf("expected 1 summary, got %d", len(summaries))
+			}
+			assertSummaryEqualsRich(t, summaries[0])
+		})
+	}
+}
+
+// TestSortModelSummaryEndpoints_DuplicateNameStableByID is the regression for
+// the ETag churn caused by duplicate display names: when two endpoints share
+// a Name, sorting by Name alone leaves their relative order at the mercy of
+// the input slice (which comes from randomised map iteration). The ID
+// tie-break makes the order deterministic across polls. Repeated sorts of a
+// shuffled input must converge to the same order every time.
+func TestSortModelSummaryEndpoints_DuplicateNameStableByID(t *testing.T) {
+	t.Parallel()
+
+	// Two endpoints with identical Names but distinct IDs. Whatever order
+	// they start in, the sorted output must always place the lexicographically
+	// smaller ID first.
+	name := "ollama-cluster"
+	idA := "aaaaaaaa"
+	idB := "zzzzzzzz"
+
+	inputs := [][]endpointNameID{
+		{{Name: name, ID: idB}, {Name: name, ID: idA}},
+		{{Name: name, ID: idA}, {Name: name, ID: idB}},
+	}
+
+	wantNames := []string{name, name}
+	wantIDs := []string{idA, idB}
+
+	for i, in := range inputs {
+		summary := &ModelSummary{
+			Name:        "model",
+			Endpoints:   []string{in[0].Name, in[1].Name},
+			EndpointIDs: []string{in[0].ID, in[1].ID},
+		}
+		sortModelSummaryEndpoints(summary)
+
+		if !equalStrings(summary.Endpoints, wantNames) {
+			t.Errorf("input %d: Endpoints = %v, want %v", i, summary.Endpoints, wantNames)
+		}
+		if !equalStrings(summary.EndpointIDs, wantIDs) {
+			t.Errorf("input %d: EndpointIDs = %v, want %v (ID tie-break on duplicate Name)", i, summary.EndpointIDs, wantIDs)
+		}
+	}
+}
+
+// TestHashModelStatusResponse_StableAcrossCalls is the direct regression for
+// ETag determinism: repeated hashes of the same ModelStatusResponse must
+// produce the same value. Maps inside the response (ModelsByFamily) have
+// randomised iteration order, so the hash must sort family keys before
+// hashing - exactly as encoding/json does on the wire.
+func TestHashModelStatusResponse_StableAcrossCalls(t *testing.T) {
+	t.Parallel()
+
+	seen := time.Now()
+	resp := &ModelStatusResponse{
+		TotalModels:    2,
+		TotalEndpoints: 2,
+		TotalFamilies:  2,
+		ModelsByFamily: map[string][]string{
+			"llama":   {"llama3", "llama2"},
+			"mistral": {"mistral"},
+			"unknown": {"phi3"},
+		},
+		RecentModels: []ModelSummary{
+			{Name: "llama3", Family: "llama", LastSeenAt: &seen},
+			{Name: "phi3", LastSeenAt: &seen},
+		},
+	}
+
+	first := hashModelStatusResponse(resp)
+	if first == "" {
+		t.Fatal("expected non-empty ETag")
+	}
+	for range 50 {
+		if got := hashModelStatusResponse(resp); got != first {
+			t.Fatalf("hashModelStatusResponse not stable: got %q, want %q", got, first)
+		}
 	}
 }

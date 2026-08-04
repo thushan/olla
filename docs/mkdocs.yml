@@ -115,6 +115,7 @@ nav:
       - FAQ: faq.md
       - Notes: notes/overview.md
       - Usage: usage.md
+      - Release Notes: about/release-notes.md
       - About: about.md
       - Compare:
         - Overview: compare/overview.md

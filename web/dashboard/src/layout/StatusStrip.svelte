@@ -1,9 +1,8 @@
 <script lang="ts">
   import { overview } from '../lib/stores/overview.svelte';
-  import { endpoints } from '../lib/stores/endpoints.svelte';
   import { fmtUptime } from '../lib/format';
   import { getNow as liveNow } from '../lib/clock.svelte';
-  import type { EndpointSummary } from '../lib/types';
+  import type { EndpointResponse } from '../lib/types';
 
   // The strip renders from whatever the overview store last saw. Before the
   // first poll lands, render dashes so the operator can see "pending" rather
@@ -22,21 +21,31 @@
     overview.status === 'stale' ? 'stale' : overview.status === 'error' ? 'unreachable' : null
   );
 
+  // No-traffic signal mirroring OverviewPanel: the has_traffic flag is
+  // always present, with total_requests===0 as a fallback for older backends.
+  // Used to drop the Resp. rate cell to a no-data dash so the strip matches
+  // the OverviewPanel tile rather than showing a literal "N/A".
+  const hasTraffic = $derived(sys?.has_traffic === true || (sys?.total_requests ?? 0) > 0);
+
   // "degraded" on its own tells the operator nothing actionable. Derive a
   // short reason from real endpoint data (offline count) rather than
   // fabricate one; when healthy or when we have no endpoint data yet, say
   // nothing so the strip stays quiet. Breaker state is deliberately not
   // consulted: it trips only on health-probe failures, not live proxy
   // traffic, so it would under-report real failures.
-  const endpointList = $derived(endpoints.data?.endpoints ?? []);
-  const degradedReason = $derived(reasonFor(sys?.status, endpointList));
+  //
+  // Source matters: the endpoints store is pausable (stopped when the
+  // EndpointsPanel is unmounted) so its count can freeze mid-outage. The
+  // overview payload's embedded endpoints array is always fresh because the
+  // overview store runs for the lifetime of the dashboard, and the backend
+  // populates it from the same registry on each /internal/status tick.
+  const overviewEndpoints = $derived(overview.data?.endpoints ?? []);
+  const degradedReason = $derived(reasonFor(sys?.status, overviewEndpoints));
 
-  function reasonFor(status: string | undefined, list: EndpointSummary[]): string | null {
+  function reasonFor(status: string | undefined, list: EndpointResponse[]): string | null {
     if (!status || status === 'healthy' || !list.length) return null;
     const offline = list.filter((e) => e.status === 'offline' || e.status === 'critical').length;
-    const parts: string[] = [];
-    if (offline) parts.push(`${offline} offline`);
-    return parts.length ? parts.join(', ') : null;
+    return offline > 0 ? `${offline} offline` : null;
   }
 
   // uptime is derived from start_time each tick so the figure stays live
@@ -74,7 +83,7 @@
   </div>
   <div class="status-cell">
     <dt>Resp. rate</dt>
-    <dd title="Counts any streamed response, regardless of HTTP status">{sys ? sys.success_rate : '—'}</dd>
+    <dd title="Counts any streamed response, regardless of HTTP status">{#if sys}{#if hasTraffic}{sys.success_rate}{:else}<span class="dash">—</span>{/if}{:else}—{/if}</dd>
   </div>
   <div class="status-cell">
     <dt>Avg latency</dt>

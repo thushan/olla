@@ -76,8 +76,11 @@ async function refreshBoth(endpointList: Record<string, unknown>[]) {
 
 // Typed variant for the new-tile coverage: full StatusResponse and
 // EndpointSummary fixtures, no `any`, so this compiles under strict TS and
-// stays in lockstep with the contract if it shifts.
-function buildStatus(over: Partial<StatusResponse> = {}): StatusResponse {
+// stays in lockstep with the contract if it shifts. Each top-level override
+// is a deep partial: callers override just the fields they care about and the
+// spreads below fill in the rest from the defaults.
+type DeepPartial<T> = { [K in keyof T]?: Partial<T[K]> };
+function buildStatus(over: DeepPartial<StatusResponse> = {}): StatusResponse {
   const violations: SecurityViolation = { rate_limits: 3, size_limits: 4, ...over.security?.violations };
   const security: SecuritySummary = {
     status: 'normal',
@@ -104,6 +107,7 @@ function buildStatus(over: Partial<StatusResponse> = {}): StatusResponse {
       total_requests: 40,
       total_failures: 0,
       security_violations: 7,
+      has_traffic: true,
       ...over.system,
     },
   };
@@ -452,5 +456,131 @@ describe('OverviewPanel system-status tile (profile)', () => {
     const tile = tileByLabel('System status');
     expect(tile).toBeTruthy();
     expect(tile!.querySelector('.sub')?.textContent).toMatch(/balanced profile/);
+  });
+});
+
+describe('OverviewPanel banner isolation from panel dim', () => {
+  // Structural regression: opacity/filter on an ancestor compound down the
+  // subtree, so a CSS override on .banner is a no-op. The banner must live
+  // OUTSIDE the [data-state]-bearing wrapper to stay at full contrast during
+  // an outage. Assert the DOM structure, not computed style - jsdom has no
+  // layout, and the bug was exactly that the banner's own opacity was 1
+  // while its effective alpha was still dimmed by the ancestor.
+  it('renders the StatusBanner as a sibling of, not inside, the data-state wrapper', async () => {
+    // Force the panel into the stale state by driving the overview store to
+    // an error response, then asserting structure.
+    global.fetch = vi.fn(async () => jsonResponse({ system: { status: 'healthy' } }));
+    overview.refresh();
+    // Any completed fetch leaves overview.status reflecting the response; we
+    // just need the panel mounted so its DOM is queryable. Drive it stale by
+    // forcing the store's error path through a failed fetch on refresh.
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    // Plant stale data and force the store status to stale so the wrapper
+    // carries data-state='stale' and the banner renders.
+    await refreshTyped(buildStatus(), [buildEndpoint({ name: 'ep' })]);
+    // The store exposes status but no setter; swap fetch to a 500 and refresh
+    // to flip status to 'error', which the panel maps to data-state='error'.
+    global.fetch = vi.fn(async () => ({ status: 500, ok: false, headers: { get: () => null } }));
+    overview.refresh();
+    await vi.waitFor(() => expect(overview.status === 'error' || overview.status === 'stale').toBe(true));
+    flushSync();
+
+    const panel = document.getElementById('panel-overview')!;
+    expect(panel).toBeTruthy();
+    const dimmed = panel.querySelector('[data-state="stale"], [data-state="error"]');
+    expect(dimmed).toBeTruthy();
+    expect(dimmed!.getAttribute('data-state')).toMatch(/stale|error/);
+
+    const banner = panel.querySelector('.banner');
+    expect(banner).toBeTruthy();
+    // The banner must NOT be inside the dimmed wrapper - it should be a
+    // sibling of it within the panel root.
+    expect(dimmed!.contains(banner)).toBe(false);
+    expect(banner!.parentElement).toBe(panel);
+  });
+});
+
+describe('OverviewPanel no-traffic tile states', () => {
+  // When the backend reports has_traffic=false the response rate arrives as
+  // "N/A" and success_rate derived numbers become meaningless. The tiles must
+  // drop to a no-data caption rather than present "N/A" / "100% of traffic".
+
+  it('renders a dash and "no traffic yet" on the Response rate tile when has_traffic is false', async () => {
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshTyped(
+      buildStatus({
+        system: {
+          success_rate: 'N/A',
+          total_requests: 0,
+          total_failures: 0,
+          has_traffic: false,
+        },
+      }),
+      [buildEndpoint({ name: 'ep', request_count: 0 })]
+    );
+    // refreshTyped's default sentinel keys on system.status, which stays
+    // 'healthy' across these tests and so resolves on the prior test's data.
+    // Wait specifically for the field under test before reading the DOM.
+    await vi.waitFor(() => expect(overview.data?.system?.has_traffic).toBe(false));
+    flushSync();
+
+    const tile = tileByLabel('Response rate');
+    expect(tile).toBeTruthy();
+    const value = tile!.querySelector('.value')?.textContent?.trim();
+    expect(value).toContain('—');
+    expect(value).not.toContain('N/A');
+    expect(tile!.querySelector('.sub')?.textContent?.trim()).toMatch(/no traffic yet/);
+  });
+
+  it('renders "no traffic yet" on the Total failures tile sub when has_traffic is false', async () => {
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshTyped(
+      buildStatus({
+        system: {
+          success_rate: 'N/A',
+          total_requests: 0,
+          total_failures: 0,
+          has_traffic: false,
+        },
+      }),
+      [buildEndpoint({ name: 'ep', request_count: 0 })]
+    );
+    await vi.waitFor(() => expect(overview.data?.system?.has_traffic).toBe(false));
+    flushSync();
+
+    const tile = tileByLabel('Total failures');
+    expect(tile).toBeTruthy();
+    const sub = tile!.querySelector('.sub')?.textContent?.trim();
+    // Must not show "100.0% of traffic" - the regression that motivated this.
+    expect(sub).toMatch(/no traffic yet/);
+    expect(sub).not.toMatch(/of traffic/);
+  });
+
+  it('still shows the live rate and failure percentage once traffic arrives', async () => {
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+
+    await refreshTyped(
+      buildStatus({
+        system: { success_rate: '95.0%', total_requests: 100, total_failures: 5, has_traffic: true },
+      }),
+      [buildEndpoint({ name: 'ep', request_count: 100 })]
+    );
+    await vi.waitFor(() => expect(overview.data?.system?.success_rate).toBe('95.0%'));
+    flushSync();
+
+    const rateTile = tileByLabel('Response rate');
+    expect(rateTile!.querySelector('.value')?.textContent?.trim()).toBe('95.0%');
+    expect(rateTile!.querySelector('.sub')?.textContent?.trim()).toMatch(/failures logged/);
+
+    const failTile = tileByLabel('Total failures');
+    // 100 - 95.0 = 5.0% of traffic.
+    expect(failTile!.querySelector('.sub')?.textContent?.trim()).toBe('5.0% of traffic');
   });
 });

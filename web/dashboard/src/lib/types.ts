@@ -46,6 +46,11 @@ export interface SystemSummary {
   security_violations: number;
   total_requests: number;
   total_failures: number;
+  // Lets the dashboard branch on the no-traffic state without guessing from
+  // a "0%" success rate. Always emitted by the backend (no omitempty); false
+  // on a fresh boot, flips true once any proxy request has been counted.
+  // When false, success_rate arrives as "N/A" rather than "0%".
+  has_traffic: boolean;
 }
 
 export interface EndpointModelsResponse {

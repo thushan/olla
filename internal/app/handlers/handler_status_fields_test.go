@@ -156,6 +156,154 @@ func TestStatusHandler_StartTimeAbsolute(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// buildSystemStatusApp is a minimal Application wired only for the
+// /internal/status system summary, parameterised by endpoint health and
+// proxy traffic so the status-semantics tests below can sweep combinations
+// without rebuilding the whole seed each time.
+func buildSystemStatusApp(t *testing.T, endpoints []*domain.Endpoint, proxyStats ports.ProxyStats) *Application {
+	t.Helper()
+	return &Application{
+		repository:     &mockStatusEndpointRepository{endpoints: endpoints},
+		statsCollector: &mockStatusStatsCollector{proxyStats: proxyStats},
+		modelRegistry:  &mockStatusModelRegistry{},
+		StartTime:      time.Now(),
+		Config:         &config.Config{Proxy: config.ProxyConfig{Engine: "olla", Profile: "balanced", LoadBalancer: "round_robin"}},
+	}
+}
+
+func allHealthyEndpoints() []*domain.Endpoint {
+	return []*domain.Endpoint{
+		{Name: "a", Type: "ollama", URLString: "http://a:11434", Status: domain.StatusHealthy, Priority: 1},
+		{Name: "b", Type: "ollama", URLString: "http://b:11434", Status: domain.StatusHealthy, Priority: 1},
+	}
+}
+
+// Regression: a fresh boot with every endpoint healthy and zero proxy
+// requests previously reported status "critical" (and success_rate "0%")
+// because the legacy < 90.0 success-rate clause fired on the no-traffic
+// zero. Status must now derive from endpoint health alone, success_rate
+// must be the explicit no-data value, and has_traffic must be false.
+func TestStatusHandler_FreshBootAllHealthy_NotCritical(t *testing.T) {
+	app := buildSystemStatusApp(t, allHealthyEndpoints(), ports.ProxyStats{})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w := httptest.NewRecorder()
+	app.statusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	sys, _ := raw["system"].(map[string]interface{})
+	require.NotNil(t, sys)
+
+	assert.Equal(t, statusHealthy, sys["status"], "fresh boot with all endpoints healthy must not report critical")
+	assert.Equal(t, "N/A", sys["success_rate"], "success_rate must be the no-data value when there is no traffic")
+	hasTraffic, ok := sys["has_traffic"].(bool)
+	require.True(t, ok, "has_traffic must be present as a bool")
+	assert.False(t, hasTraffic, "has_traffic must be false on zero traffic")
+}
+
+// Partial-health fleet with no traffic derives status from endpoint health
+// alone: below 50% healthy is critical, between 50% and 80% is degraded.
+// The absent success rate must not pull a partially-healthy fleet into a
+// harsher band than the traffic-present path would.
+func TestStatusHandler_PartialHealthZeroTraffic_StatusFromHealth(t *testing.T) {
+	endpoints := []*domain.Endpoint{
+		{Name: "up", Type: "ollama", URLString: "http://up:11434", Status: domain.StatusHealthy, Priority: 1},
+		{Name: "down1", Type: "ollama", URLString: "http://d1:11434", Status: domain.StatusUnhealthy, Priority: 1},
+		{Name: "down2", Type: "ollama", URLString: "http://d2:11434", Status: domain.StatusUnhealthy, Priority: 1},
+	}
+	app := buildSystemStatusApp(t, endpoints, ports.ProxyStats{})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w := httptest.NewRecorder()
+	app.statusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	sys, _ := raw["system"].(map[string]interface{})
+	require.NotNil(t, sys)
+
+	assert.Equal(t, statusCritical, sys["status"], "1/3 healthy is below 0.5 so status comes from health alone")
+	assert.Equal(t, "N/A", sys["success_rate"])
+	assert.False(t, sys["has_traffic"].(bool))
+}
+
+// Traffic-present path keeps its dual thresholds: an all-healthy fleet with
+// a high failure rate still lands on critical, proving the no-traffic
+// shortcut did not silently weaken the existing verdict.
+func TestStatusHandler_TrafficHighFailureRate_CriticalDespiteHealthyEndpoints(t *testing.T) {
+	app := buildSystemStatusApp(t, allHealthyEndpoints(), ports.ProxyStats{
+		TotalRequests:      100,
+		SuccessfulRequests: 80,
+		FailedRequests:     20,
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w := httptest.NewRecorder()
+	app.statusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	sys, _ := raw["system"].(map[string]interface{})
+	require.NotNil(t, sys)
+
+	assert.Equal(t, statusCritical, sys["status"], "80% success rate is below the 90% threshold even with all endpoints healthy")
+	assert.NotEqual(t, "N/A", sys["success_rate"], "success_rate must reflect real traffic, not the no-data sentinel")
+	assert.True(t, sys["has_traffic"].(bool))
+}
+
+// Regression: an empty fleet (zero configured endpoints, zero traffic)
+// divides 0/0 to NaN inside the healthy-ratio calculation; every NaN
+// comparison is false, so the old code fell through to its default healthy
+// branch and reported a proxy with nothing to route to as healthy. A proxy
+// serving no endpoints cannot serve traffic, so this must report critical.
+func TestStatusHandler_EmptyFleetZeroTraffic_Critical(t *testing.T) {
+	app := buildSystemStatusApp(t, nil, ports.ProxyStats{})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w := httptest.NewRecorder()
+	app.statusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	sys, _ := raw["system"].(map[string]interface{})
+	require.NotNil(t, sys)
+
+	assert.Equal(t, statusCritical, sys["status"], "a fleet with zero endpoints cannot be healthy")
+	assert.Equal(t, "N/A", sys["success_rate"])
+	assert.False(t, sys["has_traffic"].(bool))
+}
+
+// Guard against the zero-traffic fix overcorrecting: a single healthy
+// endpoint with no traffic yet must still report healthy, not critical.
+func TestStatusHandler_OneHealthyEndpointZeroTraffic_Healthy(t *testing.T) {
+	endpoints := []*domain.Endpoint{
+		{Name: "solo", Type: "ollama", URLString: "http://solo:11434", Status: domain.StatusHealthy, Priority: 1},
+	}
+	app := buildSystemStatusApp(t, endpoints, ports.ProxyStats{})
+
+	req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
+	w := httptest.NewRecorder()
+	app.statusHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var raw map[string]interface{}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
+	sys, _ := raw["system"].(map[string]interface{})
+	require.NotNil(t, sys)
+
+	assert.Equal(t, statusHealthy, sys["status"], "a single healthy endpoint with no traffic yet must still report healthy")
+}
+
 // C5 mirror: the /internal/status comparator in buildUnifiedEndpoints has
 // the same missing tie-breaker as the /internal/status/endpoints one.
 // Equal-priority same-health endpoints must order by name (then URL) so
@@ -172,7 +320,7 @@ func TestBuildUnifiedEndpoints_TieBreakerStableOrder(t *testing.T) {
 
 	app := createTestStatusApplication(endpoints)
 	out := make([]EndpointResponse, len(endpoints))
-	app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil)
+	app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil, buildEndpointIDs(endpoints))
 
 	require.Len(t, out, 3)
 	assert.Equal(t, "alpha", out[0].Name, "tie-breaker must sort equal-priority same-health endpoints by name")
@@ -203,7 +351,7 @@ func TestBuildUnifiedEndpoints_TieBreakerDeterministicOnCollidingDisplayURL(t *t
 	var firstWinner string
 	for i, endpoints := range orderings {
 		out := make([]EndpointResponse, len(endpoints))
-		app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil)
+		app.buildUnifiedEndpoints(endpoints, nil, nil, out, nil, buildEndpointIDs(endpoints))
 
 		require.Len(t, out, 2)
 		assert.NotEqual(t, out[0].ID, out[1].ID)

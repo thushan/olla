@@ -52,6 +52,14 @@ type SystemSummary struct {
 	SecurityViolations int64     `json:"security_violations"`
 	TotalRequests      int64     `json:"total_requests"`
 	TotalFailures      int64     `json:"total_failures"`
+	// HasTraffic lets the dashboard branch on the no-traffic state without
+	// parsing SuccessRate. Always present (not omitempty): it is derivable from
+	// TotalRequests, which is itself always emitted, so every payload carries
+	// an explicit true/false. SuccessRate becomes "N/A" when this is false,
+	// mirroring the endpoint-level convention in handler_status_endpoints.go;
+	// previously it reported "0%" on a healthy fresh boot, which coupled with
+	// the legacy status threshold produced a misleading "critical" verdict.
+	HasTraffic bool `json:"has_traffic"`
 }
 
 type ProxySummary struct {
@@ -74,8 +82,8 @@ type EndpointResponse struct {
 	NextCheck     string                 `json:"next_check"`
 	Issues        string                 `json:"issues"`
 	URL           string                 `json:"url"`
-	// ID is a stable identifier derived from the raw (unsanitised) endpoint
-	// URL; see stableEndpointID in handler_status_endpoints.go.
+	// ID is a stable, opaque identifier derived from the SANITISED endpoint
+	// URL via buildEndpointIDs; see handler_status_endpoints.go.
 	ID          string `json:"id"`
 	Priority    int    `json:"priority"`
 	Connections int64  `json:"connections"`
@@ -163,7 +171,10 @@ func (a *Application) buildStatusResponse(snapshot *statusSnapshot) StatusRespon
 
 	response.Proxy = a.buildProxySummary(a.Config.Proxy)
 	response.System = a.buildSystemSummary(snapshot.all, snapshot.healthy, snapshot.proxyStats, snapshot.securityStats, snapshot.connectionStats, snapshot.endpointStats)
-	a.buildUnifiedEndpoints(snapshot.all, snapshot.endpointStats, snapshot.connectionStats, response.Endpoints, snapshot.endpointModels)
+	// IDs derive once from the same snapshot so every payload agrees and
+	// colliding siblings stay distinct via positional disambiguators.
+	endpointIDs := buildEndpointIDs(snapshot.all)
+	a.buildUnifiedEndpoints(snapshot.all, snapshot.endpointStats, snapshot.connectionStats, response.Endpoints, snapshot.endpointModels, endpointIDs)
 	response.Security = a.buildSecuritySummary(snapshot.securityStats)
 
 	return response
@@ -204,31 +215,63 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 		}
 	}
 
-	// ratios
-	healthyRatio := float64(len(healthy)) / float64(len(all))
-	var systemSuccessRate float64
-	if proxy.TotalRequests > 0 {
-		systemSuccessRate = float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
-	}
+	hasTraffic := proxy.TotalRequests > 0
 
 	var status string
-	switch {
-	case healthyRatio < 0.5 || systemSuccessRate < 90.0:
+	if len(all) == 0 {
+		// len(healthy)/len(all) is 0/0 = NaN with zero endpoints, and every NaN
+		// comparison below is false, so both branches below would fall through
+		// to their default healthy case. A proxy with nothing to route to
+		// cannot be healthy regardless of traffic, so this is decided before
+		// the ratio is even computed.
 		status = statusCritical
-	case healthyRatio < 0.8 || systemSuccessRate < 95.0:
-		status = statusDegraded
-	default:
-		status = statusHealthy
+	} else {
+		healthyRatio := float64(len(healthy)) / float64(len(all))
+		if hasTraffic {
+			// Dual-threshold verdict: a healthy fleet cannot mask a failing proxy
+			// and high failure rates cannot mask healthy endpoints.
+			systemSuccessRate := float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
+			switch {
+			case healthyRatio < 0.5 || systemSuccessRate < 90.0:
+				status = statusCritical
+			case healthyRatio < 0.8 || systemSuccessRate < 95.0:
+				status = statusDegraded
+			default:
+				status = statusHealthy
+			}
+		} else {
+			// Fresh boot (or no requests yet): the proxy success rate is undefined,
+			// so derive status purely from endpoint health. Without this branch a
+			// perfectly healthy zero-traffic fleet fell through to the legacy
+			// < 90.0 success-rate clause and reported critical.
+			switch {
+			case healthyRatio < 0.5:
+				status = statusCritical
+			case healthyRatio < 0.8:
+				status = statusDegraded
+			default:
+				status = statusHealthy
+			}
+		}
 	}
 
 	totalViolations := security.RateLimitViolations + security.SizeLimitViolations
+
+	// No traffic means the success rate is undefined; noTrafficSuccessRate
+	// mirrors the endpoint-level convention in handler_status_endpoints.go and
+	// stops the dashboard rendering a misleading "0%" on a fresh boot.
+	successRateStr := noTrafficSuccessRate
+	if hasTraffic {
+		systemSuccessRate := float64(proxy.SuccessfulRequests) / float64(proxy.TotalRequests) * 100.0
+		successRateStr = format.Percentage(systemSuccessRate)
+	}
 
 	return SystemSummary{
 		Version:            version.Version,
 		Commit:             version.Commit,
 		Status:             status,
 		EndpointsUp:        format.EndpointsUp(len(healthy), len(all)),
-		SuccessRate:        format.Percentage(systemSuccessRate),
+		SuccessRate:        successRateStr,
 		AvgLatency:         format.Latency(proxy.AverageLatency),
 		ActiveConnections:  totalConnections,
 		SecurityViolations: totalViolations,
@@ -237,11 +280,12 @@ func (a *Application) buildSystemSummary(all, healthy []*domain.Endpoint, proxy 
 		TotalFailures:      proxy.FailedRequests,
 		UptimeHuman:        format.Duration2(time.Since(a.StartTime)),
 		StartTime:          a.StartTime,
+		HasTraffic:         hasTraffic,
 	}
 }
 
 func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map[string]ports.EndpointStats,
-	connectionStats map[string]int64, endpoints []EndpointResponse, modelMap map[string]*domain.EndpointModels) {
+	connectionStats map[string]int64, endpoints []EndpointResponse, modelMap map[string]*domain.EndpointModels, endpointIDs map[string]string) {
 	for i, endpoint := range all {
 		url := endpoint.GetURLString()
 		stats, hasStats := statsMap[url]
@@ -283,7 +327,7 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 			NextCheck:   format.TimeUntil(endpoint.NextCheckTime),
 			Models:      modelDisco,
 			Issues:      a.getEndpointIssues(endpoint, stats, hasStats, successRate),
-			ID:          stableEndpointID(url),
+			ID:          endpointIDs[url],
 			URL:         sanitiseDisplayURL(url),
 		}
 
@@ -453,39 +497,85 @@ func hashEtagStringSlice(h hash.Hash, s []string) {
 	_, _ = h.Write(etagSep)
 }
 
-// formatEtag renders the FNV-1a sum as a quoted strong validator. Base36
-// mirrors the style of stableEndpointID so client and server identity formats
-// read the same.
-func formatEtag(h hash.Hash32) string {
-	return `"` + strconv.FormatUint(uint64(h.Sum32()), 36) + `"`
+// formatEtag renders the FNV-1a sum as a quoted WEAK validator per RFC 7232:
+// the hashed fields exclude every per-second-rendered relative string and the
+// wall-clock timestamp, so two payloads a second apart under unchanged state
+// hash identically - but the hash still intentionally omits some fields that
+// could change without changing the operator-visible answer (e.g. field
+// ordering), so it is not a true content identity. Weak is the honest claim:
+// clients may use it for If-None-Match but must not collapse two distinct
+// payloads based on byte-for-byte identity. Base36 mirrors the style of
+// stableEndpointID so client and server identity formats read the same.
+// 64-bit (not 32-bit): these ETags cover a growing, unbounded field set
+// (endpoints, models) where a 32-bit sum's collision odds stop being
+// negligible at realistic fleet sizes; stableEndpointID's 32-bit identity
+// hash is unrelated and deliberately left alone (wire-visible IDs, not
+// cache-validation hashes).
+func formatEtag(h hash.Hash64) string {
+	return `W/"` + strconv.FormatUint(h.Sum64(), 36) + `"`
 }
 
+// maxIfNoneMatchBytes bounds the size of an If-None-Match header we are willing
+// to parse. A legitimate client lists at most a handful of validators; an
+// oversized header is always pathological (or hostile), so short-circuiting it
+// stops a multi-MB If-None-Match from driving an unbounded split before the
+// server-level MaxHeaderBytes cap was in place. 1 KiB is far above any real
+// browser/curl request.
+const maxIfNoneMatchBytes = 1 << 10 // 1 KiB
+
 // etagMatches implements the If-None-Match comparison: a bare "*" matches any
-// current representation, otherwise each listed validator is compared for
-// exact equality against the response ETag. Weak validators (W/"...") are not
-// emitted by these handlers, so strong-vs-weak comparison rules do not apply.
+// current representation, otherwise each listed validator is compared using
+// weak equivalence per RFC 7232 s3.2: the W/ prefix is stripped from BOTH the
+// header value and the current ETag before comparing, so a client that echoes
+// our W/"..." verbatim matches, and a hypothetical client sending a strong
+// "..." form against our current weak value also matches. Weak equivalence is
+// the correct comparison for the If-None-Match purpose these handlers use
+// (cache freshness), and is what the spec's examples assume once the server
+// emits weak validators. The bare "*" wildcard is unchanged.
 func etagMatches(ifNoneMatch, etag string) bool {
 	if ifNoneMatch == "" {
+		return false
+	}
+	if len(ifNoneMatch) > maxIfNoneMatchBytes {
+		// An oversized If-None-Match is never a legitimate match; treat it as
+		// no match so the handler falls through to a full 200 rather than
+		// spending unbounded time splitting a multi-MB header.
 		return false
 	}
 	if ifNoneMatch == "*" {
 		return true
 	}
+	cmpCur := stripWeakPrefix(etag)
 	for _, t := range strings.Split(ifNoneMatch, ",") {
-		if strings.TrimSpace(t) == etag {
+		if stripWeakPrefix(strings.TrimSpace(t)) == cmpCur {
 			return true
 		}
 	}
 	return false
 }
 
-// writeJSONWithETag emits a buffered JSON body with a strong-validator ETag,
+// stripWeakPrefix removes the leading W/ weak-validator marker so two
+// validators can be compared by opaque-token alone, exactly as RFC 7232's
+// weak comparison rule requires. A bare * wildcard is preserved untouched so
+// the wildcard path above keeps working; this helper is only reached for the
+// per-token comparison branch.
+func stripWeakPrefix(v string) string {
+	return strings.TrimPrefix(v, "W/")
+}
+
+// writeJSONWithETag emits a buffered JSON body with a weak-validator ETag,
 // returning a bare 304 (no body, no Content-Encoding) when the client's
 // If-None-Match matches. Headers are set before WriteHeader so they reach the
 // client on both 200 and 304 paths.
 func writeJSONWithETag(w http.ResponseWriter, r *http.Request, body []byte, etag string) {
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.Header().Set("ETag", etag)
+	// private: this payload carries operator-only endpoint/traffic data, never
+	// suitable for a shared cache. no-cache (not no-store): the client may
+	// still store the body but must revalidate via If-None-Match before
+	// reusing it, which is exactly the 304 flow above/below - the two are not
+	// in tension.
+	w.Header().Set("Cache-Control", "private, no-cache")
 	if etagMatches(r.Header.Get("If-None-Match"), etag) {
 		w.WriteHeader(http.StatusNotModified)
 		return
@@ -499,7 +589,7 @@ func writeJSONWithETag(w http.ResponseWriter, r *http.Request, body []byte, etag
 // relative time-ago string. Absolute event times (start_time, health_check_at,
 // next_check_at, models.last_updated) are stable real data and stay in.
 func hashStatusResponse(resp *StatusResponse) string {
-	h := fnv.New32a()
+	h := fnv.New64a()
 	hashEtagString(h, resp.Proxy.Engine)
 	hashEtagString(h, resp.Proxy.Profile)
 	hashEtagString(h, resp.Proxy.Balancer)

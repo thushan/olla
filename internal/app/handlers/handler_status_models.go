@@ -92,13 +92,13 @@ func (a *Application) modelsStatusHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	endpointNames := make(map[string]string, len(endpoints))
-	endpointIDs := make(map[string]string, len(endpoints))
+	// IDs derive once from the endpoint set so colliding siblings get the
+	// same deterministic disambiguator the /internal/status/endpoints and
+	// /internal/status payloads emit, keeping model->endpoint click-through
+	// IDs aligned across every payload.
+	endpointIDs := buildEndpointIDs(endpoints)
 	for _, ep := range endpoints {
 		endpointNames[ep.URLString] = ep.Name
-		// Stable IDs back the dashboard's model->endpoint click-through; they
-		// must be derived from the same URL the name map uses so name and id
-		// stay in lockstep even when display names collide across endpoints.
-		endpointIDs[ep.URLString] = stableEndpointID(ep.URLString)
 	}
 
 	// Best-effort alias enrichment. Degrades to nil (no aliases surfaced)
@@ -112,7 +112,7 @@ func (a *Application) modelsStatusHandler(w http.ResponseWriter, r *http.Request
 		TotalModels:    len(allModels),
 		TotalEndpoints: len(modelMap),
 		ModelsByFamily: a.groupModelsByFamily(allModels),
-		RecentModels:   a.getRecentModels(allModels, 10),
+		RecentModels:   a.getRecentModels(allModels),
 	}
 
 	response.TotalFamilies = len(response.ModelsByFamily)
@@ -137,7 +137,22 @@ func (a *Application) buildModelSummaries(
 ) []ModelSummary {
 	uniqueModels := make(map[string]*ModelSummary, maxModelsCapacity)
 
-	for endpointURL, endpointModels := range modelMap {
+	// Iterate endpoint URLs in sorted order, not map order. modelMap's range
+	// order is randomised per call, and the multi-endpoint merge below seeds a
+	// model's scalar metadata (Family/Type/Size/Params/Quant/Capabilities)
+	// from the first endpoint visited. Without a stable visitation order the
+	// same fleet can flip a shared model between rich and empty metadata
+	// across polls, churning the ETag despite no real state change. Lowest
+	// sorted URL is the deterministic tie-breaker when two endpoints carry
+	// conflicting non-empty values for the same field.
+	endpointURLs := make([]string, 0, len(modelMap))
+	for endpointURL := range modelMap {
+		endpointURLs = append(endpointURLs, endpointURL)
+	}
+	sort.Strings(endpointURLs)
+
+	for _, endpointURL := range endpointURLs {
+		endpointModels := modelMap[endpointURL]
 		endpointName := endpointNames[endpointURL]
 		if endpointName == "" {
 			// An endpoint with no configured name, or a stale model-map
@@ -149,8 +164,10 @@ func (a *Application) buildModelSummaries(
 		}
 		// The stable ID mirrors the name-resolution path so the two arrays
 		// line up positionally. For URLs without an explicit ID entry (a
-		// stale model-map key with no repository match) the raw URL is hashed
-		// directly, mirroring the sanitised-URL fallback for the name.
+		// stale model-map key with no repository match) the base hash of the
+		// sanitised URL is used, matching the fallback the name path takes.
+		// This path has no sibling context, so it cannot disambiguate
+		// collisions - the trade-off for not silently dropping the model.
 		endpointID := endpointIDs[endpointURL]
 		if endpointID == "" {
 			endpointID = stableEndpointID(endpointURL)
@@ -160,19 +177,29 @@ func (a *Application) buildModelSummaries(
 			existing, exists := uniqueModels[model.Name]
 			if !exists {
 				uniqueModels[model.Name] = a.createModelSummary(model, []string{endpointName}, []string{endpointID})
-			} else {
-				existing.Endpoints = append(existing.Endpoints, endpointName)
-				existing.EndpointIDs = append(existing.EndpointIDs, endpointID)
-
-				// A model hosted on several endpoints must deterministically
-				// report the newest last-seen timestamp, not whichever
-				// endpoint the map iteration happened to visit last.
-				if newerModelTimestamp(model.LastSeen, existing.LastSeenAt) {
-					existing.LastSeen = format.TimeAgo(model.LastSeen)
-					ls := model.LastSeen
-					existing.LastSeenAt = &ls
-				}
+				continue
 			}
+
+			existing.Endpoints = append(existing.Endpoints, endpointName)
+			existing.EndpointIDs = append(existing.EndpointIDs, endpointID)
+
+			// A model hosted on several endpoints must deterministically
+			// report the newest last-seen timestamp, not whichever
+			// endpoint the map iteration happened to visit last.
+			if newerModelTimestamp(model.LastSeen, existing.LastSeenAt) {
+				existing.LastSeen = format.TimeAgo(model.LastSeen)
+				ls := model.LastSeen
+				existing.LastSeenAt = &ls
+			}
+
+			// Merge scalar metadata prefer-non-empty: an endpoint that knows
+			// the model's family/quant/params/etc. wins over one that reported
+			// only minimal details. On two conflicting non-empty values the
+			// sorted-first endpoint (the one already on `existing`) wins - a
+			// purely deterministic rule, since "richer" is not a total order
+			// across heterogeneous backends. Only empty fields on the existing
+			// summary are overwritten.
+			a.mergeModelSummaryFields(existing, model)
 		}
 	}
 
@@ -201,10 +228,54 @@ func (a *Application) buildModelSummaries(
 	return summaries
 }
 
+// mergeModelSummaryFields backfills empty scalar metadata on an existing
+// multi-endpoint summary from a freshly seen endpoint's model. Non-empty
+// values on the existing summary are never overwritten: sorted-first wins on
+// conflicting non-empty values (a deterministic rule documented above the
+// merge loop in buildModelSummaries). Size uses the rendered Bytes string
+// rather than the raw int64 because ModelSummary only carries the formatted
+// form; on conflict the existing rendering is preserved, and on empty the
+// candidate's rendering is applied.
+func (a *Application) mergeModelSummaryFields(existing *ModelSummary, model *domain.ModelInfo) {
+	if existing.Type == "" && model.Type != "" {
+		existing.Type = model.Type
+	}
+	if model.Details != nil {
+		if existing.Family == "" && model.Details.Family != nil {
+			existing.Family = *model.Details.Family
+		}
+		if existing.Params == "" && model.Details.ParameterSize != nil {
+			existing.Params = *model.Details.ParameterSize
+		}
+		if existing.Quant == "" && model.Details.QuantizationLevel != nil {
+			existing.Quant = *model.Details.QuantizationLevel
+		}
+		// Capabilities are inferred from Details. On an empty existing set,
+		// the candidate's details supply them; on a non-empty existing set
+		// they are preserved (sorted-first wins).
+		if len(existing.Capabilities) == 0 {
+			if caps := a.inferCapabilities(model.Details); len(caps) > 0 {
+				existing.Capabilities = caps
+			}
+		}
+	}
+	// Size renders to a human-readable string; populate from the candidate
+	// only when the existing summary has none.
+	if existing.Size == "" && model.Size > 0 {
+		existing.Size = format.Bytes(uint64(model.Size))
+	}
+}
+
 // sortModelSummaryEndpoints sorts Endpoints and EndpointIDs together by name,
 // keeping the positional pairing the dashboard click-through relies on. Two
 // independent sorts would desync them whenever two endpoints share a display
 // name, so a single slice of pairs is sorted and split back.
+//
+// Comparator is Name primary, EndpointID secondary - mirroring
+// buildUnifiedEndpoints and endpointsStatusHandler. Name alone is unstable
+// when two distinct endpoints share a display name (a legitimate config);
+// the ID tie-break keeps their relative order stable across polls so the
+// ETag does not churn purely from pair swapping.
 //
 // buildModelSummaries always appends to both slices together, so lengths
 // should never differ in practice - but the invariant is only assumed, not
@@ -222,7 +293,12 @@ func sortModelSummaryEndpoints(summary *ModelSummary) {
 	for i := range n {
 		pairs[i] = endpointNameID{Name: summary.Endpoints[i], ID: summary.EndpointIDs[i]}
 	}
-	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Name < pairs[j].Name })
+	sort.Slice(pairs, func(i, j int) bool {
+		if pairs[i].Name != pairs[j].Name {
+			return pairs[i].Name < pairs[j].Name
+		}
+		return pairs[i].ID < pairs[j].ID
+	})
 	for i := range n {
 		summary.Endpoints[i] = pairs[i].Name
 		summary.EndpointIDs[i] = pairs[i].ID
@@ -440,7 +516,7 @@ func modelLastSeenTime(m ModelSummary) time.Time {
 	return time.Time{}
 }
 
-func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelSummary {
+func (a *Application) getRecentModels(models []ModelSummary) []ModelSummary {
 	sort.Slice(models, func(i, j int) bool {
 		ti, tj := modelLastSeenTime(models[i]), modelLastSeenTime(models[j])
 		if !ti.Equal(tj) {
@@ -451,8 +527,8 @@ func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelS
 		return models[i].Name < models[j].Name
 	})
 
-	if len(models) > limit {
-		return models[:limit]
+	if len(models) > recentModelsLimit {
+		return models[:recentModelsLimit]
 	}
 	return models
 }
@@ -460,6 +536,9 @@ func (a *Application) getRecentModels(models []ModelSummary, limit int) []ModelS
 const (
 	modelTypeEmbeddings = "embeddings"
 	modelTypeLLM        = "llm"
+	// recentModelsLimit caps the recent-models list surfaced in the models
+	// status payload.
+	recentModelsLimit = 10
 )
 
 func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
@@ -500,7 +579,7 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 // are sorted before hashing to keep the ETag stable across polls (mirroring
 // what encoding/json does to map keys on the wire).
 func hashModelStatusResponse(resp *ModelStatusResponse) string {
-	h := fnv.New32a()
+	h := fnv.New64a()
 
 	families := make([]string, 0, len(resp.ModelsByFamily))
 	for f := range resp.ModelsByFamily {

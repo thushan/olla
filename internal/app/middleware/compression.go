@@ -17,6 +17,14 @@ import (
 // appear on degenerate fleets where the wire cost is irrelevant anyway.
 const gzipMinSize = 256
 
+// maxAcceptEncodingBytes bounds the Accept-Encoding header we are willing to
+// parse. A legitimate client sends a short, bounded list of codings; a
+// multi-KB header is always pathological (or hostile). Short-circuiting it
+// stops an oversized Accept-Encoding from driving an unbounded split before
+// the server-level MaxHeaderBytes cap was in place. 1 KiB is far above any
+// real browser/curl request, which sits well under 100 bytes.
+const maxAcceptEncodingBytes = 1 << 10 // 1 KiB
+
 // gzipLevel is held at DefaultCompression (level 6): a good throughput/ratio
 // midpoint for JSON status payloads. BestSpeed saves CPU but inflates large
 // endpoint lists; BestCompression is CPU-heavy for a hot polling path.
@@ -66,19 +74,23 @@ func releaseGzipWriter(gz *gzip.Writer) {
 // skips compression for: 304 responses (no body, must carry no
 // Content-Encoding), text/event-stream responses (streaming SSE must reach the
 // client byte-for-byte without buffering), and bodies below gzipMinSize bytes
-// (overhead exceeds savings). Vary: Accept-Encoding is always set on the
-// gzip-negotiated path so shared caches do not serve a gzipped representation
-// to a client that did not ask for one.
+// (overhead exceeds savings). Vary: Accept-Encoding is set on EVERY response
+// from a gzip-wrapped route, including identity/non-gzip responses, so a
+// shared cache can never serve a gzipped representation to a client that did
+// not negotiate one and believe it is the same resource. Without the
+// unconditional Vary a cache keyed only on the request URL would store the
+// gzipped variant and hand it verbatim to the next identity-negotiating
+// client.
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Unconditional: see the doc comment above. Set before the
+		// gzip-negotiation branch so identity responses carry Vary too.
+		w.Header().Add("Vary", "Accept-Encoding")
+
 		if !acceptsGzip(r.Header.Get(constants.HeaderAcceptEncoding)) {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// Tell caches (and intermediaries) that this response varies by the
-		// client's Accept-Encoding, so a gzipped representation is never handed
-		// to a client that did not negotiate one.
-		w.Header().Add("Vary", "Accept-Encoding")
 
 		gw := &gzipResponseWriter{ResponseWriter: w}
 		defer gw.close()
@@ -88,9 +100,15 @@ func Gzip(next http.Handler) http.Handler {
 
 // GzipFunc is the http.HandlerFunc adaptor for Gzip, for route registries
 // (like Olla's RouteRegistry.RegisterWithMethod) that expect HandlerFunc.
+// The wrapped Gzip(h) is built ONCE at registration time rather than inside
+// the per-request closure, so a fresh handler wrapper is not allocated on
+// every request.
 func GzipFunc(h http.HandlerFunc) http.HandlerFunc {
+	// http.HandlerFunc satisfies http.Handler, so h passes to Gzip directly
+	// without an explicit conversion (which unconvert rightly flags).
+	wrapped := Gzip(h)
 	return func(w http.ResponseWriter, r *http.Request) {
-		Gzip(h).ServeHTTP(w, r)
+		wrapped.ServeHTTP(w, r)
 	}
 }
 
@@ -99,8 +117,14 @@ func GzipFunc(h http.HandlerFunc) http.HandlerFunc {
 // its q is present and strictly greater than zero. "gzip;q=0" explicitly
 // refuses gzip and must not match. The wildcard "*" matches gzip only when
 // gzip itself is not listed with q=0.
+//
+// Headers longer than maxAcceptEncodingBytes short-circuit to false: a real
+// client never sends a multi-KB Accept-Encoding, and the parser splits on ","
+// per token, so an oversized header would otherwise drive unbounded work.
+// Falling through to "no gzip" preserves correctness (the response is still
+// served, just uncompressed) and matches the safe direction.
 func acceptsGzip(header string) bool {
-	if header == "" {
+	if header == "" || len(header) > maxAcceptEncodingBytes {
 		return false
 	}
 	starQ := float64(-1)

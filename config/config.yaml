@@ -140,6 +140,20 @@ discovery:
         health_check_url: "/health"
         check_interval: 5s
         check_timeout: 2s
+      # Backends behind credentials use an auth: block, not userinfo in the URL.
+      # An embedded user:pass@host form is rejected at startup to keep secrets
+      # out of status/dashboard JSON. Inline values support ${VAR}; use
+      # username_file / password_file (or token_file / key_file for the other
+      # types) to read from a file. See:
+      # http://127.0.0.1:8000/olla/configuration/endpoint-auth/
+      #
+      # - url: "http://protected-llm:8080"
+      #   name: "protected-llm"
+      #   type: "openai-compatible"
+      #   auth:
+      #     type: basic           # bearer / api_key also supported
+      #     username: "user"
+      #     password: "pass"
   model_discovery:
     enabled: true
     interval: 5m

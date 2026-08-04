@@ -28,6 +28,17 @@ beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn();
 });
 
+// The shared jump helper now consults endpoints.hasData before DOM-polling for
+// the target row (cold deep-link wait). These tests pre-plant the row and
+// exercise the fast path, so report hasData=true to bypass the cold wait.
+vi.mock('../lib/stores/endpoints.svelte', () => ({
+  endpoints: {
+    get hasData() {
+      return true;
+    },
+  },
+}));
+
 let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
   if (component) unmount(component);

@@ -756,6 +756,12 @@ footer a {
   font-family: var(--font-sans);
 }
 
+/* Note: the StatusBanner is rendered as a SIBLING of the panel's
+   [data-state]-bearing wrapper (see OverviewPanel.svelte), not a descendant.
+   opacity/filter compound down the subtree, so an override here would be a
+   no-op - the banner must be structurally outside the dimmed region to stay
+   at full contrast during an outage. */
+
 /* SKELETON (loading state) */
 .skeleton {
   background: linear-gradient(

@@ -21,8 +21,11 @@ when you want to answer questions like "is my fleet healthy", "which backend is 
   clearing. If a view changes state, it is not in the dashboard.
 - **Polled, not realtime.** The page fetches the same `/internal/status*` JSON the CLI
   exposes. There is no WebSocket, no Server-Sent Events channel, no push. Each request is a
-  conditional `GET` using `ETag`/`If-None-Match`, so an unchanged snapshot returns a `304`
-  with no body; the status endpoints also gzip their responses when the client accepts it.
+  conditional `GET` using a **weak** `ETag` and `If-None-Match`, so an unchanged snapshot
+  returns a `304` with no body; the status endpoints also gzip their responses when the
+  client accepts it. (The status JSON `ETag` is a weak validator, `W/"<base36>"`. The
+  embedded SPA assets under `/internal/ui/` use a separate strong SHA-256 `ETag`; the two
+  schemes do not interact.)
 - **Same listener as the proxy.** It shares `server.host` and `server.port`. There is no
   second port to configure and no separate TLS posture.
 - **Three panels: Overview, Endpoints, Models.** Aggregate fleet health, per-endpoint

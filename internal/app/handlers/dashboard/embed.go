@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
-	"io"
 	"io/fs"
 	"log/slog"
 	"mime"
@@ -90,16 +89,49 @@ func Handler() http.Handler {
 	return dashboardHandler(sub)
 }
 
+// AssetsBuilt reports whether the embedded dist carries a built index.html.
+// It is the same check dashboardHandler uses to pick between the SPA handler
+// and the not-built 503 handler, surfaced separately so startup logging can
+// distinguish a binary that carries real assets from one carrying only the
+// .gitkeep sentinel (e.g. a binary produced by `go install` without
+// `make build-web`). A false return is not an error: the route still mounts
+// and answers 503 with a clear message, the binary just should not claim the
+// dashboard is "ready".
+func AssetsBuilt() bool {
+	sub, err := fs.Sub(embeddedFS, distRoot)
+	if err != nil {
+		return false
+	}
+	return assetsBuiltIn(sub)
+}
+
+// assetsBuiltIn is the FS-level check both Handler (for route selection) and
+// AssetsBuilt (for startup logging) consult. Split out so the two call sites
+// cannot drift on what "built" means, and so tests can drive the sentinel-only
+// and populated branches via a synthetic fstest.MapFS without disturbing the
+// package-level embed.
+func assetsBuiltIn(root fs.FS) bool {
+	info, err := fs.Stat(root, indexFile)
+	return err == nil && !info.IsDir()
+}
+
 // dashboardHandler returns the SPA handler when the embedded dist carries a
 // built index.html. If only the .gitkeep sentinel is present (the binary was
 // compiled without `make build-web`), it returns a not-built handler that logs
 // a startup warning once and serves 503, so a stale or unbuilt dashboard is
 // obvious to the operator instead of silently serving a placeholder shell.
 func dashboardHandler(root fs.FS) http.Handler {
-	if _, err := fs.Stat(root, indexFile); err != nil {
+	if !assetsBuiltIn(root) {
 		return notBuiltHandler()
 	}
-	return &spaHandler{root: root}
+	h, err := newSPAHandler(root)
+	if err != nil {
+		// Unreachable for a real embed (assetsBuiltIn passed above), but a
+		// synthetic fstest could surface a mid-walk read error. Degrade to the
+		// not-built handler rather than panicking at request time.
+		return notBuiltHandler()
+	}
+	return h
 }
 
 // notBuiltHandler serves a clear 503 and warns once. The dist is generated at
@@ -116,8 +148,67 @@ func notBuiltHandler() http.Handler {
 	})
 }
 
+// cachedAsset is the precomputed response shaping for one embedded asset. The
+// embed.FS is immutable for the life of the process (its own go:embed
+// contract), so reading each file ONCE at handler construction and serving
+// from this map thereafter avoids io.ReadAll + sha256 on every request -
+// observable as a per-request allocation and hash on a hot polling path.
+type cachedAsset struct {
+	etag         string // strong, quoted: embed.FS bytes never change
+	contentType  string
+	cacheControl string
+	data         []byte
+}
+
 type spaHandler struct {
-	root fs.FS
+	root   fs.FS
+	assets map[string]cachedAsset // keyed by fs.FS path (rel, slash-separated)
+	index  cachedAsset            // index.html entry, pre-resolved for serveIndex
+}
+
+// newSPAHandler walks the embedded dist once, reading each file and computing
+// its SHA-256 ETag. Walking at construction (rather than lazily on first
+// request) means the first dashboard hit is no slower than any subsequent hit
+// and the request-time hot path is a pure map lookup.
+func newSPAHandler(root fs.FS) (*spaHandler, error) {
+	h := &spaHandler{
+		root:   root,
+		assets: make(map[string]cachedAsset),
+	}
+	walkErr := fs.WalkDir(root, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if p == "." {
+			return nil
+		}
+		data, rerr := fs.ReadFile(root, p)
+		if rerr != nil {
+			return rerr
+		}
+		h.assets[p] = cachedAsset{
+			data:         data,
+			etag:         `"` + etagFor(data) + `"`,
+			contentType:  contentTypeFor(p),
+			cacheControl: cacheControlFor(p),
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	idx, ok := h.assets[indexFile]
+	if !ok {
+		// assetsBuiltIn already confirmed index.html exists, so reaching here
+		// means the walk somehow skipped it. Treat the dashboard as not built
+		// rather than serving a handler whose serveIndex would 404.
+		return nil, fs.ErrNotExist
+	}
+	h.index = idx
+	return h, nil
 }
 
 func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -146,8 +237,8 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	f, err := h.root.Open(rel)
-	if err != nil {
+	asset, ok := h.assets[rel]
+	if !ok {
 		// Unknown path: only fall back to the SPA shell for what looks like a
 		// client-side route (extensionless, not under assets/). A path that
 		// looks like a static asset - assets/missing-hash.js, missing.woff2 -
@@ -164,56 +255,31 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveIndex(w, r)
 		return
 	}
-	defer f.Close()
 
-	stat, err := f.Stat()
-	if err != nil {
-		h.serveIndex(w, r)
-		return
-	}
-	if stat.IsDir() {
-		// A directory request (e.g. /dashboard/assets/) is served as
-		// index.html: no listing, no escape from the SPA shell.
-		h.serveIndex(w, r)
-		return
-	}
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		setSecurityHeaders(w)
-		http.Error(w, "read error", http.StatusInternalServerError)
-		return
-	}
-
-	etag := `"` + etagFor(data) + `"`
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Content-Type", contentTypeFor(rel))
-	w.Header().Set("Cache-Control", cacheControlFor(rel))
+	w.Header().Set("ETag", asset.etag)
+	w.Header().Set("Content-Type", asset.contentType)
+	w.Header().Set("Cache-Control", asset.cacheControl)
 	setSecurityHeaders(w)
 
 	// modtime is serveEpoch rather than the zero time: ServeContent uses it to
 	// set Last-Modified and to drive If-Modified-Since precondition checks, so
 	// a non-zero value is what makes conditional GET work for clients that
 	// prefer that header. The strong ETag above carries If-None-Match.
-	http.ServeContent(w, r, path.Base(rel), serveEpoch, bytes.NewReader(data))
+	http.ServeContent(w, r, path.Base(rel), serveEpoch, bytes.NewReader(asset.data))
 }
 
 // serveIndex emits the SPA entry document. It is the fallback for any unknown
 // path and for directory requests, so client-side routing keeps working
 // without hitting a 404. Cache-Control is no-cache so a new deploy is picked
-// up on the next navigation, never a stale service-worker-cached shell.
+// up on the next navigation, never a stale service-worker-cached shell. The
+// index asset is pre-cached at handler construction, so this path is also a
+// pure map-resolved serve with no per-request file I/O.
 func (h *spaHandler) serveIndex(w http.ResponseWriter, r *http.Request) {
-	data, err := fs.ReadFile(h.root, indexFile)
-	if err != nil {
-		setSecurityHeaders(w)
-		http.Error(w, "dashboard index missing", http.StatusNotFound)
-		return
-	}
 	w.Header().Set("Content-Type", mimeOverrides[".html"])
 	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("ETag", `"`+etagFor(data)+`"`)
+	w.Header().Set("ETag", h.index.etag)
 	setSecurityHeaders(w)
-	http.ServeContent(w, r, indexFile, serveEpoch, bytes.NewReader(data))
+	http.ServeContent(w, r, indexFile, serveEpoch, bytes.NewReader(h.index.data))
 }
 
 // dashboardCSP is the Content-Security-Policy applied to every successful

@@ -12,6 +12,7 @@
 import { tick } from 'svelte';
 import { stableId } from './dom-id';
 import { navigation } from './stores/navigation.svelte';
+import { endpoints } from './stores/endpoints.svelte';
 import { pushRoute } from './router';
 
 const EP_PREFIX = 'ep-';
@@ -27,6 +28,13 @@ const FLASH_HOLD_MS = 1800;
 // the row appears, without a busy windmill.
 const RETRY_ATTEMPTS = 8;
 const RETRY_DELAY_MS = 50;
+// Cold deep-link budget: on a fresh tab the endpoints store has no data at
+// all yet, so no amount of DOM polling can find the row. Wait for the store's
+// first successful tick before entering the DOM-poll fast path. ~3s is the
+// outer ceiling - well past a normal cold first fetch, short enough that a
+// stuck tab doesn't hang the focus silently.
+const COLD_DATA_BUDGET_MS = 3000;
+const COLD_POLL_DELAY_MS = 50;
 
 // Jump from a click handler, where we hold the row's raw id (the server's
 // opaque endpoint token, or a url/name fallback). Hashes the id for the DOM
@@ -50,8 +58,23 @@ export async function jumpToEndpointKey(endpointKey: string): Promise<void> {
 // tick() flushes the panel swap (App.svelte's {#if} mounts EndpointsPanel);
 // the bounded retry then covers the window between mount and the row
 // appearing in the DOM once the fetch resolves.
+//
+// Two-phase wait: on a cold deep-link the endpoints store has no data yet,
+// so the panel hasn't rendered any rows at all. Polling the DOM then is
+// pointless until that first fetch lands, so we first wait for hasData
+// (with a hard ceiling) and only then enter the DOM-poll fast path that
+// covers the mount-to-render window.
 async function revealRow(domId: string): Promise<void> {
   await tick();
+  if (!endpoints.hasData) {
+    const coldStart = Date.now();
+    while (!endpoints.hasData && Date.now() - coldStart < COLD_DATA_BUDGET_MS) {
+      await new Promise((r) => setTimeout(r, COLD_POLL_DELAY_MS));
+    }
+    // Still no data after the budget: nothing to reveal. Bail rather than
+    // spin the DOM poll against a panel that has no rows.
+    if (!endpoints.hasData) return;
+  }
   let el = document.getElementById(domId);
   for (let attempt = 0; !el && attempt < RETRY_ATTEMPTS; attempt++) {
     await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));

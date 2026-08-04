@@ -889,3 +889,7 @@ func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
 		t.Errorf("RateLimitedUntil = %v, want %v", updated[0].RateLimitedUntil, rateLimitDeadline)
 	}
 }
+
+// Userinfo rejection and its redacted-error coverage live in
+// repository_userinfo_test.go (TestEndpointConfigValidation_RejectsUserinfo,
+// TestEndpointConfigValidation_AcceptsPlainURL).

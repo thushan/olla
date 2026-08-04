@@ -38,6 +38,20 @@ import (
 // under /olla/).
 const DashboardRoute = "/internal/ui/"
 
+// SlashlessDashboardRoute is the exact-match path without the trailing slash.
+// Go's ServeMux answers a request for this path with its own redirect to the
+// trailing-slash subtree BEFORE any registered handler (and therefore before
+// AccessMiddleware) ever runs, so a disallowed client previously got a bare
+// redirect on this one path instead of the self-diagnosing 403 every other
+// dashboard path returns - the policy still held on the canonical path, but
+// this one leaked its existence. Registering it explicitly, gated by the
+// same middleware, closes that gap.
+//
+// Exported so callers registering routes ahead of the dashboard (see
+// server_routes.go's pre-registration collision check) can guard against
+// this path too, not just DashboardRoute.
+const SlashlessDashboardRoute = "/internal/ui"
+
 // AccessMiddleware returns a handler that enforces the dashboard's
 // network-layer policy before delegating to next. cfg must already be Validated
 // (RegisterRoutes guarantees this); an unvalidated config with nil parsed CIDRs
@@ -94,7 +108,22 @@ func RegisterRoutes(registry *router.RouteRegistry, cfg config.DashboardConfig, 
 	}
 	guarded := AccessMiddleware(cfg, log, handler)
 	registry.RegisterWithMethod(DashboardRoute, http.HandlerFunc(guarded.ServeHTTP), "Admin dashboard (read-only)", "GET")
+
+	// Gated separately from DashboardRoute above: same policy, same security
+	// headers, but its own registration so ServeMux never gets the chance to
+	// answer this exact path before AccessMiddleware runs.
+	slashlessGuarded := AccessMiddleware(cfg, log, http.HandlerFunc(redirectToDashboardRoot))
+	registry.RegisterWithMethod(SlashlessDashboardRoute, http.HandlerFunc(slashlessGuarded.ServeHTTP), "Admin dashboard (redirect)", "GET")
 	return true
+}
+
+// redirectToDashboardRoot issues the canonical redirect to DashboardRoute for
+// a client AccessMiddleware has already approved. Security headers are set
+// explicitly because http.Redirect's response never passes through the
+// static-asset handler's own header-setting path.
+func redirectToDashboardRoot(w http.ResponseWriter, r *http.Request) {
+	setSecurityHeaders(w)
+	http.Redirect(w, r, DashboardRoute, http.StatusTemporaryRedirect)
 }
 
 // remoteAddrIP extracts the host portion of r.RemoteAddr via net.SplitHostPort,
