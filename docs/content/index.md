@@ -79,6 +79,7 @@ Get up and running with Olla in minutes:
     go install github.com/thushan/olla@latest
     olla
     ```
+    <small>Dashboard needs a release binary or Docker: `go install` binaries serve a `503` at `/internal/ui/` since the frontend isn't embedded.</small>
 
 === "From Binaries"
 
