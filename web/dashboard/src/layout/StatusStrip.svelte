@@ -21,7 +21,7 @@
     overview.status === 'stale' ? 'stale' : overview.status === 'error' ? 'unreachable' : null
   );
 
-  // No-traffic signal mirroring OverviewPanel: the WP-4 has_traffic flag is
+  // No-traffic signal mirroring OverviewPanel: the has_traffic flag is
   // always present, with total_requests===0 as a fallback for older backends.
   // Used to drop the Resp. rate cell to a no-data dash so the strip matches
   // the OverviewPanel tile rather than showing a literal "N/A".

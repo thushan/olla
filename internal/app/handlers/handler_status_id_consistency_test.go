@@ -14,8 +14,8 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-// WP-2 acceptance criterion: the same endpoint must report the SAME id across
-// every /internal/status* payload. The dashboard keys model click-through
+// Endpoint id consistency across payloads: the same endpoint must report the
+// SAME id across every /internal/status* payload. The dashboard keys model click-through
 // rows on models[].endpoint_ids and matches them against endpoints[].id, so
 // any drift breaks the click-through silently. Each status handler builds its
 // own ID map from its own snapshot, so the only way they agree is if every
@@ -133,7 +133,7 @@ func TestEndpointIDs_AcrossPayloadsConsistent(t *testing.T) {
 	require.Len(t, endpointsIDs, 2, "expected two distinct IDs across the colliding siblings")
 }
 
-// TestEndpointIDs_SecretRotationKeepsAllPayloadIDsStable is the WP-2
+// TestEndpointIDs_SecretRotationKeepsAllPayloadIDsStable is the
 // end-to-end rotation test: rotating the api_key in BOTH colliding endpoints
 // must leave their IDs unchanged across EVERY status payload. This is the
 // user-visible guarantee - dashboard deep-links and row keys do not break

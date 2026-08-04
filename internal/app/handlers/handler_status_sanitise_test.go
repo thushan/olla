@@ -141,10 +141,10 @@ func TestSanitiseDisplayURL_FailClosedOnParseError(t *testing.T) {
 //     /internal/status/models emit identical IDs for the same endpoint.
 
 // TestBuildEndpointIDs_DistinctForSanitisedCollisions: two endpoints that
-// share a sanitised URL (differ only by query) MUST get distinct IDs. Before
-// WP-2, the raw URL was hashed and they were naturally distinct but at the
-// cost of leaking the secret into a public value. With sanitised hashing,
-// distinctness comes from the positional disambiguator.
+// share a sanitised URL (differ only by query) MUST get distinct IDs.
+// Previously the raw URL was hashed and they were naturally distinct but at
+// the cost of leaking the secret into a public value. With sanitised
+// hashing, distinctness comes from the positional disambiguator.
 func TestBuildEndpointIDs_DistinctForSanitisedCollisions(t *testing.T) {
 	t.Parallel()
 
@@ -163,12 +163,12 @@ func TestBuildEndpointIDs_DistinctForSanitisedCollisions(t *testing.T) {
 	assert.NotEmpty(t, idB)
 }
 
-// TestBuildEndpointIDs_SecretRotationKeepsIDStable: the WP-2 acceptance
-// criterion. Rotating api_key=A -> api_key=B must NOT change either
-// endpoint's ID, because the disambiguator is derived from the
-// secret-independent Name sort, not the query string. This test would FAIL
-// against the old derivation: hashing raw URLs made the ID a function of the
-// secret, so rotation silently broke every dashboard deep-link and row key.
+// TestBuildEndpointIDs_SecretRotationKeepsIDStable: rotating api_key=A ->
+// api_key=B must NOT change either endpoint's ID, because the disambiguator
+// is derived from the secret-independent Name sort, not the query string.
+// This test would FAIL against the old derivation: hashing raw URLs made the
+// ID a function of the secret, so rotation silently broke every dashboard
+// deep-link and row key.
 func TestBuildEndpointIDs_SecretRotationKeepsIDStable(t *testing.T) {
 	t.Parallel()
 

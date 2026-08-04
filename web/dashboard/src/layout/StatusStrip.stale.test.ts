@@ -166,7 +166,7 @@ describe('StatusStrip degraded reason', () => {
 });
 
 describe('StatusStrip response-rate cell', () => {
-  // Coherent no-traffic UX: when the WP-4 has_traffic flag is false the
+  // Coherent no-traffic UX: when the has_traffic flag is false the
   // backend emits success_rate as "N/A", which the strip used to render
   // literally. Mirror OverviewPanel's dash so both surfaces agree.
 
