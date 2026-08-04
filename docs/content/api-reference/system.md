@@ -123,8 +123,6 @@ Detailed system status including statistics, configuration, and model informatio
 
 ### Request
 
-### Request
-
 ```bash
 curl -X GET http://localhost:40114/internal/status
 ```
