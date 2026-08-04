@@ -23,6 +23,14 @@ build/
 dist/
 .venv/
 
+# Dashboard embed source: regenerated at build time by `make build-web` and
+# gitignored. Only the .gitkeep sentinel stays committed so //go:embed is
+# non-empty and a fresh checkout compiles without Node installed; the real
+# SPA assets are written here when a binary is built.
+!internal/app/handlers/dashboard/dist/
+internal/app/handlers/dashboard/dist/*
+!internal/app/handlers/dashboard/dist/.gitkeep
+
 # Test results
 test/results/
 

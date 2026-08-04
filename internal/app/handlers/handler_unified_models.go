@@ -176,7 +176,7 @@ func (a *Application) parseUnifiedModelsQuery(qry url.Values) (ports.ModelFilter
 		case "embedding", "embeddings", "vector_search":
 			filters.Type = "embeddings"
 		case "chat", "text_generation", "completion":
-			filters.Type = "llm"
+			filters.Type = modelTypeLLM
 		}
 	}
 

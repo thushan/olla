@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Olla · Herd Status</title>
+    <meta name="description" content="Read-only operator dashboard for Olla, the LLM proxy and load balancer. Endpoint health, circuit breakers and model routing at a glance." />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>Olla's dashboard needs JavaScript enabled. The data it displays is also available as JSON at /internal/status, /internal/status/endpoints and /internal/status/models.</noscript>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

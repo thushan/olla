@@ -301,6 +301,50 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 		return errors.New("endpoint URL cannot be empty")
 	}
 
+	// Reject embedded credentials (user:pass@host). url.URL.String() preserves
+	// userinfo verbatim, so without this check a credentialed URL would flow
+	// into endpoint.URLString and out through any status API that echoes it.
+	// The endorsed credential path is the auth config block (AuthConfig, held
+	// as json:"-" fields on domain.Endpoint), so this is never a legitimate
+	// config, only ever an accident. The error string spells out the exact
+	// rewrite so a failed boot is a copy-paste fix rather than a guessing game.
+	// Both the username and password are redacted with placeholders - a
+	// username can itself be a secret (API-key-as-username schemes) - so the
+	// startup log never has the operator's real credentials sitting in it.
+	if parsedURL, err := url.Parse(cfg.URL); err == nil && parsedURL.User != nil {
+		_, hasPass := parsedURL.User.Password()
+		host := parsedURL.Host
+		plainURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, host)
+		if parsedURL.Path != "" {
+			plainURL += parsedURL.Path
+		}
+		userinfo := "<your username>"
+		if hasPass {
+			userinfo += ":<your password>"
+		}
+		redactedOriginal := fmt.Sprintf("%s://%s@%s", parsedURL.Scheme, userinfo, host)
+		if parsedURL.Path != "" {
+			redactedOriginal += parsedURL.Path
+		}
+		// Basic auth requires both a username and a password - the username-only
+		// case (user:pass@host with no password) cannot become a valid basic
+		// block, so the example must still carry a password placeholder rather
+		// than a silently-invalid partial one.
+		example := plainURL + "\nauth:\n  type: basic\n  username: <your username>\n  password: <your password>" +
+			"\n  # or username_file / password_file to read from a file"
+		if !hasPass {
+			example += "\n\nBasic auth requires a password. If this was really a token " +
+				"(e.g. https://token@host), it is more likely bearer auth:\n  " +
+				plainURL + "\nauth:\n  type: bearer\n  token: <your token>" +
+				"\n  # or token_file to read from a file"
+		}
+		return fmt.Errorf(
+			"endpoint URL for %q must not embed credentials (user:pass@host); "+
+				"move them to the auth config block. Rewrite\n  %s\nas\n  %s",
+			cfg.Name, redactedOriginal, example,
+		)
+	}
+
 	// Allow empty health check and model URLs - they will get defaults from profile or fallback values
 	// in LoadFromConfig. This enables simpler configuration when using known profile types.
 

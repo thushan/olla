@@ -1,0 +1,25 @@
+<script lang="ts">
+  import type { Snippet } from 'svelte';
+  import Header from './Header.svelte';
+  import StatusStrip from './StatusStrip.svelte';
+  import NavTabs from './NavTabs.svelte';
+  import SparkStrip from '../components/SparkStrip.svelte';
+
+  let { children }: { children: Snippet<[]> } = $props();
+</script>
+
+<header class="site-header">
+  <Header />
+  <StatusStrip />
+  <SparkStrip />
+  <NavTabs />
+</header>
+
+<main>
+  {@render children?.()}
+</main>
+
+<footer>
+  <span>Olla is a local, self-hosted proxy. This view never leaves your network.</span>
+  <span>Olla by <a class="footer-link" href="https://tensorfoundry.io" target="_blank" rel="noopener noreferrer">TensorFoundry</a></span>
+</footer>

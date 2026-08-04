@@ -9,6 +9,14 @@ TOOL := "make"
 # Tool versions (pinned)
 GOLANGCI_LINT_VERSION := v2.11.4
 BETTERALIGN_VERSION := v0.8.2
+BUN_VERSION := 1.1.0
+
+# Frontend locations. WEB_DIR is the Svelte source tree; EMBED_DIST is the
+# go:embed source the binary ships. It is gitignored and regenerated at build
+# time by build-web; only a .gitkeep sentinel stays committed so a fresh
+# checkout compiles without Bun.
+WEB_DIR := web/dashboard
+EMBED_DIST := internal/app/handlers/dashboard/dist
 
 LDFLAGS := -ldflags "\
 	-X '$(PKG).Version=$(VERSION)' \
@@ -18,15 +26,17 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration test-script-sticky test-auth-bearer test-auth-env-fatal test-auth-manual
+.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration test-script-sticky test-auth-bearer test-auth-env-fatal test-auth-manual build-web install-web clean-web lint-web test-web ci-web check-fonts-web
 
-# Build the application with version info
-build:
+# Build the application with version info. Depends on build-web so the binary
+# always embeds the current frontend; this is where the "build fresh every
+# time" guarantee is enforced for plain go builds.
+build: build-web
 	@echo "Building olla $(VERSION)..."
 	@go build $(LDFLAGS) -o bin/olla .
 
-# Build release version (optimised)
-build-release:
+# Build release version (optimised). build-web first for the same reason.
+build-release: build-web
 	@echo "Building olla $(VERSION) for release..."
 	@mkdir -p bin
 	@CGO_ENABLED=0 go build $(LDFLAGS) -a -installsuffix cgo -o bin/olla$(shell go env GOEXE) .
@@ -101,12 +111,14 @@ validate-all-platforms:
 	@echo "All platforms built successfully (6 targets)"
 	@rm -f bin/olla-*
 
-# Run the application
-run:
+# Run the application. Depends on build-web so the embedded dashboard is
+# regenerated; without it the embed carries only the .gitkeep sentinel and
+# serves a 503 not-built response.
+run: build-web
 	@go run $(LDFLAGS) .
 
 # Run with debug logging
-run-debug:
+run-debug: build-web
 	@OLLA_LOG_LEVEL=debug go run $(LDFLAGS) .
 
 # Run tests
@@ -176,7 +188,7 @@ version-built: build
 	@./bin/olla --version 2>/dev/null || echo "Add --version flag to main.go to see embedded version"
 
 # Clean build artifacts and logs
-clean:
+clean: clean-web
 	@rm -rf bin/ build/ dist/ logs/ coverage.out coverage.html
 
 # Download dependencies
@@ -208,7 +220,7 @@ ready-local: build-snapshot
 DOCKER_ARCH ?= amd64
 
 # Build Docker image without goreleaser (for local development)
-docker-build-local:
+docker-build-local: build-web
 	@echo "Building Docker image locally (without goreleaser) for $(DOCKER_ARCH)..."
 	@echo "Building olla binary to root..."
 	@CGO_ENABLED=0 GOOS=linux GOARCH=$(DOCKER_ARCH) go build $(LDFLAGS) -o olla .
@@ -255,6 +267,87 @@ release-test:
 goreleaser-check:
 	@echo "Checking goreleaser configuration..."
 	@goreleaser check
+
+# ── Frontend (dashboard SPA) ──────────────────────────────────────────────────
+# The dashboard dist is gitignored and built fresh whenever a binary is
+# produced: build, build-release, docker-build-local, run, run-debug and dev
+# depend on build-web, and goreleaser runs build-web via its before.hooks
+# (covering build-local, build-snapshot and release). test, vet, lint, align
+# and ready stay Bun-free: a committed .gitkeep sentinel keeps //go:embed
+# non-empty so a fresh checkout compiles, and the embed handler serves a loud
+# 503 if a binary was built without the SPA.
+
+# Install frontend deps (bun install). Requires Bun 1.1+.
+install-web:
+	@echo "Installing frontend dependencies (bun install --frozen-lockfile)..."
+	@cd $(WEB_DIR) && bun install --frozen-lockfile
+	@echo "Frontend dependencies installed."
+
+# Build the SPA. Vite's outDir points straight at the gitignored go:embed
+# source (see vite.config.js), so there is no separate rm/cp/touch copy step
+# any more. A writeBundle plugin hook in vite.config.js restores the
+# .gitkeep sentinel emptyOutDir wipes on every build.
+build-web: install-web
+	@echo "Building frontend into embed source..."
+	@cd $(WEB_DIR) && bun run build
+	@echo "Embed source regenerated (gitignored). Rebuild the binary to embed it."
+
+# Run svelte-check (type/syntax checks) on the SPA.
+lint-web: install-web
+	@echo "Running svelte-check..."
+	@cd $(WEB_DIR) && bun run check
+
+# Run vitest unit tests on the SPA.
+test-web: install-web
+	@echo "Running frontend tests..."
+	@cd $(WEB_DIR) && bun run test
+
+# Remove Vite's cache and the generated embed source (leaving only the
+# committed .gitkeep sentinel behind). Vite now writes straight into
+# $(EMBED_DIST) (see build-web), so there is no separate $(WEB_DIR)/dist to
+# clean any more.
+clean-web:
+	@echo "Cleaning frontend ephemeral build output..."
+	@rm -rf $(WEB_DIR)/node_modules/.cache $(WEB_DIR)/coverage
+	@rm -rf $(EMBED_DIST)/*
+	@touch $(EMBED_DIST)/.gitkeep
+	@echo "Frontend ephemeral output and embed source cleaned."
+
+# Guard against a repeat of the corrupt-font incident: a saved HTML error
+# page committed in place of a real .woff2 (wrong bytes, but a plausible
+# file size, so it passes casual review). Every .woff2 under the frontend
+# source and the built embed dist must start with the WOFF2 magic
+# (hex 774f4632 / ASCII "wOF2"), or CI fails loudly instead of shipping a
+# font that silently falls back to a system sans in every browser.
+check-fonts-web: build-web
+	@echo "Checking .woff2 files start with the WOFF2 magic bytes..."
+	@fail=0; \
+	for f in $$(find $(WEB_DIR)/src $(EMBED_DIST) -name '*.woff2' 2>/dev/null); do \
+		magic=$$(od -An -tx1 -N4 "$$f" | tr -d ' \n'); \
+		if [ "$$magic" != "774f4632" ]; then \
+			printf "\033[31m%s is not a WOFF2 file (magic: %s)\033[0m\n" "$$f" "$$magic"; \
+			fail=1; \
+		fi; \
+	done; \
+	if [ $$fail -eq 1 ]; then \
+		echo "One or more .woff2 files are corrupt or not actually fonts."; \
+		exit 1; \
+	else \
+		printf "\033[32mAll .woff2 files are genuine WOFF2.\033[0m\n"; \
+	fi
+
+# CI web gate: the SPA builds cleanly, its unit tests and type checks pass,
+# and every shipped font is a genuine WOFF2. The dist is gitignored, so there
+# is no committed-output staleness to check; a successful build-web is the
+# freshness signal. test-web, lint-web and build-web all depend on install-web,
+# so a clean checkout gets node_modules installed once (Make runs a shared
+# prerequisite only once per invocation) before any of the three run, and a
+# broken component still fails fast without waiting on the Vite build.
+# Deliberately NOT a dependency of `ready`: a fresh clone with no Bun
+# toolchain must still pass the Go gate, so these only run from `ci`/`ci-web`
+# and the GitHub Actions workflow.
+ci-web: test-web lint-web build-web check-fonts-web
+	@printf "\033[32mDashboard builds, tests, type-checks and fonts are valid.\033[0m\n"
 
 # Format code
 fmt:
@@ -307,6 +400,23 @@ install-deps:
 	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	@echo "  Installing betteralign $(BETTERALIGN_VERSION)..."
 	@go install github.com/dkorunic/betteralign/cmd/betteralign@$(BETTERALIGN_VERSION)
+	@echo "Checking Bun toolchain (needed for build-web / install-web)..."
+	@if command -v bun > /dev/null 2>&1; then \
+		INSTALLED=$$(bun --version 2>/dev/null); \
+		MAJOR=$$(echo $$INSTALLED | cut -d. -f1); \
+		MINOR=$$(echo $$INSTALLED | cut -d. -f2); \
+		REQ_MAJOR=$$(echo "$(BUN_VERSION)" | cut -d. -f1); \
+		REQ_MINOR=$$(echo "$(BUN_VERSION)" | cut -d. -f2); \
+		if [ "$$MAJOR" -gt "$$REQ_MAJOR" ] || ([ "$$MAJOR" -eq "$$REQ_MAJOR" ] && [ "$$MINOR" -ge "$$REQ_MINOR" ]); then \
+			printf "  bun: %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		else \
+			printf "  bun: %s [require: %s+ \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(BUN_VERSION)"; \
+			echo "  Install Bun $(BUN_VERSION)+ via https://bun.sh"; \
+		fi; \
+	else \
+		printf "  bun: not installed [require: %s+ \033[31m(pinned)\033[0m]\n" "$(BUN_VERSION)"; \
+		echo "  Install Bun $(BUN_VERSION)+ via https://bun.sh"; \
+	fi
 	@echo "Dependencies installed successfully!"
 
 # Check installed tool versions against requirements
@@ -332,14 +442,31 @@ check-deps:
 	else \
 		printf "  betteralign: not installed [require: %s \033[31m(pinned)\033[0m]\n" "$(BETTERALIGN_VERSION)"; \
 	fi
+	@if command -v bun > /dev/null 2>&1; then \
+		INSTALLED=$$(bun --version 2>/dev/null); \
+		MAJOR=$$(echo $$INSTALLED | cut -d. -f1); \
+		MINOR=$$(echo $$INSTALLED | cut -d. -f2); \
+		REQ_MAJOR=$$(echo "$(BUN_VERSION)" | cut -d. -f1); \
+		REQ_MINOR=$$(echo "$(BUN_VERSION)" | cut -d. -f2); \
+		if [ "$$MAJOR" -gt "$$REQ_MAJOR" ] || ([ "$$MAJOR" -eq "$$REQ_MAJOR" ] && [ "$$MINOR" -ge "$$REQ_MINOR" ]); then \
+			printf "  bun:          %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		else \
+			printf "  bun:          %s [require: %s+ \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(BUN_VERSION)"; \
+		fi \
+	else \
+		printf "  bun:          not installed [require: %s+ \033[31m(pinned)\033[0m]\n" "$(BUN_VERSION)"; \
+	fi
 
-# Development build (no optimisations)
-dev:
+# Development build (no optimisations). build-web first so the dashboard
+# embed is fresh; see run/run-debug for the same reason.
+dev: build-web
 	@echo "Building development version..."
 	@go build $(LDFLAGS) -gcflags="all=-N -l" -o bin/olla-dev .
 
-# Run full CI pipeline locally
-ci: deps fmt vet lint test-race test-cover build
+# Run full CI pipeline locally. ci-web is included here (not in `ready`) so
+# `make ci` matches what the GitHub Actions workflow gates on; ready stays
+# Bun-free for a fresh clone with no Bun toolchain.
+ci: deps fmt vet lint test-race test-cover build ci-web
 	@echo "CI pipeline completed successfully!"
 
 # Docker compose up with local config
@@ -460,4 +587,14 @@ help:
 	@echo "  test-auth-bearer        - Bearer token injection end-to-end (no Docker needed)"
 	@echo "  test-auth-env-fatal     - Missing env var aborts startup with a clear error"
 	@echo "  test-auth-manual        - All auth integration scripts (no Docker needed)"
+	@echo ""
+	@echo "Frontend:"
+	@echo "  build-web       - Build SPA into the gitignored embed source (run by build/release)"
+	@echo "  install-web     - Install frontend deps (bun install)"
+	@echo "  clean-web       - Remove Vite output, cache, and generated embed source"
+	@echo "  lint-web        - Run svelte-check on the SPA"
+	@echo "  test-web        - Run vitest unit tests on the SPA"
+	@echo "  check-fonts-web - Fail if any .woff2 is missing the WOFF2 magic bytes"
+	@echo "  ci-web          - CI gate: vitest + svelte-check + build + font-integrity (requires Bun; run by 'make ci', not 'make ready')"
+	@echo ""
 	@echo "  help            - Show this help"

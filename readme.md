@@ -58,6 +58,7 @@ For Large GPU deployments, Enterprise & Data-Centre use, see [TensorFoundry Foun
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
 - **🎯 LLM-Optimised**: Streaming-first design with optimised timeouts for long inference
 - **⚙️ High Performance**: Designed to be very [lightweight & efficient](https://thushan.github.io/olla/configuration/practices/performance/), runs on less than 50Mb RAM.
+- **📈 Admin Dashboard**: [Read-only fleet overview](https://thushan.github.io/olla/configuration/dashboard/) embedded in the binary at `/internal/ui/`, on by default and loopback-only
 
 ## Supported Backends
 
@@ -120,6 +121,13 @@ docker run --platform linux/arm64 -t \
 # Install via Go
 go install github.com/thushan/olla@latest
 ```
+
+> **Dashboard caveat with `go install`.** A plain `go install` or `go build` produces a
+> binary whose embedded `dist/` carries only a `.gitkeep` sentinel. The binary boots and
+> proxies traffic fine, but `/internal/ui/` serves a `503 dashboard not built` response
+> and the startup log line says so. For a working dashboard use a release binary, the
+> Docker image, or run `make build-web` (requires Bun 1.1+) before `make build`. See
+> [Admin Dashboard: building the frontend](https://thushan.github.io/olla/configuration/dashboard/#building-the-frontend).
 ```bash
 # Build from source
 git clone https://github.com/thushan/olla.git && cd olla && make build-release

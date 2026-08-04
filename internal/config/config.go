@@ -156,6 +156,20 @@ func DefaultConfig() *Config {
 		Engineering: EngineeringConfig{
 			ShowNerdStats: false,
 		},
+		Dashboard: DashboardConfig{
+			Enabled: true,
+			AccessPolicy: AccessPolicyConfig{
+				AllowedCIDRs: []string{"127.0.0.0/8", "::1/128"},
+				// "localhost" is a hostname, not an IP literal, so the
+				// auto-accept for IP-literal Hosts does not cover it. DefaultHost
+				// is itself "localhost", so a no-config-file startup (go install,
+				// curl installer) serving on 0.0.0.0 must not 403 its own default.
+				AllowedHosts: []string{"localhost"},
+			},
+			// Inert for now: the GateInternalAPI wrapping is not implemented yet.
+			// The field ships now so a later change needs no config migration.
+			GateInternalAPI: false,
+		},
 		Translators: TranslatorsConfig{
 			Anthropic: AnthropicTranslatorConfig{
 				Enabled:            true,
@@ -213,6 +227,10 @@ func (c *Config) Validate() error {
 
 	if err := c.Server.Cors.Validate(); err != nil {
 		return fmt.Errorf("server.cors config invalid: %w", err)
+	}
+
+	if err := c.Dashboard.Validate(); err != nil {
+		return err
 	}
 
 	return nil

@@ -42,6 +42,8 @@ Effective monitoring helps you:
 
 ## Built-in Monitoring
 
+> :memo: For a glanceable view without curling JSON, see the [Admin Dashboard](../dashboard.md), a read-only web UI served at `/internal/ui/`.
+
 ### Health Endpoint
 
 Basic health check:

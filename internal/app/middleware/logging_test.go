@@ -430,3 +430,90 @@ func (m *mockStyledLogger) With(args ...any) logger.StyledLogger                
 func (m *mockStyledLogger) InfoWithContext(msg string, endpoint string, ctx logger.LogContext)  {}
 func (m *mockStyledLogger) WarnWithContext(msg string, endpoint string, ctx logger.LogContext)  {}
 func (m *mockStyledLogger) ErrorWithContext(msg string, endpoint string, ctx logger.LogContext) {}
+
+// TestAccessLogLevel pins the level the access log resolves to per outcome.
+// The access log is the operator's audit record, so it must NOT quiet proxy
+// traffic: a proxy success now logs at Info (the regression this test guards
+// against is the proxy-success-quieting that previously demoted it to Debug),
+// and a proxy 4xx/5xx stays at Info. Only successful /internal/ polling is
+// demoted to Debug. See accessLogLevel / isQuietAccessOutcome in logging.go.
+//
+// Note on 5xx mapping: accessLogLevel is intentionally binary (Debug for
+// routine traffic, Info otherwise). Promoting 5xx to Warn/Error is a
+// behaviour change beyond this fix's scope; the operator-visible requirement
+// is "loud at default verbosity", which Info already satisfies.
+func TestAccessLogLevel(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		status int
+		want   slog.Level
+	}{
+		// Proxy traffic: never quietened in the access log. Success is the
+		// audit-worthy outcome the security-practices doc relies on.
+		{"proxy success", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusOK, slog.LevelInfo},
+		{"proxy not modified", http.MethodGet, "/olla/proxy/v1/models", http.StatusNotModified, slog.LevelInfo},
+		{"proxy server error", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusInternalServerError, slog.LevelInfo},
+		{"proxy client error", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusBadRequest, slog.LevelInfo},
+		{"/api/ proxy success", http.MethodPost, "/api/chat", http.StatusOK, slog.LevelInfo},
+
+		// /internal/ polling: still demoted when routine.
+		{"internal poll success", http.MethodGet, "/internal/health", http.StatusOK, slog.LevelDebug},
+		{"internal poll not modified", http.MethodGet, "/internal/health", http.StatusNotModified, slog.LevelDebug},
+		{"internal poll not found", http.MethodGet, "/internal/health", http.StatusNotFound, slog.LevelInfo},
+		{"internal poll server error", http.MethodGet, "/internal/status", http.StatusInternalServerError, slog.LevelInfo},
+		{"internal poll forbidden", http.MethodGet, "/internal/ui/", http.StatusForbidden, slog.LevelInfo},
+		// Non-GET/HEAD under /internal/ is never routine polling.
+		{"internal POST success", http.MethodPost, "/internal/status", http.StatusOK, slog.LevelInfo},
+
+		// Everything else logs at Info.
+		{"non-proxy non-internal success", http.MethodGet, "/version", http.StatusOK, slog.LevelInfo},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := accessLogLevel(tc.method, tc.path, tc.status)
+			if got != tc.want {
+				t.Errorf("accessLogLevel(%q, %q, %d) = %v, want %v",
+					tc.method, tc.path, tc.status, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestConsolePollOutcomeStillQuietsProxy pins the invariant that the console
+// log path (isQuietPollOutcome) is SEPARATE from the access log and still
+// quietens proxy traffic regardless of status. The console has dedicated
+// proxy-handler logging of its own; do not let access-log fixes leak across.
+func TestConsolePollOutcomeStillQuietsProxy(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		method string
+		path   string
+		status int
+		want   bool
+	}{
+		{"proxy success quieted on console", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusOK, true},
+		{"proxy 500 still quieted on console", http.MethodPost, "/olla/proxy/v1/chat/completions", http.StatusInternalServerError, true},
+		{"internal poll success quieted", http.MethodGet, "/internal/health", http.StatusOK, true},
+		{"internal poll 500 not quieted", http.MethodGet, "/internal/status", http.StatusInternalServerError, false},
+		{"non-proxy non-internal not quieted", http.MethodGet, "/version", http.StatusOK, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := isQuietPollOutcome(tc.method, tc.path, tc.status)
+			if got != tc.want {
+				t.Errorf("isQuietPollOutcome(%q, %q, %d) = %v, want %v",
+					tc.method, tc.path, tc.status, got, tc.want)
+			}
+		})
+	}
+}

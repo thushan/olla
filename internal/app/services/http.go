@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"time"
 
 	"github.com/thushan/olla/internal/app/handlers"
+	"github.com/thushan/olla/internal/app/handlers/dashboard"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
@@ -21,6 +24,13 @@ const (
 	// attacks. A legitimate client sends its full header set well within 10 s; slow
 	// backends are handled by proxy.ConnectionTimeout which applies much later.
 	defaultReadHeaderTimeout = 10 * time.Second
+
+	// minMaxHeaderBytes floors the derived MaxHeaderBytes. A configured value of
+	// zero or negative must not be read as "disable the cap" (Go's http.Server
+	// treats <=0 as "use the 1 MiB default", which is a reasonable fallback, but
+	// a small positive misconfiguration deserves a sane floor rather than
+	// crippling every request with oversized-but-legitimate headers).
+	minMaxHeaderBytes = 4 * 1024
 )
 
 // HTTPService manages the HTTP server lifecycle and route registration. It coordinates
@@ -177,6 +187,7 @@ func (s *HTTPService) Start(ctx context.Context) error {
 		ReadHeaderTimeout: readHeaderTimeout,
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytesFromConfig(s.fullConfig.Server.RequestLimits.MaxHeaderSize),
 	}
 
 	s.logger.Info("HTTP server listening",
@@ -195,7 +206,63 @@ func (s *HTTPService) Start(ctx context.Context) error {
 	s.logger.Info("Olla started, waiting for requests...", "bind", addr)
 
 	s.printWarnings()
+	s.printDashboardURL(addr)
 	return nil
+}
+
+// printDashboardURL logs a standout line pointing at the admin dashboard once
+// the server is otherwise fully up. It runs after printWarnings so it is the
+// last thing an operator sees at the bottom of the startup log, mirroring the
+// InfoWithStatus "[ OK ]" treatment Stop() already uses for its loudest line.
+// Skipped silently if the bind address can't be turned into a URL - this is
+// cosmetic, not worth failing startup over.
+//
+// The line is honest about asset presence: a binary built without `make
+// build-web` (e.g. via `go install`) carries only the .gitkeep sentinel, so
+// the dashboard route would 503 on every request. Claiming "ready" there
+// sends the operator on a dead debugging loop. We log a separate line that
+// names the fix instead.
+func (s *HTTPService) printDashboardURL(bindAddr string) {
+	if !s.fullConfig.Dashboard.Enabled {
+		return
+	}
+
+	url, ok := dashboardURL(bindAddr)
+	if !ok {
+		return
+	}
+
+	s.logger.Info(dashboardStartupLine(url, dashboard.AssetsBuilt()))
+}
+
+// dashboardStartupLine renders the line printDashboardURL emits for a given
+// URL and asset-present flag. Split out so the decision is unit-testable
+// without standing up a logger.
+func dashboardStartupLine(url string, assetsBuilt bool) string {
+	if assetsBuilt {
+		return fmt.Sprintf("Admin dashboard ready - %s", url)
+	}
+	return fmt.Sprintf("Admin dashboard at %s (assets not built - run `make build-web` or use a release binary)", url)
+}
+
+// dashboardURL derives a clickable dashboard URL from a listener bind address.
+// An unspecified host (0.0.0.0, ::, [::], or an empty host) isn't something a
+// browser can open, so it's substituted with localhost. IPv6 literals are
+// bracketed for a valid URL authority.
+func dashboardURL(bindAddr string) (string, bool) {
+	host, port, err := net.SplitHostPort(bindAddr)
+	if err != nil || port == "" {
+		return "", false
+	}
+
+	// net.JoinHostPort brackets IPv6 literals itself, so displayHost is left
+	// unbracketed here regardless of address family.
+	displayHost := host
+	if addr, perr := netip.ParseAddr(host); host == "" || (perr == nil && addr.IsUnspecified()) {
+		displayHost = "localhost"
+	}
+
+	return fmt.Sprintf("http://%s/internal/ui/", net.JoinHostPort(displayHost, port)), true
 }
 
 // applyCORS wraps the root handler with CORS as the outermost layer so that
@@ -223,6 +290,33 @@ func bindListener(ctx context.Context, addr string) (net.Listener, error) {
 		return nil, fmt.Errorf("failed to bind %s: %w", addr, err)
 	}
 	return ln, nil
+}
+
+// maxHeaderBytesFromConfig derives http.Server's MaxHeaderBytes from the
+// configured server.request_limits.max_header_size (default 1 MiB; see
+// config/config.yaml). A zero or negative value is an unset/invalid config,
+// not an instruction to disable the cap, so it falls back to Go's own
+// http.DefaultMaxHeaderBytes (1 MiB) rather than leaving MaxHeaderBytes at
+// zero, which http.Server would otherwise also read as "use the default" but
+// only by accident. A small positive value is floored at minMaxHeaderBytes so
+// a misconfiguration cannot cripple every request's headers. No ceiling is
+// applied: request_limits is operator-supplied config, not attacker input,
+// and Go's header parsing bounds work to the configured limit rather than
+// pre-allocating it.
+func maxHeaderBytesFromConfig(configured int64) int {
+	if configured <= 0 {
+		return http.DefaultMaxHeaderBytes
+	}
+	if configured > math.MaxInt {
+		// Only reachable on a 32-bit build with a pathological config value;
+		// clamp rather than truncate via a silent int64->int wraparound.
+		return math.MaxInt
+	}
+	v := int(configured)
+	if v < minMaxHeaderBytes {
+		return minMaxHeaderBytes
+	}
+	return v
 }
 
 func (s *HTTPService) printWarnings() {

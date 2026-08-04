@@ -40,3 +40,35 @@ func TestDuration2(t *testing.T) {
 		})
 	}
 }
+
+func TestEndpointsUp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		healthy int
+		total   int
+		want    string
+	}{
+		// Single-rune fast path, both sides safely single-digit.
+		{"single digit both", 9, 9, "9/9"},
+		// The fencepost: healthy==10 alone used to corrupt the healthy rune.
+		{"healthy at 10", 10, 10, "10/10"},
+		// total==10 alone used to corrupt the total rune - this is the exact
+		// case observed live ("9/:") with a 10-endpoint fleet.
+		{"total at ten, healthy single digit", 9, 10, "9/10"},
+		// One side just over the fast-path boundary.
+		{"total at eleven", 10, 11, "10/11"},
+		{"both eleven", 11, 11, "11/11"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := EndpointsUp(tc.healthy, tc.total)
+			if got != tc.want {
+				t.Errorf("EndpointsUp(%d, %d) = %q, want %q", tc.healthy, tc.total, got, tc.want)
+			}
+		})
+	}
+}

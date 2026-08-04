@@ -115,7 +115,7 @@ discovery:
   static:
     endpoints:
       # See docs for details on configuring endpoints:
-      # http://127.0.0.1:8000/olla/configuration/overview/#endpoint-configuration
+      # https://thushan.github.io/olla/configuration/overview/#endpoint-configuration
       - url: "http://localhost:11434"
         name: "local-ollama"
         type: "ollama"
@@ -140,6 +140,20 @@ discovery:
         health_check_url: "/health"
         check_interval: 5s
         check_timeout: 2s
+      # Backends behind credentials use an auth: block, not userinfo in the URL.
+      # An embedded user:pass@host form is rejected at startup to keep secrets
+      # out of status/dashboard JSON. Inline values support ${VAR}; use
+      # username_file / password_file (or token_file / key_file for the other
+      # types) to read from a file. See:
+      # https://thushan.github.io/olla/configuration/endpoint-auth/
+      #
+      # - url: "http://protected-llm:8080"
+      #   name: "protected-llm"
+      #   type: "openai-compatible"
+      #   auth:
+      #     type: basic           # bearer / api_key also supported
+      #     username: "user"
+      #     password: "pass"
   model_discovery:
     enabled: true
     interval: 5m
@@ -195,6 +209,28 @@ logging:
 
 engineering:
   show_nerdstats: false
+
+# Admin dashboard (read-only, no auth). Gated by network-layer allowlists: a
+# request must come from an allowed CIDR AND present an allowed Host header.
+# Proxy headers (X-Forwarded-For, X-Real-IP) are never consulted for this
+# decision, so a reverse proxy on the same host defeats the loopback check.
+# Loopback-only default matches the bare-metal first-run; Docker operators
+# typically need to widen access_policy.allowed_cidrs to the bridge gateway's
+# subnet. IP-literal Hosts (127.0.0.1, [::1]) are auto-accepted, so only the
+# non-IP "localhost" needs to appear in allowed_hosts.
+dashboard:
+  enabled: true
+  access_policy:
+    allowed_cidrs:
+      - "127.0.0.0/8"
+      - "::1/128"
+    allowed_hosts:
+      - "localhost"
+  # gate_internal_api is reserved for a future release and is inert today:
+  # setting it true has no effect (Olla logs a warning at startup if set).
+  # Once wired, it will extend the same access_policy to the rest of
+  # /internal/* and /version.
+  gate_internal_api: false
 
 # Model aliases allow mapping a single virtual model name to multiple actual model names
 # across different backends. When a request arrives with an alias, olla finds endpoints

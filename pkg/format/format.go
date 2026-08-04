@@ -46,7 +46,10 @@ func Duration(d time.Duration) string {
 }
 
 func EndpointsUp(healthy, total int) string {
-	if total <= 10 && healthy <= 10 {
+	// Single-rune fast path is only valid for single digits (0-9): '0'+10 is
+	// rune(58), which is ':', not "10". The guard must be < 10, not <= 10 -
+	// a fleet with exactly 10 endpoints previously rendered "9/:".
+	if total < 10 && healthy < 10 {
 		return string(rune('0'+healthy)) + "/" + string(rune('0'+total))
 	}
 	return fmt.Sprintf("%d/%d", healthy, total)

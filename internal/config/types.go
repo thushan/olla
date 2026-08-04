@@ -29,6 +29,7 @@ type Config struct {
 	ModelAliases  map[string][]string `yaml:"model_aliases,omitempty"`
 	Logging       LoggingConfig       `yaml:"logging"`
 	Filename      string              `yaml:"-"`
+	Dashboard     DashboardConfig     `yaml:"dashboard"`
 	Translators   TranslatorsConfig   `yaml:"translators"`
 	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
@@ -97,6 +98,104 @@ func (c *CorsConfig) Validate() error {
 			}
 		}
 	}
+	return nil
+}
+
+// AccessPolicyConfig is a network-layer allow rule shared by the dashboard's
+// gated zones. A request must pass both checks; there is no auth behind them,
+// so network restriction is the only control.
+type AccessPolicyConfig struct {
+	// AllowedCIDRs is matched against the TCP-layer source from r.RemoteAddr
+	// only. Proxy headers (X-Forwarded-For, X-Real-IP) are never consulted,
+	// under any configuration: Olla's listener legitimately binds 0.0.0.0 and
+	// trusting those headers without a separate trust mechanism would let any
+	// client spoof past the gate. Required, non-empty, when the zone using
+	// this policy is active.
+	AllowedCIDRs []string `yaml:"allowed_cidrs"`
+
+	// AllowedHosts is matched against r.Host with the :port suffix stripped
+	// and the comparison case-insensitive. May be empty: any Host that parses
+	// as an IP literal is always accepted, so an operator browsing
+	// via http://192.168.1.10:40114/internal/ui/ needs no entry here. List
+	// only the non-IP hostnames you want to allow (e.g. a LAN mDNS name).
+	AllowedHosts []string `yaml:"allowed_hosts"`
+
+	// allowedCIDRsParsed is populated by Validate so the hot request path
+	// never re-parses. Validate must run once at startup before any handler
+	// wrapped by this policy accepts a request.
+	allowedCIDRsParsed []*net.IPNet
+}
+
+// DashboardConfig controls the embedded read-only admin dashboard, served from
+// the existing HTTP listener at /internal/ui/.
+type DashboardConfig struct {
+	// AccessPolicy gates /internal/ui/* unconditionally whenever Enabled is
+	// true. GateInternalAPI exists for forward compatibility but is inert on
+	// this branch (see GateInternalAPI).
+	AccessPolicy AccessPolicyConfig `yaml:"access_policy"`
+
+	// Enabled controls whether /internal/ui/* routes are registered at all.
+	// The embedded assets are always compiled into the binary; this only
+	// governs whether they are ever served.
+	Enabled bool `yaml:"enabled"`
+
+	// GateInternalAPI is reserved for a later change that opts the rest of
+	// /internal/* (and /version) into the same AccessPolicy. It is INERT for
+	// now: setting it true has no effect. Defaults to false because
+	// defaulting it on would silently break existing deployments that scrape
+	// /internal/metrics or poll /internal/health from hosts the policy would
+	// reject. The field ships now so that later change needs no config migration.
+	GateInternalAPI bool `yaml:"gate_internal_api"`
+}
+
+// ParsedCIDRs returns the CIDR nets populated by AccessPolicyConfig.Validate.
+// Returns nil if Validate has not run, which the dashboard registration helper
+// treats as deny-all rather than silently allowing everything.
+func (c *DashboardConfig) ParsedCIDRs() []*net.IPNet {
+	return c.AccessPolicy.allowedCIDRsParsed
+}
+
+// Validate parses the access policy's CIDRs so the request path doesn't have
+// to. No-op when the dashboard is disabled, so an explicit off switch validates
+// clean without forcing the operator to also populate the allowlists.
+//
+// GateInternalAPI is deliberately inert for now (the wrapping that would
+// extend AccessPolicy to the rest of /internal/* isn't implemented yet), so a
+// startup slog.Warn fires when it is set true. Without the warning an operator
+// who sets the flag sees silent acceptance, assumes the gate is active, and
+// is surprised when /internal/* stays open. The field itself is kept so that
+// later change needs no config migration.
+func (c *DashboardConfig) Validate() error {
+	if c.GateInternalAPI {
+		slog.Warn("dashboard.gate_internal_api is set but inert on this build; /internal/* is NOT gated by the dashboard access policy",
+			"gate_internal_api", true,
+			"reason", "wrapping is not yet wired; treating the flag as a no-op to preserve existing monitoring scrapes")
+	}
+	if !c.Enabled {
+		return nil
+	}
+	if err := c.AccessPolicy.Validate("dashboard"); err != nil {
+		return fmt.Errorf("dashboard config invalid: %w", err)
+	}
+	return nil
+}
+
+// ValidateAccessPolicy checks the access policy's CIDRs parse and stashes the
+// parsed nets on the struct for the hot path. zone names the calling config in
+// errors so the operator can tell which section has the bad entry.
+func (c *AccessPolicyConfig) Validate(zone string) error {
+	if len(c.AllowedCIDRs) == 0 {
+		return fmt.Errorf("%s: access_policy.allowed_cidrs must not be empty", zone)
+	}
+	parsed := make([]*net.IPNet, 0, len(c.AllowedCIDRs))
+	for _, raw := range c.AllowedCIDRs {
+		_, network, err := net.ParseCIDR(raw)
+		if err != nil {
+			return fmt.Errorf("%s: invalid access_policy.allowed_cidrs entry %q: %w", zone, raw, err)
+		}
+		parsed = append(parsed, network)
+	}
+	c.allowedCIDRsParsed = parsed
 	return nil
 }
 
