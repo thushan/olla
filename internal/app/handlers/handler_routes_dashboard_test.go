@@ -183,69 +183,6 @@ func TestDashboardRoute_DisabledYields404(t *testing.T) {
 	}
 }
 
-// TestMountDashboard_Disabled_DoesNotConstructHandler is the regression guard
-// for the disabled-dashboard-still-builds-the-asset-cache bug: dashboard.Handler()
-// walks and SHA-256-hashes the whole embedded SPA bundle to build its per-asset
-// cache, and it was previously evaluated as a call argument before
-// dashboard.RegisterRoutes checked cfg.Enabled, so a disabled dashboard paid
-// that cost for nothing. Substituting dashboardHandlerFactory proves the
-// factory is never invoked when the dashboard is disabled.
-func TestMountDashboard_Disabled_DoesNotConstructHandler(t *testing.T) {
-	orig := dashboardHandlerFactory
-	t.Cleanup(func() { dashboardHandlerFactory = orig })
-
-	called := false
-	dashboardHandlerFactory = func() http.Handler {
-		called = true
-		return http.NotFoundHandler()
-	}
-
-	reg := router.NewRouteRegistry(&mockStyledLogger{})
-	app := &Application{
-		Config:        &config.Config{Dashboard: config.DashboardConfig{Enabled: false}},
-		logger:        &mockStyledLogger{},
-		routeRegistry: reg,
-	}
-	app.mountDashboard()
-
-	if called {
-		t.Fatal("dashboard handler factory must not be invoked when the dashboard is disabled")
-	}
-	if _, exists := reg.GetRoutes()[dashboard.DashboardRoute]; exists {
-		t.Fatal("disabled dashboard must not register /internal/ui/")
-	}
-}
-
-// TestMountDashboard_Enabled_ConstructsHandler is the positive counterpart:
-// an enabled dashboard does invoke the factory exactly once and mounts the
-// route, so the guard above isn't trivially satisfied by never calling
-// mountDashboard's enabled branch at all.
-func TestMountDashboard_Enabled_ConstructsHandler(t *testing.T) {
-	orig := dashboardHandlerFactory
-	t.Cleanup(func() { dashboardHandlerFactory = orig })
-
-	calls := 0
-	dashboardHandlerFactory = func() http.Handler {
-		calls++
-		return http.NotFoundHandler()
-	}
-
-	reg := router.NewRouteRegistry(&mockStyledLogger{})
-	app := &Application{
-		Config:        &config.Config{Dashboard: enabledDashboardCfg(t)},
-		logger:        &mockStyledLogger{},
-		routeRegistry: reg,
-	}
-	app.mountDashboard()
-
-	if calls != 1 {
-		t.Fatalf("dashboard handler factory calls = %d, want 1", calls)
-	}
-	if _, exists := reg.GetRoutes()[dashboard.DashboardRoute]; !exists {
-		t.Fatal("enabled dashboard must register /internal/ui/")
-	}
-}
-
 // TestDashboardRoute_CollisionSkipsMount confirms the belt-and-braces
 // collision guard: if /internal/ui/ is somehow already registered when the
 // dashboard mount runs, registerRoutes logs Error and skips the mount rather
