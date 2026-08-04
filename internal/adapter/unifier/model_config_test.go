@@ -113,11 +113,12 @@ func TestLoadConfigFromFile_BrokenYAMLFallsBackWithWarning(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(brokenModelsYAML), 0644))
 
 	// t.Chdir makes the loader's first candidate path ("models.yaml") resolve
-	// into dir; OLLA_CONFIG_DIR is pointed at a second, empty temp dir so the
-	// env-derived candidate doesn't re-read the same file and double the
-	// warning count.
+	// into dir. OLLA_CONFIG_DIR is explicitly unset: filepath.Join("", "models.yaml")
+	// collapses to "models.yaml", which is the same candidate as above - if the
+	// loader didn't skip the env candidate when unset, this would read the same
+	// broken file twice and double the warning count.
 	t.Chdir(dir)
-	t.Setenv("OLLA_CONFIG_DIR", t.TempDir())
+	t.Setenv("OLLA_CONFIG_DIR", "")
 
 	config, source, warnings := loadConfigFromFile()
 
@@ -125,12 +126,49 @@ func TestLoadConfigFromFile_BrokenYAMLFallsBackWithWarning(t *testing.T) {
 	assert.Equal(t, getDefaultConfig(), config, "must fall back to embedded defaults")
 	assert.Empty(t, source, "no path should be reported as successfully loaded")
 
-	require.Len(t, warnings, 1, "expected exactly one parse warning for the broken models.yaml")
+	require.Len(t, warnings, 1, "expected exactly one parse warning for the broken models.yaml, not a duplicate from the OLLA_CONFIG_DIR candidate")
 	assert.Contains(t, warnings[0], "models.yaml")
 	assert.Greater(t, len(warnings[0]), len("models.yaml"), "warning should carry the underlying parse error, not just the path")
 
 	// the fallback config must itself still be usable - no panics downstream
 	require.NoError(t, config.compilePatterns())
+}
+
+// TestLoadConfigFromFile_EmptyFileFallsBackWithWarning covers the other
+// silent-failure shape: an empty (or comment-only) models.yaml is valid YAML
+// and unmarshals without error, so without the isEffectivelyEmpty guard it
+// would be treated as a successful load - configSource set, INFO logged -
+// while every family pattern, mapping and rule is missing.
+func TestLoadConfigFromFile_EmptyFileFallsBackWithWarning(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{"zero_byte_file", ""},
+		{"comment_only_file", "# nothing to see here\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(tt.content), 0644))
+
+			t.Chdir(dir)
+			t.Setenv("OLLA_CONFIG_DIR", "")
+
+			config, source, warnings := loadConfigFromFile()
+
+			require.NotNil(t, config, "must fall back to a usable config, never nil")
+			assert.Equal(t, getDefaultConfig(), config, "must fall back to embedded defaults")
+			assert.Empty(t, source, "no path should be reported as successfully loaded")
+
+			require.Len(t, warnings, 1, "expected exactly one warning for the empty models.yaml")
+			assert.Contains(t, warnings[0], "models.yaml")
+			assert.Contains(t, warnings[0], "no configuration")
+
+			require.NoError(t, config.compilePatterns())
+		})
+	}
 }
 
 // TestLogConfigStatus_WarnsOnBrokenShippedFile is the LogConfigStatus

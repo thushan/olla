@@ -139,15 +139,22 @@ func loadConfigFromFile() (*ModelUnificationConfig, string, []string) {
 		"config-base/models.yaml",
 		"../config/models.yaml",
 		"../../config/models.yaml",
-		filepath.Join(os.Getenv("OLLA_CONFIG_DIR"), "models.yaml"),
+	}
+	// filepath.Join("", "models.yaml") collapses to "models.yaml", which would
+	// silently duplicate the first candidate (and double every warning) when
+	// OLLA_CONFIG_DIR is unset - only add it when it's actually set.
+	if configDir := os.Getenv("OLLA_CONFIG_DIR"); configDir != "" {
+		paths = append(paths, filepath.Join(configDir, "models.yaml"))
 	}
 
 	var warnings []string
+	seen := make(map[string]bool, len(paths))
 
 	for _, path := range paths {
-		if path == "" {
+		if path == "" || seen[path] {
 			continue
 		}
+		seen[path] = true
 
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -162,10 +169,30 @@ func loadConfigFromFile() (*ModelUnificationConfig, string, []string) {
 			continue
 		}
 
+		if config.isEffectivelyEmpty() {
+			// an empty or comment-only file unmarshals without error, but
+			// treating that as "loaded" repeats the #204 silent-failure class:
+			// LogConfigStatus would report success while every lookup against
+			// it returns nothing. Warn and let a later candidate (or defaults)
+			// win instead.
+			warnings = append(warnings, fmt.Sprintf("%s: parsed but contains no configuration", path))
+			continue
+		}
+
 		return &config, path, warnings
 	}
 
 	return getDefaultConfig(), "", warnings
+}
+
+// isEffectivelyEmpty reports whether a successfully-parsed config carries no
+// real configuration at all - the signature of an empty or comment-only YAML
+// file, which is valid YAML but not a usable models.yaml.
+func (c *ModelUnificationConfig) isEffectivelyEmpty() bool {
+	return len(c.ModelExtraction.FamilyPatterns) == 0 &&
+		len(c.Capabilities.NamePatterns) == 0 &&
+		len(c.Quantization.Mappings) == 0 &&
+		len(c.ModelExtraction.ArchitectureMappings) == 0
 }
 
 // compilePatterns compiles all regex patterns in the configuration
