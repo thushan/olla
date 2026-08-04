@@ -98,23 +98,34 @@ func ConfigSource() string {
 // request.
 func LogConfigStatus(log logger.StyledLogger) {
 	_, err := LoadModelConfig()
+	if log == nil {
+		// still trigger the load above so callers that only care about the
+		// side effect (warming the singleton) work with a nil logger; there's
+		// just nothing to log to
+		return
+	}
 	if err != nil {
 		log.Error("model unification config: failed to compile patterns, using embedded defaults", "error", err)
 		return
 	}
 
-	if configSource != "" {
-		log.Debug("model unification config loaded", "source", configSource)
-		return
-	}
-
+	// Warn about every found-but-unparseable candidate even when a later
+	// candidate loaded successfully - otherwise a broken ./models.yaml next
+	// to a working config/models.yaml goes unmentioned, which is exactly the
+	// silence issue #204 complained about.
 	if len(configParseWarnings) > 0 {
 		log.Warn("model unification config: found models.yaml but could not parse it, falling back to embedded defaults",
 			"details", strings.Join(configParseWarnings, "; "))
+	}
+
+	if configSource != "" {
+		log.Info("model unification config loaded", "source", configSource)
 		return
 	}
 
-	log.Debug("model unification config: no models.yaml found, using embedded defaults")
+	if len(configParseWarnings) == 0 {
+		log.Debug("model unification config: no models.yaml found, using embedded defaults")
+	}
 }
 
 // loadConfigFromFile loads configuration from the YAML file, trying each
