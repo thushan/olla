@@ -319,6 +319,25 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 		// ArchitectureMappings is a flat 1:1 table, so this ambiguity is
 		// unavoidable without a redesign - out of scope for this pass.
 		{"kimi model with deepseek arch (known collision)", "kimi-k2-instruct", "deepseek", "deepseek", ""},
+
+		// FamilyAliases delimiter-fallback for name-based extraction is covered
+		// separately in TestExtractFromDelimiters_UsesConfiguredAliases: the
+		// 2026 refresh (main) gave devstral its own family_pattern, so
+		// "devstral-24b" now resolves at the pattern stage as family
+		// "devstral" (see devstral-small-2505 above) and never reaches the
+		// delimiter fallback this alias mechanism exists for.
+
+		// FamilyAliases: architecture fallback for arch strings not in ArchitectureMappings
+		{"arch alias deepseek2", "model", "deepseek2", "deepseek", "2"},
+
+		// PreserveFamily: wins outright, ahead of the deepseek pattern
+		{"deepseek-coder-v2 preserved", "deepseek-coder-v2", "", "deepseek-coder-v2", ""},
+		{"deepseek-coder-v2 with suffix preserved", "deepseek-coder-v2-lite", "", "deepseek-coder-v2", ""},
+		{"nomic-bert preserved", "nomic-bert", "", "nomic-bert", ""},
+		{"nomic-bert with suffix preserved", "nomic-bert-v1.5", "", "nomic-bert", ""},
+
+		// PreserveFamily must NOT affect deepseek-coder (no -v2 suffix)
+		{"deepseek-coder still splits", "deepseek-coder", "", "deepseek", "coder"},
 	}
 
 	for _, tt := range tests {
@@ -328,6 +347,32 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 			assert.Equal(t, tt.expectedVariant, variant, "Variant mismatch")
 		})
 	}
+}
+
+// TestExtractFromDelimiters_UsesConfiguredAliases exercises the FamilyAliases
+// delimiter fallback directly, with a synthetic config, rather than through
+// the full extractFamilyAndVariant path against production config. Every
+// alias in the shipped config now also has its own family_pattern (that's
+// how the 2026 model families were added), so any real model name that
+// starts with an alias key gets resolved at the pattern stage first and
+// never reaches this fallback - a synthetic config keeps the fallback itself
+// under test regardless of how the shipped patterns evolve.
+func TestExtractFromDelimiters_UsesConfiguredAliases(t *testing.T) {
+	config := &ModelUnificationConfig{}
+	config.ModelExtraction.FamilyAliases = map[string]string{
+		"widgetcoder": "widget",
+	}
+
+	family := extractFromDelimiters("widgetcoder-24b", config)
+	assert.Equal(t, "widget", family)
+}
+
+// TestExtractFromDelimiters_NilConfigFallsBackToKnownFamilies confirms the
+// nil-config guard added when this became config-driven: a nil config must
+// not panic, and the hardcoded knownDelimiterFamilies list still resolves.
+func TestExtractFromDelimiters_NilConfigFallsBackToKnownFamilies(t *testing.T) {
+	family := extractFromDelimiters("llama-3.2-1b", nil)
+	assert.Equal(t, "llama", family)
 }
 
 func TestExtractPublisher(t *testing.T) {

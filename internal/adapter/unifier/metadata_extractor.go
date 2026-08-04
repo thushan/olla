@@ -182,6 +182,12 @@ func extractFamilyAndVariant(modelName string, arch string) (family, variant str
 	modelName = strings.TrimSpace(strings.ToLower(modelName))
 	config := getConfig()
 
+	// Preserved families (e.g. deepseek-coder-v2) must win outright, ahead of
+	// the deepseek pattern that would otherwise split them into a variant.
+	if preserved := matchPreserveFamily(modelName, arch, config); preserved != "" {
+		return preserved, ""
+	}
+
 	// Try architecture-based extraction first
 	if arch != "" {
 		family, variant = extractFromArchitecture(arch, modelName, config)
@@ -197,8 +203,49 @@ func extractFamilyAndVariant(modelName string, arch string) (family, variant str
 	}
 
 	// Fallback to delimiter-based extraction
-	family = extractFromDelimiters(modelName)
+	family = extractFromDelimiters(modelName, config)
 	return family, variant
+}
+
+// matchPreserveFamily checks whether modelName or arch matches a configured
+// preserve_family entry, using exact or token-prefix matching (never a bare
+// substring contains) so that e.g. "deepseek-coder-v2" preserves whole while
+// "deepseek-coder" still falls through to the deepseek pattern below.
+func matchPreserveFamily(modelName, arch string, config *ModelUnificationConfig) string {
+	archLower := strings.ToLower(strings.TrimSpace(arch))
+
+	for _, entry := range config.SpecialRules.PreserveFamily {
+		entryLower := strings.ToLower(entry)
+
+		if archLower == entryLower {
+			return entry
+		}
+		if matchesTokenPrefix(modelName, entryLower) {
+			return entry
+		}
+	}
+
+	return ""
+}
+
+// matchesTokenPrefix reports whether name is exactly entry, or starts with
+// entry followed by a delimiter boundary. This stops "nomic-bert" matching
+// "nomic-bertson" while still matching "nomic-bert-v1.5".
+func matchesTokenPrefix(name, entry string) bool {
+	if name == entry {
+		return true
+	}
+	if !strings.HasPrefix(name, entry) {
+		return false
+	}
+
+	next := name[len(entry)]
+	switch next {
+	case '-', '_', ':', '/', '.':
+		return true
+	default:
+		return false
+	}
 }
 
 // extractFromArchitecture extracts family and variant from architecture info
@@ -206,7 +253,12 @@ func extractFromArchitecture(arch, modelName string, config *ModelUnificationCon
 	archLower := strings.ToLower(arch)
 	mappedFamily, exists := config.ModelExtraction.ArchitectureMappings[archLower]
 	if !exists {
-		return "", ""
+		// Some backends (e.g. Ollama reporting "deepseek2") surface an
+		// architecture string that's an alias rather than a canonical family.
+		mappedFamily, exists = config.ModelExtraction.FamilyAliases[archLower]
+		if !exists {
+			return "", ""
+		}
 	}
 
 	family = mappedFamily
@@ -256,21 +308,35 @@ func extractFromPatterns(modelName string, config *ModelUnificationConfig) (fami
 	return "", ""
 }
 
-// extractFromDelimiters extracts family from first part of delimited name
-func extractFromDelimiters(modelName string) string {
+// knownDelimiterFamilies is the fallback set of bare family names recognised
+// when config doesn't supply an alias for the leading token - kept in sync
+// with the historical hardcoded list so existing behaviour is unaffected.
+var knownDelimiterFamilies = []string{
+	"llama", "gemma", "phi", "qwen", "mistral", "mixtral",
+	"yi", "deepseek", "codellama", "starcoder", "vicuna",
+	"falcon", "gpt2", "gptj", "gptneox", "bloom", "opt", "mpt",
+}
+
+// extractFromDelimiters extracts family from first part of delimited name.
+// Config-driven FamilyAliases are checked first (e.g. "devstral" -> "mistral"),
+// falling back to the known bare family names mapping to themselves.
+func extractFromDelimiters(modelName string, config *ModelUnificationConfig) string {
 	parts := regexp.MustCompile(`[-_:/]`).Split(modelName, -1)
 	if len(parts) == 0 {
 		return ""
 	}
 
 	firstPart := strings.ToLower(parts[0])
-	knownFamilies := []string{
-		"llama", "gemma", "phi", "qwen", "mistral", "mixtral",
-		"yi", "deepseek", "codellama", "starcoder", "vicuna",
-		"falcon", "gpt2", "gptj", "gptneox", "bloom", "opt", "mpt",
+
+	if config != nil {
+		for alias, mapped := range config.ModelExtraction.FamilyAliases {
+			if strings.HasPrefix(firstPart, alias) {
+				return mapped
+			}
+		}
 	}
 
-	for _, known := range knownFamilies {
+	for _, known := range knownDelimiterFamilies {
 		if strings.HasPrefix(firstPart, known) {
 			return known
 		}

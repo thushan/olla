@@ -172,6 +172,21 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
+			name: "PreserveFamily wins over the deepseek pattern",
+			models: []*domain.ModelInfo{
+				{
+					Name: "deepseek-coder-v2:16b",
+					// No Details.Family - forces the extractor to run rather
+					// than short-circuiting on a provider-supplied family.
+				},
+			},
+			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Equal(t, "deepseek-coder-v2", model.Family)
+				assert.Empty(t, model.Variant)
+			},
+		},
+		{
 			name: "Model with metadata confidence",
 			models: []*domain.ModelInfo{
 				{
