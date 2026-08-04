@@ -694,7 +694,7 @@ func richModelDetails() *domain.ModelDetails {
 	family := "llama"
 	params := "8B"
 	quant := "Q4_0"
-	mtype := "llm"
+	mtype := modelTypeLLM
 	return &domain.ModelDetails{
 		Family:            &family,
 		ParameterSize:     &params,

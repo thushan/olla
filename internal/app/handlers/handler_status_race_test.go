@@ -45,7 +45,7 @@ func TestModelsStatusHandler_Concurrent(t *testing.T) {
 	quant := "Q4_K_M"
 	modelInfo := &domain.ModelInfo{
 		Name: "llama3:7b",
-		Type: "llm",
+		Type: modelTypeLLM,
 		Size: 4_000_000_000,
 		Details: &domain.ModelDetails{
 			Family:            &family,

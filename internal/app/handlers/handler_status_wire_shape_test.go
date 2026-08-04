@@ -267,7 +267,7 @@ func seedWireShapeApp(t *testing.T) *Application {
 	family := "llama"
 	paramSize := "7B"
 	quant := "q4_0"
-	mtype := "llm"
+	mtype := modelTypeLLM
 
 	modelMap := map[string]*domain.EndpointModels{
 		healthyURL: {
