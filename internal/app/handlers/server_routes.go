@@ -27,6 +27,12 @@ type staticProvider struct {
 	routes   []staticRoute
 }
 
+// dashboardHandlerFactory constructs the dashboard's static-asset handler. A
+// package-level var (rather than calling dashboard.Handler directly) so tests
+// can substitute a cheap stub and observe whether construction happened,
+// without adding test-only instrumentation to the dashboard package itself.
+var dashboardHandlerFactory = dashboard.Handler
+
 // registerRoutes sets up the complete HTTP routing table
 func (a *Application) registerRoutes() {
 	// Internal health and monitoring endpoints come first - they're critical
@@ -59,20 +65,35 @@ func (a *Application) registerRoutes() {
 	a.registerProviderRoutes()
 
 	// Dashboard mounts last so its /internal/ui/ subtree cannot shadow any
-	// provider or internal route registered above. The collision check is
-	// belt-and-braces defence against a future regression: every route above
-	// is either an /olla/ prefixed proxy route or a fixed literal distinct
-	// from /internal/ui/, so this is never expected to fire. On detecting a
-	// collision we log Error and skip mounting (fail safe: never mount
-	// something shadowed, never take the server down over a defensive check).
-	// registerRoutes' signature stays unchanged: a collision skips the
-	// dashboard rather than halting startup. See simple-dashboard.md §5.
+	// provider or internal route registered above.
+	a.mountDashboard()
+}
+
+// mountDashboard registers the dashboard subtree, gated by cfg.Enabled. The
+// collision check is belt-and-braces defence against a future regression:
+// every route registered above is either an /olla/ prefixed proxy route or a
+// fixed literal distinct from /internal/ui/, so this is never expected to
+// fire. On detecting a collision we log Error and skip mounting (fail safe:
+// never mount something shadowed, never take the server down over a
+// defensive check). See simple-dashboard.md §5.
+//
+// dashboard.Handler() is only called from inside the enabled branch below,
+// not passed as an argument evaluated unconditionally: constructing it walks
+// and SHA-256-hashes the entire embedded SPA bundle (~300KB) to build the
+// per-asset cache, real work that a disabled dashboard has no reason to pay.
+// Keep the enabled check textually gating the Handler() call so this stays
+// obviously true by inspection rather than relying on evaluation-order
+// subtlety.
+func (a *Application) mountDashboard() {
 	if _, exists := a.routeRegistry.GetRoutes()[dashboard.DashboardRoute]; exists {
 		a.logger.Error("dashboard route collision; skipping mount",
 			"route", dashboard.DashboardRoute)
-	} else {
-		dashboard.RegisterRoutes(a.routeRegistry, a.Config.Dashboard, a.logger, dashboard.Handler())
+		return
 	}
+	if !a.Config.Dashboard.Enabled {
+		return
+	}
+	dashboard.RegisterRoutes(a.routeRegistry, a.Config.Dashboard, a.logger, dashboardHandlerFactory())
 }
 
 // registerTranslatorRoutes dynamically registers routes for all translators
