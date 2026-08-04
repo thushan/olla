@@ -311,7 +311,7 @@ curl -X GET http://localhost:40114/internal/status/endpoints
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | string | Opaque identifier derived from the sanitised URL; identical to the `id` surfaced on `/internal/status` and `/internal/status/models` for the same endpoint from the same snapshot. Stable across restarts and credential rotation for endpoints with a distinct name or a distinct sanitised URL, but positional `-N` suffixes can renumber when sanitised-URL siblings are added, removed, or renamed |
+| `id` | string | Opaque identifier derived from the sanitised URL; identical to the `id` on `/internal/status` and to the matching entry in `endpoint_ids` on `/internal/status/models` for the same endpoint from the same snapshot. Stable across restarts and credential rotation for endpoints with a distinct name or a distinct sanitised URL, but positional `-N` suffixes can renumber when sanitised-URL siblings are added, removed, or renamed |
 | `name` | string | Endpoint name from config |
 | `url` | string | Sanitised endpoint URL (userinfo, query, and fragment stripped) |
 | `type` | string | Backend profile type (e.g. `ollama`, `vllm`, `lm-studio`) |
@@ -409,7 +409,7 @@ Query parameters:
 | `last_seen` | string | Human-readable relative time since the model was last seen (excluded from the ETag hash) |
 | `last_seen_at` | string \| omitted | RFC3339 timestamp the model was last seen (absolute, hashed). When the same model is hosted on several endpoints, the newest `last_seen_at` wins |
 | `endpoints` | []string | Sorted display names of every endpoint hosting this model |
-| `endpoint_ids` | []string \| omitted | Stable IDs of every endpoint hosting this model, positionally paired with `endpoints`. Use this slice (not the names) as the click-through key to `/internal/status/endpoints`, since two endpoints can share a display name |
+| `endpoint_ids` | []string \| omitted | Opaque, process/config-relative endpoint anchors for every endpoint hosting this model, positionally paired with `endpoints`. Not durable database identifiers - the value is derived from the sanitised URL and positional `-N` suffixes can renumber when sanitised-URL siblings are added, removed, or renamed (see the [ID derivation contract](../about/release-notes.md#breaking-endpoint-id-derivation-changed)). Use this slice (not the names) as the click-through key to `/internal/status/endpoints`, since two endpoints can share a display name |
 | `aliases` | []string \| omitted | Other identifiers for the same unified model (alias names plus the canonical unified ID). Empty when the registry has no unified view or the model has a single identifier |
 | `capabilities` | []string \| omitted | Inferred capabilities (`text_generation`, `chat`, `vision`, `multimodal`, `embeddings`, `vector_search`, `long_context`, `high_precision`) |
 

@@ -46,9 +46,13 @@ status layer.
 For secrets kept out of config, use the `username_file` / `password_file` variants (see
 [Endpoint Authentication](../configuration/endpoint-auth.md)).
 
-The boot error rewrites the rejected URL into the equivalent `auth:` block, with the
-username and password replaced by placeholders, so the fix is a copy-paste away without
-the error ever echoing your real credentials.
+The boot error rewrites the rejected URL into an `auth:` block with the credentials
+replaced by placeholders, so the fix is a copy-paste away without the error ever echoing
+your real credentials. For a full `user:pass@host` URL this is an exactly equivalent
+basic block; for a username-only `user@host` URL there is no equivalent basic
+configuration (basic auth requires a password), so the error offers migration
+alternatives instead - a basic block with a password placeholder, or a bearer block if
+the username was really a token.
 
 ### Breaking: zero-traffic status semantics changed
 
@@ -76,11 +80,12 @@ status payloads for the same endpoint from the same repository snapshot.
 
 ### Breaking: endpoint `url` in status responses is now sanitised
 
-The `url` field on `/internal/status`, `/internal/status/endpoints`, and
-`/internal/status/models` now has userinfo, query string, and fragment stripped before
-it is surfaced. Previously this field echoed the raw configured URL, which could include
-embedded credentials. Clients that compared this field against the raw config value for
-identity should switch to the `id` field, which is designed for that purpose.
+The `url` field on `/internal/status` and `/internal/status/endpoints` now has userinfo,
+query string, and fragment stripped before it is surfaced. (`/internal/status/models`
+exposes no URL at all - only endpoint display names and `endpoint_ids`.) Previously this
+field echoed the raw configured URL, which could include embedded credentials. Clients
+that compared this field against the raw config value for identity should switch to the
+`id` field, which is designed for that purpose.
 
 ### Added: weak ETags on status JSON
 
