@@ -53,9 +53,10 @@ const (
 )
 
 var (
-	enableProfiling bool
-	showVersion     bool
-	configFile      string
+	enableProfiling    bool
+	showVersion        bool
+	configFile         string
+	validateConfigFlag bool
 )
 
 func init() {
@@ -63,6 +64,7 @@ func init() {
 	flag.BoolVar(&showVersion, "version", false, "Show version information")
 	flag.StringVar(&configFile, "c", "", "Config file path")
 	flag.StringVar(&configFile, "config", "", "Config file path")
+	flag.BoolVar(&validateConfigFlag, "validate-config", false, "Validate config.yaml, models.yaml and profiles, then exit without starting the server")
 }
 func main() {
 	// flag.Parse must run here, not in init(): init() runs under `go test` too,
@@ -87,6 +89,12 @@ func main() {
 		os.Exit(0)
 	} else {
 		version.PrintVersionInfo(false, vlog)
+	}
+
+	if validateConfigFlag {
+		report, exitCode := runValidateConfig(configFile)
+		fmt.Print(report)
+		os.Exit(exitCode)
 	}
 
 	if enableProfiling {
