@@ -392,6 +392,71 @@ ollama-dev: [llama3.2, experimental-model, test-model]
 ollama-prod: [llama3.2, mistral, codellama]
 ```
 
+## Customising Extraction with models.yaml
+
+Model unification's family/publisher/quantisation/capability extraction is driven by `config/models.yaml`. Olla ships one under `config/models.yaml`; you can override or extend it without rebuilding.
+
+### What it controls
+
+`models.yaml` has four top-level sections (all optional - an omitted section falls back to Olla's built-in defaults):
+
+| Section | Field | Type | Purpose |
+|---|---|---|---|
+| `model_extraction` | `family_patterns` | list of `{pattern, family_group, variant_group, description}` | Regex patterns that extract a model's family (e.g. `llama`, `qwen`) and variant from its name |
+| | `family_aliases` | map of string to string | Normalise family name variants to a canonical form |
+| | `architecture_mappings` | map of string to string | Map a GGUF `general.architecture` string to a family name |
+| | `publisher_mappings` | map of string to string | Map a publisher/org prefix to a canonical name |
+| `quantization` | `mappings` | map of string to string | Normalise quantisation labels (e.g. `q4_k_m` variants) |
+| `capabilities` | `name_patterns` | list of `{pattern, capabilities}` | Regex patterns matched against a model name to infer capabilities (e.g. `vision`, `code-generation`) |
+| | `type_capabilities` | map of string to list of string | Capabilities implied by a model's declared type |
+| | `context_thresholds` | map of string to int64 | Token thresholds for `extended_context` / `long_context` / `ultra_long_context` labels |
+| `special_rules` | `preserve_family` | list of string | Family names that must not be rewritten by pattern matching |
+| | `generic_names` | list of string | Names treated as generic rather than a real family (excluded from family-based grouping) |
+
+### Where Olla looks for it
+
+At startup, Olla tries these candidate paths in order and uses the first one that exists, reads and parses successfully, and isn't empty:
+
+1. `./models.yaml`
+2. `./config/models.yaml`
+3. `./config-base/models.yaml`
+4. `../config/models.yaml`
+5. `../../config/models.yaml`
+6. `$OLLA_CONFIG_DIR/models.yaml` (only checked when `OLLA_CONFIG_DIR` is set)
+
+If none of these produce a usable file, Olla falls back to its embedded defaults. The source actually loaded (or `using embedded defaults`) is logged at `INFO` on startup. A candidate that exists but fails to parse, or parses as valid YAML with no configuration in it, is recorded as a warning rather than silently ignored - so a broken `./models.yaml` next to a working `config/models.yaml` still gets flagged even though the working file loads.
+
+!!! warning "Quote regex patterns with single quotes"
+    A `pattern` containing a backslash (`\d`, `\w`, `\s`, and so on) must be single-quoted in YAML:
+
+    ```yaml
+    # Correct - single-quoted, backslash reaches the regex engine
+    - pattern: '^(llama|gemma|phi|qwen)[-_]?(\d+(?:\.\d+)?)'
+
+    # Wrong - double-quoted YAML strings treat \d as an escape sequence
+    # and fail to parse ("found unknown escape character")
+    - pattern: "^(llama|gemma|phi|qwen)[-_]?(\d+(?:\.\d+)?)"
+    ```
+
+    This is a real failure mode, not a hypothetical: it broke `config/models.yaml` itself (issue #204) before the file's patterns were switched to single quotes.
+
+### Worked example: adding a capability pattern
+
+To make Olla recognise a locally fine-tuned "guard" model family as having a `content-moderation` capability, add a pattern under `capabilities.name_patterns` in your own `models.yaml`:
+
+```yaml
+capabilities:
+  name_patterns:
+    - pattern: '(guard|moderation)'
+      capabilities:
+        - content-moderation
+        - safety
+```
+
+Patterns are matched case-insensitively against the model name. Place your override file at one of the candidate paths above (`./config/models.yaml` is the usual choice) - copy the relevant section from Olla's shipped `config/models.yaml` first if you want to extend rather than replace the built-in patterns, since Olla uses the first usable file wholesale rather than merging it with the defaults.
+
+After editing, run [`olla --validate-config`](../getting-started/installation.md#validating-configuration) before restarting - it loads `models.yaml` the same way the running server does and reports parse errors or empty-file warnings before they reach production.
+
 ## Limitations
 
 - **No cross-provider unification**: Ollama models stay separate from LM Studio models

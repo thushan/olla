@@ -371,6 +371,13 @@ logging:
 | **warn** | Warning conditions |
 | **error** | Error conditions only |
 
+An invalid value for `level`, `format` or `output` warns and falls back to the default rather than failing startup.
+
+!!! warning "TTY always wins for format"
+    On an interactive terminal, Olla always prints pretty/text logs, no matter what `logging.format` says in the config file - so `format: "json"` in `config.yaml` (typically set for Docker/production) won't change what you see running `olla` directly in a terminal. Off a TTY (piped, Docker, a service), the configured format is used as written. Set the `OLLA_LOGGING_FORMAT` environment variable to force a format everywhere, TTY or not.
+
+`output: "file"` adds a rotating file handler alongside stdout logging - it doesn't replace stdout. There's no environment variable for `output`; it's YAML-only.
+
 ## Engineering Configuration
 
 Advanced features for debugging and monitoring:
