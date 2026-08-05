@@ -171,6 +171,43 @@ func TestLoadConfigFromFile_EmptyFileFallsBackWithWarning(t *testing.T) {
 	}
 }
 
+// TestLoadConfigFromFile_PartialFileWithOnlyFamilyAliasesLoads guards against
+// a regression in isEffectivelyEmpty: a file that only sets one section (here
+// family_aliases) is a legitimate partial override, not an empty file, and
+// must load successfully - no warning, configSource pointing at it, and the
+// aliases present in the returned config.
+func TestLoadConfigFromFile_PartialFileWithOnlyFamilyAliasesLoads(t *testing.T) {
+	dir := t.TempDir()
+	partialYAML := `
+model_extraction:
+  family_aliases:
+    llama3: llama
+    devstral: mistral
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(partialYAML), 0644))
+
+	t.Chdir(dir)
+	t.Setenv("OLLA_CONFIG_DIR", "")
+
+	config, source, warnings := loadConfigFromFile()
+
+	require.NotNil(t, config)
+	assert.Equal(t, filepath.Join(dir, "models.yaml"), mustAbs(t, source), "partial file with only family_aliases must be treated as usable, not empty")
+	assert.Empty(t, warnings)
+
+	assert.Equal(t, "llama", config.ModelExtraction.FamilyAliases["llama3"])
+	assert.Equal(t, "mistral", config.ModelExtraction.FamilyAliases["devstral"])
+}
+
+// mustAbs resolves path against the current (t.Chdir'd) working directory so
+// it can be compared against a path built from t.TempDir() (already absolute).
+func mustAbs(t *testing.T, path string) string {
+	t.Helper()
+	abs, err := filepath.Abs(path)
+	require.NoError(t, err)
+	return abs
+}
+
 // TestLogConfigStatus_WarnsOnBrokenShippedFile is the LogConfigStatus
 // counterpart: a models.yaml that exists but fails to parse must produce a
 // warning-level log line naming the file, not the same silence as the

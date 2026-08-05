@@ -187,12 +187,20 @@ func loadConfigFromFile() (*ModelUnificationConfig, string, []string) {
 
 // isEffectivelyEmpty reports whether a successfully-parsed config carries no
 // real configuration at all - the signature of an empty or comment-only YAML
-// file, which is valid YAML but not a usable models.yaml.
+// file, which is valid YAML but not a usable models.yaml. Every top-level
+// section counts: a file that only sets family_aliases (say) is a legitimate
+// partial override and must not be discarded as "empty".
 func (c *ModelUnificationConfig) isEffectivelyEmpty() bool {
 	return len(c.ModelExtraction.FamilyPatterns) == 0 &&
+		len(c.ModelExtraction.FamilyAliases) == 0 &&
+		len(c.ModelExtraction.ArchitectureMappings) == 0 &&
+		len(c.ModelExtraction.PublisherMappings) == 0 &&
 		len(c.Capabilities.NamePatterns) == 0 &&
+		len(c.Capabilities.TypeCapabilities) == 0 &&
+		len(c.Capabilities.ContextThresholds) == 0 &&
 		len(c.Quantization.Mappings) == 0 &&
-		len(c.ModelExtraction.ArchitectureMappings) == 0
+		len(c.SpecialRules.PreserveFamily) == 0 &&
+		len(c.SpecialRules.GenericNames) == 0
 }
 
 // compilePatterns compiles all regex patterns in the configuration
