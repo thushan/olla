@@ -231,6 +231,13 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 
 // handleDiscoveryError processes discovery errors and manages endpoint disabling
 func (s *ModelDiscoveryService) handleDiscoveryError(endpoint *domain.Endpoint, err error) {
+	// Discovery requests are canceled during coordinated shutdown/restart.
+	// Treat these as expected lifecycle events, not endpoint failures.
+	if errors.Is(err, context.Canceled) {
+		s.logger.InfoWithEndpoint("Model discovery canceled during shutdown", endpoint.Name)
+		return
+	}
+
 	// Create user-friendly message for console output and detailed error for logs
 	userMsg := GetUserFriendlyMessage(err)
 
