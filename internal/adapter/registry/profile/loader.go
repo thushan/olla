@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,7 @@ type ProfileLoader struct {
 	profiles      map[string]domain.InferenceProfile
 	profileFilter *domain.FilterConfig
 	profilesDir   string
+	loadWarnings  []string
 	mu            sync.RWMutex
 }
 
@@ -56,6 +58,10 @@ func (l *ProfileLoader) LoadProfiles() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	// reset per-call so a reload doesn't accumulate warnings from a
+	// previously-broken file that's since been fixed or removed
+	l.loadWarnings = nil
+
 	allProfiles := make(map[string]domain.InferenceProfile)
 
 	// built-ins ensure it works out of the box, even without config files
@@ -79,8 +85,14 @@ func (l *ProfileLoader) LoadProfiles() error {
 
 		profile, err := l.loadProfile(path)
 		if err != nil {
-			// don't fail everything because of one bad yaml file
-			fmt.Printf("failed to load profile %s: %v\n", path, err)
+			// don't fail everything because of one bad yaml file - but don't
+			// go silent either (issue #204's bug class): record it so
+			// --validate-config and any caller with a real logger can
+			// surface it, and warn now via slog so it shows up in ordinary
+			// startup logs too.
+			warning := fmt.Sprintf("%s: %v", path, err)
+			l.loadWarnings = append(l.loadWarnings, warning)
+			slog.Warn("profile failed to load, skipping", "path", path, "error", err)
 			return nil
 		}
 
@@ -94,6 +106,18 @@ func (l *ProfileLoader) LoadProfiles() error {
 
 	// Apply filtering to all loaded profiles
 	return l.applyProfileFilter(allProfiles)
+}
+
+// LoadWarnings returns any profile files that were found but failed to load
+// during the most recent LoadProfiles call - e.g. malformed YAML or a
+// missing required field. Empty when every discovered profile loaded
+// cleanly. Exposed so callers like --validate-config can surface these
+// without depending on log capture.
+func (l *ProfileLoader) LoadWarnings() []string {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	return append([]string(nil), l.loadWarnings...)
 }
 
 // applyProfileFilter applies the configured filter to the profiles
