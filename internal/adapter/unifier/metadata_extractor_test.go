@@ -55,6 +55,10 @@ func TestNormalizeQuantization(t *testing.T) {
 		// Mixed case
 		{"q4_K_m", "q4_K_m", "q4km"},
 		{"Q4_k_M", "Q4_k_M", "q4km"},
+
+		// gpt-oss / Nemotron FP4 formats
+		{"MXFP4", "MXFP4", "mxfp4"},
+		{"NVFP4", "NVFP4", "nvfp4"},
 	}
 
 	for _, tt := range tests {
@@ -192,6 +196,12 @@ func TestInferCapabilitiesFromMetadata(t *testing.T) {
 			},
 		},
 		{
+			name:                 "Forge code model by name",
+			modelType:            "llm",
+			modelName:            "tf/forge-code-2.1-code",
+			expectedCapabilities: []string{"text-generation", "chat", "completion", "code-generation", "programming", "code-completion"},
+		},
+		{
 			name:      "Metadata capabilities",
 			modelType: "llm",
 			modelName: "custom-model",
@@ -261,6 +271,54 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 		{"unknown-model", "unknown-model", "", "", ""},
 		{"yi-34b", "yi-34b", "", "yi", "34b"},
 		{"deepseek-coder", "deepseek-coder", "", "deepseek", "coder"},
+
+		// 2026 model families (issue: models.yaml refresh)
+		{"qwen3:32b", "qwen3:32b", "", "qwen", "3"},    // already worked pre-change; regression proof
+		{"gemma4:12b", "gemma4:12b", "", "gemma", "4"}, // already worked pre-change; regression proof
+		{"glm-4.5-air", "glm-4.5-air", "", "glm", "4.5"},
+		{"gpt-oss:20b", "gpt-oss:20b", "", "gpt-oss", "20b"},
+		{"kimi-k2", "kimi-k2", "", "kimi", "k2"},
+		{"granite3.3:8b", "granite3.3:8b", "", "granite", "3.3"},
+		{"devstral-small-2505", "devstral-small-2505", "", "devstral", "small-2505"},
+		{"codestral-22b", "codestral-22b", "", "codestral", "22b"},
+		{"magistral-small", "magistral-small", "", "magistral", "small"},
+		{"ministral-8b", "ministral-8b", "", "ministral", "8b"},
+		{"nemotron-70b", "nemotron-70b", "", "nemotron", "70b"},
+		{"exaone-4.0-32b", "exaone-4.0-32b", "", "exaone", "4.0"},
+		{"hunyuan-a13b", "hunyuan-a13b", "", "hunyuan", "a13b"},
+		{"minimax-m2", "minimax-m2", "", "minimax", "m2"},
+		{"seed-oss-36b-instruct", "seed-oss-36b-instruct", "", "seed-oss", "36b-instruct"},
+		{"olmo2-13b", "olmo2-13b", "", "olmo", "2"},
+		{"internlm3-8b", "internlm3-8b", "", "internlm", "3"},
+		{"smollm3-3b", "smollm3-3b", "", "smollm", "3"},
+		{"command-r-plus", "command-r-plus", "", "command-r", "plus"},
+		{"hf publisher prefix - glm", "zai-org/glm-4.6", "", "glm", "4.6"},
+		{"hf publisher prefix - kimi", "moonshotai/Kimi-K2-Instruct", "", "kimi", ""},
+
+		// TensorFoundry Forge models (models.yaml 2026 refresh)
+		{"forge with publisher prefix", "tf/forge-code-2.1-code", "", "forge", "code-2.1-code"},
+		{"forge without publisher prefix", "forge-code-2.5-code", "", "forge", "code-2.5-code"},
+
+		// architecture-mapping path (arch supplied, name generic ("model" is
+		// in SpecialRules.GenericNames)). extractFromArchitecture doesn't stop
+		// at the first non-digit run after the family prefix - it takes the
+		// entire trimmed remainder as the variant once the first character is
+		// numeric, so "glm4moe" and "qwen3.5" yield "4moe" and "3.5" rather
+		// than just the leading digits.
+		{"model with glm4moe arch", "model", "glm4moe", "glm", "4moe"},
+		{"model with granitemoe arch", "model", "granitemoe", "granite", ""},
+		{"model with qwen3.5 arch", "model", "qwen3.5", "qwen", "3.5"},
+
+		// Known limitation, not a bug to fix here: Kimi-K2 GGUF files often
+		// report general.architecture "deepseek2" (Kimi-K2 and DeepSeek-V3
+		// share the same underlying transformer architecture), so
+		// architecture-based extraction misclassifies a Kimi model as
+		// "deepseek" whenever arch metadata is present - architecture-based
+		// lookup is tried before name-pattern matching in
+		// extractFamilyAndVariant, so it wins over the "kimi" pattern.
+		// ArchitectureMappings is a flat 1:1 table, so this ambiguity is
+		// unavoidable without a redesign - out of scope for this pass.
+		{"kimi model with deepseek arch (known collision)", "kimi-k2-instruct", "deepseek", "deepseek", ""},
 	}
 
 	for _, tt := range tests {
@@ -354,6 +412,37 @@ func TestExtractPublisher(t *testing.T) {
 			modelName:         "custom-model",
 			metadata:          nil,
 			expectedPublisher: "",
+		},
+		// 2026 model families
+		{
+			name:              "Known Devstral",
+			modelName:         "devstral-small-2505",
+			metadata:          nil,
+			expectedPublisher: "mistral",
+		},
+		{
+			name:              "Known GLM",
+			modelName:         "glm-4.5-air",
+			metadata:          nil,
+			expectedPublisher: "zai-org",
+		},
+		{
+			name:              "Known Kimi",
+			modelName:         "kimi-k2",
+			metadata:          nil,
+			expectedPublisher: "moonshotai",
+		},
+		{
+			name:              "Known Granite",
+			modelName:         "granite3.3:8b",
+			metadata:          nil,
+			expectedPublisher: "ibm",
+		},
+		{
+			name:              "Known Command-R",
+			modelName:         "command-r-plus",
+			metadata:          nil,
+			expectedPublisher: "cohere",
 		},
 	}
 

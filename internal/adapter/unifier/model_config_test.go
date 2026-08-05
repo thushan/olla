@@ -267,7 +267,7 @@ model_extraction:
 
 	// functional, not just present: a default pattern must be compiled and
 	// actually match, proving the fallback config went through compilePatterns.
-	require.Len(t, config.ModelExtraction.FamilyPatterns, 6)
+	require.Len(t, config.ModelExtraction.FamilyPatterns, len(getDefaultConfig().ModelExtraction.FamilyPatterns))
 	llamaPattern := config.ModelExtraction.FamilyPatterns[1]
 	require.NotNil(t, llamaPattern.regex, "fallback defaults must be compiled, not just assigned")
 	assert.True(t, llamaPattern.regex.MatchString("llama-3"), "compiled default pattern should match a real model name")

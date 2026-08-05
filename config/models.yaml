@@ -14,7 +14,7 @@ model_extraction:
       variant_group: 2
       description: "Common families with version numbers"
 
-    - pattern: '^[^/]+/(phi|llama|gemma|qwen|mistral)[-_]?(\d+(?:\.\d+)?)'
+    - pattern: '^[^/]+/(phi|llama|gemma|qwen|mistral|glm|granite|nemotron|exaone|kimi|minimax|hunyuan|olmo|internlm|smollm)[-_]?(\d+(?:\.\d+)?)?'
       family_group: 1
       variant_group: 2
       description: "Models with publisher prefix"
@@ -24,15 +24,93 @@ model_extraction:
       variant_group: 2
       description: "Code and specialised models"
       
+    - pattern: '^(gpt-oss)[-_:]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "OpenAI open-weight gpt-oss models"
+
     - pattern: "^(gpt)[-_]?(2|j|neox)?"
       family_group: 1
       variant_group: 2
       description: "GPT variants"
-      
+
     - pattern: "^(deepseek)[-_]?(.+)?"
       family_group: 1
       variant_group: 2
       description: "DeepSeek models"
+
+    - pattern: '^(devstral|magistral|codestral|ministral)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "Mistral AI code/agent/edge variants (Devstral, Magistral, Codestral, Ministral)"
+
+    - pattern: '^(glm)[-_]?(\d+(?:\.\d+)?)?'
+      family_group: 1
+      variant_group: 2
+      description: "GLM models (Zhipu / Z.ai)"
+
+    - pattern: '^(kimi)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "Kimi models (Moonshot AI)"
+
+    - pattern: '^(granite)[-_]?(\d+(?:\.\d+)?)?'
+      family_group: 1
+      variant_group: 2
+      description: "IBM Granite models"
+
+    - pattern: '^(nemotron)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "NVIDIA Nemotron models"
+
+    - pattern: '^(exaone)[-_]?(\d+(?:\.\d+)?)?'
+      family_group: 1
+      variant_group: 2
+      description: "LG AI EXAONE models"
+
+    - pattern: '^(hunyuan)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "Tencent Hunyuan models"
+
+    - pattern: '^(minimax)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "MiniMax models"
+
+    - pattern: '^(seed-oss)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "ByteDance Seed-OSS models"
+
+    - pattern: '^(olmo)[-_]?(\d+(?:\.\d+)?)?'
+      family_group: 1
+      variant_group: 2
+      description: "Allen Institute for AI OLMo models"
+
+    - pattern: '^(internlm)[-_]?(\d+(?:\.\d+)?)?'
+      family_group: 1
+      variant_group: 2
+      description: "Shanghai AI Lab InternLM models"
+
+    - pattern: '^(smollm)[-_]?(\d+(?:\.\d+)?)?'
+      family_group: 1
+      variant_group: 2
+      description: "Hugging Face SmolLM models"
+
+    # Command-R is genuinely locally runnable (GGUF exists) but CC-BY-NC
+    # licensed - non-commercial only. Olla doesn't gate on licence, this is
+    # just so a future reader isn't surprised.
+    - pattern: '^(command-r)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "Cohere Command-R models (CC-BY-NC licence - non-commercial only)"
+
+    - pattern: '^(?:[^/]+/)?(forge)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "TensorFoundry Forge models"
 
   # Maps architecture names to model families
   architecture_mappings:
@@ -49,12 +127,15 @@ model_extraction:
     gemma: gemma
     gemma2: gemma
     gemma3: gemma
+    gemma4: gemma
     mistral: mistral
     mixtral: mixtral
     qwen: qwen
     qwen2: qwen
     "qwen2.5": qwen
     qwen3: qwen
+    "qwen3.5": qwen
+    "qwen3.6": qwen
     deepseek: deepseek
     yi: yi
     starcoder: starcoder
@@ -67,6 +148,30 @@ model_extraction:
     bloom: bloom
     opt: opt
     mpt: mpt
+    glm4: glm
+    glm5: glm
+    glm4moe: glm
+    glm: glm
+    granite: granite
+    granitemoe: granite
+    granitehybrid: granite
+    exaone: exaone
+    exaone4: exaone
+    kimi: kimi
+    nemotron: nemotron
+    hunyuan: hunyuan
+    minimax: minimax
+    "seed-oss": "seed-oss"
+    seed_oss: "seed-oss"
+    olmo: olmo
+    olmo2: olmo
+    internlm: internlm
+    internlm2: internlm
+    internlm3: internlm
+    smollm: smollm
+    smollm2: smollm
+    smollm3: smollm
+    "command-r": "command-r"
 
   # Normalises family name variations
   family_aliases:
@@ -83,7 +188,26 @@ model_extraction:
     "qwen2.5": qwen
     qwen3: qwen
     deepseek2: deepseek
+    deepseek3: deepseek
+    deepseek4: deepseek
     devstral: mistral
+    "qwen3.5": qwen
+    gemma4: gemma
+    glm4: glm
+    glm4moe: glm
+    granitemoe: granite
+    granitehybrid: granite
+    exaone4: exaone
+    magistral: mistral
+    codestral: mistral
+    ministral: mistral
+    "seed-oss": "seed-oss"
+    seed_oss: "seed-oss"
+    olmo2: olmo
+    internlm2: internlm
+    internlm3: internlm
+    smollm2: smollm
+    smollm3: smollm
 
   # Model famailies and their publishers
   publisher_mappings:
@@ -104,6 +228,24 @@ model_extraction:
     gpt2: openai
     gptj: eleutherai
     gptneox: eleutherai
+    devstral: mistral
+    magistral: mistral
+    codestral: mistral
+    ministral: mistral
+    glm: zai-org
+    "gpt-oss": openai
+    kimi: moonshotai
+    granite: ibm
+    nemotron: nvidia
+    exaone: lg-ai
+    hunyuan: tencent
+    minimax: minimax
+    "seed-oss": bytedance
+    olmo: allenai
+    internlm: internlm
+    smollm: huggingfacetb
+    "command-r": cohere
+    forge: tensorfoundry
 
 quantization:
   # Standardises quantisation formats
@@ -146,6 +288,10 @@ quantization:
     # Extended formats
     Q4_K_XL: q4kxl
 
+    # gpt-oss / Nemotron FP4 formats
+    MXFP4: mxfp4
+    NVFP4: nvfp4
+
 capabilities:
   # Capabilities by model type
   type_capabilities:
@@ -184,7 +330,7 @@ capabilities:
       capabilities:
         - reasoning
         - logic
-        
+
     - pattern: "(math|mathstral)"
       capabilities:
         - mathematics
