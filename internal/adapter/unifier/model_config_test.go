@@ -281,8 +281,48 @@ func TestLogConfigStatus_WarnsOnBrokenShippedFile(t *testing.T) {
 
 	out := buf.String()
 	assert.Contains(t, out, "level=WARN")
-	assert.Contains(t, out, "could not parse")
+	assert.Contains(t, out, "unusable models.yaml candidate")
+	assert.Contains(t, out, "falling back to embedded defaults")
 	assert.Contains(t, out, "models.yaml")
+}
+
+// TestLogConfigStatus_ShadowedBrokenCandidateReportsRealSource is the
+// scenario issue #204's original complaint was about: a broken candidate
+// earlier in the search order (here "models.yaml" in the cwd) sitting next
+// to a working one later in the order (here the OLLA_CONFIG_DIR candidate).
+// The broken one must still be warned about - the earlier "shadowed" bug
+// dropped that warning entirely once a later candidate loaded - but the
+// message must not claim defaults are active when a real file loaded.
+func TestLogConfigStatus_ShadowedBrokenCandidateReportsRealSource(t *testing.T) {
+	cwd := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(cwd, "models.yaml"), []byte(brokenModelsYAML), 0644))
+	t.Chdir(cwd)
+
+	configDir := t.TempDir()
+	workingYAML := `
+model_extraction:
+  family_aliases:
+    llama3: llama
+`
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "models.yaml"), []byte(workingYAML), 0644))
+	t.Setenv("OLLA_CONFIG_DIR", configDir)
+
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
+
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	LogConfigStatus(logger.NewPlainStyledLogger(log))
+
+	out := buf.String()
+	assert.Contains(t, out, "level=WARN", "the broken cwd candidate must still be reported, not shadowed into silence")
+	assert.Contains(t, out, "unusable models.yaml candidate")
+	assert.Contains(t, out, "using ", "must say which source is active instead of claiming defaults")
+	assert.Contains(t, out, "instead")
+	assert.NotContains(t, out, "falling back to embedded defaults", "a real file loaded - defaults are not what's active")
+
+	assert.Contains(t, out, "level=INFO")
+	assert.Equal(t, filepath.Join(configDir, "models.yaml"), ConfigSource())
 }
 
 func TestLoadModelConfig(t *testing.T) {

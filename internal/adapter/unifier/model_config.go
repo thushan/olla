@@ -130,13 +130,18 @@ func LogConfigStatus(log logger.StyledLogger) {
 		return
 	}
 
-	// Warn about every found-but-unparseable candidate even when a later
+	// Warn about every found-but-unusable candidate even when a later
 	// candidate loaded successfully - otherwise a broken ./models.yaml next
 	// to a working config/models.yaml goes unmentioned, which is exactly the
-	// silence issue #204 complained about.
+	// silence issue #204 complained about. The wording must stay truthful to
+	// what actually happened next: only claim "falling back to embedded
+	// defaults" when that's genuinely what's active.
 	if len(configParseWarnings) > 0 {
-		log.Warn("model unification config: found models.yaml but could not parse it, falling back to embedded defaults",
-			"details", strings.Join(configParseWarnings, "; "))
+		msg := "model unification config: found unusable models.yaml candidate(s), falling back to embedded defaults"
+		if configSource != "" {
+			msg = fmt.Sprintf("model unification config: found unusable models.yaml candidate(s), using %s instead", configSource)
+		}
+		log.Warn(msg, "details", strings.Join(configParseWarnings, "; "))
 	}
 
 	if configSource != "" {
