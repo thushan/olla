@@ -323,6 +323,20 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 		{"kimi model with deepseek arch (fixed via preserve_family)", "kimi-k2-instruct", "deepseek", "kimi", ""},
 		{"kimi model with deepseek2 arch (fixed via preserve_family)", "kimi-k2", "deepseek2", "kimi", ""},
 
+		// Publisher-prefixed names (LM Studio/vLLM commonly report these)
+		// used to skip matchPreserveFamily entirely because the token-prefix
+		// check ran against the whole "publisher/model" string, so the arch
+		// stage won regardless of preserve_family. Fixed by stripping up to
+		// the last '/' before the check.
+		{"publisher-prefixed kimi with deepseek arch", "moonshotai/Kimi-K2-Instruct", "deepseek", "kimi", ""},
+		{"publisher-prefixed kimi with deepseek2 arch", "moonshotai/Kimi-K2-Instruct", "deepseek2", "kimi", ""},
+		{"publisher-prefixed deepseek-coder-v2 preserved", "deepseek-ai/DeepSeek-Coder-V2-Instruct", "", "deepseek-coder-v2", ""},
+
+		// A publisher segment that happens to share a preserve entry's name
+		// must not fool the check - the stripped, matched part is the model
+		// name after the last '/', not the publisher.
+		{"publisher segment matching a preserve entry must not match", "kimi/llama-3-8b", "", "llama", "3"},
+
 		// FamilyAliases delimiter-fallback for name-based extraction is covered
 		// separately in TestExtractFromDelimiters_UsesConfiguredAliases: the
 		// 2026 refresh (main) gave devstral its own family_pattern, so
@@ -377,6 +391,12 @@ func TestMatchPreserveFamily_KimiTokenPrefixSemantics(t *testing.T) {
 		{"arch exact match", "unrelated-name", "kimi", "kimi"},
 		{"unrelated name sharing a prefix must not match", "kimichef-70b", "", ""},
 		{"arch that merely contains kimi as a substring must not match", "unrelated", "not-kimi-arch", ""},
+
+		// Publisher-prefixed names strip everything up to and including the
+		// last '/' before the token-prefix check runs.
+		{"publisher-prefixed name matches on the model part", "moonshotai/kimi-k2-instruct", "", "kimi"},
+		{"publisher-prefixed name with deepseek arch still matches on name", "moonshotai/kimi-k2-instruct", "deepseek", "kimi"},
+		{"publisher segment sharing the entry name must not match", "kimi/llama-3-8b", "", ""},
 	}
 
 	for _, tt := range tests {

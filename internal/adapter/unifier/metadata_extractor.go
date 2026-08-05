@@ -214,13 +214,23 @@ func extractFamilyAndVariant(modelName string, arch string) (family, variant str
 func matchPreserveFamily(modelName, arch string, config *ModelUnificationConfig) string {
 	archLower := strings.ToLower(strings.TrimSpace(arch))
 
+	// Publisher-prefixed names (e.g. "moonshotai/kimi-k2-instruct" from
+	// LM Studio/vLLM backends) must match on the model's own name, not the
+	// publisher segment - strip everything up to and including the last '/'
+	// before applying the token-prefix check. The arch check above stays on
+	// the raw arch string, which is never publisher-prefixed.
+	nameForMatch := modelName
+	if idx := strings.LastIndex(nameForMatch, "/"); idx != -1 {
+		nameForMatch = nameForMatch[idx+1:]
+	}
+
 	for _, entry := range config.SpecialRules.PreserveFamily {
 		entryLower := strings.ToLower(entry)
 
 		if archLower == entryLower {
 			return entry
 		}
-		if matchesTokenPrefix(modelName, entryLower) {
+		if matchesTokenPrefix(nameForMatch, entryLower) {
 			return entry
 		}
 	}
