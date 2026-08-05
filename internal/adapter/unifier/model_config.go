@@ -76,9 +76,30 @@ var (
 func LoadModelConfig() (*ModelUnificationConfig, error) {
 	configOnce.Do(func() {
 		configInstance, configSource, configParseWarnings = loadConfigFromFile()
-		if configInstance != nil {
-			errConfig = configInstance.compilePatterns()
+		if configInstance == nil {
+			return
 		}
+
+		if err := configInstance.compilePatterns(); err != nil {
+			// the candidate parsed as valid YAML but at least one of its
+			// patterns isn't a valid regex. Don't hand back an uncompiled
+			// config - regex-driven extraction nil-guards on that, so it
+			// would silently no-op rather than panic, which is exactly the
+			// #204 class of silent failure. Record why and recover onto the
+			// embedded defaults, which are known-good.
+			if configSource != "" {
+				configParseWarnings = append(configParseWarnings, fmt.Sprintf("%s: %v", configSource, err))
+			}
+			configSource = ""
+			configInstance = getDefaultConfig()
+			// defaults are hardcoded and covered by TestPatternCompilation,
+			// so this should never fail - but never panic on the assumption,
+			// so keep whatever it returns rather than assuming success.
+			errConfig = configInstance.compilePatterns()
+			return
+		}
+
+		errConfig = nil
 	})
 	return configInstance, errConfig
 }

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -206,6 +207,58 @@ func mustAbs(t *testing.T, path string) string {
 	abs, err := filepath.Abs(path)
 	require.NoError(t, err)
 	return abs
+}
+
+// TestLoadModelConfig_InvalidRegexPatternFallsBackToCompiledDefaults covers a
+// candidate that parses as valid YAML but contains a pattern that isn't a
+// valid regex. Before this fix, LoadModelConfig would hand back the broken
+// (uncompiled) config with errConfig set, and getConfig() in
+// metadata_extractor.go would swap to getDefaultConfig() - which was never
+// compiled either, so every regex-driven lookup silently no-opped. The fix
+// must produce a *compiled*, *functional* fallback.
+func TestLoadModelConfig_InvalidRegexPatternFallsBackToCompiledDefaults(t *testing.T) {
+	dir := t.TempDir()
+	badRegexYAML := `
+model_extraction:
+  family_patterns:
+    - pattern: '(['
+      family_group: 1
+      variant_group: 2
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(badRegexYAML), 0644))
+
+	t.Chdir(dir)
+	t.Setenv("OLLA_CONFIG_DIR", "")
+
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
+
+	config, err := LoadModelConfig()
+	require.NoError(t, err, "must recover onto the embedded defaults, not surface the bad-regex error")
+	require.NotNil(t, config)
+
+	assert.Empty(t, ConfigSource(), "defaults are in use, not the broken candidate")
+
+	requireWarningNaming(t, configParseWarnings, "models.yaml")
+
+	// functional, not just present: a default pattern must be compiled and
+	// actually match, proving the fallback config went through compilePatterns.
+	require.Len(t, config.ModelExtraction.FamilyPatterns, 6)
+	llamaPattern := config.ModelExtraction.FamilyPatterns[1]
+	require.NotNil(t, llamaPattern.regex, "fallback defaults must be compiled, not just assigned")
+	assert.True(t, llamaPattern.regex.MatchString("llama-3"), "compiled default pattern should match a real model name")
+}
+
+// requireWarningNaming fails the test unless one of the warnings mentions
+// substr (typically a candidate path).
+func requireWarningNaming(t *testing.T, warnings []string, substr string) {
+	t.Helper()
+	for _, w := range warnings {
+		if strings.Contains(w, substr) {
+			return
+		}
+	}
+	t.Fatalf("expected a warning naming %q, got %v", substr, warnings)
 }
 
 // TestLogConfigStatus_WarnsOnBrokenShippedFile is the LogConfigStatus
