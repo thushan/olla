@@ -36,6 +36,20 @@ const (
 	DefaultLogMaxBackups = 7
 	DefaultLogMaxAgeDays = 14
 	DefaultTheme         = "default"
+
+	// Runtime (post-config) logging.format and logging.output defaults -
+	// these match LoggingConfig's defaults in internal/config, not the
+	// bootstrap logger's DefaultPrettyLogs/DefaultFileOutput above, which
+	// are deliberately different (a friendly pretty banner before the
+	// config file is even read).
+	DefaultLoggerFormat = "json"
+	DefaultLoggerOutput = "stdout"
+
+	LogFormatJSON = "json"
+	LogFormatText = "text"
+
+	LogOutputStdout = "stdout"
+	LogOutputFile   = "file"
 )
 
 var (
@@ -126,18 +140,31 @@ func main() {
 
 	styledLogger.Info("Loaded configuration", "config", cfg.Filename)
 
-	// Now that the config file (and any OLLA_LOGGING_LEVEL override, applied
+	// Now that the config file (and any OLLA_LOGGING_* overrides, applied
 	// inside config.Load) is known, swap the bootstrap logger for one running
-	// at the configured level. Only rebuild when the level actually changes,
-	// so a default-vs-default startup doesn't pay for a second handler/file init.
+	// with the configured level/format/output. Only rebuild when something
+	// actually changes, so a default-vs-default startup doesn't pay for a
+	// second handler/file init.
+	// config.Load already folds OLLA_LOGGING_FORMAT into cfg.Logging.Format when
+	// set, so this only tells us whether that override applies - it decides
+	// whether the format should override TTY detection below.
+	envFormatSet := os.Getenv("OLLA_LOGGING_FORMAT") != ""
 	runtimeLevel := resolveRuntimeLogLevel(cfg.Logging.Level, styledLogger.Warn)
-	if runtimeLevel != lcfg.Level {
+	runtimeFormat := resolveRuntimeLogFormat(cfg.Logging.Format, envFormatSet, util.IsTerminal(), styledLogger.Warn)
+	runtimeOutput := resolveRuntimeLogOutput(cfg.Logging.Output, styledLogger.Warn)
+	runtimePrettyLogs := runtimeFormat == LogFormatText
+	runtimeFileOutput := runtimeOutput == LogOutputFile
+
+	if runtimeLevel != lcfg.Level || runtimePrettyLogs != lcfg.PrettyLogs || runtimeFileOutput != lcfg.FileOutput {
 		runtimeCfg := *lcfg
 		runtimeCfg.Level = runtimeLevel
+		runtimeCfg.PrettyLogs = runtimePrettyLogs
+		runtimeCfg.FileOutput = runtimeFileOutput
 
 		newLogInstance, newStyledLogger, newCleanup, rebuildErr := logger.NewWithTheme(&runtimeCfg)
 		if rebuildErr != nil {
-			styledLogger.Warn("Failed to apply configured logging.level, keeping bootstrap logger", "level", runtimeLevel, "error", rebuildErr)
+			styledLogger.Warn("Failed to apply configured logging settings, keeping bootstrap logger",
+				"level", runtimeLevel, "format", runtimeFormat, "output", runtimeOutput, "error", rebuildErr)
 		} else {
 			loggerCleanup()
 			logInstance, styledLogger, loggerCleanup = newLogInstance, newStyledLogger, newCleanup
@@ -241,6 +268,54 @@ func resolveRuntimeLogLevel(configuredLevel string, warn func(msg string, args .
 		return DefaultLoggerLevel
 	}
 	return configuredLevel
+}
+
+// resolveRuntimeLogFormat decides logging.format ("json" or "text", per
+// docs/content/configuration/overview.md) for the post-config logger, mapped
+// onto logger.Config.PrettyLogs by the caller.
+//
+// On an interactive TTY, pretty logs win regardless of what the config file
+// says - that's the terminal experience folks had before logging.format was
+// wired up, and a dev shouldn't see it flip to JSON just because config.yaml
+// (or a local override) ships "format: json" for headless/Docker use. An
+// explicit OLLA_LOGGING_FORMAT env var is deliberate operator intent, so it
+// forces its value everywhere, TTY or not. Off a TTY (pipes, services,
+// containers), the configured format governs, same shape as
+// resolveRuntimeLogLevel: empty keeps the default, unrecognised warns and
+// falls back rather than crashing.
+func resolveRuntimeLogFormat(configuredFormat string, envFormatSet, isTTY bool, warn func(msg string, args ...any)) string {
+	format := configuredFormat
+	switch {
+	case format == "":
+		format = DefaultLoggerFormat
+	case format != LogFormatJSON && format != LogFormatText:
+		warn("Invalid logging.format in config, falling back to default", "configured", configuredFormat, "default", DefaultLoggerFormat)
+		format = DefaultLoggerFormat
+	}
+
+	if envFormatSet {
+		return format
+	}
+	if isTTY {
+		return LogFormatText
+	}
+	return format
+}
+
+// resolveRuntimeLogOutput decides logging.output ("stdout" or "file", per
+// docs/content/configuration/overview.md) for the post-config logger, mapped
+// onto logger.Config.FileOutput by the caller. Same shape as
+// resolveRuntimeLogLevel: empty keeps the default, unrecognised warns and
+// falls back rather than crashing.
+func resolveRuntimeLogOutput(configuredOutput string, warn func(msg string, args ...any)) string {
+	if configuredOutput == "" {
+		return DefaultLoggerOutput
+	}
+	if configuredOutput != LogOutputStdout && configuredOutput != LogOutputFile {
+		warn("Invalid logging.output in config, falling back to default", "configured", configuredOutput, "default", DefaultLoggerOutput)
+		return DefaultLoggerOutput
+	}
+	return configuredOutput
 }
 
 func buildLoggerConfig() *logger.Config {
