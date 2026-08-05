@@ -777,6 +777,15 @@ Log levels:
 - `warn`: Warning conditions
 - `error`: Error conditions only
 
+An invalid `level`, `format` or `output` value is a config mistake, not a reason to fail startup: Olla logs a warning and falls back to the default for that field.
+
+!!! note "Interactive terminals always get pretty output"
+    On an interactive terminal (TTY), Olla always renders coloured/aligned text logs, regardless of `logging.format` in the config file. This is so a developer running `olla` locally doesn't see JSON just because `config.yaml` sets `format: "json"` for production. Off a TTY (piped output, Docker, a service manager), the configured format applies as written.
+
+    Setting the `OLLA_LOGGING_FORMAT` environment variable overrides this in both directions - it forces its value everywhere, TTY or not.
+
+`logging.output: "file"` adds a rotated file handler (see `OLLA_LOG_DIR`, `OLLA_LOG_SIZE_MB`, `OLLA_LOG_MAX_BACKUPS`, `OLLA_LOG_MAX_AGE_DAYS` in [Environment Variables](#environment-variables)) alongside stdout; it does not replace stdout output. There is no `OLLA_LOGGING_OUTPUT` environment variable - `output` is YAML-only.
+
 ## Engineering Configuration
 
 Debug and development features.
@@ -822,6 +831,8 @@ These control startup behaviour and are read before the YAML config is loaded.
 | `OLLA_LOG_MAX_BACKUPS` | `7` | Number of rotated log files to keep. |
 | `OLLA_LOG_MAX_AGE_DAYS` | `14` | Maximum age in days for rotated log files before they're pruned. |
 | `OLLA_THEME` | `default` | Console theme name. Affects coloured output of the styled logger. |
+
+`--validate-config` has no environment variable equivalent - it's a CLI flag only. See [Validating configuration](#validating-configuration) below.
 
 ### Server
 
@@ -1028,6 +1039,22 @@ Additionally, Olla's `Validate()` method catches dangerous zero or empty configu
 - `discovery.type` is empty
 - `server.port` is zero or negative
 - When `model_discovery.enabled` is `true`: `interval`, `concurrent_workers`, or `timeout` is zero
+
+### Validating configuration
+
+Run `olla --validate-config` (optionally with `-c <path>`) to check `config.yaml`, `config/models.yaml` and every provider profile without starting the server:
+
+```text
+Olla Configuration Validation
+==============================
+[OK]   config.yaml  loaded from config/config.local.yaml
+[OK]   models.yaml  loaded from config/models.yaml
+[OK]   profiles     11 profile(s) loaded
+
+Result: PASS - all configuration files are valid
+```
+
+Each line is `[OK]`, `[WARN]` (usable but with issues, e.g. a `models.yaml` candidate that failed to parse before a later candidate succeeded), or `[FAIL]` (unusable). Exit code is `0` only when everything is clean; `1` if any file that exists fails to parse or is unusable. This is stricter than the running server, which warns and falls back to defaults for the same failures rather than refusing to start. Use it in CI or as a pre-restart check before deploying a config change.
 
 ## Next Steps
 

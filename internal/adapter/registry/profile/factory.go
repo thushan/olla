@@ -176,6 +176,12 @@ func (f *Factory) GetLoader() *ProfileLoader {
 	return f.loader
 }
 
+// LoadWarnings returns any profile files that were found but failed to load
+// during the most recent load or reload - see ProfileLoader.LoadWarnings.
+func (f *Factory) LoadWarnings() []string {
+	return f.loader.LoadWarnings()
+}
+
 // GetAnthropicSupport implements translator.ProfileLookup interface.
 // Returns the Anthropic support configuration for the given endpoint type,
 // or nil if the profile doesn't exist or doesn't declare Anthropic support.

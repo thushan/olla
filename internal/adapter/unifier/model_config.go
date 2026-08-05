@@ -114,6 +114,18 @@ func ConfigSource() string {
 	return configSource
 }
 
+// ConfigWarnings returns any parse warnings recorded while loading
+// models.yaml (candidates that were found but failed to parse, were
+// effectively empty, or had a pattern that didn't compile as regex),
+// triggering the load if it hasn't happened yet. Empty means nothing went
+// wrong - either a real file loaded cleanly, or no candidate file existed at
+// all. Exposed for callers like --validate-config that need the detail
+// without depending on log capture.
+func ConfigWarnings() []string {
+	_, _ = LoadModelConfig()
+	return append([]string(nil), configParseWarnings...)
+}
+
 // LogConfigStatus reports where the model unification config came from.
 // Intended to be called once at startup (rather than relying on the lazy
 // first-use load) so a broken config/models.yaml is surfaced immediately

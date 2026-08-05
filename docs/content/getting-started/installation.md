@@ -103,8 +103,33 @@ Olla exposes a deliberately small set of CLI flags. Configuration belongs in the
 | `--version` | Print version, build commit, and Go runtime, then exit. Equivalent to `OLLA_SHOW_VERSION=true`. |
 | `--profile` | Start a pprof profiling server on `localhost:19841` (visit `/debug/pprof/`). Equivalent to `OLLA_ENABLE_PROFILER=true`. Note: this is the profiling flag, not a port flag. There is no `-p`/`--port` flag; set the port in your config or via `OLLA_SERVER_PORT`. |
 | `-c`, `--config <path>` | Path to a YAML config file. Falls back to `OLLA_CONFIG_FILE`, then the built-in defaults. |
+| `--validate-config` | Validate `config.yaml`, `models.yaml` and all provider profiles, print a report, then exit without starting the server. See [Validating configuration](#validating-configuration) below. |
 
 `-h` / `--help` is provided automatically by Go's flag package and prints the list above. Running `olla` without arguments uses the YAML config from `-c`/`--config` if set, then `OLLA_CONFIG_FILE`, otherwise the built-in defaults.
+
+## Validating configuration
+
+Run `olla --validate-config` to check `config.yaml`, `config/models.yaml` and every provider profile in `config/profiles/` without starting the server. It loads each source the same way the running server does and prints one line per source:
+
+```text
+Olla Configuration Validation
+==============================
+[OK]   config.yaml  loaded from config/config.local.yaml
+[OK]   models.yaml  loaded from config/models.yaml
+[OK]   profiles     11 profile(s) loaded
+
+Result: PASS - all configuration files are valid
+```
+
+A source that fails to parse or a `models.yaml` candidate that's found but unusable is reported as `[FAIL]` or `[WARN]` with detail, for example:
+
+```text
+[FAIL] config.yaml  failed to parse config.yaml: yaml: line 1: did not find expected ',' or ']'
+[WARN] models.yaml  using embedded defaults (1 issue(s))
+         - models.yaml: yaml: line 3: found unknown escape character
+```
+
+Exit code is `0` only when every file is clean, `1` otherwise. This is deliberately stricter than a running server, which warns and falls back to defaults for a broken `models.yaml` or profile rather than refusing to start - `--validate-config` exists to catch that ahead of time. Use it in CI or as a pre-restart check before rolling out a config change.
 
 ## Next Steps
 
