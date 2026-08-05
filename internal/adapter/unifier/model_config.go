@@ -600,7 +600,12 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"ultra_long_context": 1000000,
 	}
 
-	config.SpecialRules.PreserveFamily = []string{"nomic-bert", "deepseek-coder-v2"}
+	// "kimi" fixes the Kimi-K2/deepseek architecture-string collision: Kimi-K2
+	// GGUF files often report general.architecture "deepseek2" or "deepseek"
+	// (they share the same underlying transformer architecture as DeepSeek-V3),
+	// and architecture-based lookup runs before name-pattern matching, so
+	// without this the arch string wins and misclassifies the model.
+	config.SpecialRules.PreserveFamily = []string{"nomic-bert", "deepseek-coder-v2", "kimi"}
 	config.SpecialRules.GenericNames = []string{"model", "unknown", "test", "temp", "default"}
 
 	return config

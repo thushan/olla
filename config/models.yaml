@@ -353,7 +353,14 @@ special_rules:
   preserve_family:
     - nomic-bert
     - deepseek-coder-v2
-    
+    # Kimi-K2 GGUF files often report general.architecture "deepseek2" or
+    # "deepseek" (Kimi-K2 and DeepSeek-V3 share the same underlying
+    # transformer architecture). Architecture-based lookup runs before
+    # name-pattern matching, so without this the arch string would win and
+    # misclassify a Kimi model as deepseek. Preserving "kimi" makes the name
+    # win instead, whenever the name itself says kimi.
+    - kimi
+
   # Generic names that need architecture info
   generic_names:
     - model

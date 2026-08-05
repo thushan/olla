@@ -277,7 +277,11 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 		{"gemma4:12b", "gemma4:12b", "", "gemma", "4"}, // already worked pre-change; regression proof
 		{"glm-4.5-air", "glm-4.5-air", "", "glm", "4.5"},
 		{"gpt-oss:20b", "gpt-oss:20b", "", "gpt-oss", "20b"},
-		{"kimi-k2", "kimi-k2", "", "kimi", "k2"},
+		// "kimi" is in preserve_family (fixes the deepseek arch collision
+		// below), so matchPreserveFamily short-circuits on the name-token
+		// prefix and returns no variant - same trade-off preserve_family
+		// already makes for deepseek-coder-v2 and nomic-bert.
+		{"kimi-k2", "kimi-k2", "", "kimi", ""},
 		{"granite3.3:8b", "granite3.3:8b", "", "granite", "3.3"},
 		{"devstral-small-2505", "devstral-small-2505", "", "devstral", "small-2505"},
 		{"codestral-22b", "codestral-22b", "", "codestral", "22b"},
@@ -309,16 +313,48 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 		{"model with granitemoe arch", "model", "granitemoe", "granite", ""},
 		{"model with qwen3.5 arch", "model", "qwen3.5", "qwen", "3.5"},
 
-		// Known limitation, not a bug to fix here: Kimi-K2 GGUF files often
-		// report general.architecture "deepseek2" (Kimi-K2 and DeepSeek-V3
-		// share the same underlying transformer architecture), so
-		// architecture-based extraction misclassifies a Kimi model as
-		// "deepseek" whenever arch metadata is present - architecture-based
-		// lookup is tried before name-pattern matching in
-		// extractFamilyAndVariant, so it wins over the "kimi" pattern.
-		// ArchitectureMappings is a flat 1:1 table, so this ambiguity is
-		// unavoidable without a redesign - out of scope for this pass.
-		{"kimi model with deepseek arch (known collision)", "kimi-k2-instruct", "deepseek", "deepseek", ""},
+		// Kimi-K2 GGUF files often report general.architecture "deepseek2" or
+		// "deepseek" (Kimi-K2 and DeepSeek-V3 share the same underlying
+		// transformer architecture), which used to misclassify a Kimi model
+		// as "deepseek" since architecture-based lookup ran before
+		// name-pattern matching. Fixed via special_rules.preserve_family:
+		// matchPreserveFamily checks the name-token prefix ahead of the arch
+		// stage, so the name wins whenever it actually says kimi.
+		{"kimi model with deepseek arch (fixed via preserve_family)", "kimi-k2-instruct", "deepseek", "kimi", ""},
+		{"kimi model with deepseek2 arch (fixed via preserve_family)", "kimi-k2", "deepseek2", "kimi", ""},
+
+		// Publisher-prefixed names (LM Studio/vLLM commonly report these)
+		// used to skip matchPreserveFamily entirely because the token-prefix
+		// check ran against the whole "publisher/model" string, so the arch
+		// stage won regardless of preserve_family. Fixed by stripping up to
+		// the last '/' before the check.
+		{"publisher-prefixed kimi with deepseek arch", "moonshotai/Kimi-K2-Instruct", "deepseek", "kimi", ""},
+		{"publisher-prefixed kimi with deepseek2 arch", "moonshotai/Kimi-K2-Instruct", "deepseek2", "kimi", ""},
+		{"publisher-prefixed deepseek-coder-v2 preserved", "deepseek-ai/DeepSeek-Coder-V2-Instruct", "", "deepseek-coder-v2", ""},
+
+		// A publisher segment that happens to share a preserve entry's name
+		// must not fool the check - the stripped, matched part is the model
+		// name after the last '/', not the publisher.
+		{"publisher segment matching a preserve entry must not match", "kimi/llama-3-8b", "", "llama", "3"},
+
+		// FamilyAliases delimiter-fallback for name-based extraction is covered
+		// separately in TestExtractFromDelimiters_UsesConfiguredAliases: the
+		// 2026 refresh (main) gave devstral its own family_pattern, so
+		// "devstral-24b" now resolves at the pattern stage as family
+		// "devstral" (see devstral-small-2505 above) and never reaches the
+		// delimiter fallback this alias mechanism exists for.
+
+		// FamilyAliases: architecture fallback for arch strings not in ArchitectureMappings
+		{"arch alias deepseek2", "model", "deepseek2", "deepseek", "2"},
+
+		// PreserveFamily: wins outright, ahead of the deepseek pattern
+		{"deepseek-coder-v2 preserved", "deepseek-coder-v2", "", "deepseek-coder-v2", ""},
+		{"deepseek-coder-v2 with suffix preserved", "deepseek-coder-v2-lite", "", "deepseek-coder-v2", ""},
+		{"nomic-bert preserved", "nomic-bert", "", "nomic-bert", ""},
+		{"nomic-bert with suffix preserved", "nomic-bert-v1.5", "", "nomic-bert", ""},
+
+		// PreserveFamily must NOT affect deepseek-coder (no -v2 suffix)
+		{"deepseek-coder still splits", "deepseek-coder", "", "deepseek", "coder"},
 	}
 
 	for _, tt := range tests {
@@ -328,6 +364,99 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 			assert.Equal(t, tt.expectedVariant, variant, "Variant mismatch")
 		})
 	}
+}
+
+// TestMatchPreserveFamily_KimiTokenPrefixSemantics is a direct, isolated
+// sanity check for the kimi preserve_family fix (issue: PR #207 CodeRabbit
+// finding). matchPreserveFamily uses exact-or-token-prefix matching, not a
+// bare substring contains, so it must not fire for names that merely start
+// with the same letters, or arch strings that merely contain "kimi".
+// Exercised directly against matchPreserveFamily (rather than through
+// extractFamilyAndVariant) because the kimi family_pattern is separately
+// loose enough to match "kimichef" too - testing end-to-end wouldn't isolate
+// which mechanism actually produced the result.
+func TestMatchPreserveFamily_KimiTokenPrefixSemantics(t *testing.T) {
+	config := &ModelUnificationConfig{}
+	config.SpecialRules.PreserveFamily = []string{"kimi"}
+
+	tests := []struct {
+		name      string
+		modelName string
+		arch      string
+		want      string
+	}{
+		{"exact name match", "kimi", "", "kimi"},
+		{"name with hyphen boundary", "kimi-k2-instruct", "", "kimi"},
+		{"name with dot boundary", "kimi.k2", "", "kimi"},
+		{"arch exact match", "unrelated-name", "kimi", "kimi"},
+		{"unrelated name sharing a prefix must not match", "kimichef-70b", "", ""},
+		{"arch that merely contains kimi as a substring must not match", "unrelated", "not-kimi-arch", ""},
+
+		// Publisher-prefixed names strip everything up to and including the
+		// last '/' before the token-prefix check runs.
+		{"publisher-prefixed name matches on the model part", "moonshotai/kimi-k2-instruct", "", "kimi"},
+		{"publisher-prefixed name with deepseek arch still matches on name", "moonshotai/kimi-k2-instruct", "deepseek", "kimi"},
+		{"publisher segment sharing the entry name must not match", "kimi/llama-3-8b", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchPreserveFamily(tt.modelName, tt.arch, config)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestExtractFamilyAndVariant_PlainDeepseekUnaffectedByKimiPreserve confirms
+// adding "kimi" to preserve_family didn't collaterally change plain
+// deepseek model classification - the two entries are independent.
+func TestExtractFamilyAndVariant_PlainDeepseekUnaffectedByKimiPreserve(t *testing.T) {
+	tests := []struct {
+		name            string
+		modelName       string
+		arch            string
+		expectedFamily  string
+		expectedVariant string
+	}{
+		{"deepseek-v3", "deepseek-v3", "", "deepseek", "v3"},
+		{"deepseek-r1-distill-qwen-7b", "deepseek-r1-distill-qwen-7b", "", "deepseek", "r1-distill-qwen-7b"},
+		{"arch deepseek", "model", "deepseek", "deepseek", ""},
+		{"arch deepseek2 via alias fallback", "model", "deepseek2", "deepseek", "2"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			family, variant := extractFamilyAndVariant(tt.modelName, tt.arch)
+			assert.Equal(t, tt.expectedFamily, family, "Family mismatch")
+			assert.Equal(t, tt.expectedVariant, variant, "Variant mismatch")
+		})
+	}
+}
+
+// TestExtractFromDelimiters_UsesConfiguredAliases exercises the FamilyAliases
+// delimiter fallback directly, with a synthetic config, rather than through
+// the full extractFamilyAndVariant path against production config. Every
+// alias in the shipped config now also has its own family_pattern (that's
+// how the 2026 model families were added), so any real model name that
+// starts with an alias key gets resolved at the pattern stage first and
+// never reaches this fallback - a synthetic config keeps the fallback itself
+// under test regardless of how the shipped patterns evolve.
+func TestExtractFromDelimiters_UsesConfiguredAliases(t *testing.T) {
+	config := &ModelUnificationConfig{}
+	config.ModelExtraction.FamilyAliases = map[string]string{
+		"widgetcoder": "widget",
+	}
+
+	family := extractFromDelimiters("widgetcoder-24b", config)
+	assert.Equal(t, "widget", family)
+}
+
+// TestExtractFromDelimiters_NilConfigFallsBackToKnownFamilies confirms the
+// nil-config guard added when this became config-driven: a nil config must
+// not panic, and the hardcoded knownDelimiterFamilies list still resolves.
+func TestExtractFromDelimiters_NilConfigFallsBackToKnownFamilies(t *testing.T) {
+	family := extractFromDelimiters("llama-3.2-1b", nil)
+	assert.Equal(t, "llama", family)
 }
 
 func TestExtractPublisher(t *testing.T) {
