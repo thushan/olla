@@ -209,6 +209,30 @@ func mustAbs(t *testing.T, path string) string {
 	return abs
 }
 
+// TestLoadConfigFromFile_UnreadableCandidateRecordsWarning covers a candidate
+// path that exists but can't be read as a file - here, a directory named
+// models.yaml. That's not fs.ErrNotExist, so it must be recorded as a
+// warning rather than silently skipped like a genuinely absent candidate.
+// The exact OS error text isn't asserted since it differs by platform.
+func TestLoadConfigFromFile_UnreadableCandidateRecordsWarning(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "models.yaml"), 0755))
+
+	t.Chdir(dir)
+	t.Setenv("OLLA_CONFIG_DIR", "")
+
+	config, source, warnings := loadConfigFromFile()
+
+	require.NotNil(t, config, "must fall back to a usable config, never crash")
+	assert.Equal(t, getDefaultConfig(), config)
+	assert.Empty(t, source)
+
+	require.Len(t, warnings, 1, "a directory named models.yaml is not fs.ErrNotExist and must be recorded")
+	assert.Contains(t, warnings[0], "models.yaml")
+
+	require.NoError(t, config.compilePatterns())
+}
+
 // TestLoadModelConfig_InvalidRegexPatternFallsBackToCompiledDefaults covers a
 // candidate that parses as valid YAML but contains a pattern that isn't a
 // valid regex. Before this fix, LoadModelConfig would hand back the broken

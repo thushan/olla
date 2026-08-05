@@ -1,7 +1,9 @@
 package unifier
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -184,6 +186,14 @@ func loadConfigFromFile() (*ModelUnificationConfig, string, []string) {
 
 		data, err := os.ReadFile(path)
 		if err != nil {
+			// a candidate simply not existing is the overwhelmingly common
+			// case (most of the search path is speculative) and not worth a
+			// warning. Anything else - permission denied, a directory named
+			// models.yaml, and so on - is a real problem the operator should
+			// hear about, not silence.
+			if !errors.Is(err, fs.ErrNotExist) {
+				warnings = append(warnings, fmt.Sprintf("%s: %v", path, err))
+			}
 			continue
 		}
 
