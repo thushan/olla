@@ -107,6 +107,11 @@ model_extraction:
       variant_group: 2
       description: "Cohere Command-R models (CC-BY-NC licence - non-commercial only)"
 
+    - pattern: '^(?:[^/]+/)?(forge)[-_]?(.+)?'
+      family_group: 1
+      variant_group: 2
+      description: "TensorFoundry Forge models"
+
   # Maps architecture names to model families
   architecture_mappings:
     phi3: phi
@@ -122,12 +127,15 @@ model_extraction:
     gemma: gemma
     gemma2: gemma
     gemma3: gemma
+    gemma4: gemma
     mistral: mistral
     mixtral: mixtral
     qwen: qwen
     qwen2: qwen
     "qwen2.5": qwen
     qwen3: qwen
+    "qwen3.5": qwen
+    "qwen3.6": qwen
     deepseek: deepseek
     yi: yi
     starcoder: starcoder
@@ -140,8 +148,8 @@ model_extraction:
     bloom: bloom
     opt: opt
     mpt: mpt
-    "qwen3.5": qwen
     glm4: glm
+    glm5: glm
     glm4moe: glm
     glm: glm
     granite: granite
@@ -180,6 +188,8 @@ model_extraction:
     "qwen2.5": qwen
     qwen3: qwen
     deepseek2: deepseek
+    deepseek3: deepseek
+    deepseek4: deepseek
     devstral: mistral
     "qwen3.5": qwen
     gemma4: gemma
@@ -235,6 +245,7 @@ model_extraction:
     internlm: internlm
     smollm: huggingfacetb
     "command-r": cohere
+    forge: tensorfoundry
 
 quantization:
   # Standardises quantisation formats
@@ -319,7 +330,7 @@ capabilities:
       capabilities:
         - reasoning
         - logic
-        
+
     - pattern: "(math|mathstral)"
       capabilities:
         - mathematics

@@ -196,6 +196,12 @@ func TestInferCapabilitiesFromMetadata(t *testing.T) {
 			},
 		},
 		{
+			name:                 "Forge code model by name",
+			modelType:            "llm",
+			modelName:            "tf/forge-code-2.1-code",
+			expectedCapabilities: []string{"text-generation", "chat", "completion", "code-generation", "programming", "code-completion"},
+		},
+		{
 			name:      "Metadata capabilities",
 			modelType: "llm",
 			modelName: "custom-model",
@@ -288,6 +294,10 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 		{"command-r-plus", "command-r-plus", "", "command-r", "plus"},
 		{"hf publisher prefix - glm", "zai-org/glm-4.6", "", "glm", "4.6"},
 		{"hf publisher prefix - kimi", "moonshotai/Kimi-K2-Instruct", "", "kimi", ""},
+
+		// TensorFoundry Forge models (models.yaml 2026 refresh)
+		{"forge with publisher prefix", "tf/forge-code-2.1-code", "", "forge", "code-2.1-code"},
+		{"forge without publisher prefix", "forge-code-2.5-code", "", "forge", "code-2.5-code"},
 
 		// architecture-mapping path (arch supplied, name generic ("model" is
 		// in SpecialRules.GenericNames)). extractFromArchitecture doesn't stop

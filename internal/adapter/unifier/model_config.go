@@ -390,6 +390,12 @@ func getDefaultConfig() *ModelUnificationConfig {
 			VariantGroup: 2,
 			Description:  "Cohere Command-R models (CC-BY-NC licence - non-commercial only)",
 		},
+		{
+			Pattern:      `^(?:[^/]+/)?(forge)[-_]?(.+)?`,
+			FamilyGroup:  1,
+			VariantGroup: 2,
+			Description:  "TensorFoundry Forge models",
+		},
 	}
 
 	config.ModelExtraction.FamilyAliases = map[string]string{
@@ -406,6 +412,8 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"qwen2.5":       "qwen",
 		"qwen3":         "qwen",
 		"deepseek2":     "deepseek",
+		"deepseek3":     "deepseek",
+		"deepseek4":     "deepseek",
 		"devstral":      "mistral",
 		"qwen3.5":       "qwen",
 		"gemma4":        "gemma",
@@ -440,6 +448,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"gemma":         "gemma",
 		"gemma2":        "gemma",
 		"gemma3":        "gemma",
+		"gemma4":        "gemma",
 		"mistral":       "mistral",
 		"mixtral":       "mixtral",
 		"qwen":          "qwen",
@@ -459,7 +468,9 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"opt":           "opt",
 		"mpt":           "mpt",
 		"qwen3.5":       "qwen",
+		"qwen3.6":       "qwen",
 		"glm4":          "glm",
+		"glm5":          "glm",
 		"glm4moe":       "glm",
 		"glm":           "glm",
 		"granite":       "granite",
@@ -550,6 +561,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"internlm":  "internlm",
 		"smollm":    "huggingfacetb",
 		"command-r": "cohere",
+		"forge":     "tensorfoundry",
 	}
 
 	config.Capabilities.TypeCapabilities = map[string][]string{
