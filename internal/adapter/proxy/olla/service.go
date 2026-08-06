@@ -56,6 +56,10 @@ const (
 
 	// Circuit breaker threshold higher than health checker for tolerance
 	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
+
+	// halfOpenStaleness bounds how long a single in-flight half-open probe can
+	// gate out further probes. Matches health.CircuitBreaker's hardcoded 1s.
+	halfOpenStaleness = time.Second
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -249,10 +253,17 @@ func (cb *circuitBreaker) IsOpen() bool {
 	}
 
 	// Half-open: admit exactly one probe. lastAttempt is the single-flight gate -
-	// only the goroutine that wins the 0->now CAS is let through; every other
-	// concurrent request is rejected until RecordSuccess/RecordFailure resolves
-	// the probe and resets it. Mirrors health.CircuitBreaker's lastAttempt gate.
-	return !atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, time.Now().UnixNano())
+	// only the goroutine that wins the 0->now CAS is let through immediately;
+	// every other concurrent request is rejected until RecordSuccess/RecordFailure
+	// resolves the probe and resets it. If the outstanding probe is stale (older
+	// than halfOpenStaleness - e.g. a hung request that never resolved), a
+	// further caller is admitted too rather than being wedged for however long
+	// the hang lasts. Mirrors health.CircuitBreaker's lastAttempt gate.
+	if atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, time.Now().UnixNano()) {
+		return false
+	}
+	lastAttempt := atomic.LoadInt64(&cb.lastAttempt)
+	return time.Since(time.Unix(0, lastAttempt)) < halfOpenStaleness
 }
 
 func (cb *circuitBreaker) RecordSuccess() {

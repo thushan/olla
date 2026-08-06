@@ -113,6 +113,31 @@ func TestCircuitBreaker_HalfOpen_SuccessCloses(t *testing.T) {
 	}
 }
 
+// TestCircuitBreaker_HalfOpen_StaleProbeReleased is the regression test for
+// F2: a hung probe that never calls RecordSuccess/RecordFailure used to wedge
+// the endpoint indefinitely, since lastAttempt only ever got reset by one of
+// those two calls. Backdates lastAttempt past halfOpenStaleness directly
+// (rather than sleeping in the test) to simulate a probe that has been
+// in-flight too long without resolving.
+func TestCircuitBreaker_HalfOpen_StaleProbeReleased(t *testing.T) {
+	cb := openCircuitBreaker(1000)
+
+	if cb.IsOpen() {
+		t.Fatal("expected the first call to admit a half-open probe")
+	}
+	if !cb.IsOpen() {
+		t.Fatal("a fresh in-flight probe must still block a second one")
+	}
+
+	// Simulate the first probe hanging well past the staleness window without
+	// ever resolving.
+	atomic.StoreInt64(&cb.lastAttempt, time.Now().Add(-halfOpenStaleness-time.Millisecond).UnixNano())
+
+	if cb.IsOpen() {
+		t.Fatal("a stale, never-resolved probe must not wedge the endpoint - a further probe should be admitted")
+	}
+}
+
 // TestCircuitBreaker_HalfOpen_FailureReopens verifies a probe failure that
 // crosses the threshold trips the breaker back open and blocks further traffic.
 func TestCircuitBreaker_HalfOpen_FailureReopens(t *testing.T) {
