@@ -243,6 +243,47 @@ func TestCombinedLogging_Gate(t *testing.T) {
 	})
 }
 
+// TestCombinedLogging_PathMutatingHandlerStaysQuiet pins the fix for the
+// quiet-gate fail-open: handler_proxy.go's dispatchToEndpoints strips the
+// route prefix by mutating r.URL.Path in place (r.URL.Path = pr.targetPath)
+// before forwarding upstream, so the post-request console line and the
+// access log must not re-read r.URL.Path after next.ServeHTTP returns - they
+// would see the backend's target path instead of the original route and lose
+// the quiet-poll classification entirely. CombinedLoggingMiddleware now
+// captures path once, up front, and reuses it throughout.
+//
+// The stand-in handler mutates r.URL.Path to "/v1/chat/completions" - a
+// vLLM-style target path with neither an "/olla/" substring nor an "/api/"
+// prefix, so a regression here cannot hide behind Ollama's coincidentally
+// "/api/"-prefixed target paths.
+func TestCombinedLogging_PathMutatingHandlerStaysQuiet(t *testing.T) {
+	ch := &countingHandler{minLevel: slog.LevelInfo}
+	setDefaultLogger(t, ch)
+
+	mockLogger := &mockStyledLogger{}
+	pathMutating := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.URL.Path = "/v1/chat/completions"
+		w.WriteHeader(http.StatusOK)
+	})
+	mw := CombinedLoggingMiddleware(mockLogger)(pathMutating)
+
+	req := httptest.NewRequest(http.MethodPost, "/olla/vllm/v1/chat/completions", nil)
+	rr := httptest.NewRecorder()
+	mw.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	// Same expectation as ProxyPath_InfoLevel above: console stays suppressed
+	// (0), only the access log fires (1) = 1 total. Before the fix, the
+	// mutated path made isQuietPollOutcome/accessLogLevel see "/v1/chat/completions"
+	// instead of the original "/olla/vllm/..." route, so the console's
+	// completed line stopped being quiet - inflating the count.
+	if ch.count != 1 {
+		t.Errorf("expected 1 log record (access log only) when the inner handler mutates r.URL.Path, got %d", ch.count)
+	}
+}
+
 // BenchmarkCombinedLogging_ProxyPath_InfoLevel measures the hot-path overhead
 // of CombinedLoggingMiddleware at the default info level for proxy requests.
 // At info level the console's Debug records are suppressed, so formatBytes,
