@@ -173,13 +173,14 @@ func ipInAnyCIDR(ip string, cidrs []*net.IPNet) bool {
 }
 
 // reject writes the self-diagnosing 403 response. The body names the failed
-// check and echoes the rejected client IP and Host so the operator reading the
-// response (or a support transcript of it) can see exactly what to fix without
-// re-reading YAML. The matching Warn log line carries the same detail for the
-// observability path. Plain text, no JSON: this is an operational diagnostic,
-// not an API response.
+// check, echoes the rejected client IP and Host, and names the config keys to
+// adjust (dashboard.access_policy.allowed_hosts / allowed_cidrs), so the
+// operator reading the response (or a support transcript of it) can see
+// exactly what to fix without re-reading YAML. The matching Warn log line
+// carries the same detail for the observability path. Plain text, no JSON:
+// this is an operational diagnostic, not an API response.
 func reject(w http.ResponseWriter, log logger.StyledLogger, reason, clientIP, host string) {
-	body := strings.NewReader("403 forbidden: " + reason + " (ip=" + clientIP + ", host=" + host + ")\n")
+	body := strings.NewReader("403 forbidden: " + reason + " (ip=" + clientIP + ", host=" + host + "). Adjust dashboard.access_policy.allowed_hosts (or allowed_cidrs) in your config.\n")
 	// Hardening headers apply to every dashboard response path, including
 	// this 403: the body is operator-facing text that must not be frameable,
 	// sniffable, or referrer-leaked. setSecurityHeaders is shared with
