@@ -136,7 +136,9 @@ func (sm *ServiceManager) Start(ctx context.Context) error {
 
 	started := make([]string, 0, len(order))
 	for _, name := range order {
+		sm.mu.RLock()
 		service := sm.services[name]
+		sm.mu.RUnlock()
 		sm.logger.Debug("Starting service", "name", name, "dependencies", service.Dependencies())
 
 		if err := service.Start(ctx); err != nil {

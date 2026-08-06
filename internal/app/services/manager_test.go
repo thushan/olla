@@ -65,3 +65,41 @@ func TestServiceManager_StopServices_ConcurrentRegister(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestServiceManager_Start_ConcurrentRegister is the Start-side counterpart:
+// Start's per-service loop read sm.services[name] with the same missing lock
+// as stopServices.
+func TestServiceManager_Start_ConcurrentRegister(t *testing.T) {
+	sm := NewServiceManager(newTestLogger())
+
+	const n = 20
+
+	// Register an initial batch so Start has real entries to iterate.
+	for i := range n {
+		name := "initial-" + string(rune('a'+i%26)) + string(rune('0'+i/26))
+		if err := sm.Register(&fakeManagedService{name: name}); err != nil {
+			t.Fatalf("Register failed: %v", err)
+		}
+	}
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := sm.Start(context.Background()); err != nil {
+			t.Errorf("Start failed: %v", err)
+		}
+	}()
+
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			name := "extra-" + string(rune('a'+i%26)) + string(rune('0'+i/26))
+			_ = sm.Register(&fakeManagedService{name: name})
+		}(i)
+	}
+
+	wg.Wait()
+}
