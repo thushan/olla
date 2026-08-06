@@ -92,8 +92,14 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[3], vllmModels))
 	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[4], lemonadeModels))
 
-	// Wait for async unification to complete
-	time.Sleep(200 * time.Millisecond)
+	// Wait for async unification (RegisterModels kicks off unifyModelsAsync in
+	// a goroutine) to complete for all 5 endpoints - poll for the expected
+	// unified model count rather than guessing how long that takes.
+	wantModels := len(ollamaModels) + len(lmstudioModels) + len(openaiModels) + len(vllmModels) + len(lemonadeModels)
+	require.Eventually(t, func() bool {
+		models, err := unifiedRegistry.GetUnifiedModels(ctx)
+		return err == nil && len(models) >= wantModels
+	}, 5*time.Second, 10*time.Millisecond, "async unification did not complete")
 
 	// Create converter factory
 	converterFactory := converter.NewConverterFactory()
@@ -304,7 +310,10 @@ func TestProviderModelFiltering(t *testing.T) {
 	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[2], []*domain.ModelInfo{{Name: "TheBloke/Llama-2-7B-Chat-GGUF"}}))
 
 	// Wait for async unification to complete
-	time.Sleep(200 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		models, err := unifiedRegistry.GetUnifiedModels(ctx)
+		return err == nil && len(models) >= 3
+	}, 5*time.Second, 10*time.Millisecond, "async unification did not complete")
 
 	// Create application
 	app := &Application{
@@ -390,7 +399,10 @@ func TestUnifiedModelsFormatFiltering(t *testing.T) {
 		[]*domain.ModelInfo{{Name: "gpt-3.5-turbo"}, {Name: "gpt-4"}}))
 
 	// Wait for async unification to complete
-	time.Sleep(200 * time.Millisecond)
+	require.Eventually(t, func() bool {
+		models, err := unifiedRegistry.GetUnifiedModels(ctx)
+		return err == nil && len(models) >= 5
+	}, 5*time.Second, 10*time.Millisecond, "async unification did not complete")
 
 	// Create application
 	app := &Application{
