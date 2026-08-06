@@ -21,6 +21,30 @@ import (
 // (internal/config/) to the shipped config.yaml at the repo root.
 const repoConfigPath = "../../config/config.yaml"
 
+// repoRootConfigPath is the sibling copy of config.yaml kept at the repo
+// root for convenience (`go run .` picks it up without a -config flag).
+const repoRootConfigPath = "../../config.yaml"
+
+// TestRootConfig_MatchesShippedConfig is the drift guard between the two
+// copies of the default config: config/config.yaml (canonical) and the
+// root-level config.yaml (convenience copy for running straight out of a
+// checkout). They must stay byte-identical - a divergence here is exactly
+// how the F1 blocker happened, where the two copies fell out of sync and
+// only one of them got the fix. Mirrors the profile drift guard pattern in
+// internal/adapter/registry/profile/builtin_drift_test.go.
+func TestRootConfig_MatchesShippedConfig(t *testing.T) {
+	t.Parallel()
+
+	shipped, err := os.ReadFile(repoConfigPath)
+	require.NoError(t, err, "shipped config/config.yaml must exist")
+
+	root, err := os.ReadFile(repoRootConfigPath)
+	require.NoError(t, err, "root config.yaml must exist")
+
+	require.True(t, bytes.Equal(shipped, root),
+		"config.yaml drifted from config/config.yaml - keep them byte-identical, edit both together")
+}
+
 // loadShippedConfig reads the shipped config/config.yaml via the same
 // yaml.Unmarshal-onto-DefaultConfig path the production loader uses. The path
 // is resolved against the test's working directory, which go test sets to the
