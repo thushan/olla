@@ -34,7 +34,7 @@ proxy:
   response_timeout: 900s
   read_timeout: 300s
   load_balancer: "priority" # Available: round-robin, least-connections, priority
-  stream_buffer_size: 8192
+  # stream_buffer_size: 8192 # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB)
 
 discovery:
   type: "static"
