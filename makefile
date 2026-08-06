@@ -503,7 +503,11 @@ dev: build-web
 # Bun-free for a fresh clone with no Bun toolchain. test-race-cover replaces
 # the old test-race + test-cover pair (same test-race selection, one run
 # instead of two, and it produces the coverage.out CI uploads to Codecov).
-ci: deps fmt vet lint align-check test-race-cover build ci-web
+# `test` runs alongside it (no -short) so testing.Short()-gated tests -
+# stress and slow-shutdown cases skipped under -short - execute in at least
+# one gate; race-detection on the -short-eligible suite still comes from
+# test-race-cover.
+ci: deps fmt vet lint align-check test test-race-cover build ci-web
 	@echo "CI pipeline completed successfully!"
 
 # Docker compose up with local config

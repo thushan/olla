@@ -82,7 +82,13 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Run tests
+      - name: Run full test suite (incl. testing.Short()-gated tests)
+        # test-race-cover below runs with -short, which skips slower cases
+        # (stress tests, slow-shutdown scenarios) - this plain `test` pass is
+        # the only gate that actually executes them.
+        run: make test
+
+      - name: Run tests with race detection and coverage
         # test-race-cover is test-race's exact selection (-race -short) plus a
         # coverage profile - the Makefile is the single source of truth for
         # what "the tests" means here.
