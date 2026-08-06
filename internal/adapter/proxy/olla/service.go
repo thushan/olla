@@ -58,8 +58,17 @@ const (
 	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
 
 	// halfOpenStaleness bounds how long a single in-flight half-open probe can
-	// gate out further probes. Matches health.CircuitBreaker's hardcoded 1s.
-	halfOpenStaleness = time.Second
+	// gate out further probes before the slot is handed to a replacement caller.
+	// This governs proxied inference requests, not health probes: TTFT alone
+	// routinely exceeds a second on a cold or busy backend, and engine-side
+	// timeouts run to minutes, so a sub-second window (as used by the health
+	// checker's own sub-second /health probes) would misclassify a healthy
+	// streaming probe as hung. 30s is sized to the same order of magnitude as
+	// ResponseHeaderTimeout - long enough that a normal inference response
+	// header arrives well within it, short enough that a truly hung probe
+	// doesn't wedge the endpoint for long. Deliberately not copied from
+	// health.CircuitBreaker, whose constant answers a different question.
+	halfOpenStaleness = 30 * time.Second
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -256,14 +265,19 @@ func (cb *circuitBreaker) IsOpen() bool {
 	// only the goroutine that wins the 0->now CAS is let through immediately;
 	// every other concurrent request is rejected until RecordSuccess/RecordFailure
 	// resolves the probe and resets it. If the outstanding probe is stale (older
-	// than halfOpenStaleness - e.g. a hung request that never resolved), a
-	// further caller is admitted too rather than being wedged for however long
-	// the hang lasts. Mirrors health.CircuitBreaker's lastAttempt gate.
-	if atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, time.Now().UnixNano()) {
+	// than halfOpenStaleness - e.g. a hung request that never resolved), the slot
+	// is handed to exactly one replacement caller via a last->now CAS: a plain
+	// read-and-compare here would admit every caller for as long as the window
+	// keeps being exceeded, since nothing re-stamps lastAttempt on the read path.
+	now := time.Now().UnixNano()
+	if atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, now) {
 		return false
 	}
-	lastAttempt := atomic.LoadInt64(&cb.lastAttempt)
-	return time.Since(time.Unix(0, lastAttempt)) < halfOpenStaleness
+	last := atomic.LoadInt64(&cb.lastAttempt)
+	if time.Since(time.Unix(0, last)) < halfOpenStaleness {
+		return true
+	}
+	return !atomic.CompareAndSwapInt64(&cb.lastAttempt, last, now)
 }
 
 func (cb *circuitBreaker) RecordSuccess() {

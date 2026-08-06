@@ -136,6 +136,58 @@ func TestCircuitBreaker_HalfOpen_StaleProbeReleased(t *testing.T) {
 	if cb.IsOpen() {
 		t.Fatal("a stale, never-resolved probe must not wedge the endpoint - a further probe should be admitted")
 	}
+
+	// The handover must re-stamp lastAttempt to now, not leave it stuck in the
+	// past - otherwise every subsequent caller keeps reading a stale timestamp
+	// and gets admitted too, defeating the single-flight gate entirely.
+	if !cb.IsOpen() {
+		t.Fatal("the replacement probe just admitted must block the very next caller")
+	}
+}
+
+// TestCircuitBreaker_HalfOpen_StaleProbeReleased_ConcurrentHandover races many
+// goroutines against the same stale window to prove the last->now CAS handover
+// admits exactly one replacement probe, not all of them. Before the fix, every
+// goroutine that observed the stale window read the same never-updated
+// lastAttempt and was admitted, regardless of how many arrived.
+func TestCircuitBreaker_HalfOpen_StaleProbeReleased_ConcurrentHandover(t *testing.T) {
+	const goroutines = 200
+	cb := openCircuitBreaker(1000)
+
+	// Win the initial half-open slot and immediately backdate it past the
+	// staleness window, so every goroutine below races the handover CAS.
+	if cb.IsOpen() {
+		t.Fatal("expected the first call to admit a half-open probe")
+	}
+	atomic.StoreInt64(&cb.lastAttempt, time.Now().Add(-halfOpenStaleness-time.Millisecond).UnixNano())
+
+	var admitted int64
+	var ready sync.WaitGroup
+	var start sync.WaitGroup
+	var done sync.WaitGroup
+
+	ready.Add(goroutines)
+	start.Add(1)
+	done.Add(goroutines)
+
+	for range goroutines {
+		go func() {
+			defer done.Done()
+			ready.Done()
+			start.Wait()
+			if !cb.IsOpen() {
+				atomic.AddInt64(&admitted, 1)
+			}
+		}()
+	}
+
+	ready.Wait()
+	start.Done()
+	done.Wait()
+
+	if admitted != 1 {
+		t.Fatalf("expected exactly 1 replacement probe admitted across the stale handover, got %d", admitted)
+	}
 }
 
 // TestCircuitBreaker_HalfOpen_FailureReopens verifies a probe failure that
