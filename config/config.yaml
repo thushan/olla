@@ -60,7 +60,7 @@ proxy:
   # - "standard": Normal HTTP delivery without forced flushing, suitable for REST APIs
   profile: "auto" # Available: auto, streaming, standard
   load_balancer: "least-connections" # Available: round-robin, least-connections, priority
-  stream_buffer_size: 8192 # Buffer size per request - larger = fewer syscalls, more memory
+  # stream_buffer_size: 8192 # Buffer size per request - larger = fewer syscalls, more memory. Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB).
   connection_timeout: 60s
   connection_keep_alive: 30s # TCP keep-alive interval for backend connections
   response_timeout: 15m

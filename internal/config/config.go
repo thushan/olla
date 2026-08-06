@@ -76,10 +76,13 @@ func DefaultConfig() *Config {
 			},
 		},
 		Proxy: ProxyConfig{
-			Engine:            DefaultProxyEngine,
-			LoadBalancer:      DefaultLoadBalancer,
-			Profile:           DefaultProxyProfile,
-			StreamBufferSize:  8 * 1024, // 8KB
+			Engine:       DefaultProxyEngine,
+			LoadBalancer: DefaultLoadBalancer,
+			Profile:      DefaultProxyProfile,
+			// StreamBufferSize is deliberately left at zero here: each proxy
+			// engine defaults it differently (Olla 64KiB, Sherpa 8KiB) via its
+			// own zero-check further down the chain. Hardcoding a value here
+			// would defeat that - see factory.go's raw (zero-preserving) copy.
 			ConnectionTimeout: 60 * time.Second,
 			ResponseTimeout:   15 * time.Minute,
 			ReadTimeout:       10 * time.Minute,
