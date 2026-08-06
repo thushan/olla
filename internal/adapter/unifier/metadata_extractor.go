@@ -5,6 +5,18 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
+)
+
+// fallbackConfig caches the error-path default so a run of LoadModelConfig
+// errors (extraction is called per-request) doesn't rebuild the whole
+// ModelUnificationConfig struct literal on every call. Deliberately a
+// separate cache from LoadModelConfig's own sync.Once/configOnce: this one
+// only ever holds the fixed embedded default, so it has nothing for
+// resetConfigSingleton to need to invalidate.
+var (
+	fallbackConfigOnce sync.Once
+	fallbackConfig     *ModelUnificationConfig
 )
 
 // getConfig returns the model unification config. LoadModelConfig already
@@ -15,7 +27,10 @@ import (
 func getConfig() *ModelUnificationConfig {
 	config, err := LoadModelConfig()
 	if err != nil {
-		return getDefaultConfig()
+		fallbackConfigOnce.Do(func() {
+			fallbackConfig = getDefaultConfig()
+		})
+		return fallbackConfig
 	}
 	return config
 }
