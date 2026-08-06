@@ -33,6 +33,8 @@ internal/app/handlers/dashboard/dist/*
 
 # Test results
 test/results/
+coverage.out
+coverage.html
 
 # Research and experimental code
 research/

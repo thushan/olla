@@ -141,6 +141,13 @@ test-race:
 	@echo "Running tests with race detection..."
 	@go test -race -short ./...
 
+# Run tests with race detection and a coverage profile. Same test selection as
+# test-race - this only adds -coverprofile so CI can feed coverage.out to
+# Codecov without running the suite twice.
+test-race-cover:
+	@echo "Running tests with race detection and coverage..."
+	@go test -race -short -coverprofile=coverage.out ./...
+
 # Run tests with coverage
 test-cover:
 	@echo "Running tests with coverage..."
@@ -397,6 +404,30 @@ align:
 	fi
 	@echo "Running better-align...Done!"
 
+# Run betteralign in check-only mode (no -apply). CI uses this instead of
+# align - a passing build must mean the committed code is already aligned,
+# not that this run silently patched it in a workspace nothing commits from.
+align-check:
+	@echo "Running better-align (check only)..."
+	@if command -v betteralign > /dev/null 2>&1; then \
+		INSTALLED=$$(go version -m "$$(go env GOPATH)/bin/betteralign$$(go env GOEXE)" 2>/dev/null | grep -E '^\s+mod' | awk '{print $$3}'); \
+		if [ "$$INSTALLED" = "$(BETTERALIGN_VERSION)" ]; then \
+			printf "  Version: %s \033[32m(verified)\033[0m\n" "$$INSTALLED"; \
+		else \
+			printf "  Version: %s [require: %s \033[31m(pinned)\033[0m]\n" "$$INSTALLED" "$(BETTERALIGN_VERSION)"; \
+		fi; \
+		output=$$(betteralign ./... 2>&1); \
+		if [ -n "$$output" ]; then \
+			echo "Struct alignment issues found:"; \
+			echo "$$output"; \
+			exit 1; \
+		fi; \
+	else \
+		echo "betteralign not installed. Run 'make install-deps' or 'make check-deps' for more info."; \
+		exit 1; \
+	fi
+	@echo "Running better-align (check only)...Done!"
+
 # Install dependencies at pinned versions
 install-deps:
 	@echo "Installing dependencies..."
@@ -469,8 +500,10 @@ dev: build-web
 
 # Run full CI pipeline locally. ci-web is included here (not in `ready`) so
 # `make ci` matches what the GitHub Actions workflow gates on; ready stays
-# Bun-free for a fresh clone with no Bun toolchain.
-ci: deps fmt vet lint test-race test-cover build ci-web
+# Bun-free for a fresh clone with no Bun toolchain. test-race-cover replaces
+# the old test-race + test-cover pair (same test-race selection, one run
+# instead of two, and it produces the coverage.out CI uploads to Codecov).
+ci: deps fmt vet lint align-check test-race-cover build ci-web
 	@echo "CI pipeline completed successfully!"
 
 # Docker compose up with local config
