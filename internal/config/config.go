@@ -429,6 +429,14 @@ func applyEnvOverrides(config *Config) {
 		config.ModelRegistry.Type = val
 	}
 
+	// OLLA_MODEL_UNIFIER_ENABLED controls EnableUnifier, the real toggle. It
+	// used to also write into the now-deleted (dead) Unification.Enabled field.
+	if val := os.Getenv("OLLA_MODEL_UNIFIER_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.ModelRegistry.EnableUnifier = enabled
+		}
+	}
+
 	// config for request size limits + streaming
 	if val := os.Getenv("OLLA_TRANSLATORS_ANTHROPIC_ENABLED"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
