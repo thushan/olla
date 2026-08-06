@@ -382,6 +382,13 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 	newConfig.ConnectionTimeout = config.GetConnectionTimeout()
 	newConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
 	newConfig.ResponseTimeout = config.GetResponseTimeout()
+	// Getter-based defaults, same as every other field above. Overridden below
+	// with the raw (possibly zero) value when config is concretely an
+	// *olla.Configuration, so an unset field there resolves through Olla's own
+	// default instead of getting permanently stuck on whatever this generic
+	// getter defaulted to - the same class of bug factory.go's raw copy fixes
+	// for construction (F1). A foreign config type has no way to expose an
+	// undefaulted value, so it keeps using the getter here.
 	newConfig.ReadTimeout = config.GetReadTimeout()
 	newConfig.StreamBufferSize = config.GetStreamBufferSize()
 	newConfig.Profile = config.GetProxyProfile()
@@ -393,6 +400,8 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 
 	// we try to get Olla-specific fields from incoming config if it's an *olla.Configuration
 	if ollaConfig, ok := config.(*Configuration); ok && ollaConfig != nil {
+		newConfig.ReadTimeout = ollaConfig.ReadTimeout
+		newConfig.StreamBufferSize = ollaConfig.StreamBufferSize
 		newConfig.MaxIdleConns = ollaConfig.MaxIdleConns
 		newConfig.IdleConnTimeout = ollaConfig.IdleConnTimeout
 		newConfig.MaxConnsPerHost = ollaConfig.MaxConnsPerHost
@@ -400,10 +409,10 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 		newConfig.ResponseHeaderTimeout = ollaConfig.ResponseHeaderTimeout
 		newConfig.TLSHandshakeTimeout = ollaConfig.TLSHandshakeTimeout
 	} else if current != nil {
-		// fallback: preserve current Olla-specific settings for non-Olla configs.
-		// Guard against a nil current pointer — only reachable if UpdateConfig is
-		// called on a zero-value Service (e.g. in tests) before NewService stores
-		// the initial configuration.
+		// fallback: preserve current Olla-specific pool tunables for non-Olla
+		// configs. Guard against a nil current pointer — only reachable if
+		// UpdateConfig is called on a zero-value Service (e.g. in tests)
+		// before NewService stores the initial configuration.
 		newConfig.MaxIdleConns = current.MaxIdleConns
 		newConfig.IdleConnTimeout = current.IdleConnTimeout
 		newConfig.MaxConnsPerHost = current.MaxConnsPerHost

@@ -165,9 +165,21 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 	newConfig.ConnectionTimeout = config.GetConnectionTimeout()
 	newConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
 	newConfig.ResponseTimeout = config.GetResponseTimeout()
+	// Getter-based defaults for a foreign config type, same as every other
+	// field above. Overridden below with the raw value when config is
+	// concretely a *sherpa.Configuration, preserving the distinction between
+	// "operator left this unset" and "operator set it to the default" in the
+	// stored config rather than baking the getter's resolved value into the
+	// raw field. Mirrors factory.go's raw copy for construction (F1) and
+	// olla.Service's UpdateConfig (F12).
 	newConfig.ReadTimeout = config.GetReadTimeout()
 	newConfig.StreamBufferSize = config.GetStreamBufferSize()
 	newConfig.Profile = config.GetProxyProfile()
+
+	if sherpaConfig, ok := config.(*Configuration); ok && sherpaConfig != nil {
+		newConfig.ReadTimeout = sherpaConfig.ReadTimeout
+		newConfig.StreamBufferSize = sherpaConfig.StreamBufferSize
+	}
 
 	s.configuration = newConfig
 }

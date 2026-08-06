@@ -233,3 +233,38 @@ func TestUpdateConfig_PreservesTimeouts(t *testing.T) {
 		t.Errorf("TLSHandshakeTimeout after UpdateConfig: want 15s, got %v", got.TLSHandshakeTimeout)
 	}
 }
+
+// TestUpdateConfig_ZeroValueOllaConfigResolvesOllaDefaults is the regression
+// test for F12. When config is concretely an *olla.Configuration, calling
+// GetReadTimeout()/GetStreamBufferSize() happens to resolve correctly even
+// unfixed (Go dispatches to OllaConfig's own zero-checking getter) - but it
+// bakes a concrete value into the raw field, discarding the fact the operator
+// left it unset. UpdateConfig now copies the raw field directly instead,
+// matching factory.go's raw copy for construction (F1) and preserving that
+// distinction for anything that inspects the raw config rather than going
+// through the getter. Both the raw field (still zero) and the effective
+// getter value (Olla's default) are asserted here.
+func TestUpdateConfig_ZeroValueOllaConfigResolvesOllaDefaults(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{}
+	svc.configuration.Store(&Configuration{})
+
+	// Zero-value *olla.Configuration - what a real hot-reload caller would
+	// send when the operator hasn't set stream_buffer_size/read_timeout.
+	svc.UpdateConfig(&Configuration{})
+
+	got := svc.configuration.Load()
+	if got.StreamBufferSize != 0 {
+		t.Errorf("raw StreamBufferSize after UpdateConfig = %d, want 0 (zero-preserved)", got.StreamBufferSize)
+	}
+	if got.ReadTimeout != 0 {
+		t.Errorf("raw ReadTimeout after UpdateConfig = %v, want 0 (zero-preserved)", got.ReadTimeout)
+	}
+	if got.GetStreamBufferSize() != proxyconfig.OllaDefaultStreamBufferSize {
+		t.Errorf("GetStreamBufferSize() after UpdateConfig = %d, want OllaDefaultStreamBufferSize (%d)", got.GetStreamBufferSize(), proxyconfig.OllaDefaultStreamBufferSize)
+	}
+	if got.GetReadTimeout() != proxyconfig.OllaDefaultReadTimeout {
+		t.Errorf("GetReadTimeout() after UpdateConfig = %v, want OllaDefaultReadTimeout (%v)", got.GetReadTimeout(), proxyconfig.OllaDefaultReadTimeout)
+	}
+}
