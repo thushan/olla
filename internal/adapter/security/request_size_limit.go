@@ -27,6 +27,11 @@ import (
 
 const (
 	DefaultProtocol = "HTTP/1.1"
+
+	// minHeaderSize floors a configured max_header_size so a small misconfigured
+	// value can't cripple every request's headers. Mirrors the floor
+	// services.minMaxHeaderBytes applies to the stdlib http.Server layer.
+	minHeaderSize = 4096
 )
 
 type SizeValidator struct {
@@ -39,10 +44,27 @@ type SizeValidator struct {
 func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityMetricsService, logger logger.StyledLogger) *SizeValidator {
 	return &SizeValidator{
 		maxBodySize:   limits.MaxBodySize,
-		maxHeaderSize: limits.MaxHeaderSize,
+		maxHeaderSize: effectiveMaxHeaderSize(limits.MaxHeaderSize),
 		metrics:       metrics,
 		logger:        logger,
 	}
+}
+
+// effectiveMaxHeaderSize derives the enforced header cap from the configured
+// max_header_size. A zero or negative value is "unset", not "disabled" - it
+// falls back to http.DefaultMaxHeaderBytes (1 MiB), matching the stdlib
+// http.Server fallback in services.maxHeaderBytesFromConfig so the app-level
+// policy check and the listener-level hard cap agree by default. A small
+// positive value is floored at minHeaderSize so a misconfiguration can't
+// reject every legitimate request.
+func effectiveMaxHeaderSize(configured int64) int64 {
+	if configured <= 0 {
+		return http.DefaultMaxHeaderBytes
+	}
+	if configured < minHeaderSize {
+		return minHeaderSize
+	}
+	return configured
 }
 
 func (sv *SizeValidator) Name() string {
@@ -74,10 +96,6 @@ func (sv *SizeValidator) Validate(ctx context.Context, req ports.SecurityRequest
 // validateHeaderSize estimates total header size, including field names and values.
 // Returns an error if the combined size exceeds the configured max.
 func (sv *SizeValidator) validateHeaderSize(req ports.SecurityRequest) error {
-	if sv.maxHeaderSize <= 0 {
-		return nil
-	}
-
 	totalSize := estimateHeaderSize(req.Headers, req.Method, req.Endpoint, DefaultProtocol) // assume HTTP/1.1
 	if totalSize > sv.maxHeaderSize {
 		return fmt.Errorf("header size %d exceeds limit %d", totalSize, sv.maxHeaderSize)

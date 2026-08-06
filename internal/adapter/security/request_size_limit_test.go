@@ -40,8 +40,30 @@ func TestNewSizeValidator(t *testing.T) {
 	if validator.maxBodySize != 1024 {
 		t.Errorf("Expected max body size 1024, got %d", validator.maxBodySize)
 	}
-	if validator.maxHeaderSize != 512 {
-		t.Errorf("Expected max header size 512, got %d", validator.maxHeaderSize)
+	if validator.maxHeaderSize != minHeaderSize {
+		t.Errorf("Expected max header size floored to %d, got %d", minHeaderSize, validator.maxHeaderSize)
+	}
+}
+
+func TestNewSizeValidator_HeaderSizeFloorAndDefault(t *testing.T) {
+	tests := []struct {
+		name       string
+		configured int64
+		want       int64
+	}{
+		{"zero falls back to the default cap", 0, http.DefaultMaxHeaderBytes},
+		{"negative falls back to the default cap", -100, http.DefaultMaxHeaderBytes},
+		{"small positive value is floored", 100, minHeaderSize},
+		{"exactly the floor stays unchanged", minHeaderSize, minHeaderSize},
+		{"large explicit value is respected", 2 * 1024 * 1024, 2 * 1024 * 1024},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validator := createTestSizeLimitValidator(config.ServerRequestLimits{MaxHeaderSize: tt.configured})
+			if validator.maxHeaderSize != tt.want {
+				t.Errorf("effectiveMaxHeaderSize(%d) = %d, want %d", tt.configured, validator.maxHeaderSize, tt.want)
+			}
+		})
 	}
 }
 
@@ -108,7 +130,7 @@ func TestSizeValidator_Validate_BodyTooLarge(t *testing.T) {
 func TestSizeValidator_Validate_HeadersTooLarge(t *testing.T) {
 	limits := config.ServerRequestLimits{
 		MaxBodySize:   1024,
-		MaxHeaderSize: 100,
+		MaxHeaderSize: minHeaderSize,
 	}
 
 	validator := createTestSizeLimitValidator(limits)
@@ -119,9 +141,9 @@ func TestSizeValidator_Validate_HeadersTooLarge(t *testing.T) {
 		Endpoint:   "/api/test",
 		Method:     "POST",
 		BodySize:   50,
-		HeaderSize: 200,
+		HeaderSize: minHeaderSize + 500,
 		Headers: map[string][]string{
-			"X-Large-Header": {strings.Repeat("x", 200)},
+			"X-Large-Header": {strings.Repeat("x", minHeaderSize+500)},
 		},
 	}
 
@@ -134,6 +156,49 @@ func TestSizeValidator_Validate_HeadersTooLarge(t *testing.T) {
 	}
 	if !strings.Contains(result.Reason, "Request headers too large") {
 		t.Errorf("Expected header size error, got: %s", result.Reason)
+	}
+}
+
+// TestSizeValidator_Validate_ZeroHeaderLimitUsesDefaultCap confirms max_header_size:
+// 0 no longer disables header validation - it falls back to the default 1 MiB
+// cap (matching the stdlib http.Server fallback), so a header block beyond
+// that default is still rejected even though the operator wrote "0".
+func TestSizeValidator_Validate_ZeroHeaderLimitUsesDefaultCap(t *testing.T) {
+	limits := config.ServerRequestLimits{
+		MaxBodySize:   0,
+		MaxHeaderSize: 0,
+	}
+
+	validator := createTestSizeLimitValidator(limits)
+	ctx := context.Background()
+
+	oversized := strings.Repeat("z", http.DefaultMaxHeaderBytes+1)
+	req := ports.SecurityRequest{
+		ClientID: "192.168.1.100",
+		Endpoint: "/api/test",
+		Method:   "POST",
+		BodySize: 10000,
+		Headers: map[string][]string{
+			"X-Huge-Header": {oversized},
+		},
+	}
+
+	result, err := validator.Validate(ctx, req)
+	if err != nil {
+		t.Fatalf("Validate failed: %v", err)
+	}
+	if result.Allowed {
+		t.Error("a header block over the default 1 MiB cap must be rejected even when max_header_size is 0")
+	}
+
+	// Body validation is genuinely disabled at 0 - unaffected by this change.
+	req.Headers = map[string][]string{"Content-Type": {"application/json"}}
+	result, err = validator.Validate(ctx, req)
+	if err != nil {
+		t.Fatalf("Validate failed: %v", err)
+	}
+	if !result.Allowed {
+		t.Errorf("body size should remain unbounded when max_body_size is 0, got: %s", result.Reason)
 	}
 }
 
@@ -283,7 +348,7 @@ func TestSizeValidator_Validate_EmptyBody(t *testing.T) {
 func TestSizeValidator_Validate_MultipleHeaders(t *testing.T) {
 	limits := config.ServerRequestLimits{
 		MaxBodySize:   1024,
-		MaxHeaderSize: 200,
+		MaxHeaderSize: minHeaderSize,
 	}
 
 	validator := createTestSizeLimitValidator(limits)
@@ -294,10 +359,10 @@ func TestSizeValidator_Validate_MultipleHeaders(t *testing.T) {
 		Endpoint:   "/api/test",
 		Method:     "POST",
 		BodySize:   100,
-		HeaderSize: 300,
+		HeaderSize: minHeaderSize + 300,
 		Headers: map[string][]string{
 			"Content-Type":    {"application/json"},
-			"Authorization":   {"Bearer " + strings.Repeat("x", 50)},
+			"Authorization":   {"Bearer " + strings.Repeat("x", minHeaderSize)},
 			"X-Custom-Header": {strings.Repeat("y", 50)},
 			"User-Agent":      {"TestAgent/1.0"},
 		},
@@ -384,7 +449,7 @@ func TestSizeValidator_Validate_ConcurrentRequests(t *testing.T) {
 func TestSizeValidator_Validate_MultiValueHeaders(t *testing.T) {
 	limits := config.ServerRequestLimits{
 		MaxBodySize:   1024,
-		MaxHeaderSize: 150,
+		MaxHeaderSize: minHeaderSize,
 	}
 
 	validator := createTestSizeLimitValidator(limits)
@@ -409,8 +474,8 @@ func TestSizeValidator_Validate_MultiValueHeaders(t *testing.T) {
 		t.Errorf("Multi-value headers should be calculated correctly, got: %s", result.Reason)
 	}
 
-	req.Headers["Large-Header"] = []string{strings.Repeat("z", 100)}
-	req.HeaderSize = 350
+	req.Headers["Large-Header"] = []string{strings.Repeat("z", minHeaderSize)}
+	req.HeaderSize = minHeaderSize + 200
 
 	result, err = validator.Validate(ctx, req)
 	if err != nil {
