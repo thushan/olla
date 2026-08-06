@@ -75,9 +75,16 @@ type Collector struct {
 
 	rateLimitViolations *xsync.Counter
 	sizeLimitViolations *xsync.Counter
-	lastCleanup         int64
-	lastIPCleanup       int64 // atomic: tracks when the age-eviction scan last ran
-	securityMu          sync.RWMutex
+
+	// Global latency bounds across all endpoints, CAS-updated the same way as
+	// endpointData's per-endpoint bounds (see updateLatencyBounds). minLatency
+	// starts at -1 as an "unset" sentinel since 0 is a valid observed latency.
+	minLatency int64
+	maxLatency int64
+
+	lastCleanup   int64
+	lastIPCleanup int64 // atomic: tracks when the age-eviction scan last ran
+	securityMu    sync.RWMutex
 
 	cleanupMu sync.Mutex
 }
@@ -111,6 +118,7 @@ func NewCollectorWithConfig(logger logger.StyledLogger, modelConfig *ModelCollec
 		logger:               logger,
 		endpoints:            xsync.NewMap[string, *endpointData](),
 		lastCleanup:          time.Now().UnixNano(),
+		minLatency:           -1,
 		modelCollector:       NewModelCollectorWithConfig(modelConfig),
 		translatorCollector:  NewTranslatorCollector(),
 		totalRequests:        xsync.NewCounter(),
@@ -133,6 +141,7 @@ func (c *Collector) RecordRequest(endpoint *domain.Endpoint, status string, late
 		// Update total latency only for successful requests
 		// realised in TestCollector_RecordRequest
 		c.totalLatency.Add(latencyMs)
+		c.updateGlobalLatencyBounds(latencyMs)
 	} else {
 		c.failedRequests.Inc()
 	}
@@ -187,13 +196,43 @@ func (c *Collector) GetProxyStats() ports.ProxyStats {
 		avgLatency = totalLatency / successful
 	}
 
+	minLatency := atomic.LoadInt64(&c.minLatency)
+	if minLatency == -1 {
+		minLatency = 0
+	}
+
 	return ports.ProxyStats{
 		TotalRequests:      total,
 		SuccessfulRequests: successful,
 		FailedRequests:     failed,
 		AverageLatency:     avgLatency,
-		MinLatency:         0, // Not implemented yet
-		MaxLatency:         0, // Not implemented yet
+		MinLatency:         minLatency,
+		MaxLatency:         atomic.LoadInt64(&c.maxLatency),
+	}
+}
+
+// updateGlobalLatencyBounds is the global-across-all-endpoints equivalent of
+// updateLatencyBounds, feeding GetProxyStats' MinLatency/MaxLatency.
+func (c *Collector) updateGlobalLatencyBounds(latencyMs int64) {
+	for {
+		minLatency := atomic.LoadInt64(&c.minLatency)
+		if minLatency == -1 || latencyMs < minLatency {
+			if atomic.CompareAndSwapInt64(&c.minLatency, minLatency, latencyMs) {
+				break
+			}
+		} else {
+			break
+		}
+	}
+	for {
+		maxLatency := atomic.LoadInt64(&c.maxLatency)
+		if latencyMs > maxLatency {
+			if atomic.CompareAndSwapInt64(&c.maxLatency, maxLatency, latencyMs) {
+				break
+			}
+		} else {
+			break
+		}
 	}
 }
 
@@ -261,6 +300,18 @@ func (c *Collector) GetConnectionStats() map[string]int64 {
 	})
 
 	return stats
+}
+
+// GetConnectionCount returns the active connection count for a single endpoint,
+// keyed the same way as GetConnectionStats (endpoint URL string). Returns 0 for
+// an endpoint that has never recorded a connection, matching GetConnectionStats'
+// implicit-zero behaviour for missing keys.
+func (c *Collector) GetConnectionCount(endpoint string) int64 {
+	data, ok := c.endpoints.Load(endpoint)
+	if !ok {
+		return 0
+	}
+	return atomic.LoadInt64(&data.activeConnections)
 }
 
 func (c *Collector) RecordSecurityViolation(violation ports.SecurityViolation) {

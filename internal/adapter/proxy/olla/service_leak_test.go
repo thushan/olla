@@ -289,6 +289,7 @@ func (m *mockStatsCollector) GetProxyStats() ports.ProxyStats                  {
 func (m *mockStatsCollector) GetEndpointStats() map[string]ports.EndpointStats { return nil }
 func (m *mockStatsCollector) GetSecurityStats() ports.SecurityStats            { return ports.SecurityStats{} }
 func (m *mockStatsCollector) GetConnectionStats() map[string]int64             { return nil }
+func (m *mockStatsCollector) GetConnectionCount(endpoint string) int64         { return 0 }
 
 // TestCleanupLoop_SurvivesTick_Panic verifies that a panic inside
 // cleanupUnusedResources does not kill the cleanupLoop goroutine. Before the

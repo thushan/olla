@@ -27,6 +27,11 @@ type StatsCollector interface {
 	GetEndpointStats() map[string]EndpointStats
 	GetSecurityStats() SecurityStats
 	GetConnectionStats() map[string]int64
+	// GetConnectionCount returns the active connection count for a single endpoint.
+	// Prefer this over GetConnectionStats() when only one endpoint's count is
+	// needed - it avoids building a map of every tracked endpoint just to read
+	// one entry, which matters on selector hot paths called once per candidate.
+	GetConnectionCount(endpoint string) int64
 }
 
 type EndpointStats struct {

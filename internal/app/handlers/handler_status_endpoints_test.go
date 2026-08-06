@@ -110,6 +110,9 @@ func (m *mockStatusStatsCollector) GetConnectionStats() map[string]int64 {
 	}
 	return m.connectionStats
 }
+func (m *mockStatusStatsCollector) GetConnectionCount(endpoint string) int64 {
+	return m.connectionStats[endpoint]
+}
 func (m *mockStatusStatsCollector) RecordModelTokens(model string, inputTokens, outputTokens int64) {
 }
 

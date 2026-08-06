@@ -42,7 +42,8 @@ func (m *mockTranslatorStatsCollector) GetProxyStats() ports.ProxyStats { return
 func (m *mockTranslatorStatsCollector) GetSecurityStats() ports.SecurityStats {
 	return ports.SecurityStats{}
 }
-func (m *mockTranslatorStatsCollector) GetConnectionStats() map[string]int64 { return nil }
+func (m *mockTranslatorStatsCollector) GetConnectionStats() map[string]int64     { return nil }
+func (m *mockTranslatorStatsCollector) GetConnectionCount(endpoint string) int64 { return 0 }
 func (m *mockTranslatorStatsCollector) RecordModelTokens(model string, inputTokens, outputTokens int64) {
 }
 func (m *mockTranslatorStatsCollector) GetEndpointStats() map[string]ports.EndpointStats {

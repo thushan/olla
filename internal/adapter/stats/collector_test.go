@@ -122,6 +122,34 @@ func TestCollector_RecordConnection(t *testing.T) {
 	}
 }
 
+func TestCollector_GetConnectionCount(t *testing.T) {
+	collector := NewCollector(createTestLogger())
+	endpoint := createTestEndpoint("http://localhost:8080", "local")
+	uri := endpoint.URL.String()
+
+	if got := collector.GetConnectionCount(uri); got != 0 {
+		t.Errorf("unknown endpoint: expected 0, got %d", got)
+	}
+
+	collector.RecordConnection(endpoint, 3)
+	if got := collector.GetConnectionCount(uri); got != 3 {
+		t.Errorf("after +3: expected 3, got %d", got)
+	}
+
+	collector.RecordConnection(endpoint, -1)
+	if got := collector.GetConnectionCount(uri); got != 2 {
+		t.Errorf("after -1: expected 2, got %d", got)
+	}
+
+	// GetConnectionCount must agree with GetConnectionStats for the same key -
+	// the whole point of adding it is to avoid building that map, not to
+	// diverge from what it would have said.
+	full := collector.GetConnectionStats()
+	if got := collector.GetConnectionCount(uri); got != full[uri] {
+		t.Errorf("GetConnectionCount = %d, disagrees with GetConnectionStats()[uri] = %d", got, full[uri])
+	}
+}
+
 func TestCollector_RecordSecurityViolation(t *testing.T) {
 	collector := NewCollector(createTestLogger())
 
@@ -188,6 +216,30 @@ func TestCollector_LatencyMinMax(t *testing.T) {
 	}
 	if stats.AverageLatency != 106 { // (50+200+25+150)/4 = 106.25, truncated to 106
 		t.Errorf("Expected average latency 106ms, got %d", stats.AverageLatency)
+	}
+}
+
+// TestCollector_ProxyStatsLatencyBounds is the regression test for GetProxyStats
+// hardcoding MinLatency/MaxLatency to 0: it must report the true min/max across
+// every endpoint, not just one, and must ignore failed requests (which never
+// touch latency bounds, mirroring the per-endpoint behaviour).
+func TestCollector_ProxyStatsLatencyBounds(t *testing.T) {
+	collector := NewCollector(createTestLogger())
+	endpointA := createTestEndpoint("http://localhost:8080", "a")
+	endpointB := createTestEndpoint("http://localhost:8081", "b")
+
+	collector.RecordRequest(endpointA, StatusSuccess, 50*time.Millisecond, 100)
+	collector.RecordRequest(endpointB, StatusSuccess, 10*time.Millisecond, 100) // global min
+	collector.RecordRequest(endpointA, StatusSuccess, 300*time.Millisecond, 100)
+	collector.RecordRequest(endpointB, StatusSuccess, 999*time.Millisecond, 100) // global max
+	collector.RecordRequest(endpointA, StatusFailure, 1*time.Millisecond, 0)     // must not move the bounds
+
+	proxyStats := collector.GetProxyStats()
+	if proxyStats.MinLatency != 10 {
+		t.Errorf("MinLatency = %d, want 10", proxyStats.MinLatency)
+	}
+	if proxyStats.MaxLatency != 999 {
+		t.Errorf("MaxLatency = %d, want 999", proxyStats.MaxLatency)
 	}
 }
 

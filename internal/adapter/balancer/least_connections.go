@@ -39,15 +39,14 @@ func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*doma
 		return nil, errors.New("no routable endpoints available")
 	}
 
-	// Get current connection counts from stats collector
-	connectionStats := l.statsCollector.GetConnectionStats()
-
-	// Find endpoint with a least number of connections
+	// Read each candidate's count directly instead of building a map of every
+	// tracked endpoint via GetConnectionStats - Select runs per request, and
+	// most of that map would be discarded unread.
 	var selected *domain.Endpoint
 	minConnections := int64(-1)
 
 	for _, endpoint := range routable {
-		connections := connectionStats[endpoint.URLString] // Will be 0 if not found
+		connections := l.statsCollector.GetConnectionCount(endpoint.URLString)
 
 		if minConnections == -1 || connections < minConnections {
 			minConnections = connections
