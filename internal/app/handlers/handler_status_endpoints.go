@@ -315,7 +315,7 @@ func buildEndpointIDs(endpoints []*domain.Endpoint) map[string]string {
 // hashEndpointStatusResponse computes the FNV-1a ETag for the
 // /internal/status/endpoints payload, excluding the top-level Timestamp and
 // the relative time-ago renderings (health_check, last_model_sync) that change
-// every poll. Absolute event times stay in.
+// every poll.
 func hashEndpointStatusResponse(resp *EndpointStatusResponse) string {
 	h := fnv.New64a()
 	for i := range resp.Endpoints {
@@ -327,9 +327,22 @@ func hashEndpointStatusResponse(resp *EndpointStatusResponse) string {
 	return formatEtag(h)
 }
 
-// hashEndpointSummary feeds the stable fields of one EndpointSummary. Relative
-// strings (HealthCheck, LastModelSync) are skipped; ResponseTime is kept as it
-// renders from endpoint.LastLatency, an absolute measurement, not the wall clock.
+// hashEndpointSummary feeds only the stable/semantic fields of one
+// EndpointSummary the dashboard actually needs to detect a change: identity,
+// status, config and the counters/metrics that only move when something real
+// happened. Deliberately excluded, beyond the already-skipped relative
+// strings (HealthCheck, LastModelSync):
+//
+//   - NextCheckAt/HealthCheckAt: advance on every health-check tick (30s,
+//     see internal/adapter/health) regardless of whether the endpoint's
+//     status changed, so including them churned the ETag under zero traffic -
+//     defeating the point of caching.
+//   - LastModelSyncAt: same problem, tied to the periodic model-list sync
+//     rather than an actual model-list change.
+//
+// ResponseTime is kept: it renders from endpoint.LastLatency, an absolute
+// measurement that only changes when a real request completes, not the wall
+// clock.
 func hashEndpointSummary(h hash.Hash, s *EndpointSummary) {
 	hashEtagString(h, s.ID)
 	hashEtagString(h, s.Name)
@@ -346,9 +359,6 @@ func hashEndpointSummary(h hash.Hash, s *EndpointSummary) {
 	hashEtagInt64(h, s.MaxLatencyMs)
 	hashEtagInt64(h, s.ActiveConnections)
 	hashEtagInt64Ptr(h, s.AvgLatencyMs)
-	hashEtagTimePtr(h, s.NextCheckAt)
-	hashEtagTimePtr(h, s.HealthCheckAt)
-	hashEtagTimePtr(h, s.LastModelSyncAt)
 }
 
 // unparseableURLSentinel is returned by sanitiseDisplayURL when url.Parse
