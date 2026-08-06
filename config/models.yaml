@@ -14,7 +14,7 @@ model_extraction:
       variant_group: 2
       description: "Common families with version numbers"
 
-    - pattern: '^[^/]+/(phi|llama|gemma|qwen|mistral|glm|granite|nemotron|exaone|kimi|minimax|hunyuan|olmo|internlm|smollm)[-_]?(\d+(?:\.\d+)?)?'
+    - pattern: '^[^/]+/(phi|llama|gemma|qwen|mistral|glm|granite|nemotron|exaone|kimi|minimax|hunyuan|olmo|internlm|smollm)(?:[-_.:]?(\d+(?:\.\d+)?))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Models with publisher prefix"
@@ -24,7 +24,7 @@ model_extraction:
       variant_group: 2
       description: "Code and specialised models"
       
-    - pattern: '^(gpt-oss)[-_:]?(.+)?'
+    - pattern: '^(gpt-oss)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "OpenAI open-weight gpt-oss models"
@@ -39,62 +39,62 @@ model_extraction:
       variant_group: 2
       description: "DeepSeek models"
 
-    - pattern: '^(devstral|magistral|codestral|ministral)[-_]?(.+)?'
+    - pattern: '^(devstral|magistral|codestral|ministral)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Mistral AI code/agent/edge variants (Devstral, Magistral, Codestral, Ministral)"
 
-    - pattern: '^(glm)[-_]?(\d+(?:\.\d+)?)?'
+    - pattern: '^(glm)(?:[-_.:]?(\d+(?:\.\d+)?))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "GLM models (Zhipu / Z.ai)"
 
-    - pattern: '^(kimi)[-_]?(.+)?'
+    - pattern: '^(kimi)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Kimi models (Moonshot AI)"
 
-    - pattern: '^(granite)[-_]?(\d+(?:\.\d+)?)?'
+    - pattern: '^(granite)(?:[-_.:]?(\d+(?:\.\d+)?))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "IBM Granite models"
 
-    - pattern: '^(nemotron)[-_]?(.+)?'
+    - pattern: '^(nemotron)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "NVIDIA Nemotron models"
 
-    - pattern: '^(exaone)[-_]?(\d+(?:\.\d+)?)?'
+    - pattern: '^(exaone)(?:[-_.:]?(\d+(?:\.\d+)?))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "LG AI EXAONE models"
 
-    - pattern: '^(hunyuan)[-_]?(.+)?'
+    - pattern: '^(hunyuan)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Tencent Hunyuan models"
 
-    - pattern: '^(minimax)[-_]?(.+)?'
+    - pattern: '^(minimax)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "MiniMax models"
 
-    - pattern: '^(seed-oss)[-_]?(.+)?'
+    - pattern: '^(seed-oss)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "ByteDance Seed-OSS models"
 
-    - pattern: '^(olmo)[-_]?(\d+(?:\.\d+)?)?'
+    - pattern: '^(olmo)(?:[-_.:]?(\d+(?:\.\d+)?))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Allen Institute for AI OLMo models"
 
-    - pattern: '^(internlm)[-_]?(\d+(?:\.\d+)?)?'
+    - pattern: '^(internlm)(?:[-_.:]?(\d+(?:\.\d+)?))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Shanghai AI Lab InternLM models"
 
-    - pattern: '^(smollm)[-_]?(\d+(?:\.\d+)?)?'
+    - pattern: '^(smollm)(?:[-_.:]?(\d+(?:\.\d+)?))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Hugging Face SmolLM models"
@@ -102,12 +102,12 @@ model_extraction:
     # Command-R is genuinely locally runnable (GGUF exists) but CC-BY-NC
     # licensed - non-commercial only. Olla doesn't gate on licence, this is
     # just so a future reader isn't surprised.
-    - pattern: '^(command-r)[-_]?(.+)?'
+    - pattern: '^(command-r)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "Cohere Command-R models (CC-BY-NC licence - non-commercial only)"
 
-    - pattern: '^(?:[^/]+/)?(forge)[-_]?(.+)?'
+    - pattern: '^(?:[^/]+/)?(forge)(?:[-_.:](.+))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "TensorFoundry Forge models"

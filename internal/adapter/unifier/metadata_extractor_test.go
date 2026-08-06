@@ -3,6 +3,7 @@ package unifier
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -399,15 +400,111 @@ func TestExtractFamilyAndVariant(t *testing.T) {
 	}
 }
 
+// TestFamilyPatternBoundaries is the regression guard for the campaign-found
+// family_patterns bug: the 2026-refresh patterns used an optional delimiter
+// plus an optional catch-all suffix (e.g. kimi's old `^(kimi)[-_]?(.+)?`),
+// which is unanchored - "kimichef-70b" matched at position 0 with the
+// delimiter and suffix both empty, misclassifying it as family "kimi". Every
+// family listed here must now require the character immediately following
+// the family literal to be a delimiter ([-_.:]), a version digit, or the end
+// of the string - never a bare letter - while genuine delimited/versioned
+// names keep resolving correctly. Exercised directly against
+// extractFromPatterns (not extractFamilyAndVariant) so preserve_family
+// (which already has its own correct boundary logic for "kimi") can't mask a
+// regression in the pattern itself.
+func TestFamilyPatternBoundaries(t *testing.T) {
+	config := getDefaultConfig()
+	require.NoError(t, config.compilePatterns())
+
+	tests := []struct {
+		name           string
+		modelName      string
+		expectedFamily string
+	}{
+		{"kimi: unrelated name sharing the prefix must not match", "kimichef-70b", ""},
+		{"kimi: hyphen boundary", "kimi-k2", "kimi"},
+		{"kimi: dot boundary", "kimi.k2", "kimi"},
+		{"kimi: colon boundary", "kimi:latest", "kimi"},
+
+		{"nemotron: unrelated name sharing the prefix must not match", "nemotronian-model", ""},
+		{"nemotron: hyphen boundary", "nemotron-70b", "nemotron"},
+
+		{"hunyuan: unrelated name sharing the prefix must not match", "hunyuanite-1b", ""},
+		{"hunyuan: hyphen boundary", "hunyuan-a13b", "hunyuan"},
+
+		{"minimax: unrelated name sharing the prefix must not match", "minimaxwell-2", ""},
+		{"minimax: hyphen boundary", "minimax-m2", "minimax"},
+
+		{"gpt-oss: colon boundary", "gpt-oss:20b", "gpt-oss"},
+
+		{"seed-oss: unrelated name sharing the prefix must not match", "seed-ossify-1b", ""},
+		{"seed-oss: hyphen boundary", "seed-oss-36b-instruct", "seed-oss"},
+
+		{"command-r: unrelated name sharing the prefix must not match", "command-rocket-1b", ""},
+		{"command-r: hyphen boundary", "command-r-plus", "command-r"},
+
+		{"devstral family: unrelated name sharing the prefix must not match", "devstralia-1b", ""},
+		{"devstral family: hyphen boundary", "devstral-small-2505", "devstral"},
+
+		{"glm: unrelated name sharing the prefix must not match", "glmania-1b", ""},
+		{"glm: hyphen boundary", "glm-4.5-air", "glm"},
+		{"glm: bare digit boundary", "glm4", "glm"},
+
+		{"granite: unrelated name sharing the prefix must not match", "granitehybrid", ""},
+		{"granite: bare digit boundary", "granite3.3:8b", "granite"},
+
+		{"exaone: unrelated name sharing the prefix must not match", "exaonerous-1b", ""},
+		{"exaone: hyphen boundary", "exaone-4.0-32b", "exaone"},
+
+		{"olmo: unrelated name sharing the prefix must not match", "olmossy-1b", ""},
+		{"olmo: bare digit boundary", "olmo2-13b", "olmo"},
+
+		{"internlm: unrelated name sharing the prefix must not match", "internlmish-1b", ""},
+		{"internlm: bare digit boundary", "internlm3-8b", "internlm"},
+
+		{"smollm: unrelated name sharing the prefix must not match", "smollmish-1b", ""},
+		{"smollm: bare digit boundary", "smollm3-3b", "smollm"},
+
+		{"forge: unrelated name sharing the prefix must not match", "forgery-1b", ""},
+		{"forge: hyphen boundary", "forge-code-2.5-code", "forge"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			family, _ := extractFromPatterns(tt.modelName, config)
+			assert.Equal(t, tt.expectedFamily, family)
+		})
+	}
+
+	// gpt-oss's own boundary is checked against its compiled regex directly,
+	// not via extractFromPatterns: "gpt-ossify-1b" fails the gpt-oss pattern
+	// correctly, but then falls through to the separate, unrelated, and
+	// out-of-scope "gpt" pattern (`^(gpt)[-_]?(2|j|neox)?`, not covered by
+	// this fix), which has the identical unbounded-suffix bug and would
+	// misreport family "gpt" - a false failure attributable to a different
+	// pattern, not this one.
+	var gptOssRegex *regexp.Regexp
+	for _, p := range config.ModelExtraction.FamilyPatterns {
+		if p.Description == "OpenAI open-weight gpt-oss models" {
+			gptOssRegex = p.regex
+			break
+		}
+	}
+	require.NotNil(t, gptOssRegex, "gpt-oss family pattern must exist in default config")
+	if gptOssRegex.MatchString("gpt-ossify-1b") {
+		t.Error("gpt-oss pattern must not match \"gpt-ossify-1b\" - letter immediately follows the family literal")
+	}
+}
+
 // TestMatchPreserveFamily_KimiTokenPrefixSemantics is a direct, isolated
 // sanity check for the kimi preserve_family fix (issue: PR #207 CodeRabbit
 // finding). matchPreserveFamily uses exact-or-token-prefix matching, not a
 // bare substring contains, so it must not fire for names that merely start
 // with the same letters, or arch strings that merely contain "kimi".
 // Exercised directly against matchPreserveFamily (rather than through
-// extractFamilyAndVariant) because the kimi family_pattern is separately
-// loose enough to match "kimichef" too - testing end-to-end wouldn't isolate
-// which mechanism actually produced the result.
+// extractFamilyAndVariant) so this stays a pure unit test of that one
+// function, independent of the kimi family_pattern regex (now separately
+// boundary-tightened and guarded by TestFamilyPatternBoundaries above).
 func TestMatchPreserveFamily_KimiTokenPrefixSemantics(t *testing.T) {
 	config := &ModelUnificationConfig{}
 	config.SpecialRules.PreserveFamily = []string{"kimi"}
