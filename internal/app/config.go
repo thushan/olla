@@ -2,10 +2,6 @@ package app
 
 import (
 	"time"
-
-	"github.com/thushan/olla/internal/adapter/proxy"
-	"github.com/thushan/olla/internal/config"
-	"github.com/thushan/olla/internal/core/constants"
 )
 
 const (
@@ -22,26 +18,3 @@ const (
 	// are slow to respond are covered by ConnectionTimeout instead.
 	DefaultReadHeaderTimeout = 10 * time.Second
 )
-
-func updateProxyConfiguration(config *config.Config) *proxy.Configuration {
-	keepAlive := config.Proxy.ConnectionKeepAlive
-	if keepAlive == 0 {
-		keepAlive = DefaultConnectionKeepAlive
-	}
-	return &proxy.Configuration{
-		ConnectionTimeout:     config.Proxy.ConnectionTimeout,
-		ConnectionKeepAlive:   keepAlive,
-		ResponseTimeout:       config.Proxy.ResponseTimeout,
-		ReadTimeout:           config.Proxy.ReadTimeout,
-		ResponseHeaderTimeout: config.Proxy.ResponseHeaderTimeout,
-		TLSHandshakeTimeout:   config.Proxy.TLSHandshakeTimeout,
-		ProxyPrefix:           constants.ContextRoutePrefixKey,
-		StreamBufferSize:      getStreamBufferSize(config),
-	}
-}
-func getStreamBufferSize(config *config.Config) int {
-	if config.Proxy.StreamBufferSize > 0 {
-		return config.Proxy.StreamBufferSize
-	}
-	return DefaultStreamBufferSize
-}
