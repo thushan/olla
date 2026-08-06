@@ -28,7 +28,7 @@ proxy:
   engine: "olla"
   profile: "auto"
   load_balancer: "least-connections"
-  stream_buffer_size: 8192
+  # stream_buffer_size: 8192 # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB). Pinning this here silently defeated the 64KiB default.
   connection_timeout: 5s
   # Short response timeouts so hang-mode upstream tests resolve quickly.
   response_timeout: 10s
