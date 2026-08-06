@@ -131,21 +131,11 @@ func DefaultConfig() *Config {
 				},
 			},
 			Unification: UnificationConfig{
-				Enabled:  true,
-				CacheTTL: 10 * time.Minute,
 				// Mirror config.yaml so a no-config-file run prunes on the same cadence
 				// as the shipped config. These are honoured by the unifier (via
 				// CreateWithConfig), so the values genuinely take effect.
 				StaleThreshold:  24 * time.Hour,
 				CleanupInterval: 10 * time.Minute,
-				CustomRules: []UnificationRuleConfig{
-					{
-						Platform: "ollama",
-						FamilyOverrides: map[string]string{
-							"phi4:*": "phi",
-						},
-					},
-				},
 			},
 		},
 		Logging: LoggingConfig{
@@ -437,19 +427,6 @@ func applyEnvOverrides(config *Config) {
 	}
 	if val := os.Getenv("OLLA_MODEL_REGISTRY_TYPE"); val != "" {
 		config.ModelRegistry.Type = val
-	}
-
-	// Model unification configuration
-	if val := os.Getenv("OLLA_MODEL_UNIFIER_ENABLED"); val != "" {
-		if enabled, err := strconv.ParseBool(val); err == nil {
-			config.ModelRegistry.EnableUnifier = enabled
-			config.ModelRegistry.Unification.Enabled = enabled
-		}
-	}
-	if val := os.Getenv("OLLA_MODEL_UNIFIER_CACHE_TTL"); val != "" {
-		if ttl, err := time.ParseDuration(val); err == nil {
-			config.ModelRegistry.Unification.CacheTTL = ttl
-		}
 	}
 
 	// config for request size limits + streaming
