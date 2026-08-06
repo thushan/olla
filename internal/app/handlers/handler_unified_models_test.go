@@ -105,9 +105,14 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 	err = unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[1], models)
 	require.NoError(t, err)
 
-	// Wait a bit for async unification
-	// TODO: This is a hack, should use proper synchronisation
-	<-time.After(100 * time.Millisecond)
+	// Wait for async unification (RegisterModels kicks off unifyModelsAsync in
+	// a goroutine per endpoint) to complete for both endpoints. Both endpoints
+	// serve the same two model names, so they should merge into 2 unified
+	// models rather than 4.
+	require.Eventually(t, func() bool {
+		allModels, err := unifiedRegistry.GetUnifiedModels(ctx)
+		return err == nil && len(allModels) >= 2
+	}, 5*time.Second, 10*time.Millisecond, "async unification did not complete")
 
 	// Verify models were registered
 	allModels, err := unifiedRegistry.GetUnifiedModels(ctx)
