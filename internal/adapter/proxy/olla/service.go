@@ -121,7 +121,7 @@ func NewService(
 		configuration.IdleConnTimeout = proxyconfig.OllaDefaultIdleConnTimeout
 	}
 	if configuration.ReadTimeout == 0 {
-		configuration.ReadTimeout = proxyconfig.DefaultReadTimeout
+		configuration.ReadTimeout = proxyconfig.OllaDefaultReadTimeout
 	}
 
 	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
@@ -190,6 +190,13 @@ func createOptimisedTransport(config *Configuration) *http.Transport {
 		WriteBufferSize:        64 << 10, // 64KB
 		ReadBufferSize:         64 << 10, // 64KB
 	}
+}
+
+// Configuration returns the effective, fully-defaulted configuration currently in
+// use. Exposed for diagnostics and for tests that verify factory-supplied defaults
+// actually reach the engine rather than getting overwritten upstream.
+func (s *Service) Configuration() *Configuration {
+	return s.configuration.Load()
 }
 
 // getOrCreateEndpointPool returns a connection pool for the endpoint.

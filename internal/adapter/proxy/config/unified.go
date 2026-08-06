@@ -19,10 +19,13 @@ const (
 	OllaDefaultMaxConnsPerHost     = 50
 	OllaDefaultMaxIdleConnsPerHost = 25 // Half of MaxConnsPerHost; idle slots rarely need to match total capacity
 	OllaDefaultIdleConnTimeout     = 90 * time.Second
-	// Olla uses 30s timeouts for faster failure detection in AI workloads
+	// Olla uses 30s connection/keep-alive timeouts for faster failure detection in AI
+	// workloads, but ReadTimeout stays at 60s to match DefaultReadTimeout - streaming
+	// inference responses can legitimately go quiet between tokens for longer than a
+	// connection-establishment timeout would tolerate.
 	OllaDefaultTimeout     = 30 * time.Second
 	OllaDefaultKeepAlive   = 30 * time.Second
-	OllaDefaultReadTimeout = 30 * time.Second
+	OllaDefaultReadTimeout = 60 * time.Second
 
 	// DefaultResponseHeaderTimeout caps the time a backend may hold the connection
 	// open after accepting without sending a single response header byte.
@@ -219,7 +222,7 @@ func (c *OllaConfig) GetConnectionKeepAlive() time.Duration {
 	return c.ConnectionKeepAlive
 }
 
-// GetReadTimeout returns the read timeout, defaulting to OllaDefaultReadTimeout (30s for faster error detection)
+// GetReadTimeout returns the read timeout, defaulting to OllaDefaultReadTimeout (60s)
 func (c *OllaConfig) GetReadTimeout() time.Duration {
 	if c.ReadTimeout == 0 {
 		return OllaDefaultReadTimeout

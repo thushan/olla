@@ -151,6 +151,13 @@ func (s *Service) GetStats(ctx context.Context) (ports.ProxyStats, error) {
 	return s.GetProxyStats(), nil
 }
 
+// Configuration returns the effective, fully-defaulted configuration currently in
+// use. Exposed for diagnostics and for tests that verify factory-supplied defaults
+// actually reach the engine rather than getting overwritten upstream.
+func (s *Service) Configuration() *Configuration {
+	return s.configuration
+}
+
 // UpdateConfig updates the proxy configuration
 func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 	newConfig := &Configuration{}
