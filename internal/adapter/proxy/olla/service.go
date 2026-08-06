@@ -91,6 +91,7 @@ type connectionPool struct {
 type circuitBreaker struct {
 	failures    int64 // atomic
 	lastFailure int64 // atomic
+	lastAttempt int64 // atomic: half-open single-flight gate (unix nanos), reset by RecordSuccess/RecordFailure
 	state       int64 // atomic: 0=closed, 1=open, 2=half-open
 	threshold   int64
 }
@@ -231,31 +232,39 @@ func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 // Circuit breaker methods
 func (cb *circuitBreaker) IsOpen() bool {
 	state := atomic.LoadInt64(&cb.state)
-	if state != 1 {
+	if state == 0 {
 		return false
 	}
 
-	// Check if timeout has passed
-	lastFailure := atomic.LoadInt64(&cb.lastFailure)
-	if time.Since(time.Unix(0, lastFailure)) > health.DefaultCircuitBreakerTimeout {
-		// Try half-open state
-		if atomic.CompareAndSwapInt64(&cb.state, 1, 2) {
-			// State transition: Open -> Half-open
-			return false
+	if state == 1 {
+		// Check if the recovery timeout has passed
+		lastFailure := atomic.LoadInt64(&cb.lastFailure)
+		if time.Since(time.Unix(0, lastFailure)) <= health.DefaultCircuitBreakerTimeout {
+			return true
 		}
+		// Timeout elapsed: attempt Open -> Half-open. Every caller that reaches
+		// here (whether it won this CAS or another goroutine already flipped it)
+		// falls through to the half-open single-flight gate below.
+		atomic.CompareAndSwapInt64(&cb.state, 1, 2)
 	}
 
-	return true
+	// Half-open: admit exactly one probe. lastAttempt is the single-flight gate -
+	// only the goroutine that wins the 0->now CAS is let through; every other
+	// concurrent request is rejected until RecordSuccess/RecordFailure resolves
+	// the probe and resets it. Mirrors health.CircuitBreaker's lastAttempt gate.
+	return !atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, time.Now().UnixNano())
 }
 
 func (cb *circuitBreaker) RecordSuccess() {
 	atomic.StoreInt64(&cb.failures, 0)
+	atomic.StoreInt64(&cb.lastAttempt, 0)
 	atomic.StoreInt64(&cb.state, 0) // closed
 }
 
 func (cb *circuitBreaker) RecordFailure() {
 	failures := atomic.AddInt64(&cb.failures, 1)
 	atomic.StoreInt64(&cb.lastFailure, time.Now().UnixNano())
+	atomic.StoreInt64(&cb.lastAttempt, 0)
 
 	if failures >= cb.threshold {
 		atomic.StoreInt64(&cb.state, 1) // open
