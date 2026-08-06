@@ -424,6 +424,67 @@ func TestLeastConnectionsSelector_Select_PicksFewestAmongMany(t *testing.T) {
 	}
 }
 
+// TestLeastConnectionsSelector_Select_TiedEndpointsAlternate pins the fix for
+// the campaign-found starvation bug: a strict less-than comparison over the
+// registration-ordered slice always kept the first tied candidate, so a
+// recovered endpoint tied at the same connection count as an already-healthy
+// one never got picked under sequential traffic. Ten sequential selects at a
+// permanent tie must alternate between both endpoints via the rotating
+// cursor, not pin to one.
+func TestLeastConnectionsSelector_Select_TiedEndpointsAlternate(t *testing.T) {
+	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
+	ctx := context.Background()
+
+	endpoints := []*domain.Endpoint{
+		createTestEndpoint("recovered", 11434, domain.StatusHealthy),
+		createTestEndpoint("incumbent", 11435, domain.StatusHealthy),
+	}
+
+	counts := make(map[string]int)
+	for range 10 {
+		selected, err := selector.Select(ctx, endpoints)
+		if err != nil {
+			t.Fatalf("Select failed: %v", err)
+		}
+		counts[selected.Name]++
+	}
+
+	if counts["recovered"] == 0 {
+		t.Error("recovered endpoint was never selected across 10 ties - starvation bug regressed")
+	}
+	if counts["incumbent"] == 0 {
+		t.Error("incumbent endpoint was never selected across 10 ties")
+	}
+	if counts["recovered"] != 5 || counts["incumbent"] != 5 {
+		t.Errorf("expected an even 5/5 alternation over 10 sequential ties, got %v", counts)
+	}
+}
+
+// TestLeastConnectionsSelector_Select_UnequalCountsIgnoreCursor confirms the
+// rotating tie-break only applies when candidates are genuinely tied - an
+// endpoint with strictly fewer connections must always win regardless of
+// cursor position.
+func TestLeastConnectionsSelector_Select_UnequalCountsIgnoreCursor(t *testing.T) {
+	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
+	ctx := context.Background()
+
+	endpoints := []*domain.Endpoint{
+		createTestEndpoint("busy", 11434, domain.StatusHealthy),
+		createTestEndpoint("quiet", 11435, domain.StatusHealthy),
+	}
+	selector.IncrementConnections(endpoints[0])
+
+	for i := range 5 {
+		selected, err := selector.Select(ctx, endpoints)
+		if err != nil {
+			t.Fatalf("Select failed: %v", err)
+		}
+		if selected.Name != "quiet" {
+			t.Errorf("iteration %d: expected 'quiet' (fewer connections) regardless of cursor, got %s", i, selected.Name)
+		}
+	}
+}
+
 // Helper function to create test endpoint
 func createTestEndpoint(name string, port int, status domain.EndpointStatus) *domain.Endpoint {
 	testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
