@@ -5,25 +5,19 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-var (
-	configCache     *ModelUnificationConfig
-	configCacheOnce sync.Once
-)
-
-// getConfig loads configuration once and caches for performance.
-// Thread-safe via sync.Once.
+// getConfig returns the model unification config. LoadModelConfig already
+// caches via its own sync.Once, so this used to duplicate that with a second,
+// independent cache - which meant resetConfigSingleton (used by tests to force
+// a fresh reload) didn't actually reach extraction, since this package's own
+// Once stayed latched to whatever it saw first.
 func getConfig() *ModelUnificationConfig {
-	configCacheOnce.Do(func() {
-		config, err := LoadModelConfig()
-		if err != nil {
-			config = getDefaultConfig()
-		}
-		configCache = config
-	})
-	return configCache
+	config, err := LoadModelConfig()
+	if err != nil {
+		return getDefaultConfig()
+	}
+	return config
 }
 
 // normalizeQuantization converts various quantization formats to a canonical form
