@@ -8,6 +8,11 @@ RUN apk --no-cache add ca-certificates tzdata wget && \
 WORKDIR /app
 
 COPY . .
+# The docker-flavoured config is staged at build/docker-config.yaml (see
+# .goreleaser.yml / make docker-build-local) rather than overwriting the
+# tracked root config.yaml. Rename it into place here instead.
+COPY build/docker-config.yaml config.yaml
+RUN rm -rf build
 COPY olla /usr/local/bin/olla
 
 RUN chown -R olla:olla /app

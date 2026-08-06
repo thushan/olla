@@ -224,6 +224,10 @@ docker-build-local: build-web
 	@echo "Building Docker image locally (without goreleaser) for $(DOCKER_ARCH)..."
 	@echo "Building olla binary to root..."
 	@CGO_ENABLED=0 GOOS=linux GOARCH=$(DOCKER_ARCH) go build $(LDFLAGS) -o olla .
+	@echo "Staging docker-flavoured config (mirrors the goreleaser before-hook)..."
+	@bash ./scripts/generate-container-config.sh
+	@mkdir -p build
+	@cp config/docker.yaml build/docker-config.yaml
 	@echo "Building Docker image..."
 	@docker build -t ghcr.io/thushan/olla:local-$(DOCKER_ARCH) .
 	@echo "Cleaning up binary..."
