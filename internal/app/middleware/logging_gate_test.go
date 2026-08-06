@@ -35,16 +35,24 @@ func setDefaultLogger(t *testing.T, h slog.Handler) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 }
 
-// TestEnhancedLogging_Gate exercises the level-gate logic in EnhancedLoggingMiddleware.
+// TestCombinedLogging_Gate exercises the level-gate logic in
+// CombinedLoggingMiddleware, which now does both the console log (gated by
+// isQuietPollRoute/isQuietPollOutcome) AND the access log (gated by
+// accessLogLevel/isQuietAccessOutcome) in one pass - so ch.count here is the
+// sum of both outputs, not just the console line's. Each subtest's comment
+// breaks down console vs access counts explicitly since the two gates
+// deliberately disagree on proxy traffic (console always quiets it, access
+// never does).
 // All subtests share the same slog.Default mutation so they must run serially.
-func TestEnhancedLogging_Gate(t *testing.T) {
+func TestCombinedLogging_Gate(t *testing.T) {
 	mockLogger := &mockStyledLogger{}
 	noop := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// ProxyPath_InfoLevel: at info level, Debug records must not be emitted.
-	// The responseWriter wrap and request-ID propagation must still occur.
+	// ProxyPath_InfoLevel: at info level, console Debug records must not be
+	// emitted (0), but the access log is NOT quieted for proxy traffic - a
+	// proxy success is the audit-worthy outcome, so it logs at Info (1).
 	t.Run("ProxyPath_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
@@ -54,7 +62,7 @@ func TestEnhancedLogging_Gate(t *testing.T) {
 			gotRequestID = GetRequestID(r.Context())
 			w.WriteHeader(http.StatusOK)
 		})
-		mw := EnhancedLoggingMiddleware(mockLogger)(inner)
+		mw := CombinedLoggingMiddleware(mockLogger)(inner)
 
 		req := httptest.NewRequest(http.MethodPost, "/olla/ollama/api/chat", nil)
 		rr := httptest.NewRecorder()
@@ -71,57 +79,58 @@ func TestEnhancedLogging_Gate(t *testing.T) {
 		if gotRequestID == "" {
 			t.Error("request ID must be in context even when debug logging is suppressed")
 		}
-		// "HTTP request started" and "HTTP request completed" are both Debug.
-		// With minLevel=Info the gate must suppress both records.
-		if ch.count != 0 {
-			t.Errorf("expected 0 log records at info level for proxy path, got %d", ch.count)
+		// Console started/completed are both Debug (suppressed at Info); access
+		// log is Info (not suppressed) - exactly 1 record total.
+		if ch.count != 1 {
+			t.Errorf("expected 1 log record (access log only) at info level for proxy path, got %d", ch.count)
 		}
 	})
 
-	// ProxyPath_DebugLevel: at debug level, both records must be emitted.
+	// ProxyPath_DebugLevel: at debug level, both console records fire (2) plus
+	// the access log (always Info for proxy, which is >= Debug) (1) = 3.
 	t.Run("ProxyPath_DebugLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelDebug}
 		setDefaultLogger(t, ch)
 
-		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
+		mw := CombinedLoggingMiddleware(mockLogger)(noop)
 
 		req := httptest.NewRequest(http.MethodPost, "/olla/ollama/api/chat", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
-		// Lower bound of 2: start + completion. Handler may emit more via slog.With.
-		if ch.count < 2 {
-			t.Errorf("expected at least 2 log records at debug level for proxy path, got %d", ch.count)
+		// Lower bound of 3: console start + console completion + access log.
+		if ch.count < 3 {
+			t.Errorf("expected at least 3 log records at debug level for proxy path, got %d", ch.count)
 		}
 	})
 
 	// NonProxyPath_InfoLevel: ordinary (non-proxy, non-/internal/) requests log
-	// at Info, which IS enabled at the default level - both "Request started"
-	// and "Request completed" must appear.
+	// at Info on the console (started + completed = 2) and the access log is
+	// also loud here (1) = 3.
 	t.Run("NonProxyPath_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
 
-		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
+		mw := CombinedLoggingMiddleware(mockLogger)(noop)
 
 		req := httptest.NewRequest(http.MethodGet, "/version", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
-		if ch.count < 2 {
-			t.Errorf("expected at least 2 log records at info level for non-proxy path, got %d", ch.count)
+		if ch.count < 3 {
+			t.Errorf("expected at least 3 log records at info level for non-proxy path, got %d", ch.count)
 		}
 	})
 
 	// InternalPollPath_InfoLevel: dashboard polls under /internal/ are quiet
-	// traffic and log at Debug, so at the default Info level neither "Request
-	// started" nor "Request completed" should appear - same treatment as the
-	// proxy hot path, so an open dashboard tab doesn't flood the log.
+	// traffic on BOTH gates when they succeed - console (started+completed)
+	// and the access log all demote to Debug, so at the default Info level
+	// nothing should appear (0).
 	t.Run("InternalPollPath_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
 
-		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
+		mw := CombinedLoggingMiddleware(mockLogger)(noop)
 
 		req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
 		rr := httptest.NewRecorder()
@@ -133,26 +142,28 @@ func TestEnhancedLogging_Gate(t *testing.T) {
 	})
 
 	// InternalPollPath_DebugLevel: at debug level, /internal/ poll traffic is
-	// still observable when an operator turns the verbosity up.
+	// still observable when an operator turns the verbosity up - console
+	// (2) + access log (1) = 3.
 	t.Run("InternalPollPath_DebugLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelDebug}
 		setDefaultLogger(t, ch)
 
-		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
+		mw := CombinedLoggingMiddleware(mockLogger)(noop)
 
 		req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
-		if ch.count < 2 {
-			t.Errorf("expected at least 2 log records at debug level for /internal/ poll path, got %d", ch.count)
+		if ch.count < 3 {
+			t.Errorf("expected at least 3 log records at debug level for /internal/ poll path, got %d", ch.count)
 		}
 	})
 
 	// InternalPath_404_InfoLevel: a 404 under /internal/ must never be
-	// swallowed just because it lives under the quiet-poll prefix. Only the
-	// "completed" line fires (the pre-request line is still optimistically
-	// quiet, since the status isn't known yet), but it must log at Info.
+	// swallowed just because it lives under the quiet-poll prefix, on either
+	// gate. Console: only the completed line fires (started is still
+	// optimistically quiet, status unknown yet) = 1. Access log: also loud on
+	// a 404 = 1. Total 2.
 	t.Run("InternalPath_404_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
@@ -160,19 +171,20 @@ func TestEnhancedLogging_Gate(t *testing.T) {
 		notFound := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 		})
-		mw := EnhancedLoggingMiddleware(mockLogger)(notFound)
+		mw := CombinedLoggingMiddleware(mockLogger)(notFound)
 
 		req := httptest.NewRequest(http.MethodGet, "/internal/does-not-exist", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
-		if ch.count != 1 {
-			t.Errorf("expected exactly 1 log record (the completed line) for a 404 under /internal/, got %d", ch.count)
+		if ch.count != 2 {
+			t.Errorf("expected 2 log records (console completed + access log) for a 404 under /internal/, got %d", ch.count)
 		}
 	})
 
-	// InternalPath_500_InfoLevel: a 500 under /internal/ must log at Info, not
-	// be hidden as routine polling traffic.
+	// InternalPath_500_InfoLevel: a 500 under /internal/ must log at Info on
+	// both gates, not be hidden as routine polling traffic. Console completed
+	// (1) + access log (1) = 2.
 	t.Run("InternalPath_500_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
@@ -180,39 +192,38 @@ func TestEnhancedLogging_Gate(t *testing.T) {
 		serverError := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		})
-		mw := EnhancedLoggingMiddleware(mockLogger)(serverError)
+		mw := CombinedLoggingMiddleware(mockLogger)(serverError)
 
 		req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
-		if ch.count != 1 {
-			t.Errorf("expected exactly 1 log record for a 500 under /internal/, got %d", ch.count)
+		if ch.count != 2 {
+			t.Errorf("expected 2 log records for a 500 under /internal/, got %d", ch.count)
 		}
 	})
 
 	// InternalPath_POST_InfoLevel: a POST under /internal/ is never routine
-	// GET/HEAD polling, so it must log normally even when it succeeds. Both
-	// the started and completed lines fire here because the pre-request gate
-	// also excludes non-GET/HEAD methods.
+	// GET/HEAD polling on either gate, so it must log normally even when it
+	// succeeds. Console started+completed (2) + access log (1) = 3.
 	t.Run("InternalPath_POST_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
 
-		mw := EnhancedLoggingMiddleware(mockLogger)(noop)
+		mw := CombinedLoggingMiddleware(mockLogger)(noop)
 
 		req := httptest.NewRequest(http.MethodPost, "/internal/status", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
-		if ch.count != 2 {
-			t.Errorf("expected 2 log records (started + completed) for a POST under /internal/, got %d", ch.count)
+		if ch.count != 3 {
+			t.Errorf("expected 3 log records (started + completed + access log) for a POST under /internal/, got %d", ch.count)
 		}
 	})
 
 	// InternalPath_403_InfoLevel: the dashboard's access-control gate
-	// returning 403 (e.g. being probed by a scanner) must be visible at Info,
-	// not swallowed as quiet polling traffic.
+	// returning 403 (e.g. being probed by a scanner) must be visible at Info
+	// on both gates. Console completed (1) + access log (1) = 2.
 	t.Run("InternalPath_403_InfoLevel", func(t *testing.T) {
 		ch := &countingHandler{minLevel: slog.LevelInfo}
 		setDefaultLogger(t, ch)
@@ -220,27 +231,28 @@ func TestEnhancedLogging_Gate(t *testing.T) {
 		forbidden := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 		})
-		mw := EnhancedLoggingMiddleware(mockLogger)(forbidden)
+		mw := CombinedLoggingMiddleware(mockLogger)(forbidden)
 
 		req := httptest.NewRequest(http.MethodGet, "/internal/ui/", nil)
 		rr := httptest.NewRecorder()
 		mw.ServeHTTP(rr, req)
 
-		if ch.count != 1 {
-			t.Errorf("expected exactly 1 log record for a 403 under /internal/, got %d", ch.count)
+		if ch.count != 2 {
+			t.Errorf("expected 2 log records for a 403 under /internal/, got %d", ch.count)
 		}
 	})
 }
 
-// BenchmarkEnhancedLogging_ProxyPath_InfoLevel measures the hot-path overhead
-// of EnhancedLoggingMiddleware at the default info level for proxy requests.
-// At info level all Debug records are suppressed, so formatBytes, the []any field
-// slices, and fmt.Sprintf must be skipped entirely.
+// BenchmarkCombinedLogging_ProxyPath_InfoLevel measures the hot-path overhead
+// of CombinedLoggingMiddleware at the default info level for proxy requests.
+// At info level the console's Debug records are suppressed, so formatBytes,
+// the []any field slices, and fmt.Sprintf for those must be skipped entirely;
+// the access log line still fires (proxy traffic is not quieted there).
 //
 // Run with:
 //
-//	go test -bench=BenchmarkEnhancedLogging_ProxyPath_InfoLevel -benchmem ./internal/app/middleware/
-func BenchmarkEnhancedLogging_ProxyPath_InfoLevel(b *testing.B) {
+//	go test -bench=BenchmarkCombinedLogging_ProxyPath_InfoLevel -benchmem ./internal/app/middleware/
+func BenchmarkCombinedLogging_ProxyPath_InfoLevel(b *testing.B) {
 	ch := &countingHandler{minLevel: slog.LevelInfo}
 	prev := slog.Default()
 	slog.SetDefault(slog.New(ch))
@@ -251,7 +263,7 @@ func BenchmarkEnhancedLogging_ProxyPath_InfoLevel(b *testing.B) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mw := EnhancedLoggingMiddleware(mockLogger)(inner)
+	mw := CombinedLoggingMiddleware(mockLogger)(inner)
 
 	b.ResetTimer()
 	b.ReportAllocs()

@@ -12,7 +12,7 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
-func TestEnhancedLoggingMiddleware(t *testing.T) {
+func TestCombinedLoggingMiddleware_RequestIDAndContext(t *testing.T) {
 	// Create a mock styled logger
 	mockLogger := &mockStyledLogger{}
 
@@ -40,7 +40,7 @@ func TestEnhancedLoggingMiddleware(t *testing.T) {
 	})
 
 	// Create the middleware
-	middleware := EnhancedLoggingMiddleware(mockLogger)
+	middleware := CombinedLoggingMiddleware(mockLogger)
 	handler := middleware(testHandler)
 
 	// Create a test request
@@ -71,7 +71,7 @@ func TestEnhancedLoggingMiddleware(t *testing.T) {
 	}
 }
 
-func TestAccessLoggingMiddleware(t *testing.T) {
+func TestCombinedLoggingMiddleware_BasicPassthrough(t *testing.T) {
 	// Create a mock styled logger
 	mockLogger := &mockStyledLogger{}
 
@@ -82,7 +82,7 @@ func TestAccessLoggingMiddleware(t *testing.T) {
 	})
 
 	// Create the middleware
-	middleware := AccessLoggingMiddleware(mockLogger)
+	middleware := CombinedLoggingMiddleware(mockLogger)
 	handler := middleware(testHandler)
 
 	// Create a test request
@@ -342,10 +342,10 @@ func TestSanitiseRequestID(t *testing.T) {
 	}
 }
 
-// TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated verifies
+// TestCombinedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated verifies
 // that a request carrying an X-Request-ID containing CRLF does not propagate the
 // injected value into the response or context; instead a fresh ID is generated.
-func TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *testing.T) {
+func TestCombinedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *testing.T) {
 	t.Parallel()
 
 	mockLogger := &mockStyledLogger{}
@@ -362,7 +362,7 @@ func TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *test
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mw := EnhancedLoggingMiddleware(mockLogger)(handler)
+	mw := CombinedLoggingMiddleware(mockLogger)(handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/health", nil)
 	req.Header.Set("X-Request-ID", "ok\r\nX-Injected: evil")
@@ -379,9 +379,9 @@ func TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *test
 	}
 }
 
-// TestEnhancedLoggingMiddleware_ValidRequestIDPreserved verifies that a clean
+// TestCombinedLoggingMiddleware_ValidRequestIDPreserved verifies that a clean
 // inbound X-Request-ID is echoed in the response header unchanged.
-func TestEnhancedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
+func TestCombinedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
 	t.Parallel()
 
 	mockLogger := &mockStyledLogger{}
@@ -390,7 +390,7 @@ func TestEnhancedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mw := EnhancedLoggingMiddleware(mockLogger)(handler)
+	mw := CombinedLoggingMiddleware(mockLogger)(handler)
 
 	const cleanID = "my-clean-request-id-abc123"
 	req := httptest.NewRequest(http.MethodGet, "/internal/health", nil)
