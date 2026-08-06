@@ -173,22 +173,7 @@ func (l *ProfileLoader) loadProfile(path string) (domain.InferenceProfile, error
 		config.Version = "1.0"
 	}
 
-	// hook for future custom parsers if yaml isn't enough
-	if needsCustomParser(config.Name) {
-		return l.createCustomProfile(&config)
-	}
-
 	return NewConfigurableProfile(&config), nil
-}
-
-func needsCustomParser(name string) bool {
-	// everything works with yaml config for now
-	return false
-}
-
-func (l *ProfileLoader) createCustomProfile(config *domain.ProfileConfig) (domain.InferenceProfile, error) {
-	// placeholder for when yaml isn't enough
-	return NewConfigurableProfile(config), nil
 }
 
 // loadBuiltInProfilesInto loads built-in profiles into the provided map

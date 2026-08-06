@@ -114,44 +114,6 @@ func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
 	return r.routes
 }
 
-func (r *RouteRegistry) WireUpWithMiddleware(mux *http.ServeMux, sizeLimiter interface{}, rateLimiter interface{}) {
-	type middlewareFunc interface {
-		Middleware(http.Handler) http.Handler
-	}
-
-	type rateLimiterFunc interface {
-		Middleware(bool) func(http.Handler) http.Handler
-	}
-
-	sizeMiddleware, hasSizeMiddleware := sizeLimiter.(middlewareFunc)
-	rateMiddleware, hasRateMiddleware := rateLimiter.(rateLimiterFunc)
-
-	if !hasSizeMiddleware && !hasRateMiddleware {
-		r.WireUp(mux)
-		return
-	}
-
-	for route, info := range r.routes {
-		var handler http.Handler = info.Handler
-
-		if info.IsProxy {
-			if hasRateMiddleware {
-				handler = rateMiddleware.Middleware(false)(handler)
-			}
-			if hasSizeMiddleware {
-				handler = sizeMiddleware.Middleware(handler)
-			}
-			mux.Handle(route, handler)
-		} else {
-			if hasRateMiddleware {
-				handler = rateMiddleware.Middleware(true)(handler)
-			}
-			mux.Handle(route, handler)
-		}
-	}
-	r.logRoutesTable()
-}
-
 func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters interface{}) {
 	type securityAdapterProvider interface {
 		CreateChainMiddleware() func(http.Handler) http.Handler

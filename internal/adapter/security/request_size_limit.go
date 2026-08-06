@@ -261,19 +261,3 @@ func estimateHeaderSize(headers http.Header, method, uri, proto string) int64 {
 
 	return totalSize
 }
-
-/***
- * faster by 10-15% with reduced allocations on Go 1.21+
-func estimateHeaderSizeFast(headers http.Header, method, uri, proto string) int64 {
-	totalSize := int64(len(method) + len(uri) + len(proto) + 4)
-
-	for name, values := range headers {
-		totalSize += int64(len(name))
-		for i := 0; i < len(values); i++ {
-			totalSize += int64(len(values[i]) + 4)
-		}
-	}
-
-	return totalSize
-}
-*****/

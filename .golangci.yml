@@ -69,14 +69,6 @@ linters:
     misspell:
       ignore-rules:
         - thushan
-    tagliatelle:
-      case:
-        use-field-name: true
-        rules:
-          json: camel
-          yaml: camel
-          toml: camel
-          env: upperSnake
     perfsprint:
       strconcat: false
     testifylint:
