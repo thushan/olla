@@ -1,0 +1,91 @@
+## Olla Integration Test Configuration
+## Points at mock backends on localhost.
+
+server:
+  host: "127.0.0.1"
+  port: 40114
+  read_timeout: 10s
+  write_timeout: 0s
+  shutdown_timeout: 5s
+  request_logging: true
+  request_limits:
+    max_body_size: 10485760
+    max_header_size: 524288
+  rate_limits:
+    global_requests_per_minute: 1000
+    per_ip_requests_per_minute: 200
+    health_requests_per_minute: 1000
+    burst_size: 50
+    cleanup_interval: 5m
+    trust_proxy_headers: false
+    trusted_proxy_cidrs: ["127.0.0.0/8"]
+
+proxy:
+  engine: "olla"
+  profile: "auto"
+  load_balancer: "priority"
+  stream_buffer_size: 8192
+  connection_timeout: 10s
+  response_timeout: 30s
+  read_timeout: 30s
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 0
+
+discovery:
+  type: "static"
+  refresh_interval: 10s
+  health_check:
+    initial_delay: 1s
+  static:
+    endpoints:
+      - url: "http://127.0.0.1:18901"
+        name: "mock-vllm"
+        type: "vllm"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/health"
+        check_interval: 5s
+        check_timeout: 2s
+      - url: "http://127.0.0.1:18902"
+        name: "mock-ollama"
+        type: "ollama"
+        priority: 90
+        model_url: "/api/tags"
+        health_check_url: "/"
+        check_interval: 5s
+        check_timeout: 2s
+  model_discovery:
+    enabled: true
+    interval: 30s
+    timeout: 10s
+    concurrent_workers: 2
+    retry_attempts: 1
+    retry_backoff: 500ms
+
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  unification:
+    enabled: true
+    stale_threshold: 1h
+    cleanup_interval: 5m
+  routing_strategy:
+    type: "strict"
+    options:
+      fallback_behavior: "compatible_only"
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
+
+translators:
+  anthropic:
+    enabled: false
+
+logging:
+  level: "debug"
+  format: "text"
+  output: "stdout"
+
+engineering:
+  show_nerdstats: false
