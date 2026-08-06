@@ -580,44 +580,21 @@ model_registry:
 
 ### Unification Settings
 
+Unification itself is toggled by `model_registry.enable_unifier` (see [Model Registry Configuration](#model-registry-configuration) above), not by anything under `unification:`. The `unification` block only tunes stale-model cleanup, and only takes effect when the unifier is enabled.
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `unification.enabled` | bool | `true` | Enable unification |
 | `unification.stale_threshold` | duration | `24h` | How long to retain a model after it was last seen |
 | `unification.cleanup_interval` | duration | `10m` | How often to evict stale models |
-| `unification.cache_ttl` | duration | `10m` | Cache TTL |
 
 Example:
 
 ```yaml
 model_registry:
+  enable_unifier: true
   unification:
-    enabled: true
     stale_threshold: 12h
     cleanup_interval: 15m
-    cache_ttl: 10m
-```
-
-### Custom Unification Rules
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `unification.custom_rules[].platform` | string | Platform to apply rules |
-| `unification.custom_rules[].name_patterns` | map | Name pattern mappings |
-| `unification.custom_rules[].family_overrides` | map | Family overrides |
-
-Example:
-
-```yaml
-model_registry:
-  unification:
-    custom_rules:
-      - platform: "ollama"
-        name_patterns:
-          "llama3.*": "llama3"
-          "mistral.*": "mistral"
-        family_overrides:
-          "llama3": "meta-llama"
 ```
 
 ## Model Aliases Configuration
@@ -890,7 +867,6 @@ The variables below override the `logging:` config section and take effect **aft
 |---|---|---|
 | `OLLA_MODEL_REGISTRY_TYPE` | `model_registry.type` | Currently only `memory`. |
 | `OLLA_MODEL_UNIFIER_ENABLED` | `model_registry.enable_unifier` | `true`/`false`. |
-| `OLLA_MODEL_UNIFIER_CACHE_TTL` | `model_registry.unification.cache_ttl` | Go duration string. |
 
 ### Translators
 
@@ -996,11 +972,8 @@ model_registry:
       discovery_timeout: 2s
       discovery_refresh_on_miss: false
   unification:
-    enabled: true
     stale_threshold: 24h
     cleanup_interval: 10m
-    cache_ttl: 10m
-    custom_rules: []
 
 translators:
   anthropic:
