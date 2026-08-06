@@ -40,7 +40,7 @@ research/
 # Legacy directories (to be removed)
 config-dev/
 default.yml
-config.yaml
+# config.yaml is tracked - it's the canonical shipped default, not local override
 # Claude specific local files
 .claude/*.local.json
 # just in case
