@@ -256,8 +256,6 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: false
-  unification:
-    enabled: false
   routing_strategy:
     # optimistic so requests are not rejected for unknown models
     type: "optimistic"

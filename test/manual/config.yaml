@@ -68,7 +68,6 @@ model_registry:
   type: "memory"
   enable_unifier: true
   unification:
-    enabled: true
     stale_threshold: 1h
     cleanup_interval: 5m
   routing_strategy:
