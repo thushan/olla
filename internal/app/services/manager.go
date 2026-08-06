@@ -176,7 +176,9 @@ func (sm *ServiceManager) stopServices(ctx context.Context, names []string) erro
 
 	sm.logger.Info("Stopping Services...")
 	for _, name := range names {
+		sm.mu.RLock()
 		service, exists := sm.services[name]
+		sm.mu.RUnlock()
 		if !exists {
 			continue
 		}
