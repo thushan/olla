@@ -371,6 +371,59 @@ func TestLeastConnectionsSelector_DifferentURLFormats(t *testing.T) {
 	}
 }
 
+// TestLeastConnectionsSelector_Select_UnknownEndpointCountsAsZero pins the
+// core selection contract directly: an endpoint the stats collector has never
+// seen (no Increment/Decrement calls) must be treated as having zero
+// connections, not skipped or errored, so a freshly-registered endpoint is
+// immediately eligible to receive traffic ahead of busier ones.
+func TestLeastConnectionsSelector_Select_UnknownEndpointCountsAsZero(t *testing.T) {
+	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
+	ctx := context.Background()
+
+	busy := createTestEndpoint("busy", 11434, domain.StatusHealthy)
+	unknown := createTestEndpoint("unknown", 11435, domain.StatusHealthy)
+
+	selector.IncrementConnections(busy)
+
+	selected, err := selector.Select(ctx, []*domain.Endpoint{busy, unknown})
+	if err != nil {
+		t.Fatalf("Select failed: %v", err)
+	}
+	if selected.Name != "unknown" {
+		t.Errorf("Expected the never-tracked endpoint (0 connections) to be picked over one with 1, got %s", selected.Name)
+	}
+}
+
+// TestLeastConnectionsSelector_Select_PicksFewestAmongMany pins the selection
+// contract across more than two candidates with distinct, non-adjacent
+// connection counts to guard against an off-by-one in the min-tracking loop.
+func TestLeastConnectionsSelector_Select_PicksFewestAmongMany(t *testing.T) {
+	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
+	ctx := context.Background()
+
+	endpoints := []*domain.Endpoint{
+		createTestEndpoint("five", 11434, domain.StatusHealthy),
+		createTestEndpoint("one", 11435, domain.StatusHealthy),
+		createTestEndpoint("three", 11436, domain.StatusHealthy),
+	}
+
+	for range 5 {
+		selector.IncrementConnections(endpoints[0])
+	}
+	selector.IncrementConnections(endpoints[1])
+	for range 3 {
+		selector.IncrementConnections(endpoints[2])
+	}
+
+	selected, err := selector.Select(ctx, endpoints)
+	if err != nil {
+		t.Fatalf("Select failed: %v", err)
+	}
+	if selected.Name != "one" {
+		t.Errorf("Expected 'one' (1 connection, the fewest), got %s", selected.Name)
+	}
+}
+
 // Helper function to create test endpoint
 func createTestEndpoint(name string, port int, status domain.EndpointStatus) *domain.Endpoint {
 	testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
