@@ -234,6 +234,18 @@ func TestVLLMConverter_determineOwner(t *testing.T) {
 			modelID:  "gpt4",
 			expected: "vllm",
 		},
+		{
+			// hyphenated known-org fallback (now shared with the other
+			// converters via ExtractOwnerFromModelID)
+			name:     "hyphenated prefix with known organisation",
+			modelID:  "mistralai-mistral-7b-instruct",
+			expected: "mistralai",
+		},
+		{
+			name:     "hyphenated prefix with meta organisation",
+			modelID:  "meta-llama-3-8b",
+			expected: "meta",
+		},
 	}
 
 	for _, tt := range tests {
@@ -244,7 +256,7 @@ func TestVLLMConverter_determineOwner(t *testing.T) {
 	}
 }
 
-func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
+func TestVLLMConverter_FindNativeName(t *testing.T) {
 	converter := NewVLLMConverter().(*VLLMConverter)
 
 	t.Run("only finds vLLM name from aliases with vllm source", func(t *testing.T) {
@@ -259,7 +271,7 @@ func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findVLLMNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Equal(t, "TinyLlama/TinyLlama-1.1B-Chat-v1.0", result)
 	})
 
@@ -272,7 +284,7 @@ func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findVLLMNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Equal(t, "meta-llama/Meta-Llama-3.1-8B-Instruct", result)
 	})
 
@@ -287,7 +299,7 @@ func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findVLLMNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Empty(t, result)
 	})
 
@@ -304,7 +316,7 @@ func TestVLLMConverter_findVLLMNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findVLLMNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Empty(t, result, "Should not pick up slash-based names from non-vLLM sources")
 	})
 }

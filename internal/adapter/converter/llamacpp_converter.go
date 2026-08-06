@@ -49,7 +49,7 @@ func (c *LlamaCppConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 func (c *LlamaCppConverter) convertModel(model *domain.UnifiedModel) *profile.LlamaCppModel {
 	// llama.cpp uses simple OpenAI-compatible format with minimal fields
 	now := time.Now().Unix()
-	modelID := c.findLlamaCppNativeName(model)
+	modelID := c.FindNativeName(model)
 	if modelID == "" {
 		// Fallback to first alias or unified ID
 		if len(model.Aliases) > 0 {
@@ -67,16 +67,6 @@ func (c *LlamaCppConverter) convertModel(model *domain.UnifiedModel) *profile.Ll
 	}
 
 	return llamaModel
-}
-
-// findLlamaCppNativeName looks for the native llama.cpp name from aliases
-func (c *LlamaCppConverter) findLlamaCppNativeName(model *domain.UnifiedModel) string {
-	// Use base converter to find llamacpp-specific alias
-	alias, found := c.BaseConverter.FindProviderAlias(model)
-	if found {
-		return alias
-	}
-	return ""
 }
 
 // determineOwner extracts the organisation from the model ID or defaults to "llamacpp"

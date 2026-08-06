@@ -351,7 +351,7 @@ func TestLlamaCppConverter_determineOwner(t *testing.T) {
 	}
 }
 
-func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
+func TestLlamaCppConverter_FindNativeName(t *testing.T) {
 	converter := NewLlamaCppConverter().(*LlamaCppConverter)
 
 	t.Run("finds llamacpp name from aliases with llamacpp source", func(t *testing.T) {
@@ -367,7 +367,7 @@ func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLlamaCppNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Equal(t, "llama-3.1-8b-instruct-q4_k_m.gguf", result, "Should find llamacpp-specific alias")
 	})
 
@@ -383,7 +383,7 @@ func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLlamaCppNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Empty(t, result, "Should return empty string when no llamacpp alias exists")
 	})
 
@@ -400,7 +400,7 @@ func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLlamaCppNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Empty(t, result, "Should not pick up names from non-llamacpp sources")
 	})
 
@@ -416,7 +416,7 @@ func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLlamaCppNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Equal(t, "llama-3-8b-q4_k_m.gguf", result, "Should return first llamacpp alias")
 	})
 
@@ -431,7 +431,7 @@ func TestLlamaCppConverter_findLlamaCppNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLlamaCppNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Equal(t, "google-gemma-2-9b.gguf", result)
 	})
 }

@@ -65,7 +65,9 @@ func TestLemonadeConverter_ConvertToFormat_SingleModel(t *testing.T) {
 	assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", lemonadeModel.ID)
 	assert.Equal(t, "model", lemonadeModel.Object)
 	assert.NotZero(t, lemonadeModel.Created)
-	assert.Equal(t, constants.ProviderTypeLemonade, lemonadeModel.OwnedBy)
+	// "Qwen2.5" is picked up by the shared hyphenated known-org fallback
+	// (ExtractOwnerFromModelID) rather than defaulting to "lemonade".
+	assert.Equal(t, "Qwen2.5", lemonadeModel.OwnedBy)
 	assert.Equal(t, "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx", lemonadeModel.Checkpoint)
 	assert.Equal(t, "oga-cpu", lemonadeModel.Recipe)
 }
@@ -108,7 +110,8 @@ func TestLemonadeConverter_ConvertToFormat_MultipleModels(t *testing.T) {
 	// Check first model (CPU)
 	model1 := response.Data[0]
 	assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", model1.ID)
-	assert.Equal(t, constants.ProviderTypeLemonade, model1.OwnedBy)
+	// "Qwen2.5" is picked up by the shared hyphenated known-org fallback.
+	assert.Equal(t, "Qwen2.5", model1.OwnedBy)
 	assert.Equal(t, "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx", model1.Checkpoint)
 	assert.Equal(t, "oga-cpu", model1.Recipe)
 
@@ -346,7 +349,7 @@ func TestLemonadeConverter_ConvertToFormat_WithFilters(t *testing.T) {
 	assert.Equal(t, "model3", response.Data[1].ID)
 }
 
-func TestLemonadeConverter_FindLemonadeNativeName(t *testing.T) {
+func TestLemonadeConverter_FindNativeName(t *testing.T) {
 	converter := NewLemonadeConverter().(*LemonadeConverter)
 
 	t.Run("finds Lemonade name from aliases when source is lemonade", func(t *testing.T) {
@@ -358,7 +361,7 @@ func TestLemonadeConverter_FindLemonadeNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLemonadeNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", result)
 	})
 
@@ -371,7 +374,7 @@ func TestLemonadeConverter_FindLemonadeNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLemonadeNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Empty(t, result)
 	})
 
@@ -386,7 +389,7 @@ func TestLemonadeConverter_FindLemonadeNativeName(t *testing.T) {
 			},
 		}
 
-		result := converter.findLemonadeNativeName(model)
+		result := converter.FindNativeName(model)
 		assert.Empty(t, result, "Should not pick up names from non-Lemonade sources")
 	})
 }
@@ -404,6 +407,10 @@ func TestLemonadeConverter_DetermineOwner(t *testing.T) {
 		{"simple-model", constants.ProviderTypeLemonade},
 		{"", constants.ProviderTypeLemonade},
 		{"org/sub/model", "org"}, // Only first part counts
+		// hyphenated known-org fallback (now shared with the other converters
+		// via ExtractOwnerFromModelID)
+		{"mistralai-mistral-7b-instruct", "mistralai"},
+		{"meta-llama-3-8b", "meta"},
 	}
 
 	for _, tc := range testCases {

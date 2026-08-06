@@ -42,6 +42,17 @@ func (b *BaseConverter) FindProviderAlias(model *domain.UnifiedModel) (string, b
 	return "", false
 }
 
+// FindNativeName looks up the provider-native model name from aliases, or ""
+// when none is set. Each converter used to carry its own one-line wrapper
+// around FindProviderAlias for this (findVLLMNativeName, findLlamaCppNativeName,
+// etc.) - all identical, just discarding the found bool.
+func (b *BaseConverter) FindNativeName(model *domain.UnifiedModel) string {
+	if alias, found := b.FindProviderAlias(model); found {
+		return alias
+	}
+	return ""
+}
+
 // FindProviderEndpoint finds the provider-specific endpoint for a unified model
 func (b *BaseConverter) FindProviderEndpoint(model *domain.UnifiedModel, providerName string) *domain.SourceEndpoint {
 	for i := range model.SourceEndpoints {

@@ -1,7 +1,6 @@
 package converter
 
 import (
-	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -50,7 +49,7 @@ func (c *SGLangConverter) ConvertToFormat(models []*domain.UnifiedModel, filters
 func (c *SGLangConverter) convertModel(model *domain.UnifiedModel) *profile.SGLangModel {
 	// For SGLang, prefer the native SGLang name if available from source endpoints
 	now := time.Now().Unix()
-	modelID := c.findSGLangNativeName(model)
+	modelID := c.FindNativeName(model)
 	if modelID == "" {
 		// Fallback to first alias or unified ID
 		if len(model.Aliases) > 0 {
@@ -84,23 +83,11 @@ func (c *SGLangConverter) convertModel(model *domain.UnifiedModel) *profile.SGLa
 	return sglangModel
 }
 
-// findSGLangNativeName looks for the native SGLang name from aliases
-func (c *SGLangConverter) findSGLangNativeName(model *domain.UnifiedModel) string {
-	// Use base converter to find SGLang-specific alias
-	alias, found := c.BaseConverter.FindProviderAlias(model)
-	if found {
-		return alias
-	}
-	return ""
-}
-
 // determineOwner extracts the organisation from the model ID or defaults to "sglang"
 func (c *SGLangConverter) determineOwner(modelID string) string {
-	// SGLang models often follow organisation/model-name pattern
-	if parts := strings.SplitN(modelID, "/", 2); len(parts) == 2 {
-		return parts[0]
-	}
-	return constants.ProviderTypeSGLang
+	// Use shared owner extraction logic from BaseConverter
+	// Handles slash-separated (org/model) and hyphenated (org-model) formats
+	return ExtractOwnerFromModelID(modelID, constants.ProviderTypeSGLang)
 }
 
 // getParentModel attempts to find parent model information

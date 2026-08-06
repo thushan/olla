@@ -1,7 +1,6 @@
 package converter
 
 import (
-	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -49,7 +48,7 @@ func (c *VLLMMLXConverter) ConvertToFormat(models []*domain.UnifiedModel, filter
 }
 
 func (c *VLLMMLXConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMLXModel {
-	modelID := c.findVLLMMLXNativeName(model)
+	modelID := c.FindNativeName(model)
 	if modelID == "" {
 		// Fall back to first alias, then unified ID
 		if len(model.Aliases) > 0 {
@@ -67,21 +66,11 @@ func (c *VLLMMLXConverter) convertModel(model *domain.UnifiedModel) *profile.VLL
 	}
 }
 
-// findVLLMMLXNativeName looks for the native vLLM-MLX name from aliases.
-func (c *VLLMMLXConverter) findVLLMMLXNativeName(model *domain.UnifiedModel) string {
-	alias, found := c.BaseConverter.FindProviderAlias(model)
-	if found {
-		return alias
-	}
-	return ""
-}
-
 // determineOwner extracts the namespace from a HuggingFace-style model ID
 // (e.g. "mlx-community/Model-Name" -> "mlx-community"), defaulting to "vllm-mlx"
 // when the ID has no "/" separator.
 func (c *VLLMMLXConverter) determineOwner(modelID string) string {
-	if parts := strings.SplitN(modelID, "/", 2); len(parts) == 2 {
-		return parts[0]
-	}
-	return constants.ProviderTypeVLLMMLX
+	// Use shared owner extraction logic from BaseConverter
+	// Handles slash-separated (org/model) and hyphenated (org-model) formats
+	return ExtractOwnerFromModelID(modelID, constants.ProviderTypeVLLMMLX)
 }

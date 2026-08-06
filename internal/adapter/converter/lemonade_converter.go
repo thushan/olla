@@ -1,7 +1,6 @@
 package converter
 
 import (
-	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -50,7 +49,7 @@ func (c *LemonadeConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 func (c *LemonadeConverter) convertModel(model *domain.UnifiedModel) *profile.LemonadeModel {
 	// For Lemonade, prefer the native Lemonade name if available from source endpoints
 	now := time.Now().Unix()
-	modelID := c.findLemonadeNativeName(model)
+	modelID := c.FindNativeName(model)
 	if modelID == "" {
 		// Fallback to first alias or unified ID
 		if len(model.Aliases) > 0 {
@@ -73,24 +72,11 @@ func (c *LemonadeConverter) convertModel(model *domain.UnifiedModel) *profile.Le
 	return lemonadeModel
 }
 
-// findLemonadeNativeName looks for the native Lemonade name from aliases
-// This ensures we use the backend's original identifier rather than our unified name
-func (c *LemonadeConverter) findLemonadeNativeName(model *domain.UnifiedModel) string {
-	// Use base converter to find Lemonade-specific alias
-	alias, found := c.BaseConverter.FindProviderAlias(model)
-	if found {
-		return alias
-	}
-	return ""
-}
-
 // determineOwner extracts the organisation from the model ID or defaults to "lemonade"
 func (c *LemonadeConverter) determineOwner(modelID string) string {
-	// Lemonade models may follow organisation/model-name pattern from checkpoint
-	if parts := strings.SplitN(modelID, "/", 2); len(parts) == 2 {
-		return parts[0]
-	}
-	return constants.ProviderTypeLemonade
+	// Use shared owner extraction logic from BaseConverter
+	// Handles slash-separated (org/model) and hyphenated (org-model) formats
+	return ExtractOwnerFromModelID(modelID, constants.ProviderTypeLemonade)
 }
 
 // applyMetadataFeatures applies Lemonade-specific metadata features

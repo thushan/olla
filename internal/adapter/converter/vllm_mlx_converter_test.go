@@ -182,6 +182,10 @@ func TestVLLMMLXConverter_DetermineOwner(t *testing.T) {
 		{"org/model", "org"},
 		{"no-slash", constants.ProviderTypeVLLMMLX},
 		{"a/b/c", "a"},
+		// hyphenated known-org fallback (now shared with the other converters
+		// via ExtractOwnerFromModelID)
+		{"mistralai-mistral-7b-instruct", "mistralai"},
+		{"meta-llama-3-8b", "meta"},
 	}
 
 	for _, tc := range cases {
