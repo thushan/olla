@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -560,9 +561,26 @@ func (a *Application) handleEndpointError(w http.ResponseWriter, pr *proxyReques
 // content-type check prevents double-writing response after partial stream
 // (learned this the hard way when users got html error messages appended to their json)
 func (a *Application) handleProxyError(w http.ResponseWriter, err error) {
-	if w.Header().Get(constants.HeaderContentType) == "" {
-		http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
+	if w.Header().Get(constants.HeaderContentType) != "" {
+		return
 	}
+
+	// A chunked (no Content-Length) request body that exceeds the configured
+	// cap is caught mid-read by the http.MaxBytesReader SizeValidator.CreateMiddleware
+	// installs on r.Body, not by the pre-check that handles known-Content-Length
+	// oversize requests. That surfaces here as a generic read error wrapped up
+	// through retry.go's body preservation - without this check it would fall
+	// through to a misleading 502, when the real cause is the same "body too
+	// large" condition the pre-check rejects with 413. Match that response
+	// exactly so the client sees one consistent envelope regardless of which
+	// path caught the oversize body.
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
 }
 
 func (a *Application) stripRoutePrefix(ctx context.Context, path string) string {
