@@ -143,6 +143,18 @@ func accessLogLevel(method, path string, status int) slog.Level {
 	return slog.LevelInfo
 }
 
+// consoleLogParams resolves the level and message the console log lines
+// (request started/completed) should use for a given quiet gate result.
+// Factored out so the pre- and post-request blocks share one place that
+// decides "quiet => Debug with the terse message, otherwise Info with the
+// operator-facing one" instead of each spelling out its own if/else.
+func consoleLogParams(quiet bool, quietMsg, loudMsg string) (slog.Level, string) {
+	if quiet {
+		return slog.LevelDebug, quietMsg
+	}
+	return slog.LevelInfo, loudMsg
+}
+
 // responseWriter wraps http.ResponseWriter to capture response size and status
 type responseWriter struct {
 	http.ResponseWriter
@@ -235,28 +247,16 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			// doc comment for why. The post-request line below uses the
 			// status-aware gate (isQuietPollOutcome) instead.
 			preQuiet := isQuietPollRoute(r.Method, r.URL.Path)
-			if preQuiet {
-				if baseLogger.Enabled(ctx, slog.LevelDebug) {
-					baseLogger.Debug("HTTP request started",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"remote_addr", r.RemoteAddr,
-						"user_agent", r.UserAgent(),
-						"request_bytes", requestSize,
-						"request_size_formatted", formatBytes(requestSize),
-					)
-				}
-			} else {
-				if baseLogger.Enabled(ctx, slog.LevelInfo) {
-					baseLogger.Info("Request started",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"remote_addr", r.RemoteAddr,
-						"user_agent", r.UserAgent(),
-						"request_bytes", requestSize,
-						"request_size_formatted", formatBytes(requestSize),
-					)
-				}
+			level, msg := consoleLogParams(preQuiet, "HTTP request started", "Request started")
+			if baseLogger.Enabled(ctx, level) {
+				baseLogger.Log(ctx, level, msg,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+					"user_agent", r.UserAgent(),
+					"request_bytes", requestSize,
+					"request_size_formatted", formatBytes(requestSize),
+				)
 			}
 
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
@@ -268,32 +268,18 @@ func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			// 5xx, or non-GET/HEAD request under /internal/ always logs here at
 			// its normal level even if the pre-request line above was quieted.
 			postQuiet := isQuietPollOutcome(r.Method, r.URL.Path, wrapped.status)
-			if postQuiet {
-				if baseLogger.Enabled(ctx, slog.LevelDebug) {
-					baseLogger.Debug("HTTP request completed",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"status", wrapped.status,
-						"duration_ms", duration.Milliseconds(),
-						"duration_formatted", duration.String(),
-						"request_bytes", requestSize,
-						"response_bytes", wrapped.size,
-						"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
-					)
-				}
-			} else {
-				if baseLogger.Enabled(ctx, slog.LevelInfo) {
-					baseLogger.Info("Request completed",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"status", wrapped.status,
-						"duration_ms", duration.Milliseconds(),
-						"duration_formatted", duration.String(),
-						"request_bytes", requestSize,
-						"response_bytes", wrapped.size,
-						"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
-					)
-				}
+			level, msg = consoleLogParams(postQuiet, "HTTP request completed", "Request completed")
+			if baseLogger.Enabled(ctx, level) {
+				baseLogger.Log(ctx, level, msg,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"status", wrapped.status,
+					"duration_ms", duration.Milliseconds(),
+					"duration_formatted", duration.String(),
+					"request_bytes", requestSize,
+					"response_bytes", wrapped.size,
+					"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
+				)
 			}
 		})
 	}
@@ -339,6 +325,101 @@ func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler
 			level := accessLogLevel(r.Method, r.URL.Path, wrapped.status)
 			if baseLogger.Enabled(detailedCtx, level) {
 				baseLogger.Log(detailedCtx, level, "Access log",
+					"timestamp", start.Format(time.RFC3339),
+					"request_id", requestID,
+					"remote_addr", r.RemoteAddr,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"query", redactQuery(r.URL.RawQuery),
+					"status", wrapped.status,
+					"request_bytes", requestSize,
+					"response_bytes", wrapped.size,
+					"duration_ms", duration.Milliseconds(),
+					"user_agent", r.UserAgent(),
+					"referer", r.Referer(),
+					"content_type", r.Header.Get(constants.HeaderContentType),
+					"accept", r.Header.Get(constants.HeaderAccept))
+			}
+		})
+	}
+}
+
+// CombinedLoggingMiddleware fuses the console log (EnhancedLoggingMiddleware) and
+// the access log (AccessLoggingMiddleware) into a single pass over the request.
+// Callers used to chain the two - AccessLoggingMiddleware wrapping
+// EnhancedLoggingMiddleware - which meant every request built two responseWriter
+// wrappers, read time.Now() twice and derived the request ID twice for no
+// behavioural benefit, since both wrappers observed the same status/size. This
+// wraps once, times once, and feeds both log outputs from that single pass.
+//
+// The two outputs keep their independently-decided quiet gates -
+// isQuietPollOutcome for the console line, isQuietAccessOutcome for the access
+// line - see their doc comments for why they must not be unified: the access
+// log is the operator's audit record and must not go quiet on proxy traffic
+// the way the console line deliberately does.
+func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+
+			requestID := sanitiseRequestID(r.Header.Get(constants.HeaderXRequestID))
+			if requestID == "" {
+				requestID = util.GenerateRequestID()
+			}
+
+			requestSize := r.ContentLength
+			if requestSize < 0 {
+				requestSize = 0
+			}
+
+			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
+			baseLogger := slog.Default().With(constants.ContextRequestIdKey, requestID)
+			ctx = context.WithValue(ctx, LoggerKey, baseLogger)
+
+			w.Header().Set("X-Olla-Request-ID", requestID)
+
+			wrapped := &responseWriter{ResponseWriter: w, status: 200}
+
+			preQuiet := isQuietPollRoute(r.Method, r.URL.Path)
+			level, msg := consoleLogParams(preQuiet, "HTTP request started", "Request started")
+			if baseLogger.Enabled(ctx, level) {
+				baseLogger.Log(ctx, level, msg,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+					"user_agent", r.UserAgent(),
+					"request_bytes", requestSize,
+					"request_size_formatted", formatBytes(requestSize),
+				)
+			}
+
+			next.ServeHTTP(wrapped, r.WithContext(ctx))
+
+			duration := time.Since(start)
+
+			postQuiet := isQuietPollOutcome(r.Method, r.URL.Path, wrapped.status)
+			level, msg = consoleLogParams(postQuiet, "HTTP request completed", "Request completed")
+			if baseLogger.Enabled(ctx, level) {
+				baseLogger.Log(ctx, level, msg,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"status", wrapped.status,
+					"duration_ms", duration.Milliseconds(),
+					"duration_formatted", duration.String(),
+					"request_bytes", requestSize,
+					"response_bytes", wrapped.size,
+					"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
+				)
+			}
+
+			// Access log uses a plain (non-.With'd) logger since request_id is
+			// already an explicit field below - attaching it via .With() as well
+			// would double it up in the emitted record.
+			accessLogger := slog.Default()
+			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
+			accessLevel := accessLogLevel(r.Method, r.URL.Path, wrapped.status)
+			if accessLogger.Enabled(detailedCtx, accessLevel) {
+				accessLogger.Log(detailedCtx, accessLevel, "Access log",
 					"timestamp", start.Format(time.RFC3339),
 					"request_id", requestID,
 					"remote_addr", r.RemoteAddr,
