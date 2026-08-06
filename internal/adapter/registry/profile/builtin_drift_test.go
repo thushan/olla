@@ -37,6 +37,11 @@ func TestBuiltinProfilesMatchShippedYAML(t *testing.T) {
 	builtins := make(map[string]domain.InferenceProfile)
 	loader.loadBuiltInProfilesInto(builtins)
 
+	// Completeness guard: if a new builtin fallback is ever added to
+	// loadBuiltInProfilesInto without a matching entry here, this whole test
+	// would keep passing while silently not drift-checking it.
+	require.Len(t, builtins, len(builtinShippedPairs), "loadBuiltInProfilesInto produced a different number of builtins than builtinShippedPairs knows about - update builtinShippedPairs")
+
 	for name, filename := range builtinShippedPairs {
 		t.Run(name, func(t *testing.T) {
 			data, err := os.ReadFile(shippedProfilesDir + filename)
