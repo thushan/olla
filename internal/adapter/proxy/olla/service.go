@@ -301,7 +301,7 @@ func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targ
 
 	// Add model header
 	if model, ok := ctx.Value(constants.ContextModelKey).(string); ok && model != "" {
-		proxyReq.Header.Set("X-Model", model)
+		proxyReq.Header.Set(constants.HeaderXModel, model)
 		stats.Model = model
 	}
 
