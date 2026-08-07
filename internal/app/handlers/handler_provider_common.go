@@ -49,8 +49,12 @@ func (a *Application) createProviderProfile(providerType string) *domain.Request
 			}
 		}
 	} else {
-		// Non-OpenAI providers only route to their specific backend type
+		// Non-OpenAI providers only route to their specific backend type - this
+		// is a hard boundary, not a compatibility hint, so filterEndpointsByProfile
+		// must not silently widen to other types if none match (issue: cross-type
+		// leak during a same-type outage).
 		profile.AddSupportedProfile(providerType)
+		profile.FailClosedOnNoMatch = true
 	}
 
 	return profile

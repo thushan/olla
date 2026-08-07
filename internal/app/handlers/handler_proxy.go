@@ -608,6 +608,17 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		}
 
 		if len(compatible) == 0 {
+			if profile.FailClosedOnNoMatch {
+				// Provider-scoped request (e.g. /olla/vllm/) with zero healthy
+				// endpoints of that type: return the empty set so the caller's
+				// existing no-routable-endpoints path produces a proper 404/503,
+				// instead of silently crossing into another provider type.
+				logger.Warn("No compatible endpoints found for provider-scoped path, failing closed",
+					"path", profile.Path,
+					"supported_by", profile.SupportedBy,
+					"total_endpoints", len(endpoints))
+				return nil
+			}
 			logger.Warn("No compatible endpoints found for path, falling back to all endpoints",
 				"path", profile.Path,
 				"supported_by", profile.SupportedBy,
