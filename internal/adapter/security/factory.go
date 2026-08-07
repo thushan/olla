@@ -57,8 +57,11 @@ func (sa *Adapters) Stop() {
 // allocated four closures per request for no reason - the underlying
 // validators don't change after startup.
 func (sa *Adapters) CreateChainMiddleware() func(http.Handler) http.Handler {
-	rateLimitMiddleware := sa.RateLimit.CreateMiddleware()
-	sizeMiddleware := sa.SizeValidation.CreateMiddleware()
+	rateLimitMiddleware := sa.CreateRateLimitMiddleware()
+	sizeMiddleware := func(next http.Handler) http.Handler { return next }
+	if sa.SizeValidation != nil {
+		sizeMiddleware = sa.SizeValidation.CreateMiddleware()
+	}
 
 	return func(next http.Handler) http.Handler {
 		return rateLimitMiddleware(sizeMiddleware(next))
