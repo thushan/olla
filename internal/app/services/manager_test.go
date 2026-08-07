@@ -10,14 +10,21 @@ import (
 // fakeManagedService is a minimal ManagedService for exercising ServiceManager
 // without pulling in real dependencies. Stop sleeps briefly so concurrent
 // Register calls have a real window to race against stopServices' map read.
+// startDelay does the same for Start's map read when set.
 type fakeManagedService struct {
-	name string
-	deps []string
+	name       string
+	deps       []string
+	startDelay time.Duration
 }
 
-func (f *fakeManagedService) Name() string                { return f.name }
-func (f *fakeManagedService) Dependencies() []string      { return f.deps }
-func (f *fakeManagedService) Start(context.Context) error { return nil }
+func (f *fakeManagedService) Name() string           { return f.name }
+func (f *fakeManagedService) Dependencies() []string { return f.deps }
+func (f *fakeManagedService) Start(context.Context) error {
+	if f.startDelay > 0 {
+		time.Sleep(f.startDelay)
+	}
+	return nil
+}
 func (f *fakeManagedService) Stop(context.Context) error {
 	time.Sleep(time.Millisecond)
 	return nil
@@ -75,9 +82,12 @@ func TestServiceManager_Start_ConcurrentRegister(t *testing.T) {
 	const n = 20
 
 	// Register an initial batch so Start has real entries to iterate.
+	// Each Start call sleeps briefly, the same trick fakeManagedService.Stop
+	// uses above, so the Register goroutines below have a real window to
+	// overlap Start's per-service map read instead of racing to finish first.
 	for i := range n {
 		name := "initial-" + string(rune('a'+i%26)) + string(rune('0'+i/26))
-		if err := sm.Register(&fakeManagedService{name: name}); err != nil {
+		if err := sm.Register(&fakeManagedService{name: name, startDelay: time.Millisecond}); err != nil {
 			t.Fatalf("Register failed: %v", err)
 		}
 	}
