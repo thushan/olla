@@ -157,6 +157,108 @@ func TestWorkerPool_PublishAsyncShutdownRace(t *testing.T) {
 	}
 }
 
+// TestWorkerPool_QueueDroppedCountsOverflow verifies that events which never
+// make it into the worker queue (because it's full) are counted separately
+// from subscriber-buffer drops. Workers are set to zero so nothing ever
+// drains eventChan, giving a deterministic fill point instead of racing a
+// slow consumer against the publisher.
+func TestWorkerPool_QueueDroppedCountsOverflow(t *testing.T) {
+	eb := New[int]()
+	defer eb.Shutdown()
+
+	const bufferSize = 5
+	wp := NewWorkerPool(eb, 0, bufferSize)
+	defer wp.cancel() // no workers were started, so Shutdown()'s wg.Wait() isn't needed
+
+	const overflow = 7
+	for i := range bufferSize + overflow {
+		wp.PublishAsync(i)
+	}
+
+	require.EqualValues(t, overflow, wp.Dropped(), "expected exactly the overflow beyond the buffer to be dropped")
+}
+
+// TestWorkerPool_QueueDroppedZeroOnNormalFlow verifies that as long as the
+// queue never fills, PublishAsync leaves QueueDropped at zero.
+func TestWorkerPool_QueueDroppedZeroOnNormalFlow(t *testing.T) {
+	config := EventBusConfig{
+		BufferSize:    100,
+		CleanupPeriod: 0,
+	}
+	eb := NewWithConfig[int](config)
+	defer eb.Shutdown()
+
+	ctx := context.Background()
+	ch, cleanup := eb.Subscribe(ctx)
+	defer cleanup()
+
+	go func() {
+		for range ch {
+			// drain fast enough that the queue never backs up
+		}
+	}()
+
+	for i := range 50 {
+		eb.PublishAsync(i)
+	}
+
+	require.Eventually(t, func() bool {
+		return eb.Stats().QueueDropped == 0
+	}, pollCeiling, pollInterval, "queue drops should stay at zero when the queue never fills")
+}
+
+// TestWorkerPool_QueueDroppedMonotonic hammers a saturated queue from many
+// concurrent publishers and checks the counter only ever climbs, never dips,
+// confirming the atomic increment is race-free under -race.
+func TestWorkerPool_QueueDroppedMonotonic(t *testing.T) {
+	eb := New[int]()
+	defer eb.Shutdown()
+
+	const bufferSize = 4
+	wp := NewWorkerPool(eb, 0, bufferSize) // no workers, so the buffer saturates immediately
+	defer wp.cancel()
+
+	const goroutines = 20
+	const perGoroutine = 100
+
+	var wg sync.WaitGroup
+	var lastSeen atomic.Uint64
+	var monotonic atomic.Bool
+	monotonic.Store(true)
+
+	stop := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				cur := wp.Dropped()
+				if cur < lastSeen.Load() {
+					monotonic.Store(false)
+				}
+				lastSeen.Store(cur)
+			}
+		}
+	}()
+
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range perGoroutine {
+				wp.PublishAsync(i)
+			}
+		}()
+	}
+	wg.Wait()
+	close(stop)
+
+	require.True(t, monotonic.Load(), "QueueDropped must never decrease")
+	require.EqualValues(t, goroutines*perGoroutine-bufferSize, wp.Dropped(),
+		"expected all sends beyond the buffer capacity to be counted as dropped")
+}
+
 // TestWorkerPool_ConcurrentPublishing verifies concurrent publishing works correctly
 func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	eb := New[string]()

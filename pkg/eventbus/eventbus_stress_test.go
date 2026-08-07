@@ -173,17 +173,17 @@ func TestEventBus_HighVolumePublishing(t *testing.T) {
 		t.Fatal("bus did not deliver a post-storm event - looks wedged")
 	}
 
-	// Subscriber-level drops are tracked in Stats().TotalDropped; drops in the
-	// worker queue itself (WorkerPool.PublishAsync's "queue full" branch) are
-	// not counted, so this is a lower bound, not an exact reconciliation -
-	// still enough to catch a corrupted or overflowing counter.
+	// Subscriber-level drops are tracked in Stats().TotalDropped, and
+	// worker-queue-level drops (WorkerPool.PublishAsync's "queue full" branch)
+	// in Stats().QueueDropped, so summing both now gives an exact
+	// reconciliation rather than a lower bound.
 	stats := bus.Stats()
-	require.LessOrEqual(t, receivedTotal+int64(stats.TotalDropped), int64(totalEvents)+1,
+	require.LessOrEqual(t, receivedTotal+int64(stats.TotalDropped)+int64(stats.QueueDropped), int64(totalEvents)+1,
 		"delivered + tracked drops should never exceed what was published")
 
 	t.Logf("HIGH VOLUME - Published %d events in %v", totalEvents, publishDuration)
 	t.Logf("HIGH VOLUME - Received: %d events (%.2f%%)", receivedTotal, float64(receivedTotal)/float64(totalEvents)*100)
-	t.Logf("HIGH VOLUME - Tracked drops: %d", stats.TotalDropped)
+	t.Logf("HIGH VOLUME - Tracked drops: %d (subscriber) + %d (queue)", stats.TotalDropped, stats.QueueDropped)
 	t.Logf("HIGH VOLUME - Publish rate: %.0f events/second", float64(totalEvents)/publishDuration.Seconds())
 }
 

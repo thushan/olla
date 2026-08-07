@@ -179,6 +179,13 @@ func (eb *EventBus[T]) Stats() EventBusStats {
 	stats := EventBusStats{
 		IsShutdown: eb.isShutdown.Load(),
 	}
+	// QueueDropped is cumulative, worker-pool-level history rather than a
+	// function of current subscriber state, so report it even after
+	// shutdown - unlike TotalDropped/subscriber counts below, which only
+	// make sense while subscribers exist.
+	if eb.workerPool != nil {
+		stats.QueueDropped = eb.workerPool.Dropped()
+	}
 	if stats.IsShutdown {
 		return stats
 	}
@@ -201,6 +208,11 @@ type EventBusStats struct {
 	ActiveSubscribers int
 	TotalDropped      uint64
 	IsShutdown        bool
+	// QueueDropped counts events discarded before they reached a subscriber,
+	// because the worker pool's internal queue was full (see WorkerPool.dropped).
+	// This is distinct from TotalDropped, which counts events that reached a
+	// subscriber but were dropped because that subscriber's own buffer was full.
+	QueueDropped uint64
 }
 
 // generateSubscriberID creates a unique subscriber ID

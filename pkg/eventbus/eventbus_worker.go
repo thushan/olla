@@ -3,6 +3,7 @@ package eventbus
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 )
 
 // WorkerPool manages a pool of workers for async event publishing
@@ -13,6 +14,7 @@ type WorkerPool[T any] struct {
 	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 	workers   int
+	dropped   atomic.Uint64
 }
 
 // NewWorkerPool creates a new worker pool for the event bus
@@ -50,8 +52,20 @@ func (wp *WorkerPool[T]) PublishAsync(event T) {
 	case wp.eventChan <- event:
 		// Successfully queued
 	default:
-		// Queue is full, drop the event to prevent blocking
+		// Queue is full, drop the event to prevent blocking. This is a
+		// stage-1 drop - the event never reached a subscriber at all - which
+		// is a different failure mode to EventBusStats.TotalDropped (a
+		// stage-3 drop, where a subscriber's own buffer was full). Operators
+		// need both counters to tell "queue too small / workers too slow to
+		// drain" apart from "a subscriber is too slow to consume".
+		wp.dropped.Add(1)
 	}
+}
+
+// Dropped returns the number of events discarded because the worker queue
+// was full when PublishAsync was called.
+func (wp *WorkerPool[T]) Dropped() uint64 {
+	return wp.dropped.Load()
 }
 
 // worker processes events from the queue
