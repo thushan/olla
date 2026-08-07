@@ -179,32 +179,32 @@ features:
 resources:
   # Lemonade memory requirements (optimised for local scenarios)
   model_sizes:
-    - patterns: ["*70b*", "*72b*", "*120b*"]
+    - patterns: ["70b", "72b", "120b"]
       min_memory_gb: 64
       recommended_memory_gb: 96
       min_gpu_memory_gb: 48
       estimated_load_time_ms: 60000
-    - patterns: ["*30b*", "*32b*", "*33b*"]
+    - patterns: ["30b", "32b", "33b"]
       min_memory_gb: 32
       recommended_memory_gb: 48
       min_gpu_memory_gb: 24
       estimated_load_time_ms: 45000
-    - patterns: ["*13b*", "*14b*", "*20b*"]
+    - patterns: ["13b", "14b", "20b"]
       min_memory_gb: 16
       recommended_memory_gb: 32
       min_gpu_memory_gb: 16
       estimated_load_time_ms: 30000
-    - patterns: ["*7b*", "*8b*"]
+    - patterns: ["7b", "8b"]
       min_memory_gb: 8
       recommended_memory_gb: 16
       min_gpu_memory_gb: 8
       estimated_load_time_ms: 20000
-    - patterns: ["*3b*", "*4b*"]
+    - patterns: ["3b", "4b"]
       min_memory_gb: 4
       recommended_memory_gb: 8
       min_gpu_memory_gb: 4
       estimated_load_time_ms: 15000
-    - patterns: ["*0.5b*", "*0.6b*", "*1b*", "*1.5b*", "*1.7b*"]
+    - patterns: ["0.5b", "0.6b", "1b", "1.5b", "1.7b"]
       min_memory_gb: 2
       recommended_memory_gb: 4
       min_gpu_memory_gb: 2

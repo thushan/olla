@@ -1,9 +1,13 @@
 package profile
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
+
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -357,4 +361,83 @@ func TestContainsSizeToken(t *testing.T) {
 			assert.Equal(t, tt.expected, containsSizeToken(tt.s, tt.token))
 		})
 	}
+}
+
+// TestConfigurableProfile_ShippedProfiles_SizeBucketsResolve is the
+// regression guard for the incident where six shipped profiles (vllm,
+// sglang, lmdeploy, lemonade, vllm-mlx, dmr) carried glob-wrapped size
+// patterns like "*70b*" left over from before the ollama/lmstudio/llamacpp
+// profiles switched to bare-token matching. containsSizeToken (like the
+// strings.Contains it replaced) can never match a literal "*" character, so
+// those six profiles silently fell through to resources.defaults for every
+// model, for months, without a single test noticing.
+//
+// This loads the real shipped YAML from config/profiles/ (not a fixture) and
+// exercises the real GetResourceRequirements path, so a reintroduced
+// glob-wrapped pattern - in any profile, not just the six named above - fails
+// loudly instead of quietly degrading to defaults.
+func TestConfigurableProfile_ShippedProfiles_SizeBucketsResolve(t *testing.T) {
+	entries, err := os.ReadDir(shippedProfilesDir)
+	require.NoError(t, err)
+
+	var yamlFiles []string
+	for _, e := range entries {
+		if !e.IsDir() && len(e.Name()) > 5 && e.Name()[len(e.Name())-5:] == ".yaml" {
+			yamlFiles = append(yamlFiles, e.Name())
+		}
+	}
+	require.NotEmpty(t, yamlFiles, "expected shipped profile YAML files under %s", shippedProfilesDir)
+
+	for _, filename := range yamlFiles {
+		t.Run(filename, func(t *testing.T) {
+			data, err := os.ReadFile(shippedProfilesDir + filename)
+			require.NoError(t, err)
+
+			var cfg domain.ProfileConfig
+			require.NoError(t, yaml.Unmarshal(data, &cfg))
+
+			if len(cfg.Resources.ModelSizes) == 0 {
+				t.Skipf("%s has no resources.model_sizes block (defaults-only or cloud profile) - nothing to resolve", filename)
+				return
+			}
+
+			profile := NewConfigurableProfile(&cfg)
+
+			// Every size bucket must be reachable from a realistic model name
+			// built around its own first pattern - if any bucket is dead, the
+			// pattern is glob-wrapped (or otherwise broken) again.
+			for _, bucket := range cfg.Resources.ModelSizes {
+				require.NotEmpty(t, bucket.Patterns, "%s: model_sizes bucket has no patterns", filename)
+				token := bucket.Patterns[0]
+				modelName := "test-model-" + token + "-instruct"
+
+				got := profile.GetResourceRequirements(modelName, nil)
+				assert.Equalf(t, bucket.MinMemoryGB, got.MinMemoryGB,
+					"%s: model %q (pattern %q) resolved to MinMemoryGB=%v, want the %q bucket's %v - pattern is likely glob-wrapped and dead",
+					filename, modelName, token, got.MinMemoryGB, token, bucket.MinMemoryGB)
+			}
+		})
+	}
+}
+
+// TestConfigurableProfile_VLLM_SizeTokenBoundary loads the real shipped
+// vllm.yaml (one of the six profiles fixed alongside this test) and checks
+// the 7b/17b boundary case directly, mirroring
+// TestConfigurableProfile_GetResourceRequirements_SizeTokenBoundaries but
+// against production YAML rather than an inline fixture.
+func TestConfigurableProfile_VLLM_SizeTokenBoundary(t *testing.T) {
+	data, err := os.ReadFile(shippedProfilesDir + "vllm.yaml")
+	require.NoError(t, err)
+
+	var cfg domain.ProfileConfig
+	require.NoError(t, yaml.Unmarshal(data, &cfg))
+
+	profile := NewConfigurableProfile(&cfg)
+
+	sevenB := profile.GetResourceRequirements("Meta-Llama-3.1-7B-Instruct", nil)
+	seventeenB := profile.GetResourceRequirements("Some-Custom-17B-Instruct", nil)
+
+	assert.Equal(t, 16.0, sevenB.MinMemoryGB, "7B model must resolve to the 7b/8b bucket, not fall through")
+	assert.NotEqual(t, sevenB.MinMemoryGB, seventeenB.MinMemoryGB, "17B model must not match the 7b token")
+	assert.Equal(t, cfg.Resources.Defaults.MinMemoryGB, seventeenB.MinMemoryGB, "17B model has no matching bucket, so it must fall through to defaults")
 }

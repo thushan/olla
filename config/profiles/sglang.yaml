@@ -167,32 +167,32 @@ features:
 resources:
   # SGLang memory requirements (generally more efficient than vLLM)
   model_sizes:
-    - patterns: ["*70b*", "*72b*"]
+    - patterns: ["70b", "72b"]
       min_memory_gb: 120    # Less than vLLM due to RadixAttention
       recommended_memory_gb: 140
       min_gpu_memory_gb: 120
       estimated_load_time_ms: 50000  # Faster than vLLM
-    - patterns: ["*34b*", "*33b*", "*30b*"]
+    - patterns: ["34b", "33b", "30b"]
       min_memory_gb: 60
       recommended_memory_gb: 70
       min_gpu_memory_gb: 60
       estimated_load_time_ms: 35000
-    - patterns: ["*13b*", "*14b*"]
+    - patterns: ["13b", "14b"]
       min_memory_gb: 25
       recommended_memory_gb: 35
       min_gpu_memory_gb: 25
       estimated_load_time_ms: 25000
-    - patterns: ["*7b*", "*8b*"]
+    - patterns: ["7b", "8b"]
       min_memory_gb: 14
       recommended_memory_gb: 20
       min_gpu_memory_gb: 14
       estimated_load_time_ms: 15000
-    - patterns: ["*3b*"]
+    - patterns: ["3b"]
       min_memory_gb: 6
       recommended_memory_gb: 10
       min_gpu_memory_gb: 6
       estimated_load_time_ms: 12000
-    - patterns: ["*1b*", "*1.1b*", "*1.5b*"]
+    - patterns: ["1b", "1.1b", "1.5b"]
       min_memory_gb: 3
       recommended_memory_gb: 6
       min_gpu_memory_gb: 3
