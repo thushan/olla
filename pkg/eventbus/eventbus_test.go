@@ -370,6 +370,7 @@ func TestEventBus_CleanupInactiveSubscribers(t *testing.T) {
 	defer bus.Shutdown()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -379,9 +380,14 @@ func TestEventBus_CleanupInactiveSubscribers(t *testing.T) {
 		t.Errorf("Expected 1 subscriber, got %d", stats.TotalSubscribers)
 	}
 
-	// Cancel context to make subscriber inactive
-	cancel()
-
+	// Deliberately do NOT cancel ctx here: Subscribe's cancellation watcher
+	// goroutine would call eb.unsubscribe directly on cancellation (see
+	// TestEventBus_ContextCancellation), removing the subscriber immediately
+	// and letting the assertion below pass without cleanupInactiveSubscribers
+	// ever running. Leaving the context live and simply not publishing to it
+	// lets lastActive go stale past InactiveTimeout, so only the ticker-driven
+	// sweep can purge it.
+	//
 	// require.Eventually is justified here: cleanupInactiveSubscribers only
 	// runs on cleanupTicker's tick, a ticker-driven background sweep with no
 	// completion signal exposed. Given enough wall-clock it WILL fire and
@@ -390,7 +396,7 @@ func TestEventBus_CleanupInactiveSubscribers(t *testing.T) {
 	// construction rather than racing a delivery/backpressure condition.
 	require.Eventually(t, func() bool {
 		return bus.Stats().TotalSubscribers == 0
-	}, pollCeiling, pollInterval, "subscriber was not cleaned up")
+	}, pollCeiling, pollInterval, "subscriber was not cleaned up by the inactivity sweep")
 
 	// Channel won't be closed (to prevent panics), but should not receive events
 	select {
