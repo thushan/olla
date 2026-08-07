@@ -126,6 +126,10 @@ jobs:
         with:
           version: v${{ env.GOLANGCILINT_VERSION }}
           args: --timeout=10m --max-same-issues=0 --max-issues-per-linter=0
+          # skip the online config-schema check against golangci-lint.run - it's
+          # network-dependent, redundant with `make ready` validating the config
+          # locally against the real linter, and was timing out CI runners
+          verify: false
 
       - name: betteralign checks
         run: |
