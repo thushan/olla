@@ -49,11 +49,18 @@ loop:
 		}
 	}
 
-	// Shutdown EventBus
+	// Shutdown EventBus. Shutdown() itself blocks on wg.Wait() until every
+	// worker goroutine has exited, so the worker pool is deterministically
+	// gone by the time this call returns - no polling needed for that part.
 	eb.Shutdown()
 
-	// Poll for worker goroutines to actually exit instead of trusting a fixed
-	// sleep to outlast scheduler delays on a loaded runner.
+	// What's left to settle asynchronously is the cleanup-ticker loop exiting
+	// on close(stopCleanup) and (if still running) the per-subscriber
+	// ctx-cancellation watcher goroutine - neither exposes a completion
+	// signal, and goroutine-count-based leak detection has no synchronisation
+	// seam by nature (it's runtime/scheduler state, not an event the
+	// component emits). Both exit unconditionally given enough wall-clock, so
+	// polling here is guaranteed eventually true by construction.
 	var finalGoroutines, leaked int
 	require.Eventually(t, func() bool {
 		runtime.GC()
@@ -88,14 +95,6 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 	var published atomic.Int64
 	var received atomic.Int64
 
-	// Publish many events rapidly
-	go func() {
-		for i := range 1000 {
-			eb.PublishAsync(i)
-			published.Add(1)
-		}
-	}()
-
 	// Slow consumer
 	go func() {
 		for range ch {
@@ -104,19 +103,29 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 		}
 	}()
 
-	// Wait for every publish call to be issued, rather than hoping a fixed
-	// sleep is long enough on a loaded runner.
-	require.Eventually(t, func() bool {
-		return published.Load() == 1000
-	}, pollCeiling, pollInterval, "not all events were published")
+	// Publish many events rapidly, synchronising on the publisher goroutine's
+	// own completion (a WaitGroup it owns) instead of polling a counter.
+	var publishWg sync.WaitGroup
+	publishWg.Add(1)
+	go func() {
+		defer publishWg.Done()
+		for i := range 1000 {
+			eb.PublishAsync(i)
+			published.Add(1)
+		}
+	}()
+	publishWg.Wait()
 
-	// The tiny buffer (10) against a consumer sleeping 1ms/event guarantees
-	// backpressure drops well before the flood finishes - poll the drop
-	// counter directly instead of inferring it from received vs published
-	// counts after an arbitrary wait.
-	require.Eventually(t, func() bool {
-		return eb.Stats().TotalDropped > 0
-	}, pollCeiling, pollInterval, "expected some events to be dropped due to backpressure")
+	// Drain blocks until every queued event has run through bus.Publish, so
+	// the subscriber-buffer-full decision for every one of them is final by
+	// the time it returns. With a 10-slot buffer against 1000 events and a
+	// consumer that only drains one event per millisecond, overflow is
+	// guaranteed by construction (workers dispatch far faster than the
+	// consumer can keep the buffer clear), so the drop count check below
+	// needs no polling.
+	eb.Drain()
+
+	require.Greater(t, eb.Stats().TotalDropped, uint64(0), "expected some events to be dropped due to backpressure")
 
 	t.Logf("Published: %d", published.Load())
 	t.Logf("Received: %d", received.Load())
@@ -202,9 +211,11 @@ func TestWorkerPool_QueueDroppedZeroOnNormalFlow(t *testing.T) {
 		eb.PublishAsync(i)
 	}
 
-	require.Eventually(t, func() bool {
-		return eb.Stats().QueueDropped == 0
-	}, pollCeiling, pollInterval, "queue drops should stay at zero when the queue never fills")
+	// Drain blocks until all 50 events have run through bus.Publish, so
+	// QueueDropped is final by the time it returns - no polling needed.
+	eb.Drain()
+
+	require.EqualValues(t, 0, eb.Stats().QueueDropped, "queue drops should stay at zero when the queue never fills")
 }
 
 // TestWorkerPool_QueueDroppedMonotonic hammers a saturated queue from many
@@ -259,7 +270,12 @@ func TestWorkerPool_QueueDroppedMonotonic(t *testing.T) {
 		"expected all sends beyond the buffer capacity to be counted as dropped")
 }
 
-// TestWorkerPool_ConcurrentPublishing verifies concurrent publishing works correctly
+// TestWorkerPool_ConcurrentPublishing verifies concurrent publishing works
+// correctly. numPublishers*eventsPerPublisher is deliberately sized to equal
+// the bus's default subscriber buffer (100), so every event fits in the
+// subscriber's channel even if nothing ever reads it - delivery is
+// guaranteed by construction, not by outracing a slow consumer, which is
+// what let this drop the old per-event sleeps and the 80%-floor poll.
 func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	eb := New[string]()
 
@@ -272,13 +288,15 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	var published atomic.Int64
 	var receivedCount atomic.Int64
 
-	// Use smaller numbers for more reliable test
 	const numPublishers = 5
 	const eventsPerPublisher = 20
+	const totalEvents = numPublishers * eventsPerPublisher // == default BufferSize (100)
 
 	// Start receiver first
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		for {
 			select {
 			case <-ch:
@@ -289,10 +307,6 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 		}
 	}()
 
-	// Give receiver time to start
-	time.Sleep(10 * time.Millisecond)
-
-	// Publish events with small delays to ensure delivery
 	var wg sync.WaitGroup
 	for p := range numPublishers {
 		wg.Add(1)
@@ -302,26 +316,33 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 				event := string(rune('A'+publisherID)) + string(rune('0'+i))
 				eb.PublishAsync(event)
 				published.Add(1)
-				// Small delay to prevent overwhelming the buffer
-				time.Sleep(time.Millisecond)
 			}
 		}(p)
 	}
 
-	// Wait for all publishers to finish
+	// Wait for all publishers to finish issuing PublishAsync calls.
 	wg.Wait()
 
-	// With smaller numbers and delays, we should receive most events.
-	// Poll for delivery to catch up instead of trusting a fixed sleep to
-	// outlast processing on a loaded runner - allow for some drops but
-	// expect at least 80% delivery.
-	minExpected := int64(float64(numPublishers*eventsPerPublisher) * 0.8)
-	require.Eventually(t, func() bool {
-		return receivedCount.Load() >= minExpected
-	}, pollCeiling, pollInterval, "expected at least %d events to be delivered", minExpected)
+	// Drain blocks until every one of those events has run through
+	// bus.Publish, so the delivery decision for all of them is final - no
+	// polling for the receive count to catch up.
+	eb.Drain()
 
-	// Stop receiver
+	// Stop the background receiver, then flush anything it hadn't yet pulled
+	// off the channel: nothing writes to ch after Drain returns, so this is a
+	// safe, deterministic, non-blocking sweep rather than a race against the
+	// receiver's own scheduling.
 	close(done)
+	<-stopped
+flush:
+	for {
+		select {
+		case <-ch:
+			receivedCount.Add(1)
+		default:
+			break flush
+		}
+	}
 
 	publishedTotal := published.Load()
 	receivedTotal := receivedCount.Load()
@@ -329,8 +350,10 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	t.Logf("Published: %d", publishedTotal)
 	t.Logf("Received: %d events", receivedTotal)
 
-	// Ensure we actually published what we expected
-	if publishedTotal != int64(numPublishers*eventsPerPublisher) {
-		t.Errorf("Expected to publish %d events, but published %d", numPublishers*eventsPerPublisher, publishedTotal)
-	}
+	require.EqualValues(t, totalEvents, publishedTotal, "expected to publish exactly the configured event count")
+	// Buffer capacity (100) equals totalEvents exactly, so every event must
+	// have been delivered - no drops possible by construction.
+	require.EqualValues(t, totalEvents, receivedTotal, "expected every event to be delivered - buffer capacity equals the event count")
+	require.EqualValues(t, 0, eb.Stats().TotalDropped, "no drops possible when total events fit the subscriber buffer exactly")
+	require.EqualValues(t, 0, eb.Stats().QueueDropped, "no drops possible when total events fit the worker queue (1000) with room to spare")
 }

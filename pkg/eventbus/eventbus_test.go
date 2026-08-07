@@ -105,8 +105,15 @@ func TestEventBus_ContextCancellation(t *testing.T) {
 
 	cancel()
 
-	// Wait a bit to ensure unsubscribe has processed
-	time.Sleep(50 * time.Millisecond)
+	// Subscribe's cancellation watcher goroutine only fires eb.unsubscribe
+	// after ctx.Done() closes, with no completion signal exposed to the
+	// caller - polling Stats() is the only seam available, and the
+	// unsubscribe itself is a single cheap map delete, not something
+	// contending with backpressure, so it is guaranteed eventually true by
+	// construction regardless of runner core count.
+	require.Eventually(t, func() bool {
+		return bus.Stats().TotalSubscribers == 0
+	}, pollCeiling, pollInterval, "subscriber was not unsubscribed after context cancellation")
 
 	// Verify no more events are received (channel not closed to prevent panics)
 	select {
@@ -343,9 +350,9 @@ func TestEventBus_Stats(t *testing.T) {
 		t.Errorf("Expected 2 subscribers, got %+v", stats)
 	}
 
-	// Remove one subscriber
+	// Remove one subscriber. cleanup() calls eb.unsubscribe() synchronously
+	// (a plain map delete), so Stats() reflects it immediately - no wait needed.
 	cleanup1()
-	time.Sleep(10 * time.Millisecond) // Give time for cleanup
 
 	stats = bus.Stats()
 	if stats.TotalSubscribers != 1 || stats.ActiveSubscribers != 1 {
@@ -375,8 +382,12 @@ func TestEventBus_CleanupInactiveSubscribers(t *testing.T) {
 	// Cancel context to make subscriber inactive
 	cancel()
 
-	// Wait for the cleanup ticker to actually purge the subscriber, rather than
-	// hoping a fixed sleep outlasts however many ticks a loaded runner needs.
+	// require.Eventually is justified here: cleanupInactiveSubscribers only
+	// runs on cleanupTicker's tick, a ticker-driven background sweep with no
+	// completion signal exposed. Given enough wall-clock it WILL fire and
+	// purge the subscriber regardless of core count - it just may take more
+	// ticks on a starved runner - so polling is guaranteed eventually true by
+	// construction rather than racing a delivery/backpressure condition.
 	require.Eventually(t, func() bool {
 		return bus.Stats().TotalSubscribers == 0
 	}, pollCeiling, pollInterval, "subscriber was not cleaned up")
