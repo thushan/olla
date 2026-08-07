@@ -7,7 +7,7 @@ require (
 	github.com/expr-lang/expr v1.17.8
 	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/json-iterator/go v1.1.12
-	github.com/mattn/go-isatty v0.0.23
+	github.com/mattn/go-isatty v0.0.24
 	github.com/pterm/pterm v0.12.83
 	github.com/puzpuzpuz/xsync/v4 v4.5.0
 	github.com/rs/cors v1.11.1
