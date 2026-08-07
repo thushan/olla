@@ -10,7 +10,6 @@ import (
 	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
-	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -54,6 +53,12 @@ func (s *Service) ProxyRequestToEndpointsWithRetry(ctx context.Context, w http.R
 func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	stats.EndpointName = endpoint.Name
 
+	// The model actually dispatched to this endpoint, resolved from the alias
+	// map up front so every RecordSuccess/RecordFailure call below (including
+	// the failure paths ahead of the alias body rewrite) records model-level
+	// stats under the backend model name, not whatever alias the client sent.
+	resolvedModel := core.ResolvedModelName(ctx, endpoint, stats.Model)
+
 	// Snapshot config once for this request so all reads below are coherent even
 	// if UpdateConfig races concurrently.
 	cfg := s.configuration.Load()
@@ -63,7 +68,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	if cb != nil && cb.IsOpen() {
 		rlog.Warn("Circuit breaker is open for endpoint", "endpoint", endpoint.Name)
 		err := fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
-		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), err)
+		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), err)
 		return err
 	}
 
@@ -91,13 +96,11 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	// log at DEBUG when a model alias rewrite occurred so operators can correlate
 	// the alias name the client sent with the actual model dispatched to the backend
-	if aliasMap, ok := ctx.Value(constants.ContextModelAliasMapKey).(map[string]string); ok {
-		if actualModel, ok := aliasMap[endpoint.GetURLString()]; ok && actualModel != stats.Model {
-			rlog.Debug("Model alias rewritten for backend",
-				"alias", stats.Model,
-				"actual_model", actualModel,
-				"endpoint", endpoint.Name)
-		}
+	if resolvedModel != stats.Model {
+		rlog.Debug("Model alias rewritten for backend",
+			"alias", stats.Model,
+			"actual_model", resolvedModel,
+			"endpoint", endpoint.Name)
 	}
 
 	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, endpoint, stats)
@@ -105,7 +108,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		if cb != nil {
 			cb.RecordFailure()
 		}
-		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), err)
+		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), err)
 		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
@@ -124,7 +127,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		} else {
 			rlog.Error("round-trip failed", "error", err)
 		}
-		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), err)
+		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), err)
 		duration := time.Since(stats.StartTime)
 		return common.MakeUserFriendlyError(err, duration, "backend", cfg.GetResponseTimeout())
 	}
@@ -152,7 +155,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	buffer, poolErr := s.bufferPool.Get()
 	if poolErr != nil {
-		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), poolErr)
+		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), poolErr)
 		return fmt.Errorf("olla: stream buffer unavailable: %w", poolErr)
 	}
 	defer s.bufferPool.Put(buffer)
@@ -171,13 +174,13 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
 		rlog.Error("streaming failed", "error", streamErr)
-		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), streamErr)
+		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), streamErr)
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", cfg.GetResponseTimeout())
 	}
 
 	// We've successfully written the response
 	duration := time.Since(stats.StartTime)
-	s.RecordSuccess(endpoint, stats.Model, duration.Milliseconds(), int64(bytesWritten))
+	s.RecordSuccess(endpoint, resolvedModel, duration.Milliseconds(), int64(bytesWritten))
 
 	s.PublishEvent(core.ProxyEvent{
 		Type:      core.EventTypeProxySuccess,

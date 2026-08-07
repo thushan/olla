@@ -11,6 +11,26 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+// ResolvedModelName returns the model name actually dispatched to endpoint:
+// the alias map's per-endpoint entry if the request was alias-resolved,
+// otherwise requestedModel unchanged (the common case, where the requested
+// name already is the resolved name). Callers should use this - not the raw
+// requested/alias name - when recording model-level stats
+// (StatsCollector.RecordModelRequest via RecordSuccess/RecordFailure), so
+// /internal/stats/models aggregates under the model the backend actually
+// served rather than fragmenting across whatever alias each client happened
+// to send.
+func ResolvedModelName(ctx context.Context, endpoint *domain.Endpoint, requestedModel string) string {
+	aliasMap, ok := ctx.Value(constants.ContextModelAliasMapKey).(map[string]string)
+	if !ok || endpoint == nil {
+		return requestedModel
+	}
+	if actualModel, ok := aliasMap[endpoint.GetURLString()]; ok {
+		return actualModel
+	}
+	return requestedModel
+}
+
 // RewriteModelForAlias checks whether the request uses a model alias and, if the
 // selected endpoint has an alias mapping, rewrites the "model" field in the JSON
 // request body to the actual model name the backend expects. The original request
