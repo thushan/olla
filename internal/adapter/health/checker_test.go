@@ -231,22 +231,22 @@ func TestCircuitBreaker_BasicOperation(t *testing.T) {
 	cb := NewCircuitBreaker()
 	url := "http://localhost:11434"
 
-	if cb.IsOpen(url) {
+	if open, _ := cb.IsOpen(url, 0); open {
 		t.Error("Circuit breaker should be closed initially")
 	}
 
 	// Record failures until it opens
 	for range DefaultCircuitBreakerThreshold {
-		cb.RecordFailure(url)
+		cb.RecordFailure(url, 0)
 	}
 
-	if !cb.IsOpen(url) {
+	if open, _ := cb.IsOpen(url, 0); !open {
 		t.Error("Circuit breaker should be open after threshold failures")
 	}
 
 	// Record success should close it
-	cb.RecordSuccess(url)
-	if cb.IsOpen(url) {
+	cb.RecordSuccess(url, 0)
+	if open, _ := cb.IsOpen(url, 0); open {
 		t.Error("Circuit breaker should be closed after success")
 	}
 }
@@ -256,8 +256,8 @@ func TestCircuitBreaker_Cleanup(t *testing.T) {
 	url1 := "http://localhost:11434"
 	url2 := "http://localhost:11435"
 
-	cb.RecordFailure(url1)
-	cb.RecordFailure(url2)
+	cb.RecordFailure(url1, 0)
+	cb.RecordFailure(url2, 0)
 
 	active := cb.GetActiveEndpoints()
 	if len(active) != 2 {

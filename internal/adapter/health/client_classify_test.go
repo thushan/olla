@@ -82,8 +82,8 @@ func TestConfigError_DoesNotTripCircuitBreaker(t *testing.T) {
 		_, _ = hc.Check(context.Background(), ep)
 	}
 
-	assert.False(t, cb.IsOpen(ep.HealthCheckURLString),
-		"circuit breaker must not open on repeated auth failures")
+	open, _ := cb.IsOpen(ep.HealthCheckURLString, ep.CheckTimeout)
+	assert.False(t, open, "circuit breaker must not open on repeated auth failures")
 }
 
 // TestConfigError_IsNotRoutable ensures the new status doesn't accidentally

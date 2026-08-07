@@ -121,8 +121,8 @@ func TestRateLimit_DoesNotTripCircuitBreaker(t *testing.T) {
 		_, _ = hc.Check(context.Background(), ep)
 	}
 
-	assert.False(t, cb.IsOpen(ep.HealthCheckURLString),
-		"circuit breaker must not open on rate-limit responses")
+	open, _ := cb.IsOpen(ep.HealthCheckURLString, ep.CheckTimeout)
+	assert.False(t, open, "circuit breaker must not open on rate-limit responses")
 }
 
 // TestScheduler_SkipsRateLimitedEndpoints verifies the comparison logic that the

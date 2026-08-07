@@ -53,8 +53,11 @@ func (hc *HealthClient) Check(ctx context.Context, endpoint *domain.Endpoint) (r
 
 	healthCheckURL := endpoint.GetHealthCheckURLString()
 
-	// Check circuit breaker first
-	if hc.circuitBreaker.IsOpen(healthCheckURL) {
+	// Check circuit breaker first. attempt correlates this specific admitted
+	// probe (half-open case) with the RecordSuccess/RecordFailure call below -
+	// see CircuitBreaker.RecordSuccess for why that matters.
+	circuitOpen, attempt := hc.circuitBreaker.IsOpen(healthCheckURL, endpoint.CheckTimeout)
+	if circuitOpen {
 		result = domain.HealthCheckResult{
 			Status:     domain.StatusOffline,
 			Error:      ErrCircuitBreakerOpen,
@@ -105,15 +108,15 @@ func (hc *HealthClient) Check(ctx context.Context, endpoint *domain.Endpoint) (r
 	// responding; counting them as failures would trip the CB on misconfigured
 	// credentials or a throttled endpoint, hiding the real cause from the operator.
 	if lastErr != nil {
-		hc.circuitBreaker.RecordFailure(healthCheckURL)
+		hc.circuitBreaker.RecordFailure(healthCheckURL, attempt)
 	} else {
 		switch result.Status {
 		case domain.StatusConfigError, domain.StatusRateLimited:
 			// Do not trip the circuit breaker; this is an operator or rate error, not downtime.
 		case domain.StatusHealthy, domain.StatusBusy:
-			hc.circuitBreaker.RecordSuccess(healthCheckURL)
+			hc.circuitBreaker.RecordSuccess(healthCheckURL, attempt)
 		default:
-			hc.circuitBreaker.RecordFailure(healthCheckURL)
+			hc.circuitBreaker.RecordFailure(healthCheckURL, attempt)
 		}
 	}
 

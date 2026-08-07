@@ -566,11 +566,11 @@ func BenchmarkCircuitBreaker(b *testing.B) {
 		for i := range b.N {
 			// Alternate between checking state and recording success/failure
 			if i%3 == 0 {
-				cb.IsOpen(endpoint)
+				cb.IsOpen(endpoint, 2*time.Second)
 			} else if i%3 == 1 {
-				cb.RecordSuccess(endpoint)
+				cb.RecordSuccess(endpoint, 0)
 			} else {
-				cb.RecordFailure(endpoint)
+				cb.RecordFailure(endpoint, 0)
 			}
 		}
 	})
@@ -585,11 +585,11 @@ func BenchmarkCircuitBreaker(b *testing.B) {
 		for range b.N {
 			// Simulate failure scenarios
 			for range 5 {
-				cb.RecordFailure(endpoint)
+				cb.RecordFailure(endpoint, 0)
 			}
-			cb.IsOpen(endpoint)
+			cb.IsOpen(endpoint, 2*time.Second)
 			// Reset by recording success
-			cb.RecordSuccess(endpoint)
+			cb.RecordSuccess(endpoint, 0)
 		}
 	})
 
@@ -609,14 +609,15 @@ func BenchmarkCircuitBreaker(b *testing.B) {
 			for pb.Next() {
 				endpoint := endpoints[i%len(endpoints)]
 				if i%4 == 0 {
-					cb.IsOpen(endpoint)
+					cb.IsOpen(endpoint, 2*time.Second)
 				} else if i%4 == 1 {
-					cb.RecordSuccess(endpoint)
+					cb.RecordSuccess(endpoint, 0)
 				} else if i%4 == 2 {
-					cb.RecordFailure(endpoint)
+					cb.RecordFailure(endpoint, 0)
 				} else {
 					// Check if should try (inverse of IsOpen)
-					_ = !cb.IsOpen(endpoint)
+					open, _ := cb.IsOpen(endpoint, 2*time.Second)
+					_ = !open
 				}
 				i++
 			}
