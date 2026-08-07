@@ -30,8 +30,9 @@ quantization:
     ZZTESTMARKER: "custom-marker"
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(customYAML), 0644))
-	t.Chdir(dir)
-	t.Setenv("OLLA_CONFIG_DIR", "")
+	// Select the config via OLLA_CONFIG_DIR rather than t.Chdir, so this test
+	// stays isolated from others that use unqualified models.yaml paths.
+	t.Setenv("OLLA_CONFIG_DIR", dir)
 
 	resetConfigSingleton()
 
