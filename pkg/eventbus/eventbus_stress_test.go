@@ -6,6 +6,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestWorkerPool_ConcurrentPublishingStress runs comprehensive stress tests
@@ -129,19 +131,18 @@ func TestEventBus_HighVolumePublishing(t *testing.T) {
 
 	publishDuration := time.Since(start)
 
-	// Wait for processing
-	time.Sleep(2 * time.Second)
+	// Poll for processing to catch up instead of trusting a fixed sleep to
+	// outlast draining on a loaded runner - we only need proof that a
+	// meaningful volume got through, not to measure exactly how fast.
+	require.Eventually(t, func() bool {
+		return received.Load() >= 1000
+	}, 10*time.Second, 50*time.Millisecond, "expected to receive at least 1000 events out of %d", totalEvents)
 	close(done)
 
 	receivedTotal := received.Load()
 	t.Logf("HIGH VOLUME - Published %d events in %v", totalEvents, publishDuration)
 	t.Logf("HIGH VOLUME - Received: %d events (%.2f%%)", receivedTotal, float64(receivedTotal)/float64(totalEvents)*100)
 	t.Logf("HIGH VOLUME - Publish rate: %.0f events/second", float64(totalEvents)/publishDuration.Seconds())
-
-	// We expect significant drops with this volume, but should still process many
-	if receivedTotal < 1000 {
-		t.Errorf("Expected to receive at least 1000 events out of %d, got %d", totalEvents, receivedTotal)
-	}
 }
 
 // TestEventBus_ConcurrentSubscribers tests many concurrent subscribers

@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestWorkerPool_NoGoroutineLeaks verifies the worker pool doesn't leak goroutines
@@ -50,25 +52,21 @@ loop:
 	// Shutdown EventBus
 	eb.Shutdown()
 
-	// Give time for goroutines to clean up
-	time.Sleep(500 * time.Millisecond)
-	runtime.GC()
-	time.Sleep(100 * time.Millisecond)
-
-	// Check goroutine count
-	finalGoroutines := runtime.NumGoroutine()
-	leaked := finalGoroutines - baselineGoroutines
+	// Poll for worker goroutines to actually exit instead of trusting a fixed
+	// sleep to outlast scheduler delays on a loaded runner.
+	var finalGoroutines, leaked int
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		finalGoroutines = runtime.NumGoroutine()
+		leaked = finalGoroutines - baselineGoroutines
+		return leaked <= 5 // small tolerance for test framework overhead
+	}, pollCeiling, pollInterval, "goroutine leak: expected leaked <= 5")
 
 	t.Logf("Baseline goroutines: %d", baselineGoroutines)
 	t.Logf("Final goroutines: %d", finalGoroutines)
 	t.Logf("Events published: %d", numEvents)
 	t.Logf("Events received: %d", received)
 	t.Logf("Leaked goroutines: %d", leaked)
-
-	// Allow for a small tolerance (test framework overhead)
-	if leaked > 5 {
-		t.Errorf("Goroutine leak detected: %d goroutines leaked", leaked)
-	}
 }
 
 // TestWorkerPool_HandlesBackpressure verifies the worker pool handles backpressure
@@ -106,19 +104,22 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 		}
 	}()
 
-	// Let it run
-	time.Sleep(2 * time.Second)
+	// Wait for every publish call to be issued, rather than hoping a fixed
+	// sleep is long enough on a loaded runner.
+	require.Eventually(t, func() bool {
+		return published.Load() == 1000
+	}, pollCeiling, pollInterval, "not all events were published")
 
-	publishedCount := published.Load()
-	receivedCount := received.Load()
+	// The tiny buffer (10) against a consumer sleeping 1ms/event guarantees
+	// backpressure drops well before the flood finishes - poll the drop
+	// counter directly instead of inferring it from received vs published
+	// counts after an arbitrary wait.
+	require.Eventually(t, func() bool {
+		return eb.Stats().TotalDropped > 0
+	}, pollCeiling, pollInterval, "expected some events to be dropped due to backpressure")
 
-	t.Logf("Published: %d", publishedCount)
-	t.Logf("Received: %d", receivedCount)
-
-	// We expect some events to be dropped due to backpressure
-	if receivedCount >= publishedCount {
-		t.Error("Expected some events to be dropped due to backpressure")
-	}
+	t.Logf("Published: %d", published.Load())
+	t.Logf("Received: %d", received.Load())
 }
 
 // TestWorkerPool_PublishAsyncShutdownRace exercises the TOCTOU window that existed
@@ -208,8 +209,14 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	// Wait for all publishers to finish
 	wg.Wait()
 
-	// Give time for events to be processed
-	time.Sleep(200 * time.Millisecond)
+	// With smaller numbers and delays, we should receive most events.
+	// Poll for delivery to catch up instead of trusting a fixed sleep to
+	// outlast processing on a loaded runner - allow for some drops but
+	// expect at least 80% delivery.
+	minExpected := int64(float64(numPublishers*eventsPerPublisher) * 0.8)
+	require.Eventually(t, func() bool {
+		return receivedCount.Load() >= minExpected
+	}, pollCeiling, pollInterval, "expected at least %d events to be delivered", minExpected)
 
 	// Stop receiver
 	close(done)
@@ -219,13 +226,6 @@ func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 
 	t.Logf("Published: %d", publishedTotal)
 	t.Logf("Received: %d events", receivedTotal)
-
-	// With smaller numbers and delays, we should receive most events
-	// Allow for some drops but expect at least 80% delivery
-	minExpected := int64(float64(numPublishers*eventsPerPublisher) * 0.8)
-	if receivedTotal < minExpected {
-		t.Errorf("Expected at least %d events, got %d", minExpected, receivedTotal)
-	}
 
 	// Ensure we actually published what we expected
 	if publishedTotal != int64(numPublishers*eventsPerPublisher) {

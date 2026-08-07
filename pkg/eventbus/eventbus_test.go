@@ -6,6 +6,16 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+)
+
+// pollCeiling and pollInterval bound the require.Eventually polls across the
+// eventbus package's tests: generous enough to absorb scheduler jitter on a
+// loaded CI runner, tight enough to keep the suite fast on the happy path.
+const (
+	pollCeiling  = 5 * time.Second
+	pollInterval = 20 * time.Millisecond
 )
 
 type TestEvent struct {
@@ -365,14 +375,11 @@ func TestEventBus_CleanupInactiveSubscribers(t *testing.T) {
 	// Cancel context to make subscriber inactive
 	cancel()
 
-	// Wait for cleanup cycle
-	time.Sleep(200 * time.Millisecond)
-
-	// Subscriber should be cleaned up
-	stats = bus.Stats()
-	if stats.TotalSubscribers != 0 {
-		t.Errorf("Expected subscriber to be cleaned up, got %d subscribers", stats.TotalSubscribers)
-	}
+	// Wait for the cleanup ticker to actually purge the subscriber, rather than
+	// hoping a fixed sleep outlasts however many ticks a loaded runner needs.
+	require.Eventually(t, func() bool {
+		return bus.Stats().TotalSubscribers == 0
+	}, pollCeiling, pollInterval, "subscriber was not cleaned up")
 
 	// Channel won't be closed (to prevent panics), but should not receive events
 	select {
