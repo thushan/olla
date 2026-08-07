@@ -32,6 +32,7 @@ func TestFactory_UnsetConfig_AppliesEngineDefaults(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected *olla.Service, got %T", svc)
 		}
+		t.Cleanup(ollaSvc.Cleanup)
 		effective := ollaSvc.Configuration()
 
 		if effective.StreamBufferSize != config.OllaDefaultStreamBufferSize {
