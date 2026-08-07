@@ -403,18 +403,20 @@ func TestConfigurableProfile_ShippedProfiles_SizeBucketsResolve(t *testing.T) {
 
 			profile := NewConfigurableProfile(&cfg)
 
-			// Every size bucket must be reachable from a realistic model name
-			// built around its own first pattern - if any bucket is dead, the
-			// pattern is glob-wrapped (or otherwise broken) again.
+			// Every pattern in every size bucket must be reachable from a
+			// realistic model name - if any pattern is dead (glob-wrapped or
+			// otherwise broken), this needs to catch it, not just the bucket's
+			// first pattern.
 			for _, bucket := range cfg.Resources.ModelSizes {
 				require.NotEmpty(t, bucket.Patterns, "%s: model_sizes bucket has no patterns", filename)
-				token := bucket.Patterns[0]
-				modelName := "test-model-" + token + "-instruct"
+				for _, token := range bucket.Patterns {
+					modelName := "test-model-" + token + "-instruct"
 
-				got := profile.GetResourceRequirements(modelName, nil)
-				assert.Equalf(t, bucket.MinMemoryGB, got.MinMemoryGB,
-					"%s: model %q (pattern %q) resolved to MinMemoryGB=%v, want the %q bucket's %v - pattern is likely glob-wrapped and dead",
-					filename, modelName, token, got.MinMemoryGB, token, bucket.MinMemoryGB)
+					got := profile.GetResourceRequirements(modelName, nil)
+					assert.Equalf(t, bucket.MinMemoryGB, got.MinMemoryGB,
+						"%s: model %q (pattern %q) resolved to MinMemoryGB=%v, want the %q bucket's %v - pattern is likely glob-wrapped and dead",
+						filename, modelName, token, got.MinMemoryGB, token, bucket.MinMemoryGB)
+				}
 			}
 		})
 	}

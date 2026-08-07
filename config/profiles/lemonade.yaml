@@ -194,6 +194,14 @@ resources:
       recommended_memory_gb: 32
       min_gpu_memory_gb: 16
       estimated_load_time_ms: 30000
+    # Checked before the 7b/8b bucket: "1.7b" contains "7b" on a word
+    # boundary (the "." counts as a separator), so it must resolve here
+    # first or it silently falls into the 7B bucket instead.
+    - patterns: ["0.5b", "0.6b", "1b", "1.5b", "1.7b"]
+      min_memory_gb: 2
+      recommended_memory_gb: 4
+      min_gpu_memory_gb: 2
+      estimated_load_time_ms: 10000
     - patterns: ["7b", "8b"]
       min_memory_gb: 8
       recommended_memory_gb: 16
@@ -204,11 +212,6 @@ resources:
       recommended_memory_gb: 8
       min_gpu_memory_gb: 4
       estimated_load_time_ms: 15000
-    - patterns: ["0.5b", "0.6b", "1b", "1.5b", "1.7b"]
-      min_memory_gb: 2
-      recommended_memory_gb: 4
-      min_gpu_memory_gb: 2
-      estimated_load_time_ms: 10000
 
   defaults:
     min_memory_gb: 4

@@ -145,6 +145,14 @@ resources:
       recommended_memory_gb: 16
       min_gpu_memory_gb: 10
       estimated_load_time_ms: 60000
+    # Checked before the 7b/8b bucket: "1.7b" contains "7b" on a word
+    # boundary (the "." counts as a separator), so it must resolve here
+    # first or it silently falls into the 7B bucket instead.
+    - patterns: ["1b", "1.5b", "1.7b"]
+      min_memory_gb: 2
+      recommended_memory_gb: 3
+      min_gpu_memory_gb: 2
+      estimated_load_time_ms: 10000
     - patterns: ["7b", "8b"]
       min_memory_gb: 6
       recommended_memory_gb: 8
@@ -155,11 +163,6 @@ resources:
       recommended_memory_gb: 4
       min_gpu_memory_gb: 3
       estimated_load_time_ms: 15000
-    - patterns: ["1b", "1.5b", "1.7b"]
-      min_memory_gb: 2
-      recommended_memory_gb: 3
-      min_gpu_memory_gb: 2
-      estimated_load_time_ms: 10000
 
   # Quantization multipliers (same as llama.cpp for GGUF models)
   quantization:
