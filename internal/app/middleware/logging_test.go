@@ -108,6 +108,34 @@ func TestCombinedLoggingMiddleware_BasicPassthrough(t *testing.T) {
 	}
 }
 
+// TestCombinedLoggingMiddleware_UsesInjectedLogger is the regression test for
+// the console and access records silently going through slog.Default()
+// instead of the styledLogger passed in - a configured logger (level, theme,
+// output target) would have no effect on request logging.
+func TestCombinedLoggingMiddleware_UsesInjectedLogger(t *testing.T) {
+	var buf strings.Builder
+	injected := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	mockLogger := &mockStyledLogger{underlying: injected}
+
+	handler := CombinedLoggingMiddleware(mockLogger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// A plain path outside /api/, /olla/ and /internal/ so neither quiet gate
+	// fires and both records use their loud (non-abbreviated) message.
+	req := httptest.NewRequest("GET", "/hello", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	out := buf.String()
+	if !strings.Contains(out, "Request started") || !strings.Contains(out, "Request completed") {
+		t.Errorf("expected both console lifecycle records on the injected logger, got: %q", out)
+	}
+	if !strings.Contains(out, "Access log") {
+		t.Errorf("expected the access log record on the injected logger, got: %q", out)
+	}
+}
+
 func TestFormatBytes(t *testing.T) {
 	tests := []struct {
 		input    int64
@@ -405,7 +433,9 @@ func TestCombinedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
 }
 
 // Mock styled logger for testing
-type mockStyledLogger struct{}
+type mockStyledLogger struct {
+	underlying *slog.Logger
+}
 
 func (m *mockStyledLogger) Debug(msg string, args ...any)                                {}
 func (m *mockStyledLogger) Info(msg string, args ...any)                                 {}
@@ -422,7 +452,12 @@ func (m *mockStyledLogger) ErrorWithEndpoint(msg string, endpoint string, args .
 func (m *mockStyledLogger) InfoHealthy(msg string, endpoint string, args ...any)         {}
 func (m *mockStyledLogger) InfoHealthStatus(msg string, name string, status domain.EndpointStatus, args ...any) {
 }
-func (m *mockStyledLogger) GetUnderlying() *slog.Logger                                         { return slog.Default() }
+func (m *mockStyledLogger) GetUnderlying() *slog.Logger {
+	if m.underlying != nil {
+		return m.underlying
+	}
+	return slog.Default()
+}
 func (m *mockStyledLogger) WithRequestID(requestID string) logger.StyledLogger                  { return m }
 func (m *mockStyledLogger) InfoConfigChange(oldName, newName string)                            {}
 func (m *mockStyledLogger) WithAttrs(attrs ...slog.Attr) logger.StyledLogger                    { return m }

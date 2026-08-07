@@ -228,7 +228,7 @@ func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			}
 
 			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
-			baseLogger := slog.Default().With(constants.ContextRequestIdKey, requestID)
+			baseLogger := styledLogger.GetUnderlying().With(constants.ContextRequestIdKey, requestID)
 			ctx = context.WithValue(ctx, LoggerKey, baseLogger)
 
 			w.Header().Set("X-Olla-Request-ID", requestID)
@@ -270,7 +270,7 @@ func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			// Access log uses a plain (non-.With'd) logger since request_id is
 			// already an explicit field below - attaching it via .With() as well
 			// would double it up in the emitted record.
-			accessLogger := slog.Default()
+			accessLogger := styledLogger.GetUnderlying()
 			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
 			accessLevel := accessLogLevel(r.Method, r.URL.Path, wrapped.status)
 			if accessLogger.Enabled(detailedCtx, accessLevel) {
