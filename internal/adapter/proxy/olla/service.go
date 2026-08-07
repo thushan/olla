@@ -424,7 +424,7 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 		newConfig.TLSHandshakeTimeout = ollaConfig.TLSHandshakeTimeout
 	} else if current != nil {
 		// fallback: preserve current Olla-specific pool tunables for non-Olla
-		// configs. Guard against a nil current pointer — only reachable if
+		// configs. Guard against a nil current pointer - only reachable if
 		// UpdateConfig is called on a zero-value Service (e.g. in tests)
 		// before NewService stores the initial configuration.
 		newConfig.MaxIdleConns = current.MaxIdleConns
