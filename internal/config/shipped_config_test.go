@@ -22,7 +22,10 @@ import (
 const repoConfigPath = "../../config/config.yaml"
 
 // repoRootConfigPath is the sibling copy of config.yaml kept at the repo
-// root for convenience (`go run .` picks it up without a -config flag).
+// root. Load's search order tries config/config.yaml first, so this copy is
+// never actually read when config/config.yaml is present - it exists for
+// operators who copy just the root file out of a checkout. The drift guard
+// below keeps the two byte-identical so which one Load finds never matters.
 const repoRootConfigPath = "../../config.yaml"
 
 // TestRootConfig_MatchesShippedConfig is the drift guard between the two
