@@ -37,7 +37,7 @@ func (s *Service) ProxyRequestToEndpointsWithRetry(ctx context.Context, w http.R
 		} else {
 			rlog.Error("no healthy endpoints available")
 		}
-		s.RecordFailure(ctx, nil, time.Since(stats.StartTime), common.ErrNoHealthyEndpoints)
+		s.RecordFailure(ctx, nil, stats.Model, time.Since(stats.StartTime), common.ErrNoHealthyEndpoints)
 		return common.ErrNoHealthyEndpoints
 	}
 
@@ -75,7 +75,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	proxyReq, err := http.NewRequestWithContext(ctx, r.Method, targetURL.String(), r.Body)
 	if err != nil {
-		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), err)
+		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), err)
 		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
@@ -106,7 +106,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		} else {
 			rlog.Error("round-trip failed", "error", err)
 		}
-		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), err)
+		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), err)
 		duration := time.Since(stats.StartTime)
 		return common.MakeUserFriendlyError(err, duration, "backend", s.configuration.GetResponseTimeout())
 	}
@@ -129,7 +129,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	buffer, poolErr := s.bufferPool.Get()
 	if poolErr != nil {
-		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), poolErr)
+		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), poolErr)
 		return fmt.Errorf("sherpa: stream buffer unavailable: %w", poolErr)
 	}
 	defer s.bufferPool.Put(buffer)
@@ -148,13 +148,13 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
 		rlog.Error("streaming failed", "error", streamErr)
-		s.RecordFailure(ctx, endpoint, time.Since(stats.StartTime), streamErr)
+		s.RecordFailure(ctx, endpoint, stats.Model, time.Since(stats.StartTime), streamErr)
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", s.configuration.GetResponseTimeout())
 	}
 
 	// We've successfully written the response
 	duration := time.Since(stats.StartTime)
-	s.RecordSuccess(endpoint, duration.Milliseconds(), int64(bytesWritten))
+	s.RecordSuccess(endpoint, stats.Model, duration.Milliseconds(), int64(bytesWritten))
 
 	s.PublishEvent(core.ProxyEvent{
 		Type:      core.EventTypeProxySuccess,

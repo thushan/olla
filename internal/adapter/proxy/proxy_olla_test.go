@@ -284,10 +284,10 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 				if j%2 == 0 {
 					// Simulate success
 					latency := time.Duration((id*operationsPerGoroutine+j+1)*10) * time.Millisecond
-					proxy.RecordSuccess(nil, latency.Milliseconds(), 1000)
+					proxy.RecordSuccess(nil, "", latency.Milliseconds(), 1000)
 				} else {
 					// Simulate failure
-					proxy.RecordFailure(context.Background(), nil, time.Duration(10)*time.Millisecond, errors.New("test error"))
+					proxy.RecordFailure(context.Background(), nil, "", time.Duration(10)*time.Millisecond, errors.New("test error"))
 				}
 			}
 		}(i)
