@@ -278,9 +278,12 @@ func (p *ConfigurableProfile) GetResourceRequirements(modelName string, registry
 		}
 	}
 
-	// Use defaults if no pattern matched
+	// Use defaults if no pattern matched. Copy rather than alias: the
+	// quantisation scaling below mutates baseReqs in place, and it would
+	// otherwise corrupt the shared config defaults for every later caller.
 	if baseReqs == nil {
-		baseReqs = &p.config.Resources.Defaults
+		defaults := p.config.Resources.Defaults
+		baseReqs = &defaults
 	}
 
 	// Apply quantization multipliers if configured

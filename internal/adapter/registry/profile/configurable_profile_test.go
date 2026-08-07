@@ -2,6 +2,7 @@ package profile
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -442,4 +443,91 @@ func TestConfigurableProfile_VLLM_SizeTokenBoundary(t *testing.T) {
 	assert.Equal(t, 16.0, sevenB.MinMemoryGB, "7B model must resolve to the 7b/8b bucket, not fall through")
 	assert.NotEqual(t, sevenB.MinMemoryGB, seventeenB.MinMemoryGB, "17B model must not match the 7b token")
 	assert.Equal(t, cfg.Resources.Defaults.MinMemoryGB, seventeenB.MinMemoryGB, "17B model has no matching bucket, so it must fall through to defaults")
+}
+
+// unmatchedQuantisationConfig builds a profile config whose only bucket never
+// matches, so every request falls through to resources.defaults - the path
+// where a quantisation multiplier used to be applied in place to the shared
+// defaults struct rather than a per-call copy.
+func unmatchedQuantisationConfig() *domain.ProfileConfig {
+	return &domain.ProfileConfig{
+		Resources: struct {
+			Quantization struct {
+				Multipliers map[string]float64 `yaml:"multipliers"`
+			} `yaml:"quantization"`
+			ModelSizes        []domain.ModelSizePattern        `yaml:"model_sizes"`
+			ConcurrencyLimits []domain.ConcurrencyLimitPattern `yaml:"concurrency_limits"`
+			Defaults          domain.ResourceRequirements      `yaml:"defaults"`
+			TimeoutScaling    domain.TimeoutScaling            `yaml:"timeout_scaling"`
+		}{
+			Quantization: struct {
+				Multipliers map[string]float64 `yaml:"multipliers"`
+			}{
+				Multipliers: map[string]float64{"q4": 0.5},
+			},
+			// A bucket that can never match "unmatched-model-*", so both
+			// requests below fall through to Defaults.
+			ModelSizes: []domain.ModelSizePattern{
+				{Patterns: []string{"999b"}, MinMemoryGB: 500, RecommendedMemoryGB: 600, MinGPUMemoryGB: 500},
+			},
+			Defaults: domain.ResourceRequirements{
+				MinMemoryGB:         10,
+				RecommendedMemoryGB: 20,
+				MinGPUMemoryGB:      10,
+			},
+		},
+	}
+}
+
+// TestConfigurableProfile_QuantisationDoesNotMutateSharedDefaults guards
+// against GetResourceRequirements applying a quantisation multiplier
+// in place to p.config.Resources.Defaults. baseReqs used to alias that
+// shared struct when no size bucket matched, so a quantised model
+// requested first would permanently scale down the defaults every later
+// caller - including unquantised requests - received.
+func TestConfigurableProfile_QuantisationDoesNotMutateSharedDefaults(t *testing.T) {
+	config := unmatchedQuantisationConfig()
+	profile := NewConfigurableProfile(config)
+
+	quantised := profile.GetResourceRequirements("unmatched-model-q4", nil)
+	assert.Equal(t, 5.0, quantised.MinMemoryGB, "quantised call should see the scaled value")
+
+	plain := profile.GetResourceRequirements("unmatched-model-plain", nil)
+	assert.Equal(t, 10.0, plain.MinMemoryGB, "unquantised call after a quantised one must still see unscaled defaults")
+	assert.Equal(t, 20.0, plain.RecommendedMemoryGB)
+	assert.Equal(t, 10.0, plain.MinGPUMemoryGB)
+
+	assert.Equal(t, 10.0, config.Resources.Defaults.MinMemoryGB, "the shared config defaults must never be mutated")
+}
+
+// TestConfigurableProfile_QuantisationConcurrentCallsDoNotRace exercises the
+// same fall-through-to-defaults path from many goroutines simultaneously.
+// Prior to the copy-before-scale fix this both corrupted results (later
+// calls could observe a partially or fully scaled-down default) and raced
+// under -race, since every goroutine mutated the same shared struct fields.
+func TestConfigurableProfile_QuantisationConcurrentCallsDoNotRace(t *testing.T) {
+	config := unmatchedQuantisationConfig()
+	profile := NewConfigurableProfile(config)
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := range goroutines {
+		go func(n int) {
+			defer wg.Done()
+			modelName := "unmatched-model-plain"
+			if n%2 == 0 {
+				modelName = "unmatched-model-q4"
+			}
+			got := profile.GetResourceRequirements(modelName, nil)
+			if n%2 == 1 {
+				assert.Equal(t, 10.0, got.MinMemoryGB)
+			} else {
+				assert.Equal(t, 5.0, got.MinMemoryGB)
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	assert.Equal(t, 10.0, config.Resources.Defaults.MinMemoryGB, "the shared config defaults must never be mutated by concurrent callers")
 }
