@@ -487,12 +487,17 @@ func TestFamilyPatternBoundaries(t *testing.T) {
 	}
 
 	// gpt-oss's own boundary is checked against its compiled regex directly,
-	// not via extractFromPatterns: "gpt-ossify-1b" fails the gpt-oss pattern
-	// correctly, but then falls through to the separate, unrelated, and
-	// out-of-scope "gpt" pattern (`^(gpt)[-_]?(2|j|neox)?`, not covered by
-	// this fix), which has the identical unbounded-suffix bug and would
-	// misreport family "gpt" - a false failure attributable to a different
-	// pattern, not this one.
+	// not via extractFromPatterns: "gpt-ossify-1b" correctly fails the
+	// gpt-oss pattern, but then falls through to the separate "gpt" pattern
+	// (`^(gpt)(?:[-_.:]?(2|j|neox))?(?:$|[^a-zA-Z])`, boundary-tightened by a
+	// later fix), which still resolves it to family "gpt" - not a leftover
+	// bug, but the same accepted trade-off every boundary-tightened pattern
+	// in this file makes: a delimiter immediately after the family literal
+	// satisfies the boundary check on its own, regardless of what follows
+	// (see e.g. "granite-plus" -> "granite" reasoning elsewhere in this
+	// package). Exercising extractFromPatterns end-to-end here would fail on
+	// that unrelated "gpt" collision instead of testing gpt-oss's own
+	// boundary, so this checks gpt-oss's compiled regex in isolation.
 	var gptOssRegex *regexp.Regexp
 	for _, p := range config.ModelExtraction.FamilyPatterns {
 		if p.Description == "OpenAI open-weight gpt-oss models" {

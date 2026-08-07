@@ -202,7 +202,17 @@ func TestSizeValidator_Validate_ZeroHeaderLimitUsesDefaultCap(t *testing.T) {
 	}
 }
 
-func TestSizeValidator_Validate_ZeroLimitsDisabled(t *testing.T) {
+// TestSizeValidator_Validate_ZeroBodyDisabled_ZeroHeaderUnderDefaultCap
+// covers max_body_size: 0 and max_header_size: 0 together at small values
+// that pass either way, so it doesn't overlap with
+// TestSizeValidator_Validate_ZeroHeaderLimitUsesDefaultCap (which asserts
+// the header default cap actually rejects an oversized block). The two
+// zeros mean different things: max_body_size: 0 genuinely disables the body
+// check (unbounded), but max_header_size: 0 is NOT "disabled" - it falls
+// back to the default 1 MiB cap - these headers are just small enough
+// (5000 bytes) to pass under that cap regardless, not because the check is
+// off.
+func TestSizeValidator_Validate_ZeroBodyDisabled_ZeroHeaderUnderDefaultCap(t *testing.T) {
 	limits := config.ServerRequestLimits{
 		MaxBodySize:   0,
 		MaxHeaderSize: 0,
@@ -227,7 +237,7 @@ func TestSizeValidator_Validate_ZeroLimitsDisabled(t *testing.T) {
 		t.Fatalf("Validate failed: %v", err)
 	}
 	if !result.Allowed {
-		t.Errorf("Request should be allowed when limits are disabled, got: %s", result.Reason)
+		t.Errorf("expected the body (disabled) and small headers (under the default cap) to both be allowed, got: %s", result.Reason)
 	}
 }
 
