@@ -95,7 +95,15 @@ func TestWorkerPool_ConcurrentPublishingStress(t *testing.T) {
 	}
 }
 
-// TestEventBus_HighVolumePublishing tests with very high volume
+// TestEventBus_HighVolumePublishing floods the bus with far more events than
+// its worker queue (1000) and subscriber buffer (bus.bufferSize, default 100)
+// can hold. PublishAsync is deliberately non-blocking - see EventBus.PublishAsync
+// and WorkerPool.PublishAsync - so under an unthrottled storm the bus WILL drop
+// events rather than block the publisher or the workers. There is no delivery
+// floor this bus promises during a storm that outruns its buffers, so this test
+// proves the storm doesn't block the publisher, doesn't wedge the bus, and that
+// the bus is still delivering normally once the storm has drained - not that a
+// specific count of events survived it.
 func TestEventBus_HighVolumePublishing(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping high volume test in short mode")
@@ -110,7 +118,9 @@ func TestEventBus_HighVolumePublishing(t *testing.T) {
 	// Drain events in background
 	var received atomic.Int64
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		for {
 			select {
 			case <-ch:
@@ -131,17 +141,49 @@ func TestEventBus_HighVolumePublishing(t *testing.T) {
 
 	publishDuration := time.Since(start)
 
-	// Poll for processing to catch up instead of trusting a fixed sleep to
-	// outlast draining on a loaded runner - we only need proof that a
-	// meaningful volume got through, not to measure exactly how fast.
+	// The whole point of PublishAsync is that the publisher never blocks on a
+	// backed-up bus - prove that held under real load.
+	require.Less(t, publishDuration, 5*time.Second, "PublishAsync must not block the publisher under load")
+
+	// The worker queue can hold at most 1000 events in flight, so whatever got
+	// queued drains quickly once publishing stops. Wait for the received count
+	// to stop climbing rather than guessing a fixed delay.
 	require.Eventually(t, func() bool {
-		return received.Load() >= 1000
-	}, 10*time.Second, 50*time.Millisecond, "expected to receive at least 1000 events out of %d", totalEvents)
-	close(done)
+		before := received.Load()
+		time.Sleep(100 * time.Millisecond)
+		return received.Load() == before
+	}, 5*time.Second, 10*time.Millisecond, "received count never stabilised after the storm - bus may be wedged")
 
 	receivedTotal := received.Load()
+
+	// Stop the background drainer and wait for it to actually exit before
+	// probing directly on ch - otherwise the two readers race for the same
+	// delivery and the probe can lose nondeterministically.
+	close(done)
+	<-stopped
+
+	// Prove the bus survived the storm rather than silently wedging: publish one
+	// more event synchronously and confirm the now-sole reader gets it.
+	delivered := bus.Publish(-1)
+	require.Equal(t, 1, delivered, "bus should still deliver to the live subscriber after the storm")
+	select {
+	case v := <-ch:
+		require.Equal(t, -1, v)
+	case <-time.After(time.Second):
+		t.Fatal("bus did not deliver a post-storm event - looks wedged")
+	}
+
+	// Subscriber-level drops are tracked in Stats().TotalDropped; drops in the
+	// worker queue itself (WorkerPool.PublishAsync's "queue full" branch) are
+	// not counted, so this is a lower bound, not an exact reconciliation -
+	// still enough to catch a corrupted or overflowing counter.
+	stats := bus.Stats()
+	require.LessOrEqual(t, receivedTotal+int64(stats.TotalDropped), int64(totalEvents)+1,
+		"delivered + tracked drops should never exceed what was published")
+
 	t.Logf("HIGH VOLUME - Published %d events in %v", totalEvents, publishDuration)
 	t.Logf("HIGH VOLUME - Received: %d events (%.2f%%)", receivedTotal, float64(receivedTotal)/float64(totalEvents)*100)
+	t.Logf("HIGH VOLUME - Tracked drops: %d", stats.TotalDropped)
 	t.Logf("HIGH VOLUME - Publish rate: %.0f events/second", float64(totalEvents)/publishDuration.Seconds())
 }
 
