@@ -217,13 +217,13 @@ As of v0.0.16, the retry mechanism is automatic and built-in for connection fail
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `stream_buffer_size` | int | `8192` | Stream buffer size (bytes) |
+| `stream_buffer_size` | int | unset (engine default: Olla 64KiB, Sherpa 8KiB) | Stream buffer size (bytes) |
 
 Example:
 
 ```yaml
 proxy:
-  stream_buffer_size: 8192
+  # stream_buffer_size: 8192  # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB)
 ```
 
 ### Profile Filtering
@@ -947,7 +947,7 @@ proxy:
   # DEPRECATED as of v0.0.16 - retry is now automatic
   # max_retries: 3
   # retry_backoff: 1s
-  stream_buffer_size: 8192
+  # stream_buffer_size: 8192  # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB)
 
 discovery:
   type: "static"
