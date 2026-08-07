@@ -147,6 +147,16 @@ func (eb *EventBus[T]) PublishAsync(event T) {
 	}
 }
 
+// Drain blocks until every event queued via PublishAsync before this call
+// has been fully processed (delivered to or dropped by every subscriber).
+// See WorkerPool.Drain for the exact idle semantics and its call-order
+// contract with Shutdown. A no-op if the bus has no worker pool.
+func (eb *EventBus[T]) Drain() {
+	if eb.workerPool != nil {
+		eb.workerPool.Drain()
+	}
+}
+
 // Shutdown gracefully stops the event bus
 func (eb *EventBus[T]) Shutdown() {
 	if !eb.isShutdown.CompareAndSwap(false, true) {
