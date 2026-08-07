@@ -580,20 +580,27 @@ func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.Inference
 	llamaCppConfig.Request.ParsingRules.CompletionsPath = constants.PathV1Completions
 	llamaCppConfig.Request.ParsingRules.ModelFieldName = DefaultModelKey
 	llamaCppConfig.Request.ParsingRules.SupportsStreaming = true
-	llamaCppConfig.PathIndices.Health = 0
-	llamaCppConfig.PathIndices.Models = 4
-	llamaCppConfig.PathIndices.ChatCompletions = 7
-	llamaCppConfig.PathIndices.Completions = 6
-	llamaCppConfig.PathIndices.Embeddings = 9
+	// Health is not addressable here: /health is deliberately excluded from
+	// API.Paths above (Olla doesn't aggregate it yet), so there is no valid
+	// index to point at. -1 marks it as absent rather than aliasing another
+	// path's slot; API.HealthCheckPath is the field actually used for health
+	// checks. The remaining indices match the enabled entries in API.Paths.
+	llamaCppConfig.PathIndices.Health = -1
+	llamaCppConfig.PathIndices.Models = 0
+	llamaCppConfig.PathIndices.ChatCompletions = 3
+	llamaCppConfig.PathIndices.Completions = 2
+	llamaCppConfig.PathIndices.Embeddings = 5
 
-	// Resource patterns for built-in llama.cpp profile
+	// Resource patterns for built-in llama.cpp profile. Bare size tokens, not
+	// globs: GetResourceRequirements matches these with strings.Contains, so
+	// asterisk-wrapped patterns like "*70b*" never match anything.
 	llamaCppConfig.Resources.ModelSizes = []domain.ModelSizePattern{
-		{Patterns: []string{"*70b*", "*72b*"}, MinMemoryGB: 40, RecommendedMemoryGB: 48, MinGPUMemoryGB: 40, EstimatedLoadTimeMS: 300000},
-		{Patterns: []string{"*34b*", "*33b*", "*30b*"}, MinMemoryGB: 20, RecommendedMemoryGB: 24, MinGPUMemoryGB: 20, EstimatedLoadTimeMS: 120000},
-		{Patterns: []string{"*13b*", "*14b*"}, MinMemoryGB: 10, RecommendedMemoryGB: 16, MinGPUMemoryGB: 10, EstimatedLoadTimeMS: 60000},
-		{Patterns: []string{"*7b*", "*8b*"}, MinMemoryGB: 6, RecommendedMemoryGB: 8, MinGPUMemoryGB: 6, EstimatedLoadTimeMS: 30000},
-		{Patterns: []string{"*3b*"}, MinMemoryGB: 3, RecommendedMemoryGB: 4, MinGPUMemoryGB: 3, EstimatedLoadTimeMS: 15000},
-		{Patterns: []string{"*1b*", "*1.5b*"}, MinMemoryGB: 2, RecommendedMemoryGB: 3, MinGPUMemoryGB: 2, EstimatedLoadTimeMS: 10000},
+		{Patterns: []string{"70b", "72b"}, MinMemoryGB: 40, RecommendedMemoryGB: 48, MinGPUMemoryGB: 40, EstimatedLoadTimeMS: 300000},
+		{Patterns: []string{"34b", "33b", "30b"}, MinMemoryGB: 20, RecommendedMemoryGB: 24, MinGPUMemoryGB: 20, EstimatedLoadTimeMS: 120000},
+		{Patterns: []string{"13b", "14b"}, MinMemoryGB: 10, RecommendedMemoryGB: 16, MinGPUMemoryGB: 10, EstimatedLoadTimeMS: 60000},
+		{Patterns: []string{"7b", "8b"}, MinMemoryGB: 6, RecommendedMemoryGB: 8, MinGPUMemoryGB: 6, EstimatedLoadTimeMS: 30000},
+		{Patterns: []string{"3b"}, MinMemoryGB: 3, RecommendedMemoryGB: 4, MinGPUMemoryGB: 3, EstimatedLoadTimeMS: 15000},
+		{Patterns: []string{"1b", "1.5b"}, MinMemoryGB: 2, RecommendedMemoryGB: 3, MinGPUMemoryGB: 2, EstimatedLoadTimeMS: 10000},
 	}
 	llamaCppConfig.Resources.Quantization.Multipliers = map[string]float64{
 		"q2":  0.35,
