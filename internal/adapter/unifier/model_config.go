@@ -310,7 +310,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 			Description:  "OpenAI open-weight gpt-oss models",
 		},
 		{
-			Pattern:      `^(gpt)[-_]?(2|j|neox)?`,
+			Pattern:      `^(gpt)(?:[-_.:]?(2|j|neox))?(?:$|[^a-zA-Z])`,
 			FamilyGroup:  1,
 			VariantGroup: 2,
 			Description:  "GPT variants",

@@ -29,7 +29,7 @@ model_extraction:
       variant_group: 2
       description: "OpenAI open-weight gpt-oss models"
 
-    - pattern: "^(gpt)[-_]?(2|j|neox)?"
+    - pattern: '^(gpt)(?:[-_.:]?(2|j|neox))?(?:$|[^a-zA-Z])'
       family_group: 1
       variant_group: 2
       description: "GPT variants"

@@ -467,6 +467,16 @@ func TestFamilyPatternBoundaries(t *testing.T) {
 
 		{"forge: unrelated name sharing the prefix must not match", "forgery-1b", ""},
 		{"forge: hyphen boundary", "forge-code-2.5-code", "forge"},
+
+		// gpt's variant is a restricted alternation (2|j|neox), not an
+		// arbitrary catch-all, but the same unanchored-suffix bug applied:
+		// "gptx-70b" used to match family "gpt" with an empty variant.
+		{"gpt: unrelated name sharing the prefix must not match", "gptx-70b", ""},
+		{"gpt: bare digit boundary", "gpt2", "gpt"},
+		{"gpt: hyphen boundary", "gpt-j-6b", "gpt"},
+		// gpt-oss is listed earlier in family_patterns and must keep winning
+		// over the plain "gpt" pattern for its own names.
+		{"gpt-oss: not shadowed by the plain gpt pattern", "gpt-oss:20b", "gpt-oss"},
 	}
 
 	for _, tt := range tests {
