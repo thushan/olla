@@ -215,7 +215,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	ollamaConfig.Characteristics.StreamingSupport = true
 	ollamaConfig.Characteristics.Auth = domain.AuthHint{Types: []string{"bearer"}}
 	ollamaConfig.Detection.UserAgentPatterns = []string{"ollama/"}
-	ollamaConfig.Detection.Headers = []string{"X-ProfileOllama-Version"}
+	ollamaConfig.Detection.Headers = []string{"X-Ollama-Version"}
 	ollamaConfig.Detection.PathIndicators = []string{"/", "/api/tags"}
 	ollamaConfig.Detection.DefaultPorts = []int{11434}
 	ollamaConfig.Models.NameFormat = defaultNameFormat
