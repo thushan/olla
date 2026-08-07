@@ -869,6 +869,8 @@ func TestHealthCheckLoop_CancelledContextAbortsInFlightChecks(t *testing.T) {
 	checker := NewHTTPHealthChecker(repo, styledLogger, blocking)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	// Also release the context if an assertion below aborts the test early.
+	defer cancel()
 
 	// Drive a single performHealthChecks tick directly from a goroutine, then
 	// cancel the ctx once the check is genuinely in flight. We skip the ticker
