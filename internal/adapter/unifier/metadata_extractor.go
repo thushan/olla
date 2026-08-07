@@ -29,6 +29,9 @@ func getConfig() *ModelUnificationConfig {
 	if err != nil {
 		fallbackConfigOnce.Do(func() {
 			fallbackConfig = getDefaultConfig()
+			// Uncompiled patterns make regex-driven extraction a silent no-op,
+			// so compile here as LoadModelConfig does on its own recovery path.
+			_ = fallbackConfig.compilePatterns()
 		})
 		return fallbackConfig
 	}
