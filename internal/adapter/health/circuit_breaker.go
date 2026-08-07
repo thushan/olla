@@ -54,16 +54,26 @@ func (cb *CircuitBreaker) IsOpen(endpointURL string) bool {
 	if atomic.LoadInt32(&state.isOpen) == 1 {
 		lastFailure := atomic.LoadInt64(&state.lastFailure)
 		if time.Unix(0, lastFailure).Add(cb.timeout).Before(time.Now()) {
-			// Allow one request through (half-open state)
+			// Half-open: admit exactly one probe. lastAttempt is the
+			// single-flight gate - only the goroutine that wins the 0->now CAS
+			// is let through immediately; every other concurrent caller is
+			// rejected until RecordSuccess/RecordFailure resolves the probe
+			// and resets it. If the outstanding probe is stale (older than
+			// DefaultHalfOpenProbeStaleness - e.g. a hung health check that
+			// never resolved), the slot is handed to exactly one replacement
+			// caller via a last->now CAS: a plain read-and-compare here (the
+			// bug this replaces) would admit every caller for as long as the
+			// window keeps being exceeded, since nothing re-stamps
+			// lastAttempt on the read path - the circuit effectively stays
+			// wide open forever after a single stuck probe.
 			if atomic.CompareAndSwapInt64(&state.lastAttempt, 0, now) {
 				return false
 			}
-
-			// Another request is already in flight,
-			// check if it's been a long time, shouldn't have left you
-			// Without a dope beat to step to
 			lastAttempt := atomic.LoadInt64(&state.lastAttempt)
-			return time.Unix(0, lastAttempt).Add(time.Second).After(time.Now())
+			if time.Unix(0, lastAttempt).Add(DefaultHalfOpenProbeStaleness).After(time.Now()) {
+				return true
+			}
+			return !atomic.CompareAndSwapInt64(&state.lastAttempt, lastAttempt, now)
 		}
 		return true
 	}

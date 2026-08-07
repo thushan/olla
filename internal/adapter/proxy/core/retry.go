@@ -198,7 +198,23 @@ func (h *RetryHandler) executeProxyAttempt(ctx context.Context, w http.ResponseW
 	return proxyFunc(ctx, w, r, endpoint, stats)
 }
 
-// handleConnectionFailure processes connection failures and manages endpoint removal
+// handleConnectionFailure processes connection failures and manages endpoint removal.
+//
+// This is one of two layers of failure protection, and it fires first: a
+// single connection-refused error demotes the endpoint to offline right here
+// (see markEndpointUnhealthy), on the very first attempt, well before the
+// proxy engine's own per-endpoint circuit breaker (olla/service.go's
+// circuitBreaker, threshold 5) could accumulate enough failures to open.
+// That's intentional layering, not redundancy: connection-refused means the
+// backend process is down/unreachable, which request-path health demotion
+// (backed by the health checker's periodic re-probing) is the right tool
+// for - retrying it further or waiting for a 5-failure threshold would just
+// burn latency on a backend that health checks will keep confirming is
+// down. In practice this means the circuit breaker rarely gets to open on
+// connection-refused; it mostly governs the failure classes that don't
+// trip this 1-strike path - hangs and response-header timeouts, where the
+// backend is reachable but not answering. See olla/service.go's
+// circuitBreaker.IsOpen for the other side of this split.
 func (h *RetryHandler) handleConnectionFailure(ctx context.Context, endpoint *domain.Endpoint,
 	err error, attemptCount int, availableEndpoints []*domain.Endpoint, maxRetries int) []*domain.Endpoint {
 

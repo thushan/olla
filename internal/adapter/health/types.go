@@ -24,6 +24,15 @@ const (
 	DefaultCircuitBreakerThreshold = 3
 	DefaultCircuitBreakerTimeout   = 30 * time.Second
 
+	// DefaultHalfOpenProbeStaleness bounds how long a single in-flight
+	// half-open probe can gate out further probes before the slot is handed
+	// to a replacement caller. This governs health-check probes, not proxied
+	// inference requests (see proxy/olla's much larger halfOpenStaleness for
+	// that distinction): a /health probe is sub-second by design, so a
+	// probe still "in flight" a full second later is almost certainly hung,
+	// not just slow.
+	DefaultHalfOpenProbeStaleness = time.Second
+
 	// Alias the shared constants for backward compatibility
 	MaxBackoffMultiplier = constants.DefaultMaxBackoffMultiplier
 	MaxBackoffSeconds    = constants.DefaultMaxBackoffSeconds

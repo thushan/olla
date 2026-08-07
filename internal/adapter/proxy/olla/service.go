@@ -243,6 +243,19 @@ func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 }
 
 // Circuit breaker methods
+//
+// This is the second of two layers of failure protection, and it rarely
+// gets the chance to open on the most common failure class: a
+// connection-refused error is handled one layer up, in
+// core.RetryHandler.handleConnectionFailure, which demotes the endpoint to
+// offline via the health-check path after a single failure - well before
+// this breaker's 5-failure threshold could accumulate. That demotion is
+// intentional layering, not something that makes this breaker redundant: it
+// governs a different failure class. A backend that accepts the TCP
+// connection but then hangs or blows past ResponseHeaderTimeout never hits
+// handleConnectionFailure at all (the connection succeeded), so this
+// breaker is what actually protects against that class in practice -
+// hangs and slow/unresponsive backends, not down ones.
 func (cb *circuitBreaker) IsOpen() bool {
 	state := atomic.LoadInt64(&cb.state)
 	if state == 0 {
