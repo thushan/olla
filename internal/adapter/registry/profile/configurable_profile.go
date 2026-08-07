@@ -212,6 +212,37 @@ func (p *ConfigurableProfile) TransformModelName(fromName string, toFormat strin
 	return fromName
 }
 
+// containsSizeToken reports whether s contains token bounded by non-alphanumeric
+// characters (or the start/end of s), rather than a bare substring match. This
+// stops a size token like "7b" matching inside "17b" or "70b" while still
+// matching legitimate forms such as "llama-7b", "7b-chat" or "codellama:7b".
+// Model size patterns in profile YAML are bare tokens, not globs (see
+// config/profiles/llamacpp.yaml), so this is the sole matcher for them.
+func containsSizeToken(s, token string) bool {
+	if token == "" {
+		return false
+	}
+	for start := 0; start <= len(s)-len(token); {
+		idx := strings.Index(s[start:], token)
+		if idx == -1 {
+			return false
+		}
+		idx += start
+		end := idx + len(token)
+		beforeOK := idx == 0 || !isAlphaNumericByte(s[idx-1])
+		afterOK := end == len(s) || !isAlphaNumericByte(s[end])
+		if beforeOK && afterOK {
+			return true
+		}
+		start = idx + 1
+	}
+	return false
+}
+
+func isAlphaNumericByte(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
 func (p *ConfigurableProfile) GetResourceRequirements(modelName string, registry domain.ModelRegistry) domain.ResourceRequirements {
 	// Check if we have resource patterns configured
 	if p.config.Resources.ModelSizes == nil && p.config.Resources.Defaults.MinMemoryGB == 0 {
@@ -231,7 +262,7 @@ func (p *ConfigurableProfile) GetResourceRequirements(modelName string, registry
 	var baseReqs *domain.ResourceRequirements
 	for _, pattern := range p.config.Resources.ModelSizes {
 		for _, pat := range pattern.Patterns {
-			if strings.Contains(lowerName, pat) {
+			if containsSizeToken(lowerName, pat) {
 				baseReqs = &domain.ResourceRequirements{
 					MinMemoryGB:         pattern.MinMemoryGB,
 					RecommendedMemoryGB: pattern.RecommendedMemoryGB,
@@ -247,9 +278,12 @@ func (p *ConfigurableProfile) GetResourceRequirements(modelName string, registry
 		}
 	}
 
-	// Use defaults if no pattern matched
+	// Use defaults if no pattern matched. Copy rather than alias: the
+	// quantisation scaling below mutates baseReqs in place, and it would
+	// otherwise corrupt the shared config defaults for every later caller.
 	if baseReqs == nil {
-		baseReqs = &p.config.Resources.Defaults
+		defaults := p.config.Resources.Defaults
+		baseReqs = &defaults
 	}
 
 	// Apply quantization multipliers if configured

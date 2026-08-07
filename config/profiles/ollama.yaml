@@ -55,7 +55,7 @@ detection:
   user_agent_patterns:
     - "ollama/"
   headers:
-    - "X-ProfileOllama-Version"
+    - "X-Ollama-Version"
   path_indicators:
     - "/"
     - "/api/tags"

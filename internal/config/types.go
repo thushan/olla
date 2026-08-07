@@ -328,8 +328,8 @@ type EngineeringConfig struct {
 
 // ModelRegistryConfig holds model registry configuration
 type ModelRegistryConfig struct {
-	RoutingStrategy ModelRoutingStrategy `yaml:"routing_strategy"`
 	Type            string               `yaml:"type"`
+	RoutingStrategy ModelRoutingStrategy `yaml:"routing_strategy"`
 	Unification     UnificationConfig    `yaml:"unification"`
 	EnableUnifier   bool                 `yaml:"enable_unifier"`
 }
@@ -347,20 +347,14 @@ type ModelRoutingStrategyOptions struct {
 	DiscoveryRefreshOnMiss bool          `yaml:"discovery_refresh_on_miss"`
 }
 
-// UnificationConfig holds model unification configuration
+// UnificationConfig holds model unification configuration. Kept to only the
+// fields NewUnifiedMemoryModelRegistry actually consumes - Enabled, CacheTTL,
+// CustomRules and FamilyOverrides used to exist here too but were parsed and
+// silently ignored, so accepted configuration had no runtime effect. Removed
+// rather than left as a trap for the next field added here.
 type UnificationConfig struct {
-	CustomRules     []UnificationRuleConfig `yaml:"custom_rules"`
-	CacheTTL        time.Duration           `yaml:"cache_ttl"`
-	Enabled         bool                    `yaml:"enabled"`
-	StaleThreshold  time.Duration           `yaml:"stale_threshold"`
-	CleanupInterval time.Duration           `yaml:"cleanup_interval"`
-}
-
-// UnificationRuleConfig defines custom unification rules
-type UnificationRuleConfig struct {
-	FamilyOverrides map[string]string `yaml:"family_overrides"`
-	NamePatterns    map[string]string `yaml:"name_patterns"`
-	Platform        string            `yaml:"platform"`
+	StaleThreshold  time.Duration `yaml:"stale_threshold"`
+	CleanupInterval time.Duration `yaml:"cleanup_interval"`
 }
 
 // TranslatorsConfig holds translator-specific configuration

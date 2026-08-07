@@ -19,6 +19,33 @@ func TestNewLMDeployConverter(t *testing.T) {
 	assert.Equal(t, constants.ProviderTypeLMDeploy, c.GetFormatName())
 }
 
+func TestLMDeployConverter_DetermineOwner(t *testing.T) {
+	t.Parallel()
+
+	c := NewLMDeployConverter().(*LMDeployConverter)
+
+	cases := []struct {
+		modelID  string
+		expected string
+	}{
+		{"internlm/internlm2-chat-7b", "internlm"},
+		{"simple-model", constants.ProviderTypeLMDeploy},
+		{"no-slash", constants.ProviderTypeLMDeploy},
+		// hyphenated known-org fallback (now shared with the other converters
+		// via ExtractOwnerFromModelID)
+		{"mistralai-mistral-7b-instruct", "mistralai"},
+		{"meta-llama-3-8b", "meta"},
+	}
+
+	for _, tc := range cases {
+
+		t.Run(tc.modelID, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.expected, c.determineOwner(tc.modelID))
+		})
+	}
+}
+
 func TestLMDeployConverter_ConvertToFormat_Empty(t *testing.T) {
 	t.Parallel()
 

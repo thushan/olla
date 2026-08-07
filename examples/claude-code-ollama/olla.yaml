@@ -16,7 +16,7 @@ server:
 proxy:
   engine: olla             # High-performance engine (default)
   load_balancer: priority  # Route to highest-priority endpoint first
-  stream_buffer_size: 8192
+  # stream_buffer_size: 8192  # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB)
   response_timeout: 300s   # 5 minutes for long generations
   read_timeout: 60s
 

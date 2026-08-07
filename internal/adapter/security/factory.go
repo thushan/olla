@@ -52,15 +52,19 @@ func (sa *Adapters) Stop() {
 	}
 }
 
+// CreateChainMiddleware builds the rate-limit -> size-validation chain once,
+// at wiring time. Building it fresh on every request (as this used to do)
+// allocated four closures per request for no reason - the underlying
+// validators don't change after startup.
 func (sa *Adapters) CreateChainMiddleware() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rateLimitMiddleware := sa.RateLimit.CreateMiddleware()
-			sizeMiddleware := sa.SizeValidation.CreateMiddleware()
+	rateLimitMiddleware := sa.CreateRateLimitMiddleware()
+	sizeMiddleware := func(next http.Handler) http.Handler { return next }
+	if sa.SizeValidation != nil {
+		sizeMiddleware = sa.SizeValidation.CreateMiddleware()
+	}
 
-			handler := rateLimitMiddleware(sizeMiddleware(next))
-			handler.ServeHTTP(w, r)
-		})
+	return func(next http.Handler) http.Handler {
+		return rateLimitMiddleware(sizeMiddleware(next))
 	}
 }
 

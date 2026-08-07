@@ -10,7 +10,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/logger"
+)
+
+// pollCeiling and pollInterval bound the require.Eventually goroutine-count
+// polls in this file: generous enough to absorb scheduler jitter, tight
+// enough to keep the suite fast on the happy path.
+const (
+	pollCeiling  = 5 * time.Second
+	pollInterval = 10 * time.Millisecond
 )
 
 // TestCreateCombinedContext_NoGoroutineLeak verifies that the context merger doesn't leak goroutines
@@ -45,19 +54,11 @@ func TestCreateCombinedContext_NoGoroutineLeak(t *testing.T) {
 		cancel2()
 	}
 
-	// Give goroutines time to exit
-	time.Sleep(100 * time.Millisecond)
-	runtime.GC()
-	time.Sleep(10 * time.Millisecond)
-
-	// Check goroutine count
-	finalGoroutines := runtime.NumGoroutine()
-	leaked := finalGoroutines - initialGoroutines
-
-	if leaked > 2 { // Allow small variance for test framework
-		t.Errorf("Goroutine leak detected: initial=%d, final=%d, leaked=%d",
-			initialGoroutines, finalGoroutines, leaked)
-	}
+	// Wait for goroutines to exit
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		return runtime.NumGoroutine()-initialGoroutines <= 2 // allow small variance
+	}, pollCeiling, pollInterval, "goroutine leak detected")
 }
 
 // TestPerformTimedRead_NoGoroutineLeak verifies read operations don't leak goroutines
@@ -204,19 +205,11 @@ func TestStreamResponseWithTimeout_ClientDisconnect(t *testing.T) {
 		reader.Seek(0, io.SeekStart)
 	}
 
-	// Give goroutines time to exit
-	time.Sleep(100 * time.Millisecond)
-	runtime.GC()
-	time.Sleep(10 * time.Millisecond)
-
-	// Check goroutine count
-	finalGoroutines := runtime.NumGoroutine()
-	leaked := finalGoroutines - initialGoroutines
-
-	if leaked > 2 { // Allow small variance
-		t.Errorf("Goroutine leak detected: initial=%d, final=%d, leaked=%d",
-			initialGoroutines, finalGoroutines, leaked)
-	}
+	// Wait for goroutines to exit
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		return runtime.NumGoroutine()-initialGoroutines <= 2 // allow small variance
+	}, pollCeiling, pollInterval, "goroutine leak detected")
 }
 
 // Helper types for testing

@@ -12,7 +12,7 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
-func TestEnhancedLoggingMiddleware(t *testing.T) {
+func TestCombinedLoggingMiddleware_RequestIDAndContext(t *testing.T) {
 	// Create a mock styled logger
 	mockLogger := &mockStyledLogger{}
 
@@ -40,7 +40,7 @@ func TestEnhancedLoggingMiddleware(t *testing.T) {
 	})
 
 	// Create the middleware
-	middleware := EnhancedLoggingMiddleware(mockLogger)
+	middleware := CombinedLoggingMiddleware(mockLogger)
 	handler := middleware(testHandler)
 
 	// Create a test request
@@ -71,7 +71,7 @@ func TestEnhancedLoggingMiddleware(t *testing.T) {
 	}
 }
 
-func TestAccessLoggingMiddleware(t *testing.T) {
+func TestCombinedLoggingMiddleware_BasicPassthrough(t *testing.T) {
 	// Create a mock styled logger
 	mockLogger := &mockStyledLogger{}
 
@@ -82,7 +82,7 @@ func TestAccessLoggingMiddleware(t *testing.T) {
 	})
 
 	// Create the middleware
-	middleware := AccessLoggingMiddleware(mockLogger)
+	middleware := CombinedLoggingMiddleware(mockLogger)
 	handler := middleware(testHandler)
 
 	// Create a test request
@@ -105,6 +105,34 @@ func TestAccessLoggingMiddleware(t *testing.T) {
 	expectedBody := "access log test"
 	if rr.Body.String() != expectedBody {
 		t.Errorf("Expected body %q, got %q", expectedBody, rr.Body.String())
+	}
+}
+
+// TestCombinedLoggingMiddleware_UsesInjectedLogger is the regression test for
+// the console and access records silently going through slog.Default()
+// instead of the styledLogger passed in - a configured logger (level, theme,
+// output target) would have no effect on request logging.
+func TestCombinedLoggingMiddleware_UsesInjectedLogger(t *testing.T) {
+	var buf strings.Builder
+	injected := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	mockLogger := &mockStyledLogger{underlying: injected}
+
+	handler := CombinedLoggingMiddleware(mockLogger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// A plain path outside /api/, /olla/ and /internal/ so neither quiet gate
+	// fires and both records use their loud (non-abbreviated) message.
+	req := httptest.NewRequest("GET", "/hello", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	out := buf.String()
+	if !strings.Contains(out, "Request started") || !strings.Contains(out, "Request completed") {
+		t.Errorf("expected both console lifecycle records on the injected logger, got: %q", out)
+	}
+	if !strings.Contains(out, "Access log") {
+		t.Errorf("expected the access log record on the injected logger, got: %q", out)
 	}
 }
 
@@ -342,10 +370,10 @@ func TestSanitiseRequestID(t *testing.T) {
 	}
 }
 
-// TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated verifies
+// TestCombinedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated verifies
 // that a request carrying an X-Request-ID containing CRLF does not propagate the
 // injected value into the response or context; instead a fresh ID is generated.
-func TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *testing.T) {
+func TestCombinedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *testing.T) {
 	t.Parallel()
 
 	mockLogger := &mockStyledLogger{}
@@ -362,7 +390,7 @@ func TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *test
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mw := EnhancedLoggingMiddleware(mockLogger)(handler)
+	mw := CombinedLoggingMiddleware(mockLogger)(handler)
 
 	req := httptest.NewRequest(http.MethodGet, "/internal/health", nil)
 	req.Header.Set("X-Request-ID", "ok\r\nX-Injected: evil")
@@ -379,9 +407,9 @@ func TestEnhancedLoggingMiddleware_InvalidRequestIDReplacedWithGenerated(t *test
 	}
 }
 
-// TestEnhancedLoggingMiddleware_ValidRequestIDPreserved verifies that a clean
+// TestCombinedLoggingMiddleware_ValidRequestIDPreserved verifies that a clean
 // inbound X-Request-ID is echoed in the response header unchanged.
-func TestEnhancedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
+func TestCombinedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
 	t.Parallel()
 
 	mockLogger := &mockStyledLogger{}
@@ -390,7 +418,7 @@ func TestEnhancedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	mw := EnhancedLoggingMiddleware(mockLogger)(handler)
+	mw := CombinedLoggingMiddleware(mockLogger)(handler)
 
 	const cleanID = "my-clean-request-id-abc123"
 	req := httptest.NewRequest(http.MethodGet, "/internal/health", nil)
@@ -405,7 +433,9 @@ func TestEnhancedLoggingMiddleware_ValidRequestIDPreserved(t *testing.T) {
 }
 
 // Mock styled logger for testing
-type mockStyledLogger struct{}
+type mockStyledLogger struct {
+	underlying *slog.Logger
+}
 
 func (m *mockStyledLogger) Debug(msg string, args ...any)                                {}
 func (m *mockStyledLogger) Info(msg string, args ...any)                                 {}
@@ -422,7 +452,12 @@ func (m *mockStyledLogger) ErrorWithEndpoint(msg string, endpoint string, args .
 func (m *mockStyledLogger) InfoHealthy(msg string, endpoint string, args ...any)         {}
 func (m *mockStyledLogger) InfoHealthStatus(msg string, name string, status domain.EndpointStatus, args ...any) {
 }
-func (m *mockStyledLogger) GetUnderlying() *slog.Logger                                         { return slog.Default() }
+func (m *mockStyledLogger) GetUnderlying() *slog.Logger {
+	if m.underlying != nil {
+		return m.underlying
+	}
+	return slog.Default()
+}
 func (m *mockStyledLogger) WithRequestID(requestID string) logger.StyledLogger                  { return m }
 func (m *mockStyledLogger) InfoConfigChange(oldName, newName string)                            {}
 func (m *mockStyledLogger) WithAttrs(attrs ...slog.Attr) logger.StyledLogger                    { return m }

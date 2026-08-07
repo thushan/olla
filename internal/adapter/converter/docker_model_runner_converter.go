@@ -1,7 +1,6 @@
 package converter
 
 import (
-	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -49,7 +48,7 @@ func (c *DockerModelRunnerConverter) ConvertToFormat(models []*domain.UnifiedMod
 
 func (c *DockerModelRunnerConverter) convertModel(model *domain.UnifiedModel) *profile.DockerModelRunnerModel {
 	now := time.Now().Unix()
-	modelID := c.findDMRNativeName(model)
+	modelID := c.FindNativeName(model)
 	if modelID == "" {
 		// Fall back to first alias, then unified ID
 		if len(model.Aliases) > 0 {
@@ -67,20 +66,9 @@ func (c *DockerModelRunnerConverter) convertModel(model *domain.UnifiedModel) *p
 	}
 }
 
-// findDMRNativeName looks for the native Docker Model Runner name from aliases
-func (c *DockerModelRunnerConverter) findDMRNativeName(model *domain.UnifiedModel) string {
-	alias, found := c.BaseConverter.FindProviderAlias(model)
-	if found {
-		return alias
-	}
-	return ""
-}
-
-// determineOwner extracts the organisation from the model ID's namespace prefix,
-// defaulting to "docker" when the ID has no namespace (i.e. no "/" separator).
+// determineOwner extracts the organisation from the model ID or defaults to "docker"
 func (c *DockerModelRunnerConverter) determineOwner(modelID string) string {
-	if parts := strings.SplitN(modelID, "/", 2); len(parts) == 2 {
-		return parts[0]
-	}
-	return "docker"
+	// Use shared owner extraction logic from BaseConverter
+	// Handles slash-separated (org/model) and hyphenated (org-model) formats
+	return ExtractOwnerFromModelID(modelID, "docker")
 }

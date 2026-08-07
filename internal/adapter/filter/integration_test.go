@@ -3,7 +3,6 @@ package filter_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -193,88 +192,6 @@ func TestModelFilteringIntegration(t *testing.T) {
 	}
 }
 
-func TestFilterRepositoryIntegration(t *testing.T) {
-	ctx := context.Background()
-	repo := filter.NewMemoryFilterRepository().(*filter.MemoryFilterRepository)
-
-	// Test storing and retrieving filter configurations
-	t.Run("store and retrieve filter configs", func(t *testing.T) {
-		// Create filter configs
-		profileFilter := &domain.FilterConfig{
-			Include: []string{"ollama", "lmstudio"},
-			Exclude: []string{"vllm"},
-		}
-
-		modelFilter := &domain.FilterConfig{
-			Exclude: []string{"deepseek*", "*-coder*"},
-		}
-
-		// Store filters
-		err := repo.SetFilterConfig(ctx, "profile-filter", profileFilter)
-		require.NoError(t, err)
-
-		err = repo.SetFilterConfig(ctx, "model-filter", modelFilter)
-		require.NoError(t, err)
-
-		// Retrieve and verify
-		retrieved, err := repo.GetFilterConfig(ctx, "profile-filter")
-		require.NoError(t, err)
-		assert.Equal(t, profileFilter.Include, retrieved.Include)
-		assert.Equal(t, profileFilter.Exclude, retrieved.Exclude)
-
-		retrieved, err = repo.GetFilterConfig(ctx, "model-filter")
-		require.NoError(t, err)
-		assert.Equal(t, modelFilter.Exclude, retrieved.Exclude)
-	})
-
-	// Test validation
-	t.Run("validate filter config", func(t *testing.T) {
-		invalidFilter := &domain.FilterConfig{
-			Include: []string{""},
-			Exclude: []string{"  "},
-		}
-
-		err := repo.ValidateAndStore(ctx, "invalid-filter", invalidFilter)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid filter configuration")
-	})
-
-	// Test concurrent access
-	t.Run("concurrent filter operations", func(t *testing.T) {
-		done := make(chan bool)
-
-		// Writer goroutine
-		go func() {
-			for i := range 100 {
-				config := &domain.FilterConfig{
-					Include: []string{"pattern" + string(rune(i))},
-				}
-				_ = repo.SetFilterConfig(ctx, "concurrent-test", config)
-				time.Sleep(time.Microsecond)
-			}
-			done <- true
-		}()
-
-		// Reader goroutine
-		go func() {
-			for range 100 {
-				_, _ = repo.GetFilterConfig(ctx, "concurrent-test")
-				time.Sleep(time.Microsecond)
-			}
-			done <- true
-		}()
-
-		// Wait for both goroutines
-		<-done
-		<-done
-
-		// Verify final state
-		final, err := repo.GetFilterConfig(ctx, "concurrent-test")
-		assert.NoError(t, err)
-		assert.NotNil(t, final)
-	})
-}
-
 func TestFilterConfigOperations(t *testing.T) {
 	t.Run("merge filter configs", func(t *testing.T) {
 		base := &domain.FilterConfig{
@@ -332,10 +249,7 @@ func TestEndToEndFiltering(t *testing.T) {
 
 	// Simulate a complete filtering workflow
 	t.Run("complete filtering workflow", func(t *testing.T) {
-		// 1. Create filter repository
-		repo := filter.NewMemoryFilterRepository().(*filter.MemoryFilterRepository)
-
-		// 2. Load filter configurations (simulating from config file)
+		// 1. Load filter configurations (simulating from config file)
 		configs := map[string]*domain.FilterConfig{
 			"production-profiles": {
 				Include: []string{"ollama", "openai*"},
@@ -349,15 +263,13 @@ func TestEndToEndFiltering(t *testing.T) {
 			},
 		}
 
-		err := repo.LoadFromConfig(configs)
-		require.NoError(t, err)
-
-		// 3. Retrieve and use filters
+		// 2. Use the filters directly - the real path is GlobFilter, config
+		// storage/retrieval used to be exercised via MemoryFilterRepository but
+		// that had zero production callers and was removed.
 		filterImpl := filter.NewGlobFilter()
 
 		// Test profile filtering
-		profileFilter, err := repo.GetFilterConfig(ctx, "production-profiles")
-		require.NoError(t, err)
+		profileFilter := configs["production-profiles"]
 
 		profiles := map[string]interface{}{
 			"ollama":       "ollama-profile",
@@ -377,8 +289,7 @@ func TestEndToEndFiltering(t *testing.T) {
 		assert.Contains(t, filteredProfiles, "openai")
 
 		// Test model filtering
-		modelFilter, err := repo.GetFilterConfig(ctx, "safe-models")
-		require.NoError(t, err)
+		modelFilter := configs["safe-models"]
 
 		models := []*domain.ModelInfo{
 			{Name: "llama3-8b"},

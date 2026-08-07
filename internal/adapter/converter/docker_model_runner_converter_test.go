@@ -154,6 +154,10 @@ func TestDockerModelRunnerConverter_DetermineOwner(t *testing.T) {
 		{"huggingface/model", "huggingface"},
 		{"simple-model", "docker"},
 		{"no-slash", "docker"},
+		// hyphenated known-org fallback (now shared with the other converters
+		// via ExtractOwnerFromModelID)
+		{"mistralai-mistral-7b-instruct", "mistralai"},
+		{"meta-llama-3-8b", "meta"},
 	}
 
 	for _, tc := range cases {

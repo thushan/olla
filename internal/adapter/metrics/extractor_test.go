@@ -276,13 +276,19 @@ func TestExtractor_ExtractFromHeaders(t *testing.T) {
 	assert.NotNil(t, metrics)
 }
 
-func TestExtractor_ValidateProfile_InvalidPath(t *testing.T) {
-	// Skip validation test for now as JSONPath compilation validation
-	// is not working as expected with the PaesslerAG/jsonpath library
-	t.Skip("JSONPath validation not working as expected")
-
+// TestExtractor_ValidateProfile_MalformedPathIsAccepted documents actual,
+// intentional behaviour: ValidateProfile does not - and cannot cheaply -
+// syntax-check Paths entries. Diagnosis of the "JSONPath validation not
+// working as expected" skip: this project uses gjson (see convertToGjsonPath),
+// which has no compile step - a path is just a string matched lazily against
+// JSON bytes at extraction time, so there is nothing to fail upfront the way
+// a real JSONPath library's compiler would. The skipped test asserted an
+// error that the code was never capable of producing. Calculations are
+// different - they go through expr.Compile, which does fail on bad syntax;
+// see TestExtractor_ValidateProfile_InvalidCalculation below for that path.
+func TestExtractor_ValidateProfile_MalformedPathIsAccepted(t *testing.T) {
 	profile := &mockProfile{
-		name: "invalid",
+		name: "malformed-path",
 		config: &domain.ProfileConfig{
 			Metrics: domain.MetricsConfig{
 				Extraction: domain.MetricsExtractionConfig{
@@ -297,7 +303,40 @@ func TestExtractor_ValidateProfile_InvalidPath(t *testing.T) {
 
 	factory := &mockProfileFactory{
 		profiles: map[string]*mockProfile{
-			"invalid": profile,
+			"malformed-path": profile,
+		},
+	}
+
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, _, _ := logger.New(loggerCfg)
+	testLogger := logger.NewPlainStyledLogger(log)
+	extractor, err := NewExtractor(factory, testLogger)
+	require.NoError(t, err)
+
+	assert.NoError(t, extractor.ValidateProfile(profile))
+}
+
+// TestExtractor_ValidateProfile_InvalidCalculation covers the validation
+// ValidateProfile actually performs: Calculations are pre-compiled with
+// expr.Compile, which does reject invalid expression syntax.
+func TestExtractor_ValidateProfile_InvalidCalculation(t *testing.T) {
+	profile := &mockProfile{
+		name: "invalid-calc",
+		config: &domain.ProfileConfig{
+			Metrics: domain.MetricsConfig{
+				Extraction: domain.MetricsExtractionConfig{
+					Enabled: true,
+					Calculations: map[string]string{
+						"bad": "output_tokens +* 2",
+					},
+				},
+			},
+		},
+	}
+
+	factory := &mockProfileFactory{
+		profiles: map[string]*mockProfile{
+			"invalid-calc": profile,
 		},
 	}
 
@@ -309,5 +348,5 @@ func TestExtractor_ValidateProfile_InvalidPath(t *testing.T) {
 
 	err = extractor.ValidateProfile(profile)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid JSONPath")
+	assert.Contains(t, err.Error(), "invalid calculation")
 }

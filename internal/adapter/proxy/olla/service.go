@@ -56,6 +56,19 @@ const (
 
 	// Circuit breaker threshold higher than health checker for tolerance
 	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
+
+	// halfOpenStaleness bounds how long a single in-flight half-open probe can
+	// gate out further probes before the slot is handed to a replacement caller.
+	// This governs proxied inference requests, not health probes: TTFT alone
+	// routinely exceeds a second on a cold or busy backend, and engine-side
+	// timeouts run to minutes, so a sub-second window (as used by the health
+	// checker's own sub-second /health probes) would misclassify a healthy
+	// streaming probe as hung. 30s is sized to the same order of magnitude as
+	// ResponseHeaderTimeout - long enough that a normal inference response
+	// header arrives well within it, short enough that a truly hung probe
+	// doesn't wedge the endpoint for long. Deliberately not copied from
+	// health.CircuitBreaker, whose constant answers a different question.
+	halfOpenStaleness = 30 * time.Second
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -91,6 +104,7 @@ type connectionPool struct {
 type circuitBreaker struct {
 	failures    int64 // atomic
 	lastFailure int64 // atomic
+	lastAttempt int64 // atomic: half-open single-flight gate (unix nanos), reset by RecordSuccess/RecordFailure
 	state       int64 // atomic: 0=closed, 1=open, 2=half-open
 	threshold   int64
 }
@@ -121,7 +135,7 @@ func NewService(
 		configuration.IdleConnTimeout = proxyconfig.OllaDefaultIdleConnTimeout
 	}
 	if configuration.ReadTimeout == 0 {
-		configuration.ReadTimeout = proxyconfig.DefaultReadTimeout
+		configuration.ReadTimeout = proxyconfig.OllaDefaultReadTimeout
 	}
 
 	base := core.NewBaseProxyComponents(discoveryService, selector, statsCollector, metricsExtractor, logger)
@@ -192,6 +206,13 @@ func createOptimisedTransport(config *Configuration) *http.Transport {
 	}
 }
 
+// Configuration returns the effective, fully-defaulted configuration currently in
+// use. Exposed for diagnostics and for tests that verify factory-supplied defaults
+// actually reach the engine rather than getting overwritten upstream.
+func (s *Service) Configuration() *Configuration {
+	return s.configuration.Load()
+}
+
 // getOrCreateEndpointPool returns a connection pool for the endpoint.
 // LoadOrCompute guarantees the transport is constructed at most once per endpoint key,
 // preventing wasted allocations when multiple goroutines race on first use.
@@ -224,31 +245,51 @@ func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 // Circuit breaker methods
 func (cb *circuitBreaker) IsOpen() bool {
 	state := atomic.LoadInt64(&cb.state)
-	if state != 1 {
+	if state == 0 {
 		return false
 	}
 
-	// Check if timeout has passed
-	lastFailure := atomic.LoadInt64(&cb.lastFailure)
-	if time.Since(time.Unix(0, lastFailure)) > health.DefaultCircuitBreakerTimeout {
-		// Try half-open state
-		if atomic.CompareAndSwapInt64(&cb.state, 1, 2) {
-			// State transition: Open -> Half-open
-			return false
+	if state == 1 {
+		// Check if the recovery timeout has passed
+		lastFailure := atomic.LoadInt64(&cb.lastFailure)
+		if time.Since(time.Unix(0, lastFailure)) <= health.DefaultCircuitBreakerTimeout {
+			return true
 		}
+		// Timeout elapsed: attempt Open -> Half-open. Every caller that reaches
+		// here (whether it won this CAS or another goroutine already flipped it)
+		// falls through to the half-open single-flight gate below.
+		atomic.CompareAndSwapInt64(&cb.state, 1, 2)
 	}
 
-	return true
+	// Half-open: admit exactly one probe. lastAttempt is the single-flight gate -
+	// only the goroutine that wins the 0->now CAS is let through immediately;
+	// every other concurrent request is rejected until RecordSuccess/RecordFailure
+	// resolves the probe and resets it. If the outstanding probe is stale (older
+	// than halfOpenStaleness - e.g. a hung request that never resolved), the slot
+	// is handed to exactly one replacement caller via a last->now CAS: a plain
+	// read-and-compare here would admit every caller for as long as the window
+	// keeps being exceeded, since nothing re-stamps lastAttempt on the read path.
+	now := time.Now().UnixNano()
+	if atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, now) {
+		return false
+	}
+	last := atomic.LoadInt64(&cb.lastAttempt)
+	if time.Since(time.Unix(0, last)) < halfOpenStaleness {
+		return true
+	}
+	return !atomic.CompareAndSwapInt64(&cb.lastAttempt, last, now)
 }
 
 func (cb *circuitBreaker) RecordSuccess() {
 	atomic.StoreInt64(&cb.failures, 0)
+	atomic.StoreInt64(&cb.lastAttempt, 0)
 	atomic.StoreInt64(&cb.state, 0) // closed
 }
 
 func (cb *circuitBreaker) RecordFailure() {
 	failures := atomic.AddInt64(&cb.failures, 1)
 	atomic.StoreInt64(&cb.lastFailure, time.Now().UnixNano())
+	atomic.StoreInt64(&cb.lastAttempt, 0)
 
 	if failures >= cb.threshold {
 		atomic.StoreInt64(&cb.state, 1) // open
@@ -285,7 +326,7 @@ func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targ
 
 	// Add model header
 	if model, ok := ctx.Value(constants.ContextModelKey).(string); ok && model != "" {
-		proxyReq.Header.Set("X-Model", model)
+		proxyReq.Header.Set(constants.HeaderXModel, model)
 		stats.Model = model
 	}
 
@@ -355,6 +396,13 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 	newConfig.ConnectionTimeout = config.GetConnectionTimeout()
 	newConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
 	newConfig.ResponseTimeout = config.GetResponseTimeout()
+	// Getter-based defaults, same as every other field above. Overridden below
+	// with the raw (possibly zero) value when config is concretely an
+	// *olla.Configuration, so an unset field there resolves through Olla's own
+	// default instead of getting permanently stuck on whatever this generic
+	// getter defaulted to - the same class of bug factory.go's raw copy fixes
+	// for construction (F1). A foreign config type has no way to expose an
+	// undefaulted value, so it keeps using the getter here.
 	newConfig.ReadTimeout = config.GetReadTimeout()
 	newConfig.StreamBufferSize = config.GetStreamBufferSize()
 	newConfig.Profile = config.GetProxyProfile()
@@ -366,6 +414,8 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 
 	// we try to get Olla-specific fields from incoming config if it's an *olla.Configuration
 	if ollaConfig, ok := config.(*Configuration); ok && ollaConfig != nil {
+		newConfig.ReadTimeout = ollaConfig.ReadTimeout
+		newConfig.StreamBufferSize = ollaConfig.StreamBufferSize
 		newConfig.MaxIdleConns = ollaConfig.MaxIdleConns
 		newConfig.IdleConnTimeout = ollaConfig.IdleConnTimeout
 		newConfig.MaxConnsPerHost = ollaConfig.MaxConnsPerHost
@@ -373,10 +423,10 @@ func (s *Service) UpdateConfig(config ports.ProxyConfiguration) {
 		newConfig.ResponseHeaderTimeout = ollaConfig.ResponseHeaderTimeout
 		newConfig.TLSHandshakeTimeout = ollaConfig.TLSHandshakeTimeout
 	} else if current != nil {
-		// fallback: preserve current Olla-specific settings for non-Olla configs.
-		// Guard against a nil current pointer — only reachable if UpdateConfig is
-		// called on a zero-value Service (e.g. in tests) before NewService stores
-		// the initial configuration.
+		// fallback: preserve current Olla-specific pool tunables for non-Olla
+		// configs. Guard against a nil current pointer - only reachable if
+		// UpdateConfig is called on a zero-value Service (e.g. in tests)
+		// before NewService stores the initial configuration.
 		newConfig.MaxIdleConns = current.MaxIdleConns
 		newConfig.IdleConnTimeout = current.IdleConnTimeout
 		newConfig.MaxConnsPerHost = current.MaxConnsPerHost

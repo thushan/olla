@@ -818,10 +818,13 @@ func TestHealthCheckLoop_SurvivesPanic(t *testing.T) {
 // are cancelled when the loop context is cancelled rather than running to their
 // full timeout.
 type blockingHTTPClient struct {
+	doEntered chan struct{} // closed the first time Do is entered, before it waits on ctx
 	cancelled chan struct{} // closed when a Do call observes ctx cancellation
+	doOnce    sync.Once
 }
 
 func (b *blockingHTTPClient) Do(req *http.Request) (*http.Response, error) {
+	b.doOnce.Do(func() { close(b.doEntered) })
 	<-req.Context().Done()
 	select {
 	case <-b.cancelled:
@@ -862,32 +865,60 @@ func TestHealthCheckLoop_CancelledContextAbortsInFlightChecks(t *testing.T) {
 	repo.endpoints[testURL.String()] = ep
 	repo.mu.Unlock()
 
-	blocking := &blockingHTTPClient{cancelled: make(chan struct{})}
+	blocking := &blockingHTTPClient{doEntered: make(chan struct{}), cancelled: make(chan struct{})}
 	checker := NewHTTPHealthChecker(repo, styledLogger, blocking)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	// Also release the context if an assertion below aborts the test early.
+	defer cancel()
 
 	// Drive a single performHealthChecks tick directly from a goroutine, then
-	// cancel the ctx immediately. We skip the ticker so the test is deterministic.
-	started := make(chan struct{})
+	// cancel the ctx once the check is genuinely in flight. We skip the ticker
+	// so the test is deterministic.
+	done := make(chan struct{})
 	go func() {
-		close(started)
+		defer close(done)
 		// Per-tick timeout must also be short so cancellation is observable.
 		checkCtx, checkCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer checkCancel()
 		checker.performHealthChecks(checkCtx)
 	}()
 
-	// Wait for the goroutine to start, then cancel.
-	<-started
+	// Wait until the check has actually reached the blocking Do() call before
+	// cancelling. performHealthChecks' per-endpoint goroutine races a
+	// buffered-semaphore send against ctx.Done() in a single select - cancelling
+	// too early means both branches can be simultaneously ready, and select
+	// picks between ready cases at random (documented Go behaviour, not a
+	// product bug: either branch is safe - skip the check on a cancelled
+	// context, or start it and let the downstream cancelled context fail it
+	// fast). That's what made this test flaky: on an unlucky draw the endpoint
+	// goroutine would return via the ctx.Done() branch without ever calling
+	// Do(), so blocking.cancelled would never close and the test would hang
+	// for the full timeout. Synchronising on doEntered removes the race by
+	// only cancelling once the check is genuinely blocked inside Do().
+	select {
+	case <-blocking.doEntered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("health check never reached the blocking Do() call")
+	}
+
 	cancel()
 
-	// The in-flight Do call should observe the cancellation well within the
-	// per-tick timeout (5 s). Allow 500 ms as a generous but bounded window.
+	// The in-flight Do call should observe the cancellation promptly -
+	// cancellation propagates synchronously through the context tree once
+	// cancel() is called.
 	select {
 	case <-blocking.cancelled:
 		// pass - in-flight check was cancelled
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("in-flight health check was not cancelled within 500ms after loop context was cancelled")
+	case <-time.After(2 * time.Second):
+		t.Fatal("in-flight health check was not cancelled within 2s after loop context was cancelled")
+	}
+
+	// Join the goroutine before returning so it can't linger past this test
+	// under go test -count N or alongside t.Parallel() siblings.
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("performHealthChecks goroutine did not exit after cancellation")
 	}
 }

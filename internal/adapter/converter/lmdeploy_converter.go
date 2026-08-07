@@ -52,7 +52,7 @@ func (c *LMDeployConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 func (c *LMDeployConverter) convertModel(model *domain.UnifiedModel) *profile.LMDeployModel {
 	now := time.Now().Unix()
 
-	modelID := c.findLMDeployNativeName(model)
+	modelID := c.FindNativeName(model)
 	if modelID == "" {
 		if len(model.Aliases) > 0 {
 			modelID = model.Aliases[0].Name
@@ -90,19 +90,10 @@ func (c *LMDeployConverter) convertModel(model *domain.UnifiedModel) *profile.LM
 	return m
 }
 
-func (c *LMDeployConverter) findLMDeployNativeName(model *domain.UnifiedModel) string {
-	alias, found := c.BaseConverter.FindProviderAlias(model)
-	if found {
-		return alias
-	}
-	return ""
-}
-
 // determineOwner extracts the organisation from org/model-name style IDs,
 // defaulting to "lmdeploy" when there is no slash.
 func (c *LMDeployConverter) determineOwner(modelID string) string {
-	if parts := strings.SplitN(modelID, "/", 2); len(parts) == 2 {
-		return parts[0]
-	}
-	return constants.ProviderTypeLMDeploy
+	// Use shared owner extraction logic from BaseConverter
+	// Handles slash-separated (org/model) and hyphenated (org-model) formats
+	return ExtractOwnerFromModelID(modelID, constants.ProviderTypeLMDeploy)
 }

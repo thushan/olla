@@ -57,8 +57,6 @@ linters:
         - G118  # context.Background in goroutines — intentional for long-lived background workers
         - G301  # directory permissions 0755 — standard for log directories
         - G304  # file inclusion via variable — expected for config/profile loaders
-        - G401
-        - G501
         - G703  # path traversal via taint — expected for config/profile loaders
         - G704  # SSRF via taint — expected for a proxy that forwards requests by design
     govet:
@@ -69,14 +67,6 @@ linters:
     misspell:
       ignore-rules:
         - thushan
-    tagliatelle:
-      case:
-        use-field-name: true
-        rules:
-          json: camel
-          yaml: camel
-          toml: camel
-          env: upperSnake
     perfsprint:
       strconcat: false
     testifylint:

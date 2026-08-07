@@ -207,10 +207,6 @@ func (u *LifecycleUnifier) GetAliases(ctx context.Context, unifiedID string) ([]
 	return u.unifier.GetAliases(ctx, unifiedID)
 }
 
-func (u *LifecycleUnifier) RegisterCustomRule(platformType string, rule ports.UnificationRule) error {
-	return u.unifier.RegisterCustomRule(platformType, rule)
-}
-
 func (u *LifecycleUnifier) GetStats() domain.UnificationStats {
 	return u.unifier.GetStats()
 }

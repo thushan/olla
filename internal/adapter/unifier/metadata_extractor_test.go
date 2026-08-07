@@ -1,10 +1,43 @@
 package unifier
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// TestGetConfig_ReflectsResetSingleton is the regression test for the
+// double-cache bug: getConfig() used to keep its own sync.Once independent of
+// LoadModelConfig's, so resetConfigSingleton() (which only clears the latter)
+// never actually reached extraction - normalizeQuantization and friends kept
+// serving whatever config they saw on first use for the rest of the test
+// process. getConfig() now delegates straight to LoadModelConfig(), so a
+// reset must be visible here too.
+func TestGetConfig_ReflectsResetSingleton(t *testing.T) {
+	// Latch getConfig() onto the embedded defaults first, same as any other
+	// test in this process would.
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
+	require.NotContains(t, getDefaultConfig().Quantization.Mappings, "ZZTESTMARKER", "sanity: pick a mapping key the embedded defaults don't already define")
+
+	dir := t.TempDir()
+	customYAML := `
+quantization:
+  mappings:
+    ZZTESTMARKER: "custom-marker"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(customYAML), 0644))
+	// Select the config via OLLA_CONFIG_DIR rather than t.Chdir, so this test
+	// stays isolated from others that use unqualified models.yaml paths.
+	t.Setenv("OLLA_CONFIG_DIR", dir)
+
+	resetConfigSingleton()
+
+	assert.Equal(t, "custom-marker", normalizeQuantization("ZZTESTMARKER"), "getConfig() must observe the reset, not a stale cached config")
+}
 
 func TestNormalizeQuantization(t *testing.T) {
 	tests := []struct {

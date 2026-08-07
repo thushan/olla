@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 )
 
 // funcName extracts the full symbol name of a function value for comparison.
@@ -69,5 +71,33 @@ func TestSherpaTransport_ResponseHeaderTimeout(t *testing.T) {
 	const want = DefaultResponseHeaderTimeout
 	if svc.transport.ResponseHeaderTimeout != want {
 		t.Errorf("transport.ResponseHeaderTimeout = %v, want %v", svc.transport.ResponseHeaderTimeout, want)
+	}
+}
+
+// TestUpdateConfig_ZeroValueSherpaConfigResolvesSherpaDefaults pins the raw-copy
+// pattern in UpdateConfig for *sherpa.Configuration inputs: an unset (zero-value)
+// field must stay zero on the raw struct rather than getting the getter's
+// resolved default baked in, so a later reload that legitimately clears the
+// field back to "unset" is not permanently stuck on today's default. The
+// getters still resolve to the correct Sherpa/base defaults either way.
+func TestUpdateConfig_ZeroValueSherpaConfigResolvesSherpaDefaults(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{}
+	svc.configuration = &Configuration{}
+	svc.UpdateConfig(&Configuration{})
+
+	got := svc.configuration
+	if got.StreamBufferSize != 0 {
+		t.Errorf("StreamBufferSize = %d, want 0 (raw field must stay unset)", got.StreamBufferSize)
+	}
+	if got.ReadTimeout != 0 {
+		t.Errorf("ReadTimeout = %v, want 0 (raw field must stay unset)", got.ReadTimeout)
+	}
+	if got.GetStreamBufferSize() != proxyconfig.DefaultStreamBufferSize {
+		t.Errorf("GetStreamBufferSize() = %d, want %d", got.GetStreamBufferSize(), proxyconfig.DefaultStreamBufferSize)
+	}
+	if got.GetReadTimeout() != proxyconfig.DefaultReadTimeout {
+		t.Errorf("GetReadTimeout() = %v, want %v", got.GetReadTimeout(), proxyconfig.DefaultReadTimeout)
 	}
 }

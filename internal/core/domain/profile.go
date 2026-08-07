@@ -62,6 +62,6 @@ type ModelResponseFormat struct {
 // DetectionHints provides patterns for auto-detection of platform types
 type DetectionHints struct {
 	UserAgentPatterns []string // e.g., ["ollama/"]
-	ResponseHeaders   []string // e.g., ["X-ProfileOllama-Version"]
+	ResponseHeaders   []string // e.g., ["X-Ollama-Version"]
 	PathIndicators    []string // e.g., ["/api/tags"]
 }

@@ -65,6 +65,39 @@ func (a *Application) modifyRequestPath(r *http.Request, newPath string) *http.R
 	return r.WithContext(ctx)
 }
 
+// staticSupportedProviders is the single source of truth for provider types
+// recognised when the profile factory isn't available - test contexts and the
+// hardcoded route registration in registerStaticProviderRoutes. Production
+// always goes through the profile factory (loaded from config/profiles/*.yaml);
+// this list only matters for that fallback path.
+//
+// Three call sites used to each keep their own copy of this list - getStaticProviders
+// (server_routes.go), isProviderSupported's fallback (below) and createProviderProfile's
+// OpenAI-compatible fallback (handler_provider_common.go) - and they drifted:
+// LMDeploy, SGLang, DMR and OMLX were inconsistently present across the three.
+var staticSupportedProviders = []string{
+	constants.ProviderTypeLemonade,
+	constants.ProviderTypeOllama,
+	constants.ProviderTypeLMStudio,
+	constants.ProviderTypeOpenAI,
+	constants.ProviderTypeLMDeploy,
+	constants.ProviderTypeSGLang,
+	constants.ProviderTypeVLLM,
+	constants.ProviderTypeOMLX,
+	constants.ProviderTypeDockerMR,
+}
+
+// isStaticSupportedProvider reports whether provider (already normalised) is
+// one of staticSupportedProviders.
+func isStaticSupportedProvider(provider string) bool {
+	for _, p := range staticSupportedProviders {
+		if p == provider {
+			return true
+		}
+	}
+	return false
+}
+
 // isProviderSupported checks if a provider type is valid using the profile factory
 func (a *Application) isProviderSupported(provider string) bool {
 	// normalise first to handle variations
@@ -76,19 +109,7 @@ func (a *Application) isProviderSupported(provider string) bool {
 	}
 
 	// fallback for tests when profile factory is not available
-	// check against the static provider list used in registerStaticProviderRoutes
-	// this ensures consistency between validation and route registration
-	staticProviders := map[string]bool{
-		constants.ProviderTypeLemonade: true,
-		constants.ProviderTypeLMDeploy: true,
-		constants.ProviderTypeLMStudio: true,
-		constants.ProviderTypeOllama:   true,
-		constants.ProviderTypeOpenAI:   true,
-		constants.ProviderTypeSGLang:   true,
-		constants.ProviderTypeVLLM:     true,
-		constants.ProviderTypeOMLX:     true,
-	}
-	return staticProviders[normalised]
+	return isStaticSupportedProvider(normalised)
 }
 
 // getProviderPrefix returns the canonical /olla/<provider> prefix (no trailing slash) for strip-and-forward routing.

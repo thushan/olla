@@ -67,11 +67,11 @@ type ModelCapabilities struct {
 // nothing local. This prevents us from routing big models
 // to tiny servers.
 type ResourceRequirements struct {
-	MinMemoryGB         float64
-	RecommendedMemoryGB float64
-	RequiresGPU         bool
-	MinGPUMemoryGB      float64
-	EstimatedLoadTimeMS int64
+	MinMemoryGB         float64 `yaml:"min_memory_gb"`
+	RecommendedMemoryGB float64 `yaml:"recommended_memory_gb"`
+	RequiresGPU         bool    `yaml:"requires_gpu"`
+	MinGPUMemoryGB      float64 `yaml:"min_gpu_memory_gb"`
+	EstimatedLoadTimeMS int64   `yaml:"estimated_load_time_ms"`
 }
 
 // RoutingStrategy guides how we select endpoints.

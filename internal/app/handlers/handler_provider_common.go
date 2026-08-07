@@ -40,12 +40,13 @@ func (a *Application) createProviderProfile(providerType string) *domain.Request
 				}
 			}
 		} else {
-			// Test/static fallback: must track the openai-compatible types in
-			// isProviderSupported (handler_common.go) and getStaticProviders (server_routes.go)
-			profile.AddSupportedProfile(constants.ProviderTypeOpenAI)
-			profile.AddSupportedProfile(constants.ProviderTypeVLLM)
-			profile.AddSupportedProfile(constants.ProviderTypeLemonade)
-			profile.AddSupportedProfile(constants.ProviderTypeOMLX)
+			// Test/static fallback: sourced from staticSupportedProviders
+			// (handler_common.go), the single source of truth shared with
+			// isProviderSupported's fallback and getStaticProviders
+			// (server_routes.go).
+			for _, p := range staticSupportedProviders {
+				profile.AddSupportedProfile(p)
+			}
 		}
 	} else {
 		// Non-OpenAI providers only route to their specific backend type

@@ -1619,3 +1619,21 @@ func TestEnvOverrides_NewTunables(t *testing.T) {
 		})
 	}
 }
+
+// TestEnvOverride_ModelUnifierEnabled is the regression test for
+// OLLA_MODEL_UNIFIER_ENABLED: it must flip the live ModelRegistry.EnableUnifier
+// toggle. It used to also write into a dead Unification.Enabled field, which
+// was deleted, but the env var itself - the only way to set this toggle
+// without editing config.yaml (e.g. container deployments) - must keep working.
+func TestEnvOverride_ModelUnifierEnabled(t *testing.T) {
+	t.Setenv("OLLA_MODEL_UNIFIER_ENABLED", "false")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if cfg.ModelRegistry.EnableUnifier {
+		t.Error("OLLA_MODEL_UNIFIER_ENABLED=false did not flip ModelRegistry.EnableUnifier")
+	}
+}

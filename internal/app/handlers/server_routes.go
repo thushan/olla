@@ -399,6 +399,13 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 				{path: "", handler: a.providerProxyHandler, description: "oMLX proxy", isProxy: true},
 			},
 		},
+		constants.ProviderTypeDockerMR: {
+			prefixes: []string{constants.ProviderPrefixDockerMR},
+			routes: []staticRoute{
+				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeDockerMR, constants.ProviderTypeOpenAI), description: "Docker Model Runner models (OpenAI format)", method: "GET"},
+				{path: "", handler: a.providerProxyHandler, description: "Docker Model Runner proxy", isProxy: true},
+			},
+		},
 	}
 }
 

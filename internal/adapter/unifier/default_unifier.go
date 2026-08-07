@@ -487,10 +487,6 @@ func (u *DefaultUnifier) GetAliases(ctx context.Context, unifiedID string) ([]st
 	return aliases, nil
 }
 
-func (u *DefaultUnifier) RegisterCustomRule(platformType string, rule ports.UnificationRule) error {
-	return nil
-}
-
 func (u *DefaultUnifier) GetStats() domain.UnificationStats {
 	return domain.UnificationStats{
 		TotalUnified:       int64(u.stats.UnifiedModels),

@@ -96,7 +96,7 @@ const (
 	HeaderCFConnectingIP = "CF-Connecting-IP"
 
 	// Profile Detection Headers
-	HeaderXProfileOllamaVersion = "X-ProfileOllama-Version"
+	HeaderXProfileOllamaVersion = "X-Ollama-Version"
 
 	// Olla-Specific Headers
 	HeaderXOllaRequestID       = "X-Olla-Request-ID"

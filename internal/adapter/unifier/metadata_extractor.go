@@ -8,22 +8,34 @@ import (
 	"sync"
 )
 
+// fallbackConfig caches the error-path default so a run of LoadModelConfig
+// errors (extraction is called per-request) doesn't rebuild the whole
+// ModelUnificationConfig struct literal on every call. Deliberately a
+// separate cache from LoadModelConfig's own sync.Once/configOnce: this one
+// only ever holds the fixed embedded default, so it has nothing for
+// resetConfigSingleton to need to invalidate.
 var (
-	configCache     *ModelUnificationConfig
-	configCacheOnce sync.Once
+	fallbackConfigOnce sync.Once
+	fallbackConfig     *ModelUnificationConfig
 )
 
-// getConfig loads configuration once and caches for performance.
-// Thread-safe via sync.Once.
+// getConfig returns the model unification config. LoadModelConfig already
+// caches via its own sync.Once, so this used to duplicate that with a second,
+// independent cache - which meant resetConfigSingleton (used by tests to force
+// a fresh reload) didn't actually reach extraction, since this package's own
+// Once stayed latched to whatever it saw first.
 func getConfig() *ModelUnificationConfig {
-	configCacheOnce.Do(func() {
-		config, err := LoadModelConfig()
-		if err != nil {
-			config = getDefaultConfig()
-		}
-		configCache = config
-	})
-	return configCache
+	config, err := LoadModelConfig()
+	if err != nil {
+		fallbackConfigOnce.Do(func() {
+			fallbackConfig = getDefaultConfig()
+			// Uncompiled patterns make regex-driven extraction a silent no-op,
+			// so compile here as LoadModelConfig does on its own recovery path.
+			_ = fallbackConfig.compilePatterns()
+		})
+		return fallbackConfig
+	}
+	return config
 }
 
 // normalizeQuantization converts various quantization formats to a canonical form

@@ -51,7 +51,7 @@ func (c *VLLMConverter) ConvertToFormat(models []*domain.UnifiedModel, filters p
 func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMModel {
 	// For vLLM, prefer the native vLLM name if available from source endpoints
 	now := time.Now().Unix()
-	modelID := c.findVLLMNativeName(model)
+	modelID := c.FindNativeName(model)
 	if modelID == "" {
 		// Fallback to first alias or unified ID
 		if len(model.Aliases) > 0 {
@@ -94,21 +94,9 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 	return vllmModel
 }
 
-// findVLLMNativeName looks for the native vLLM name from aliases
-func (c *VLLMConverter) findVLLMNativeName(model *domain.UnifiedModel) string {
-	// Use base converter to find vLLM-specific alias
-	alias, found := c.BaseConverter.FindProviderAlias(model)
-	if found {
-		return alias
-	}
-	return ""
-}
-
 // determineOwner extracts the organisation from the model ID or defaults to "vllm"
 func (c *VLLMConverter) determineOwner(modelID string) string {
-	// vLLM models often follow organisation/model-name pattern
-	if parts := strings.SplitN(modelID, "/", 2); len(parts) == 2 {
-		return parts[0]
-	}
-	return constants.ProviderTypeVLLM
+	// Use shared owner extraction logic from BaseConverter
+	// Handles slash-separated (org/model) and hyphenated (org-model) formats
+	return ExtractOwnerFromModelID(modelID, constants.ProviderTypeVLLM)
 }

@@ -44,8 +44,8 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 		sherpaConfig.ConnectionTimeout = config.GetConnectionTimeout()
 		sherpaConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
 		sherpaConfig.ResponseTimeout = config.GetResponseTimeout()
-		sherpaConfig.ReadTimeout = config.GetReadTimeout()
-		sherpaConfig.StreamBufferSize = config.GetStreamBufferSize()
+		sherpaConfig.ReadTimeout = rawReadTimeout(config)
+		sherpaConfig.StreamBufferSize = rawStreamBufferSize(config)
 		sherpaConfig.Profile = config.GetProxyProfile()
 		// Each optional getter is asserted independently so a config that supports
 		// only one timeout does not silently drop the other back to its default.
@@ -65,8 +65,8 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 		ollaConfig.ConnectionTimeout = config.GetConnectionTimeout()
 		ollaConfig.ConnectionKeepAlive = config.GetConnectionKeepAlive()
 		ollaConfig.ResponseTimeout = config.GetResponseTimeout()
-		ollaConfig.ReadTimeout = config.GetReadTimeout()
-		ollaConfig.StreamBufferSize = config.GetStreamBufferSize()
+		ollaConfig.ReadTimeout = rawReadTimeout(config)
+		ollaConfig.StreamBufferSize = rawStreamBufferSize(config)
 		ollaConfig.Profile = config.GetProxyProfile()
 
 		// Pool tunables travel together and define the "is this an Olla-specific
@@ -99,6 +99,26 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 	})
 
 	return factory
+}
+
+// rawStreamBufferSize copies the operator-supplied buffer size without applying
+// ports.ProxyConfiguration's own default. Calling GetStreamBufferSize() here would
+// bake in the generic 8KiB default before the target engine's constructor gets a
+// chance to apply its own (e.g. Olla's 64KiB), permanently defeating that default.
+func rawStreamBufferSize(config ports.ProxyConfiguration) int {
+	if c, ok := config.(*Configuration); ok {
+		return c.StreamBufferSize
+	}
+	return config.GetStreamBufferSize()
+}
+
+// rawReadTimeout is the read-timeout equivalent of rawStreamBufferSize - see there
+// for why the defaulted getter must not be used here.
+func rawReadTimeout(config ports.ProxyConfiguration) time.Duration {
+	if c, ok := config.(*Configuration); ok {
+		return c.ReadTimeout
+	}
+	return config.GetReadTimeout()
 }
 
 // Register adds a new proxy creator

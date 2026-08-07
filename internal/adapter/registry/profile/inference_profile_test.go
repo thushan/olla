@@ -166,7 +166,9 @@ func TestOpenAICompatibleProfile_InferenceProfile(t *testing.T) {
 		assert.True(t, caps.TextGeneration)
 		assert.True(t, caps.FunctionCalling)
 		assert.True(t, caps.StreamingSupport)
-		assert.Equal(t, int64(4096), caps.MaxContextLength) // Default
+		// gpt-4* matches the shipped context_patterns (builtin now synced to
+		// config/profiles/openai-compatible.yaml), not the bare 4096 fallback.
+		assert.Equal(t, int64(8192), caps.MaxContextLength)
 	})
 
 	t.Run("GetResourceRequirements", func(t *testing.T) {

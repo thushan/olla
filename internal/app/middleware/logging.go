@@ -143,6 +143,18 @@ func accessLogLevel(method, path string, status int) slog.Level {
 	return slog.LevelInfo
 }
 
+// consoleLogParams resolves the level and message the console log lines
+// (request started/completed) should use for a given quiet gate result.
+// Factored out so the pre- and post-request blocks share one place that
+// decides "quiet => Debug with the terse message, otherwise Info with the
+// operator-facing one" instead of each spelling out its own if/else.
+func consoleLogParams(quiet bool, quietMsg, loudMsg string) (slog.Level, string) {
+	if quiet {
+		return slog.LevelDebug, quietMsg
+	}
+	return slog.LevelInfo, loudMsg
+}
+
 // responseWriter wraps http.ResponseWriter to capture response size and status
 type responseWriter struct {
 	http.ResponseWriter
@@ -188,157 +200,81 @@ func GetRequestID(ctx context.Context) string {
 	return ""
 }
 
-// EnhancedLoggingMiddleware adds request ID to logger context and logs request/response details
-func EnhancedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler) http.Handler {
+// CombinedLoggingMiddleware fuses the console log and the access log into a
+// single pass over the request. This used to be two separate middlewares
+// chained together, which meant every request built two responseWriter
+// wrappers, read time.Now() twice and derived the request ID twice for no
+// behavioural benefit, since both wrappers observed the same status/size. This
+// wraps once, times once, and feeds both log outputs from that single pass.
+//
+// The two outputs keep their independently-decided quiet gates -
+// isQuietPollOutcome for the console line, isQuietAccessOutcome for the access
+// line - see their doc comments for why they must not be unified: the access
+// log is the operator's audit record and must not go quiet on proxy traffic
+// the way the console line deliberately does.
+func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
-			// Get or create request ID. Validate the inbound value to prevent
-			// log injection via CR/LF or non-printable characters, and to cap
-			// the length so structured log fields stay bounded.
 			requestID := sanitiseRequestID(r.Header.Get(constants.HeaderXRequestID))
 			if requestID == "" {
 				requestID = util.GenerateRequestID()
 			}
 
-			// Calculate request size
 			requestSize := r.ContentLength
 			if requestSize < 0 {
 				requestSize = 0
 			}
 
-			// Add to context for propagation
 			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
-
-			// Create a base logger with request ID. slog.With allocates; it runs
-			// regardless of level because the logger is stored in context for handlers
-			// that may log at any level. This is unavoidable and is not gated.
-			baseLogger := slog.Default().With(constants.ContextRequestIdKey, requestID)
+			baseLogger := styledLogger.GetUnderlying().With(constants.ContextRequestIdKey, requestID)
 			ctx = context.WithValue(ctx, LoggerKey, baseLogger)
 
-			// Add to response header for client tracking
 			w.Header().Set("X-Olla-Request-ID", requestID)
 
-			// Wrap response writer to capture metrics
 			wrapped := &responseWriter{ResponseWriter: w, status: 200}
 
-			// Gate field construction on whether the record will actually be emitted.
-			// On the proxy hot path and the dashboard's /internal/ polling surface, at
-			// the default info level Debug records are discarded by the handler —
-			// building the []any slice and calling formatBytes 2x per request is pure
-			// waste. Other requests log at Info, so they only pay the cost when
-			// info-level logging is actually enabled.
-			//
-			// This pre-request line uses the optimistic, status-blind gate
-			// (isQuietPollRoute) since the response doesn't exist yet — see its
-			// doc comment for why. The post-request line below uses the
-			// status-aware gate (isQuietPollOutcome) instead.
 			preQuiet := isQuietPollRoute(r.Method, r.URL.Path)
-			if preQuiet {
-				if baseLogger.Enabled(ctx, slog.LevelDebug) {
-					baseLogger.Debug("HTTP request started",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"remote_addr", r.RemoteAddr,
-						"user_agent", r.UserAgent(),
-						"request_bytes", requestSize,
-						"request_size_formatted", formatBytes(requestSize),
-					)
-				}
-			} else {
-				if baseLogger.Enabled(ctx, slog.LevelInfo) {
-					baseLogger.Info("Request started",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"remote_addr", r.RemoteAddr,
-						"user_agent", r.UserAgent(),
-						"request_bytes", requestSize,
-						"request_size_formatted", formatBytes(requestSize),
-					)
-				}
+			level, msg := consoleLogParams(preQuiet, "HTTP request started", "Request started")
+			if baseLogger.Enabled(ctx, level) {
+				baseLogger.Log(ctx, level, msg,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"remote_addr", r.RemoteAddr,
+					"user_agent", r.UserAgent(),
+					"request_bytes", requestSize,
+					"request_size_formatted", formatBytes(requestSize),
+				)
 			}
 
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
 
 			duration := time.Since(start)
 
-			// The completed line is the one that must never hide a real problem,
-			// so it re-evaluates quietness with the response status known: a 404,
-			// 5xx, or non-GET/HEAD request under /internal/ always logs here at
-			// its normal level even if the pre-request line above was quieted.
 			postQuiet := isQuietPollOutcome(r.Method, r.URL.Path, wrapped.status)
-			if postQuiet {
-				if baseLogger.Enabled(ctx, slog.LevelDebug) {
-					baseLogger.Debug("HTTP request completed",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"status", wrapped.status,
-						"duration_ms", duration.Milliseconds(),
-						"duration_formatted", duration.String(),
-						"request_bytes", requestSize,
-						"response_bytes", wrapped.size,
-						"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
-					)
-				}
-			} else {
-				if baseLogger.Enabled(ctx, slog.LevelInfo) {
-					baseLogger.Info("Request completed",
-						"method", r.Method,
-						"path", r.URL.Path,
-						"status", wrapped.status,
-						"duration_ms", duration.Milliseconds(),
-						"duration_formatted", duration.String(),
-						"request_bytes", requestSize,
-						"response_bytes", wrapped.size,
-						"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
-					)
-				}
-			}
-		})
-	}
-}
-
-// AccessLoggingMiddleware provides structured access logging for detailed analysis
-func AccessLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-
-			// Use existing request ID from context or create one
-			requestID := GetRequestID(r.Context())
-			if requestID == "" {
-				requestID = util.GenerateRequestID()
-				ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
-				r = r.WithContext(ctx)
+			level, msg = consoleLogParams(postQuiet, "HTTP request completed", "Request completed")
+			if baseLogger.Enabled(ctx, level) {
+				baseLogger.Log(ctx, level, msg,
+					"method", r.Method,
+					"path", r.URL.Path,
+					"status", wrapped.status,
+					"duration_ms", duration.Milliseconds(),
+					"duration_formatted", duration.String(),
+					"request_bytes", requestSize,
+					"response_bytes", wrapped.size,
+					"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
+				)
 			}
 
-			// Calculate request size
-			requestSize := r.ContentLength
-			if requestSize < 0 {
-				requestSize = 0
-			}
-
-			wrapped := &responseWriter{ResponseWriter: w, status: 200}
-
-			next.ServeHTTP(wrapped, r)
-
-			duration := time.Since(start)
-
-			// Access logs route to a dedicated file handler (keyed by DefaultDetailedCookie).
-			// Build fields only when the handler is enabled to avoid allocating the
-			// format.RFC3339 string, redactQuery output, and the variadic slice on every
-			// request when the file sink is not configured.
-			//
-			// Unlike the console line, the access log is status-aware for proxy
-			// traffic: a proxy 4xx/5xx must surface at Info here (the access log is
-			// the operator's audit record), while routine proxy success and
-			// successful /internal/ polls stay at Debug. See isQuietAccessOutcome.
-			baseLogger := slog.Default()
+			// Access log uses a plain (non-.With'd) logger since request_id is
+			// already an explicit field below - attaching it via .With() as well
+			// would double it up in the emitted record.
+			accessLogger := styledLogger.GetUnderlying()
 			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
-			level := accessLogLevel(r.Method, r.URL.Path, wrapped.status)
-			if baseLogger.Enabled(detailedCtx, level) {
-				baseLogger.Log(detailedCtx, level, "Access log",
+			accessLevel := accessLogLevel(r.Method, r.URL.Path, wrapped.status)
+			if accessLogger.Enabled(detailedCtx, accessLevel) {
+				accessLogger.Log(detailedCtx, accessLevel, "Access log",
 					"timestamp", start.Format(time.RFC3339),
 					"request_id", requestID,
 					"remote_addr", r.RemoteAddr,

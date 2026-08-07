@@ -37,8 +37,7 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 	return func(next http.Handler) http.Handler {
 		// Wrap with logging so every proxy request is recorded regardless of which
 		// security path runs below.
-		withLogging := middleware.EnhancedLoggingMiddleware(s.logger)(next)
-		withAccessLogging := middleware.AccessLoggingMiddleware(s.logger)(withLogging)
+		withAccessLogging := middleware.CombinedLoggingMiddleware(s.logger)(next)
 
 		if s.securityAdapters != nil {
 			// Delegate to the concrete adapter chain. It sets the correct status codes
@@ -79,9 +78,7 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 func (s *SecurityAdapters) CreateRateLimitMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		// Apply enhanced logging for non-proxy routes as well
-		withLogging := middleware.EnhancedLoggingMiddleware(s.logger)(next)
-		withAccessLogging := middleware.AccessLoggingMiddleware(s.logger)(withLogging)
-		return withAccessLogging
+		return middleware.CombinedLoggingMiddleware(s.logger)(next)
 	}
 }
 

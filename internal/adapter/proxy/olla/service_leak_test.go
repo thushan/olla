@@ -10,10 +10,19 @@ import (
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
+)
+
+// pollCeiling and pollInterval bound the require.Eventually polls in this
+// file: generous enough to absorb scheduler jitter, tight enough to keep the
+// suite fast on the happy path.
+const (
+	pollCeiling  = 5 * time.Second
+	pollInterval = 10 * time.Millisecond
 )
 
 // TestEndpointPoolCleanup_NoMemoryLeak verifies endpoint pools are cleaned up
@@ -68,17 +77,14 @@ func TestEndpointPoolCleanup_NoMemoryLeak(t *testing.T) {
 	})
 
 	// Wait for cleanup to run
-	time.Sleep(200 * time.Millisecond)
-
-	// Verify pools were cleaned up
-	poolCount = 0
-	s.endpointPools.Range(func(k string, v *connectionPool) bool {
-		poolCount++
-		return true
-	})
-	if poolCount != 0 {
-		t.Errorf("Expected 0 pools after cleanup, got %d", poolCount)
-	}
+	require.Eventually(t, func() bool {
+		count := 0
+		s.endpointPools.Range(func(k string, v *connectionPool) bool {
+			count++
+			return true
+		})
+		return count == 0
+	}, pollCeiling, pollInterval, "pools were not cleaned up")
 }
 
 // TestCircuitBreakerCleanup_NoMemoryLeak verifies circuit breakers are cleaned up
@@ -121,17 +127,14 @@ func TestCircuitBreakerCleanup_NoMemoryLeak(t *testing.T) {
 	}
 
 	// Wait for cleanup
-	time.Sleep(200 * time.Millisecond)
-
-	// Verify circuit breakers were cleaned up
-	cbCount = 0
-	s.circuitBreakers.Range(func(k string, v *circuitBreaker) bool {
-		cbCount++
-		return true
-	})
-	if cbCount != 0 {
-		t.Errorf("Expected 0 circuit breakers after cleanup, got %d", cbCount)
-	}
+	require.Eventually(t, func() bool {
+		count := 0
+		s.circuitBreakers.Range(func(k string, v *circuitBreaker) bool {
+			count++
+			return true
+		})
+		return count == 0
+	}, pollCeiling, pollInterval, "circuit breakers were not cleaned up")
 }
 
 // TestCleanupLoop_ExitsCleanly verifies the cleanup goroutine exits properly
@@ -157,27 +160,22 @@ func TestCleanupLoop_ExitsCleanly(t *testing.T) {
 		// Start cleanup loop
 		go s.cleanupLoop()
 
-		// Let it run briefly
-		time.Sleep(100 * time.Millisecond)
+		// Confirm the loop actually started (rather than blindly sleeping and
+		// hoping) so it has genuinely been running before we stop it.
+		require.Eventually(t, func() bool {
+			return runtime.NumGoroutine() > initialGoroutines
+		}, pollCeiling, pollInterval, "cleanup goroutine did not start")
 
 		// Stop it
 		close(s.cleanupStop)
 		s.cleanupTicker.Stop()
 	}
 
-	// Give goroutines time to exit
-	time.Sleep(200 * time.Millisecond)
-	runtime.GC()
-	time.Sleep(10 * time.Millisecond)
-
-	// Check goroutine count
-	finalGoroutines := runtime.NumGoroutine()
-	leaked := finalGoroutines - initialGoroutines
-
-	if leaked > 2 { // Allow small variance
-		t.Errorf("Goroutine leak detected: initial=%d, final=%d, leaked=%d",
-			initialGoroutines, finalGoroutines, leaked)
-	}
+	// Wait for goroutines to exit
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		return runtime.NumGoroutine()-initialGoroutines <= 2 // allow small variance
+	}, pollCeiling, pollInterval, "goroutine leak detected after cleanup loops stopped")
 }
 
 // TestNewService_StartsCleanupGoroutine verifies cleanup goroutine starts
@@ -202,31 +200,19 @@ func TestNewService_StartsCleanupGoroutine(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Give cleanup goroutine time to start
-	time.Sleep(50 * time.Millisecond)
-
 	// Check that we have one more goroutine (the cleanup loop)
-	currentGoroutines := runtime.NumGoroutine()
-	if currentGoroutines <= initialGoroutines {
-		t.Error("Cleanup goroutine not started")
-	}
+	require.Eventually(t, func() bool {
+		return runtime.NumGoroutine() > initialGoroutines
+	}, pollCeiling, pollInterval, "cleanup goroutine not started")
 
 	// Cleanup should stop the goroutine
 	service.Cleanup()
 
-	// Give time for goroutine to exit
-	time.Sleep(100 * time.Millisecond)
-	runtime.GC()
-	time.Sleep(10 * time.Millisecond)
-
 	// Check goroutines returned to initial count
-	finalGoroutines := runtime.NumGoroutine()
-	leaked := finalGoroutines - initialGoroutines
-
-	if leaked > 2 { // Allow small variance
-		t.Errorf("Goroutine leak after Cleanup: initial=%d, final=%d, leaked=%d",
-			initialGoroutines, finalGoroutines, leaked)
-	}
+	require.Eventually(t, func() bool {
+		runtime.GC()
+		return runtime.NumGoroutine()-initialGoroutines <= 2 // allow small variance
+	}, pollCeiling, pollInterval, "goroutine leak after Cleanup")
 }
 
 // Mock types for testing
@@ -289,6 +275,7 @@ func (m *mockStatsCollector) GetProxyStats() ports.ProxyStats                  {
 func (m *mockStatsCollector) GetEndpointStats() map[string]ports.EndpointStats { return nil }
 func (m *mockStatsCollector) GetSecurityStats() ports.SecurityStats            { return ports.SecurityStats{} }
 func (m *mockStatsCollector) GetConnectionStats() map[string]int64             { return nil }
+func (m *mockStatsCollector) GetConnectionCount(endpoint string) int64         { return 0 }
 
 // TestCleanupLoop_SurvivesTick_Panic verifies that a panic inside
 // cleanupUnusedResources does not kill the cleanupLoop goroutine. Before the
@@ -318,8 +305,15 @@ func TestCleanupLoop_SurvivesTick_Panic(t *testing.T) {
 
 	go s.cleanupLoop()
 
-	// Wait for at least two ticks: first panics, second must still fire.
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the first (panicking) tick to have actually run:
+	// cleanupUnusedResources deletes the map entry before calling
+	// CloseIdleConnections (the nil-transport call that panics), so its
+	// disappearance is a real signal the panicking tick fired and was
+	// recovered - not just an elapsed-time guess.
+	require.Eventually(t, func() bool {
+		_, exists := s.endpointPools.Load("bad-endpoint")
+		return !exists
+	}, pollCeiling, pollInterval, "first (panicking) tick never ran")
 
 	// Liveness probe: an alive loop is parked in its select and receives this
 	// send (then exits). A dead goroutine never receives it.

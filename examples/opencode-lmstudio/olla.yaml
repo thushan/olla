@@ -38,7 +38,7 @@ proxy:
   response_timeout: 900s  # 15 minutes for longer generations
   read_timeout: 300s
   load_balancer: "priority" # Available: round-robin, least-connections, priority
-  stream_buffer_size: 8192
+  # stream_buffer_size: 8192 # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB)
   # Note: retry is automatic and tuned internally; there is no max_retries /
   # retry_backoff to set here.
 
@@ -84,7 +84,6 @@ model_registry:
   type: "memory"
   enable_unifier: true
   unification:
-    enabled: true
     stale_threshold: 24h  # how long to keep models in memory after last seen
     cleanup_interval: 10m  # how often to check for stale models
 

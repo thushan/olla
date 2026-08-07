@@ -136,7 +136,17 @@ func (sm *ServiceManager) Start(ctx context.Context) error {
 
 	started := make([]string, 0, len(order))
 	for _, name := range order {
-		service := sm.services[name]
+		sm.mu.RLock()
+		service, ok := sm.services[name]
+		sm.mu.RUnlock()
+		if !ok {
+			// No path currently removes a registered service, but production code
+			// must not assume a map lookup always hits - guard it the same way
+			// stopServices already does below, instead of panicking on a nil
+			// ManagedService.
+			sm.stopServices(ctx, started)
+			return fmt.Errorf("service %s not found while starting services", name)
+		}
 		sm.logger.Debug("Starting service", "name", name, "dependencies", service.Dependencies())
 
 		if err := service.Start(ctx); err != nil {
@@ -176,7 +186,9 @@ func (sm *ServiceManager) stopServices(ctx context.Context, names []string) erro
 
 	sm.logger.Info("Stopping Services...")
 	for _, name := range names {
+		sm.mu.RLock()
 		service, exists := sm.services[name]
+		sm.mu.RUnlock()
 		if !exists {
 			continue
 		}

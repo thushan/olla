@@ -76,10 +76,13 @@ func DefaultConfig() *Config {
 			},
 		},
 		Proxy: ProxyConfig{
-			Engine:            DefaultProxyEngine,
-			LoadBalancer:      DefaultLoadBalancer,
-			Profile:           DefaultProxyProfile,
-			StreamBufferSize:  8 * 1024, // 8KB
+			Engine:       DefaultProxyEngine,
+			LoadBalancer: DefaultLoadBalancer,
+			Profile:      DefaultProxyProfile,
+			// StreamBufferSize is deliberately left at zero here: each proxy
+			// engine defaults it differently (Olla 64KiB, Sherpa 8KiB) via its
+			// own zero-check further down the chain. Hardcoding a value here
+			// would defeat that - see factory.go's raw (zero-preserving) copy.
 			ConnectionTimeout: 60 * time.Second,
 			ResponseTimeout:   15 * time.Minute,
 			ReadTimeout:       10 * time.Minute,
@@ -131,21 +134,11 @@ func DefaultConfig() *Config {
 				},
 			},
 			Unification: UnificationConfig{
-				Enabled:  true,
-				CacheTTL: 10 * time.Minute,
 				// Mirror config.yaml so a no-config-file run prunes on the same cadence
 				// as the shipped config. These are honoured by the unifier (via
 				// CreateWithConfig), so the values genuinely take effect.
 				StaleThreshold:  24 * time.Hour,
 				CleanupInterval: 10 * time.Minute,
-				CustomRules: []UnificationRuleConfig{
-					{
-						Platform: "ollama",
-						FamilyOverrides: map[string]string{
-							"phi4:*": "phi",
-						},
-					},
-				},
 			},
 		},
 		Logging: LoggingConfig{
@@ -439,16 +432,11 @@ func applyEnvOverrides(config *Config) {
 		config.ModelRegistry.Type = val
 	}
 
-	// Model unification configuration
+	// OLLA_MODEL_UNIFIER_ENABLED controls EnableUnifier, the real toggle. It
+	// used to also write into the now-deleted (dead) Unification.Enabled field.
 	if val := os.Getenv("OLLA_MODEL_UNIFIER_ENABLED"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
 			config.ModelRegistry.EnableUnifier = enabled
-			config.ModelRegistry.Unification.Enabled = enabled
-		}
-	}
-	if val := os.Getenv("OLLA_MODEL_UNIFIER_CACHE_TTL"); val != "" {
-		if ttl, err := time.ParseDuration(val); err == nil {
-			config.ModelRegistry.Unification.CacheTTL = ttl
 		}
 	}
 

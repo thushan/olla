@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -162,4 +163,35 @@ func TestIsProviderSupported(t *testing.T) {
 		// Test unknown is not supported
 		assert.False(t, app.isProviderSupported("unknown"))
 	})
+}
+
+// TestStaticProviderListsAgree is the regression test for the three-way
+// provider-list drift: getStaticProviders (server_routes.go),
+// isProviderSupported's fallback and createProviderProfile's OpenAI-compatible
+// fallback used to each keep their own copy, and LMDeploy/SGLang/DMR/OMLX had
+// drifted out of sync between them. All three now derive from
+// staticSupportedProviders (handler_common.go); this asserts they still agree.
+func TestStaticProviderListsAgree(t *testing.T) {
+	app := &Application{}
+
+	routes := getStaticProviders(app)
+
+	for _, provider := range staticSupportedProviders {
+		t.Run(provider, func(t *testing.T) {
+			_, hasRoutes := routes[provider]
+			assert.True(t, hasRoutes, "getStaticProviders is missing an entry for %q", provider)
+
+			assert.True(t, app.isProviderSupported(provider), "isProviderSupported fallback rejects %q", provider)
+
+			openaiProfile := app.createProviderProfile(constants.ProviderTypeOpenAI)
+			assert.True(t, openaiProfile.IsCompatibleWith(provider),
+				"createProviderProfile(%q) fallback does not accept %q as OpenAI-compatible", constants.ProviderTypeOpenAI, provider)
+		})
+	}
+
+	// getStaticProviders must not carry any provider staticSupportedProviders
+	// doesn't know about either - drift can go in both directions.
+	for provider := range routes {
+		assert.Contains(t, staticSupportedProviders, provider, "getStaticProviders has an entry for %q that staticSupportedProviders doesn't list", provider)
+	}
 }

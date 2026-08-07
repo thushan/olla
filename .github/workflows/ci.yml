@@ -34,6 +34,12 @@ permissions:
   contents: read
   pull-requests: read
 
+# Deliberately NOT run here (user decision, not an oversight): the
+# claude-code-e2e / /olla-validate agent skills, test/scripts/* shell
+# scenarios, and `make test-stress`. These need real backends, take
+# multi-minute-to-multi-hour runs, or both - they're agent/human-gated
+# pre-release and post-major-change gates, not per-push/PR CI checks.
+# See docs/content/development/validation.md.
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -65,7 +71,7 @@ jobs:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Run go vet
-        run: go vet ./...
+        run: make vet
 
       - name: Run go fmt check
         run: make fmt && git diff --exit-code
@@ -76,8 +82,17 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Run tests
-        run: make test-race
+      - name: Run full test suite (incl. testing.Short()-gated tests)
+        # test-race-cover below runs with -short, which skips slower cases
+        # (stress tests, slow-shutdown scenarios) - this plain `test` pass is
+        # the only gate that actually executes them.
+        run: make test
+
+      - name: Run tests with race detection and coverage
+        # test-race-cover is test-race's exact selection (-race -short) plus a
+        # coverage profile - the Makefile is the single source of truth for
+        # what "the tests" means here.
+        run: make test-race-cover
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
@@ -102,20 +117,24 @@ jobs:
           persist-credentials: false
 
       - name: golangci-lint
+        # Kept on the dedicated action (not `make lint`) deliberately: the
+        # Makefile's lint target runs golangci-lint with --fix for local
+        # convenience, which would silently patch files in CI instead of
+        # failing the build. The action also gives caching and inline PR
+        # annotations `make lint` doesn't.
         uses: golangci/golangci-lint-action@v7
         with:
           version: v${{ env.GOLANGCILINT_VERSION }}
           args: --timeout=10m --max-same-issues=0 --max-issues-per-linter=0
+          # skip the online config-schema check against golangci-lint.run - it's
+          # network-dependent, redundant with `make ready` validating the config
+          # locally against the real linter, and was timing out CI runners
+          verify: false
 
       - name: betteralign checks
         run: |
           go install github.com/dkorunic/betteralign/cmd/betteralign@v${{ env.BETTERALIGN_VERSION }}
-          output=$(betteralign ./...)
-          if [ -n "$output" ]; then
-            echo "Struct alignment issues found:"
-            echo "$output"
-            exit 1
-          fi
+          make align-check
 
   cross-platform:
     name: Cross-Platform Build Validation
