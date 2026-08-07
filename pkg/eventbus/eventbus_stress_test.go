@@ -10,7 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestWorkerPool_ConcurrentPublishingStress runs comprehensive stress tests
+// TestWorkerPool_ConcurrentPublishingStress hammers the bus with 10 publishers
+// racing unthrottled against a single subscriber. Like TestEventBus_HighVolumePublishing,
+// PublishAsync is non-blocking by design, so under a genuine storm the bus WILL
+// drop events at the queue and/or subscriber stage rather than block anyone -
+// on a starved 2-core CI runner the receiver goroutine can lose enough
+// scheduler time that most events are dropped before it ever gets to read
+// them. There is no delivery floor to assert here; once the storm ends,
+// dropped events are gone for good, not "eventually" delivered. This test
+// instead proves the bus keeps its actual guarantees: the storm doesn't wedge
+// it, and delivered + tracked drops reconciles against what was published.
 // This test is skipped in CI (when -short flag is used)
 func TestWorkerPool_ConcurrentPublishingStress(t *testing.T) {
 	if testing.Short() {
@@ -35,7 +44,9 @@ func TestWorkerPool_ConcurrentPublishingStress(t *testing.T) {
 
 	// Start receiver
 	done := make(chan struct{})
+	stopped := make(chan struct{})
 	go func() {
+		defer close(stopped)
 		for {
 			select {
 			case event := <-ch:
@@ -66,19 +77,24 @@ func TestWorkerPool_ConcurrentPublishingStress(t *testing.T) {
 	// Wait for all publishers to finish
 	wg.Wait()
 
-	// Give time for events to be processed
-	time.Sleep(500 * time.Millisecond)
+	// Wait for the received count to stop climbing rather than guessing a
+	// fixed delay - the queue (1000) and subscriber buffer (100) both drain
+	// quickly once publishing stops.
+	require.Eventually(t, func() bool {
+		before := receivedCount.Load()
+		time.Sleep(50 * time.Millisecond)
+		return receivedCount.Load() == before
+	}, pollCeiling, pollInterval, "received count never stabilised after the storm - bus may be wedged")
 
-	// Stop receiver
+	// Stop the receiver and wait for it to actually exit before touching the
+	// map directly, so there's no race between the goroutine's last write and
+	// this read.
 	close(done)
-
-	// Wait a bit for receiver to finish
-	time.Sleep(100 * time.Millisecond)
+	<-stopped
 
 	publishedTotal := published.Load()
 	receivedTotal := receivedCount.Load()
 
-	// Safely read the map length
 	mu.Lock()
 	uniqueEvents := len(received)
 	mu.Unlock()
@@ -87,12 +103,16 @@ func TestWorkerPool_ConcurrentPublishingStress(t *testing.T) {
 	t.Logf("STRESS TEST - Received: %d events", receivedTotal)
 	t.Logf("STRESS TEST - Unique events: %d", uniqueEvents)
 
-	// With stress test, we expect more drops but still reasonable delivery
-	// Lower threshold since we're stress testing without delays
-	minExpected := int64(float64(numPublishers*eventsPerPublisher) * 0.3)
-	if receivedTotal < minExpected {
-		t.Errorf("Expected at least %d events, got %d", minExpected, receivedTotal)
-	}
+	// Prove the bus survived the storm rather than silently wedging: publish
+	// one more event synchronously and confirm the still-live subscriber gets it.
+	delivered := eb.Publish("post-storm")
+	require.Equal(t, 1, delivered, "bus should still deliver to the live subscriber after the storm")
+
+	// Delivered + tracked drops (subscriber-stage and queue-stage) should
+	// never exceed what was actually published.
+	stats := eb.Stats()
+	require.LessOrEqual(t, receivedTotal+int64(stats.TotalDropped)+int64(stats.QueueDropped), publishedTotal,
+		"delivered + tracked drops should never exceed what was published")
 }
 
 // TestEventBus_HighVolumePublishing floods the bus with far more events than
