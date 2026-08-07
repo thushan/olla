@@ -138,6 +138,9 @@ func TestProxyConfiguration_RealChain_OllaGetsEngineBufferDefault(t *testing.T) 
 		// no-config-file fallback path rather than relying on the test
 		// runner's ambient working directory not containing one.
 		t.Chdir(t.TempDir())
+		// Load() prefers OLLA_CONFIG_FILE over its search paths. Clear it so an
+		// ambient value cannot turn this into a "file not found" failure.
+		t.Setenv("OLLA_CONFIG_FILE", "")
 
 		cfg, err := appconfig.Load()
 		if err != nil {
