@@ -342,7 +342,9 @@ func TestResponseStartedWriter_BareFlush_MarksStarted(t *testing.T) {
 // TestResponseStartedWriter_FlushError_NotSupported confirms FlushError
 // surfaces http.ErrNotSupported (matching stdlib ResponseController
 // convention) rather than panicking or silently swallowing the failure, when
-// nothing in the chain supports flushing.
+// nothing in the chain supports flushing. It must also leave Started() false:
+// an unsupported flush commits nothing, so handleProxyError must still be
+// free to write an error response (CodeRabbit PRRT_kwDOOvLJ9s6XdGod).
 type nonFlushingWriter struct {
 	http.ResponseWriter
 }
@@ -358,6 +360,7 @@ func TestResponseStartedWriter_FlushError_NotSupported(t *testing.T) {
 	err := tracker.FlushError()
 	require.Error(t, err)
 	assert.ErrorIs(t, err, http.ErrNotSupported)
+	assert.False(t, tracker.Started(), "an unsupported flush commits nothing, so started must stay false")
 }
 
 // TestResponseStartedWriter_DoubleWrap_FlushMarksBothStarted mirrors the real
