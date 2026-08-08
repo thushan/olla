@@ -353,7 +353,7 @@ func BenchmarkOllaCircuitBreaker(b *testing.B) {
 		} else if i%3 == 1 {
 			cb.RecordSuccess(0)
 		} else {
-			_, _ = cb.IsOpen()
+			_, _ = cb.IsOpen(olla.HalfOpenStaleness)
 		}
 	}
 }

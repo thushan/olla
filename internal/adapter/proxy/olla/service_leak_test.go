@@ -112,8 +112,8 @@ func TestCircuitBreakerCleanup_NoMemoryLeak(t *testing.T) {
 		endpoint := fmt.Sprintf("endpoint-%d", i)
 		cb := s.GetCircuitBreaker(endpoint)
 		// Set as closed with no recent failures
-		atomic.StoreInt64(&cb.state, 0)
-		atomic.StoreInt64(&cb.lastFailure, 0)
+		cb.SetOpen(false)
+		cb.SetLastFailureNanos(0)
 	}
 
 	// Verify circuit breakers were created

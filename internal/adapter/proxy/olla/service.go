@@ -40,6 +40,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/health"
 	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
+	"github.com/thushan/olla/internal/adapter/resilience"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -57,7 +58,7 @@ const (
 	// Circuit breaker threshold higher than health checker for tolerance
 	circuitBreakerThreshold = 5 // vs health.DefaultCircuitBreakerThreshold (3)
 
-	// halfOpenStaleness bounds how long a single in-flight half-open probe can
+	// HalfOpenStaleness bounds how long a single in-flight half-open probe can
 	// gate out further probes before the slot is handed to a replacement caller.
 	// This governs proxied inference requests, not health probes: TTFT alone
 	// routinely exceeds a second on a cold or busy backend, and engine-side
@@ -68,7 +69,7 @@ const (
 	// header arrives well within it, short enough that a truly hung probe
 	// doesn't wedge the endpoint for long. Deliberately not copied from
 	// health.CircuitBreaker, whose constant answers a different question.
-	halfOpenStaleness = 30 * time.Second
+	HalfOpenStaleness = 30 * time.Second
 )
 
 // Service implements the Olla proxy - optimised for high performance and resilience
@@ -100,14 +101,13 @@ type connectionPool struct {
 	healthy   int64 // atomic: 0=unhealthy, 1=healthy
 }
 
-// circuitBreaker prevents overwhelming failing endpoints
-type circuitBreaker struct {
-	failures    int64 // atomic
-	lastFailure int64 // atomic
-	lastAttempt int64 // atomic: half-open single-flight gate (unix nanos), reset by RecordSuccess/RecordFailure
-	state       int64 // atomic: 0=closed, 1=open, 2=half-open
-	threshold   int64
-}
+// circuitBreaker is a local alias for the shared closed/open/half-open state
+// machine in internal/adapter/resilience - kept as a distinct name so this
+// package's call sites and tests don't need renaming. See GetCircuitBreaker
+// for the threshold/openDuration this package configures it with, and the
+// comment above IsOpen's old home (now on resilience.Breaker) for why a
+// second, independent copy of this state machine existed here at all.
+type circuitBreaker = resilience.Breaker
 
 // NewService creates a new Olla proxy service
 func NewService(
@@ -234,15 +234,15 @@ func (s *Service) getOrCreateEndpointPool(endpoint string) *connectionPool {
 // under concurrent first-use, avoiding a redundant allocation race.
 func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 	cb, _ := s.circuitBreakers.LoadOrCompute(endpoint, func() (*circuitBreaker, bool) {
-		return &circuitBreaker{
-			threshold: circuitBreakerThreshold,
-			state:     0, // closed
-		}, false
+		return resilience.New(resilience.Config{
+			FailureThreshold: circuitBreakerThreshold,
+			OpenDuration:     health.DefaultCircuitBreakerTimeout,
+		}), false
 	})
 	return cb
 }
 
-// Circuit breaker methods
+// Circuit breaker usage
 //
 // This is the second of two layers of failure protection, and it rarely
 // gets the chance to open on the most common failure class: a
@@ -256,93 +256,15 @@ func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 // handleConnectionFailure at all (the connection succeeded), so this
 // breaker is what actually protects against that class in practice -
 // hangs and slow/unresponsive backends, not down ones.
-// IsOpen reports whether the circuit is open for this endpoint.
 //
-// The second return value, attempt, identifies the specific half-open probe
-// this call admitted (0 when the circuit is closed and no half-open gating
-// applies, and 0 when this caller was rejected). Callers that proceed to
-// perform the probe MUST pass attempt back into the matching
-// RecordSuccess/RecordFailure call - see those for why: a late result from a
-// probe that was superseded by a stale-handover replacement must not clobber
-// the replacement's state.
-func (cb *circuitBreaker) IsOpen() (open bool, attempt int64) {
-	state := atomic.LoadInt64(&cb.state)
-	if state == 0 {
-		return false, 0
-	}
-
-	if state == 1 {
-		// Check if the recovery timeout has passed
-		lastFailure := atomic.LoadInt64(&cb.lastFailure)
-		if time.Since(time.Unix(0, lastFailure)) <= health.DefaultCircuitBreakerTimeout {
-			return true, 0
-		}
-		// Timeout elapsed: attempt Open -> Half-open. Every caller that reaches
-		// here (whether it won this CAS or another goroutine already flipped it)
-		// falls through to the half-open single-flight gate below.
-		atomic.CompareAndSwapInt64(&cb.state, 1, 2)
-	}
-
-	// Half-open: admit exactly one probe. lastAttempt is the single-flight gate -
-	// only the goroutine that wins the 0->now CAS is let through immediately;
-	// every other concurrent request is rejected until RecordSuccess/RecordFailure
-	// resolves the probe and resets it. If the outstanding probe is stale (older
-	// than halfOpenStaleness - e.g. a hung request that never resolved), the slot
-	// is handed to exactly one replacement caller via a last->now CAS: a plain
-	// read-and-compare here would admit every caller for as long as the window
-	// keeps being exceeded, since nothing re-stamps lastAttempt on the read path.
-	now := time.Now().UnixNano()
-	if atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, now) {
-		return false, now
-	}
-	last := atomic.LoadInt64(&cb.lastAttempt)
-	if time.Since(time.Unix(0, last)) < halfOpenStaleness {
-		return true, 0
-	}
-	if atomic.CompareAndSwapInt64(&cb.lastAttempt, last, now) {
-		return false, now
-	}
-	return true, 0
-}
-
-// RecordSuccess records a successful probe. attempt must be the value IsOpen
-// returned when it admitted this probe (0 for the normal closed-circuit path,
-// where no correlation is needed or performed).
-//
-// ABA race note: when attempt is non-zero (a half-open probe), this only
-// applies if attempt still matches lastAttempt - i.e. this call is the most
-// recent admitted probe, not one that a stale-handover already superseded.
-// Without this check, a very late result from a hung probe that finally
-// resolves AFTER a replacement probe has already run to completion would
-// clobber the replacement's outcome (e.g. a stale success closing a circuit
-// the replacement had just legitimately re-opened, or vice versa). This closes
-// the gap for the common case - a superseded probe's result arriving after
-// the replacement has already resolved - but is not a full fencing solution:
-// two admitted probes racing to record at literally the same instant are not
-// additionally serialised beyond the atomics already in play.
-func (cb *circuitBreaker) RecordSuccess(attempt int64) {
-	if attempt != 0 && atomic.LoadInt64(&cb.lastAttempt) != attempt {
-		return
-	}
-	atomic.StoreInt64(&cb.failures, 0)
-	atomic.StoreInt64(&cb.lastAttempt, 0)
-	atomic.StoreInt64(&cb.state, 0) // closed
-}
-
-// RecordFailure records a failed probe. See RecordSuccess for the attempt
-// correlation contract.
-func (cb *circuitBreaker) RecordFailure(attempt int64) {
-	if attempt != 0 && atomic.LoadInt64(&cb.lastAttempt) != attempt {
-		return
-	}
-	failures := atomic.AddInt64(&cb.failures, 1)
-	atomic.StoreInt64(&cb.lastFailure, time.Now().UnixNano())
-	atomic.StoreInt64(&cb.lastAttempt, 0)
-
-	if failures >= cb.threshold {
-		atomic.StoreInt64(&cb.state, 1) // open
-	}
-}
+// The state machine itself (closed/open/half-open, single-flight probe
+// gating, stale-handover, ABA-safe attempt tokens) lives in
+// resilience.Breaker, shared with adapter/health's circuit breaker - see
+// that package for the mechanics. Call sites here pass HalfOpenStaleness
+// (see its doc comment above) as the probe-staleness window on every
+// IsOpen call, since that value is fixed per endpoint in this package
+// rather than derived per call the way adapter/health derives it from
+// CheckTimeout.
 
 // ProxyRequest handles incoming HTTP requests
 func (s *Service) ProxyRequest(ctx context.Context, w http.ResponseWriter, r *http.Request, stats *ports.RequestStats, rlog logger.StyledLogger) error {
@@ -543,9 +465,8 @@ func (s *Service) cleanupUnusedResources() {
 	s.circuitBreakers.Range(func(endpoint string, cb *circuitBreaker) bool {
 		if !endpointExists[endpoint] {
 			// Also check if circuit breaker is closed and hasn't failed recently
-			state := atomic.LoadInt64(&cb.state)
-			lastFailure := atomic.LoadInt64(&cb.lastFailure)
-			if state == 0 && (lastFailure == 0 || now-lastFailure > staleThreshold) {
+			lastFailure := cb.LastFailureNanos()
+			if !cb.Tripped() && (lastFailure == 0 || now-lastFailure > staleThreshold) {
 				s.circuitBreakers.Delete(endpoint)
 				cbRemoved++
 			}

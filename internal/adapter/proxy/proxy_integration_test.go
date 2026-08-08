@@ -438,7 +438,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 		cb := proxy.GetCircuitBreaker(endpoint.Name)
 
 		// Initially should be closed
-		if open, _ := cb.IsOpen(); open {
+		if open, _ := cb.IsOpen(olla.HalfOpenStaleness); open {
 			t.Error("Circuit breaker should start closed")
 		}
 

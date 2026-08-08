@@ -71,7 +71,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	var attempt int64
 	if cb != nil {
 		var open bool
-		open, attempt = cb.IsOpen()
+		open, attempt = cb.IsOpen(HalfOpenStaleness)
 		if open {
 			rlog.Warn("Circuit breaker is open for endpoint", "endpoint", endpoint.Name)
 			err := fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
