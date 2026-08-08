@@ -66,33 +66,33 @@ func TestOllaProxyService_CircuitBreaker(t *testing.T) {
 	cb := proxy.GetCircuitBreaker("test-endpoint")
 
 	// Initially closed (should allow requests)
-	if cb.IsOpen() {
+	if open, _ := cb.IsOpen(); open {
 		t.Error("Circuit breaker should be closed initially")
 	}
 
 	// Record failures up to threshold
 	for i := range 4 { // threshold is 5
-		cb.RecordFailure()
-		if cb.IsOpen() {
+		cb.RecordFailure(0)
+		if open, _ := cb.IsOpen(); open {
 			t.Errorf("Circuit breaker should remain closed after %d failures", i+1)
 		}
 	}
 
 	// One more failure should open the circuit
-	cb.RecordFailure()
-	if !cb.IsOpen() {
+	cb.RecordFailure(0)
+	if open, _ := cb.IsOpen(); !open {
 		t.Error("Circuit breaker should be open after threshold failures")
 	}
 
 	// Should remain open for timeout period
 	time.Sleep(10 * time.Millisecond)
-	if !cb.IsOpen() {
+	if open, _ := cb.IsOpen(); !open {
 		t.Error("Circuit breaker should remain open during timeout")
 	}
 
 	// Successful request should close it
-	cb.RecordSuccess()
-	if cb.IsOpen() {
+	cb.RecordSuccess(0)
+	if open, _ := cb.IsOpen(); open {
 		t.Error("Circuit breaker should be closed after successful request")
 	}
 }
@@ -138,7 +138,7 @@ func TestOllaProxyService_CircuitBreaker_Integration(t *testing.T) {
 	// Check circuit breaker is open - note that HTTP 500s don't trigger circuit breaker
 	// Circuit breaker is for connection failures, not HTTP error status codes
 	cb := proxy.GetCircuitBreaker(endpoint.Name)
-	if cb.IsOpen() {
+	if open, _ := cb.IsOpen(); open {
 		t.Log("Circuit breaker is open (this might be expected depending on implementation)")
 	} else {
 		t.Log("Circuit breaker remained closed - HTTP 500s don't trigger circuit breaker, only connection failures")

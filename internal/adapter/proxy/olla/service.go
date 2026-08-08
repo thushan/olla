@@ -256,17 +256,26 @@ func (s *Service) GetCircuitBreaker(endpoint string) *circuitBreaker {
 // handleConnectionFailure at all (the connection succeeded), so this
 // breaker is what actually protects against that class in practice -
 // hangs and slow/unresponsive backends, not down ones.
-func (cb *circuitBreaker) IsOpen() bool {
+// IsOpen reports whether the circuit is open for this endpoint.
+//
+// The second return value, attempt, identifies the specific half-open probe
+// this call admitted (0 when the circuit is closed and no half-open gating
+// applies, and 0 when this caller was rejected). Callers that proceed to
+// perform the probe MUST pass attempt back into the matching
+// RecordSuccess/RecordFailure call - see those for why: a late result from a
+// probe that was superseded by a stale-handover replacement must not clobber
+// the replacement's state.
+func (cb *circuitBreaker) IsOpen() (open bool, attempt int64) {
 	state := atomic.LoadInt64(&cb.state)
 	if state == 0 {
-		return false
+		return false, 0
 	}
 
 	if state == 1 {
 		// Check if the recovery timeout has passed
 		lastFailure := atomic.LoadInt64(&cb.lastFailure)
 		if time.Since(time.Unix(0, lastFailure)) <= health.DefaultCircuitBreakerTimeout {
-			return true
+			return true, 0
 		}
 		// Timeout elapsed: attempt Open -> Half-open. Every caller that reaches
 		// here (whether it won this CAS or another goroutine already flipped it)
@@ -284,22 +293,48 @@ func (cb *circuitBreaker) IsOpen() bool {
 	// keeps being exceeded, since nothing re-stamps lastAttempt on the read path.
 	now := time.Now().UnixNano()
 	if atomic.CompareAndSwapInt64(&cb.lastAttempt, 0, now) {
-		return false
+		return false, now
 	}
 	last := atomic.LoadInt64(&cb.lastAttempt)
 	if time.Since(time.Unix(0, last)) < halfOpenStaleness {
-		return true
+		return true, 0
 	}
-	return !atomic.CompareAndSwapInt64(&cb.lastAttempt, last, now)
+	if atomic.CompareAndSwapInt64(&cb.lastAttempt, last, now) {
+		return false, now
+	}
+	return true, 0
 }
 
-func (cb *circuitBreaker) RecordSuccess() {
+// RecordSuccess records a successful probe. attempt must be the value IsOpen
+// returned when it admitted this probe (0 for the normal closed-circuit path,
+// where no correlation is needed or performed).
+//
+// ABA race note: when attempt is non-zero (a half-open probe), this only
+// applies if attempt still matches lastAttempt - i.e. this call is the most
+// recent admitted probe, not one that a stale-handover already superseded.
+// Without this check, a very late result from a hung probe that finally
+// resolves AFTER a replacement probe has already run to completion would
+// clobber the replacement's outcome (e.g. a stale success closing a circuit
+// the replacement had just legitimately re-opened, or vice versa). This closes
+// the gap for the common case - a superseded probe's result arriving after
+// the replacement has already resolved - but is not a full fencing solution:
+// two admitted probes racing to record at literally the same instant are not
+// additionally serialised beyond the atomics already in play.
+func (cb *circuitBreaker) RecordSuccess(attempt int64) {
+	if attempt != 0 && atomic.LoadInt64(&cb.lastAttempt) != attempt {
+		return
+	}
 	atomic.StoreInt64(&cb.failures, 0)
 	atomic.StoreInt64(&cb.lastAttempt, 0)
 	atomic.StoreInt64(&cb.state, 0) // closed
 }
 
-func (cb *circuitBreaker) RecordFailure() {
+// RecordFailure records a failed probe. See RecordSuccess for the attempt
+// correlation contract.
+func (cb *circuitBreaker) RecordFailure(attempt int64) {
+	if attempt != 0 && atomic.LoadInt64(&cb.lastAttempt) != attempt {
+		return
+	}
 	failures := atomic.AddInt64(&cb.failures, 1)
 	atomic.StoreInt64(&cb.lastFailure, time.Now().UnixNano())
 	atomic.StoreInt64(&cb.lastAttempt, 0)

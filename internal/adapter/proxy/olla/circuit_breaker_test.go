@@ -42,7 +42,7 @@ func TestCircuitBreaker_HalfOpen_SingleFlight(t *testing.T) {
 			defer done.Done()
 			ready.Done()
 			start.Wait() // release all goroutines at once to maximise contention
-			if !cb.IsOpen() {
+			if open, _ := cb.IsOpen(); !open {
 				atomic.AddInt64(&admitted, 1)
 			}
 		}()
@@ -57,14 +57,15 @@ func TestCircuitBreaker_HalfOpen_SingleFlight(t *testing.T) {
 	}
 
 	// Until the probe resolves, every further caller must still be rejected.
-	if !cb.IsOpen() {
+	if open, _ := cb.IsOpen(); !open {
 		t.Fatal("second probe was admitted before RecordSuccess/RecordFailure resolved the first")
 	}
 
 	// A failure resolves the in-flight probe and, since threshold is far away,
 	// leaves the breaker in half-open - exactly one further probe should now
-	// be admitted.
-	cb.RecordFailure()
+	// be admitted. attempt=0 because this test resolves the gate directly, not
+	// via a captured probe token.
+	cb.RecordFailure(0)
 
 	admitted = 0
 	ready.Add(goroutines)
@@ -75,7 +76,7 @@ func TestCircuitBreaker_HalfOpen_SingleFlight(t *testing.T) {
 			defer done.Done()
 			ready.Done()
 			start.Wait()
-			if !cb.IsOpen() {
+			if open, _ := cb.IsOpen(); !open {
 				atomic.AddInt64(&admitted, 1)
 			}
 		}()
@@ -94,11 +95,12 @@ func TestCircuitBreaker_HalfOpen_SingleFlight(t *testing.T) {
 func TestCircuitBreaker_HalfOpen_SuccessCloses(t *testing.T) {
 	cb := openCircuitBreaker(3)
 
-	if cb.IsOpen() {
+	open, attempt := cb.IsOpen()
+	if open {
 		t.Fatal("expected the first call after timeout elapsed to admit a half-open probe")
 	}
 
-	cb.RecordSuccess()
+	cb.RecordSuccess(attempt)
 
 	if atomic.LoadInt64(&cb.state) != 0 {
 		t.Fatalf("state = %d after RecordSuccess, want closed (0)", cb.state)
@@ -107,7 +109,7 @@ func TestCircuitBreaker_HalfOpen_SuccessCloses(t *testing.T) {
 		t.Fatalf("lastAttempt = %d after RecordSuccess, want reset to 0", cb.lastAttempt)
 	}
 	for range 10 {
-		if cb.IsOpen() {
+		if open, _ := cb.IsOpen(); open {
 			t.Fatal("closed breaker rejected a request")
 		}
 	}
@@ -122,10 +124,10 @@ func TestCircuitBreaker_HalfOpen_SuccessCloses(t *testing.T) {
 func TestCircuitBreaker_HalfOpen_StaleProbeReleased(t *testing.T) {
 	cb := openCircuitBreaker(1000)
 
-	if cb.IsOpen() {
+	if open, _ := cb.IsOpen(); open {
 		t.Fatal("expected the first call to admit a half-open probe")
 	}
-	if !cb.IsOpen() {
+	if open, _ := cb.IsOpen(); !open {
 		t.Fatal("a fresh in-flight probe must still block a second one")
 	}
 
@@ -133,14 +135,14 @@ func TestCircuitBreaker_HalfOpen_StaleProbeReleased(t *testing.T) {
 	// ever resolving.
 	atomic.StoreInt64(&cb.lastAttempt, time.Now().Add(-halfOpenStaleness-time.Millisecond).UnixNano())
 
-	if cb.IsOpen() {
+	if open, _ := cb.IsOpen(); open {
 		t.Fatal("a stale, never-resolved probe must not wedge the endpoint - a further probe should be admitted")
 	}
 
 	// The handover must re-stamp lastAttempt to now, not leave it stuck in the
 	// past - otherwise every subsequent caller keeps reading a stale timestamp
 	// and gets admitted too, defeating the single-flight gate entirely.
-	if !cb.IsOpen() {
+	if open, _ := cb.IsOpen(); !open {
 		t.Fatal("the replacement probe just admitted must block the very next caller")
 	}
 }
@@ -156,7 +158,7 @@ func TestCircuitBreaker_HalfOpen_StaleProbeReleased_ConcurrentHandover(t *testin
 
 	// Win the initial half-open slot and immediately backdate it past the
 	// staleness window, so every goroutine below races the handover CAS.
-	if cb.IsOpen() {
+	if open, _ := cb.IsOpen(); open {
 		t.Fatal("expected the first call to admit a half-open probe")
 	}
 	atomic.StoreInt64(&cb.lastAttempt, time.Now().Add(-halfOpenStaleness-time.Millisecond).UnixNano())
@@ -175,7 +177,7 @@ func TestCircuitBreaker_HalfOpen_StaleProbeReleased_ConcurrentHandover(t *testin
 			defer done.Done()
 			ready.Done()
 			start.Wait()
-			if !cb.IsOpen() {
+			if open, _ := cb.IsOpen(); !open {
 				atomic.AddInt64(&admitted, 1)
 			}
 		}()
@@ -195,16 +197,99 @@ func TestCircuitBreaker_HalfOpen_StaleProbeReleased_ConcurrentHandover(t *testin
 func TestCircuitBreaker_HalfOpen_FailureReopens(t *testing.T) {
 	cb := openCircuitBreaker(1) // single failure re-opens
 
-	if cb.IsOpen() {
+	open, attempt := cb.IsOpen()
+	if open {
 		t.Fatal("expected the first call after timeout elapsed to admit a half-open probe")
 	}
 
-	cb.RecordFailure()
+	cb.RecordFailure(attempt)
 
 	if atomic.LoadInt64(&cb.state) != 1 {
 		t.Fatalf("state = %d after threshold-crossing RecordFailure, want open (1)", cb.state)
 	}
-	if !cb.IsOpen() {
+	if open, _ := cb.IsOpen(); !open {
 		t.Fatal("re-opened breaker admitted a request before its timeout elapsed again")
+	}
+}
+
+// TestCircuitBreaker_ABARace_SupersededProbeResultDropped pins the ABA-race
+// guard: a late result from a probe that a stale-handover already superseded
+// must not clobber the replacement's state. Without attempt correlation, the
+// original hung probe's late RecordSuccess would close a circuit the
+// replacement had just legitimately re-opened via RecordFailure (and the
+// inverse: a stale failure re-opening a circuit the replacement just closed).
+func TestCircuitBreaker_ABARace_SupersededProbeResultDropped(t *testing.T) {
+	// Direction 1: stale success must not close a circuit the replacement
+	// re-opened.
+	cb := openCircuitBreaker(1) // single failure re-opens
+
+	// Admit probe A (the call transitions open -> half-open and stamps the
+	// single-flight gate); discard its token and backdate lastAttempt past the
+	// staleness window directly (rather than sleeping) to simulate a hung probe.
+	// attemptA is taken as that backdated stamp so it is guaranteed distinct
+	// from attemptB - two real IsOpen() calls a few lines apart can share the
+	// same UnixNano() value on a coarser system clock.
+	open, _ := cb.IsOpen()
+	if open {
+		t.Fatal("expected the first call to admit a half-open probe")
+	}
+	attemptA := time.Now().Add(-halfOpenStaleness - time.Millisecond).UnixNano()
+	atomic.StoreInt64(&cb.lastAttempt, attemptA)
+
+	// A is stale; a stale-handover admits replacement probe B with a fresh token.
+	open, attemptB := cb.IsOpen()
+	if open {
+		t.Fatal("expected the stale handover to admit exactly one replacement probe")
+	}
+	if attemptB == 0 || attemptB == attemptA {
+		t.Fatalf("expected a distinct non-zero attempt token for the replacement probe, got %d (A was %d)", attemptB, attemptA)
+	}
+
+	// B fails first and legitimately re-opens the circuit (threshold == 1).
+	cb.RecordFailure(attemptB)
+	if atomic.LoadInt64(&cb.state) != 1 {
+		t.Fatal("expected the circuit to be re-opened after the replacement probe's failure")
+	}
+
+	// A's hung request finally resolves - as a SUCCESS. Without attempt
+	// correlation this would close the circuit B just re-opened.
+	cb.RecordSuccess(attemptA)
+	if atomic.LoadInt64(&cb.state) != 1 {
+		t.Fatal("a superseded probe's late success must not close the circuit the replacement re-opened")
+	}
+
+	// Direction 2 (inverse): stale failure must not re-open a circuit the
+	// replacement just closed.
+	cb2 := openCircuitBreaker(1000) // high threshold so a failure does not reopen
+
+	open, _ = cb2.IsOpen()
+	if open {
+		t.Fatal("expected the first call to admit a half-open probe")
+	}
+	attemptA2 := time.Now().Add(-halfOpenStaleness - time.Millisecond).UnixNano()
+	atomic.StoreInt64(&cb2.lastAttempt, attemptA2)
+
+	open, attemptB2 := cb2.IsOpen()
+	if open {
+		t.Fatal("expected the stale handover to admit exactly one replacement probe")
+	}
+	if attemptB2 == 0 || attemptB2 == attemptA2 {
+		t.Fatalf("expected a distinct non-zero attempt token for the replacement probe, got %d (A was %d)", attemptB2, attemptA2)
+	}
+
+	// B succeeds first and legitimately closes the circuit.
+	cb2.RecordSuccess(attemptB2)
+	if atomic.LoadInt64(&cb2.state) != 0 {
+		t.Fatal("expected the circuit to be closed after the replacement probe's success")
+	}
+
+	// A's late result arrives as a FAILURE. Without correlation this would
+	// re-open the circuit B just closed and bump the failure counter.
+	cb2.RecordFailure(attemptA2)
+	if atomic.LoadInt64(&cb2.state) != 0 {
+		t.Fatal("a superseded probe's late failure must not re-open the circuit the replacement closed")
+	}
+	if failures := atomic.LoadInt64(&cb2.failures); failures != 0 {
+		t.Fatalf("superseded probe's failure must not increment the failure counter, got %d", failures)
 	}
 }

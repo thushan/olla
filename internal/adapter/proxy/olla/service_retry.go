@@ -63,13 +63,21 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	// if UpdateConfig races concurrently.
 	cfg := s.configuration.Load()
 
-	// Check circuit breaker first
+	// Check circuit breaker first. attempt is the probe correlation token when
+	// this call was admitted as a half-open probe (0 when the circuit was
+	// closed); it is threaded through to the recorder calls below so a late
+	// result from a superseded probe can't clobber the replacement's state.
 	cb := s.GetCircuitBreaker(endpoint.Name)
-	if cb != nil && cb.IsOpen() {
-		rlog.Warn("Circuit breaker is open for endpoint", "endpoint", endpoint.Name)
-		err := fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
-		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), err)
-		return err
+	var attempt int64
+	if cb != nil {
+		var open bool
+		open, attempt = cb.IsOpen()
+		if open {
+			rlog.Warn("Circuit breaker is open for endpoint", "endpoint", endpoint.Name)
+			err := fmt.Errorf("circuit breaker open for endpoint %s", endpoint.Name)
+			s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), err)
+			return err
+		}
 	}
 
 	// Build target URL using common function that respects preserve_path
@@ -106,7 +114,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	proxyReq, err := s.prepareProxyRequest(ctx, r, targetURL, endpoint, stats)
 	if err != nil {
 		if cb != nil {
-			cb.RecordFailure()
+			cb.RecordFailure(attempt)
 		}
 		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), err)
 		return fmt.Errorf("failed to create proxy request: %w", err)
@@ -119,7 +127,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	if err != nil {
 		if cb != nil {
-			cb.RecordFailure()
+			cb.RecordFailure(attempt)
 		}
 		// Don't log as error if it's a connection failure - the retry handler will handle it
 		if core.IsConnectionError(err) {
@@ -135,7 +143,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	// Record success with circuit breaker
 	if cb != nil {
-		cb.RecordSuccess()
+		cb.RecordSuccess(attempt)
 	}
 
 	rlog.Debug("round-trip success", "status", resp.StatusCode)
