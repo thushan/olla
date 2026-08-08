@@ -35,29 +35,45 @@ func NewRetryHandler(discoveryService ports.DiscoveryService, logger logger.Styl
 // ProxyFunc defines the signature for endpoint proxy implementations
 type ProxyFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error
 
-// responseStartedWriter wraps http.ResponseWriter and records whether any response
-// bytes or status codes have been sent to the client. We use this to gate retry
-// decisions: once the client has received data, retrying a non-idempotent request
-// would send duplicate content or charge twice on metered APIs.
-type responseStartedWriter struct {
+// ResponseStartedWriter wraps http.ResponseWriter and records whether any response
+// bytes or status codes have been sent to the client. Retry logic uses this to gate
+// retry decisions: once the client has received data, retrying a non-idempotent
+// request would send duplicate content or charge twice on metered APIs. It is also
+// the correct "has this response been committed" signal for callers upstream of
+// retry (e.g. handler_proxy.go's handleProxyError) - Header().Set does not commit
+// anything, only WriteHeader/Write do, so a Content-Type-presence check is not a
+// reliable substitute.
+type ResponseStartedWriter struct {
 	http.ResponseWriter
 	started bool
 }
 
-func (rw *responseStartedWriter) WriteHeader(code int) {
+// NewResponseStartedWriter wraps w so callers can observe whether a response has
+// been committed via Started().
+func NewResponseStartedWriter(w http.ResponseWriter) *ResponseStartedWriter {
+	return &ResponseStartedWriter{ResponseWriter: w}
+}
+
+func (rw *ResponseStartedWriter) WriteHeader(code int) {
 	rw.started = true
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-func (rw *responseStartedWriter) Write(b []byte) (int, error) {
+func (rw *ResponseStartedWriter) Write(b []byte) (int, error) {
 	rw.started = true
 	return rw.ResponseWriter.Write(b)
+}
+
+// Started reports whether a status code or body bytes have been committed to the
+// client yet.
+func (rw *ResponseStartedWriter) Started() bool {
+	return rw.started
 }
 
 // Unwrap exposes the underlying ResponseWriter so http.NewResponseController can
 // discover optional interfaces (Flush, Hijack, SetDeadline, etc.) via the chain.
 // Without this, the wrapper hides the underlying flusher and SSE streams stall.
-func (rw *responseStartedWriter) Unwrap() http.ResponseWriter {
+func (rw *ResponseStartedWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
 }
 
@@ -102,7 +118,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 	}
 
 	// Wrap the writer so we can detect when bytes have been committed to the client.
-	tracker := &responseStartedWriter{ResponseWriter: w}
+	tracker := NewResponseStartedWriter(w)
 
 	var lastErr error
 	maxRetries := len(endpoints)

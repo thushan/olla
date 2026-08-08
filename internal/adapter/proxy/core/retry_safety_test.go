@@ -149,7 +149,7 @@ func TestResponseStartedWriter_TracksWrites(t *testing.T) {
 
 	t.Run("WriteHeader sets started", func(t *testing.T) {
 		t.Parallel()
-		rw := &responseStartedWriter{ResponseWriter: httptest.NewRecorder()}
+		rw := &ResponseStartedWriter{ResponseWriter: httptest.NewRecorder()}
 		assert.False(t, rw.started)
 		rw.WriteHeader(http.StatusOK)
 		assert.True(t, rw.started)
@@ -157,7 +157,7 @@ func TestResponseStartedWriter_TracksWrites(t *testing.T) {
 
 	t.Run("Write sets started", func(t *testing.T) {
 		t.Parallel()
-		rw := &responseStartedWriter{ResponseWriter: httptest.NewRecorder()}
+		rw := &ResponseStartedWriter{ResponseWriter: httptest.NewRecorder()}
 		assert.False(t, rw.started)
 		_, _ = rw.Write([]byte("hello"))
 		assert.True(t, rw.started)
@@ -165,7 +165,7 @@ func TestResponseStartedWriter_TracksWrites(t *testing.T) {
 
 	t.Run("neither called: not started", func(t *testing.T) {
 		t.Parallel()
-		rw := &responseStartedWriter{ResponseWriter: httptest.NewRecorder()}
+		rw := &ResponseStartedWriter{ResponseWriter: httptest.NewRecorder()}
 		assert.False(t, rw.started)
 	})
 }
@@ -296,7 +296,7 @@ func TestResponseStartedWriter_Unwrap(t *testing.T) {
 	t.Parallel()
 
 	inner := httptest.NewRecorder()
-	rw := &responseStartedWriter{ResponseWriter: inner}
+	rw := &ResponseStartedWriter{ResponseWriter: inner}
 
 	rc := http.NewResponseController(rw)
 	if err := rc.Flush(); err != nil {
