@@ -316,7 +316,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 			Description:  "GPT variants",
 		},
 		{
-			Pattern:      `^(deepseek)[-_]?(.+)?`,
+			Pattern:      `^(deepseek)(?:[-_.:](.+))?(?:$|[^a-zA-Z])`,
 			FamilyGroup:  1,
 			VariantGroup: 2,
 			Description:  "DeepSeek models",

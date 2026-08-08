@@ -477,6 +477,9 @@ func TestFamilyPatternBoundaries(t *testing.T) {
 		// gpt-oss is listed earlier in family_patterns and must keep winning
 		// over the plain "gpt" pattern for its own names.
 		{"gpt-oss: not shadowed by the plain gpt pattern", "gpt-oss:20b", "gpt-oss"},
+
+		{"deepseek: unrelated name sharing the prefix must not match", "deepseeker-1b", ""},
+		{"deepseek: hyphen boundary", "deepseek-coder", "deepseek"},
 	}
 
 	for _, tt := range tests {

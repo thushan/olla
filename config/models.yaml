@@ -34,7 +34,7 @@ model_extraction:
       variant_group: 2
       description: "GPT variants"
 
-    - pattern: "^(deepseek)[-_]?(.+)?"
+    - pattern: "^(deepseek)(?:[-_.:](.+))?(?:$|[^a-zA-Z])"
       family_group: 1
       variant_group: 2
       description: "DeepSeek models"
