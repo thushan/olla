@@ -25,7 +25,7 @@ func TestNewFactory(t *testing.T) {
 	}
 
 	// Test default strategies are registered
-	expectedStrategies := []string{DefaultBalancerPriority, DefaultBalancerRoundRobin, DefaultBalancerLeastConnections}
+	expectedStrategies := []string{DefaultBalancerPriority, DefaultBalancerRoundRobin, DefaultBalancerLeastConnections, DefaultBalancerOMLXLoadedFirst}
 	available := factory.GetAvailableStrategies()
 
 	if len(available) != len(expectedStrategies) {
@@ -57,6 +57,7 @@ func TestFactory_Create_DefaultStrategies(t *testing.T) {
 		{DefaultBalancerPriority, DefaultBalancerPriority, true},
 		{DefaultBalancerRoundRobin, DefaultBalancerRoundRobin, true},
 		{DefaultBalancerLeastConnections, DefaultBalancerLeastConnections, true},
+		{DefaultBalancerOMLXLoadedFirst, DefaultBalancerOMLXLoadedFirst, true},
 		{"unknown-strategy", "", false},
 		{"", "", false},
 	}
