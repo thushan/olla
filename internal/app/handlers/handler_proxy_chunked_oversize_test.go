@@ -291,5 +291,8 @@ func TestSizeValidator_ChunkedProxyBody_EndToEnd(t *testing.T) {
 		if rr.Code != http.StatusOK {
 			t.Errorf("expected 200 for a chunked body under the cap, got %d (body: %q, real upstream reached: %v)", rr.Code, rr.Body.String(), strings.Contains(rr.Body.String(), "ok"))
 		}
+		if rr.Body.String() != `{"ok":true}` {
+			t.Errorf("expected the real upstream response, got %q", rr.Body.String())
+		}
 	})
 }
