@@ -209,7 +209,7 @@ func TestStatusResponse_ETagStableAcrossRelativeTimeChurn(t *testing.T) {
 
 // The inverse - a genuine per-endpoint status change still produces a
 // different ETag - is already covered by
-// TestStatusResponse_ETagChangesOnRealDataChange below.
+// TestEndpointStatusResponse_ETagChangesOnStatusFlip below.
 
 // TestEndpointStatusResponse_ETagStableAcrossRelativeTimeChurn is the same
 // property for the endpoints status surface, exercising the LastModelSync and
