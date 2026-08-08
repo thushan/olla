@@ -24,6 +24,13 @@ const (
 	DefaultCircuitBreakerThreshold = 3
 	DefaultCircuitBreakerTimeout   = 30 * time.Second
 
+	// defaultCheckTimeoutFallback is the checkTimeout probeStaleness (in
+	// circuit_breaker.go) falls back to when a caller has no real endpoint
+	// context (e.g. a test) to derive the half-open staleness window from.
+	// Mirrors config.go's own default for Endpoint.CheckTimeout, so the
+	// fallback matches what an unconfigured endpoint would actually have.
+	defaultCheckTimeoutFallback = 2 * time.Second
+
 	// Alias the shared constants for backward compatibility
 	MaxBackoffMultiplier = constants.DefaultMaxBackoffMultiplier
 	MaxBackoffSeconds    = constants.DefaultMaxBackoffSeconds

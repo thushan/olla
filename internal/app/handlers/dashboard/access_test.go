@@ -153,6 +153,12 @@ func TestAccessMiddleware_RejectionMatrix(t *testing.T) {
 				if !strings.Contains(body, "host=") || !strings.Contains(body, "ip=") {
 					t.Fatalf("403 body must be self-diagnosing (ip=, host=), got %q", body)
 				}
+				// Must also name the config key to adjust, not just echo the
+				// rejected values - "self-diagnosing" means telling the operator
+				// where to fix it, not only what was rejected.
+				if !strings.Contains(body, "dashboard.access_policy.allowed_hosts") || !strings.Contains(body, "allowed_cidrs") {
+					t.Fatalf("403 body must name the config key to adjust, got %q", body)
+				}
 				if ct := rec.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
 					t.Fatalf("403 Content-Type must be text/plain, got %q", ct)
 				}

@@ -79,21 +79,35 @@ func (b *BaseProxyComponents) IncrementRequests() {
 	atomic.AddInt64(&b.Stats.TotalRequests, 1)
 }
 
-// RecordSuccess records a successful request
-func (b *BaseProxyComponents) RecordSuccess(endpoint *domain.Endpoint, latency int64, bytes int64) {
+// RecordSuccess records a successful request. modelName is the resolved
+// model this request targeted (stats.Model at the call site) - when non-empty
+// it also feeds StatsCollector.RecordModelRequest alongside the per-endpoint
+// RecordRequest, so /internal/stats/models has data to report. Guarded on
+// modelName != "" the same way the deprecated proxy_olla.go once did (see
+// git show ed93e9a^ - RecordModelRequest lost its only callers when that file
+// was deleted and has been dark ever since).
+func (b *BaseProxyComponents) RecordSuccess(endpoint *domain.Endpoint, modelName string, latency int64, bytes int64) {
 	b.Stats.RecordSuccess(latency)
 
 	if b.StatsCollector != nil && endpoint != nil {
-		b.StatsCollector.RecordRequest(endpoint, "success", time.Duration(latency)*time.Millisecond, bytes)
+		duration := time.Duration(latency) * time.Millisecond
+		b.StatsCollector.RecordRequest(endpoint, "success", duration, bytes)
+		if modelName != "" {
+			b.StatsCollector.RecordModelRequest(modelName, endpoint, "success", duration, bytes)
+		}
 	}
 }
 
-// RecordFailure records a failed request
-func (b *BaseProxyComponents) RecordFailure(ctx context.Context, endpoint *domain.Endpoint, duration time.Duration, err error) {
+// RecordFailure records a failed request. See RecordSuccess for the
+// modelName contract.
+func (b *BaseProxyComponents) RecordFailure(ctx context.Context, endpoint *domain.Endpoint, modelName string, duration time.Duration, err error) {
 	b.Stats.RecordFailure()
 
 	if b.StatsCollector != nil && endpoint != nil {
 		b.StatsCollector.RecordRequest(endpoint, "error", duration, 0)
+		if modelName != "" {
+			b.StatsCollector.RecordModelRequest(modelName, endpoint, "error", duration, 0)
+		}
 	}
 
 	// Publish error event (non-blocking)

@@ -149,7 +149,7 @@ func TestResponseStartedWriter_TracksWrites(t *testing.T) {
 
 	t.Run("WriteHeader sets started", func(t *testing.T) {
 		t.Parallel()
-		rw := &responseStartedWriter{ResponseWriter: httptest.NewRecorder()}
+		rw := &ResponseStartedWriter{ResponseWriter: httptest.NewRecorder()}
 		assert.False(t, rw.started)
 		rw.WriteHeader(http.StatusOK)
 		assert.True(t, rw.started)
@@ -157,7 +157,7 @@ func TestResponseStartedWriter_TracksWrites(t *testing.T) {
 
 	t.Run("Write sets started", func(t *testing.T) {
 		t.Parallel()
-		rw := &responseStartedWriter{ResponseWriter: httptest.NewRecorder()}
+		rw := &ResponseStartedWriter{ResponseWriter: httptest.NewRecorder()}
 		assert.False(t, rw.started)
 		_, _ = rw.Write([]byte("hello"))
 		assert.True(t, rw.started)
@@ -165,7 +165,7 @@ func TestResponseStartedWriter_TracksWrites(t *testing.T) {
 
 	t.Run("neither called: not started", func(t *testing.T) {
 		t.Parallel()
-		rw := &responseStartedWriter{ResponseWriter: httptest.NewRecorder()}
+		rw := &ResponseStartedWriter{ResponseWriter: httptest.NewRecorder()}
 		assert.False(t, rw.started)
 	})
 }
@@ -296,12 +296,93 @@ func TestResponseStartedWriter_Unwrap(t *testing.T) {
 	t.Parallel()
 
 	inner := httptest.NewRecorder()
-	rw := &responseStartedWriter{ResponseWriter: inner}
+	rw := &ResponseStartedWriter{ResponseWriter: inner}
 
 	rc := http.NewResponseController(rw)
 	if err := rc.Flush(); err != nil {
 		t.Errorf("Flush() via ResponseController on wrapped writer = %v, want nil", err)
 	}
+}
+
+// flushRecordingWriter wraps httptest.ResponseRecorder and records whether
+// Flush was called, so tests can prove a flush actually reached the
+// underlying writer rather than just observing the tracker's own state.
+type flushRecordingWriter struct {
+	*httptest.ResponseRecorder
+	flushed bool
+}
+
+func (w *flushRecordingWriter) Flush() {
+	w.flushed = true
+	w.ResponseRecorder.Flush()
+}
+
+// TestResponseStartedWriter_BareFlush_MarksStarted is the repro for the
+// CodeRabbit finding: http.NewResponseController(tracker).Flush() used to walk
+// straight past the wrapper via Unwrap() to the underlying writer's Flush,
+// leaving tracker.Started() false even though bytes were flushed to the
+// client. Before the fix this assertion failed (started_after_bare_flush was
+// false); FlushError/Flush now mark started before delegating, closing the gap.
+func TestResponseStartedWriter_BareFlush_MarksStarted(t *testing.T) {
+	t.Parallel()
+
+	inner := &flushRecordingWriter{ResponseRecorder: httptest.NewRecorder()}
+	tracker := NewResponseStartedWriter(inner)
+
+	require.False(t, tracker.Started(), "sanity: not started before any write or flush")
+
+	rc := http.NewResponseController(tracker)
+	require.NoError(t, rc.Flush())
+
+	assert.True(t, tracker.Started(), "started_after_bare_flush must be true: a flush commits the response")
+	assert.True(t, inner.flushed, "the underlying writer's Flush must actually have been invoked")
+	assert.True(t, inner.ResponseRecorder.Flushed, "httptest.ResponseRecorder.Flushed must be true through the wrapper")
+}
+
+// TestResponseStartedWriter_FlushError_NotSupported confirms FlushError
+// surfaces http.ErrNotSupported (matching stdlib ResponseController
+// convention) rather than panicking or silently swallowing the failure, when
+// nothing in the chain supports flushing. It must also leave Started() false:
+// an unsupported flush commits nothing, so handleProxyError must still be
+// free to write an error response (CodeRabbit PRRT_kwDOOvLJ9s6XdGod).
+type nonFlushingWriter struct {
+	http.ResponseWriter
+}
+
+func TestResponseStartedWriter_FlushError_NotSupported(t *testing.T) {
+	t.Parallel()
+
+	// httptest.ResponseRecorder implements Flush, so wrap it in a type that
+	// only exposes the plain ResponseWriter methods to hide it.
+	inner := &nonFlushingWriter{ResponseWriter: httptest.NewRecorder()}
+	tracker := NewResponseStartedWriter(inner)
+
+	err := tracker.FlushError()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, http.ErrNotSupported)
+	assert.False(t, tracker.Started(), "an unsupported flush commits nothing, so started must stay false")
+}
+
+// TestResponseStartedWriter_DoubleWrap_FlushMarksBothStarted mirrors the real
+// production shape: dispatchToEndpoints wraps the writer once and
+// RetryHandler.ExecuteWithRetry wraps it again internally. A flush through
+// http.NewResponseController on the outer wrapper must mark both trackers as
+// started, not just the outer one.
+func TestResponseStartedWriter_DoubleWrap_FlushMarksBothStarted(t *testing.T) {
+	t.Parallel()
+
+	inner := httptest.NewRecorder()
+	innerTracker := NewResponseStartedWriter(inner)
+	outerTracker := NewResponseStartedWriter(innerTracker)
+
+	require.False(t, innerTracker.Started())
+	require.False(t, outerTracker.Started())
+
+	rc := http.NewResponseController(outerTracker)
+	require.NoError(t, rc.Flush())
+
+	assert.True(t, outerTracker.Started(), "outer tracker must be marked started")
+	assert.True(t, innerTracker.Started(), "inner tracker must also be marked started by the cascade")
 }
 
 // TestRetry_HTTPTestBackend_PostRSTBeforeBody uses a real httptest backend that

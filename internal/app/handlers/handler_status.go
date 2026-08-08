@@ -585,9 +585,11 @@ func writeJSONWithETag(w http.ResponseWriter, r *http.Request, body []byte, etag
 }
 
 // hashStatusResponse computes the FNV-1a ETag over the stable fields of a
-// StatusResponse, deliberately excluding the top-level Timestamp and every
-// relative time-ago string. Absolute event times (start_time, health_check_at,
-// next_check_at, models.last_updated) are stable real data and stay in.
+// StatusResponse, deliberately excluding the top-level Timestamp, every
+// relative time-ago string, and the per-endpoint health-check tick timestamps
+// (next_check_at, health_check_at) - see hashEndpointResponse. start_time and
+// models.last_updated are absolute data that only moves on a real event, so
+// they stay in.
 func hashStatusResponse(resp *StatusResponse) string {
 	h := fnv.New64a()
 	hashEtagString(h, resp.Proxy.Engine)
@@ -618,9 +620,13 @@ func hashStatusResponse(resp *StatusResponse) string {
 	return formatEtag(h)
 }
 
-// hashEndpointResponse feeds the stable fields of one EndpointResponse to the
-// hasher. Relative strings (last_check, next_check) are skipped because they
-// render with one-second granularity and would change on every poll.
+// hashEndpointResponse feeds only the stable/semantic fields of one
+// EndpointResponse to the hasher. Relative strings (last_check, next_check)
+// are skipped because they render with one-second granularity and would
+// change on every poll; NextCheckAt/HealthCheckAt are skipped too - they
+// advance on every health-check tick (30s, see internal/adapter/health)
+// regardless of whether the endpoint's status actually changed, which
+// churned this ETag under zero traffic and defeated caching.
 func hashEndpointResponse(h hash.Hash, ep *EndpointResponse) {
 	hashEtagString(h, ep.ID)
 	hashEtagString(h, ep.Name)
@@ -636,8 +642,6 @@ func hashEndpointResponse(h hash.Hash, ep *EndpointResponse) {
 	hashEtagInt64(h, ep.MinLatencyMs)
 	hashEtagInt64(h, ep.MaxLatencyMs)
 	hashEtagInt64Ptr(h, ep.AvgLatencyMs)
-	hashEtagTimePtr(h, ep.NextCheckAt)
-	hashEtagTimePtr(h, ep.HealthCheckAt)
 	hashEtagTime(h, ep.Models.LastUpdated)
 	hashEtagInt64(h, ep.Models.Count)
 }

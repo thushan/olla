@@ -3,12 +3,14 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/balancer"
+	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
@@ -84,12 +86,18 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 
 	a.logRequestStart(pr, len(endpoints))
 
-	err := a.executeProxyRequest(ctx, w, r, endpoints, pr)
+	// Wrap w once so both the proxy engine and handleProxyError observe the same
+	// commit signal. RetryHandler.ExecuteWithRetry wraps it again internally, which
+	// is harmless: both trackers read the same underlying writes, and Unwrap() lets
+	// http.NewResponseController chain through both layers to reach the real flusher.
+	tracker := core.NewResponseStartedWriter(w)
+
+	err := a.executeProxyRequest(ctx, tracker, r, endpoints, pr)
 	pr.captureStickyOutcome(ctx, r)
 	a.logRequestResult(pr, err)
 
 	if err != nil {
-		a.handleProxyError(w, err)
+		a.handleProxyError(tracker, err)
 	}
 }
 
@@ -557,12 +565,32 @@ func (a *Application) handleEndpointError(w http.ResponseWriter, pr *proxyReques
 }
 
 // only send error response if we haven't started streaming yet.
-// content-type check prevents double-writing response after partial stream
-// (learned this the hard way when users got html error messages appended to their json)
-func (a *Application) handleProxyError(w http.ResponseWriter, err error) {
-	if w.Header().Get(constants.HeaderContentType) == "" {
-		http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
+// w.Started() is the real "response already committed" signal: Header().Set does
+// not commit anything, only WriteHeader/Write do, so a Content-Type-presence check
+// used to let this guard misfire on any handler that set headers before failing.
+// This still prevents double-writing a response after a partial stream
+// (learned this the hard way when users got html error messages appended to their json).
+func (a *Application) handleProxyError(w *core.ResponseStartedWriter, err error) {
+	if w.Started() {
+		return
 	}
+
+	// A chunked (no Content-Length) request body that exceeds the configured
+	// cap is caught mid-read by the http.MaxBytesReader SizeValidator.CreateMiddleware
+	// installs on r.Body, not by the pre-check that handles known-Content-Length
+	// oversize requests. That surfaces here as a generic read error wrapped up
+	// through retry.go's body preservation - without this check it would fall
+	// through to a misleading 502, when the real cause is the same "body too
+	// large" condition the pre-check rejects with 413. Match that response
+	// exactly so the client sees one consistent envelope regardless of which
+	// path caught the oversize body.
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+
+	http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
 }
 
 func (a *Application) stripRoutePrefix(ctx context.Context, path string) string {
@@ -590,6 +618,17 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		}
 
 		if len(compatible) == 0 {
+			if profile.FailClosedOnNoMatch {
+				// Provider-scoped request (e.g. /olla/vllm/) with zero healthy
+				// endpoints of that type: return the empty set so the caller's
+				// existing no-routable-endpoints path produces a proper 404/503,
+				// instead of silently crossing into another provider type.
+				logger.Warn("No compatible endpoints found for provider-scoped path, failing closed",
+					"path", profile.Path,
+					"supported_by", profile.SupportedBy,
+					"total_endpoints", len(endpoints))
+				return nil
+			}
 			logger.Warn("No compatible endpoints found for path, falling back to all endpoints",
 				"path", profile.Path,
 				"supported_by", profile.SupportedBy,

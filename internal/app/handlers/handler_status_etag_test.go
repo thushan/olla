@@ -173,13 +173,15 @@ func TestStatusResponse_ETagStableAcrossRelativeTimeChurn(t *testing.T) {
 			Commit:       "abc",
 		},
 		Endpoints: []EndpointResponse{{
-			ID:          "abc",
-			Name:        "ep1",
-			Status:      statusHealthy,
-			URL:         "http://localhost:11434",
-			SuccessRate: "100.0%",
-			LastCheck:   "5s ago", // excluded
-			NextCheck:   "in 25s", // excluded
+			ID:            "abc",
+			Name:          "ep1",
+			Status:        statusHealthy,
+			URL:           "http://localhost:11434",
+			SuccessRate:   "100.0%",
+			LastCheck:     "5s ago", // excluded
+			NextCheck:     "in 25s", // excluded
+			HealthCheckAt: &now,
+			NextCheckAt:   &startTime,
 		}},
 	}
 
@@ -188,14 +190,26 @@ func TestStatusResponse_ETagStableAcrossRelativeTimeChurn(t *testing.T) {
 	r2 := r1
 	r2.Endpoints = append([]EndpointResponse(nil), r1.Endpoints...)
 
+	// A later health-check tick with no real change: HealthCheckAt/NextCheckAt
+	// advance every 30s regardless of whether the endpoint's status changed -
+	// the campaign-found ETag churn-under-zero-traffic bug.
+	tickedCheckAt := now.Add(30 * time.Second)
+	tickedNextAt := startTime.Add(30 * time.Second)
+
 	r2.Timestamp = now.Add(2 * time.Second)
 	r2.System.UptimeHuman = "1m 2s"
 	r2.Endpoints[0].LastCheck = "7s ago"
 	r2.Endpoints[0].NextCheck = "in 23s"
+	r2.Endpoints[0].HealthCheckAt = &tickedCheckAt
+	r2.Endpoints[0].NextCheckAt = &tickedNextAt
 
 	assert.Equal(t, hashStatusResponse(&r1), hashStatusResponse(&r2),
-		"ETag must be stable when only the wall-clock-rendered strings move")
+		"ETag must be stable when only the wall-clock-rendered strings and health-check ticks move")
 }
+
+// The inverse - a genuine per-endpoint status change still produces a
+// different ETag - is already covered by
+// TestEndpointStatusResponse_ETagChangesOnStatusFlip below.
 
 // TestEndpointStatusResponse_ETagStableAcrossRelativeTimeChurn is the same
 // property for the endpoints status surface, exercising the LastModelSync and
@@ -203,29 +217,72 @@ func TestStatusResponse_ETagStableAcrossRelativeTimeChurn(t *testing.T) {
 func TestEndpointStatusResponse_ETagStableAcrossRelativeTimeChurn(t *testing.T) {
 	t.Parallel()
 
+	checkAt1 := time.Now()
+	nextAt1 := checkAt1.Add(30 * time.Second)
+	syncAt1 := checkAt1.Add(-time.Minute)
+
 	r1 := EndpointStatusResponse{
 		Timestamp:     time.Now(),
 		TotalCount:    1,
 		HealthyCount:  1,
 		RoutableCount: 1,
 		Endpoints: []EndpointSummary{{
-			ID:            "abc",
-			Name:          "ep1",
-			Type:          "ollama",
-			Status:        healthyStatus,
-			URL:           "http://localhost:11434",
-			HealthCheck:   "3s ago",  // excluded
-			LastModelSync: "10s ago", // excluded
+			ID:              "abc",
+			Name:            "ep1",
+			Type:            "ollama",
+			Status:          healthyStatus,
+			URL:             "http://localhost:11434",
+			HealthCheck:     "3s ago",  // excluded
+			LastModelSync:   "10s ago", // excluded
+			HealthCheckAt:   &checkAt1,
+			NextCheckAt:     &nextAt1,
+			LastModelSyncAt: &syncAt1,
 		}},
 	}
+
+	// A later health-check tick with no real change: HealthCheckAt/NextCheckAt
+	// advance every 30s (see internal/adapter/health) and LastModelSyncAt
+	// advances on its own periodic sync, none of which the dashboard needs to
+	// invalidate its cache over - this is exactly the campaign-found ETag
+	// churn-under-zero-traffic bug.
+	checkAt2 := checkAt1.Add(30 * time.Second)
+	nextAt2 := checkAt2.Add(30 * time.Second)
+	syncAt2 := syncAt1.Add(time.Minute)
 
 	r2 := r1
 	r2.Endpoints = append([]EndpointSummary(nil), r1.Endpoints...)
 	r2.Timestamp = r1.Timestamp.Add(time.Second)
 	r2.Endpoints[0].HealthCheck = "4s ago"
 	r2.Endpoints[0].LastModelSync = "11s ago"
+	r2.Endpoints[0].HealthCheckAt = &checkAt2
+	r2.Endpoints[0].NextCheckAt = &nextAt2
+	r2.Endpoints[0].LastModelSyncAt = &syncAt2
 
 	assert.Equal(t, hashEndpointStatusResponse(&r1), hashEndpointStatusResponse(&r2))
+}
+
+// TestEndpointStatusResponse_ETagChangesOnStatusFlip guards the inverse of
+// the churn-stability test above: a genuine status change must still produce
+// a different ETag so the dashboard doesn't cache a stale payload.
+func TestEndpointStatusResponse_ETagChangesOnStatusFlip(t *testing.T) {
+	t.Parallel()
+
+	r1 := EndpointStatusResponse{
+		TotalCount:   1,
+		HealthyCount: 1,
+		Endpoints: []EndpointSummary{{
+			ID:     "abc",
+			Name:   "ep1",
+			Status: healthyStatus,
+		}},
+	}
+	r2 := r1
+	r2.Endpoints = append([]EndpointSummary(nil), r1.Endpoints...)
+	r2.Endpoints[0].Status = "unhealthy"
+	r2.HealthyCount = 0
+
+	assert.NotEqual(t, hashEndpointStatusResponse(&r1), hashEndpointStatusResponse(&r2),
+		"ETag must change when an endpoint's status actually flips")
 }
 
 // TestModelStatusResponse_ETagStableAcrossRelativeTimeChurn covers the models

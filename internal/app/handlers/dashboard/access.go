@@ -69,13 +69,13 @@ func AccessMiddleware(cfg config.DashboardConfig, log logger.StyledLogger, next 
 		clientIP := remoteAddrIP(r.RemoteAddr)
 
 		if !ipInAnyCIDR(clientIP, parsed) {
-			reject(w, log, "ip not in allowed range", clientIP, r.Host)
+			reject(w, log, "ip not in allowed range", "dashboard.access_policy.allowed_cidrs", clientIP, r.Host)
 			return
 		}
 
 		host := strings.ToLower(normaliseHost(r.Host))
 		if !hostAccepted(host, allowedHosts) {
-			reject(w, log, "host not accepted", clientIP, r.Host)
+			reject(w, log, "host not accepted", "dashboard.access_policy.allowed_hosts", clientIP, r.Host)
 			return
 		}
 
@@ -173,13 +173,17 @@ func ipInAnyCIDR(ip string, cidrs []*net.IPNet) bool {
 }
 
 // reject writes the self-diagnosing 403 response. The body names the failed
-// check and echoes the rejected client IP and Host so the operator reading the
-// response (or a support transcript of it) can see exactly what to fix without
-// re-reading YAML. The matching Warn log line carries the same detail for the
-// observability path. Plain text, no JSON: this is an operational diagnostic,
-// not an API response.
-func reject(w http.ResponseWriter, log logger.StyledLogger, reason, clientIP, host string) {
-	body := strings.NewReader("403 forbidden: " + reason + " (ip=" + clientIP + ", host=" + host + ")\n")
+// check, echoes the rejected client IP and Host, and names the config keys to
+// adjust (dashboard.access_policy.allowed_hosts / allowed_cidrs), so the
+// operator reading the response (or a support transcript of it) can see
+// exactly what to fix without re-reading YAML. The matching Warn log line
+// carries the same detail for the observability path, plus configKey - the
+// single config key relevant to this specific reason (unlike the body, which
+// names both generically) - so the operator doesn't have to guess which of
+// the two policy knobs actually applies. Plain text, no JSON: this is an
+// operational diagnostic, not an API response.
+func reject(w http.ResponseWriter, log logger.StyledLogger, reason, configKey, clientIP, host string) {
+	body := strings.NewReader("403 forbidden: " + reason + " (ip=" + clientIP + ", host=" + host + "). Adjust dashboard.access_policy.allowed_hosts (or allowed_cidrs) in your config.\n")
 	// Hardening headers apply to every dashboard response path, including
 	// this 403: the body is operator-facing text that must not be frameable,
 	// sniffable, or referrer-leaked. setSecurityHeaders is shared with
@@ -191,6 +195,7 @@ func reject(w http.ResponseWriter, log logger.StyledLogger, reason, clientIP, ho
 	if log != nil {
 		log.Warn("dashboard access denied",
 			"reason", reason,
+			"config_key", configKey,
 			"client_ip", clientIP,
 			"host", host)
 	}

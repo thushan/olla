@@ -49,8 +49,12 @@ func (a *Application) createProviderProfile(providerType string) *domain.Request
 			}
 		}
 	} else {
-		// Non-OpenAI providers only route to their specific backend type
+		// Non-OpenAI providers only route to their specific backend type - this
+		// is a hard boundary, not a compatibility hint, so filterEndpointsByProfile
+		// must not silently widen to other types if none match (issue: cross-type
+		// leak during a same-type outage).
 		profile.AddSupportedProfile(providerType)
+		profile.FailClosedOnNoMatch = true
 	}
 
 	return profile
@@ -123,6 +127,21 @@ func (a *Application) getProviderEndpoints(ctx context.Context, providerType str
 	providerProfile.Path = pr.targetPath
 
 	providerEndpoints := a.filterEndpointsByProfile(endpoints, providerProfile, pr.requestLogger)
+
+	if providerProfile.FailClosedOnNoMatch && len(providerEndpoints) == 0 {
+		// The provider-type filter itself found nothing - short-circuit before
+		// the second filterEndpointsByProfile call below (pr.profile, the
+		// inspector-derived profile) can reach its stage-3 model-routing pass
+		// on an already-empty list. GetRoutableEndpointsForModel consults the
+		// model registry's global endpoint view, independent of the (known
+		// empty) list passed in, and can attach a 503 model_unavailable
+		// RoutingDecision to pr.profile even though the model IS available -
+		// just on a different provider type. writeNoRoutableEndpoints prefers
+		// that decision's status/message over its own provider-type 404,
+		// which would silently mask a same-type outage as "model not found"
+		// instead of "no <type> endpoints available".
+		return providerEndpoints, nil
+	}
 
 	// If the request has specific requirements (e.g., needs vision support),
 	// apply those filters on top of the provider constraint

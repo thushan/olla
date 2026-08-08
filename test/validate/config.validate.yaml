@@ -50,7 +50,7 @@ proxy:
   # least-connections spreads traffic across instances, which gives the
   # affinity and diversity assertions something real to observe.
   load_balancer: "least-connections"
-  stream_buffer_size: 8192
+  # stream_buffer_size: 8192 # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB). Pinning this here silently defeated the 64KiB default.
   connection_timeout: 10s
   response_timeout: 60s
   read_timeout: 60s

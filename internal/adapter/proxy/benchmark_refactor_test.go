@@ -349,11 +349,11 @@ func BenchmarkOllaCircuitBreaker(b *testing.B) {
 	for i := range b.N {
 		// Alternate between checking state and recording success/failure
 		if i%3 == 0 {
-			cb.RecordFailure()
+			cb.RecordFailure(0)
 		} else if i%3 == 1 {
-			cb.RecordSuccess()
+			cb.RecordSuccess(0)
 		} else {
-			cb.IsOpen()
+			_, _ = cb.IsOpen(olla.HalfOpenStaleness)
 		}
 	}
 }

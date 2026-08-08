@@ -35,30 +35,85 @@ func NewRetryHandler(discoveryService ports.DiscoveryService, logger logger.Styl
 // ProxyFunc defines the signature for endpoint proxy implementations
 type ProxyFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error
 
-// responseStartedWriter wraps http.ResponseWriter and records whether any response
-// bytes or status codes have been sent to the client. We use this to gate retry
-// decisions: once the client has received data, retrying a non-idempotent request
-// would send duplicate content or charge twice on metered APIs.
-type responseStartedWriter struct {
+// ResponseStartedWriter wraps http.ResponseWriter and records whether any response
+// bytes or status codes have been sent to the client. Retry logic uses this to gate
+// retry decisions: once the client has received data, retrying a non-idempotent
+// request would send duplicate content or charge twice on metered APIs. It is also
+// the correct "has this response been committed" signal for callers upstream of
+// retry (e.g. handler_proxy.go's handleProxyError) - Header().Set does not commit
+// anything, only WriteHeader/Write do, so a Content-Type-presence check is not a
+// reliable substitute.
+//
+// A flush is also a commit: streaming code can in principle reach a bare Flush()
+// (via http.NewResponseController) without a prior Write on this wrapper - bytes
+// already buffered by the underlying writer would then reach the client while
+// started stays false. Flush/FlushError guard against that by marking started
+// before delegating, so the signal holds regardless of call order.
+type ResponseStartedWriter struct {
 	http.ResponseWriter
 	started bool
 }
 
-func (rw *responseStartedWriter) WriteHeader(code int) {
+// NewResponseStartedWriter wraps w so callers can observe whether a response has
+// been committed via Started().
+func NewResponseStartedWriter(w http.ResponseWriter) *ResponseStartedWriter {
+	return &ResponseStartedWriter{ResponseWriter: w}
+}
+
+func (rw *ResponseStartedWriter) WriteHeader(code int) {
 	rw.started = true
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-func (rw *responseStartedWriter) Write(b []byte) (int, error) {
+func (rw *ResponseStartedWriter) Write(b []byte) (int, error) {
 	rw.started = true
 	return rw.ResponseWriter.Write(b)
+}
+
+// Started reports whether a status code or body bytes have been committed to the
+// client yet.
+func (rw *ResponseStartedWriter) Started() bool {
+	return rw.started
 }
 
 // Unwrap exposes the underlying ResponseWriter so http.NewResponseController can
 // discover optional interfaces (Flush, Hijack, SetDeadline, etc.) via the chain.
 // Without this, the wrapper hides the underlying flusher and SSE streams stall.
-func (rw *responseStartedWriter) Unwrap() http.ResponseWriter {
+func (rw *ResponseStartedWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
+}
+
+// FlushError marks the response as started and flushes the underlying writer,
+// mirroring http.ResponseController's FlushError semantics. It returns
+// http.ErrNotSupported if nothing in the underlying chain supports flushing,
+// rather than panicking or swallowing the failure.
+//
+// started is set before the flush is attempted: a flush pushes any buffered
+// bytes to the client immediately, so the commit has already happened by the
+// time this call is made, even if the underlying flush itself then fails.
+func (rw *ResponseStartedWriter) FlushError() error {
+	wasStarted := rw.started
+	rw.started = true
+
+	rc := http.NewResponseController(rw.ResponseWriter)
+	if err := rc.Flush(); err != nil {
+		// ErrNotSupported means nothing in the chain could flush at all, so
+		// nothing was committed - restore the prior state. Any other error
+		// (dead connection, etc.) may have partially written bytes before
+		// failing, so started stays true.
+		if errors.Is(err, http.ErrNotSupported) {
+			rw.started = wasStarted
+		}
+		return err
+	}
+	return nil
+}
+
+// Flush satisfies the plain http.Flusher interface for callers that still
+// type-assert for it directly. Like http.Flusher.Flush, it is best-effort and
+// discards any error - use FlushError to observe failures.
+func (rw *ResponseStartedWriter) Flush() {
+	_ = rw.FlushError()
 }
 
 // isIdempotent reports whether the HTTP method is safe to retry after a partial
@@ -102,7 +157,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 	}
 
 	// Wrap the writer so we can detect when bytes have been committed to the client.
-	tracker := &responseStartedWriter{ResponseWriter: w}
+	tracker := NewResponseStartedWriter(w)
 
 	var lastErr error
 	maxRetries := len(endpoints)
@@ -198,7 +253,23 @@ func (h *RetryHandler) executeProxyAttempt(ctx context.Context, w http.ResponseW
 	return proxyFunc(ctx, w, r, endpoint, stats)
 }
 
-// handleConnectionFailure processes connection failures and manages endpoint removal
+// handleConnectionFailure processes connection failures and manages endpoint removal.
+//
+// This is one of two layers of failure protection, and it fires first: a
+// single connection-refused error demotes the endpoint to offline right here
+// (see markEndpointUnhealthy), on the very first attempt, well before the
+// proxy engine's own per-endpoint circuit breaker (olla/service.go's
+// circuitBreaker, threshold 5) could accumulate enough failures to open.
+// That's intentional layering, not redundancy: connection-refused means the
+// backend process is down/unreachable, which request-path health demotion
+// (backed by the health checker's periodic re-probing) is the right tool
+// for - retrying it further or waiting for a 5-failure threshold would just
+// burn latency on a backend that health checks will keep confirming is
+// down. In practice this means the circuit breaker rarely gets to open on
+// connection-refused; it mostly governs the failure classes that don't
+// trip this 1-strike path - hangs and response-header timeouts, where the
+// backend is reachable but not answering. See olla/service.go's
+// circuitBreaker.IsOpen for the other side of this split.
 func (h *RetryHandler) handleConnectionFailure(ctx context.Context, endpoint *domain.Endpoint,
 	err error, attemptCount int, availableEndpoints []*domain.Endpoint, maxRetries int) []*domain.Endpoint {
 

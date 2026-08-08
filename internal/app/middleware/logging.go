@@ -217,6 +217,15 @@ func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 
+			// Captured once, up front: handlers on the dispatch path (e.g. the
+			// provider proxy handler) mutate r.URL.Path in place to strip the
+			// /olla/{provider}/ prefix before forwarding upstream. Re-reading
+			// r.URL.Path after next.ServeHTTP returns would see the stripped
+			// path, which no longer matches IsProxyRequest/isQuietPollOutcome's
+			// prefix checks - silently flipping every proxy request's post-log
+			// and access-log lines back to Info regardless of this gate.
+			path := r.URL.Path
+
 			requestID := sanitiseRequestID(r.Header.Get(constants.HeaderXRequestID))
 			if requestID == "" {
 				requestID = util.GenerateRequestID()
@@ -235,12 +244,12 @@ func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 
 			wrapped := &responseWriter{ResponseWriter: w, status: 200}
 
-			preQuiet := isQuietPollRoute(r.Method, r.URL.Path)
+			preQuiet := isQuietPollRoute(r.Method, path)
 			level, msg := consoleLogParams(preQuiet, "HTTP request started", "Request started")
 			if baseLogger.Enabled(ctx, level) {
 				baseLogger.Log(ctx, level, msg,
 					"method", r.Method,
-					"path", r.URL.Path,
+					"path", path,
 					"remote_addr", r.RemoteAddr,
 					"user_agent", r.UserAgent(),
 					"request_bytes", requestSize,
@@ -252,12 +261,12 @@ func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 
 			duration := time.Since(start)
 
-			postQuiet := isQuietPollOutcome(r.Method, r.URL.Path, wrapped.status)
+			postQuiet := isQuietPollOutcome(r.Method, path, wrapped.status)
 			level, msg = consoleLogParams(postQuiet, "HTTP request completed", "Request completed")
 			if baseLogger.Enabled(ctx, level) {
 				baseLogger.Log(ctx, level, msg,
 					"method", r.Method,
-					"path", r.URL.Path,
+					"path", path,
 					"status", wrapped.status,
 					"duration_ms", duration.Milliseconds(),
 					"duration_formatted", duration.String(),
@@ -272,14 +281,14 @@ func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			// would double it up in the emitted record.
 			accessLogger := styledLogger.GetUnderlying()
 			detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
-			accessLevel := accessLogLevel(r.Method, r.URL.Path, wrapped.status)
+			accessLevel := accessLogLevel(r.Method, path, wrapped.status)
 			if accessLogger.Enabled(detailedCtx, accessLevel) {
 				accessLogger.Log(detailedCtx, accessLevel, "Access log",
 					"timestamp", start.Format(time.RFC3339),
 					"request_id", requestID,
 					"remote_addr", r.RemoteAddr,
 					"method", r.Method,
-					"path", r.URL.Path,
+					"path", path,
 					"query", redactQuery(r.URL.RawQuery),
 					"status", wrapped.status,
 					"request_bytes", requestSize,

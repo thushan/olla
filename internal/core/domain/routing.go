@@ -28,10 +28,23 @@ type RequestProfile struct {
 	ModelName            string
 	SupportedBy          []string
 
-	RequestType          RequestType // Chat, completion, embedding, etc.
-	EstimatedTokens      int         // For capacity planning
+	RequestType     RequestType // Chat, completion, embedding, etc.
+	EstimatedTokens int         // For capacity planning
+
 	RequiresFunctionCall bool
 	RequiresVision       bool
+
+	// FailClosedOnNoMatch marks a profile whose SupportedBy represents a hard
+	// provider-type boundary rather than a soft compatibility hint. Set only by
+	// createProviderProfile for a non-OpenAI provider-scoped route (e.g.
+	// /olla/vllm/), never for the OpenAI-inclusive profile or the unscoped
+	// /olla/proxy/ route's inspector-derived profile. When true,
+	// filterEndpointsByProfile must return the empty set rather than widen to
+	// all endpoints if nothing matches - crossing provider types during a
+	// same-type outage (e.g. a vllm request silently served by an
+	// openai-compatible backend) is a correctness bug, not graceful
+	// degradation, and must produce the normal no-routable-endpoints 404/503.
+	FailClosedOnNoMatch bool
 }
 
 func NewRequestProfile(path string) *RequestProfile {
