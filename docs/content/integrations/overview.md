@@ -29,7 +29,7 @@ Olla natively supports the following backends:
 
 You can use the `type` in [Endpoint Configurations](/olla/configuration/overview/#endpoint-configuration) when adding new endpoints.
 
-## Frontend Support
+## Frontend & Agent Support
 
 ### OpenWebUI
 
@@ -38,17 +38,20 @@ Native support for [OpenWebUI](https://github.com/open-webui/open-webui) with Ol
 * [OpenWebUI with Ollama](./frontend/openwebui.md)
 * [OpenWebUI with OpenAI](./frontend/openwebui-openai.md)
 
-### Claude-Compatible Clients
+### Agents
 
-Olla provides Anthropic Messages API translation, enabling Claude-compatible clients to work with any OpenAI-compatible backend:
+Coding assistants and agent harnesses, connected over whichever API format they speak:
 
 | Client | Description | Integration Guide |
 |--------|-------------|-------------------|
 | [Claude Code](./frontend/claude-code.md) | Anthropic's official CLI coding assistant | Full Anthropic API support |
 | [OpenCode](./frontend/opencode.md) | Open-source AI coding assistant (SST fork) | OpenAI or Anthropic API |
 | [Crush CLI](./frontend/crush-cli.md) | Modern terminal AI assistant by Charmbracelet | Dual OpenAI/Anthropic support |
+| [Hermes Agent](./frontend/hermes-agent.md) | Nous Research's agent harness | OpenAI-compatible custom provider, plus a sticky-session recipe |
 
-These clients can use local models across any supported backend through Olla's Anthropic translation layer. Backends with native Anthropic support (Ollama, LM Studio, vLLM, vLLM-MLX, llama.cpp, Docker Model Runner, oMLX) use zero-overhead passthrough; the rest (SGLang, LMDeploy, Lemonade, LiteLLM, generic OpenAI-compatible) are served via translation.
+Clients using the Anthropic Messages API reach any supported backend through Olla's translation layer. Backends with native Anthropic support (Ollama, LM Studio, vLLM, vLLM-MLX, llama.cpp, Docker Model Runner, oMLX) use zero-overhead passthrough; the rest (SGLang, LMDeploy, Lemonade, LiteLLM, generic OpenAI-compatible) are served via translation.
+
+Multi-turn agent sessions benefit from [sticky sessions](../concepts/sticky-sessions.md), which pin a conversation to one backend so its KV-cache stays warm across turns.
 
 ### API Translation
 

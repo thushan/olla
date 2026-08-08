@@ -173,9 +173,11 @@ nav:
         - Frontends:
             - OpenWebUI + Ollama: integrations/frontend/openwebui.md
             - OpenWebUI + OpenAI: integrations/frontend/openwebui-openai.md
+        - Agents:
             - Claude Code: integrations/frontend/claude-code.md
             - OpenCode: integrations/frontend/opencode.md
             - Crush CLI: integrations/frontend/crush-cli.md
+            - Hermes Agent: integrations/frontend/hermes-agent.md
         - API Translation:
             - Anthropic: integrations/api-translation/anthropic.md
   - Development:
