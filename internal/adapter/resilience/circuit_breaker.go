@@ -102,17 +102,19 @@ func (b *Breaker) IsOpen(probeStaleness time.Duration) (open bool, attempt int64
 		// Timeout elapsed: attempt open -> half-open. Every caller that
 		// reaches here (whether it won this CAS or another goroutine already
 		// flipped it) falls through to the half-open single-flight gate
-		// below. half-open is deliberately a persisted state, not merely
-		// "isOpen && timeout elapsed" recomputed on every call: once here, a
-		// half-open probe that fails WITHOUT crossing the failure threshold
-		// leaves the breaker in half-open (RecordFailure only escalates back
-		// to stateOpen when failures >= threshold), so the very next caller
-		// can immediately contest the single-flight gate again rather than
-		// waiting out a full fresh openDuration. A plain recompute-every-call
-		// design would force that full wait after every failed probe, which
-		// only coincides with this one in the realistic case where a single
-		// post-trip failure typically re-crosses the threshold anyway (see
-		// RecordFailure) - and diverges when it doesn't.
+		// below. half-open is a persisted state, not merely "isOpen &&
+		// timeout elapsed" recomputed on every call, mirroring olla's
+		// original mechanics exactly (this is a pure refactor, not a
+		// behaviour change). The practical effect - RecordFailure only
+		// escalates back to stateOpen when failures >= threshold, so a
+		// half-open failure below threshold would leave the breaker in
+		// half-open rather than forcing a fresh openDuration wait - is not
+		// reachable through the public API today: failures only resets on
+		// success, so every non-closed state already has failures >=
+		// threshold by construction, and RecordFailure always re-escalates.
+		// The branch exists for future-proofing (e.g. a caller configuring a
+		// threshold that legitimately allows several half-open attempts), not
+		// because current callers depend on it.
 		b.state.CompareAndSwap(stateOpen, stateHalfOpen)
 	}
 
@@ -179,9 +181,9 @@ func (b *Breaker) RecordFailure(attempt int64) {
 	if failures >= b.threshold {
 		b.state.Store(stateOpen)
 	}
-	// Below threshold: leave the state as-is. If this was a half-open probe,
-	// that means staying half-open rather than escalating back to a full
-	// stateOpen wait - see the half-open persistence note on IsOpen.
+	// Below threshold: leave the state as-is (not currently reachable via the
+	// public API in a non-closed state - see the half-open persistence note
+	// on IsOpen).
 }
 
 // Tripped reports whether the breaker is anything other than closed (open or
