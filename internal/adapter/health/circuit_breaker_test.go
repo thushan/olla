@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
+
+	"github.com/thushan/olla/internal/adapter/resilience"
 )
 
 const testEndpoint = "http://endpoint-under-test"
@@ -22,13 +24,14 @@ const testCheckTimeout = 2 * time.Second
 // proxy/olla/circuit_breaker_test.go's openCircuitBreaker helper.
 func openCircuitBreaker(threshold int) *CircuitBreaker {
 	cb := &CircuitBreaker{
-		endpoints:        xsync.NewMap[string, *circuitState](),
+		endpoints:        xsync.NewMap[string, *resilience.Breaker](),
 		failureThreshold: threshold,
 		timeout:          DefaultCircuitBreakerTimeout,
 	}
-	state := cb.loadOrCreateState(testEndpoint)
-	atomic.StoreInt32(&state.isOpen, 1)
-	atomic.StoreInt64(&state.lastFailure, time.Now().Add(-DefaultCircuitBreakerTimeout-time.Second).UnixNano())
+	cb.endpoints.Store(testEndpoint, resilience.NewTripped(resilience.Config{
+		FailureThreshold: threshold,
+		OpenDuration:     DefaultCircuitBreakerTimeout,
+	}, DefaultCircuitBreakerTimeout+time.Second))
 	return cb
 }
 
@@ -76,7 +79,7 @@ func TestCircuitBreaker_HalfOpen_SlowButAliveProbeWithinBudget_NoHandover(t *tes
 	// CheckTimeout, i.e. still legitimately in flight, not hung.
 	state, _ := cb.endpoints.Load(testEndpoint)
 	backdated := time.Now().Add(-4 * time.Second).UnixNano()
-	atomic.StoreInt64(&state.lastAttempt, backdated)
+	state.SetLastAttemptNanos(backdated)
 
 	if open, _ := cb.IsOpen(testEndpoint, testCheckTimeout); !open {
 		t.Fatal("a probe still within its CheckTimeout-derived budget must not be superseded - a second caller must be rejected")
@@ -84,8 +87,8 @@ func TestCircuitBreaker_HalfOpen_SlowButAliveProbeWithinBudget_NoHandover(t *tes
 
 	// Sanity: the in-budget probe's stamp is still authoritative - IsOpen must
 	// not have performed a handover CAS against it.
-	if atomic.LoadInt64(&state.lastAttempt) != backdated {
-		t.Fatalf("lastAttempt changed even though the probe was within budget: got %d, want unchanged %d", atomic.LoadInt64(&state.lastAttempt), backdated)
+	if got := state.LastAttemptNanos(); got != backdated {
+		t.Fatalf("lastAttempt changed even though the probe was within budget: got %d, want unchanged %d", got, backdated)
 	}
 }
 
@@ -101,7 +104,7 @@ func TestCircuitBreaker_HalfOpen_HungProbeBeyondBudget_TriggersHandover(t *testi
 
 	// Backdate past the 5s budget.
 	state, _ := cb.endpoints.Load(testEndpoint)
-	atomic.StoreInt64(&state.lastAttempt, time.Now().Add(-5*time.Second-time.Millisecond).UnixNano())
+	state.SetLastAttemptNanos(time.Now().Add(-5*time.Second - time.Millisecond).UnixNano())
 
 	open, replacementAttempt := cb.IsOpen(testEndpoint, testCheckTimeout)
 	if open {
@@ -126,7 +129,7 @@ func TestCircuitBreaker_ABARace_SupersededProbeResultDropped(t *testing.T) {
 	// UnixNano() timestamps could otherwise coincide on a coarser system
 	// clock and defeat the "distinct token" assertion below).
 	attemptA := time.Now().Add(-10 * time.Second).UnixNano()
-	atomic.StoreInt64(&state.lastAttempt, attemptA)
+	state.SetLastAttemptNanos(attemptA)
 
 	// A is stale (10s ago, well past the 5s budget); a stale-handover admits
 	// replacement probe B.
@@ -137,7 +140,7 @@ func TestCircuitBreaker_ABARace_SupersededProbeResultDropped(t *testing.T) {
 
 	// B resolves first and legitimately closes the circuit.
 	cb.RecordSuccess(testEndpoint, attemptB)
-	if atomic.LoadInt32(&state.isOpen) != 0 {
+	if state.Tripped() {
 		t.Fatal("expected the circuit to be closed after the replacement probe's success")
 	}
 
@@ -145,11 +148,11 @@ func TestCircuitBreaker_ABARace_SupersededProbeResultDropped(t *testing.T) {
 	// correlation this would re-open the circuit B just closed.
 	cb.RecordFailure(testEndpoint, attemptA)
 
-	if atomic.LoadInt32(&state.isOpen) != 0 {
+	if state.Tripped() {
 		t.Fatal("a superseded probe's late result must not clobber the replacement's state - circuit must still be closed")
 	}
-	if atomic.LoadInt64(&state.failures) != 0 {
-		t.Fatalf("superseded probe's failure must not increment the failure counter, got %d", atomic.LoadInt64(&state.failures))
+	if got := state.Failures(); got != 0 {
+		t.Fatalf("superseded probe's failure must not increment the failure counter, got %d", got)
 	}
 }
 
@@ -173,7 +176,7 @@ func TestCircuitBreaker_HalfOpen_StaleProbeReleased(t *testing.T) {
 	// Simulate the first probe hanging well past the staleness window without
 	// ever resolving.
 	state, _ := cb.endpoints.Load(testEndpoint)
-	atomic.StoreInt64(&state.lastAttempt, time.Now().Add(-probeStaleness(testCheckTimeout)-time.Millisecond).UnixNano())
+	state.SetLastAttemptNanos(time.Now().Add(-probeStaleness(testCheckTimeout) - time.Millisecond).UnixNano())
 
 	if open, _ := cb.IsOpen(testEndpoint, testCheckTimeout); open {
 		t.Fatal("a stale, never-resolved probe must not wedge the endpoint - a further probe should be admitted")
@@ -204,7 +207,7 @@ func TestCircuitBreaker_HalfOpen_StaleProbeReleased_ConcurrentHandover(t *testin
 		t.Fatal("expected the first call to admit a half-open probe")
 	}
 	state, _ := cb.endpoints.Load(testEndpoint)
-	atomic.StoreInt64(&state.lastAttempt, time.Now().Add(-probeStaleness(testCheckTimeout)-time.Millisecond).UnixNano())
+	state.SetLastAttemptNanos(time.Now().Add(-probeStaleness(testCheckTimeout) - time.Millisecond).UnixNano())
 
 	var admitted int64
 	var ready sync.WaitGroup
@@ -290,11 +293,11 @@ func TestCircuitBreaker_HalfOpen_SuccessCloses(t *testing.T) {
 	cb.RecordSuccess(testEndpoint, attempt)
 
 	state, _ := cb.endpoints.Load(testEndpoint)
-	if atomic.LoadInt32(&state.isOpen) != 0 {
-		t.Fatalf("isOpen = %d after RecordSuccess, want closed (0)", state.isOpen)
+	if state.Tripped() {
+		t.Fatal("expected the breaker to be closed after RecordSuccess")
 	}
-	if atomic.LoadInt64(&state.lastAttempt) != 0 {
-		t.Fatalf("lastAttempt = %d after RecordSuccess, want reset to 0", state.lastAttempt)
+	if got := state.LastAttemptNanos(); got != 0 {
+		t.Fatalf("lastAttempt = %d after RecordSuccess, want reset to 0", got)
 	}
 	for range 10 {
 		if open, _ := cb.IsOpen(testEndpoint, testCheckTimeout); open {
@@ -317,8 +320,8 @@ func TestCircuitBreaker_HalfOpen_FailureReopens(t *testing.T) {
 	cb.RecordFailure(testEndpoint, attempt)
 
 	state, _ := cb.endpoints.Load(testEndpoint)
-	if atomic.LoadInt32(&state.isOpen) != 1 {
-		t.Fatalf("isOpen = %d after threshold-crossing RecordFailure, want open (1)", state.isOpen)
+	if !state.Tripped() {
+		t.Fatal("expected the breaker to be open after a threshold-crossing RecordFailure")
 	}
 	if open, _ := cb.IsOpen(testEndpoint, testCheckTimeout); !open {
 		t.Fatal("re-opened breaker admitted a request before its timeout elapsed again")
