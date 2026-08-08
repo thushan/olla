@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/adapter/proxy/sherpa"
@@ -134,6 +136,30 @@ func TestHandleProxyError_ResponseAlreadyStarted_NoOps(t *testing.T) {
 	}
 	if rr.Body.String() != `{"partial":` {
 		t.Errorf("handleProxyError must not append to a body already in flight, got %q", rr.Body.String())
+	}
+}
+
+// TestHandleProxyError_BareFlush_NoOps proves the ResponseStartedWriter flush
+// fix end to end: a bare flush (no prior Write/WriteHeader through the
+// tracker) must be treated as a commit, so handleProxyError does not append
+// an error status/body onto a response the client has already started
+// receiving via the flush.
+func TestHandleProxyError_BareFlush_NoOps(t *testing.T) {
+	t.Parallel()
+
+	rr := httptest.NewRecorder()
+	tracker := core.NewResponseStartedWriter(rr)
+
+	require.NoError(t, http.NewResponseController(tracker).Flush())
+
+	var app *Application
+	app.handleProxyError(tracker, errors.New("dial tcp: connection refused"))
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("handleProxyError must not write a status after a bare flush already committed the response, got %d", rr.Code)
+	}
+	if rr.Body.String() != "" {
+		t.Errorf("handleProxyError must not append a body after a bare flush already committed the response, got %q", rr.Body.String())
 	}
 }
 

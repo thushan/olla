@@ -43,6 +43,12 @@ type ProxyFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request,
 // retry (e.g. handler_proxy.go's handleProxyError) - Header().Set does not commit
 // anything, only WriteHeader/Write do, so a Content-Type-presence check is not a
 // reliable substitute.
+//
+// A flush is also a commit: streaming code can in principle reach a bare Flush()
+// (via http.NewResponseController) without a prior Write on this wrapper - bytes
+// already buffered by the underlying writer would then reach the client while
+// started stays false. Flush/FlushError guard against that by marking started
+// before delegating, so the signal holds regardless of call order.
 type ResponseStartedWriter struct {
 	http.ResponseWriter
 	started bool
@@ -75,6 +81,31 @@ func (rw *ResponseStartedWriter) Started() bool {
 // Without this, the wrapper hides the underlying flusher and SSE streams stall.
 func (rw *ResponseStartedWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
+}
+
+// FlushError marks the response as started and flushes the underlying writer,
+// mirroring http.ResponseController's FlushError semantics. It returns
+// http.ErrNotSupported if nothing in the underlying chain supports flushing,
+// rather than panicking or swallowing the failure.
+//
+// started is set before the flush is attempted: a flush pushes any buffered
+// bytes to the client immediately, so the commit has already happened by the
+// time this call is made, even if the underlying flush itself then fails.
+func (rw *ResponseStartedWriter) FlushError() error {
+	rw.started = true
+
+	rc := http.NewResponseController(rw.ResponseWriter)
+	if err := rc.Flush(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Flush satisfies the plain http.Flusher interface for callers that still
+// type-assert for it directly. Like http.Flusher.Flush, it is best-effort and
+// discards any error - use FlushError to observe failures.
+func (rw *ResponseStartedWriter) Flush() {
+	_ = rw.FlushError()
 }
 
 // isIdempotent reports whether the HTTP method is safe to retry after a partial
