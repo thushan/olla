@@ -401,3 +401,54 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 		t.Errorf("Expected 0 IP limiters after cleanup, got %d", limiterCountAfter)
 	}
 }
+
+// A zero per-IP limit means "do not limit per client", not "do not limit at all".
+// The global limit is a separate switch with its own zero value, so disabling only
+// the per-IP tier must leave the global limiter in force. Regression guard for
+// Validate() returning early on perIPRequestsPerMinute <= 0, before the global
+// limiter is consulted.
+func TestRateLimitValidator_Validate_PerIPDisabledStillEnforcesGlobal(t *testing.T) {
+	limits := config.ServerRateLimits{
+		GlobalRequestsPerMinute: 60, // 1/sec, so burst is the only real headroom
+		PerIPRequestsPerMinute:  0,  // per-IP tier off, global left on
+		BurstSize:               5,
+		CleanupInterval:         time.Minute,
+	}
+
+	validator := createTestRateLimitValidator(limits)
+	defer validator.Stop()
+
+	if validator.globalLimiter == nil {
+		t.Fatal("Global limiter should be initialised when the global limit is non-zero")
+	}
+
+	req := ports.SecurityRequest{
+		ClientID:      "192.168.1.100",
+		Endpoint:      "/api/test",
+		Method:        "POST",
+		IsHealthCheck: false,
+	}
+
+	const requests = 50
+	allowed := 0
+	for i := range requests {
+		result, err := validator.Validate(context.Background(), req)
+		if err != nil {
+			t.Fatalf("Validate failed on request %d: %v", i+1, err)
+		}
+		if result.Allowed {
+			allowed++
+		}
+	}
+
+	// A tight loop cannot earn meaningful refill at 1/sec, so anything far above
+	// the burst means the global limiter was never asked.
+	if allowed == requests {
+		t.Fatalf("All %d requests were allowed with a global limit of %d/min and burst %d; "+
+			"a zero per-IP limit has disabled global rate limiting entirely",
+			requests, limits.GlobalRequestsPerMinute, limits.BurstSize)
+	}
+	if allowed > limits.BurstSize {
+		t.Errorf("Allowed %d requests, expected no more than the burst size of %d", allowed, limits.BurstSize)
+	}
+}
