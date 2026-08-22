@@ -121,7 +121,7 @@ func (rl *RateLimitValidator) Validate(ctx context.Context, req ports.SecurityRe
 				RateLimit:  rl.globalRequestsPerMinute,
 				Remaining:  0,
 				ResetTime:  now.Add(time.Minute),
-				Reason:     "Global rate limit exceeded",
+				Reason:     constants.ReasonGlobalRateLimitExceeded,
 			}, nil
 		}
 	}
@@ -179,7 +179,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 			RateLimit:  limit,
 			Remaining:  0,
 			ResetTime:  now.Add(time.Minute),
-			Reason:     "Rate limit exceeded",
+			Reason:     constants.ReasonRateLimitExceeded,
 		}
 	}
 
@@ -197,7 +197,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 			RateLimit:  limit,
 			Remaining:  remaining,
 			ResetTime:  now.Add(time.Minute),
-			Reason:     "Rate limit exceeded",
+			Reason:     constants.ReasonRateLimitExceeded,
 		}
 	}
 

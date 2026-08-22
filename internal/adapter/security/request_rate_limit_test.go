@@ -10,6 +10,7 @@ import (
 	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -291,6 +292,9 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 
 		if !result.Allowed {
 			globalBlocked = true
+			if result.Reason != constants.ReasonGlobalRateLimitExceeded {
+				t.Errorf("Expected the global limiter to reject, got reason: %s", result.Reason)
+			}
 			break
 		}
 	}

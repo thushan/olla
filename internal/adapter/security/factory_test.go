@@ -9,6 +9,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/stats"
 
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -161,7 +162,8 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 			rateLimited = true
 			// Burst is 1 for both tiers here, so either limiter may be the one
 			// that rejects. The chain only has to surface a rate-limit reason.
-			if result.Reason != "Rate limit exceeded" && result.Reason != "Global rate limit exceeded" {
+			if result.Reason != constants.ReasonRateLimitExceeded &&
+				result.Reason != constants.ReasonGlobalRateLimitExceeded {
 				t.Errorf("Expected rate limit reason, got: %s", result.Reason)
 			}
 			break
