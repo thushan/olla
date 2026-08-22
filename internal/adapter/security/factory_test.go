@@ -159,7 +159,9 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 		}
 		if !result.Allowed {
 			rateLimited = true
-			if result.Reason != "Rate limit exceeded" {
+			// Burst is 1 for both tiers here, so either limiter may be the one
+			// that rejects. The chain only has to surface a rate-limit reason.
+			if result.Reason != "Rate limit exceeded" && result.Reason != "Global rate limit exceeded" {
 				t.Errorf("Expected rate limit reason, got: %s", result.Reason)
 			}
 			break

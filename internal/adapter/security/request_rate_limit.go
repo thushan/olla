@@ -106,15 +106,9 @@ func (rl *RateLimitValidator) Validate(ctx context.Context, req ports.SecurityRe
 		limit = rl.perIPRequestsPerMinute
 	}
 
-	if limit <= 0 {
-		return ports.SecurityResult{
-			Allowed:   true,
-			RateLimit: 0,
-			Remaining: 0,
-			ResetTime: now.Add(time.Minute),
-		}, nil
-	}
-
+	// The global limiter is consulted before the per-IP tier is considered, so
+	// that disabling per-IP limiting leaves the global cap in force. The two are
+	// documented as independent switches, each with its own zero value.
 	if rl.globalLimiter != nil {
 		reservation := rl.globalLimiter.Reserve()
 		if !reservation.OK() || reservation.Delay() > 0 {
@@ -124,15 +118,37 @@ func (rl *RateLimitValidator) Validate(ctx context.Context, req ports.SecurityRe
 			return ports.SecurityResult{
 				Allowed:    false,
 				RetryAfter: 60,
-				RateLimit:  limit,
+				RateLimit:  rl.globalRequestsPerMinute,
 				Remaining:  0,
 				ResetTime:  now.Add(time.Minute),
-				Reason:     "Rate limit exceeded",
+				Reason:     "Global rate limit exceeded",
 			}, nil
 		}
 	}
 
+	if limit <= 0 {
+		return ports.SecurityResult{
+			Allowed:   true,
+			RateLimit: 0,
+			Remaining: 0,
+			ResetTime: now.Add(time.Minute),
+		}, nil
+	}
+
 	return rl.checkIPLimit(req.ClientID, limit, now, req.IsHealthCheck), nil
+}
+
+// retryAfterSeconds converts a per-minute allowance into a Retry-After hint,
+// with a floor of one second. checkIPLimit is only reached with a positive
+// limit, but the guard keeps a future caller from dividing by zero here.
+func retryAfterSeconds(limit int) int {
+	if limit <= 0 {
+		return 60
+	}
+	if seconds := 60 / limit; seconds > 0 {
+		return seconds
+	}
+	return 1
 }
 
 // checkIPLimit handles per-IP rate enfrecment, including health check separation.
@@ -159,7 +175,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 	if !reservation.OK() {
 		return ports.SecurityResult{
 			Allowed:    false,
-			RetryAfter: 60 / limit,
+			RetryAfter: retryAfterSeconds(limit),
 			RateLimit:  limit,
 			Remaining:  0,
 			ResetTime:  now.Add(time.Minute),
