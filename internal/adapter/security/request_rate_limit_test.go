@@ -290,15 +290,17 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 		}
 
 		if !result.Allowed {
-			if result.Reason == "Global rate limit exceeded" {
-				globalBlocked = true
-				break
-			}
+			globalBlocked = true
+			break
 		}
 	}
 
+	// Burst is 3 at 180/min, and the per-IP allowance of 600/min is far looser,
+	// so a tight loop of 20 across three IPs can only be stopped by the global
+	// limiter. Previously this asserted on a Reason string the code never emits
+	// and downgraded the miss to t.Log, so it passed unconditionally.
 	if !globalBlocked {
-		t.Log("Global rate limiting not triggered - this may be due to token refill timing")
+		t.Error("Global rate limit was never enforced across 20 requests with a burst of 3")
 	}
 }
 
