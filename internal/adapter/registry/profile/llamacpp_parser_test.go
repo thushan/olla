@@ -492,7 +492,7 @@ func TestLlamaCppParser_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("handles model with meta field", func(t *testing.T) {
-		// Meta field exists in response but is not processed in Phase 3
+		// Discovery does not depend on optional upstream metadata.
 		response := `{
 			"object": "list",
 			"data": [
@@ -519,7 +519,6 @@ func TestLlamaCppParser_EdgeCases(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "model-with-meta.gguf", model.Name)
-		// Meta field is parsed but not processed in Phase 3
 		require.NotNil(t, model.Details)
 		require.NotNil(t, model.Details.Format)
 		assert.Equal(t, constants.RecipeGGUF, *model.Details.Format)
@@ -554,6 +553,122 @@ func TestLlamaCppParser_EdgeCases(t *testing.T) {
 		require.Len(t, models, 1)
 		assert.Equal(t, "data-model.gguf", models[0].Name)
 	})
+}
+
+func TestLlamaCppParser_Issue222(t *testing.T) {
+	// llama.cpp b10859 returned a boolean vocab_type and a string ftype.
+	// This reproduces #222 with the server arguments and preset text omitted.
+	response := `{
+		"data": [{
+			"id": "Qwen3-Coder-30B-A3B",
+			"aliases": [],
+			"tags": [],
+			"object": "model",
+			"owned_by": "llamacpp",
+			"created": 1789077214,
+			"status": {"value": "loaded"},
+			"architecture": {"input_modalities": ["text"], "output_modalities": ["text"]},
+			"source": "preset",
+			"can_remove": false,
+			"meta": {
+				"vocab_type": true,
+				"n_vocab": 151936,
+				"n_ctx": 65536,
+				"n_ctx_train": 262144,
+				"n_embd": 2048,
+				"n_params": 30532122624,
+				"size": 17659361280,
+				"ftype": "Q4_K - Medium"
+			}
+		}],
+		"object": "list"
+	}`
+	parser := &llamaCppParser{}
+	models, err := parser.Parse([]byte(response))
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	assert.Equal(t, "Qwen3-Coder-30B-A3B", models[0].Name)
+	assert.Equal(t, constants.ProviderTypeLlamaCpp, models[0].Type)
+	require.NotNil(t, models[0].Details)
+	require.NotNil(t, models[0].Details.ModifiedAt)
+	assert.Equal(t, time.Unix(1789077214, 0), *models[0].Details.ModifiedAt)
+	assert.Nil(t, models[0].Details.Publisher)
+	require.NotNil(t, models[0].Details.Format)
+	assert.Equal(t, constants.RecipeGGUF, *models[0].Details.Format)
+}
+
+func TestLlamaCppParser_MetadataCompatibility(t *testing.T) {
+	parser := &llamaCppParser{}
+	tests := []struct {
+		name string
+		meta string
+	}{
+		{"numeric vocabulary type", `{"vocab_type": 2}`},
+		{"boolean vocabulary type", `{"vocab_type": true}`},
+		{"false vocabulary type", `{"vocab_type": false}`},
+		{"null vocabulary type", `{"vocab_type": null}`},
+		{"missing vocabulary type", `{}`},
+		{"changed metadata fields", `{"n_vocab": "32000", "n_ctx_train": false, "n_embd": [], "n_params": {}, "size": "4GB", "ftype": "Q4_K_M"}`},
+		{"null metadata", `null`},
+		{"non-object metadata", `"unavailable"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			response := fmt.Sprintf(`{
+				"data": [{"id": "model.gguf", "created": 1704067200, "owned_by": "publisher", "meta": %s}],
+				"models": [{"id": "model.gguf", "meta": %s}]
+			}`, tt.meta, tt.meta)
+
+			models, err := parser.Parse([]byte(response))
+			require.NoError(t, err)
+			require.Len(t, models, 1)
+			assert.Equal(t, "model.gguf", models[0].Name)
+			assert.Equal(t, constants.ProviderTypeLlamaCpp, models[0].Type)
+			require.NotNil(t, models[0].Details)
+			require.NotNil(t, models[0].Details.ModifiedAt)
+			assert.Equal(t, time.Unix(1704067200, 0), *models[0].Details.ModifiedAt)
+			require.NotNil(t, models[0].Details.Publisher)
+			assert.Equal(t, "publisher", *models[0].Details.Publisher)
+			require.NotNil(t, models[0].Details.Format)
+			assert.Equal(t, constants.RecipeGGUF, *models[0].Details.Format)
+		})
+	}
+}
+
+func TestLlamaCppParser_IgnoresUnusedFields(t *testing.T) {
+	parser := &llamaCppParser{}
+	// Neither the duplicate models array nor object markers contribute to discovery.
+	response := `{
+		"object": false,
+		"data": [{"id": "model.gguf", "object": {}, "meta": {"vocab_type": true}}],
+		"models": [{"id": 123, "created": false, "owned_by": [], "meta": {"vocab_type": true}}]
+	}`
+	models, err := parser.Parse([]byte(response))
+	require.NoError(t, err)
+	require.Len(t, models, 1)
+	assert.Equal(t, "model.gguf", models[0].Name)
+}
+
+func TestLlamaCppParser_RejectsInvalidDiscoveryFields(t *testing.T) {
+	parser := &llamaCppParser{}
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"invalid data", `{"data": {"id": "model.gguf"}}`},
+		{"invalid identifier", `{"data": [{"id": true}]}`},
+		{"invalid timestamp", `{"data": [{"id": "model.gguf", "created": "yesterday"}]}`},
+		{"invalid publisher", `{"data": [{"id": "model.gguf", "owned_by": []}]}`},
+		{"truncated metadata", `{"data": [{"id": "model.gguf", "meta": {"vocab_type":`},
+		{"invalid metadata JSON", `{"data": [{"id": "model.gguf", "meta": {"vocab_type": invalid}}]}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			models, err := parser.Parse([]byte(tt.body))
+			require.ErrorContains(t, err, "failed to parse llama.cpp response")
+			assert.Nil(t, models)
+		})
+	}
 }
 
 func TestLlamaCppParser_PerformanceConsiderations(t *testing.T) {
