@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -70,7 +69,12 @@ func NewHTTPModelDiscoveryClientWithDefaults(profileFactory *profile.Factory, lo
 	}
 }
 
-func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint *domain.Endpoint) ([]*domain.ModelInfo, error) {
+func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint *domain.Endpoint) (models []*domain.ModelInfo, err error) {
+	defer func() {
+		if err != nil {
+			c.recordError(endpoint.URLString)
+		}
+	}()
 	startTime := time.Now()
 
 	c.updateMetrics(func(m *DiscoveryMetrics) {
@@ -84,7 +88,6 @@ func (c *HTTPModelDiscoveryClient) DiscoverModels(ctx context.Context, endpoint 
 
 	platformProfile, err := c.profileFactory.GetProfile(profileType)
 	if err != nil {
-		c.recordError(endpoint.URLString)
 		return nil, NewDiscoveryError(endpoint.URLString, profileType, "get_profile", 0, time.Since(startTime), err)
 	}
 
@@ -119,21 +122,13 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 			return models, nil
 		}
 
-		// Continue to next profile unless it's a non-recoverable parsing error
-		var discErr *DiscoveryError
-		if errors.As(err, &discErr) {
-			// Stop only on parse errors, continue on HTTP errors (different endpoints)
-			// we can't really do much if there's parsing errors
-			var parseError *ParseError
-			if errors.As(discErr.Err, &parseError) {
-				lastErr = err
-				break
-			}
+		if ctx.Err() != nil {
+			return nil, err
 		}
+
 		lastErr = err
 	}
 
-	c.recordError(endpoint.URLString)
 	return nil, NewDiscoveryError(endpoint.URLString, domain.ProfileAuto, "auto_detect", 0, time.Since(startTime), lastErr)
 }
 
@@ -198,16 +193,20 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 	}
 
 	// Limit response size to prevent memory issues
-	limitedReader := io.LimitReader(resp.Body, MaxResponseSize)
+	limitedReader := io.LimitReader(resp.Body, MaxResponseSize+1)
 	body, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return nil, NewDiscoveryError(endpoint.URLString, platformProfile.GetName(), "read_response", resp.StatusCode, duration, err)
 	}
 
+	if len(body) > MaxResponseSize {
+		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "read_response", resp.StatusCode, duration, fmt.Errorf("model response exceeds %d bytes", MaxResponseSize))
+	}
+
 	models, err := platformProfile.ParseModelsResponse(body)
 	if err != nil {
 		// Include the actual discovery URL in the error for debugging
-		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "parse_response", resp.StatusCode, duration, err)
+		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "parse_response", resp.StatusCode, duration, &ParseError{Format: platformProfile.GetName(), Err: err})
 	}
 
 	c.updateMetrics(func(m *DiscoveryMetrics) {
