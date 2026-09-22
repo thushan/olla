@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	MaxConsecutiveFailures = 5 // Disable discovery after this many failures
-	DefaultCleanupInterval = 10 * time.Minute
+	MaxConsecutiveFailures   = 5 // Pause discovery after this many failures
+	DefaultDiscoveryCooldown = 5 * time.Minute
+	DefaultCleanupInterval   = 10 * time.Minute
 )
 
 // ModelDiscoveryService coordinates model discovery across all endpoints
@@ -31,6 +32,7 @@ type ModelDiscoveryService struct {
 	modelFilter       ports.Filter
 	stopCh            chan struct{}
 	ticker            *time.Ticker
+	retryAfter        map[string]time.Time
 	disabledEndpoints map[string]int                  // tracks consecutive failures
 	endpointFilters   map[string]*domain.FilterConfig // per-endpoint filter configs
 	config            DiscoveryConfig
@@ -56,6 +58,7 @@ func NewModelDiscoveryService(client ModelDiscoveryClient, endpointRepo domain.E
 		config:            config,
 		stopCh:            make(chan struct{}),
 		disabledEndpoints: make(map[string]int),
+		retryAfter:        make(map[string]time.Time),
 		modelFilter:       filter.NewGlobFilter(),
 		endpointFilters:   make(map[string]*domain.FilterConfig),
 	}
@@ -134,7 +137,7 @@ func (s *ModelDiscoveryService) DiscoverAll(ctx context.Context) error {
 		return nil
 	}
 
-	// FIX: have to filter only active endpoitns here, otherwise we're stuck in a loop
+	// Failed endpoints are retried once their cooldown expires.
 	activeEndpoints := s.filterActiveEndpoints(endpoints)
 	if len(activeEndpoints) == 0 {
 		s.logger.Debug("No active endpoints available for discovery")
@@ -149,20 +152,25 @@ func (s *ModelDiscoveryService) DiscoverAll(ctx context.Context) error {
 
 // DiscoverEndpoint discovers models from a specific endpoint
 func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *domain.Endpoint) error {
-	// [TF]	Note: Don't skip disabled endpoints in tests, as they might be testing re-enabling
-	// 		In release, the filterActiveEndpoints in DiscoverAll handles this nicely
+	// Explicit discovery bypasses the periodic cooldown.
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 
 	discoveryCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
 
 	models, err := s.client.DiscoverModels(discoveryCtx, endpoint)
 	if err != nil {
-		s.handleDiscoveryError(endpoint, err)
+		if ctx.Err() == nil {
+			s.handleDiscoveryError(endpoint, err)
+		}
 		return err
 	}
 
-	// Reset failure count on success
-	s.resetFailureCount(endpoint.URLString)
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
 
 	// Apply model filtering if configured for this endpoint
 	filteredModels := models
@@ -194,6 +202,7 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		}
 	}
 
+	s.resetFailureCount(endpoint.URLString)
 	s.logger.InfoWithEndpoint(" ", endpoint.Name, "models", len(filteredModels))
 	return nil
 }
@@ -209,19 +218,20 @@ func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoi
 		workerCount = len(endpoints)
 	}
 
-	eg, ctx := errgroup.WithContext(ctx)
+	// Endpoint failures must not cancel discovery on unrelated backends.
+	var eg errgroup.Group
 	eg.SetLimit(workerCount)
 
 	for _, ep := range endpoints {
 		eg.Go(func() error {
-			if err := s.DiscoverEndpoint(ctx, ep); err != nil && !errors.Is(err, context.Canceled) {
+			if err := s.DiscoverEndpoint(ctx, ep); err != nil {
 				return err
 			}
 			return nil
 		})
 	}
 
-	if err := eg.Wait(); err != nil {
+	if err := errors.Join(eg.Wait(), ctx.Err()); err != nil {
 		return fmt.Errorf("discovery failed: %w", err)
 	}
 
@@ -242,7 +252,7 @@ func (s *ModelDiscoveryService) handleDiscoveryError(endpoint *domain.Endpoint, 
 	s.logger.ErrorWithContext(fmt.Sprintf("Model discovery failed (%s)", userMsg), endpoint.Name, logCtx)
 
 	if !IsRecoverable(err) {
-		s.logger.WarnWithEndpoint("Disabling discovery for endpoint due to non-recoverable error", endpoint.Name)
+		s.logger.WarnWithEndpoint("Pausing discovery for endpoint until cooldown expires", endpoint.Name)
 		s.disableEndpoint(endpoint.URLString)
 		return
 	}
@@ -251,7 +261,7 @@ func (s *ModelDiscoveryService) handleDiscoveryError(endpoint *domain.Endpoint, 
 
 	failureCount := s.getFailureCount(endpoint.URLString)
 	if failureCount >= MaxConsecutiveFailures {
-		s.logger.WarnWithEndpoint("Disabling discovery for endpoint after consequent failures", endpoint.Name, "failures", failureCount)
+		s.logger.WarnWithEndpoint("Pausing discovery for endpoint after consecutive failures", endpoint.Name, "failures", failureCount)
 		s.disableEndpoint(endpoint.URLString)
 	}
 }
@@ -267,7 +277,7 @@ func (s *ModelDiscoveryService) filterActiveEndpoints(endpoints []*domain.Endpoi
 
 	active := make([]*domain.Endpoint, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if failureCount, exists := s.disabledEndpoints[endpoint.URLString]; !exists || failureCount < MaxConsecutiveFailures {
+		if failureCount, exists := s.disabledEndpoints[endpoint.URLString]; !exists || failureCount < MaxConsecutiveFailures || !time.Now().Before(s.retryAfter[endpoint.URLString]) {
 			active = append(active, endpoint)
 		}
 	}
@@ -280,7 +290,7 @@ func (s *ModelDiscoveryService) isEndpointDisabled(endpointURL string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	failureCount, exists := s.disabledEndpoints[endpointURL]
-	return exists && failureCount >= MaxConsecutiveFailures
+	return exists && failureCount >= MaxConsecutiveFailures && time.Now().Before(s.retryAfter[endpointURL])
 }
 
 // disableEndpoint marks an endpoint as disabled for discovery
@@ -288,6 +298,8 @@ func (s *ModelDiscoveryService) disableEndpoint(endpointURL string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.disabledEndpoints[endpointURL] = MaxConsecutiveFailures
+	cooldown := max(DefaultDiscoveryCooldown, s.config.Interval)
+	s.retryAfter[endpointURL] = time.Now().Add(cooldown)
 }
 
 // incrementFailureCount increments the failure count for an endpoint
@@ -309,6 +321,7 @@ func (s *ModelDiscoveryService) resetFailureCount(endpointURL string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.disabledEndpoints, endpointURL)
+	delete(s.retryAfter, endpointURL)
 }
 
 // GetMetrics returns combined discovery metrics
@@ -316,7 +329,12 @@ func (s *ModelDiscoveryService) GetMetrics() DiscoveryMetrics {
 	metrics := s.client.GetMetrics()
 
 	s.mu.RLock()
-	disabledCount := len(s.disabledEndpoints)
+	disabledCount := 0
+	for endpointURL, failures := range s.disabledEndpoints {
+		if failures >= MaxConsecutiveFailures && time.Now().Before(s.retryAfter[endpointURL]) {
+			disabledCount++
+		}
+	}
 	s.mu.RUnlock()
 
 	if disabledCount > 0 {

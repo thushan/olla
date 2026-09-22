@@ -132,10 +132,10 @@ func IsRecoverable(err error) bool {
 	// we may want to improve this as we discover more recoverable errors
 	// but abstracting it here means we can change it in one place
 
-	// can't really recover from wrong format etc
+	// A backend upgrade or a transient response can repair a format mismatch.
 	var parseError *ParseError
 	if errors.As(err, &parseError) {
-		return false
+		return true
 	}
 
 	// hopefully recoverable?
