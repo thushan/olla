@@ -230,7 +230,7 @@ func TestEndpointDisabling(t *testing.T) {
 	}{
 		{
 			name:                   "non-recoverable error disables immediately",
-			discoveryError:         &ParseError{Data: []byte{}, Format: "json", Err: errors.New("parse error")},
+			discoveryError:         NewDiscoveryError("http://test", "ollama", "http_status", 401, 0, errors.New("unauthorised")),
 			expectedDisabled:       true,
 			expectFailureIncrement: false,
 		},

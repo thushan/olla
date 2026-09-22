@@ -18,7 +18,15 @@ func (p *llamaCppParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 		return make([]*domain.ModelInfo, 0), nil
 	}
 
-	var response LlamaCppResponse
+	// Decode only fields discovery uses. Upstream metadata types can change
+	// independently, and the duplicate Ollama-compatible models array is unused.
+	var response struct {
+		Data []struct {
+			ID      string `json:"id"`
+			OwnedBy string `json:"owned_by"`
+			Created int64  `json:"created"`
+		} `json:"data"`
+	}
 	const LlamaCpp = "llamacpp"
 
 	if err := json.Unmarshal(data, &response); err != nil {

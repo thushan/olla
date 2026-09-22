@@ -81,9 +81,14 @@ func (e *NetworkError) Unwrap() error {
 
 // GetUserFriendlyMessage gives a concise, user-friendly error message from discovery errors
 func GetUserFriendlyMessage(err error) string {
+	var parseErr *ParseError
+	if errors.As(err, &parseErr) {
+		return "invalid response format"
+	}
+
 	var discErr *DiscoveryError
 	if errors.As(err, &discErr) {
-		if discErr.StatusCode > 0 {
+		if discErr.StatusCode > 0 && discErr.StatusCode != 200 {
 			switch {
 			case discErr.StatusCode >= 400 && discErr.StatusCode < 500:
 				return fmt.Sprintf("endpoint configuration issue (HTTP %d)", discErr.StatusCode)
@@ -92,6 +97,10 @@ func GetUserFriendlyMessage(err error) string {
 			default:
 				return fmt.Sprintf("HTTP error (%d)", discErr.StatusCode)
 			}
+		}
+
+		if discErr.Operation == "read_response" {
+			return "failed to read model response"
 		}
 
 		// common network issues
@@ -115,11 +124,6 @@ func GetUserFriendlyMessage(err error) string {
 		return "network connection failed"
 	}
 
-	var parseErr *ParseError
-	if errors.As(err, &parseErr) {
-		return "invalid response format"
-	}
-
 	return "discovery failed"
 }
 
@@ -128,10 +132,10 @@ func IsRecoverable(err error) bool {
 	// we may want to improve this as we discover more recoverable errors
 	// but abstracting it here means we can change it in one place
 
-	// can't really recover from wrong format etc
+	// A backend upgrade or a transient response can repair a format mismatch.
 	var parseError *ParseError
 	if errors.As(err, &parseError) {
-		return false
+		return true
 	}
 
 	// hopefully recoverable?

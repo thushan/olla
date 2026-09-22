@@ -416,7 +416,7 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			name: "Non-recoverable parse error stops detection",
+			name: "Parse error followed by no matching profile",
 			serverResponses: map[string]serverResponse{
 				"/api/tags": {
 					status: 200,

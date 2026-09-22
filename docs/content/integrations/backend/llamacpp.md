@@ -674,6 +674,14 @@ See [Profile Configuration](../../concepts/profile-system.md) for complete custo
 
 ## Troubleshooting
 
+### Empty Model Listings
+
+Olla discovers llama.cpp models from the `data` array returned by the backend's `/v1/models` endpoint. Discovery reads `id`, `created` and `owned_by`, and ignores unused metadata and the duplicate `models` array. Metadata differences between llama.cpp builds, such as a boolean `meta.vocab_type` or a string `meta.ftype`, do not prevent model discovery.
+
+If Olla's model listings are empty, check the backend's `/v1/models` response directly with the configured authentication, confirm the endpoint is healthy in `/internal/status/endpoints`, and inspect the discovery error in Olla's logs. A response parsing error means the backend returned a response that Olla could not decode; HTTP 200 alone does not confirm successful discovery. Invalid JSON or incorrectly typed discovery fields still fail parsing.
+
+Repeated failures temporarily pause discovery for that endpoint. Once the backend is healthy and returns a valid listing, Olla retries automatically after the pause, without requiring a restart. See [Model Discovery](../../configuration/overview.md#model-discovery) for retry timing.
+
 ### Slot Exhaustion (504 Errors)
 
 **Issue**: "all slots are busy" or 504 timeout errors

@@ -287,7 +287,9 @@ discovery:
 ```
 
 !!! note "Discovery Behaviour"
-    Model discovery only runs on healthy endpoints. Failed discoveries disable the endpoint temporarily.
+    Periodic model discovery only runs on healthy endpoints. A failed discovery does not cancel discovery for other endpoints.
+
+    After five consecutive failures, discovery for that endpoint pauses for at least five minutes, or the configured discovery interval if longer. HTTP 4xx responses, including authentication failures, pause discovery immediately. Olla retries on the first periodic scan after the pause when the endpoint is healthy; a failed retry starts another pause. Discovery resumes automatically after the backend recovers, without restarting Olla. This pause affects model discovery, not endpoint health checks.
 
 ## Model Registry Configuration
 
