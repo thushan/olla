@@ -20,6 +20,14 @@ Cross-provider model discovery endpoint that aggregates models from all configur
 
 Returns all available models across all configured and healthy endpoints.
 
+!!! note "Model Aliases Visibility"
+    The visibility of configured model aliases in model listings is controlled by the `model_aliases_mode` configuration option:
+    - `disabled` (default): Only actual backend models are shown. Aliases are not listed.
+    - `append`: Aliases are shown alongside their target models.
+    - `hidden`: Aliases are shown, but their target models are hidden from the list.
+    
+    See [Model Aliases Configuration](../configuration/reference.md#model-aliases-mode) and [Model Aliases Concepts](../concepts/model-aliases.md#alias-visibility-in-model-listings) for details.
+
 ### Query Parameters
 
 | Parameter | Type | Default | Description |

@@ -516,3 +516,177 @@ func TestResolveAliasEndpoints_IntegrationWithFilterEndpointsByProfile(t *testin
 	require.NotNil(t, profile.RoutingDecision)
 	assert.Equal(t, "alias", profile.RoutingDecision.Strategy)
 }
+
+// TestResolveAliasEndpoints_FallbackToSecondTarget tests that when the first
+// target model in an alias is not available on any healthy endpoint, the
+// second target is tried (config order = priority)
+func TestResolveAliasEndpoints_FallbackToSecondTarget(t *testing.T) {
+	styledLog := &mockStyledLogger{}
+
+	endpoint1URL, _ := url.Parse("http://ollama:11434")
+	endpoint2URL, _ := url.Parse("http://lmstudio:1234")
+	endpoint3URL, _ := url.Parse("http://openai:8080")
+
+	// All three endpoints are healthy candidates
+	candidates := []*domain.Endpoint{
+		{
+			Name:      "ollama",
+			URL:       endpoint1URL,
+			URLString: "http://ollama:11434",
+			Type:      domain.ProfileOllama,
+		},
+		{
+			Name:      "lmstudio",
+			URL:       endpoint2URL,
+			URLString: "http://lmstudio:1234",
+			Type:      domain.ProfileLmStudio,
+		},
+		{
+			Name:      "openai",
+			URL:       endpoint3URL,
+			URLString: "http://openai:8080",
+			Type:      domain.ProfileOpenAI,
+		},
+	}
+
+	// Alias has two targets: gpt-3.5-turbo (first priority) and gpt-4 (fallback)
+	// Only gpt-4 is available on any endpoint (openai)
+	// The alias should resolve to openai endpoint with gpt-4
+	modelRegistry := &mockSimpleModelRegistry{
+		endpointsForModel: map[string][]string{
+			"gpt-3.5-turbo": {"http://unhealthy:9999"}, // not in candidates (unhealthy)
+			"gpt-4":         {"http://openai:8080"},
+		},
+	}
+
+	aliases := map[string][]string{
+		"my-gpt": {"gpt-3.5-turbo", "gpt-4"},
+	}
+	aliasResolver := registry.NewAliasResolver(aliases, styledLog)
+
+	app := &Application{
+		modelRegistry: modelRegistry,
+		aliasResolver: aliasResolver,
+		logger:        styledLog,
+	}
+
+	profile := domain.NewRequestProfile("/v1/chat/completions")
+	profile.ModelName = "my-gpt"
+	profile.SupportedBy = []string{domain.ProfileOpenAI, domain.ProfileOllama, domain.ProfileLmStudio}
+
+	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
+
+	// Should return only the openai endpoint (which has gpt-4)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "http://openai:8080", result[0].URLString)
+
+	// Verify the rewrite map uses gpt-4 for the openai endpoint
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	require.True(t, ok)
+	aliasMap := aliasMapRaw.(map[string]string)
+	assert.Equal(t, "gpt-4", aliasMap["http://openai:8080"])
+}
+
+// TestResolveAliasEndpoints_FallbackToSecondTargetOnSameEndpoint tests fallback
+// when both targets are on the same endpoint but first is unavailable
+func TestResolveAliasEndpoints_FallbackToSecondTargetOnSameEndpoint(t *testing.T) {
+	styledLog := &mockStyledLogger{}
+
+	endpoint1URL, _ := url.Parse("http://openai:8080")
+
+	candidates := []*domain.Endpoint{
+		{
+			Name:      "openai",
+			URL:       endpoint1URL,
+			URLString: "http://openai:8080",
+			Type:      domain.ProfileOpenAI,
+		},
+	}
+
+	// Both targets on the same endpoint, but first is "unavailable"
+	// The mock registry will only return endpoints for gpt-4
+	modelRegistry := &mockSimpleModelRegistry{
+		endpointsForModel: map[string][]string{
+			// gpt-3.5-turbo not listed = not available
+			"gpt-4": {"http://openai:8080"},
+		},
+	}
+
+	aliases := map[string][]string{
+		"my-gpt": {"gpt-3.5-turbo", "gpt-4"},
+	}
+	aliasResolver := registry.NewAliasResolver(aliases, styledLog)
+
+	app := &Application{
+		modelRegistry: modelRegistry,
+		aliasResolver: aliasResolver,
+		logger:        styledLog,
+	}
+
+	profile := domain.NewRequestProfile("/v1/chat/completions")
+	profile.ModelName = "my-gpt"
+	profile.SupportedBy = []string{domain.ProfileOpenAI}
+
+	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
+
+	// Should return the openai endpoint with gpt-4
+	assert.Len(t, result, 1)
+	assert.Equal(t, "http://openai:8080", result[0].URLString)
+
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	require.True(t, ok)
+	aliasMap := aliasMapRaw.(map[string]string)
+	assert.Equal(t, "gpt-4", aliasMap["http://openai:8080"])
+}
+
+// TestResolveAliasEndpoints_TargetOrderMatters tests that config order determines
+// priority - first target wins when both are available on the same endpoint
+func TestResolveAliasEndpoints_TargetOrderMatters(t *testing.T) {
+	styledLog := &mockStyledLogger{}
+
+	endpoint1URL, _ := url.Parse("http://openai:8080")
+
+	candidates := []*domain.Endpoint{
+		{
+			Name:      "openai",
+			URL:       endpoint1URL,
+			URLString: "http://openai:8080",
+			Type:      domain.ProfileOpenAI,
+		},
+	}
+
+	// Both targets available on the same endpoint
+	modelRegistry := &mockSimpleModelRegistry{
+		endpointsForModel: map[string][]string{
+			"gpt-3.5-turbo": {"http://openai:8080"},
+			"gpt-4":         {"http://openai:8080"},
+		},
+	}
+
+	// gpt-3.5-turbo is first in config, so it should win for the endpoint
+	aliases := map[string][]string{
+		"my-gpt": {"gpt-3.5-turbo", "gpt-4"},
+	}
+	aliasResolver := registry.NewAliasResolver(aliases, styledLog)
+
+	app := &Application{
+		modelRegistry: modelRegistry,
+		aliasResolver: aliasResolver,
+		logger:        styledLog,
+	}
+
+	profile := domain.NewRequestProfile("/v1/chat/completions")
+	profile.ModelName = "my-gpt"
+	profile.SupportedBy = []string{domain.ProfileOpenAI}
+
+	result := app.resolveAliasEndpoints(t.Context(), profile, candidates, styledLog)
+
+	assert.Len(t, result, 1)
+	assert.Equal(t, "http://openai:8080", result[0].URLString)
+
+	// First target in config should win
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	require.True(t, ok)
+	aliasMap := aliasMapRaw.(map[string]string)
+	assert.Equal(t, "gpt-3.5-turbo", aliasMap["http://openai:8080"])
+}

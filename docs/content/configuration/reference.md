@@ -606,6 +606,7 @@ Define virtual model names that map to platform-specific model names across diff
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `model_aliases` | map[string][]string | `nil` | Map of alias name → list of actual model names |
+| `model_aliases_mode` | string | `disabled` | Controls alias visibility in model listings (`disabled`, `append`, `hidden`) |
 
 Each key is the virtual model name clients will use. Each value is a list of actual model names that backends may serve the model under. When a request matches an alias, Olla resolves endpoints for all listed model names and rewrites the request body to the correct name for the selected backend.
 
@@ -621,10 +622,24 @@ model_aliases:
   my-codegen:
     - "qwen2.5-coder:7b"                     # Ollama
     - qwen2.5-coder-7b-instruct              # LM Studio
+
+model_aliases_mode: "hidden"
 ```
 
 !!! note
     Alias names take priority over standard model routing. If no endpoints are found for the alias, Olla falls back to standard routing using the alias name as a regular model name, honouring the configured routing strategy. Under `strict` (the default) an alias whose targets are all unavailable is rejected (`404`/`503`), not proxied to a compatible-but-wrong backend. See [Model Aliases](../concepts/model-aliases.md) for details.
+
+### Model Aliases Mode
+
+The `model_aliases_mode` setting controls how configured aliases appear in model listing endpoints (e.g., `/olla/proxy/v1/models`, `/olla/ollama/v1/models`, `/olla/openai/v1/models`, etc.):
+
+| Mode | Description |
+|------|-------------|
+| `disabled` | Aliases are not shown in model listings. Only actual models discovered from backends are returned. This is the default for backward compatibility. |
+| `append` | Aliases are added to model listings alongside their target models. Both the alias name and the actual model names appear in the response. |
+| `hidden` | Aliases are shown in model listings, but their target models are hidden. Clients see only the alias names (e.g., `my-llama`), not the backend-specific names (e.g., `llama3.1:8b`, `llama-3.1-8b-instruct`). Target models remain accessible by their direct names if requested explicitly. |
+
+When using `hidden` or `append` mode, the alias entries in model listings include their target models in the `aliases` field, allowing clients to discover the underlying model names if needed.
 
 ## Routing Response Headers
 

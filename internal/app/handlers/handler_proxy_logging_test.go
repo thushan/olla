@@ -89,7 +89,7 @@ func TestLogRequestResult_StickyOutcome_OmittedWhenDisabled(t *testing.T) {
 
 	cl := &capturingLogger{}
 	pr := makeTestPR(cl)
-	pr.stickyOutcome = "disabled"
+	pr.stickyOutcome = constants.StickyOutcomeResultDisabled
 
 	app := &Application{logger: cl}
 	app.logRequestResult(pr, nil)

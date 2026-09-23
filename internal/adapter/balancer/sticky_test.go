@@ -152,7 +152,7 @@ func TestStickySessionWrapper_NoKey(t *testing.T) {
 	chosen, err := w.Select(ctx, []*domain.Endpoint{ep1})
 	require.NoError(t, err)
 	assert.Equal(t, ep1.URLString, chosen.URLString)
-	assert.Equal(t, "disabled", outcome.Result)
+	assert.Equal(t, constants.StickyOutcomeResultDisabled, outcome.Result)
 	assert.Equal(t, "none", outcome.Source)
 }
 

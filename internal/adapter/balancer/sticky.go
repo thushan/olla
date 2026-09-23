@@ -96,7 +96,7 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 	if key == "" {
 		// No affinity key — pass through transparently.
 		if outcome != nil {
-			outcome.Result = "disabled"
+			outcome.Result = constants.StickyOutcomeResultDisabled
 			outcome.Source = "none"
 		}
 		return s.inner.Select(ctx, endpoints)

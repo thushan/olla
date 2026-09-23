@@ -53,11 +53,21 @@ func (c *OpenAIConverter) ConvertToFormat(models []*domain.UnifiedModel, filters
 
 func (c *OpenAIConverter) convertModel(model *domain.UnifiedModel) OpenAIModelData {
 	// OLLA-85: [Unification] Models with different digests fail to unify correctly.
-	// we need to use first alas as ID for routing compatibility
+	// we need to use first alias as ID for routing compatibility
 	// to make sure the returned model ID can be used for requests
+	// Exception: config-sourced aliases (Source="config") use their own ID as the model ID
 	modelID := model.ID
 	if len(model.Aliases) > 0 {
-		modelID = model.Aliases[0].Name
+		isConfigAlias := false
+		for _, alias := range model.Aliases {
+			if alias.Source == "config" {
+				isConfigAlias = true
+				break
+			}
+		}
+		if !isConfigAlias {
+			modelID = model.Aliases[0].Name
+		}
 	}
 
 	return OpenAIModelData{

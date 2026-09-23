@@ -26,16 +26,23 @@ type Config struct {
 	//       - gpt-oss:120b
 	//       - gpt-oss-120b-MLX
 	//       - gguf_gpt_oss_120b.gguf
-	ModelAliases  map[string][]string `yaml:"model_aliases,omitempty"`
-	Logging       LoggingConfig       `yaml:"logging"`
-	Filename      string              `yaml:"-"`
-	Dashboard     DashboardConfig     `yaml:"dashboard"`
-	Translators   TranslatorsConfig   `yaml:"translators"`
-	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
-	Discovery     DiscoveryConfig     `yaml:"discovery"`
-	Proxy         ProxyConfig         `yaml:"proxy"`
-	Server        ServerConfig        `yaml:"server"`
-	Engineering   EngineeringConfig   `yaml:"engineering"`
+	ModelAliases map[string][]string `yaml:"model_aliases,omitempty"`
+
+	// ModelAliasesMode controls whether configured aliases appear in model listings
+	// and whether their target models are hidden. Valid values: "disabled", "append", "hidden".
+	// - "disabled": aliases are not shown in model listings (default, backward compatible)
+	// - "append": aliases are added to listings alongside their target models
+	// - "hidden": aliases are shown in listings, target models are hidden
+	ModelAliasesMode string              `yaml:"model_aliases_mode,omitempty"`
+	Logging          LoggingConfig       `yaml:"logging"`
+	Filename         string              `yaml:"-"`
+	Dashboard        DashboardConfig     `yaml:"dashboard"`
+	Translators      TranslatorsConfig   `yaml:"translators"`
+	ModelRegistry    ModelRegistryConfig `yaml:"model_registry"`
+	Discovery        DiscoveryConfig     `yaml:"discovery"`
+	Proxy            ProxyConfig         `yaml:"proxy"`
+	Server           ServerConfig        `yaml:"server"`
+	Engineering      EngineeringConfig   `yaml:"engineering"`
 }
 
 // CorsConfig controls browser cross-origin access to the Olla API.
@@ -546,8 +553,24 @@ func (c *AnthropicTranslatorConfig) Validate() error {
 // Returns an error for invalid configurations that would cause runtime failures.
 // Logs warnings for non-fatal issues like duplicate model names.
 func (c *Config) ValidateModelAliases() error {
-	if len(c.ModelAliases) == 0 {
+	if len(c.ModelAliases) == 0 && c.ModelAliasesMode == "" {
 		return nil // no aliases configured, nothing to validate
+	}
+
+	// Validate model_aliases_mode if set
+	if c.ModelAliasesMode != "" {
+		validModes := map[string]bool{
+			"disabled": true,
+			"append":   true,
+			"hidden":   true,
+		}
+		if !validModes[c.ModelAliasesMode] {
+			return fmt.Errorf("invalid model_aliases_mode %q: must be one of disabled, append, hidden", c.ModelAliasesMode)
+		}
+	}
+
+	if len(c.ModelAliases) == 0 {
+		return nil
 	}
 
 	for aliasName, actualModels := range c.ModelAliases {

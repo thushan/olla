@@ -41,6 +41,15 @@ func (r *AliasResolver) GetActualModels(aliasName string) []string {
 	return r.aliases[aliasName]
 }
 
+// GetAllAliases returns all configured aliases and their target models.
+// Returns nil if no aliases are configured.
+func (r *AliasResolver) GetAllAliases() map[string][]string {
+	if r == nil {
+		return nil
+	}
+	return r.aliases
+}
+
 // EndpointModelMapping maps an endpoint URL to the actual model name it should receive
 type EndpointModelMapping struct {
 	EndpointURL string
