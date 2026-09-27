@@ -122,7 +122,7 @@ jobs:
         # convenience, which would silently patch files in CI instead of
         # failing the build. The action also gives caching and inline PR
         # annotations `make lint` doesn't.
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           version: v${{ env.GOLANGCILINT_VERSION }}
           args: --timeout=10m --max-same-issues=0 --max-issues-per-linter=0
