@@ -151,6 +151,11 @@ func (sm *ServiceManager) Start(ctx context.Context) error {
 
 		if err := service.Start(ctx); err != nil {
 			sm.logger.Error("Failed to start service", "name", name, "error", err)
+			// Roll back already-started services in reverse order, so that
+    		// dependants stop before their dependencies.
+    		for i, j := 0, len(started)-1; i < j; i, j = i+1, j-1 {
+   			 started[i], started[j] = started[j], started[i]
+			}
 			sm.stopServices(ctx, started)
 			return fmt.Errorf("failed to start service %s: %w", name, err)
 		}
