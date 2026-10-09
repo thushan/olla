@@ -93,6 +93,24 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 	key, _ := ctx.Value(constants.ContextStickyKeyKey).(string)
 	source, _ := ctx.Value(constants.ContextStickyKeySourceKey).(string)
 
+	// Client-supplied hard selection (X-Olla-Endpoint): wins over any existing pin
+	// and re-pins the session so subsequent turns follow the override.
+	if override, _ := ctx.Value(constants.ContextEndpointOverrideKey).(string); override != "" {
+		for _, ep := range endpoints {
+			if ep.Status.IsRoutable() && (strings.EqualFold(ep.Name, override) || ep.URLString == override) {
+				if key != "" {
+					s.store.Set(key, ep.URLString, ttlcache.DefaultTTL)
+				}
+				if outcome != nil {
+					outcome.Result = "override"
+					outcome.Source = "endpoint_header"
+				}
+				return ep, nil
+			}
+		}
+		// Unknown or unroutable endpoint name — fall through to normal selection.
+	}
+
 	if key == "" {
 		// No affinity key — pass through transparently.
 		if outcome != nil {
