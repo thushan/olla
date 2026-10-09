@@ -56,6 +56,11 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
 	a.routeRegistry.RegisterWithMethod("/olla/proxy/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
 
+	// appletree drop-in: root-level OpenAI paths (glm-relay clients use base_url .../v1
+	// with no /olla prefix; owner decision 2026-10-07 keeps port 18888 in place).
+	a.routeRegistry.RegisterProxyRoute("/", a.proxyHandler, "Root OpenAI proxy (glm-relay drop-in)", "POST")
+	a.routeRegistry.RegisterWithMethod("/v1/models", a.openaiModelsHandler, "Root OpenAI models (glm-relay drop-in)", "GET")
+
 	// Dynamic translator route registration
 	// Each translator that implements PathProvider gets its route automatically registered
 	// This scales to unlimited translators (Gemini, Bedrock, etc.) without code changes
