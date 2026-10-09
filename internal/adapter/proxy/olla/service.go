@@ -289,6 +289,15 @@ func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targ
 		return nil, err
 	}
 
+	// appletree patch: TensorFold's body parser rejects chunked request bodies.
+	// r.Body was already buffered by the retry handler, so always declare an
+	// exact Content-Length instead of letting Go fall back to chunked encoding.
+	if r.ContentLength > 0 {
+		proxyReq.ContentLength = r.ContentLength
+		proxyReq.Header.Set("Content-Length", fmt.Sprintf("%d", r.ContentLength))
+		proxyReq.Header.Del("Transfer-Encoding")
+	}
+
 	// Copy headers
 	headerStart := time.Now()
 	core.CopyHeaders(proxyReq, r, endpoint)
