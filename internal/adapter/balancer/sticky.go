@@ -86,7 +86,7 @@ func (s *StickySessionWrapper) notePin(endpoint *domain.Endpoint, delta int64) {
 
 // pickLeastLoaded chooses among routable endpoints the one with the fewest in-flight
 // connections (ties → inner balancer for stable tie-break behavior).
-func (s *StickySessionWrapper) pickLeastLoaded(ctx context.Context, endpoints []*domain.Endpoint) *domain.Endpoint {
+func (s *StickySessionWrapper) pickLeastLoaded(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
 	routable := make([]*domain.Endpoint, 0, len(endpoints))
 	for _, ep := range endpoints {
 		if ep.RoutableNow() {
@@ -94,16 +94,27 @@ func (s *StickySessionWrapper) pickLeastLoaded(ctx context.Context, endpoints []
 		}
 	}
 	if len(routable) == 0 {
-		return nil
+		return nil, nil
 	}
-	best := routable[0]
-	bestN := s.stats.GetConnectionCount(best.URLString)
+	// Collect the min-load tier, then tie-break via the inner selector's weighted
+	// randomness — sequential single requests all see 0/0 and would otherwise
+	// deterministically hammer the first endpoint (appletree, post-deploy fix).
+	bestN := s.stats.GetConnectionCount(routable[0].URLString)
+	tier := []*domain.Endpoint{routable[0]}
 	for _, ep := range routable[1:] {
-		if n := s.stats.GetConnectionCount(ep.URLString); n < bestN {
-			best, bestN = ep, n
+		n := s.stats.GetConnectionCount(ep.URLString)
+		switch {
+		case n < bestN:
+			bestN = n
+			tier = []*domain.Endpoint{ep}
+		case n == bestN:
+			tier = append(tier, ep)
 		}
 	}
-	return best
+	if len(tier) == 1 {
+		return tier[0], nil
+	}
+	return s.inner.Select(ctx, tier)
 }
 
 func NewStickySessionWrapper(inner domain.EndpointSelector, cfg config.StickySessionConfig) *StickySessionWrapper {
@@ -213,7 +224,7 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 	// collector is attached.
 	chosen, err := func() (*domain.Endpoint, error) {
 		if s.stats != nil {
-			if ep := s.pickLeastLoaded(ctx, endpoints); ep != nil {
+			if ep, err2 := s.pickLeastLoaded(ctx, endpoints); err2 == nil && ep != nil {
 				return ep, nil
 			}
 		}
