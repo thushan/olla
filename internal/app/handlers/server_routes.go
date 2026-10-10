@@ -41,6 +41,9 @@ func (a *Application) registerRoutes() {
 	a.routeRegistry.RegisterWithMethod("/internal/status", middleware.GzipFunc(a.statusHandler), "Endpoint status", "GET")
 	a.routeRegistry.RegisterWithMethod(constants.DefaultMetricsEndpoint, a.metricsHandler, "Prometheus metrics", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/status/endpoints", middleware.GzipFunc(a.endpointsStatusHandler), "Endpoints status", "GET")
+	// Patch #3: runtime drain/undrain (in-memory state; survives health-checker copy)
+	a.routeRegistry.RegisterWithMethod("/internal/endpoints/{name}/drain", http.HandlerFunc(a.drainHandler), "Drain endpoint from rotation", "POST")
+	a.routeRegistry.RegisterWithMethod("/internal/endpoints/{name}/undrain", http.HandlerFunc(a.drainHandler), "Return endpoint to rotation", "POST")
 	a.routeRegistry.RegisterWithMethod("/internal/status/models", middleware.GzipFunc(a.modelsStatusHandler), "Models status", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/stats/models", a.modelStatsHandler, "Model statistics", "GET")
 	a.routeRegistry.RegisterWithMethod("/internal/stats/translators", a.translatorStatsHandler, "Translator statistics", "GET")
@@ -55,6 +58,11 @@ func (a *Application) registerRoutes() {
 	// Legacy proxy paths for backward compatibility
 	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
 	a.routeRegistry.RegisterWithMethod("/olla/proxy/v1/models", a.openaiModelsHandler, "OpenAI-compatible models", "GET")
+
+	// appletree drop-in: root-level OpenAI paths (glm-relay clients use base_url .../v1
+	// with no /olla prefix; owner decision 2026-10-07 keeps port 18888 in place).
+	a.routeRegistry.RegisterProxyRoute("/", a.proxyHandler, "Root OpenAI proxy (glm-relay drop-in)", "POST")
+	a.routeRegistry.RegisterWithMethod("/v1/models", a.openaiModelsHandler, "Root OpenAI models (glm-relay drop-in)", "GET")
 
 	// Dynamic translator route registration
 	// Each translator that implements PathProvider gets its route automatically registered

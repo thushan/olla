@@ -33,6 +33,12 @@ type Endpoint struct {
 	Name                  string
 	Type                  string `json:"type,omitempty"`
 	Status                EndpointStatus
+	// Drained is runtime state: true while the endpoint is administratively
+	// drained from rotation (PATCH-era patch #3). Survives health checks; the
+	// checker records results but leaves a drained endpoint non-routable.
+	Drained               bool
+	DrainedAt             time.Time
+	DrainReason           string
 	URLString             string
 	HealthCheckPathString string
 	HealthCheckURLString  string
@@ -78,6 +84,10 @@ const (
 	// honour the Retry-After delay before probing again.
 	StatusRateLimited EndpointStatus = StatusStringRateLimited
 )
+
+func (e *Endpoint) RoutableNow() bool {
+	return e.Status.IsRoutable() && !e.Drained
+}
 
 func (s EndpointStatus) IsRoutable() bool {
 	switch s {

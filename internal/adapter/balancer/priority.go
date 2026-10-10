@@ -36,7 +36,7 @@ func (p *PrioritySelector) Select(ctx context.Context, endpoints []*domain.Endpo
 	// Filter only routable endpoints
 	routable := make([]*domain.Endpoint, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if endpoint.Status.IsRoutable() {
+		if endpoint.RoutableNow() {
 			routable = append(routable, endpoint)
 		}
 	}

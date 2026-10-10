@@ -32,7 +32,7 @@ func (r *RoundRobinSelector) Select(ctx context.Context, endpoints []*domain.End
 
 	routable := make([]*domain.Endpoint, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if endpoint.Status.IsRoutable() {
+		if endpoint.RoutableNow() {
 			routable = append(routable, endpoint)
 		}
 	}
