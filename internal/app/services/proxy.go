@@ -292,6 +292,9 @@ func (s *ProxyServiceWrapper) applyStickySessions() {
 		return
 	}
 	sw := balancer.NewStickySessionWrapper(s.loadBalancer, s.config.StickySessions)
+	if s.statsCollector != nil {
+		sw = sw.WithStatsCollector(s.statsCollector) // load-aware pin placement (patch #4)
+	}
 	sw.Start()
 	s.stickyWrapper = sw
 	s.loadBalancer = sw

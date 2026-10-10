@@ -186,8 +186,12 @@ func TestDashboardRoute_DisabledYields404(t *testing.T) {
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("disabled dashboard must produce default-mux 404, got %d", rec.Code)
+	// With the root-level "/" proxy route registered (appletree patch #2), Go's
+	// ServeMux subtree rule routes /internal/ui/ to it, yielding 503
+	// writeNoRoutableEndpoints (mock discovery has no healthy endpoints) rather
+	// than a bare 404. Either code proves the dashboard did not handle it.
+	if rec.Code != http.StatusNotFound && rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("disabled dashboard must 404 (or 503 via root proxy fallback), got %d", rec.Code)
 	}
 }
 
