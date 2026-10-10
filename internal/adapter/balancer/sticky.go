@@ -97,7 +97,7 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 	// and re-pins the session so subsequent turns follow the override.
 	if override, _ := ctx.Value(constants.ContextEndpointOverrideKey).(string); override != "" {
 		for _, ep := range endpoints {
-			if ep.Status.IsRoutable() && (strings.EqualFold(ep.Name, override) || ep.URLString == override) {
+			if ep.RoutableNow() && (strings.EqualFold(ep.Name, override) || ep.URLString == override) {
 				if key != "" {
 					s.store.Set(key, ep.URLString, ttlcache.DefaultTTL)
 				}
@@ -125,7 +125,7 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 	if item != nil {
 		pinnedURL := item.Value()
 		for _, ep := range endpoints {
-			if ep.Status.IsRoutable() && ep.URLString == pinnedURL {
+			if ep.RoutableNow() && ep.URLString == pinnedURL {
 				// Sticky hit — backend is still alive and serving this model.
 				if outcome != nil {
 					outcome.Result = "hit"
