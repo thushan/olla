@@ -7,12 +7,14 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 	"github.com/tidwall/gjson"
 )
 
@@ -33,10 +35,88 @@ type StickySessionWrapper struct {
 	inner domain.EndpointSelector
 	store *ttlcache.Cache[string, string]
 	cfg   config.StickySessionConfig
+	stats ports.StatsCollector // optional; enables load-aware pin placement (appletree patch #4)
+	pins  map[string]int64     // endpoint name -> active pin count (observability, appletree patch #4)
+	pinMu sync.Mutex
 }
 
 // NewStickySessionWrapper wraps inner with sticky session affinity using cfg.
 // Call Start() after construction and Stop() on shutdown.
+// WithStatsCollector attaches the stats collector, enabling load-aware pin
+// placement: on a sticky miss the least-loaded routable endpoint (same decision
+// set the inner balancer would see) wins, instead of the inner strategy's choice.
+// Appletree patch #4 — see design note in commit message.
+func (s *StickySessionWrapper) WithStatsCollector(st ports.StatsCollector) *StickySessionWrapper {
+	s.stats = st
+	s.pinMu.Lock()
+	s.pins = make(map[string]int64)
+	s.pinMu.Unlock()
+	return s
+}
+
+// PinCounts returns a copy of the per-endpoint pin attribution map (for /internal/metrics).
+func (s *StickySessionWrapper) PinCounts() map[string]int64 {
+	s.pinMu.Lock()
+	defer s.pinMu.Unlock()
+	out := make(map[string]int64, len(s.pins))
+	for k, v := range s.pins {
+		out[k] = v
+	}
+	return out
+}
+
+func (s *StickySessionWrapper) pinSnapshot() map[string]int64 {
+	s.pinMu.Lock()
+	defer s.pinMu.Unlock()
+	out := make(map[string]int64, len(s.pins))
+	for k, v := range s.pins {
+		out[k] = v
+	}
+	return out
+}
+
+func (s *StickySessionWrapper) notePin(endpoint *domain.Endpoint, delta int64) {
+	if s.pins == nil || endpoint == nil {
+		return
+	}
+	s.pinMu.Lock()
+	s.pins[endpoint.Name] += delta
+	s.pinMu.Unlock()
+}
+
+// pickLeastLoaded chooses among routable endpoints the one with the fewest in-flight
+// connections (ties → inner balancer for stable tie-break behavior).
+func (s *StickySessionWrapper) pickLeastLoaded(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
+	routable := make([]*domain.Endpoint, 0, len(endpoints))
+	for _, ep := range endpoints {
+		if ep.RoutableNow() {
+			routable = append(routable, ep)
+		}
+	}
+	if len(routable) == 0 {
+		return nil, nil
+	}
+	// Collect the min-load tier, then tie-break via the inner selector's weighted
+	// randomness — sequential single requests all see 0/0 and would otherwise
+	// deterministically hammer the first endpoint (appletree, post-deploy fix).
+	bestN := s.stats.GetConnectionCount(routable[0].URLString)
+	tier := []*domain.Endpoint{routable[0]}
+	for _, ep := range routable[1:] {
+		n := s.stats.GetConnectionCount(ep.URLString)
+		switch {
+		case n < bestN:
+			bestN = n
+			tier = []*domain.Endpoint{ep}
+		case n == bestN:
+			tier = append(tier, ep)
+		}
+	}
+	if len(tier) == 1 {
+		return tier[0], nil
+	}
+	return s.inner.Select(ctx, tier)
+}
+
 func NewStickySessionWrapper(inner domain.EndpointSelector, cfg config.StickySessionConfig) *StickySessionWrapper {
 	idleTTL := time.Duration(cfg.IdleTTLSeconds) * time.Second
 
@@ -93,6 +173,24 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 	key, _ := ctx.Value(constants.ContextStickyKeyKey).(string)
 	source, _ := ctx.Value(constants.ContextStickyKeySourceKey).(string)
 
+	// Client-supplied hard selection (X-Olla-Endpoint): wins over any existing pin
+	// and re-pins the session so subsequent turns follow the override.
+	if override, _ := ctx.Value(constants.ContextEndpointOverrideKey).(string); override != "" {
+		for _, ep := range endpoints {
+			if ep.RoutableNow() && (strings.EqualFold(ep.Name, override) || ep.URLString == override) {
+				if key != "" {
+					s.store.Set(key, ep.URLString, ttlcache.DefaultTTL)
+				}
+				if outcome != nil {
+					outcome.Result = "override"
+					outcome.Source = "endpoint_header"
+				}
+				return ep, nil
+			}
+		}
+		// Unknown or unroutable endpoint name — fall through to normal selection.
+	}
+
 	if key == "" {
 		// No affinity key — pass through transparently.
 		if outcome != nil {
@@ -107,7 +205,7 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 	if item != nil {
 		pinnedURL := item.Value()
 		for _, ep := range endpoints {
-			if ep.Status.IsRoutable() && ep.URLString == pinnedURL {
+			if ep.RoutableNow() && ep.URLString == pinnedURL {
 				// Sticky hit — backend is still alive and serving this model.
 				if outcome != nil {
 					outcome.Result = "hit"
@@ -119,18 +217,39 @@ func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.E
 		// Pinned backend is gone or unhealthy — fall through to repin.
 	}
 
-	chosen, err := s.inner.Select(ctx, endpoints)
+	// Load-aware pin placement (appletree patch #4): on a fresh miss, seed the
+	// least-loaded routable endpoint instead of the inner strategy's (load-blind)
+	// pick. Existing pins are untouched — KV affinity is preserved; only NEW
+	// conversations balance. Falls back to the inner selector when no stats
+	// collector is attached.
+	chosen, err := func() (*domain.Endpoint, error) {
+		if s.stats != nil {
+			if ep, err2 := s.pickLeastLoaded(ctx, endpoints); err2 == nil && ep != nil {
+				return ep, nil
+			}
+		}
+		return s.inner.Select(ctx, endpoints)
+	}()
 	if err != nil {
 		return nil, err
 	}
 
 	// Record the affinity mapping for future turns.
 	s.store.Set(key, chosen.URLString, ttlcache.DefaultTTL)
+	s.notePin(chosen, 1)
 
 	result := "miss"
 	if item != nil {
 		// We had a pin but the backend was no longer routable.
 		result = "repin"
+		if old := item.Value(); old != "" {
+			for _, ep := range endpoints {
+				if ep.URLString == old {
+					s.notePin(ep, -1)
+					break
+				}
+			}
+		}
 	}
 
 	if outcome != nil {
@@ -253,20 +372,22 @@ func stickyKeyFromIP(r *http.Request, modelName string) (string, string) {
 
 // StickyStats holds a point-in-time snapshot of sticky session activity.
 type StickyStats struct {
-	Enabled        bool   `json:"enabled"`
-	ActiveSessions int    `json:"active_sessions"`
-	Insertions     uint64 `json:"insertions"`
-	Hits           uint64 `json:"hits"`
-	Misses         uint64 `json:"misses"`
-	Evictions      uint64 `json:"evictions"`
-	MaxSessions    uint64 `json:"max_sessions"`
-	IdleTTLSeconds int    `json:"idle_ttl_seconds"`
+	Enabled        bool             `json:"enabled"`
+	ActiveSessions int              `json:"active_sessions"`
+	Insertions     uint64           `json:"insertions"`
+	Hits           uint64           `json:"hits"`
+	Misses         uint64           `json:"misses"`
+	Evictions      uint64           `json:"evictions"`
+	Pins           map[string]int64 `json:"pins_per_endpoint,omitempty"`
+	MaxSessions    uint64           `json:"max_sessions"`
+	IdleTTLSeconds int              `json:"idle_ttl_seconds"`
 }
 
 // Stats returns a point-in-time snapshot of the session store metrics.
 func (s *StickySessionWrapper) Stats() StickyStats {
 	m := s.store.Metrics()
 	return StickyStats{
+		Pins:           s.pinSnapshot(),
 		Enabled:        true,
 		ActiveSessions: s.store.Len(),
 		Insertions:     m.Insertions,

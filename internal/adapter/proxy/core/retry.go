@@ -254,6 +254,12 @@ func (h *RetryHandler) preserveRequestBody(r *http.Request) ([]byte, error) {
 
 	// Recreate the body for the first attempt
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	r.ContentLength = int64(len(bodyBytes))
+	r.Header.Del("Transfer-Encoding")
+	if r.GetBody == nil {
+		b := bodyBytes
+		r.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(b)), nil }
+	}
 	return bodyBytes, nil
 }
 
@@ -271,6 +277,12 @@ func (h *RetryHandler) checkContextCancellation(ctx context.Context) error {
 func (h *RetryHandler) resetRequestBodyForRetry(r *http.Request, bodyBytes []byte, attemptCount int) {
 	if bodyBytes != nil && attemptCount > 0 {
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	r.ContentLength = int64(len(bodyBytes))
+	r.Header.Del("Transfer-Encoding")
+	if r.GetBody == nil {
+		b := bodyBytes
+		r.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(b)), nil }
+	}
 	}
 }
 
