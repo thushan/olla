@@ -50,6 +50,8 @@ go run ./test/cmd/ollamock \
 | `GET /api/v1/models` | Lemonade model listing |
 | `POST /api/v1/chat/completions` | Lemonade chat (OpenAI shape) |
 | `POST /v1/messages` | Anthropic Messages API |
+| `GET /info` | TEI server info (carries the served embedding model name) |
+| `POST /v1/embeddings` | TEI embeddings (OpenAI shape, single model per instance) |
 
 ## Behaviour Modes
 

@@ -77,6 +77,11 @@ func (srv *mockServer) handler() http.Handler {
 	mux.HandleFunc("GET /api/v0/models", srv.wrap(srv.handleLMStudioModels))
 	mux.HandleFunc("GET /api/v1/models", srv.wrap(srv.handleLemonadeModels))
 
+	// Text Embedding Inference (TEI) protocol - single embedding model per
+	// instance, discovered via /info rather than a model list.
+	mux.HandleFunc("GET /info", srv.wrap(srv.handleTEIInfo))
+	mux.HandleFunc("POST /v1/embeddings", srv.wrap(srv.handleTEIEmbeddings))
+
 	// Inference endpoints - streaming handled in streaming.go.
 	mux.HandleFunc("POST /api/chat", srv.wrap(srv.handleOllamaChat))
 	mux.HandleFunc("POST /api/generate", srv.wrap(srv.handleOllamaGenerate))
@@ -396,6 +401,93 @@ func (srv *mockServer) handleLemonadeModels(w http.ResponseWriter, _ *http.Reque
 		}
 	}
 	writeJSON(w, http.StatusOK, response{Object: "list", Data: models})
+}
+
+// --- Text Embedding Inference (TEI) protocol ---
+
+// teiServedModel returns the model this instance reports as served. TEI runs
+// exactly one embedding model per instance, so the first configured model is
+// used regardless of how many names the instance was started with.
+func (srv *mockServer) teiServedModel() string {
+	if len(srv.cfg.models) == 0 {
+		return ""
+	}
+	return srv.cfg.models[0]
+}
+
+func (srv *mockServer) handleTEIInfo(w http.ResponseWriter, _ *http.Request) {
+	served := srv.teiServedModel()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"model_id":          "/data/" + strings.ReplaceAll(served, "/", "-"),
+		"served_model_name": served,
+		"model_dtype":       "float16",
+		"max_input_length":  8192,
+		"model_type": map[string]any{
+			"embedding": map[string]string{"pooling": "cls"},
+		},
+	})
+}
+
+func (srv *mockServer) handleTEIEmbeddings(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Model string          `json:"model"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": map[string]string{"message": "invalid JSON body", "type": "invalid_request_error"},
+		})
+		return
+	}
+
+	served := srv.teiServedModel()
+	if req.Model == "" {
+		req.Model = served
+	} else if req.Model != served {
+		// Real TEI rejects unknown model names; mirroring that lets routing
+		// tests fail loudly when a request lands on the wrong instance.
+		writeJSON(w, http.StatusNotFound, map[string]any{
+			"error": map[string]string{"message": fmt.Sprintf("Model %q not found", req.Model), "type": "model_not_found"},
+		})
+		return
+	}
+
+	inputCount := 1
+	if len(req.Input) > 0 {
+		var input any
+		if err := json.Unmarshal(req.Input, &input); err == nil {
+			switch v := input.(type) {
+			case []any:
+				inputCount = len(v)
+			case string:
+				inputCount = 1
+			}
+		}
+	}
+
+	dims := 8
+	data := make([]map[string]any, inputCount)
+	for i := range data {
+		vec := make([]float64, dims)
+		for d := range vec {
+			vec[d] = float64(i*dims+d+1) / 100
+		}
+		data[i] = map[string]any{
+			"object":    "embedding",
+			"embedding": vec,
+			"index":     i,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"object": "list",
+		"model":  req.Model,
+		"data":   data,
+		"usage": map[string]int{
+			"prompt_tokens": inputCount * dims,
+			"total_tokens":  inputCount * dims,
+		},
+	})
 }
 
 // contextDone returns a closed channel when ctx is already done, otherwise the

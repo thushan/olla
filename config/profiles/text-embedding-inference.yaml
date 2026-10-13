@@ -1,0 +1,103 @@
+# Hugging Face Text Embedding Inference (TEI) profile
+# Docs: https://github.com/huggingface/text-embedding-inference
+# TEI serves a single embedding model per instance. The model ID is not
+# exposed via an OpenAI-style /v1/models list; it is reported by the /info
+# endpoint (served_model_name, falling back to model_id), so this profile
+# uses a dedicated response_format parser for discovery.
+name: text-embedding-inference
+version: "1.0"
+display_name: "Text Embedding Inference"
+description: "Hugging Face Text Embedding Inference server, embeddings only"
+
+# Routing configuration
+routing:
+  prefixes:
+    - text-embedding-inference
+    - tei
+
+# API compatibility
+api:
+  # /v1/embeddings follows the OpenAI embeddings wire format, so provider and
+  # unified routing can treat TEI as OpenAI-compatible for that path.
+  openai_compatible: true
+  paths:
+    - /v1/embeddings   # 0: OpenAI-compatible embeddings
+    - /embeddings      # 1: native TEI embeddings
+    - /info            # 2: server info, carries the served model ID
+    - /health          # 3: liveness probe
+  model_discovery_path: /info
+  health_check_path: /health
+
+# Platform characteristics
+characteristics:
+  timeout: 2m
+  max_concurrent_requests: 100  # TEI batches requests internally
+  default_priority: 50
+  streaming_support: false      # embeddings are single-shot responses
+  auth:
+    required: false
+    types:
+      - bearer   # HF_TOKEN or custom API key when deployed behind auth
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/info"
+    - "/v1/embeddings"
+  default_ports:
+    - 80    # TEI container default
+    - 8080  # common local alternative
+
+# Model handling
+models:
+  name_format: "{{.Name}}"
+  # Every model served by a TEI instance is an embedding model, regardless of
+  # its name. This keeps capability routing from sending chat or generation
+  # traffic to TEI endpoints.
+  capability_patterns:
+    embeddings:
+      - "*"
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "text-embedding-inference"
+  parsing_rules:
+    model_field_name: "model"
+    supports_streaming: false
+
+# Path indices for specific functions
+path_indices:
+  health: 3
+  models: 2
+  embeddings: 0
+
+# Resource management
+resources:
+  defaults:
+    min_memory_gb: 4
+    recommended_memory_gb: 8
+    requires_gpu: false     # CPU inference supported
+    estimated_load_time_ms: 10000
+
+  concurrency_limits:
+    - min_memory_gb: 0
+      max_concurrent: 100
+
+  timeout_scaling:
+    base_timeout_seconds: 120
+    load_time_buffer: true
+
+# Metrics extraction for TEI responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    # OpenAI embeddings response shape: usage carries prompt/total tokens,
+    # there is no choices array or finish_reason.
+    paths:
+      model: "$.model"
+      input_tokens: "$.usage.prompt_tokens"
+      total_tokens: "$.usage.total_tokens"

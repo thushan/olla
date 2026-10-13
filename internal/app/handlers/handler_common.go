@@ -85,6 +85,7 @@ var staticSupportedProviders = []string{
 	constants.ProviderTypeVLLM,
 	constants.ProviderTypeOMLX,
 	constants.ProviderTypeDockerMR,
+	constants.ProviderTypeTextEmbeddingInference,
 }
 
 // isStaticSupportedProvider reports whether provider (already normalised) is

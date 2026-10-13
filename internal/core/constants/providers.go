@@ -14,18 +14,23 @@ const (
 	ProviderTypeDockerMR     = "docker-model-runner"
 	ProviderTypeOMLX         = "omlx"
 
+	// Text Embedding Inference (Hugging Face TEI) serves embeddings only and
+	// discovers its model from /info rather than an OpenAI-style model list.
+	ProviderTypeTextEmbeddingInference = "text-embedding-inference"
+
 	// Provider display names
-	ProviderDisplayOllama   = "Ollama"
-	ProviderDisplayLemonade = "Lemonade"
-	ProviderDisplayLlamaCpp = "llama.cpp"
-	ProviderDisplayLMStudio = "LM Studio"
-	ProviderDisplayOpenAI   = "OpenAI"
-	ProviderDisplayLMDeploy = "LMDeploy"
-	ProviderDisplaySGLang   = "SGLang"
-	ProviderDisplayVLLM     = "vLLM"
-	ProviderDisplayVLLMMLX  = "vLLM-MLX"
-	ProviderDisplayDockerMR = "Docker Model Runner"
-	ProviderDisplayOMLX     = "oMLX"
+	ProviderDisplayOllama                 = "Ollama"
+	ProviderDisplayLemonade               = "Lemonade"
+	ProviderDisplayLlamaCpp               = "llama.cpp"
+	ProviderDisplayLMStudio               = "LM Studio"
+	ProviderDisplayOpenAI                 = "OpenAI"
+	ProviderDisplayLMDeploy               = "LMDeploy"
+	ProviderDisplaySGLang                 = "SGLang"
+	ProviderDisplayVLLM                   = "vLLM"
+	ProviderDisplayVLLMMLX                = "vLLM-MLX"
+	ProviderDisplayDockerMR               = "Docker Model Runner"
+	ProviderDisplayOMLX                   = "oMLX"
+	ProviderDisplayTextEmbeddingInference = "Text Embedding Inference"
 
 	// Common provider prefixes
 	// llama.cpp provider prefixes
@@ -42,4 +47,7 @@ const (
 	ProviderPrefixDockerMR = "dmr"
 	// oMLX provider prefix
 	ProviderPrefixOMLX = "omlx"
+	// Text Embedding Inference provider prefixes
+	ProviderPrefixTextEmbeddingInference1 = "text-embedding-inference"
+	ProviderPrefixTextEmbeddingInference2 = "tei"
 )

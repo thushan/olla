@@ -22,6 +22,7 @@ These profiles control:
 - `lemonade.yaml` - Lemonade SDK local LLM serving platform with AMD Ryzen AI support
 - `vllm.yaml` - vLLM high-performance inference server
 - `sglang.yaml` - SGLang high-performance inference server
+- `text-embedding-inference.yaml` - Hugging Face Text Embedding Inference (TEI) embedding server (single embedding model per instance, discovered via `/info`)
 - `anthropic.yaml` - Anthropic Claude API
 - `openai-compatible.yaml` - OpenAI-compatible API generic profile (also accepts `type: "openai"` as an alias)
 
@@ -155,7 +156,7 @@ Used for auto-detecting platform types:
 
 ### Request Section
 - `model_field_paths`: JSON paths to find model name in requests
-- `response_format`: Which parser to use (ollama, lmstudio, vllm, sglang, lemonade, openai)
+- `response_format`: Which parser to use (ollama, lmstudio, vllm, sglang, lemonade, text-embedding-inference, openai)
 - `parsing_rules`: How to parse different request types
 
 ## Examples
