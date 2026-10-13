@@ -110,7 +110,7 @@ func TestGetParserForFormat_TextEmbeddingInference(t *testing.T) {
 func TestShippedTextEmbeddingInferenceProfile(t *testing.T) {
 	t.Parallel()
 
-	data, err := os.ReadFile(shippedProfilesDir + "text-embedding-inference.yaml")
+	data, err := os.ReadFile(shippedProfilesDir + "text-embeddings-inference.yaml")
 	require.NoError(t, err, "shipped profile file must exist")
 
 	var cfg domain.ProfileConfig

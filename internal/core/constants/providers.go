@@ -16,7 +16,7 @@ const (
 
 	// Text Embedding Inference (Hugging Face TEI) serves embeddings only and
 	// discovers its model from /info rather than an OpenAI-style model list.
-	ProviderTypeTextEmbeddingInference = "text-embedding-inference"
+	ProviderTypeTextEmbeddingInference = "text-embeddings-inference"
 
 	// Provider display names
 	ProviderDisplayOllama                 = "Ollama"
@@ -48,6 +48,6 @@ const (
 	// oMLX provider prefix
 	ProviderPrefixOMLX = "omlx"
 	// Text Embedding Inference provider prefixes
-	ProviderPrefixTextEmbeddingInference1 = "text-embedding-inference"
+	ProviderPrefixTextEmbeddingInference1 = "text-embeddings-inference"
 	ProviderPrefixTextEmbeddingInference2 = "tei"
 )

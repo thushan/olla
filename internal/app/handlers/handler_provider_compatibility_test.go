@@ -265,20 +265,20 @@ func TestProviderCompatibility_RealFactory(t *testing.T) {
 		// TEI provider stays scoped to its own endpoints; the short "tei" URL
 		// alias must resolve to the same profile as the canonical name.
 		{
-			name:         "text-embedding-inference provider accepts text-embedding-inference-typed endpoint",
-			providerType: "text-embedding-inference",
-			endpointType: "text-embedding-inference",
+			name:         "text-embeddings-inference provider accepts text-embeddings-inference-typed endpoint",
+			providerType: "text-embeddings-inference",
+			endpointType: "text-embeddings-inference",
 			wantCompat:   true,
 		},
 		{
 			name:         "tei alias resolves to the same profile as the canonical name",
 			providerType: "tei",
-			endpointType: "text-embedding-inference",
+			endpointType: "text-embeddings-inference",
 			wantCompat:   true,
 		},
 		{
-			name:         "text-embedding-inference provider rejects ollama-typed endpoint",
-			providerType: "text-embedding-inference",
+			name:         "text-embeddings-inference provider rejects ollama-typed endpoint",
+			providerType: "text-embeddings-inference",
 			endpointType: "ollama",
 			wantCompat:   false,
 		},

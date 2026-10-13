@@ -673,7 +673,7 @@ Don't update versions in natively supported profiles however.
 | litellm | `litellm` | `litellm` | None |
 | lmdeploy | `lmdeploy` | `lmdeploy` | None |
 | dmr | `docker-model-runner` | `dmr` | None |
-| text-embedding-inference | `text-embedding-inference` | `text-embedding-inference`, `tei` | `/info`, `/v1/models` |
+| text-embeddings-inference | `text-embeddings-inference` | `text-embeddings-inference`, `tei` | `/info`, `/v1/models` |
 | openai-compatible | `openai-compatible` (or `openai`, alias) | `openai`, `openai-compatible` | None |
 
 ### Required Fields

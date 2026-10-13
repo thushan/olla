@@ -1,10 +1,10 @@
 # Hugging Face Text Embedding Inference (TEI) profile
-# Docs: https://github.com/huggingface/text-embedding-inference
+# Docs: https://github.com/huggingface/text-embeddings-inference
 # TEI serves a single embedding model per instance. The model ID is not
 # exposed via an OpenAI-style /v1/models list; it is reported by the /info
 # endpoint (served_model_name, falling back to model_id), so this profile
 # uses a dedicated response_format parser for discovery.
-name: text-embedding-inference
+name: text-embeddings-inference
 version: "1.0"
 display_name: "Text Embedding Inference"
 description: "Hugging Face Text Embedding Inference server, embeddings only"
@@ -12,7 +12,7 @@ description: "Hugging Face Text Embedding Inference server, embeddings only"
 # Routing configuration
 routing:
   prefixes:
-    - text-embedding-inference
+    - text-embeddings-inference
     - tei
 
 # API compatibility
@@ -62,7 +62,7 @@ models:
 request:
   model_field_paths:
     - "model"
-  response_format: "text-embedding-inference"
+  response_format: "text-embeddings-inference"
   parsing_rules:
     model_field_name: "model"
     supports_streaming: false

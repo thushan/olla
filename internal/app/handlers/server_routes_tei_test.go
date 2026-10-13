@@ -22,7 +22,7 @@ import (
 
 // TestRegisterProviderRoutes_TextEmbeddingInference exercises the real
 // profile-driven route registration for TEI. It guards two things the static
-// fallback cannot: both routing prefixes (text-embedding-inference and tei)
+// fallback cannot: both routing prefixes (text-embeddings-inference and tei)
 // produce routes, and /info - TEI's discovery path, which has no native
 // listing shape of its own - is served in OpenAI format rather than the
 // unregistered "native" converter that would 500.
@@ -76,7 +76,7 @@ func TestRegisterProviderRoutes_TextEmbeddingInference(t *testing.T) {
 	mux := http.NewServeMux()
 	reg.WireUp(mux)
 
-	for _, path := range []string{"/olla/text-embedding-inference/info", "/olla/tei/info"} {
+	for _, path := range []string{"/olla/text-embeddings-inference/info", "/olla/tei/info"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			rec := httptest.NewRecorder()
