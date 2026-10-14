@@ -73,7 +73,7 @@ detection:
     - "/embed"
   default_ports:
     - 80    # TEI container default
-    - 8080  # common local alternative
+    - 3000  # TEI binary default
 
 # Model handling
 models:
