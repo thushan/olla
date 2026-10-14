@@ -2,7 +2,7 @@
 
 A multi-protocol mock LLM backend for end-to-end validation of Olla's proxy and routing logic without requiring real inference infrastructure.
 
-It speaks Ollama, LM Studio, OpenAI-compatible, Lemonade, Anthropic, and Text Embedding Inference (TEI) wire formats and supports controllable fault injection via an HTTP control plane.
+It speaks Ollama, LM Studio, OpenAI-compatible, Lemonade, Anthropic, and Text Embeddings Inference (TEI) wire formats and supports controllable fault injection via an HTTP control plane.
 
 ## Running
 

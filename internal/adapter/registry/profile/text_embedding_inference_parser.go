@@ -9,7 +9,7 @@ import (
 )
 
 // TEIInfoResponse is the shape of the /info endpoint served by Hugging Face
-// Text Embedding Inference. Unlike OpenAI-style listing endpoints it describes
+// Text Embeddings Inference. Unlike OpenAI-style listing endpoints it describes
 // the single model the instance serves rather than a list of models.
 type TEIInfoResponse struct {
 	ModelID         string `json:"model_id"`
@@ -22,7 +22,7 @@ func (p *textEmbeddingInferenceParser) Parse(data []byte) ([]*domain.ModelInfo, 
 	var response TEIInfoResponse
 	if len(data) > 0 {
 		if err := json.Unmarshal(data, &response); err != nil {
-			return nil, fmt.Errorf("failed to parse Text Embedding Inference response: %w", err)
+			return nil, fmt.Errorf("failed to parse Text Embeddings Inference response: %w", err)
 		}
 	}
 
@@ -36,7 +36,7 @@ func (p *textEmbeddingInferenceParser) Parse(data []byte) ([]*domain.ModelInfo, 
 		// Error rather than an empty list: an empty registration would silently
 		// deregister the endpoint's model, while an error feeds the discovery
 		// failure count and pause machinery.
-		return nil, errors.New("Text Embedding Inference /info response contains neither served_model_name nor model_id")
+		return nil, errors.New("tei /info response contains neither served_model_name nor model_id")
 	}
 
 	return []*domain.ModelInfo{

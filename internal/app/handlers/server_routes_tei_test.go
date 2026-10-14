@@ -25,14 +25,14 @@ import (
 	"github.com/thushan/olla/internal/router"
 )
 
-// TestRegisterProviderRoutes_TextEmbeddingInference exercises the real
+// TestRegisterProviderRoutes_TextEmbeddingsInference exercises the real
 // profile-driven route registration for TEI. It guards two things the static
 // fallback cannot: both routing prefixes (text-embeddings-inference and tei)
 // produce routes, and /info - TEI's discovery path, which carries model
 // metadata rather than a listing - is NOT intercepted: it falls through to
 // the catch-all proxy and is forwarded verbatim. The OpenAI model listing is
 // served at /v1/models instead.
-func TestRegisterProviderRoutes_TextEmbeddingInference(t *testing.T) {
+func TestRegisterProviderRoutes_TextEmbeddingsInference(t *testing.T) {
 	t.Parallel()
 
 	factory, err := profile.NewFactory("../../../config/profiles")
@@ -44,7 +44,7 @@ func TestRegisterProviderRoutes_TextEmbeddingInference(t *testing.T) {
 		URL:       teiURL,
 		URLString: teiURL.String(),
 		Status:    domain.StatusHealthy,
-		Type:      constants.ProviderTypeTextEmbeddingInference,
+		Type:      constants.ProviderTypeTextEmbeddingsInference,
 	}
 
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(&mockStyledLogger{}, nil, nil, nil)
@@ -74,7 +74,7 @@ func TestRegisterProviderRoutes_TextEmbeddingInference(t *testing.T) {
 
 	// Both prefixes must expose the OpenAI listing, and /info must not be
 	// intercepted (it is forwarded verbatim by the catch-all proxy).
-	for _, prefix := range []string{constants.ProviderPrefixTextEmbeddingInference1, constants.ProviderPrefixTextEmbeddingInference2} {
+	for _, prefix := range []string{constants.ProviderPrefixTextEmbeddingsInference1, constants.ProviderPrefixTextEmbeddingsInference2} {
 		routes := reg.GetRoutes()
 		assert.NotContains(t, routes, "/olla/"+prefix+"/info", "prefix %s must not intercept /info", prefix)
 		assert.Contains(t, routes, "/olla/"+prefix+"/v1/models", "prefix %s must register /v1/models", prefix)
@@ -146,7 +146,7 @@ func (m *teiCaptureProxyService) GetStats(_ context.Context) (ports.ProxyStats, 
 
 func (m *teiCaptureProxyService) UpdateConfig(_ ports.ProxyConfiguration) {}
 
-// TestRegisterProviderRoutes_TextEmbeddingInference_ForwardsNativePaths proves
+// TestRegisterProviderRoutes_TextEmbeddingsInference_ForwardsNativePaths proves
 // the fix for the upstream review finding: every native TEI endpoint is
 // forwarded verbatim by the provider catch-all route, not just the
 // OpenAI-compatible /v1/embeddings. For each documented path - including /info,
@@ -154,7 +154,7 @@ func (m *teiCaptureProxyService) UpdateConfig(_ ports.ProxyConfiguration) {}
 // both routing prefixes, the request must reach the proxy engine with the
 // /olla/<prefix> prefix stripped and the body byte-for-byte unchanged - no
 // per-endpoint handlers, no translation.
-func TestRegisterProviderRoutes_TextEmbeddingInference_ForwardsNativePaths(t *testing.T) {
+func TestRegisterProviderRoutes_TextEmbeddingsInference_ForwardsNativePaths(t *testing.T) {
 	t.Parallel()
 
 	factory, err := profile.NewFactory("../../../config/profiles")
@@ -166,7 +166,7 @@ func TestRegisterProviderRoutes_TextEmbeddingInference_ForwardsNativePaths(t *te
 		URL:       teiURL,
 		URLString: teiURL.String(),
 		Status:    domain.StatusHealthy,
-		Type:      constants.ProviderTypeTextEmbeddingInference,
+		Type:      constants.ProviderTypeTextEmbeddingsInference,
 	}
 
 	capture := &teiCaptureProxyService{}
@@ -205,7 +205,7 @@ func TestRegisterProviderRoutes_TextEmbeddingInference_ForwardsNativePaths(t *te
 		{"/metrics", http.MethodGet, ""},
 	}
 
-	for _, prefix := range []string{constants.ProviderPrefixTextEmbeddingInference1, constants.ProviderPrefixTextEmbeddingInference2} {
+	for _, prefix := range []string{constants.ProviderPrefixTextEmbeddingsInference1, constants.ProviderPrefixTextEmbeddingsInference2} {
 		for _, tc := range cases {
 			t.Run(prefix+tc.path, func(t *testing.T) {
 				capture.reset()

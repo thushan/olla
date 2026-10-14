@@ -270,7 +270,7 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 			a.routeRegistry.RegisterWithMethod(basePath+"api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", "POST")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
-		} else if profileName != constants.ProviderTypeTextEmbeddingInference {
+		} else if profileName != constants.ProviderTypeTextEmbeddingsInference {
 			// Generic providers serve their discovery path as a model listing.
 			// TEI's discovery path is /info - model metadata, not a listing - so
 			// it is left to the catch-all proxy and forwarded verbatim to the
@@ -409,13 +409,13 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 				{path: "", handler: a.providerProxyHandler, description: "Docker Model Runner proxy", isProxy: true},
 			},
 		},
-		constants.ProviderTypeTextEmbeddingInference: {
-			prefixes: []string{constants.ProviderPrefixTextEmbeddingInference1, constants.ProviderPrefixTextEmbeddingInference2},
+		constants.ProviderTypeTextEmbeddingsInference: {
+			prefixes: []string{constants.ProviderPrefixTextEmbeddingsInference1, constants.ProviderPrefixTextEmbeddingsInference2},
 			routes: []staticRoute{
 				// /info is TEI's discovery path - model metadata, not a listing -
 				// so it is left to the catch-all proxy and forwarded verbatim.
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeTextEmbeddingInference, constants.ProviderTypeOpenAI), description: "Text Embedding Inference models (OpenAI format)", method: "GET"},
-				{path: "", handler: a.providerProxyHandler, description: "Text Embedding Inference proxy", isProxy: true},
+				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeTextEmbeddingsInference, constants.ProviderTypeOpenAI), description: "Text Embeddings Inference models (OpenAI format)", method: "GET"},
+				{path: "", handler: a.providerProxyHandler, description: "Text Embeddings Inference proxy", isProxy: true},
 			},
 		},
 	}

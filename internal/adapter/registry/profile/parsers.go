@@ -38,7 +38,7 @@ func getParserForFormat(format string) ModelResponseParser {
 		return &openAIParser{}
 	case constants.ProviderTypeDockerMR:
 		return &dockerModelRunnerParser{}
-	case constants.ProviderTypeTextEmbeddingInference:
+	case constants.ProviderTypeTextEmbeddingsInference:
 		return &textEmbeddingInferenceParser{}
 	default:
 		// openai format is the de facto standard

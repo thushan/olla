@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"log/slog"
 	"math"
 	"net/http"
 	"regexp"
@@ -77,7 +78,7 @@ func (srv *mockServer) handler() http.Handler {
 	mux.HandleFunc("GET /api/v0/models", srv.wrap(srv.handleLMStudioModels))
 	mux.HandleFunc("GET /api/v1/models", srv.wrap(srv.handleLemonadeModels))
 
-	// Text Embedding Inference (TEI) protocol - single model per instance,
+	// Text Embeddings Inference (TEI) protocol - single model per instance,
 	// discovered via /info rather than a model list. Native request bodies
 	// carry no model field; response shapes mirror the OpenAPI spec closely
 	// enough for forwarding tests.
@@ -414,7 +415,7 @@ func (srv *mockServer) handleLemonadeModels(w http.ResponseWriter, _ *http.Reque
 	writeJSON(w, http.StatusOK, response{Object: "list", Data: models})
 }
 
-// --- Text Embedding Inference (TEI) protocol ---
+// --- Text Embeddings Inference (TEI) protocol ---
 
 // teiServedModel returns the model this instance reports as served. TEI runs
 // exactly one embedding model per instance, so the first configured model is
@@ -452,15 +453,11 @@ func (srv *mockServer) handleTEIEmbeddings(w http.ResponseWriter, r *http.Reques
 	}
 
 	served := srv.teiServedModel()
-	if req.Model == "" {
-		req.Model = served
-	} else if req.Model != served {
-		// Real TEI rejects unknown model names; mirroring that lets routing
-		// tests fail loudly when a request lands on the wrong instance.
-		writeJSON(w, http.StatusNotFound, map[string]any{
-			"error": map[string]string{"message": fmt.Sprintf("Model %q not found", req.Model), "type": "model_not_found"},
-		})
-		return
+	if req.Model != "" && req.Model != served {
+		// Real TEI accepts any model name, logs a warning, and reports the model
+		// it actually serves; mirror that so routing tests observe the served
+		// identity rather than the requested one.
+		slog.Warn("tei: requested model differs from served model", "requested", req.Model, "served", served)
 	}
 
 	inputCount := 1
@@ -492,7 +489,7 @@ func (srv *mockServer) handleTEIEmbeddings(w http.ResponseWriter, r *http.Reques
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"object": "list",
-		"model":  req.Model,
+		"model":  served,
 		"data":   data,
 		"usage": map[string]int{
 			"prompt_tokens": inputCount * dims,

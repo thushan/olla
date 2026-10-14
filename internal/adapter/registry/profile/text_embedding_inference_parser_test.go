@@ -27,7 +27,7 @@ const teiInfoSample = `{
 	}
 }`
 
-func TestTextEmbeddingInferenceParser_Parse(t *testing.T) {
+func TestTextEmbeddingsInferenceParser_Parse(t *testing.T) {
 	t.Parallel()
 
 	parser := &textEmbeddingInferenceParser{}
@@ -86,14 +86,14 @@ func TestTextEmbeddingInferenceParser_Parse(t *testing.T) {
 
 		_, err := parser.Parse([]byte(`{"served_model_name": `))
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to parse Text Embedding Inference response")
+		assert.Contains(t, err.Error(), "failed to parse Text Embeddings Inference response")
 	})
 }
 
-func TestGetParserForFormat_TextEmbeddingInference(t *testing.T) {
+func TestGetParserForFormat_TextEmbeddingsInference(t *testing.T) {
 	t.Parallel()
 
-	parser := getParserForFormat(constants.ProviderTypeTextEmbeddingInference)
+	parser := getParserForFormat(constants.ProviderTypeTextEmbeddingsInference)
 	require.IsType(t, &textEmbeddingInferenceParser{}, parser)
 
 	models, err := parser.Parse([]byte(teiInfoSample))
@@ -102,7 +102,7 @@ func TestGetParserForFormat_TextEmbeddingInference(t *testing.T) {
 	assert.Equal(t, "Snowflake/snowflake-arctic-embed-l-v2.0", models[0].Name)
 }
 
-// TestShippedTextEmbeddingInferenceProfile loads the real shipped YAML (not a
+// TestShippedTextEmbeddingsInferenceProfile loads the real shipped YAML (not a
 // fixture) and asserts the wiring that makes TEI discovery work end to end:
 // /info as the discovery path, /health for liveness, OpenAI compatibility for
 // /v1/embeddings traffic, embeddings-only capabilities, and the dedicated
@@ -110,7 +110,7 @@ func TestGetParserForFormat_TextEmbeddingInference(t *testing.T) {
 // surface: the paths list feeds the path inspector's unified-route routing
 // hints, so every documented TEI endpoint must be present (and nothing that
 // TEI does not serve, like a bare /embeddings).
-func TestShippedTextEmbeddingInferenceProfile(t *testing.T) {
+func TestShippedTextEmbeddingsInferenceProfile(t *testing.T) {
 	t.Parallel()
 
 	data, err := os.ReadFile(shippedProfilesDir + "text-embeddings-inference.yaml")
@@ -121,7 +121,7 @@ func TestShippedTextEmbeddingInferenceProfile(t *testing.T) {
 
 	profile := NewConfigurableProfile(&cfg)
 
-	assert.Equal(t, constants.ProviderTypeTextEmbeddingInference, profile.GetName())
+	assert.Equal(t, constants.ProviderTypeTextEmbeddingsInference, profile.GetName())
 	assert.True(t, profile.IsOpenAPICompatible(), "TEI /v1/embeddings is OpenAI-compatible")
 	assert.Equal(t, "/health", profile.GetHealthCheckPath())
 	assert.Equal(t, "http://127.0.0.1:80/info", profile.GetModelDiscoveryURL("http://127.0.0.1:80"))
