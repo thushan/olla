@@ -39,10 +39,12 @@ func (p *textEmbeddingInferenceParser) Parse(data []byte) ([]*domain.ModelInfo, 
 		return nil, errors.New("tei /info response contains neither served_model_name nor model_id")
 	}
 
+	// "embeddings" rather than the provider type: capability inference keys off
+	// this field to tag the model as an embedding model and drop text-generation.
 	return []*domain.ModelInfo{
 		{
 			Name:     name,
-			Type:     "model",
+			Type:     "embeddings",
 			LastSeen: time.Now(),
 		},
 	}, nil

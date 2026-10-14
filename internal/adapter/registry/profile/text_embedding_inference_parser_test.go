@@ -39,6 +39,7 @@ func TestTextEmbeddingsInferenceParser_Parse(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, models, 1)
 		assert.Equal(t, "Snowflake/snowflake-arctic-embed-l-v2.0", models[0].Name)
+		assert.Equal(t, "embeddings", models[0].Type, "TEI models must be typed as embeddings for capability filtering")
 	})
 
 	t.Run("falls back to model_id when served_model_name is absent", func(t *testing.T) {
