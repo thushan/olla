@@ -1,13 +1,20 @@
 # Hugging Face Text Embedding Inference (TEI) profile
 # Docs: https://github.com/huggingface/text-embeddings-inference
-# TEI serves a single embedding model per instance. The model ID is not
-# exposed via an OpenAI-style /v1/models list; it is reported by the /info
-# endpoint (served_model_name, falling back to model_id), so this profile
-# uses a dedicated response_format parser for discovery.
+# TEI serves a single model per instance (embedding, sequence classification
+# or reranker). The model ID is not exposed via an OpenAI-style /v1/models
+# list; it is reported by the /info endpoint (served_model_name, falling back
+# to model_id), so this profile uses a dedicated response_format parser for
+# discovery.
+#
+# Every path below is forwarded verbatim to the backend by the provider
+# catch-all route (prefix stripped) - no per-endpoint handlers exist. The
+# list matters for unified-route path-based routing hints: TEI's native
+# request bodies carry no model field, so the path is often the only signal
+# that a request belongs on a TEI endpoint.
 name: text-embeddings-inference
 version: "1.0"
 display_name: "Text Embedding Inference"
-description: "Hugging Face Text Embedding Inference server, embeddings only"
+description: "Hugging Face Text Embedding Inference server (embeddings, classification, reranking)"
 
 # Routing configuration
 routing:
@@ -21,10 +28,29 @@ api:
   # unified routing can treat TEI as OpenAI-compatible for that path.
   openai_compatible: true
   paths:
+    # Indices below are the real array positions; path_indices further down
+    # must stay in step with these.
+    # OpenAI-compatible
     - /v1/embeddings   # 0: OpenAI-compatible embeddings
-    - /embeddings      # 1: native TEI embeddings
-    - /info            # 2: server info, carries the served model ID
-    - /health          # 3: liveness probe
+
+    # Native embedding endpoints
+    - /embed           # 1: native embeddings (primary)
+    - /embed_all       # 2: per-token embeddings without pooling
+    - /embed_sparse    # 3: sparse (SPLADE) embeddings
+
+    # Tokenisation
+    - /tokenize        # 4: encode text to token IDs
+    - /decode          # 5: decode token IDs to text
+
+    # Classification and reranking
+    - /predict         # 6: sequence classification predictions
+    - /rerank          # 7: cross-encoder rerank scores
+    - /similarity      # 8: sentence similarity scores
+
+    # System endpoints
+    - /info            # 9: server info, carries the served model ID
+    - /health          # 10: health check
+    - /metrics         # 11: Prometheus metrics
   model_discovery_path: /info
   health_check_path: /health
 
@@ -44,6 +70,7 @@ detection:
   path_indicators:
     - "/info"
     - "/v1/embeddings"
+    - "/embed"
   default_ports:
     - 80    # TEI container default
     - 8080  # common local alternative
@@ -51,9 +78,12 @@ detection:
 # Model handling
 models:
   name_format: "{{.Name}}"
-  # Every model served by a TEI instance is an embedding model, regardless of
-  # its name. This keeps capability routing from sending chat or generation
-  # traffic to TEI endpoints.
+  # TEI instances serve embedding, classification or reranker models. Olla's
+  # capability set has no rerank or classify entry, so every served model is
+  # tagged as an embedding model regardless of its name. This keeps capability
+  # routing from sending chat or generation traffic to TEI endpoints; native
+  # /predict and /rerank requests carry no model field and are unaffected by
+  # capability filtering.
   capability_patterns:
     embeddings:
       - "*"
@@ -67,10 +97,13 @@ request:
     model_field_name: "model"
     supports_streaming: false
 
-# Path indices for specific functions
+# Path indices for specific functions, matching the enabled entries in
+# api.paths above. The remaining native endpoints are documentation only -
+# Olla's PathIndices struct only reads health, models, completions,
+# chat_completions and embeddings.
 path_indices:
-  health: 3
-  models: 2
+  health: 10
+  models: 9
   embeddings: 0
 
 # Resource management
@@ -95,8 +128,10 @@ metrics:
     enabled: true
     source: response_body
     format: json
-    # OpenAI embeddings response shape: usage carries prompt/total tokens,
-    # there is no choices array or finish_reason.
+    # OpenAI embeddings response shape (/v1/embeddings only): usage carries
+    # prompt/total tokens, there is no choices array or finish_reason. The
+    # native endpoints return bare arrays with no usage block, so extraction
+    # is a silent no-op for them.
     paths:
       model: "$.model"
       input_tokens: "$.usage.prompt_tokens"

@@ -77,10 +77,21 @@ func (srv *mockServer) handler() http.Handler {
 	mux.HandleFunc("GET /api/v0/models", srv.wrap(srv.handleLMStudioModels))
 	mux.HandleFunc("GET /api/v1/models", srv.wrap(srv.handleLemonadeModels))
 
-	// Text Embedding Inference (TEI) protocol - single embedding model per
-	// instance, discovered via /info rather than a model list.
+	// Text Embedding Inference (TEI) protocol - single model per instance,
+	// discovered via /info rather than a model list. Native request bodies
+	// carry no model field; response shapes mirror the OpenAPI spec closely
+	// enough for forwarding tests.
 	mux.HandleFunc("GET /info", srv.wrap(srv.handleTEIInfo))
 	mux.HandleFunc("POST /v1/embeddings", srv.wrap(srv.handleTEIEmbeddings))
+	mux.HandleFunc("POST /embed", srv.wrap(srv.handleTEIEmbed))
+	mux.HandleFunc("POST /embed_all", srv.wrap(srv.handleTEIEmbedAll))
+	mux.HandleFunc("POST /embed_sparse", srv.wrap(srv.handleTEIEmbedSparse))
+	mux.HandleFunc("POST /tokenize", srv.wrap(srv.handleTEITokenize))
+	mux.HandleFunc("POST /decode", srv.wrap(srv.handleTEIDecode))
+	mux.HandleFunc("POST /predict", srv.wrap(srv.handleTEIPredict))
+	mux.HandleFunc("POST /rerank", srv.wrap(srv.handleTEIRerank))
+	mux.HandleFunc("POST /similarity", srv.wrap(srv.handleTESimilarity))
+	mux.HandleFunc("GET /metrics", srv.wrap(srv.handleTEIMetrics))
 
 	// Inference endpoints - streaming handled in streaming.go.
 	mux.HandleFunc("POST /api/chat", srv.wrap(srv.handleOllamaChat))
@@ -488,6 +499,197 @@ func (srv *mockServer) handleTEIEmbeddings(w http.ResponseWriter, r *http.Reques
 			"total_tokens":  inputCount * dims,
 		},
 	})
+}
+
+// teiInputCount reports how many inputs a native TEI request carries. Native
+// endpoints take "inputs" as either a single value or an array; the mock only
+// needs the count to size its deterministic responses.
+func teiInputCount(r *http.Request) (int, error) {
+	var req struct {
+		Input json.RawMessage `json:"inputs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return 0, err
+	}
+	if len(req.Input) == 0 {
+		return 0, errors.New("missing inputs")
+	}
+	var input any
+	if err := json.Unmarshal(req.Input, &input); err != nil {
+		return 0, err
+	}
+	if v, ok := input.([]any); ok {
+		return len(v), nil
+	}
+	return 1, nil
+}
+
+// teiWriteError mirrors TEI's native error shape ({"error", "error_type"}) for
+// malformed or missing inputs, which TEI reports as a 400 with error_type
+// "validation".
+func teiWriteError(w http.ResponseWriter, message string) {
+	writeJSON(w, http.StatusBadRequest, map[string]any{"error": message, "error_type": "validation"})
+}
+
+// teiVector returns the deterministic 8-dim vector used across the native
+// embedding endpoints so tests can assert on exact values.
+func teiVector(i int) []float64 {
+	const dims = 8
+	vec := make([]float64, dims)
+	for d := range vec {
+		vec[d] = float64(i*dims+d+1) / 100
+	}
+	return vec
+}
+
+func (srv *mockServer) handleTEIEmbed(w http.ResponseWriter, r *http.Request) {
+	count, err := teiInputCount(r)
+	if err != nil {
+		teiWriteError(w, "inputs is required")
+		return
+	}
+	vectors := make([][]float64, count)
+	for i := range vectors {
+		vectors[i] = teiVector(i)
+	}
+	writeJSON(w, http.StatusOK, vectors)
+}
+
+func (srv *mockServer) handleTEIEmbedAll(w http.ResponseWriter, r *http.Request) {
+	count, err := teiInputCount(r)
+	if err != nil {
+		teiWriteError(w, "inputs is required")
+		return
+	}
+	// Per-token embeddings without pooling: [batch][tokens][dims]. The mock
+	// emits a single token per input.
+	all := make([][][]float64, count)
+	for i := range all {
+		all[i] = [][]float64{teiVector(i)}
+	}
+	writeJSON(w, http.StatusOK, all)
+}
+
+func (srv *mockServer) handleTEIEmbedSparse(w http.ResponseWriter, r *http.Request) {
+	count, err := teiInputCount(r)
+	if err != nil {
+		teiWriteError(w, "inputs is required")
+		return
+	}
+	sparse := make([][]map[string]any, count)
+	for i := range sparse {
+		sparse[i] = []map[string]any{
+			{"index": 0, "value": 1.0},
+			{"index": i + 1, "value": 0.5},
+		}
+	}
+	writeJSON(w, http.StatusOK, sparse)
+}
+
+func (srv *mockServer) handleTEITokenize(w http.ResponseWriter, r *http.Request) {
+	count, err := teiInputCount(r)
+	if err != nil {
+		teiWriteError(w, "inputs is required")
+		return
+	}
+	ids := make([][]int, count)
+	for i := range ids {
+		ids[i] = []int{i*100 + 1, i*100 + 2}
+	}
+	writeJSON(w, http.StatusOK, ids)
+}
+
+func (srv *mockServer) handleTEIDecode(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		IDs json.RawMessage `json:"ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		teiWriteError(w, "ids is required")
+		return
+	}
+	var ids any
+	if err := json.Unmarshal(req.IDs, &ids); err != nil {
+		teiWriteError(w, "ids must be an array")
+		return
+	}
+	batch, ok := ids.([]any)
+	if !ok {
+		teiWriteError(w, "ids must be an array")
+		return
+	}
+	// A nested first element means a batch of sequences; otherwise the whole
+	// array is a single sequence.
+	if len(batch) > 0 {
+		if _, nested := batch[0].([]any); nested {
+			out := make([]string, len(batch))
+			for i := range out {
+				out[i] = fmt.Sprintf("decoded-%d", i)
+			}
+			writeJSON(w, http.StatusOK, out)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, []string{"decoded-0"})
+}
+
+func (srv *mockServer) handleTEIPredict(w http.ResponseWriter, r *http.Request) {
+	count, err := teiInputCount(r)
+	if err != nil {
+		teiWriteError(w, "inputs is required")
+		return
+	}
+	predictions := make([]map[string]any, count)
+	for i := range predictions {
+		predictions[i] = map[string]any{
+			"label": "mock-label",
+			"score": 0.5 + float64(i)*0.1,
+		}
+	}
+	writeJSON(w, http.StatusOK, predictions)
+}
+
+func (srv *mockServer) handleTEIRerank(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Query string   `json:"query"`
+		Texts []string `json:"texts"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Texts) == 0 {
+		teiWriteError(w, "texts is required")
+		return
+	}
+	ranks := make([]map[string]any, len(req.Texts))
+	for i := range req.Texts {
+		ranks[i] = map[string]any{
+			"index": i,
+			"score": float64(len(req.Texts)-i) / float64(len(req.Texts)),
+		}
+	}
+	writeJSON(w, http.StatusOK, ranks)
+}
+
+func (srv *mockServer) handleTESimilarity(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Inputs struct {
+			SourceSentence string   `json:"source_sentence"`
+			Sentences      []string `json:"sentences"`
+		} `json:"inputs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.Inputs.Sentences) == 0 {
+		teiWriteError(w, "inputs.sentences is required")
+		return
+	}
+	scores := make([]float64, len(req.Inputs.Sentences))
+	for i := range scores {
+		scores[i] = 0.9 - float64(i)*0.1
+	}
+	writeJSON(w, http.StatusOK, scores)
+}
+
+func (srv *mockServer) handleTEIMetrics(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+	fmt.Fprint(w, "# HELP tei_mock_requests_total Mock request counter\n"+
+		"# TYPE tei_mock_requests_total counter\n"+
+		"tei_mock_requests_total 0\n")
 }
 
 // contextDone returns a closed channel when ctx is already done, otherwise the

@@ -2,7 +2,7 @@
 
 A multi-protocol mock LLM backend for end-to-end validation of Olla's proxy and routing logic without requiring real inference infrastructure.
 
-It speaks Ollama, LM Studio, OpenAI-compatible, Lemonade, and Anthropic wire formats and supports controllable fault injection via an HTTP control plane.
+It speaks Ollama, LM Studio, OpenAI-compatible, Lemonade, Anthropic, and Text Embedding Inference (TEI) wire formats and supports controllable fault injection via an HTTP control plane.
 
 ## Running
 
@@ -50,8 +50,17 @@ go run ./test/cmd/ollamock \
 | `GET /api/v1/models` | Lemonade model listing |
 | `POST /api/v1/chat/completions` | Lemonade chat (OpenAI shape) |
 | `POST /v1/messages` | Anthropic Messages API |
-| `GET /info` | TEI server info (carries the served embedding model name) |
+| `GET /info` | TEI server info (carries the served model name) |
 | `POST /v1/embeddings` | TEI embeddings (OpenAI shape, single model per instance) |
+| `POST /embed` | TEI native embeddings (bare vector arrays) |
+| `POST /embed_all` | TEI per-token embeddings without pooling |
+| `POST /embed_sparse` | TEI sparse (SPLADE) embeddings |
+| `POST /tokenize` | TEI tokenise inputs to token IDs |
+| `POST /decode` | TEI decode token IDs to text |
+| `POST /predict` | TEI sequence classification predictions |
+| `POST /rerank` | TEI cross-encoder rerank scores |
+| `POST /similarity` | TEI sentence similarity scores |
+| `GET /metrics` | TEI Prometheus metrics (mock counters) |
 
 ## Behaviour Modes
 

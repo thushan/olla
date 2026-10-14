@@ -270,20 +270,13 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 			a.routeRegistry.RegisterWithMethod(basePath+"api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", "POST")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
-		} else {
-			// Generic providers only need their discovery endpoint.
-			// "native" is not a registered converter format - it 500s for any
-			// profile whose discovery path is not shadowed by another
-			// registration on the same route (every current profile except
-			// TEI is shadowed). TEI's native path is /info, which has no
-			// provider-specific listing shape of its own, so serve the OpenAI
-			// format there as well.
-			nativeFormat := "native"
-			if profileName == constants.ProviderTypeTextEmbeddingInference {
-				nativeFormat = constants.ProviderTypeOpenAI
-			}
+		} else if profileName != constants.ProviderTypeTextEmbeddingInference {
+			// Generic providers serve their discovery path as a model listing.
+			// TEI's discovery path is /info - model metadata, not a listing - so
+			// it is left to the catch-all proxy and forwarded verbatim to the
+			// backend instead of being served from the registry.
 			a.routeRegistry.RegisterWithMethod(nativePath,
-				a.genericProviderModelsHandler(prefix, nativeFormat),
+				a.genericProviderModelsHandler(prefix, "native"),
 				prefix+" models", "GET")
 		}
 	}
@@ -419,10 +412,9 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 		constants.ProviderTypeTextEmbeddingInference: {
 			prefixes: []string{constants.ProviderPrefixTextEmbeddingInference1, constants.ProviderPrefixTextEmbeddingInference2},
 			routes: []staticRoute{
-				// /info is TEI's discovery path; it carries no listing shape of
-				// its own, so the OpenAI format serves both paths.
-				{path: "info", handler: a.genericProviderModelsHandler(constants.ProviderTypeTextEmbeddingInference, constants.ProviderTypeOpenAI), description: "Text Embedding Inference models (OpenAI format)", method: "GET"},
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeTextEmbeddingInference, constants.ProviderTypeOpenAI), description: "Text Embedding Inference models (OpenAI format alt path)", method: "GET"},
+				// /info is TEI's discovery path - model metadata, not a listing -
+				// so it is left to the catch-all proxy and forwarded verbatim.
+				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeTextEmbeddingInference, constants.ProviderTypeOpenAI), description: "Text Embedding Inference models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "Text Embedding Inference proxy", isProxy: true},
 			},
 		},

@@ -106,7 +106,10 @@ func TestGetParserForFormat_TextEmbeddingInference(t *testing.T) {
 // fixture) and asserts the wiring that makes TEI discovery work end to end:
 // /info as the discovery path, /health for liveness, OpenAI compatibility for
 // /v1/embeddings traffic, embeddings-only capabilities, and the dedicated
-// parser selected by response_format.
+// parser selected by response_format. It also pins the full native API
+// surface: the paths list feeds the path inspector's unified-route routing
+// hints, so every documented TEI endpoint must be present (and nothing that
+// TEI does not serve, like a bare /embeddings).
 func TestShippedTextEmbeddingInferenceProfile(t *testing.T) {
 	t.Parallel()
 
@@ -122,6 +125,27 @@ func TestShippedTextEmbeddingInferenceProfile(t *testing.T) {
 	assert.True(t, profile.IsOpenAPICompatible(), "TEI /v1/embeddings is OpenAI-compatible")
 	assert.Equal(t, "/health", profile.GetHealthCheckPath())
 	assert.Equal(t, "http://127.0.0.1:80/info", profile.GetModelDiscoveryURL("http://127.0.0.1:80"))
+
+	// The complete TEI REST API surface per the current OpenAPI spec.
+	require.Equal(t, []string{
+		"/v1/embeddings", // 0: OpenAI-compatible embeddings
+		"/embed",         // 1: native embeddings (primary)
+		"/embed_all",     // 2: per-token embeddings without pooling
+		"/embed_sparse",  // 3: sparse (SPLADE) embeddings
+		"/tokenize",      // 4: encode text to token IDs
+		"/decode",        // 5: decode token IDs to text
+		"/predict",       // 6: sequence classification predictions
+		"/rerank",        // 7: cross-encoder rerank scores
+		"/similarity",    // 8: sentence similarity scores
+		"/info",          // 9: server info, carries the served model ID
+		"/health",        // 10: health check
+		"/metrics",       // 11: Prometheus metrics
+	}, profile.GetPaths(), "api.paths must mirror the documented TEI API")
+
+	// path_indices must point at the right entries of api.paths.
+	assert.Equal(t, cfg.API.Paths[cfg.PathIndices.Health], "/health", "PathIndices.Health must index /health")
+	assert.Equal(t, cfg.API.Paths[cfg.PathIndices.Models], "/info", "PathIndices.Models must index /info (discovery)")
+	assert.Equal(t, cfg.API.Paths[cfg.PathIndices.Embeddings], "/v1/embeddings", "PathIndices.Embeddings must index /v1/embeddings")
 
 	caps := profile.GetModelCapabilities("Snowflake/snowflake-arctic-embed-l-v2.0", nil)
 	assert.True(t, caps.Embeddings, "TEI models must be flagged as embedding models")

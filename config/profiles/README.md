@@ -22,7 +22,7 @@ These profiles control:
 - `lemonade.yaml` - Lemonade SDK local LLM serving platform with AMD Ryzen AI support
 - `vllm.yaml` - vLLM high-performance inference server
 - `sglang.yaml` - SGLang high-performance inference server
-- `text-embeddings-inference.yaml` - Hugging Face Text Embedding Inference (TEI) embedding server (single embedding model per instance, discovered via `/info`)
+- `text-embeddings-inference.yaml` - Hugging Face Text Embedding Inference (TEI) server for embedding, classification and reranker models (single model per instance, discovered via `/info`; all native endpoints such as `/embed`, `/rerank`, `/predict` and `/info` are forwarded verbatim to the backend)
 - `anthropic.yaml` - Anthropic Claude API
 - `openai-compatible.yaml` - OpenAI-compatible API generic profile (also accepts `type: "openai"` as an alias)
 
