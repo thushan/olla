@@ -19,17 +19,17 @@ const (
 	ProviderTypeTextEmbeddingsInference = "text-embeddings-inference"
 
 	// Provider display names
-	ProviderDisplayOllama                 = "Ollama"
-	ProviderDisplayLemonade               = "Lemonade"
-	ProviderDisplayLlamaCpp               = "llama.cpp"
-	ProviderDisplayLMStudio               = "LM Studio"
-	ProviderDisplayOpenAI                 = "OpenAI"
-	ProviderDisplayLMDeploy               = "LMDeploy"
-	ProviderDisplaySGLang                 = "SGLang"
-	ProviderDisplayVLLM                   = "vLLM"
-	ProviderDisplayVLLMMLX                = "vLLM-MLX"
-	ProviderDisplayDockerMR               = "Docker Model Runner"
-	ProviderDisplayOMLX                   = "oMLX"
+	ProviderDisplayOllama                  = "Ollama"
+	ProviderDisplayLemonade                = "Lemonade"
+	ProviderDisplayLlamaCpp                = "llama.cpp"
+	ProviderDisplayLMStudio                = "LM Studio"
+	ProviderDisplayOpenAI                  = "OpenAI"
+	ProviderDisplayLMDeploy                = "LMDeploy"
+	ProviderDisplaySGLang                  = "SGLang"
+	ProviderDisplayVLLM                    = "vLLM"
+	ProviderDisplayVLLMMLX                 = "vLLM-MLX"
+	ProviderDisplayDockerMR                = "Docker Model Runner"
+	ProviderDisplayOMLX                    = "oMLX"
 	ProviderDisplayTextEmbeddingsInference = "Text Embeddings Inference"
 
 	// Common provider prefixes
