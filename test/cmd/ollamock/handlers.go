@@ -589,11 +589,19 @@ func (srv *mockServer) handleTEITokenize(w http.ResponseWriter, r *http.Request)
 		teiWriteError(w, "inputs is required")
 		return
 	}
-	ids := make([][]int, count)
-	for i := range ids {
-		ids[i] = []int{i*100 + 1, i*100 + 2}
+	// TEI returns one array of token objects (id, text, special, start, stop)
+	// per input, not bare ID arrays. Deterministic special/content/special
+	// pattern so tests can assert on exact values.
+	tokens := make([][]map[string]any, count)
+	for i := range tokens {
+		text := fmt.Sprintf("input-%d", i)
+		tokens[i] = []map[string]any{
+			{"id": i*100 + 1, "text": "[CLS]", "special": true, "start": nil, "stop": nil},
+			{"id": i*100 + 2, "text": text, "special": false, "start": 0, "stop": len(text)},
+			{"id": i*100 + 3, "text": "[SEP]", "special": true, "start": nil, "stop": nil},
+		}
 	}
-	writeJSON(w, http.StatusOK, ids)
+	writeJSON(w, http.StatusOK, tokens)
 }
 
 func (srv *mockServer) handleTEIDecode(w http.ResponseWriter, r *http.Request) {

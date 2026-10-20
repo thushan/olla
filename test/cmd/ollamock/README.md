@@ -55,7 +55,7 @@ go run ./test/cmd/ollamock \
 | `POST /embed` | TEI native embeddings (bare vector arrays) |
 | `POST /embed_all` | TEI per-token embeddings without pooling |
 | `POST /embed_sparse` | TEI sparse (SPLADE) embeddings |
-| `POST /tokenize` | TEI tokenise inputs to token IDs |
+| `POST /tokenize` | TEI tokenise inputs to token objects |
 | `POST /decode` | TEI decode token IDs to text |
 | `POST /predict` | TEI sequence classification predictions |
 | `POST /rerank` | TEI cross-encoder rerank scores |
