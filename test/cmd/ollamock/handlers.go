@@ -583,25 +583,103 @@ func (srv *mockServer) handleTEIEmbedSparse(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, sparse)
 }
 
+// teiTokenCLSID and teiTokenSEPID follow BERT's special token IDs, which TEI's
+// WordPiece tokenisers also use.
+const (
+	teiTokenCLSID = 101
+	teiTokenSEPID = 102
+)
+
 func (srv *mockServer) handleTEITokenize(w http.ResponseWriter, r *http.Request) {
-	count, err := teiInputCount(r)
+	inputs, err := teiStringInputs(r)
 	if err != nil {
 		teiWriteError(w, "inputs is required")
 		return
 	}
 	// TEI returns one array of token objects (id, text, special, start, stop)
-	// per input, not bare ID arrays. Deterministic special/content/special
-	// pattern so tests can assert on exact values.
-	tokens := make([][]map[string]any, count)
-	for i := range tokens {
-		text := fmt.Sprintf("input-%d", i)
-		tokens[i] = []map[string]any{
-			{"id": i*100 + 1, "text": "[CLS]", "special": true, "start": nil, "stop": nil},
-			{"id": i*100 + 2, "text": text, "special": false, "start": 0, "stop": len(text)},
-			{"id": i*100 + 3, "text": "[SEP]", "special": true, "start": nil, "stop": nil},
-		}
+	// per input, not bare ID arrays. The mock tokenises by splitting on
+	// whitespace, deterministically, so tests can assert on exact values.
+	tokens := make([][]map[string]any, len(inputs))
+	for i, input := range inputs {
+		tokens[i] = teiTokenise(input)
 	}
 	writeJSON(w, http.StatusOK, tokens)
+}
+
+// teiStringInputs extracts "inputs" as a single string or an array of strings,
+// the two shapes TEI's native endpoints accept.
+func teiStringInputs(r *http.Request) ([]string, error) {
+	var req struct {
+		Input json.RawMessage `json:"inputs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return nil, err
+	}
+	if len(req.Input) == 0 {
+		return nil, errors.New("missing inputs")
+	}
+	var input any
+	if err := json.Unmarshal(req.Input, &input); err != nil {
+		return nil, err
+	}
+	switch v := input.(type) {
+	case string:
+		return []string{v}, nil
+	case []any:
+		inputs := make([]string, 0, len(v))
+		for _, item := range v {
+			s, ok := item.(string)
+			if !ok {
+				return nil, errors.New("inputs must be a string or an array of strings")
+			}
+			inputs = append(inputs, s)
+		}
+		return inputs, nil
+	default:
+		return nil, errors.New("inputs must be a string or an array of strings")
+	}
+}
+
+// teiTokenise returns [CLS], one token per whitespace-separated word, then
+// [SEP]. Word start/stop are byte offsets into the input.
+func teiTokenise(input string) []map[string]any {
+	tokens := []map[string]any{
+		{"id": teiTokenCLSID, "text": "[CLS]", "special": true, "start": nil, "stop": nil},
+	}
+	// strings.Fields would lose the offsets, so scan bytes instead: UTF-8
+	// continuation bytes are never mistaken for ASCII whitespace.
+	start := -1
+	for i := 0; i <= len(input); i++ {
+		isSpace := i == len(input) || isASCIIWhitespace(input[i])
+		if !isSpace && start < 0 {
+			start = i
+		}
+		if isSpace && start >= 0 {
+			tokens = append(tokens, map[string]any{
+				"id":      teiWordTokenID(input[start:i]),
+				"text":    input[start:i],
+				"special": false,
+				"start":   start,
+				"stop":    i,
+			})
+			start = -1
+		}
+	}
+	return append(tokens, map[string]any{
+		"id": teiTokenSEPID, "text": "[SEP]", "special": true, "start": nil, "stop": nil,
+	})
+}
+
+func isASCIIWhitespace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
+}
+
+// teiWordTokenID maps a word to a deterministic pseudo token ID via FNV-1a,
+// kept clear of the special IDs 101 and 102.
+func teiWordTokenID(word string) int {
+	h := fnv.New64a()
+	h.Write([]byte(word))
+	return teiTokenSEPID + 1 + int(h.Sum64()%10000)
 }
 
 func (srv *mockServer) handleTEIDecode(w http.ResponseWriter, r *http.Request) {

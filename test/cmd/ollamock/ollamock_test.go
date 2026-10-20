@@ -459,3 +459,80 @@ func TestFailHealth(t *testing.T) {
 		t.Errorf("want 200 on /v1/models with fail_health, got %d", modelsResp.StatusCode)
 	}
 }
+
+// TestTEITokenizeShape pins the TEI /tokenize response: arrays of token
+// objects per input with real word text and byte offsets, plus determinism
+// across calls so tests can assert on exact IDs.
+func TestTEITokenizeShape(t *testing.T) {
+	t.Parallel()
+	ts := testServer(t)
+
+	var body [][]struct {
+		ID      int    `json:"id"`
+		Text    string `json:"text"`
+		Special bool   `json:"special"`
+		Start   *int   `json:"start"`
+		Stop    *int   `json:"stop"`
+	}
+	resp := postJSON(t, ts.URL+"/tokenize", `{"inputs":["hello world","Olla routes TEI"]}`)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	decodeJSON(t, resp, &body)
+
+	if len(body) != 2 {
+		t.Fatalf("want 2 input arrays, got %d", len(body))
+	}
+
+	// "hello world": [CLS], hello (0..5), world (6..11), [SEP].
+	if len(body[0]) != 4 {
+		t.Fatalf("want 4 tokens for %q, got %d", "hello world", len(body[0]))
+	}
+	first := body[0]
+	if first[0].ID != 101 || first[0].Text != "[CLS]" || !first[0].Special || first[0].Start != nil || first[0].Stop != nil {
+		t.Errorf("[CLS] token wrong: %+v", first[0])
+	}
+	if first[1].ID == 101 || first[1].ID == 102 || first[1].Text != "hello" || first[1].Special {
+		t.Errorf("word token 1 wrong: %+v", first[1])
+	}
+	if first[1].Start == nil || *first[1].Start != 0 || first[1].Stop == nil || *first[1].Stop != 5 {
+		t.Errorf("%q offsets wrong: start=%v stop=%v", "hello", first[1].Start, first[1].Stop)
+	}
+	if first[2].Text != "world" || first[2].Start == nil || *first[2].Start != 6 || first[2].Stop == nil || *first[2].Stop != 11 {
+		t.Errorf("%q token or offsets wrong: %+v", "world", first[2])
+	}
+	if first[3].ID != 102 || first[3].Text != "[SEP]" || !first[3].Special || first[3].Start != nil || first[3].Stop != nil {
+		t.Errorf("[SEP] token wrong: %+v", first[3])
+	}
+
+	// "Olla routes TEI": three words plus specials.
+	if len(body[1]) != 5 {
+		t.Fatalf("want 5 tokens for %q, got %d", "Olla routes TEI", len(body[1]))
+	}
+
+	// Determinism: same request, same IDs, byte for byte.
+	resp2 := postJSON(t, ts.URL+"/tokenize", `{"inputs":["hello world","Olla routes TEI"]}`)
+	if resp2.StatusCode != http.StatusOK {
+		t.Fatalf("second call want 200, got %d", resp2.StatusCode)
+	}
+	var body2 [][]map[string]any
+	decodeJSON(t, resp2, &body2)
+	first2 := body2[0]
+	if first2[1]["id"] != float64(first[1].ID) {
+		t.Errorf("token ID not deterministic: %v then %v", first[1].ID, first2[1]["id"])
+	}
+
+	// Single string input is accepted too.
+	resp3 := postJSON(t, ts.URL+"/tokenize", `{"inputs":"hello world"}`)
+	if resp3.StatusCode != http.StatusOK {
+		t.Fatalf("single-string call want 200, got %d", resp3.StatusCode)
+	}
+	resp3.Body.Close()
+
+	// Missing inputs stays a 400.
+	resp4 := postJSON(t, ts.URL+"/tokenize", `{}`)
+	resp4.Body.Close()
+	if resp4.StatusCode != http.StatusBadRequest {
+		t.Errorf("missing inputs want 400, got %d", resp4.StatusCode)
+	}
+}
