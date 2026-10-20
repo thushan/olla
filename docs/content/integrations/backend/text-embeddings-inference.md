@@ -40,7 +40,7 @@ keywords: TEI, Text Embeddings Inference, Olla proxy, embeddings, reranking, sen
         <th>Unsupported</th>
         <td>
             <ul>
-                <li>Chat / Text Generation (embeddings only)</li>
+                <li>Chat / text generation (TEI serves embedding, classifier and reranker models only)</li>
                 <li>Model Management (loading/unloading)</li>
                 <li>Instance Management</li>
                 <li>Model Download</li>
@@ -79,7 +79,7 @@ keywords: TEI, Text Embeddings Inference, Olla proxy, embeddings, reranking, sen
 
 TEI serves a single model per instance (an embedding, sequence-classification or reranker model) and does not expose an OpenAI-style `/v1/models` list. Instead, Olla discovers the served model from the `/info` endpoint (`served_model_name`, falling back to `model_id`) using a dedicated parser. Every native TEI endpoint is forwarded verbatim by the provider catch-all route; there are no per-endpoint handlers.
 
-Because TEI models are embedding models, Olla tags them with the `embeddings` capability (and not `text-generation`), so chat and generation traffic is never routed to a TEI endpoint.
+Because Olla has no rerank or classify capability yet, every TEI model is tagged with the `embeddings` capability (and never `text-generation`), so chat and generation traffic is never routed to a TEI endpoint. [Capability tagging](#capability-tagging) covers what that means for rerank and classification traffic.
 
 ## Configuration
 
@@ -131,7 +131,7 @@ The following endpoints are forwarded verbatim to the TEI backend by the provide
   </tr>
   <tr>
     <td><code>/tokenize</code></td>
-    <td>Encode text to token IDs</td>
+    <td>Encode text to tokens</td>
   </tr>
   <tr>
     <td><code>/decode</code></td>
@@ -194,7 +194,6 @@ curl -X POST http://localhost:40114/olla/tei/embed \
 curl -X POST http://localhost:40114/olla/tei/rerank \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
     "query": "What is machine learning?",
     "texts": [
       "Machine learning is a subset of artificial intelligence",
@@ -228,7 +227,9 @@ Unlike LLM backends, TEI has no `/v1/models` listing. Olla's dedicated parser re
 
 ### Capability tagging
 
-TEI models are registered with the `embeddings` capability and without `text-generation`, so unified routing never sends chat or generation traffic to a TEI endpoint. Native `/predict` and `/rerank` requests carry no model field and are unaffected by capability filtering.
+Olla has no rerank or classify capability yet, so every TEI model is tagged `embeddings` whatever its real type. That keeps chat and generation traffic away from TEI endpoints, but it does not route `/rerank` or `/predict` to a model of the matching kind: those requests carry no `model` field, so point the endpoint at the instance serving the model you want. TEI answers `424` when a request does not match the served model type, for example `/v1/embeddings` against a reranker instance.
+
+The model's real kind (parsed from `/info`'s `model_type`) is recorded in the model's details and surfaces as the `model_type` metadata key.
 
 ## Starting a TEI Server
 
@@ -237,10 +238,12 @@ TEI is distributed as a container image and a standalone binary. The container e
 ### Docker
 
 ```bash
-docker run -p 3000:80 \
-  -v ~/.cache/huggingface:/root/.cache/huggingface \
-  ghcr.io/huggingface/text-embeddings-inference:main \
-  --model-id sentence-transformers/all-MiniLM-L6-v2
+model=sentence-transformers/all-MiniLM-L6-v2
+volume=$PWD/data   # TEI caches weights under /data
+
+docker run -p 3000:80 -v $volume:/data --pull always \
+  ghcr.io/huggingface/text-embeddings-inference:cpu-1.9 --model-id $model
+# GPU: use cuda-1.9 (or an arch tag such as 89-1.9 or hopper-1.9) with --gpus all
 ```
 
 Point the Olla endpoint `url` at the published port (for example `http://localhost:3000`).
