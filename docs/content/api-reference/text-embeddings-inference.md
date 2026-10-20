@@ -14,7 +14,7 @@ Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers. Availa
 | POST | `/olla/tei/embed` | Native embeddings (primary) |
 | POST | `/olla/tei/embed_all` | Per-token embeddings without pooling |
 | POST | `/olla/tei/embed_sparse` | Sparse (SPLADE) embeddings |
-| POST | `/olla/tei/tokenize` | Encode text to token IDs |
+| POST | `/olla/tei/tokenize` | Encode text to tokens |
 | POST | `/olla/tei/decode` | Decode token IDs to text |
 | POST | `/olla/tei/predict` | Sequence classification predictions |
 | POST | `/olla/tei/rerank` | Cross-encoder rerank scores |
@@ -47,6 +47,9 @@ curl -X GET http://localhost:40114/olla/tei/info
   }
 }
 ```
+
+!!! note "Abbreviated example"
+    Real `/info` responses also include `version`, `max_batch_tokens`, `max_client_batch_size`, `auto_truncate` and `tokenization_workers`; they are elided here for brevity.
 
 ---
 
@@ -187,7 +190,7 @@ curl -X POST http://localhost:40114/olla/tei/embed_all \
 
 ## POST /olla/tei/embed_sparse
 
-Sparse (SPLADE) embeddings. Returns index/value pairs per input.
+Sparse (SPLADE) embeddings. Returns arrays of index/value objects per input.
 
 ### Request
 
@@ -203,7 +206,10 @@ curl -X POST http://localhost:40114/olla/tei/embed_sparse \
 
 ```json
 [
-  {"indices": [15, 88], "values": [0.42, 0.17]}
+  [
+    {"index": 15, "value": 0.42},
+    {"index": 88, "value": 0.17}
+  ]
 ]
 ```
 
@@ -211,7 +217,7 @@ curl -X POST http://localhost:40114/olla/tei/embed_sparse \
 
 ## POST /olla/tei/tokenize
 
-Encode text to token IDs.
+Encode text to token objects (ID, text, special flag, character offsets).
 
 ### Request
 
@@ -226,10 +232,13 @@ curl -X POST http://localhost:40114/olla/tei/tokenize \
 ### Response
 
 ```json
-{
-  "tokens": [[15496, 99, 1625, 299]],
-  "attention_mask": [[1, 1, 1, 1]]
-}
+[
+  [
+    {"id": 101, "text": "[CLS]", "special": true, "start": null, "stop": null},
+    {"id": 7592, "text": "hello", "special": false, "start": 0, "stop": 5},
+    {"id": 102, "text": "[SEP]", "special": true, "start": null, "stop": null}
+  ]
+]
 ```
 
 ---
@@ -251,14 +260,14 @@ curl -X POST http://localhost:40114/olla/tei/decode \
 ### Response
 
 ```json
-["hello , world !"]
+["hello, world!"]
 ```
 
 ---
 
 ## POST /olla/tei/predict
 
-Sequence classification predictions. Returns labels and scores per input.
+Sequence classification predictions. Returns score/label objects per input, sorted by score.
 
 ### Request
 
@@ -274,7 +283,8 @@ curl -X POST http://localhost:40114/olla/tei/predict \
 
 ```json
 [
-  {"labels": ["positive", "negative"], "scores": [0.97, 0.03]}
+  {"score": 0.97, "label": "positive"},
+  {"score": 0.03, "label": "negative"}
 ]
 ```
 
@@ -290,7 +300,6 @@ Cross-encoder rerank scores for a query against a set of texts.
 curl -X POST http://localhost:40114/olla/tei/rerank \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
     "query": "What is machine learning?",
     "texts": [
       "Machine learning is a subset of artificial intelligence",
@@ -303,8 +312,8 @@ curl -X POST http://localhost:40114/olla/tei/rerank \
 
 ```json
 [
-  {"index": 0, "relevance_score": 0.91},
-  {"index": 1, "relevance_score": 0.04}
+  {"index": 0, "score": 0.91},
+  {"index": 1, "score": 0.04}
 ]
 ```
 
