@@ -12,9 +12,9 @@ import (
 // Text Embeddings Inference. Unlike OpenAI-style listing endpoints it describes
 // the single model the instance serves rather than a list of models.
 type TEIInfoResponse struct {
+	ModelType       map[string]any `json:"model_type,omitempty"`
 	ModelID         string         `json:"model_id"`
 	ServedModelName string         `json:"served_model_name"`
-	ModelType       map[string]any `json:"model_type,omitempty"`
 }
 
 // teiModelTypes are the keys TEI uses in model_type's externally tagged
