@@ -62,6 +62,72 @@ func TestTextEmbeddingsInferenceParser_Parse(t *testing.T) {
 		assert.Equal(t, "/data/nomic-embed-text-v1.5", models[0].Name)
 	})
 
+	t.Run("records embedding model_type in details", func(t *testing.T) {
+		t.Parallel()
+
+		models, err := parser.Parse([]byte(`{"model_id": "/data/embed", "model_type": {"embedding": {"pooling": "cls"}}}`))
+		require.NoError(t, err)
+		require.Len(t, models, 1)
+		require.NotNil(t, models[0].Details)
+		require.NotNil(t, models[0].Details.Type)
+		assert.Equal(t, "embedding", *models[0].Details.Type)
+		assert.Equal(t, "embeddings", models[0].Type, "Details.Type must not change the embeddings capability type")
+	})
+
+	t.Run("records reranker model_type in details", func(t *testing.T) {
+		t.Parallel()
+
+		models, err := parser.Parse([]byte(`{"model_id": "/data/rerank", "model_type": {"reranker": {}}}`))
+		require.NoError(t, err)
+		require.Len(t, models, 1)
+		require.NotNil(t, models[0].Details)
+		require.NotNil(t, models[0].Details.Type)
+		assert.Equal(t, "reranker", *models[0].Details.Type)
+		assert.Equal(t, "embeddings", models[0].Type, "rerankers must stay embeddings-typed so they never gain text-generation")
+	})
+
+	t.Run("records classifier model_type in details", func(t *testing.T) {
+		t.Parallel()
+
+		models, err := parser.Parse([]byte(`{"model_id": "/data/classify", "model_type": {"classifier": {}}}`))
+		require.NoError(t, err)
+		require.Len(t, models, 1)
+		require.NotNil(t, models[0].Details)
+		require.NotNil(t, models[0].Details.Type)
+		assert.Equal(t, "classifier", *models[0].Details.Type)
+		assert.Equal(t, "embeddings", models[0].Type)
+	})
+
+	t.Run("leaves details unset when model_type is missing", func(t *testing.T) {
+		t.Parallel()
+
+		// Older TEI versions do not serve model_type at all.
+		models, err := parser.Parse([]byte(`{"model_id": "/data/embed"}`))
+		require.NoError(t, err)
+		require.Len(t, models, 1)
+		assert.Nil(t, models[0].Details)
+	})
+
+	t.Run("leaves details unset for unrecognised model_type", func(t *testing.T) {
+		t.Parallel()
+
+		models, err := parser.Parse([]byte(`{"model_id": "/data/other", "model_type": {"image": {}}}`))
+		require.NoError(t, err)
+		require.Len(t, models, 1)
+		assert.Nil(t, models[0].Details)
+	})
+
+	t.Run("leaves details unset for multi-key model_type", func(t *testing.T) {
+		t.Parallel()
+
+		// TEI's model_type is externally tagged and single-key; a multi-key
+		// object is not a shape we can label without guessing.
+		models, err := parser.Parse([]byte(`{"model_id": "/data/odd", "model_type": {"embedding": {}, "reranker": {}}}`))
+		require.NoError(t, err)
+		require.Len(t, models, 1)
+		assert.Nil(t, models[0].Details)
+	})
+
 	t.Run("returns error when neither field is present", func(t *testing.T) {
 		t.Parallel()
 
@@ -158,4 +224,7 @@ func TestShippedTextEmbeddingsInferenceProfile(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, models, 1)
 	assert.Equal(t, "Snowflake/snowflake-arctic-embed-l-v2.0", models[0].Name)
+	require.NotNil(t, models[0].Details)
+	require.NotNil(t, models[0].Details.Type)
+	assert.Equal(t, "embedding", *models[0].Details.Type, "shipped profile must route /info's model_type into model details")
 }

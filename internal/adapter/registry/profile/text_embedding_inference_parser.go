@@ -12,8 +12,18 @@ import (
 // Text Embeddings Inference. Unlike OpenAI-style listing endpoints it describes
 // the single model the instance serves rather than a list of models.
 type TEIInfoResponse struct {
-	ModelID         string `json:"model_id"`
-	ServedModelName string `json:"served_model_name"`
+	ModelID         string         `json:"model_id"`
+	ServedModelName string         `json:"served_model_name"`
+	ModelType       map[string]any `json:"model_type,omitempty"`
+}
+
+// teiModelTypes are the keys TEI uses in model_type's externally tagged
+// object ({"embedding":{...}}, {"reranker":{...}}, {"classifier":{...}}).
+// Anything else means a TEI version serving a kind we do not know about.
+var teiModelTypes = map[string]struct{}{
+	"embedding":  {},
+	"reranker":   {},
+	"classifier": {},
 }
 
 type textEmbeddingInferenceParser struct{}
@@ -41,11 +51,33 @@ func (p *textEmbeddingInferenceParser) Parse(data []byte) ([]*domain.ModelInfo, 
 
 	// "embeddings" rather than the provider type: capability inference keys off
 	// this field to tag the model as an embedding model and drop text-generation.
-	return []*domain.ModelInfo{
-		{
-			Name:     name,
-			Type:     "embeddings",
-			LastSeen: time.Now(),
-		},
-	}, nil
+	// Olla has no rerank/classify capability yet, so this stays "embeddings" for
+	// every TEI model; the real kind travels in Details.Type (surfaced as the
+	// model_type metadata key) so the limitation is at least observable.
+	modelInfo := &domain.ModelInfo{
+		Name:     name,
+		Type:     "embeddings",
+		LastSeen: time.Now(),
+	}
+
+	if kind, ok := teiModelKind(response.ModelType); ok {
+		modelInfo.Details = &domain.ModelDetails{Type: &kind}
+	}
+
+	return []*domain.ModelInfo{modelInfo}, nil
+}
+
+// teiModelKind extracts the tag key from model_type's single-key object.
+// An absent, empty or multi-key object yields no kind: guessing among
+// several tags would mislabel the model.
+func teiModelKind(modelType map[string]any) (string, bool) {
+	if len(modelType) != 1 {
+		return "", false
+	}
+	for key := range modelType {
+		if _, known := teiModelTypes[key]; known {
+			return key, true
+		}
+	}
+	return "", false
 }

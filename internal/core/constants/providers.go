@@ -14,8 +14,9 @@ const (
 	ProviderTypeDockerMR     = "docker-model-runner"
 	ProviderTypeOMLX         = "omlx"
 
-	// Text Embeddings Inference (Hugging Face TEI) serves embeddings only and
-	// discovers its model from /info rather than an OpenAI-style model list.
+	// Text Embeddings Inference (Hugging Face TEI) serves embedding, classifier
+	// and reranker models, one per instance, and discovers its model from /info
+	// rather than an OpenAI-style model list.
 	ProviderTypeTextEmbeddingsInference = "text-embeddings-inference"
 
 	// Provider display names
