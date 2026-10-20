@@ -3,11 +3,75 @@ package inspector
 import (
 	"context"
 	"net/http"
+	"path/filepath"
+	"runtime"
 	"testing"
 
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
+
+// TestPathInspector_Inspect_RealProfiles_EmbedPaths loads the real
+// config/profiles to guard the Ollama vs TEI embedding paths: TEI's /embed is
+// a suffix of Ollama's /api/embed, so the profile files themselves decide
+// which backend an /api/embed request resolves to.
+func TestPathInspector_Inspect_RealProfiles_EmbedPaths(t *testing.T) {
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine test file location")
+	}
+	// Test files live under internal/adapter/inspector, three levels below the repo root
+	profilesDir, err := filepath.Abs(filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "config", "profiles"))
+	if err != nil {
+		t.Fatalf("cannot resolve profiles dir: %v", err)
+	}
+
+	factory, err := profile.NewFactory(profilesDir)
+	if err != nil {
+		t.Fatalf("failed to load real profiles from %s: %v", profilesDir, err)
+	}
+	inspector := NewPathInspector(factory, createTestLogger())
+	ctx := context.Background()
+
+	const teiProfile = "text-embeddings-inference"
+
+	tests := []struct {
+		name    string
+		path    string
+		want    string
+		notWant string
+	}{
+		{
+			name:    "ollama native embed resolves to ollama, not TEI",
+			path:    "/api/embed",
+			want:    domain.ProfileOllama,
+			notWant: teiProfile,
+		},
+		{
+			name:    "TEI native embed resolves to TEI, not ollama",
+			path:    "/embed",
+			want:    teiProfile,
+			notWant: domain.ProfileOllama,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			profile := domain.NewRequestProfile(tt.path)
+			if err := inspector.Inspect(ctx, nil, profile); err != nil {
+				t.Fatalf("PathInspector.Inspect() error = %v", err)
+			}
+
+			if !contains(profile.SupportedBy, tt.want) {
+				t.Errorf("Inspect(%q) supported profiles = %v, want %q", tt.path, profile.SupportedBy, tt.want)
+			}
+			if contains(profile.SupportedBy, tt.notWant) {
+				t.Errorf("Inspect(%q) supported profiles = %v, do not want %q", tt.path, profile.SupportedBy, tt.notWant)
+			}
+		})
+	}
+}
 
 func TestPathInspector_Name(t *testing.T) {
 	inspector := createTestPathInspector(t)
