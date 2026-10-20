@@ -58,16 +58,18 @@ func TestPathInspector_Inspect_RealProfiles_EmbedPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			profile := domain.NewRequestProfile(tt.path)
-			if err := inspector.Inspect(ctx, nil, profile); err != nil {
+			// reqProfile, not "profile": that name would shadow the imported
+			// registry/profile package.
+			reqProfile := domain.NewRequestProfile(tt.path)
+			if err := inspector.Inspect(ctx, nil, reqProfile); err != nil {
 				t.Fatalf("PathInspector.Inspect() error = %v", err)
 			}
 
-			if !contains(profile.SupportedBy, tt.want) {
-				t.Errorf("Inspect(%q) supported profiles = %v, want %q", tt.path, profile.SupportedBy, tt.want)
+			if !contains(reqProfile.SupportedBy, tt.want) {
+				t.Errorf("Inspect(%q) supported profiles = %v, want %q", tt.path, reqProfile.SupportedBy, tt.want)
 			}
-			if contains(profile.SupportedBy, tt.notWant) {
-				t.Errorf("Inspect(%q) supported profiles = %v, do not want %q", tt.path, profile.SupportedBy, tt.notWant)
+			if contains(reqProfile.SupportedBy, tt.notWant) {
+				t.Errorf("Inspect(%q) supported profiles = %v, do not want %q", tt.path, reqProfile.SupportedBy, tt.notWant)
 			}
 		})
 	}
