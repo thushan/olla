@@ -529,10 +529,14 @@ func TestTEITokenizeShape(t *testing.T) {
 	}
 	resp3.Body.Close()
 
-	// Missing inputs stays a 400.
+	// Missing inputs is a 422 Validation error, as upstream TEI reports it.
 	resp4 := postJSON(t, ts.URL+"/tokenize", `{}`)
-	resp4.Body.Close()
-	if resp4.StatusCode != http.StatusBadRequest {
-		t.Errorf("missing inputs want 400, got %d", resp4.StatusCode)
+	var errBody map[string]string
+	decodeJSON(t, resp4, &errBody)
+	if resp4.StatusCode != http.StatusUnprocessableEntity {
+		t.Errorf("missing inputs want 422, got %d", resp4.StatusCode)
+	}
+	if errBody["error_type"] != "Validation" {
+		t.Errorf("want error_type Validation, got %q", errBody["error_type"])
 	}
 }

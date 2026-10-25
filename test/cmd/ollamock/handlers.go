@@ -522,10 +522,13 @@ func teiInputCount(r *http.Request) (int, error) {
 }
 
 // teiWriteError mirrors TEI's native error shape ({"error", "error_type"}) for
-// malformed or missing inputs, which TEI reports as a 400 with error_type
-// "validation".
+// malformed or missing inputs. Upstream maps ErrorType::Validation to 422 and
+// serialises the variant name as "Validation" (router/src/http/server.rs,
+// router/src/lib.rs). It also returns 400 "Empty" for blank inputs and a
+// plain-text 422 for axum JSON rejections; the mock approximates all of those
+// with the one Validation shape.
 func teiWriteError(w http.ResponseWriter, message string) {
-	writeJSON(w, http.StatusBadRequest, map[string]any{"error": message, "error_type": "validation"})
+	writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": message, "error_type": "Validation"})
 }
 
 // teiVector returns the deterministic 8-dim vector used across the native
