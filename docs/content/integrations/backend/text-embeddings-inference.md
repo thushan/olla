@@ -229,7 +229,7 @@ Unlike LLM backends, TEI has no `/v1/models` listing. Olla's dedicated parser re
 
 Olla has no rerank or classify capability yet, so every TEI model is tagged `embeddings` whatever its real type. That keeps chat and generation traffic away from TEI endpoints, but it does not route `/rerank` or `/predict` to a model of the matching kind: those requests carry no `model` field, so point the endpoint at the instance serving the model you want. TEI answers `424` when a request does not match the served model type, for example `/v1/embeddings` against a reranker instance.
 
-The model's real kind (parsed from `/info`'s `model_type`) is recorded in the model's details and surfaces as the `model_type` metadata key.
+Olla records the model's real kind (parsed from `/info`'s `model_type`) internally, so rerank and classify routing can use it later. It is not yet returned by any Olla API; to see the kind, query the TEI instance's `/info` directly.
 
 ## Starting a TEI Server
 
