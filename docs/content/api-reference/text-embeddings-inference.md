@@ -49,7 +49,7 @@ curl -X GET http://localhost:40114/olla/tei/info
 ```
 
 !!! note "Abbreviated example"
-    Real `/info` responses also include `version`, `max_batch_tokens`, `max_client_batch_size`, `auto_truncate` and `tokenization_workers`; they are elided here for brevity.
+    Real `/info` responses also include `version`, `max_concurrent_requests`, `max_batch_tokens`, `max_client_batch_size`, `auto_truncate` and `tokenization_workers`, plus the nullable `model_sha`, `max_batch_requests`, `sha` and `docker_label`; they are elided here for brevity.
 
 ---
 
