@@ -718,20 +718,82 @@ func (srv *mockServer) handleTEIDecode(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, []string{"decoded-0"})
 }
 
-func (srv *mockServer) handleTEIPredict(w http.ResponseWriter, r *http.Request) {
-	count, err := teiInputCount(r)
-	if err != nil {
-		teiWriteError(w, "inputs is required")
-		return
+// teiPredictInputs follows TEI's hand-written PredictInput deserialiser
+// (router/src/http/types.rs). A string, ["a"] or ["a","b"] is ONE sequence (the
+// last being a sentence pair); only an array whose first element is itself an
+// array is a batch, with each element a 1 or 2 string sequence. It returns the
+// sequence count and whether the request was a batch.
+func teiPredictInputs(r *http.Request) (count int, batch bool, err error) {
+	var req struct {
+		Inputs json.RawMessage `json:"inputs"`
 	}
-	predictions := make([]map[string]any, count)
-	for i := range predictions {
-		predictions[i] = map[string]any{
-			"label": "mock-label",
-			"score": 0.5 + float64(i)*0.1,
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return 0, false, err
+	}
+	if len(req.Inputs) == 0 {
+		return 0, false, errors.New("missing inputs")
+	}
+	var in any
+	if err := json.Unmarshal(req.Inputs, &in); err != nil {
+		return 0, false, err
+	}
+	if _, ok := in.(string); ok {
+		return 1, false, nil
+	}
+	items, ok := in.([]any)
+	if !ok || len(items) == 0 {
+		return 0, false, errors.New("inputs must be a string, a string pair or a batch")
+	}
+	if _, nested := items[0].([]any); !nested {
+		if len(items) > 2 {
+			return 0, false, errors.New("a sequence is one string or a pair")
+		}
+		for _, it := range items {
+			if _, isStr := it.(string); !isStr {
+				return 0, false, errors.New("sequence elements must be strings")
+			}
+		}
+		return 1, false, nil
+	}
+	for _, it := range items {
+		seq, isArr := it.([]any)
+		if !isArr || len(seq) < 1 || len(seq) > 2 {
+			return 0, false, errors.New("batch elements must be 1 or 2 strings")
+		}
+		for _, e := range seq {
+			if _, isStr := e.(string); !isStr {
+				return 0, false, errors.New("sequence elements must be strings")
+			}
 		}
 	}
-	writeJSON(w, http.StatusOK, predictions)
+	return len(items), true, nil
+}
+
+// handleTEIPredict answers with a flat [{score,label}] for a single sequence
+// and one such array per sequence for a batch, each sorted by score descending
+// as upstream does. Scores vary by position so batches are distinguishable.
+func (srv *mockServer) handleTEIPredict(w http.ResponseWriter, r *http.Request) {
+	count, batch, err := teiPredictInputs(r)
+	if err != nil {
+		teiWriteError(w, "invalid inputs: "+err.Error())
+		return
+	}
+	one := func(i int) []map[string]any {
+		pos := 0.6 + 0.05*float64(i%8)
+		return []map[string]any{
+			{"score": pos, "label": "positive"},
+			{"score": 1 - pos, "label": "negative"},
+		}
+	}
+	if !batch {
+		writeJSON(w, http.StatusOK, one(0))
+		return
+	}
+	out := make([][]map[string]any, count)
+	for i := range out {
+		out[i] = one(i)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (srv *mockServer) handleTEIRerank(w http.ResponseWriter, r *http.Request) {

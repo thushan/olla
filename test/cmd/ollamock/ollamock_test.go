@@ -540,3 +540,72 @@ func TestTEITokenizeShape(t *testing.T) {
 		t.Errorf("want error_type Validation, got %q", errBody["error_type"])
 	}
 }
+
+// TestTEIPredictShapes pins TEI's PredictInput semantics: a string, ["a"] and
+// the pair ["a","b"] are one sequence (flat response); only an array of arrays
+// is a batch (one prediction array per sequence).
+func TestTEIPredictShapes(t *testing.T) {
+	t.Parallel()
+	ts := testServer(t)
+
+	sorted := func(p []struct {
+		Score float64 `json:"score"`
+		Label string  `json:"label"`
+	}) bool {
+		for i := 1; i < len(p); i++ {
+			if p[i].Score > p[i-1].Score {
+				return false
+			}
+		}
+		return len(p) > 0
+	}
+
+	flat := []string{`"a"`, `["a"]`, `["a","b"]`}
+	for _, in := range flat {
+		resp := postJSON(t, ts.URL+"/predict", `{"inputs":`+in+`}`)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: want 200, got %d", in, resp.StatusCode)
+		}
+		var got []struct {
+			Score float64 `json:"score"`
+			Label string  `json:"label"`
+		}
+		decodeJSON(t, resp, &got)
+		if !sorted(got) {
+			t.Errorf("%s: want flat score-desc array, got %+v", in, got)
+		}
+	}
+
+	batches := map[string]int{
+		`[["a"],["b"]]`:           2,
+		`[["a","b"],["c","d"]]`:   2,
+		`[["a"],["b","c"],["d"]]`: 3,
+	}
+	for in, want := range batches {
+		resp := postJSON(t, ts.URL+"/predict", `{"inputs":`+in+`}`)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s: want 200, got %d", in, resp.StatusCode)
+		}
+		var got [][]struct {
+			Score float64 `json:"score"`
+			Label string  `json:"label"`
+		}
+		decodeJSON(t, resp, &got)
+		if len(got) != want {
+			t.Fatalf("%s: want %d prediction arrays, got %d", in, want, len(got))
+		}
+		for _, p := range got {
+			if !sorted(p) {
+				t.Errorf("%s: predictions not score-desc: %+v", in, p)
+			}
+		}
+	}
+
+	for _, in := range []string{`[]`, `["a","b","c"]`, `["a",["b"]]`, `[["a","b","c"]]`, `[["a"],"b"]`, `5`} {
+		resp := postJSON(t, ts.URL+"/predict", `{"inputs":`+in+`}`)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnprocessableEntity {
+			t.Errorf("%s: want 422, got %d", in, resp.StatusCode)
+		}
+	}
+}
