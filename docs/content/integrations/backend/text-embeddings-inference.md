@@ -163,7 +163,7 @@ The following endpoints are forwarded verbatim to the TEI backend by the provide
   </tr>
 </table>
 
-Olla additionally serves an OpenAI-format model listing at `/v1/models`, built from the model discovered via `/info`.
+Olla additionally serves an OpenAI-format model listing at `/v1/models`. It lists the models discovered via `/info` on every healthy TEI endpoint, not just one instance.
 
 ## Usage Examples
 

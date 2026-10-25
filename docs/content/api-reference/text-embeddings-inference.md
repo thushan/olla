@@ -1,6 +1,6 @@
 # Text Embeddings Inference API
 
-Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers. Available through the `/olla/tei/` prefix (or the longer `/olla/text-embeddings-inference/`). All native endpoints are forwarded verbatim to the backend; Olla additionally serves an OpenAI-format model listing at `/v1/models`.
+Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers. Available through the `/olla/tei/` prefix (or the longer `/olla/text-embeddings-inference/`). All native endpoints are forwarded verbatim to the backend; Olla additionally serves a fleet-wide OpenAI-format model listing at `/v1/models`.
 
 ## Endpoints Overview
 
@@ -9,7 +9,7 @@ Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers. Availa
 | GET | `/olla/tei/info` | Server info, carries the served model ID |
 | GET | `/olla/tei/health` | Health check |
 | GET | `/olla/tei/metrics` | Prometheus metrics |
-| GET | `/olla/tei/v1/models` | List models (OpenAI format, served by Olla) |
+| GET | `/olla/tei/v1/models` | List models across all TEI endpoints (OpenAI format, served by Olla) |
 | POST | `/olla/tei/v1/embeddings` | Embeddings (OpenAI format) |
 | POST | `/olla/tei/embed` | Native embeddings (primary) |
 | POST | `/olla/tei/embed_all` | Per-token embeddings without pooling |
@@ -79,7 +79,7 @@ curl -X GET http://localhost:40114/olla/tei/metrics
 
 ## GET /olla/tei/v1/models
 
-List models available on the TEI instance, in OpenAI format. Served by Olla from the model discovered via `/info` (TEI itself has no `/v1/models`).
+List the models served by all healthy TEI endpoints, in OpenAI format. Served by Olla from the models discovered via `/info` on each instance (TEI itself has no `/v1/models`), so a fleet with two TEI instances returns two entries. The listing is not scoped to one instance, `owned_by` is always `olla`, and `created` is the time of the request.
 
 ### Request
 
@@ -97,7 +97,13 @@ curl -X GET http://localhost:40114/olla/tei/v1/models
       "id": "Snowflake/snowflake-arctic-embed-l-v2.0",
       "object": "model",
       "created": 1705334400,
-      "owned_by": "text-embeddings-inference"
+      "owned_by": "olla"
+    },
+    {
+      "id": "BAAI/bge-small-en-v1.5",
+      "object": "model",
+      "created": 1705334400,
+      "owned_by": "olla"
     }
   ]
 }
