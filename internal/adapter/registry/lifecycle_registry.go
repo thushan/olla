@@ -7,7 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/thushan/olla/internal/adapter/unifier"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
@@ -27,13 +26,10 @@ func NewLifecycleUnifiedRegistry(logger logger.StyledLogger, config unifier.Conf
 	unifierFactory := unifier.NewFactory(logger)
 	modelUnifier, _ := unifierFactory.CreateWithConfig(unifier.LifecycleUnifierType, config)
 
-	base := &UnifiedMemoryModelRegistry{
-		MemoryModelRegistry: NewMemoryModelRegistry(logger),
-		unifier:             modelUnifier,
-		unifiedModels:       xsync.NewMap[string, *domain.UnifiedModel](),
-		globalUnified:       xsync.NewMap[string, *domain.UnifiedModel](),
-		endpoints:           xsync.NewMap[string, *domain.Endpoint](),
-	}
+	// Build through the plain constructor so every field (routing strategy,
+	// endpoint sets) is initialised in one place, then swap in the lifecycle unifier.
+	base := NewUnifiedMemoryModelRegistry(logger, nil, nil, nil)
+	base.unifier = modelUnifier
 
 	return &LifecycleUnifiedRegistry{
 		UnifiedMemoryModelRegistry: base,
@@ -98,17 +94,6 @@ func (r *LifecycleUnifiedRegistry) RegisterModelsWithEndpoint(ctx context.Contex
 	}
 
 	return nil
-}
-
-func (r *LifecycleUnifiedRegistry) RemoveEndpoint(ctx context.Context, endpointURL string) error {
-	// Unifier needs to clean up state before registry removes models
-	if lifecycleUnifier, ok := r.unifier.(*unifier.LifecycleUnifier); ok {
-		if err := lifecycleUnifier.RemoveEndpoint(ctx, endpointURL); err != nil {
-			r.logger.Warn("Error removing endpoint from unifier", "url", endpointURL, "error", err)
-		}
-	}
-
-	return r.UnifiedMemoryModelRegistry.RemoveEndpoint(ctx, endpointURL)
 }
 
 func (r *LifecycleUnifiedRegistry) GetEndpointHealth(ctx context.Context) (map[string]*domain.EndpointStateInfo, error) {
