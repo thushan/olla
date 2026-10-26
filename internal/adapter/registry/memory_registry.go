@@ -230,6 +230,30 @@ func (r *MemoryModelRegistry) GetEndpointsForModel(ctx context.Context, modelNam
 	return endpoints, nil
 }
 
+// exactEndpoints is the exact-name lookup alone, without the default-tag fallback, so
+// the unified registry can run every exact match (base and catalogue) before falling back.
+func (r *MemoryModelRegistry) exactEndpoints(modelName string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	endpointSet, ok := r.modelToEndpoints.Load(modelName)
+	if !ok {
+		return nil
+	}
+	var endpoints []string
+	endpointSet.Range(func(endpoint string, _ struct{}) bool {
+		endpoints = append(endpoints, endpoint)
+		return true
+	})
+	return endpoints
+}
+
+func (r *MemoryModelRegistry) defaultTagEndpoints(modelName string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.ollamaDefaultTagEndpoints(modelName)
+}
+
 // RegisterModelsWithEndpoint registers models and remembers the endpoint's type,
 // which the base registry otherwise never sees, so the Ollama default-tag rule can
 // be scoped to Ollama-sourced models.

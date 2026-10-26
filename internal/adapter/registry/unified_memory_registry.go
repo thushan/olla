@@ -265,45 +265,82 @@ func (r *UnifiedMemoryModelRegistry) IsModelAvailable(ctx context.Context, model
 	return err == nil
 }
 
-// GetEndpointsForModel overrides to support unified model lookup
+// GetEndpointsForModel overrides to support unified model lookup. Every exact match
+// (the base index, then the catalogue's case-insensitive one) is tried before the
+// Ollama default-tag fallback, so a bare name never shadows a model that really has it.
 func (r *UnifiedMemoryModelRegistry) GetEndpointsForModel(ctx context.Context, modelName string) ([]string, error) {
-	// Try original lookup first
-	endpoints, err := r.MemoryModelRegistry.GetEndpointsForModel(ctx, modelName)
-	if err == nil && len(endpoints) > 0 {
+	if modelName == "" {
+		return r.MemoryModelRegistry.GetEndpointsForModel(ctx, modelName)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	if endpoints := r.MemoryModelRegistry.exactEndpoints(modelName); len(endpoints) > 0 {
 		return endpoints, nil
 	}
 
-	// Try unified model lookup
 	unified, _ := r.GetUnifiedModel(ctx, modelName)
+	if unified != nil && namesModel(unified, modelName) {
+		return sourceURLs(unified, nil), nil
+	}
+
+	// Only now may a name without a tag mean "<name>:latest". The fallback is one-way
+	// on purpose: Ollama always lists models tagged, so a native bare "foo" never comes
+	// from Ollama and "foo:latest" needs no toggle to it.
+	if tagged, bare := domain.OllamaDefaultTagName(modelName); bare {
+		if endpoints := r.MemoryModelRegistry.defaultTagEndpoints(modelName); len(endpoints) > 0 {
+			return endpoints, nil
+		}
+		if unified != nil {
+			// The merged model can also be served elsewhere (the catalogue merges names
+			// case-insensitively), and those hosts do not know the bare name.
+			return sourceURLs(unified, ollamaSource(tagged)), nil
+		}
+	}
 	if unified == nil {
-		// Model not found in unified registry, return empty array
 		return []string{}, nil
 	}
+	return sourceURLs(unified, nil), nil
+}
 
-	// A bare name that only matched through the Ollama default tag may use the
-	// Ollama sources alone: the merged model can also be served elsewhere (the
-	// catalogue merges names case-insensitively), and those hosts do not know "name".
-	// The fallback is one-way on purpose: Ollama always lists models tagged, so a
-	// native bare "foo" never comes from Ollama and "foo:latest" needs no toggle to it.
-	tagged, bare := domain.OllamaDefaultTagName(modelName)
-	if bare && !namesModel(unified, modelName) {
-		var ollamaURLs []string
+// CanonicalModelName follows the same exact-first resolution as routing and takes the
+// native name from the Ollama source that matched, so stats and sticky keys agree
+// whatever case or tag the client (or an alias target) used.
+func (r *UnifiedMemoryModelRegistry) CanonicalModelName(name string) string {
+	tagged, bare := domain.OllamaDefaultTagName(name)
+	if !bare || len(r.MemoryModelRegistry.exactEndpoints(name)) > 0 {
+		return name
+	}
+	unified, _ := r.GetUnifiedModel(context.Background(), name)
+	if unified != nil {
+		if namesModel(unified, name) {
+			return name
+		}
+		match := ollamaSource(tagged)
 		for i := range unified.SourceEndpoints {
-			src := &unified.SourceEndpoints[i]
-			if src.Platform == domain.ProfileOllama && strings.EqualFold(src.NativeName, tagged) {
-				ollamaURLs = append(ollamaURLs, src.EndpointURL)
+			if match(&unified.SourceEndpoints[i]) {
+				return unified.SourceEndpoints[i].NativeName
 			}
 		}
-		return ollamaURLs, nil
 	}
+	return r.MemoryModelRegistry.CanonicalModelName(name)
+}
 
-	// Extract endpoints from unified model
-	var endpointURLs []string
-	for _, endpoint := range unified.SourceEndpoints {
-		endpointURLs = append(endpointURLs, endpoint.EndpointURL)
+func ollamaSource(tagged string) func(*domain.SourceEndpoint) bool {
+	return func(src *domain.SourceEndpoint) bool {
+		return src.Platform == domain.ProfileOllama && strings.EqualFold(src.NativeName, tagged)
 	}
+}
 
-	return endpointURLs, nil
+func sourceURLs(m *domain.UnifiedModel, keep func(*domain.SourceEndpoint) bool) []string {
+	var urls []string
+	for i := range m.SourceEndpoints {
+		if keep == nil || keep(&m.SourceEndpoints[i]) {
+			urls = append(urls, m.SourceEndpoints[i].EndpointURL)
+		}
+	}
+	return urls
 }
 
 // namesModel reports whether name is the model's ID or one of its aliases, ignoring case.

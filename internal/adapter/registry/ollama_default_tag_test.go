@@ -149,6 +149,38 @@ func TestUnifiedRegistry_OllamaDefaultTag_MixedCaseKeepsToOllama(t *testing.T) {
 
 }
 
+// The inspector lowercases names, so "Qwen/Foo" reaches the registry as written or
+// lowered. vLLM's existing case-insensitive catalogue match must beat the Ollama
+// default-tag fallback.
+func TestUnifiedRegistry_OllamaDefaultTag_ExactCatalogueMatchBeatsFallback(t *testing.T) {
+	t.Parallel()
+
+	reg := buildUnified(t,
+		tagFixture{url: vllmURL, name: "vllm-1", typ: domain.ProfileVLLM, models: []string{"Qwen/Foo"}},
+		tagFixture{url: ollamaURL, name: "ollama-1", typ: domain.ProfileOllama, models: []string{"qwen/foo:latest"}},
+	)
+	ctx := context.Background()
+
+	for _, name := range []string{"Qwen/Foo", "qwen/foo"} {
+		got, err := reg.GetEndpointsForModel(ctx, name)
+		require.NoError(t, err)
+		assert.Equal(t, []string{vllmURL}, got, name)
+		assert.Equal(t, name, reg.CanonicalModelName(name), "an exact match keeps its spelling")
+	}
+}
+
+// An alias target in a different case still canonicalises to the Ollama native name.
+func TestUnifiedRegistry_OllamaDefaultTag_MixedCaseCanonicalName(t *testing.T) {
+	t.Parallel()
+
+	reg := buildUnified(t,
+		tagFixture{url: ollamaURL, name: "ollama-1", typ: domain.ProfileOllama, models: []string{"all-minilm:latest"}},
+	)
+
+	assert.Equal(t, "all-minilm:latest", reg.CanonicalModelName("ALL-MINILM"))
+	assert.Equal(t, "all-minilm:latest", reg.CanonicalModelName("all-minilm"))
+}
+
 func TestUnifiedRegistry_OllamaDefaultTag_CanonicalName(t *testing.T) {
 	t.Parallel()
 
