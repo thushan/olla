@@ -35,6 +35,15 @@ func TestOllamaParser_CapabilitiesTyping(t *testing.T) {
 			body: `{"models":[{"name":"hybrid:latest","details":{"family":"x"},"capabilities":["embedding","completion"]}]}`,
 		},
 		{
+			name:     "embedding plus unknown value is still embedding only",
+			body:     `{"models":[{"name":"rerank:latest","capabilities":["embedding","rerank"]}]}`,
+			wantType: "embeddings",
+		},
+		{
+			name: "only unknown values stays untyped",
+			body: `{"models":[{"name":"foo:latest","capabilities":["foo"]}]}`,
+		},
+		{
 			name: "empty capabilities stays untyped",
 			body: `{"models":[{"name":"x:latest","details":{"family":"x"},"capabilities":[]}]}`,
 		},
