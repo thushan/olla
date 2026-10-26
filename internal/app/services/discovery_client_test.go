@@ -51,7 +51,7 @@ func ollamaEndpoint(t *testing.T, rawURL string) *domain.Endpoint {
 	}
 }
 
-// Not parallel: it sets HTTP_PROXY for the process.
+// Not parallel: it sets HTTP_PROXY for the process (Go reads it once, so the control uses an explicit proxy).
 func TestDiscoveryClient_IgnoresEnvironmentProxy(t *testing.T) {
 	var proxied atomic.Int32
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -88,15 +88,25 @@ func TestDiscoveryClient_IgnoresEnvironmentProxy(t *testing.T) {
 		_, _ = dc.DiscoverModels(context.Background(), ollamaEndpoint(t, endpointURL))
 	}
 
-	// control: a stock client does hand the credentials to the environment proxy,
-	// which proves this test can see the bug it guards against
-	stock := &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone(), Timeout: 5 * time.Second}
+	// control: a client configured with a proxy hands the credentials to it, which
+	// proves this test can see the leak it guards against. The proxy is explicit
+	// because ProxyFromEnvironment reads the environment once per process, so
+	// under -count>1 or after another test it would ignore the HTTP_PROXY set here.
+	proxyURL, err := url.Parse(proxy.URL)
+	require.NoError(t, err)
+	stockTransport := http.DefaultTransport.(*http.Transport).Clone()
+	stockTransport.Proxy = http.ProxyURL(proxyURL)
+	stock := &http.Client{Transport: stockTransport, Timeout: 5 * time.Second}
 	run(stock)
 	require.Positive(t, proxied.Load(), "control: default transport should have used the environment proxy")
 	proxied.Store(0)
 	direct.Store(0)
 
-	run(newDiscoveryHTTPClient(5 * time.Second))
+	guarded := newDiscoveryHTTPClient(5 * time.Second)
+	// the environment is cached per process, so the behavioural check below can
+	// pass for the wrong reason; the structural one cannot
+	assert.Nil(t, guarded.Transport.(*http.Transport).Proxy, "discovery transport must not consult proxy settings")
+	run(guarded)
 	assert.Zero(t, proxied.Load(), "discovery must not send credentialled requests through HTTP_PROXY")
 	assert.EqualValues(t, 1, direct.Load(), "discovery reaches the backend directly")
 	assert.Equal(t, "sk-SECRET-123", gotKey.Load())
