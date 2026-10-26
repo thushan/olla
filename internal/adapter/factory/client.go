@@ -90,10 +90,39 @@ func RefuseCrossOriginRedirect(req *http.Request, via []*http.Request) error {
 	return http.ErrUseLastResponse
 }
 
-// sameHostAndPort compares hostnames case-insensitively and ports after dropping
+// sameHostAndPort compares hostnames with ASCII case folding and ports after dropping
 // the scheme's default, so an explicit :80 or :443 matches the bare form.
 func sameHostAndPort(a, b *url.URL) bool {
-	return strings.EqualFold(a.Hostname(), b.Hostname()) && explicitPort(a) == explicitPort(b)
+	return sameHostname(a.Hostname(), b.Hostname()) && explicitPort(a) == explicitPort(b)
+}
+
+// sameHostname folds ASCII case only. strings.EqualFold applies Unicode folding,
+// which equates names the transport resolves as different hosts (the IDNA names
+// of "σ.example" and "ς.example" are distinct), so a redirect between them would
+// pass and replay credentials. An IPv6 zone is case-sensitive and compared as is.
+func sameHostname(a, b string) bool {
+	a, zoneA, _ := strings.Cut(a, "%")
+	b, zoneB, _ := strings.Cut(b, "%")
+	return zoneA == zoneB && asciiEqualFold(a, b)
+}
+
+func asciiEqualFold(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range len(a) {
+		x, y := a[i], b[i]
+		if 'A' <= x && x <= 'Z' {
+			x += 'a' - 'A'
+		}
+		if 'A' <= y && y <= 'Z' {
+			y += 'a' - 'A'
+		}
+		if x != y {
+			return false
+		}
+	}
+	return true
 }
 
 // explicitPort is the port when it is not the default for the URL's scheme, else "".
