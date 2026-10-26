@@ -154,6 +154,40 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
+			// Shape produced by the Ollama parser: no top-level Type, only Details.Type.
+			name: "Ollama embedding-only model typed from capabilities",
+			models: []*domain.ModelInfo{
+				{
+					Name: "all-minilm:latest",
+					Details: &domain.ModelDetails{
+						Type:   ptrString("embeddings"),
+						Family: ptrString("bert"),
+					},
+				},
+			},
+			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "embeddings")
+				assert.Contains(t, model.Capabilities, "similarity")
+				assert.Contains(t, model.Capabilities, "vector-search")
+				assert.NotContains(t, model.Capabilities, "text-generation")
+			},
+		},
+		{
+			name: "Ollama completion model keeps text-generation without embeddings",
+			models: []*domain.ModelInfo{
+				{
+					Name:    "qwen3-vl:8b",
+					Details: &domain.ModelDetails{Family: ptrString("qwen3vl")},
+				},
+			},
+			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "text-generation")
+				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
 			name: "Ultra long context model",
 			models: []*domain.ModelInfo{
 				{
