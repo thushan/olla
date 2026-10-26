@@ -64,6 +64,11 @@ captured by TEI's `/embed`. Ollama embedding-only models are typed `embeddings` 
 `capabilities` that `/api/tags` reports (newer Ollama releases; older ones report none and stay
 untyped), so `/v1/embeddings` still reaches them when a TEI instance is in the fleet.
 
+Because `/api/embed` is now a recognised Ollama path, `/olla/ollama/api/embed` checks the requested
+model like Ollama's other routes. Name the model as Ollama lists it, tag included: a model pulled
+without a tag lists as `all-minilm:latest`, and a bare `all-minilm` now gets a 404 `model_not_found`
+here, as it already did on `/api/chat`. Resolving bare names to `:latest` is a separate fix.
+
 ### Fixed: LM Studio model types and capabilities
 
 LM Studio models carry `"object": "model"` beside their real `type` (`llm`, `vlm`,
