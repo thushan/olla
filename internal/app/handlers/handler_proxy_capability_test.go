@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/logger"
 )
 
 func TestFilterEndpointsByCapabilities(t *testing.T) {
@@ -477,20 +479,46 @@ func TestExtractRequiredCapabilities(t *testing.T) {
 	}
 }
 
-// warnRecorder counts Warn calls by message; every other level is a no-op.
+// warnRecorder counts Warn calls by message; every other level is a no-op. It returns itself
+// from WithRequestID so request-scoped loggers record into the same counts.
 type warnRecorder struct {
 	mockStyledLogger
+	mu    sync.Mutex
 	warns map[string]int
 }
 
-func (w *warnRecorder) Warn(msg string, _ ...any) { w.warns[msg]++ }
+func newWarnRecorder() *warnRecorder { return &warnRecorder{warns: map[string]int{}} }
+
+func (w *warnRecorder) Warn(msg string, _ ...any) {
+	w.mu.Lock()
+	w.warns[msg]++
+	w.mu.Unlock()
+}
+
+func (w *warnRecorder) WithRequestID(string) logger.StyledLogger { return w }
+
+func (w *warnRecorder) snapshot() map[string]int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := make(map[string]int, len(w.warns))
+	for k, v := range w.warns {
+		out[k] = v
+	}
+	return out
+}
+
+func (w *warnRecorder) reset() {
+	w.mu.Lock()
+	w.warns = map[string]int{}
+	w.mu.Unlock()
+}
 
 // A refusal is logged once by the "Request rejected" line, so the filter itself must not
 // write a Warn per request while a client keeps retrying against a downed backend.
 func TestFilterEndpointsByCapabilities_RefusalWritesNoWarn(t *testing.T) {
 	t.Parallel()
 
-	rec := &warnRecorder{warns: map[string]int{}}
+	rec := newWarnRecorder()
 	capableURL := "http://embedder:8080"
 	otherURL := "http://reranker:8080"
 	mk := func(name, rawURL string) *domain.Endpoint {

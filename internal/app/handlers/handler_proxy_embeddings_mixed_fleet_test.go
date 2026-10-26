@@ -164,7 +164,7 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 // runMixedFleet registers fleet in a real unified registry through the shipped profile
 // parsers, sends one request through the proxy handler and returns the response and the
 // endpoints the proxy engine was handed. Offline hosts keep their discovered models.
-func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *inspector.Chain, styledLog *mockStyledLogger,
+func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *inspector.Chain, styledLog logger.StyledLogger,
 	strategyCfg config.ModelRoutingStrategy, fleet []fleetEndpoint, path, body string) (*httptest.ResponseRecorder, []*domain.Endpoint) {
 	t.Helper()
 
@@ -366,5 +366,36 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 				assert.ElementsMatch(t, tt.wantOffered, got)
 			})
 		}
+	}
+}
+
+// A refusal reaches the client through the final "Request rejected" line alone. The
+// "using unfiltered" fallback warning describes a decision Olla did not make here, and
+// repeating any other Warn per request floods the log while a backend stays down.
+func TestProxyRouting_CapabilityRefusalWritesOnlyTheRejectionWarn(t *testing.T) {
+	t.Parallel()
+
+	profileFactory, chain, _ := mixedFleetDeps(t)
+	rec := newWarnRecorder()
+	tei := func(name, info string, offline bool) fleetEndpoint {
+		return fleetEndpoint{name: name, typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: info, offline: offline}
+	}
+	fleet := []fleetEndpoint{
+		tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false),
+		{name: "ollama-1", typ: domain.ProfileOllama, modelsJSON: ollamaTagsEmbedAndVision},
+	}
+
+	for _, path := range []string{"/olla/proxy/embed", "/olla/tei/embed"} {
+		const refusals = 100
+		for range refusals {
+			w, selected := runMixedFleet(t, profileFactory, chain, rec, config.ModelRoutingStrategy{Type: "strict"}, fleet, path, `{"inputs":"hello"}`)
+			require.Equal(t, http.StatusServiceUnavailable, w.Code, "path %s", path)
+			require.Empty(t, selected)
+		}
+		warns := rec.snapshot()
+		assert.Equal(t, refusals, warns["Request rejected"], "path %s", path)
+		delete(warns, "Request rejected")
+		assert.Empty(t, warns, "path %s: only the final rejection line may warn", path)
+		rec.reset()
 	}
 }

@@ -840,11 +840,12 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 		return endpoints, nil
 	}
 
-	filtered := a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger)
+	// decide the refusal first: the filter below warns about falling back unfiltered, which
+	// is wrong (and one unsampled line per request) when the outcome is a refusal
 	if refusal := a.capabilityRefusalFor(endpoints, capableModels, profile, requiredCapabilities, logger); refusal != nil {
 		return []*domain.Endpoint{}, refusal
 	}
-	return filtered, nil
+	return a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger), nil
 }
 
 // capabilityRefusalFor returns the capability_unavailable decision when none of candidates
