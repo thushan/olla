@@ -22,6 +22,7 @@ type warnCounter struct {
 	*mockStyledLogger
 	mu     sync.Mutex
 	counts map[string]int
+	errors int
 }
 
 func newWarnCounter() *warnCounter {
@@ -40,7 +41,15 @@ func (w *warnCounter) WithRequestID(string) logger.StyledLogger { return w }
 func (w *warnCounter) Error(msg string, _ ...any) {
 	w.mu.Lock()
 	w.counts[msg]++
+	w.errors++
 	w.mu.Unlock()
+}
+
+// errorTotal is every ERROR written, whatever its message.
+func (w *warnCounter) errorTotal() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.errors
 }
 
 func (w *warnCounter) count(msg string) int {

@@ -50,6 +50,12 @@ type ErrorWriter interface {
 	WriteError(w http.ResponseWriter, err error, statusCode int)
 }
 
+// optional interface for translators whose WriteError logs; lets callers that already report
+// a rejection through a sampled log write the same response without a second line per request
+type QuietErrorWriter interface {
+	WriteErrorQuiet(w http.ResponseWriter, err error, statusCode int)
+}
+
 // optional interface for translators that support token counting
 // enables api compatibility with token estimation endpoints
 type TokenCounter interface {

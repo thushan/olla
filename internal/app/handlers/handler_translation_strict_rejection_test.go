@@ -175,6 +175,6 @@ func TestTranslationHandler_StrictRejectionFloodLogsBounded(t *testing.T) {
 	}
 
 	assert.Equal(t, 1, log.count("Request rejected"))
-	assert.Zero(t, log.count("Translation request failed"))
+	assert.Zero(t, log.errorTotal(), "no ERROR of any message per rejection")
 	assert.Zero(t, log.count("Model routing rejected request"))
 }

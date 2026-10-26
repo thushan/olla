@@ -419,7 +419,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			a.logRequestStart(pr, 0)
 			a.logRequestRejected(pr, status, reason)
 
-			a.respondTranslatorError(w, trans, pr, errors.New(reason), status)
+			a.respondTranslatorError(w, trans, pr, errors.New(reason), status, true)
 			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNoCompatibleEndpoints)
 			return
 		}
@@ -930,20 +930,26 @@ func (a *Application) writeTranslatorError(
 		"error", err.Error(),
 		"status", statusCode)
 
-	a.respondTranslatorError(w, trans, pr, err, statusCode)
+	a.respondTranslatorError(w, trans, pr, err, statusCode, false)
 }
 
-// respondTranslatorError writes the error response without logging it. Routing rejections use
-// it directly because their sampled "Request rejected" line is the only diagnostic wanted;
-// writeTranslatorError's ERROR per request would flood the log.
+// respondTranslatorError writes the error response. Routing rejections call it directly with
+// quiet set, because their sampled "Request rejected" line is the only diagnostic wanted;
+// writeTranslatorError's ERROR, and the translator's own, per request would flood the log.
 func (a *Application) respondTranslatorError(
 	w http.ResponseWriter,
 	trans translator.RequestTranslator,
 	pr *proxyRequest,
 	err error,
 	statusCode int,
+	quiet bool,
 ) {
 	pr.hadError = true
+
+	if qw, ok := trans.(translator.QuietErrorWriter); ok && quiet {
+		qw.WriteErrorQuiet(w, err, statusCode)
+		return
+	}
 
 	// use custom error format if translator implements it
 	if errorWriter, ok := trans.(translator.ErrorWriter); ok {
