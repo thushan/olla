@@ -899,8 +899,10 @@ func (a *Application) servableCapableHosts(capableModels map[string]bool, profil
 	if err != nil {
 		return servable
 	}
+	// provider routes confine candidates to the provider's types, so judge the same set
+	scope := &domain.RequestProfile{SupportedBy: profile.ProviderScope}
 	for _, ep := range all {
-		if capableModels[ep.GetURLString()] && profile.IsCompatibleWith(NormaliseProviderType(ep.Type)) {
+		if capableModels[ep.GetURLString()] && profile.IsCompatibleWith(NormaliseProviderType(ep.Type)) && scope.IsCompatibleWith(NormaliseProviderType(ep.Type)) {
 			servable[ep.GetURLString()] = true
 		}
 	}

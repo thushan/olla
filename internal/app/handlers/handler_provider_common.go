@@ -126,6 +126,11 @@ func (a *Application) getProviderEndpoints(ctx context.Context, providerType str
 	providerProfile := a.createProviderProfile(providerType)
 	providerProfile.Path = pr.targetPath
 
+	// Record the provider boundary so the capability refusal judges only hosts the route can reach.
+	if pr.profile != nil {
+		pr.profile.ProviderScope = providerProfile.SupportedBy
+	}
+
 	providerEndpoints := a.filterEndpointsByProfile(endpoints, providerProfile, pr.requestLogger)
 
 	if providerProfile.FailClosedOnNoMatch && len(providerEndpoints) == 0 {

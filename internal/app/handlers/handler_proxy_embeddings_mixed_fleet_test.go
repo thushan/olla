@@ -311,6 +311,11 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
 		{"model-less embed on the tei provider route with the tei embedder down and a healthy ollama embedder", "/olla/tei/embed", inputsBody, constants.RoutingReasonCapabilityUnavailable, nil,
 			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
+		// /v1/embeddings is shared with Ollama, but the tei provider route confines candidates to TEI
+		{"model-less v1 embeddings on the tei provider route with a healthy ollama embedder", "/olla/tei/v1/embeddings", embedBody, constants.RoutingReasonCapabilityUnavailable, nil,
+			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
+		{"model-less v1 embeddings on the unified route reaches the ollama embedder", embeddingsPath, embedBody, "", []string{"ollama-1"},
+			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
 		{"model-less embed on the tei provider route whose only embedder is a healthy ollama keeps the fallback", "/olla/tei/embed", inputsBody, "", []string{"tei-classify", "tei-rerank"},
 			[]fleetEndpoint{tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
 		{"model-less embed routes to a second embedder that is up", "/olla/proxy/embed", inputsBody, "", []string{"tei-embed-2"},
