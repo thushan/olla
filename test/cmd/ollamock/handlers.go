@@ -515,8 +515,10 @@ func teiWrongKindErr(msg string) *teiError {
 // writePlain emits an axum extractor rejection.
 func (e *teiError) writePlain(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(e.status)
-	_, _ = io.WriteString(w, e.msg)
+	// text/plain with nosniff is never rendered as HTML; this is a test mock.
+	_, _ = io.WriteString(w, e.msg) //nolint:gosec // G705: plain-text body, not HTML
 }
 
 // write emits the native {"error","error_type"} shape.
@@ -957,11 +959,11 @@ func teiPredictInputs(r *http.Request) (count int, batch bool, blank, err *teiEr
 		if len(items) > 2 {
 			return 0, false, nil, teiValidationErr("a sequence is one string or a pair")
 		}
-		blank, err := teiSequenceTexts(items, emptyInput)
-		if err != nil {
-			return 0, false, nil, err
+		seqBlank, seqErr := teiSequenceTexts(items, emptyInput)
+		if seqErr != nil {
+			return 0, false, nil, seqErr
 		}
-		return 1, false, blank, nil
+		return 1, false, seqBlank, nil
 	}
 	for _, it := range items {
 		seq, isArr := it.([]any)
