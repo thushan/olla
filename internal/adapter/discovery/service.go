@@ -11,7 +11,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/thushan/olla/internal/adapter/filter"
-	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
@@ -150,6 +149,12 @@ func (s *ModelDiscoveryService) DiscoverAll(ctx context.Context) error {
 	return s.discoverConcurrently(ctx, activeEndpoints)
 }
 
+// endpointModelRegistrar is implemented by registries that register models with the
+// endpoint object rather than just its URL.
+type endpointModelRegistrar interface {
+	RegisterModelsWithEndpoint(ctx context.Context, endpoint *domain.Endpoint, models []*domain.ModelInfo) error
+}
+
 // DiscoverEndpoint discovers models from a specific endpoint
 func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *domain.Endpoint) error {
 	// Explicit discovery bypasses the periodic cooldown.
@@ -187,10 +192,10 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		}
 	}
 
-	// Check if registry supports endpoint registration
-	if unifiedRegistry, ok := s.modelRegistry.(*registry.UnifiedMemoryModelRegistry); ok {
-		// Use the new method that accepts endpoint objects
-		if err := unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoint, filteredModels); err != nil {
+	// Registries that take the endpoint object also learn its type, which scopes
+	// per-platform name rules such as Ollama's default tag
+	if endpointRegistry, ok := s.modelRegistry.(endpointModelRegistrar); ok {
+		if err := endpointRegistry.RegisterModelsWithEndpoint(ctx, endpoint, filteredModels); err != nil {
 			s.logger.ErrorWithEndpoint("Failed to register discovered models", endpoint.Name, "error", err)
 			return fmt.Errorf("failed to register models: %w", err)
 		}

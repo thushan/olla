@@ -18,9 +18,12 @@ import (
 type MemoryModelRegistry struct {
 	endpointModels   *xsync.Map[string, *domain.EndpointModels]
 	modelToEndpoints *xsync.Map[string, *xsync.Map[string, struct{}]]
-	logger           logger.StyledLogger
-	stats            domain.RegistryStats
-	mu               sync.RWMutex
+	// ollamaEndpoints holds the URLs of Ollama-type endpoints. Only their models
+	// answer to a name without the default tag; see OllamaDefaultTagName.
+	ollamaEndpoints *xsync.Map[string, struct{}]
+	logger          logger.StyledLogger
+	stats           domain.RegistryStats
+	mu              sync.RWMutex
 }
 
 func NewMemoryModelRegistry(logger logger.StyledLogger) *MemoryModelRegistry {
@@ -28,6 +31,7 @@ func NewMemoryModelRegistry(logger logger.StyledLogger) *MemoryModelRegistry {
 	return &MemoryModelRegistry{
 		endpointModels:   xsync.NewMap[string, *domain.EndpointModels](),
 		modelToEndpoints: xsync.NewMap[string, *xsync.Map[string, struct{}]](),
+		ollamaEndpoints:  xsync.NewMap[string, struct{}](),
 		stats: domain.RegistryStats{
 			TotalEndpoints:    0,
 			TotalModels:       0,
@@ -213,7 +217,8 @@ func (r *MemoryModelRegistry) GetEndpointsForModel(ctx context.Context, modelNam
 
 	endpointSet, ok := r.modelToEndpoints.Load(modelName)
 	if !ok {
-		return []string{}, nil
+		// An exact match always wins; only a miss tries the Ollama default tag.
+		return r.ollamaDefaultTagEndpoints(modelName), nil
 	}
 
 	var endpoints []string
@@ -223,6 +228,71 @@ func (r *MemoryModelRegistry) GetEndpointsForModel(ctx context.Context, modelNam
 	})
 
 	return endpoints, nil
+}
+
+// RegisterModelsWithEndpoint registers models and remembers the endpoint's type,
+// which the base registry otherwise never sees, so the Ollama default-tag rule can
+// be scoped to Ollama-sourced models.
+func (r *MemoryModelRegistry) RegisterModelsWithEndpoint(ctx context.Context, endpoint *domain.Endpoint, models []*domain.ModelInfo) error {
+	r.noteEndpointType(endpoint)
+	return r.RegisterModels(ctx, endpoint.GetURLString(), models)
+}
+
+func (r *MemoryModelRegistry) noteEndpointType(endpoint *domain.Endpoint) {
+	if endpoint == nil || endpoint.GetURLString() == "" {
+		return
+	}
+	if endpoint.Type == domain.ProfileOllama {
+		r.ollamaEndpoints.Store(endpoint.GetURLString(), struct{}{})
+		return
+	}
+	r.ollamaEndpoints.Delete(endpoint.GetURLString())
+}
+
+// ollamaDefaultTagEndpoints answers a name without a tag from Ollama-sourced
+// "name:latest" entries. Callers have already missed the exact lookup, so a model
+// that really is called "name" is never shadowed. Scoping to Ollama endpoints
+// matters: a vLLM host serving "name:latest" has not been asked for "name" and
+// would be sent a name it does not know. Callers hold r.mu.
+func (r *MemoryModelRegistry) ollamaDefaultTagEndpoints(modelName string) []string {
+	tagged, ok := domain.OllamaDefaultTagName(modelName)
+	if !ok {
+		return []string{}
+	}
+	endpointSet, ok := r.modelToEndpoints.Load(tagged)
+	if !ok {
+		return []string{}
+	}
+	endpoints := []string{}
+	endpointSet.Range(func(endpoint string, _ struct{}) bool {
+		if _, isOllama := r.ollamaEndpoints.Load(endpoint); isOllama {
+			endpoints = append(endpoints, endpoint)
+		}
+		return true
+	})
+	return endpoints
+}
+
+// CanonicalModelName returns the native name a request for name resolves to, so
+// stats and sticky keys for "foo" and "foo:latest" land together. It differs from
+// name only when the exact lookup misses and an Ollama host serves "name:latest".
+// Forwarded request bodies are never rewritten with it.
+func (r *MemoryModelRegistry) CanonicalModelName(name string) string {
+	tagged, ok := domain.OllamaDefaultTagName(name)
+	if !ok {
+		return name
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	if _, exact := r.modelToEndpoints.Load(name); exact {
+		return name
+	}
+	if len(r.ollamaDefaultTagEndpoints(name)) > 0 {
+		return tagged
+	}
+	return name
 }
 
 func (r *MemoryModelRegistry) IsModelAvailable(ctx context.Context, modelName string) bool {
@@ -241,7 +311,7 @@ func (r *MemoryModelRegistry) IsModelAvailable(ctx context.Context, modelName st
 
 	endpointSet, ok := r.modelToEndpoints.Load(modelName)
 	if !ok {
-		return false
+		return len(r.ollamaDefaultTagEndpoints(modelName)) > 0
 	}
 
 	// Check if the set has any endpoints
@@ -323,6 +393,7 @@ func (r *MemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpointURL st
 
 	r.removeEndpointFromIndex(endpointURL)
 	r.endpointModels.Delete(endpointURL)
+	r.ollamaEndpoints.Delete(endpointURL)
 	r.updateStats()
 
 	return nil

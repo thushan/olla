@@ -91,10 +91,55 @@ func (c *CatalogStore) GetAllModels() []*domain.UnifiedModel {
 	return models
 }
 
+// ResolveByName finds a model by ID or alias. An exact match always wins; only a
+// miss on a name without a tag tries "<name>:latest", and that only matches a model
+// an Ollama endpoint serves under that native name (see domain.OllamaDefaultTagName).
 func (c *CatalogStore) ResolveByName(name string) (*domain.UnifiedModel, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if model, ok := c.lookupLocked(name, true); ok {
+		return model, true
+	}
+
+	tagged, ok := domain.OllamaDefaultTagName(name)
+	if !ok {
+		return nil, false
+	}
+	// The alias index already holds every alias, so the full scan adds nothing here.
+	model, ok := c.lookupLocked(tagged, false)
+	if !ok || !servedByOllamaAs(model, tagged) {
+		return nil, false
+	}
+	return model, true
+}
+
+// ResolveExactName is ResolveByName without the Ollama default-tag fallback. Ingest
+// uses it to decide whether a discovered model is one already in the catalogue: a
+// vLLM model called "foo" is not the Ollama model "foo:latest" and must not merge
+// into it.
+func (c *CatalogStore) ResolveExactName(name string) (*domain.UnifiedModel, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.lookupLocked(name, true)
+}
+
+// servedByOllamaAs reports whether an Ollama endpoint serves model under nativeName.
+// A merged model can also be served by other platforms under the same name, and
+// those must not make a bare name resolve.
+func servedByOllamaAs(model *domain.UnifiedModel, nativeName string) bool {
+	for i := range model.SourceEndpoints {
+		src := &model.SourceEndpoints[i]
+		if src.Platform == domain.ProfileOllama && strings.EqualFold(src.NativeName, nativeName) {
+			return true
+		}
+	}
+	return false
+}
+
+// lookupLocked resolves name by ID, then the lower-cased alias index, then (when scan
+// is set) an alias scan. Callers hold c.mu.
+func (c *CatalogStore) lookupLocked(name string, scan bool) (*domain.UnifiedModel, bool) {
 	// Direct ID lookup is fastest
 	if ptr, exists := c.catalog[name]; exists && ptr != nil {
 		if model := ptr.Load(); model != nil {
@@ -109,6 +154,10 @@ func (c *CatalogStore) ResolveByName(name string) (*domain.UnifiedModel, bool) {
 				return model, true
 			}
 		}
+	}
+
+	if !scan {
+		return nil, false
 	}
 
 	// Fallback to full scan for aliases

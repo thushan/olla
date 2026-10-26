@@ -133,7 +133,7 @@ func (u *DefaultUnifier) processModel(modelInfo *domain.ModelInfo, endpoint *dom
 	}
 
 	// Fall back to name matching if no digest
-	if existing, found := u.store.ResolveByName(model.Name); found {
+	if existing, found := u.store.ResolveExactName(model.Name); found {
 		if u.canMergeByName(existing, model) {
 			u.mergeModel(existing, model, endpoint)
 			u.stats.NameMatches++
@@ -183,6 +183,7 @@ func (u *DefaultUnifier) createUnifiedModel(model *Model, endpoint *domain.Endpo
 		WithURL(endpoint.GetURLString()).
 		WithName(endpoint.Name).
 		WithNativeName(model.Name).
+		WithPlatform(platform).
 		WithState(state).
 		WithDiskSize(model.Size).
 		Build()
@@ -242,6 +243,7 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 			WithURL(endpointURL).
 			WithName(endpoint.Name).
 			WithNativeName(model.Name).
+			WithPlatform(platform).
 			WithState(state).
 			WithDiskSize(model.Size).
 			Build()

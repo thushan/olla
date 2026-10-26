@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -98,6 +99,7 @@ func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig
 func (r *UnifiedMemoryModelRegistry) RegisterEndpoint(endpoint *domain.Endpoint) {
 	if endpoint != nil && endpoint.GetURLString() != "" {
 		r.endpoints.Store(endpoint.GetURLString(), endpoint)
+		r.noteEndpointType(endpoint)
 	}
 }
 
@@ -121,6 +123,7 @@ func (r *UnifiedMemoryModelRegistry) RegisterModels(ctx context.Context, endpoin
 	for _, model := range models {
 		if model != nil {
 			r.modelEndpointSets.Delete(model.Name)
+			r.dropBareNameSet(model.Name)
 		}
 	}
 
@@ -329,6 +332,7 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 		copy(aliases, model.Aliases)
 
 		if model.RemoveEndpoint(endpointURL) {
+			r.dropBareNameSets(sourceEndpoints)
 			// If no endpoints left, remove the unified model and its cached sets
 			if !model.IsAvailable() {
 				r.globalUnified.Delete(id)
@@ -365,6 +369,20 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 	})
 
 	return nil
+}
+
+// dropBareNameSet forgets the cached endpoint set of the bare name "name:latest"
+// answers to. It resolves through the tagged entry, so it goes stale with it.
+func (r *UnifiedMemoryModelRegistry) dropBareNameSet(nativeName string) {
+	if bare, ok := strings.CutSuffix(nativeName, ":"+domain.OllamaDefaultTag); ok {
+		r.modelEndpointSets.Delete(bare)
+	}
+}
+
+func (r *UnifiedMemoryModelRegistry) dropBareNameSets(sources []domain.SourceEndpoint) {
+	for i := range sources {
+		r.dropBareNameSet(sources[i].NativeName)
+	}
 }
 
 // GetHealthyEndpointsForModel returns healthy endpoints that have a specific model
