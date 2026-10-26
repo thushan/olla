@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -384,6 +386,10 @@ func TestPathInspector_RequiredCapabilitiesByPath(t *testing.T) {
 		{path: "/embed_all", embeddings: true},
 		{path: "/embed_sparse", embeddings: true},
 		{path: "/similarity", embeddings: true},
+		{path: "/olla/tei/v1/rerank", rerank: true},
+		{path: "/api/embed", none: true},      // Ollama's embed carries its model in the body
+		{path: "/api/rerank", none: true},     // not a TEI path
+		{path: "/prefix/predict", none: true}, // single-segment names match whole paths only
 		{path: "/v1/chat/completions", none: true},
 		{path: "/tokenize", none: true},
 		{path: "/v1/models", none: true},
@@ -415,6 +421,123 @@ func TestPathInspector_RequiredCapabilitiesByPath(t *testing.T) {
 			}
 			if caps.ChatCompletion || caps.TextGeneration {
 				t.Errorf("Inspect(%q) offered chat or text generation: %+v", tt.path, *caps)
+			}
+		})
+	}
+}
+
+// shippedProfilePaths loads config/profiles and returns each profile's declared
+// paths, deduplicated per profile.
+func shippedProfilePaths(t *testing.T) (*profile.Factory, map[string][]string) {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot determine test file location")
+	}
+	profilesDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "config", "profiles")
+	factory, err := profile.NewFactory(profilesDir)
+	if err != nil {
+		t.Fatalf("failed to load shipped profiles: %v", err)
+	}
+	out := make(map[string][]string)
+	// the inspector registers openai-compatible whether or not the factory lists it
+	names := append(factory.GetAvailableProfiles(), domain.ProfileOpenAICompatible)
+	slices.Sort(names)
+	for _, name := range slices.Compact(names) {
+		p, err := factory.GetProfile(name)
+		if err != nil {
+			t.Fatalf("GetProfile(%q): %v", name, err)
+		}
+		seen := make(map[string]bool)
+		for _, path := range p.GetPaths() {
+			if path != "" && !seen[path] {
+				seen[path] = true
+				out[name] = append(out[name], path)
+			}
+		}
+	}
+	return factory, out
+}
+
+func segments(path string) int {
+	return len(strings.FieldsFunc(path, func(r rune) bool { return r == '/' }))
+}
+
+// Every path a shipped profile declares must resolve to exactly the profiles
+// that declare it, so a path shared by name (/health, /v1/embeddings) lists all
+// its owners and nothing else.
+func TestPathInspector_ShippedProfiles_DeclaredPathsResolveToTheirOwners(t *testing.T) {
+	factory, byProfile := shippedProfilePaths(t)
+	inspector := NewPathInspector(factory, createTestLogger())
+
+	owners := make(map[string][]string)
+	for name, paths := range byProfile {
+		for _, path := range paths {
+			owners[path] = append(owners[path], name)
+		}
+	}
+
+	for path, want := range owners {
+		t.Run(path, func(t *testing.T) {
+			reqProfile := domain.NewRequestProfile(path)
+			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+				t.Fatalf("Inspect(%q) error = %v", path, err)
+			}
+			got := slices.Clone(reqProfile.SupportedBy)
+			slices.Sort(got)
+			got = slices.Compact(got)
+			slices.Sort(want)
+			if !slices.Equal(got, want) {
+				t.Errorf("Inspect(%q) supported by %v, want exactly %v", path, got, want)
+			}
+		})
+	}
+}
+
+// A profile path only matches a longer request path when it has two or more
+// segments. A one-segment name such as /embed, /version or /health says nothing
+// about a deeper path, which belongs to whichever backend declares it.
+func TestPathInspector_ShippedProfiles_SingleSegmentPathsDoNotCaptureDeeperPaths(t *testing.T) {
+	factory, byProfile := shippedProfilePaths(t)
+	inspector := NewPathInspector(factory, createTestLogger())
+
+	single := make(map[string]bool)
+	multi := make(map[string][]string)
+	for name, paths := range byProfile {
+		for _, path := range paths {
+			if segments(path) == 1 {
+				single[path] = true
+			} else if segments(path) > 1 {
+				multi[path] = append(multi[path], name)
+			}
+		}
+	}
+
+	for path := range single {
+		deeper := "/api/unlisted" + path
+		t.Run(deeper, func(t *testing.T) {
+			reqProfile := domain.NewRequestProfile(deeper)
+			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+				t.Fatalf("Inspect(%q) error = %v", deeper, err)
+			}
+			if len(reqProfile.SupportedBy) != 0 {
+				t.Errorf("Inspect(%q) was captured by %v via the one-segment path %q", deeper, reqProfile.SupportedBy, path)
+			}
+		})
+	}
+
+	// the other side of the rule: prefixed multi-segment paths still resolve
+	for path, owners := range multi {
+		prefixed := "/mount" + path
+		t.Run(prefixed, func(t *testing.T) {
+			reqProfile := domain.NewRequestProfile(prefixed)
+			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+				t.Fatalf("Inspect(%q) error = %v", prefixed, err)
+			}
+			for _, owner := range owners {
+				if !contains(reqProfile.SupportedBy, owner) {
+					t.Errorf("Inspect(%q) supported by %v, want %q included", prefixed, reqProfile.SupportedBy, owner)
+				}
 			}
 		})
 	}
