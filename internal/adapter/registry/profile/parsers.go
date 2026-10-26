@@ -92,10 +92,11 @@ func (p *ollamaParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 func createOllamaModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 	details := &domain.ModelDetails{}
 
-	// Only embedding-only models are typed. Mapping vision/tools/thinking into
-	// capability tags would make the capability filter evict those requests to
-	// Ollama endpoints in mixed fleets, so embedding is the one tag we need.
-	// Hybrid embedding+completion models stay untyped and keep text-generation.
+	// Only embedding-only models are typed. Details.Type is single-valued and
+	// nothing in Olla produces a tools tag, so mapping vision/tools would be
+	// partial, flip Ollama vision models to "vlm" in /olla/models, and narrow
+	// model-less vision/tool requests to Ollama endpoints only. Hybrid
+	// embedding+completion models stay untyped and keep text-generation.
 	if isOllamaEmbeddingOnly(ollamaModel.Capabilities) {
 		embeddingsType := "embeddings"
 		details.Type = &embeddingsType
