@@ -39,7 +39,7 @@ When a request specifies a model (e.g., `phi3.5:latest`), Olla needs to determin
 Ollama lists a model pulled without a tag as `name:latest` and accepts `name` for it. Olla does the
 same: when no endpoint serves the exact name you asked for, a name with no tag is looked up as
 `name:latest` on Ollama endpoints. An exact match always wins, only Ollama endpoints answer to the
-untagged name, and the request is forwarded exactly as you wrote it.
+untagged name, and the request is forwarded exactly as you wrote it. The lookup only goes one way, `name` to `name:latest`, because Ollama always lists models with a tag.
 
 ## Routing Strategies
 
