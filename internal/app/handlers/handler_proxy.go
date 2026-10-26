@@ -644,8 +644,11 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		}
 	}
 
-	// stage 2: capability filtering (vision requests need vision models)
-	if profile != nil && profile.ModelCapabilities != nil && a.modelRegistry != nil {
+	// stage 2: capability filtering (vision requests need vision models).
+	// only for model-less requests: capability tags are heuristic, so when the
+	// caller names a model, stage 3 alone decides which endpoints host it. a
+	// tag on some other model must never evict the hosts of the requested one.
+	if profile != nil && profile.ModelName == "" && profile.ModelCapabilities != nil && a.modelRegistry != nil {
 		capabilityFiltered := a.filterEndpointsByCapabilities(profileFiltered, profile, logger)
 		if len(capabilityFiltered) > 0 {
 			profileFiltered = capabilityFiltered
@@ -848,14 +851,16 @@ func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities
 	return requiredCapabilities
 }
 
-// intersects capability sets to find models that support ALL requested features.
+// finds endpoints hosting at least one single model that has ALL required
+// capabilities (intersection is per model, not per endpoint, so an endpoint
+// with a vision model and a separate tools model doesn't satisfy both).
 // uses nil return to signal "no capability support" vs empty map for "no matches"
 func (a *Application) findCapableModels(requiredCapabilities []string, logger logger.StyledLogger) map[string]bool {
 	ctx := context.Background()
-	capableModels := make(map[string]bool)
 	hasCapabilitySupport := false
+	var capableByID map[string]*domain.UnifiedModel
 
-	for i, capability := range requiredCapabilities {
+	for _, capability := range requiredCapabilities {
 		models, err := a.modelRegistry.GetModelsByCapability(ctx, capability)
 		if err != nil {
 			logger.Warn("Failed to get models by capability",
@@ -868,12 +873,13 @@ func (a *Application) findCapableModels(requiredCapabilities []string, logger lo
 			hasCapabilitySupport = true
 		}
 
-		if i == 0 {
-			a.addModelsToMap(models, capableModels)
-		} else {
-			// set intersection - only keep models that have all capabilities
-			capableModels = a.intersectModels(models, capableModels)
+		next := make(map[string]*domain.UnifiedModel, len(models))
+		for _, model := range models {
+			if capableByID == nil || capableByID[model.ID] != nil {
+				next[model.ID] = model
+			}
 		}
+		capableByID = next
 	}
 
 	// nil means "don't filter", empty map means "no matches found"
@@ -881,27 +887,13 @@ func (a *Application) findCapableModels(requiredCapabilities []string, logger lo
 		return nil
 	}
 
-	return capableModels
-}
-
-func (a *Application) addModelsToMap(models []*domain.UnifiedModel, capableModels map[string]bool) {
-	for _, model := range models {
+	capableEndpoints := make(map[string]bool)
+	for _, model := range capableByID {
 		for _, sourceEndpoint := range model.SourceEndpoints {
-			capableModels[sourceEndpoint.EndpointURL] = true
+			capableEndpoints[sourceEndpoint.EndpointURL] = true
 		}
 	}
-}
-
-func (a *Application) intersectModels(models []*domain.UnifiedModel, existingCapableModels map[string]bool) map[string]bool {
-	newCapableModels := make(map[string]bool)
-	for _, model := range models {
-		for _, sourceEndpoint := range model.SourceEndpoints {
-			if existingCapableModels[sourceEndpoint.EndpointURL] {
-				newCapableModels[sourceEndpoint.EndpointURL] = true
-			}
-		}
-	}
-	return newCapableModels
+	return capableEndpoints
 }
 
 func (a *Application) filterEndpointsByCapableModels(endpoints []*domain.Endpoint, capableModels map[string]bool, requiredCapabilities []string, logger logger.StyledLogger) []*domain.Endpoint {
