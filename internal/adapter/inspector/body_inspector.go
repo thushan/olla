@@ -1,6 +1,7 @@
 package inspector
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -29,6 +30,10 @@ const (
 	// Requests where "model" is absent or appears beyond this ceiling will not be routed by
 	// model name - capability-based or default routing applies instead.
 	modelScanSize = 8 * 1024 * 1024
+
+	// peekWindow bounds how much leading whitespace we tolerate before deciding a body is not
+	// a JSON object; it is also the bufio size, so it is the only per-request allocation added.
+	peekWindow = 256
 )
 
 type modelRequest struct {
@@ -66,45 +71,23 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		return nil
 	}
 
-	contentType := r.Header.Get(constants.HeaderContentType)
-	if !strings.Contains(strings.ToLower(contentType), constants.ContentTypeJSON) {
-		bi.logger.Debug("Skipping body inspection for non-JSON content", "content_type", contentType)
+	// The body decides, not the header: curl -d sends form-urlencoded, fetch() with a string
+	// body sends text/plain and plenty of scripts send nothing, yet all carry JSON. Skipping on
+	// Content-Type left those requests model-less, so they were routed to any compatible host.
+	// Multipart and encoded bodies are opaque to us (we never decompress), and anything that
+	// does not open with '{' cannot hold a top-level model field.
+	if bi.opaqueBody(r) {
+		return nil
+	}
+	if !bi.looksLikeJSONObject(r) {
 		return nil
 	}
 
-	// For large requests (e.g. vision with base64 images) we still need the model name for
-	// routing, but buffering the full body just to parse JSON is wasteful and would OOM for
-	// multi-megabyte payloads. Instead, stream-scan up to modelScanSize bytes using a
-	// TeeReader so all bytes read are captured for body restoration, and locate the top-level
-	// "model" key using token-level iteration that skips large nested values without buffering
-	// them. This handles the case where "messages" (with large base64 images) precedes "model".
+	// Large requests (e.g. vision with base64 images) still need the model name for routing,
+	// but buffering the full body just to parse JSON is wasteful and would OOM for
+	// multi-megabyte payloads. Instead stream-scan up to modelScanSize bytes (see inspectLarge).
 	if r.ContentLength > bi.maxBodySize {
-		// captured is a locally-allocated bytes.Buffer (not from a sync.Pool), so
-		// captured.Bytes() is safe to use directly without an extra copy - unlike the
-		// small-body path below which must copy buffer.Bytes() to avoid pool aliasing
-		// once the deferred Reset()/Put() runs.
-		captured := &bytes.Buffer{}
-		origBody := r.Body
-		tee := io.TeeReader(io.LimitReader(origBody, modelScanSize), captured)
-
-		modelName := extractTopLevelModelFieldFromReader(tee)
-
-		// Restore body: bytes the decoder read (captured via TeeReader) + remaining original body.
-		// The decoder may have stopped before the limit, so origBody still holds the unconsumed tail.
-		// readCloser ensures Close() propagates to origBody to drain the connection and avoid leaks.
-		r.Body = readCloser{
-			Reader: io.MultiReader(bytes.NewReader(captured.Bytes()), origBody),
-			Closer: origBody,
-		}
-
-		if modelName != "" {
-			profile.ModelName = bi.normalizeModelName(modelName)
-			bi.logger.Debug("Extracted model name from large request body scan",
-				"model", profile.ModelName, "content_length", r.ContentLength)
-		} else {
-			bi.logger.Debug("Could not extract model name from large request body",
-				"content_length", r.ContentLength)
-		}
+		bi.inspectLarge(r, profile)
 		return nil
 	}
 
@@ -121,6 +104,19 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 
 	if _, err := io.Copy(buffer, limitedReader); err != nil {
 		bi.logger.Debug("Failed to read request body", "error", err)
+		return nil
+	}
+
+	// An unknown length (chunked) body that filled the buffer may be arbitrarily larger, and a
+	// model placed after a big field would be missed by parsing a truncated prefix. Hand it to
+	// the bounded scan, replaying what we have already read.
+	if r.ContentLength < 0 && int64(buffer.Len()) >= bi.maxBodySize {
+		origBody := r.Body
+		r.Body = readCloser{
+			Reader: io.MultiReader(bytes.NewReader(append([]byte(nil), buffer.Bytes()...)), origBody),
+			Closer: origBody,
+		}
+		bi.inspectLarge(r, profile)
 		return nil
 	}
 
@@ -175,6 +171,81 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 	}
 
 	return nil
+}
+
+// opaqueBody reports bodies we must not look inside: multipart (the model, if any, is a form
+// part) and anything with a Content-Encoding, which we deliberately never decompress.
+func (bi *BodyInspector) opaqueBody(r *http.Request) bool {
+	ct := strings.ToLower(r.Header.Get(constants.HeaderContentType))
+	if strings.HasPrefix(strings.TrimSpace(ct), "multipart/") {
+		bi.logger.Debug("Skipping body inspection for multipart content", "content_type", ct)
+		return true
+	}
+	if enc := r.Header.Get(constants.HeaderContentEncoding); enc != "" {
+		bi.logger.Debug("Skipping body inspection for encoded content", "content_encoding", enc)
+		return true
+	}
+	return false
+}
+
+// looksLikeJSONObject peeks at the first non-whitespace byte without consuming it. It asks for
+// one more byte at a time so it never waits for data beyond what the decision needs. The body
+// is always left readable from its first byte.
+func (bi *BodyInspector) looksLikeJSONObject(r *http.Request) bool {
+	origBody := r.Body
+	br := bufio.NewReaderSize(origBody, peekWindow)
+	r.Body = readCloser{Reader: br, Closer: origBody}
+
+	for n := 1; n <= peekWindow; n++ {
+		head, err := br.Peek(n)
+		if len(head) < n {
+			// EOF or read error before any decision byte: nothing to inspect.
+			_ = err
+			return false
+		}
+		switch c := head[n-1]; c {
+		case ' ', '\t', '\r', '\n':
+			continue
+		case '{':
+			return true
+		default:
+			bi.logger.Debug("Skipping body inspection for non-object body")
+			return false
+		}
+	}
+	return false
+}
+
+// inspectLarge scans r.Body for the top-level "model" key using a TeeReader so every byte read
+// is captured for restoration, with token-level iteration that skips large nested values
+// without buffering them. This handles "messages" (with large base64 images) preceding "model".
+func (bi *BodyInspector) inspectLarge(r *http.Request, profile *domain.RequestProfile) {
+	// captured is a locally-allocated bytes.Buffer (not from a sync.Pool), so
+	// captured.Bytes() is safe to use directly without an extra copy - unlike the
+	// small-body path which must copy buffer.Bytes() to avoid pool aliasing
+	// once the deferred Reset()/Put() runs.
+	captured := &bytes.Buffer{}
+	origBody := r.Body
+	tee := io.TeeReader(io.LimitReader(origBody, modelScanSize), captured)
+
+	modelName := extractTopLevelModelFieldFromReader(tee)
+
+	// Restore body: bytes the decoder read (captured via TeeReader) + remaining original body.
+	// The decoder may have stopped before the limit, so origBody still holds the unconsumed tail.
+	// readCloser ensures Close() propagates to origBody to drain the connection and avoid leaks.
+	r.Body = readCloser{
+		Reader: io.MultiReader(bytes.NewReader(captured.Bytes()), origBody),
+		Closer: origBody,
+	}
+
+	if modelName != "" {
+		profile.ModelName = bi.normalizeModelName(modelName)
+		bi.logger.Debug("Extracted model name from large request body scan",
+			"model", profile.ModelName, "content_length", r.ContentLength)
+	} else {
+		bi.logger.Debug("Could not extract model name from large request body",
+			"content_length", r.ContentLength)
+	}
 }
 
 func (bi *BodyInspector) extractModelName(body []byte) string {

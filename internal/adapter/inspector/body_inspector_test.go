@@ -78,11 +78,12 @@ func TestBodyInspector_Inspect(t *testing.T) {
 			expectedModel: "",
 		},
 		{
-			name:           "Non-JSON content type",
-			body:           `{"model": "gpt-4"}`,
-			contentType:    "text/plain",
-			expectedModel:  "",
-			skipInspection: true,
+			// the body decides, not the header: fetch() and curl -d send JSON as text/plain
+			// and form-urlencoded
+			name:          "JSON body with text/plain content type",
+			body:          `{"model": "gpt-4"}`,
+			contentType:   "text/plain",
+			expectedModel: "gpt-4",
 		},
 		{
 			name:          "Invalid JSON",
@@ -701,3 +702,118 @@ func TestBodyInspector_PathCapabilitiesVersusBody(t *testing.T) {
 		})
 	}
 }
+
+func TestBodyInspector_BodyDecidesNotContentType(t *testing.T) {
+	t.Parallel()
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+	styledLog := &mockStyledLogger{underlying: log}
+
+	const embedBody = `{"model":"nomic-embed-text","input":"hi"}`
+	bigPad := strings.Repeat("A", MaxBodySize+1000)
+	lateModelBig := `{"messages":[{"content":"` + bigPad + `"}],"model":"late-model"}`
+	earlyModelBig := `{"model":"early-model","messages":[{"content":"` + bigPad + `"}]}`
+
+	tests := []struct {
+		name         string
+		body         string
+		contentType  string
+		encoding     string
+		unknownLen   bool
+		wantModel    string
+		wantEmbed    bool
+		wantUntouch  bool // body must not be interpreted at all
+		skipCapCheck bool
+	}{
+		{name: "form-urlencoded (curl default)", body: embedBody, contentType: "application/x-www-form-urlencoded", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "text/plain", body: embedBody, contentType: "text/plain", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "text/plain charset", body: embedBody, contentType: "text/plain;charset=UTF-8", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "vnd.api+json", body: embedBody, contentType: "application/vnd.api+json", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "ld+json", body: embedBody, contentType: "application/ld+json", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "x-ndjson", body: embedBody, contentType: "application/x-ndjson", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "octet-stream", body: embedBody, contentType: "application/octet-stream", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "missing header", body: embedBody, contentType: "", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "uppercase JSON", body: embedBody, contentType: "APPLICATION/JSON", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "json with charset", body: embedBody, contentType: "application/json; charset=utf-8", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "leading whitespace", body: "  \r\n\t" + embedBody, contentType: "text/plain", wantModel: "nomic-embed-text", wantEmbed: true},
+
+		{name: "multipart with model field", body: "--b\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nwhisper\r\n--b--\r\n", contentType: "multipart/form-data; boundary=b", wantUntouch: true},
+		{name: "multipart even if body looks like JSON", body: embedBody, contentType: "multipart/form-data; boundary=b", wantUntouch: true},
+		{name: "gzip body", body: "\x1f\x8b\x08\x00binary", contentType: "application/json", encoding: "gzip", wantUntouch: true},
+		{name: "encoded header on JSON-looking body", body: embedBody, contentType: "application/json", encoding: "gzip", wantUntouch: true},
+		{name: "real form body", body: "model=nomic-embed-text&input=hi", contentType: "application/x-www-form-urlencoded", wantUntouch: true},
+		{name: "binary body", body: "\x00\x01\x02model\xff", contentType: "application/octet-stream", wantUntouch: true},
+		{name: "array body", body: `[{"model":"x"}]`, contentType: "application/json", wantUntouch: true},
+		{name: "whitespace only", body: "   \n  ", contentType: "text/plain", wantUntouch: true},
+
+		{name: "large body, early model, text/plain", body: earlyModelBig, contentType: "text/plain", wantModel: "early-model", skipCapCheck: true},
+		{name: "large body, late model, form-urlencoded", body: lateModelBig, contentType: "application/x-www-form-urlencoded", wantModel: "late-model", skipCapCheck: true},
+		{name: "large chunked body, late model", body: lateModelBig, contentType: "application/json", unknownLen: true, wantModel: "late-model", skipCapCheck: true},
+		{name: "large chunked body, late model, no content type", body: lateModelBig, contentType: "", unknownLen: true, wantModel: "late-model", skipCapCheck: true},
+		{name: "small chunked body keeps capability detection", body: embedBody, contentType: "text/plain", unknownLen: true, wantModel: "nomic-embed-text", wantEmbed: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			bi, err := NewBodyInspector(styledLog)
+			require.NoError(t, err)
+
+			req := &http.Request{
+				Body:          io.NopCloser(strings.NewReader(tt.body)),
+				Header:        make(http.Header),
+				ContentLength: int64(len(tt.body)),
+			}
+			if tt.unknownLen {
+				req.ContentLength = -1
+			}
+			if tt.contentType != "" {
+				req.Header.Set("Content-Type", tt.contentType)
+			}
+			if tt.encoding != "" {
+				req.Header.Set("Content-Encoding", tt.encoding)
+			}
+			profile := domain.NewRequestProfile("/v1/embeddings")
+
+			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+
+			if tt.wantUntouch {
+				assert.Empty(t, profile.ModelName)
+				assert.Nil(t, profile.ModelCapabilities)
+			} else {
+				assert.Equal(t, tt.wantModel, profile.ModelName)
+				if !tt.skipCapCheck {
+					require.NotNil(t, profile.ModelCapabilities)
+					assert.Equal(t, tt.wantEmbed, profile.ModelCapabilities.Embeddings)
+				}
+			}
+
+			got, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			assert.True(t, tt.body == string(got), "body must be restored byte-for-byte (len want %d got %d)", len(tt.body), len(got))
+		})
+	}
+}
+
+func TestBodyInspector_CloseReachesOriginalBody(t *testing.T) {
+	t.Parallel()
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+	bi, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+	require.NoError(t, err)
+
+	for _, body := range []string{`{"model":"m"}`, "not json", ""} {
+		closer := &closeTracker{Reader: strings.NewReader(body)}
+		req := &http.Request{Body: closer, Header: make(http.Header), ContentLength: int64(len(body)) + 1}
+		require.NoError(t, bi.Inspect(context.Background(), req, domain.NewRequestProfile("/x")))
+		require.NoError(t, req.Body.Close())
+		assert.True(t, closer.closed, "Close must propagate for body %q", body)
+	}
+}
+
+type closeTracker struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closeTracker) Close() error { c.closed = true; return nil }
