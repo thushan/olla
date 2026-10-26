@@ -38,7 +38,7 @@ func TestRefuseCrossOriginRedirect(t *testing.T) {
 		to     string
 		follow bool
 	}{
-		{"same origin", "http://backend:11434/api/ps", "http://backend:11434/api/ps/", true},
+		{"same origin", "http://backend:11434/api/tags", "http://backend:11434/api/tags/", true},
 		{"different host", "http://backend:11434/x", "http://evil:11434/x", false},
 		{"different port", "http://backend:11434/x", "http://backend:9999/x", false},
 		{"http to https upgrade on the same host", "http://backend:11434/x", "https://backend:11434/x", true},
