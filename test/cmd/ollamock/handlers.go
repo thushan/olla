@@ -34,12 +34,14 @@ var (
 // serverConfig holds static configuration set at startup.
 // Field order largest-to-smallest for alignment.
 type serverConfig struct {
-	name         string
+	name string
+	// teiKind is the model_type /info reports and the TEI routes enforce:
+	// teiKindEmbedding (also the zero value), teiKindReranker or teiKindClassifier.
+	teiKind      string
 	models       []string
 	ttftMS       int
 	tps          int
 	streamChunks int
-	teiKind      string
 }
 
 // mockServer is the central state container wired into the HTTP mux.
