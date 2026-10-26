@@ -335,7 +335,7 @@ func TestFilterEndpointsByProfile_WithCapabilities(t *testing.T) {
 	t.Run("named model is never narrowed by capability tags", func(t *testing.T) {
 		profile := &domain.RequestProfile{
 			Path:      "/v1/chat/completions",
-			ModelName: "llava:13b",
+			ModelName: "llama3.1:8b",
 			ModelCapabilities: &domain.ModelCapabilities{
 				VisionUnderstanding: true,
 				ChatCompletion:      true,
@@ -345,9 +345,10 @@ func TestFilterEndpointsByProfile_WithCapabilities(t *testing.T) {
 
 		filtered := app.filterEndpointsByProfile(endpoints, profile, styledLog)
 
-		// Should return only endpoint1 (has llava:13b with vision)
+		// llama3.1:8b carries no vision tag and lives on the non-vision endpoint;
+		// the request names it, so the vision tag on other models must not evict it
 		assert.Len(t, filtered, 1)
-		assert.Equal(t, "ollama-vision", filtered[0].Name)
+		assert.Equal(t, "ollama-basic", filtered[0].Name)
 	})
 
 	t.Run("falls back to profile filtering when no capability match", func(t *testing.T) {
