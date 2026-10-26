@@ -553,7 +553,8 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 		case modelTypeLLM:
 			caps = append(caps, "text_generation", "chat")
 		case "reranker":
-			caps = append(caps, "rerank")
+			// sequence-classification models, so TEI /predict serves them too
+			caps = append(caps, "rerank", "classification")
 		case "classifier":
 			caps = append(caps, "classification")
 		}

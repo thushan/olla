@@ -1007,6 +1007,6 @@ func TestInferCapabilities_NonGenerativeKinds(t *testing.T) {
 	kind := func(k string) *domain.ModelDetails { return &domain.ModelDetails{Type: &k} }
 
 	assert.Equal(t, []string{"embeddings", "vector_search"}, app.inferCapabilities(kind("embeddings")))
-	assert.Equal(t, []string{"rerank"}, app.inferCapabilities(kind("reranker")))
+	assert.Equal(t, []string{"rerank", "classification"}, app.inferCapabilities(kind("reranker")))
 	assert.Equal(t, []string{"classification"}, app.inferCapabilities(kind("classifier")))
 }

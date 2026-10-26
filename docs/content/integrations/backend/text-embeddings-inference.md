@@ -232,7 +232,7 @@ Olla reads each instance's kind from `/info`'s `model_type` and gives the model 
 | TEI kind | Olla model type | Capabilities |
 |----------|-----------------|--------------|
 | `embedding` | `embeddings` | `embeddings`, `similarity`, `vector-search` |
-| `reranker` | `reranker` | `rerank` |
+| `reranker` | `reranker` | `rerank`, `classification` |
 | `classifier` | `classifier` | `classification` |
 
 An instance whose `/info` has no `model_type` (older TEI) or a kind Olla does not know is treated as an embedding model.
@@ -243,13 +243,13 @@ TEI's native request bodies carry no `model` field, so for those requests Olla p
 |--------------|-------------------------------|
 | `/embed`, `/embed_all`, `/embed_sparse`, `/similarity` | an embedding model |
 | `/rerank` | a reranker model |
-| `/predict` | a classifier model |
+| `/predict` | a classifier or reranker model |
 
 This applies to the unified route (`/olla/proxy/rerank`) and the provider route (`/olla/tei/rerank`) alike, so a fleet can mix embedding, reranker and classifier instances behind one Olla. A request that names a model (for example `/v1/embeddings` with `"model": "..."`) is routed by that model name instead, and capability is not consulted.
 
 If no healthy endpoint hosts a model of the needed kind, Olla does not reject the request: it falls back to every compatible endpoint, as it does for other capability-based routing. TEI then answers `424` when the instance it reaches serves a different kind, for example `/rerank` sent to an embedding instance. The same `424` applies to a request you pin to a specific instance yourself.
 
-The kind is also visible through Olla: `/olla/models?type=reranker` and `?type=classifier` filter by it, and each model's `capabilities` list shows `rerank` or `classification`.
+The kind is also visible through Olla: `/olla/models?type=reranker` and `?type=classifier` filter by it, and each model's `capabilities` list shows `rerank` and/or `classification`.
 
 ## Starting a TEI Server
 

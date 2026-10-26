@@ -276,7 +276,7 @@ curl -X POST http://localhost:40114/olla/tei/decode \
 
 ## POST /olla/tei/predict
 
-Sequence classification predictions, sorted by score descending. Routed to an instance serving a classifier model.
+Sequence classification predictions, sorted by score descending. Routed to an instance serving a classifier or reranker model (rerankers are sequence-classification models too).
 
 `inputs` is read as a single sequence when it is a string, `["text"]` or a sentence pair `["a", "b"]`, and the response is one flat array of `{score, label}` objects. It is a batch only when it is an array of arrays (`[["a"], ["b", "c"]]`), and the response is then an array of such arrays, one per sequence.
 

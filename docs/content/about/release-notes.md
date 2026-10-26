@@ -32,7 +32,7 @@ the matching kind. See the [TEI integration guide](../integrations/backend/text-
 ### Added: Text Embeddings Inference model kinds
 
 TEI reranker and classifier models get their own types (`reranker`, `classifier`) with
-`rerank` and `classification` capabilities, and are never tagged `text-generation`. They show
+`rerank` and `classification` capabilities (rerankers carry both, as TEI's `/predict` serves them too), and are never tagged `text-generation`. They show
 up under `/olla/models?type=reranker` and `?type=classifier`. Model-less `/embed`, `/embed_all`,
 `/embed_sparse`, `/similarity`, `/rerank` and `/predict` requests, whose bodies carry no `model`
 field, are routed to an instance serving a model of the matching kind. A custom `models.yaml`

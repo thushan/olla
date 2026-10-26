@@ -196,6 +196,7 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			endpoint: createTestEndpoint("http://localhost:3001", "TEI"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
 				assert.Contains(t, model.Capabilities, "rerank")
+				assert.Contains(t, model.Capabilities, "classification", "TEI /predict serves rerankers")
 				assert.NotContains(t, model.Capabilities, "text-generation")
 				assert.NotContains(t, model.Capabilities, "embeddings")
 			},

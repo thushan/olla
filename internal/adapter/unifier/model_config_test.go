@@ -472,7 +472,7 @@ func TestCustomConfig_MissingCapabilityKeysFallBackToDefaults(t *testing.T) {
 		wantCaps    []string
 		notWantCaps []string
 	}{
-		{"reranker", "reranker", 0, []string{"rerank"}, []string{"text-generation"}},
+		{"reranker", "reranker", 0, []string{"rerank", "classification"}, []string{"text-generation"}},
 		{"classifier", "classifier", 0, []string{"classification"}, []string{"text-generation"}},
 		{"embeddings keeps the user's entry", "embeddings", 0, []string{"embeddings"}, []string{"text-generation", "similarity"}},
 		{"llm keeps the user's entry", "llm", 0, []string{"text-generation", "chat"}, []string{"completion"}},

@@ -120,13 +120,16 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 		},
 		{"untagged vision model reaches its host beside llava host", chatPath, visionBody("Qwen/Qwen2.5-VL-7B-Instruct"), "vllm-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
 		{"llava reaches ollama beside untagged vision host", chatPath, visionBody("llava:13b"), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
-		// TEI native bodies carry no model field: the path picks the kind
+		// TEI native bodies carry no model field: the path picks the kind. /predict is
+		// served by classifiers and rerankers alike, so those fleets omit the reranker.
 		{"model-less rerank goes to the reranker", "/olla/proxy/rerank", rerankBody, "tei-rerank", teiTrio},
-		{"model-less predict goes to the classifier", "/olla/proxy/predict", inputsBody, "tei-classify", teiTrio},
+		{"model-less predict goes to the classifier", "/olla/proxy/predict", inputsBody, "tei-classify", []fleetEndpoint{teiEmbed, teiClassify}},
+		// TEI /predict also serves rerankers, so an embedder + reranker fleet must not fall back to the embedder (424)
+		{"model-less predict reaches the reranker beside an embedder", "/olla/proxy/predict", inputsBody, "tei-rerank", []fleetEndpoint{teiEmbed, teiRerank}},
 		{"model-less embed goes to the embedder", "/olla/proxy/embed", inputsBody, "tei-embed", teiTrio},
 		{"model-less embed_all goes to the embedder", "/olla/proxy/embed_all", inputsBody, "tei-embed", teiTrio},
 		{"tei provider route rerank goes to the reranker", "/olla/tei/rerank", rerankBody, "tei-rerank", teiTrio},
-		{"tei provider route predict goes to the classifier", "/olla/tei/predict", inputsBody, "tei-classify", teiTrio},
+		{"tei provider route predict goes to the classifier", "/olla/tei/predict", inputsBody, "tei-classify", []fleetEndpoint{teiEmbed, teiClassify}},
 		{"named embedding model reaches the embedder among tei kinds", embeddingsPath, embedBody("Snowflake/snowflake-arctic-embed-l-v2.0"), "tei-embed", teiTrio},
 		{"model-less rerank beside vllm still reaches the reranker", "/olla/proxy/rerank", rerankBody, "tei-rerank", []fleetEndpoint{vllmEmbed, teiEmbed, teiRerank}},
 		{"model-less embeddings steered to a real lm studio embedding model beside vllm", embeddingsPath, embedBody(""), "lmstudio-1", []fleetEndpoint{lmStudio, vllmEmbed}},

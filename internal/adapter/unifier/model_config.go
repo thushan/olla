@@ -611,7 +611,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 		"vlm":        {"text-generation", "vision", "multimodal", "image-understanding"},
 		"embeddings": {"embeddings", "similarity", "vector-search"},
 		"embedding":  {"embeddings", "similarity", "vector-search"},
-		"reranker":   {"rerank"},
+		"reranker":   {"rerank", "classification"},
 		"classifier": {"classification"},
 	}
 
