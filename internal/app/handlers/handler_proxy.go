@@ -848,12 +848,12 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 }
 
 // capabilityRefusalFor returns the capability_unavailable decision when none of candidates
-// hosts a capable model and every host that does is unroutable; otherwise nil.
+// hosts a capable model and every host that does is unhealthy; otherwise nil.
 func (a *Application) capabilityRefusalFor(candidates []*domain.Endpoint, capableModels map[string]bool, requiredCapabilities []string, logger logger.StyledLogger) *domain.ModelRoutingDecision {
-	if anyCapableHost(candidates, capableModels) || !a.allCapableHostsUnroutable(capableModels) {
+	if anyCapableHost(candidates, capableModels) || !a.allCapableHostsUnhealthy(capableModels) {
 		return nil
 	}
-	logger.Warn("Models with the required capabilities exist but none are on a routable endpoint",
+	logger.Warn("Models with the required capabilities exist but none are on a healthy endpoint",
 		"capabilities", requiredCapabilities,
 		"capable_endpoints", len(capableModels))
 	return ports.NewRoutingDecision(constants.RoutingStrategyCapability, ports.RoutingActionRejected,
@@ -888,25 +888,21 @@ func anyCapableHost(endpoints []*domain.Endpoint, capableModels map[string]bool)
 	return false
 }
 
-// allCapableHostsUnroutable reports whether no host serving a capable model is routable. The
+// allCapableHostsUnhealthy reports whether no host serving a capable model is healthy. The
 // registry keeps a model's source endpoints while the host is down, so the capable set still
-// names hosts that are gone. Routable (not merely healthy) is the test: a Busy or Warming host
-// is still handed requests by the balancers. When endpoint state cannot be read the answer is
-// no, which keeps the old fallback rather than refusing on a guess.
-func (a *Application) allCapableHostsUnroutable(capableModels map[string]bool) bool {
+// names hosts the healthy list no longer contains. "Healthy" is the same list the candidates
+// come from (Busy hosts are excluded and never receive proxied traffic), so a Busy capable
+// host counts as down. When health cannot be read the answer is no, which keeps the old
+// fallback rather than refusing on a guess.
+func (a *Application) allCapableHostsUnhealthy(capableModels map[string]bool) bool {
 	if a.discoveryService == nil {
 		return false
 	}
-	all, err := a.discoveryService.GetEndpoints(context.Background())
+	healthy, err := a.discoveryService.GetHealthyEndpoints(context.Background())
 	if err != nil {
 		return false
 	}
-	for _, endpoint := range all {
-		if capableModels[endpoint.GetURLString()] && endpoint.Status.IsRoutable() {
-			return false
-		}
-	}
-	return true
+	return !anyCapableHost(healthy, capableModels)
 }
 
 func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities) []string {
