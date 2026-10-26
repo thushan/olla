@@ -401,6 +401,11 @@ func TestResolvedModelName(t *testing.T) {
 	withAlias := context.WithValue(withCanonical, constants.ContextModelAliasMapKey,
 		map[string]string{endpoint.URLString: "aliased:7b"})
 
+	withTargets := context.WithValue(context.Background(), constants.ContextModelAliasMapKey,
+		map[string]string{endpoint.URLString: "all-minilm"})
+	withTargets = context.WithValue(withTargets, constants.ContextCanonicalModelKey,
+		CanonicalModel{Requested: "embed", Targets: map[string]string{"all-minilm": "all-minilm:latest"}})
+
 	tests := []struct {
 		ctx       context.Context
 		endpoint  *domain.Endpoint
@@ -408,6 +413,7 @@ func TestResolvedModelName(t *testing.T) {
 		requested string
 		want      string
 	}{
+		{withTargets, endpoint, "a bare alias target is labelled with its native name", "embed", "all-minilm:latest"},
 		{context.Background(), endpoint, "nothing in context keeps the request", "all-minilm", "all-minilm"},
 		{withCanonical, endpoint, "bare name is labelled with its native name", "all-minilm", "all-minilm:latest"},
 		{withCanonical, nil, "the label does not need an endpoint", "all-minilm", "all-minilm:latest"},

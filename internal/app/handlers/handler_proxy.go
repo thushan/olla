@@ -220,6 +220,28 @@ func (a *Application) canonicalModelName(name string) string {
 	return canon.CanonicalModelName(name)
 }
 
+// withCanonicalAliasTargets records the native name of any alias target that is a bare
+// Ollama name, so stats key on "all-minilm:latest" however the model was requested.
+// The alias map itself is untouched: the backend still receives the target as configured.
+func (a *Application) withCanonicalAliasTargets(ctx context.Context, requested string, aliasMap map[string]string) context.Context {
+	var targets map[string]string
+	for _, target := range aliasMap {
+		if native := a.canonicalModelName(target); native != target {
+			if targets == nil {
+				targets = make(map[string]string)
+			}
+			targets[target] = native
+		}
+	}
+	if targets == nil {
+		return ctx
+	}
+	canonical, _ := ctx.Value(constants.ContextCanonicalModelKey).(core.CanonicalModel)
+	canonical.Requested = requested
+	canonical.Targets = targets
+	return context.WithValue(ctx, constants.ContextCanonicalModelKey, canonical)
+}
+
 func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *proxyRequest) {
 	pr.requestLogger.Debug("Proxy handler called", "path", r.URL.Path, "method", r.Method)
 

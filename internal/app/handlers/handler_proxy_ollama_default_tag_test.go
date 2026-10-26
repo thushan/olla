@@ -324,6 +324,29 @@ func TestProxyRoutes_OllamaBareName_StickyKeyIsSpellingIndependent(t *testing.T)
 	assert.Equal(t, keyFor(tagBareEmbed+":latest"), keyFor(tagBareEmbed), "foo and foo:latest share one sticky key")
 }
 
+// An alias whose target is a bare Ollama name routes and forwards the target as
+// configured, but stats key on the native name like a direct request would.
+func TestProxyRoutes_OllamaBareName_AliasTargetStatsUseNativeName(t *testing.T) {
+	t.Parallel()
+
+	fleet := newTagFleet(t, tagStrategies[0].cfg, nil, false, false)
+	fleet.app.aliasResolver = registry.NewAliasResolver(map[string][]string{"embed": {tagBareEmbed}}, &mockStyledLogger{})
+	got := fleet.capture()
+
+	body := `{"model":"embed","input":"hi"}`
+	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/v1/embeddings", strings.NewReader(body))
+	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+	w := httptest.NewRecorder()
+	fleet.app.proxyHandler(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Equal(t, []string{"ollama-1"}, got.endpoints)
+	aliasMap, _ := got.ctx.Value(constants.ContextModelAliasMapKey).(map[string]string)
+	assert.Equal(t, tagBareEmbed, aliasMap[fleet.endpoints[0].GetURLString()], "the backend is sent the target as configured")
+	assert.Equal(t, tagBareEmbed+":latest", core.ResolvedModelName(got.ctx, fleet.endpoints[0], "embed"), "stats use the native name")
+}
+
 // backendRecorder stands in for Ollama and records what it was sent.
 type backendRecorder struct {
 	*httptest.Server

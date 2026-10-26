@@ -14,7 +14,12 @@ import (
 // CanonicalModel records that a client's model name resolved to a different native
 // name without being rewritten, as when "all-minilm" is served as "all-minilm:latest".
 // The forwarded body keeps the client's spelling; this only names the model for stats.
+//
+// Targets does the same for an alias: it maps the model name an alias rewrites to
+// (what the backend receives) onto its native name, so alias and direct requests for
+// one model record under one stats key.
 type CanonicalModel struct {
+	Targets   map[string]string
 	Requested string
 	Native    string
 }
@@ -32,10 +37,15 @@ type CanonicalModel struct {
 func ResolvedModelName(ctx context.Context, endpoint *domain.Endpoint, requestedModel string) string {
 	if aliasMap, ok := ctx.Value(constants.ContextModelAliasMapKey).(map[string]string); ok && endpoint != nil {
 		if actualModel, ok := aliasMap[endpoint.GetURLString()]; ok {
+			if canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel); ok {
+				if native, ok := canonical.Targets[actualModel]; ok {
+					return native
+				}
+			}
 			return actualModel
 		}
 	}
-	if canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel); ok && canonical.Requested == requestedModel {
+	if canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel); ok && canonical.Native != "" && canonical.Requested == requestedModel {
 		return canonical.Native
 	}
 	return requestedModel

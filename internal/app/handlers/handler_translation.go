@@ -517,6 +517,7 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.ContextModelAliasMapKey); ok {
 			if aliasMap, ok := aliasMapRaw.(map[string]string); ok {
 				ctx = context.WithValue(ctx, constants.ContextModelAliasMapKey, aliasMap)
+				ctx = a.withCanonicalAliasTargets(ctx, pr.model, aliasMap)
 				r = r.WithContext(ctx)
 			}
 		}
