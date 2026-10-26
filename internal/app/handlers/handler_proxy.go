@@ -375,6 +375,9 @@ func (a *Application) logRequestStart(pr *proxyRequest, endpointCount int) {
 // "completed"/"failed" outcomes so a fail-fast rejection (e.g. strict model_not_found)
 // is surfaced as a rejection rather than a successful completion (#191).
 func (a *Application) logRequestRejected(pr *proxyRequest, status int) {
+	if !a.rejectLog.allowRequest(pr.clientIP) {
+		return
+	}
 	duration := time.Since(pr.stats.StartTime)
 
 	logFields := []any{
@@ -597,6 +600,19 @@ func (a *Application) stripRoutePrefix(ctx context.Context, path string) string 
 	return util.StripRoutePrefix(ctx, path, constants.ContextRoutePrefixKey)
 }
 
+// logRoutingRejected writes the routing-rejection WARN, sampled per status and model so a
+// client repeating an unroutable model cannot write one line per request.
+func (a *Application) logRoutingRejected(log logger.StyledLogger, model string, decision *domain.ModelRoutingDecision) {
+	if !a.rejectLog.allowRouting(model, decision) {
+		return
+	}
+	log.Warn("Model routing rejected request",
+		"model", model,
+		"strategy", decision.Strategy,
+		"reason", decision.Reason,
+		"status", decision.StatusCode)
+}
+
 // three-stage filtering pipeline that progressively narrows down endpoints.
 // starts broad (platform compatibility), then capabilities (vision, embeddings),
 // finally specific model availability. each stage falls back gracefully.
@@ -676,11 +692,7 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		if err != nil {
 			// handle routing errors based on decision
 			if decision != nil && decision.StatusCode > 0 {
-				logger.Warn("Model routing rejected request",
-					"model", profile.ModelName,
-					"strategy", decision.Strategy,
-					"reason", decision.Reason,
-					"status", decision.StatusCode)
+				a.logRoutingRejected(logger, profile.ModelName, decision)
 				// return empty to trigger appropriate error response
 				return []*domain.Endpoint{}
 			}

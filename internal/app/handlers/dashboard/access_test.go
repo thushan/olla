@@ -250,7 +250,7 @@ func TestRegisterRoutes_DisabledLeavesMuxEmpty(t *testing.T) {
 	t.Parallel()
 
 	reg := router.NewRouteRegistry(stubLogger{})
-	registered := RegisterRoutes(reg, config.DashboardConfig{Enabled: false}, nil, http.NotFoundHandler())
+	registered := RegisterRoutes(reg, config.DashboardConfig{Enabled: false}, nil, http.NotFoundHandler(), nil)
 	if registered {
 		t.Fatal("RegisterRoutes must report false when disabled")
 	}
@@ -263,7 +263,7 @@ func TestRegisterRoutes_EnabledMountsDashboardSubtree(t *testing.T) {
 	t.Parallel()
 
 	reg := router.NewRouteRegistry(stubLogger{})
-	registered := RegisterRoutes(reg, loopbackConfig(), nil, reachedHandler(boolPtr(t)))
+	registered := RegisterRoutes(reg, loopbackConfig(), nil, reachedHandler(boolPtr(t)), nil)
 	if !registered {
 		t.Fatal("RegisterRoutes must report true when enabled")
 	}
@@ -288,7 +288,7 @@ func TestSlashlessDashboardRoute_DisallowedClientGets403(t *testing.T) {
 	t.Parallel()
 
 	reg := router.NewRouteRegistry(stubLogger{})
-	if !RegisterRoutes(reg, loopbackConfig(), nil, http.NotFoundHandler()) {
+	if !RegisterRoutes(reg, loopbackConfig(), nil, http.NotFoundHandler(), nil) {
 		t.Fatal("RegisterRoutes must report true when enabled")
 	}
 
@@ -314,7 +314,7 @@ func TestSlashlessDashboardRoute_AllowedClientRedirects(t *testing.T) {
 	t.Parallel()
 
 	reg := router.NewRouteRegistry(stubLogger{})
-	if !RegisterRoutes(reg, loopbackConfig(), nil, http.NotFoundHandler()) {
+	if !RegisterRoutes(reg, loopbackConfig(), nil, http.NotFoundHandler(), nil) {
 		t.Fatal("RegisterRoutes must report true when enabled")
 	}
 
@@ -371,7 +371,7 @@ func TestRegisterRoutes_DoesNotTouchOtherRoutes(t *testing.T) {
 	RegisterRoutes(reg, loopbackConfig(), nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("DASHBOARD"))
-	}))
+	}), nil)
 
 	mux := http.NewServeMux()
 	reg.WireUp(mux)
@@ -449,7 +449,7 @@ func TestRegisterRoutes_DisabledDoesNotMountDashboardOrAffectOthers(t *testing.T
 		w.WriteHeader(http.StatusOK)
 	}), "status", http.MethodGet)
 
-	RegisterRoutes(reg, config.DashboardConfig{Enabled: false}, nil, http.NotFoundHandler())
+	RegisterRoutes(reg, config.DashboardConfig{Enabled: false}, nil, http.NotFoundHandler(), nil)
 
 	mux := http.NewServeMux()
 	reg.WireUp(mux)

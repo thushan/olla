@@ -37,17 +37,28 @@ const (
 type SizeValidator struct {
 	logger        logger.StyledLogger
 	metrics       ports.SecurityMetricsService
+	rejectLog     *logger.Throttle
 	maxBodySize   int64
 	maxHeaderSize int64
 }
 
-func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityMetricsService, logger logger.StyledLogger) *SizeValidator {
-	return &SizeValidator{
+func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityMetricsService, log logger.StyledLogger) *SizeValidator {
+	sv := &SizeValidator{
 		maxBodySize:   limits.MaxBodySize,
 		maxHeaderSize: effectiveMaxHeaderSize(limits.MaxHeaderSize),
 		metrics:       metrics,
-		logger:        logger,
+		logger:        log,
 	}
+	// Oversized requests can be sent at wire speed, so the WARN is sampled per
+	// client IP; the violation counters still see every rejection.
+	sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_ip", nil)
+	return sv
+}
+
+// Flush writes any pending rejection summary. The validator has no goroutines to
+// stop, so shutdown only needs this to report the tail of a flood.
+func (sv *SizeValidator) Flush() {
+	sv.rejectLog.Flush()
 }
 
 // effectiveMaxHeaderSize derives the enforced header cap from the configured
@@ -233,30 +244,28 @@ func (sv *SizeValidator) CreateNonProxyMiddleware() func(http.Handler) http.Hand
 // CreateMiddleware and CreateNonProxyMiddleware share the same reporting path
 // without duplicating the metric-construction logic.
 func (sv *SizeValidator) recordViolation(r *http.Request, req ports.SecurityRequest, result ports.SecurityResult) {
-	if sv.metrics == nil {
-		sv.logger.Warn("Request rejected",
-			"reason", result.Reason,
-			"method", r.Method,
-			"path", r.URL.Path,
-			"remote_addr", r.RemoteAddr)
+	clientIP := util.GetClientIP(r, false, nil)
+
+	if sv.metrics != nil {
+		violationType := constants.ViolationSizeLimit
+		size := req.BodySize
+		if strings.Contains(result.Reason, "headers too large") {
+			size = req.HeaderSize
+		}
+
+		violation := ports.SecurityViolation{
+			ClientID:      clientIP,
+			ViolationType: violationType,
+			Endpoint:      r.URL.Path,
+			Size:          size,
+			Timestamp:     time.Now(),
+		}
+		_ = sv.metrics.RecordViolation(r.Context(), violation)
+	}
+
+	if !sv.rejectLog.Allow(clientIP) {
 		return
 	}
-
-	violationType := constants.ViolationSizeLimit
-	size := req.BodySize
-	if strings.Contains(result.Reason, "headers too large") {
-		size = req.HeaderSize
-	}
-
-	violation := ports.SecurityViolation{
-		ClientID:      util.GetClientIP(r, false, nil),
-		ViolationType: violationType,
-		Endpoint:      r.URL.Path,
-		Size:          size,
-		Timestamp:     time.Now(),
-	}
-	_ = sv.metrics.RecordViolation(r.Context(), violation)
-
 	sv.logger.Warn("Request rejected",
 		"reason", result.Reason,
 		"method", r.Method,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/balancer"
@@ -27,6 +28,20 @@ type SecurityAdapters struct {
 	securityChain    *ports.SecurityChain
 	securityAdapters *security.Adapters // nil when security is not configured
 	logger           logger.StyledLogger
+	throttles        *logger.ThrottleSet // nil in tests; collects the request-log throttles
+
+	// requestLog is built once and shared by every route: the route registry asks for the
+	// chain per route, and a middleware built per route would hold its own rejection
+	// throttle, so a client would get one sampled line per route per window rather than one.
+	requestLog     func(http.Handler) http.Handler
+	requestLogOnce sync.Once
+}
+
+func (s *SecurityAdapters) loggingMiddleware() func(http.Handler) http.Handler {
+	s.requestLogOnce.Do(func() {
+		s.requestLog = middleware.NewCombinedLoggingMiddleware(s.logger, s.throttles)
+	})
+	return s.requestLog
 }
 
 // CreateChainMiddleware creates middleware that applies the full security chain with enhanced logging.
@@ -37,7 +52,7 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 	return func(next http.Handler) http.Handler {
 		// Wrap with logging so every proxy request is recorded regardless of which
 		// security path runs below.
-		withAccessLogging := middleware.CombinedLoggingMiddleware(s.logger)(next)
+		withAccessLogging := s.loggingMiddleware()(next)
 
 		if s.securityAdapters != nil {
 			// Delegate to the concrete adapter chain. It sets the correct status codes
@@ -78,7 +93,7 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 func (s *SecurityAdapters) CreateRateLimitMiddleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		// Apply enhanced logging for non-proxy routes as well
-		return middleware.CombinedLoggingMiddleware(s.logger)(next)
+		return s.loggingMiddleware()(next)
 	}
 }
 
@@ -112,9 +127,13 @@ type Application struct {
 	// closure so the handler layer does not need to import the balancer package.
 	stickyStatsFn func() *balancer.StickyStats
 	aliasResolver *registry.AliasResolver
-	server        *http.Server
-	errCh         chan error
-	StartTime     time.Time
+	rejectLog     *rejectLogs
+	// throttles holds every rejection-log throttle the application created, so shutdown
+	// can report the tail of a flood that stopped just before it.
+	throttles *logger.ThrottleSet
+	server    *http.Server
+	errCh     chan error
+	StartTime time.Time
 }
 
 // NewApplication creates a new Application instance with all required dependencies
@@ -153,9 +172,11 @@ func NewApplication(
 	inspectorChain.AddInspector(bodyInspector)
 
 	// Create security adapters
+	throttles := newThrottleSet()
 	securityAdapters := &SecurityAdapters{
 		securityChain: securityChain,
 		logger:        logger,
+		throttles:     throttles,
 	}
 
 	// Create route registry
@@ -218,6 +239,8 @@ func NewApplication(
 		converterFactory:   converter.NewConverterFactory(),
 		translatorRegistry: translatorRegistry,
 		aliasResolver:      aliasResolver,
+		rejectLog:          newRejectLogs(logger, throttles),
+		throttles:          throttles,
 		server:             server,
 		errCh:              make(chan error, 1),
 		StartTime:          time.Now(),
@@ -232,6 +255,13 @@ func (a *Application) GetRouteRegistry() *router.RouteRegistry {
 // GetSecurityAdapters returns the security adapters for middleware
 func (a *Application) GetSecurityAdapters() *SecurityAdapters {
 	return a.securityAdapters
+}
+
+// FlushRejectLogs writes the pending "repeats suppressed" summaries of the handler,
+// dashboard and request-log throttles. HTTPService calls it after the listener has
+// drained, so rejections that arrived during shutdown are counted.
+func (a *Application) FlushRejectLogs() {
+	a.throttles.Flush()
 }
 
 // GetServer returns the HTTP server instance

@@ -333,6 +333,11 @@ func (s *HTTPService) Stop(ctx context.Context) error {
 		s.logger.InfoWithStatus("Stopping HTTP server", "OK")
 	}()
 
+	// After the listener drains, so rejections that arrived during shutdown are counted.
+	if s.application != nil {
+		defer s.application.FlushRejectLogs()
+	}
+
 	if s.server != nil {
 		shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
