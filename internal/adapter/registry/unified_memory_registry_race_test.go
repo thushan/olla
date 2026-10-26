@@ -189,6 +189,24 @@ func TestLifecycleRegistry_MarkEndpointOfflineDuringReads(t *testing.T) {
 	require.NotEqual(t, domain.ModelStateOffline, after.GetEndpointByURL("http://a:11434").ModelState)
 }
 
+// Alias lookups fall through to the unifier's catalogue, so they must still
+// return the registry's current record after MarkEndpointOffline replaces it.
+func TestLifecycleRegistry_MarkEndpointOfflineVisibleToAliasLookup(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
+	seedTwoEndpoints(t, r)
+	lr := &LifecycleUnifiedRegistry{UnifiedMemoryModelRegistry: r}
+	require.NoError(t, lr.MarkEndpointOffline(ctx, "http://b:11434", "down"))
+
+	for _, name := range []string{"llama3:8b", "LLAMA3:8B"} {
+		m, err := r.GetUnifiedModel(ctx, name)
+		require.NoError(t, err, name)
+		require.Equal(t, domain.ModelStateOffline, m.GetEndpointByURL("http://b:11434").ModelState, name)
+	}
+}
+
 func TestUnifiedRegistry_RemoveEndpointLeavesHeldModelIntact(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

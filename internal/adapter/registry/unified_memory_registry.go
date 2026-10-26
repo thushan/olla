@@ -259,6 +259,12 @@ func (r *UnifiedMemoryModelRegistry) GetUnifiedModel(ctx context.Context, idOrAl
 		return nil, fmt.Errorf("model not found: %s", idOrAlias)
 	}
 
+	// globalUnified is where RemoveEndpoint and MarkEndpointOffline publish
+	// their replacements, so prefer it over the unifier's catalogue copy
+	if current, exists := r.globalUnified.Load(unified.ID); exists {
+		return current, nil
+	}
+
 	return unified, nil
 }
 
