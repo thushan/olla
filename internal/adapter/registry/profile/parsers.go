@@ -79,7 +79,7 @@ func (p *ollamaParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 			modelInfo.Description = *ollamaModel.Description
 		}
 
-		if ollamaModel.Details != nil || ollamaModel.Digest != nil || ollamaModel.ModifiedAt != nil {
+		if ollamaModel.Details != nil || ollamaModel.Digest != nil || ollamaModel.ModifiedAt != nil || len(ollamaModel.Capabilities) > 0 {
 			modelInfo.Details = createOllamaModelDetails(ollamaModel)
 		}
 
@@ -91,6 +91,15 @@ func (p *ollamaParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 func createOllamaModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 	details := &domain.ModelDetails{}
+
+	// Only embedding-only models are typed. Mapping vision/tools/thinking into
+	// capability tags would make the capability filter evict those requests to
+	// Ollama endpoints in mixed fleets, so embedding is the one tag we need.
+	// Hybrid embedding+completion models stay untyped and keep text-generation.
+	if isOllamaEmbeddingOnly(ollamaModel.Capabilities) {
+		embeddingsType := "embeddings"
+		details.Type = &embeddingsType
+	}
 
 	if ollamaModel.Digest != nil {
 		details.Digest = ollamaModel.Digest
@@ -123,6 +132,19 @@ func createOllamaModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 		}
 	}
 	return details
+}
+
+func isOllamaEmbeddingOnly(capabilities []string) bool {
+	var embedding, completion bool
+	for _, c := range capabilities {
+		switch c {
+		case "embedding":
+			embedding = true
+		case "completion":
+			completion = true
+		}
+	}
+	return embedding && !completion
 }
 
 type lmStudioParser struct{}

@@ -13,6 +13,8 @@ type OllamaModel struct {
 	Description *string        `json:"description,omitempty"`
 	Details     *OllamaDetails `json:"details,omitempty"`
 	Name        string         `json:"name"`
+	// Capabilities is reported by newer Ollama releases only (absent on older ones).
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // OllamaDetails contains additional model metadata from Ollama
