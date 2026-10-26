@@ -2,6 +2,8 @@ package factory
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -55,18 +57,21 @@ func NewBackendHTTPClient(opts BackendClientOptions) *http.Client {
 }
 
 // RefuseCrossOriginRedirect is an http.Client.CheckRedirect that follows a
-// redirect only when it keeps the host:port of the original request and the
-// scheme, with one exception: http may upgrade to https on the same host:port,
-// which a backend behind a TLS-terminating front end does routinely and which
-// can only move credentials onto a safer channel. Any other scheme, host or
-// port change, and any downgrade from a hop that was already https, returns the
-// 3xx response unfollowed so the caller sees a non-success status.
+// redirect only when it keeps the host and port of the original request and the
+// scheme, with one exception: http may upgrade to https on the same host and
+// port, which a backend behind a TLS-terminating front end does routinely and
+// which can only move credentials onto a safer channel. Ports are compared with
+// each scheme's default filled in, so "h", "h:80" and "http://h:80" are one origin
+// for http, and an upgrade from http://h:80 to https://h:443 (or the bare forms
+// of both) counts as the same host and port. Any other scheme, host or port
+// change, and any downgrade from a hop that was already https, returns the 3xx
+// response unfollowed so the caller sees a non-success status.
 func RefuseCrossOriginRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= maxBackendRedirects {
 		return http.ErrUseLastResponse
 	}
 	origin := via[0].URL
-	if req.URL.Host != origin.Host {
+	if !sameHostAndPort(origin, req.URL) {
 		return http.ErrUseLastResponse
 	}
 	if req.URL.Scheme == origin.Scheme {
@@ -80,6 +85,21 @@ func RefuseCrossOriginRedirect(req *http.Request, via []*http.Request) error {
 		return nil
 	}
 	return http.ErrUseLastResponse
+}
+
+// sameHostAndPort compares hostnames case-insensitively and ports after dropping
+// the scheme's default, so an explicit :80 or :443 matches the bare form.
+func sameHostAndPort(a, b *url.URL) bool {
+	return strings.EqualFold(a.Hostname(), b.Hostname()) && explicitPort(a) == explicitPort(b)
+}
+
+// explicitPort is the port when it is not the default for the URL's scheme, else "".
+func explicitPort(u *url.URL) string {
+	port := u.Port()
+	if (u.Scheme == schemeHTTP && port == "80") || (u.Scheme == schemeHTTPS && port == "443") {
+		return ""
+	}
+	return port
 }
 
 type SharedClientFactory struct {
