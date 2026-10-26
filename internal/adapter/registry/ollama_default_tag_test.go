@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,17 @@ func buildUnified(t *testing.T, fleet ...tagFixture) *UnifiedMemoryModelRegistry
 	for _, f := range fleet {
 		require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, newEndpoint(f), modelInfos(f.models)))
 	}
-	reg.WaitForUnification()
+	// Unification is asynchronous: wait until every native name resolves.
+	require.Eventually(t, func() bool {
+		for _, f := range fleet {
+			for _, n := range f.models {
+				if u, err := reg.GetUnifiedModel(ctx, n); err != nil || u == nil {
+					return false
+				}
+			}
+		}
+		return true
+	}, 5*time.Second, 5*time.Millisecond)
 	return reg
 }
 

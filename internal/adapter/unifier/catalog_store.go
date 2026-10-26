@@ -369,6 +369,7 @@ func (c *CatalogStore) deepCopyForModification(model *domain.UnifiedModel) *doma
 				EndpointURL:    endpoint.EndpointURL,
 				EndpointName:   endpoint.EndpointName,
 				NativeName:     endpoint.NativeName,
+				Platform:       endpoint.Platform,
 				State:          endpoint.State,
 				ModelState:     endpoint.ModelState,
 				DiskSize:       endpoint.DiskSize,

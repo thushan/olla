@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"

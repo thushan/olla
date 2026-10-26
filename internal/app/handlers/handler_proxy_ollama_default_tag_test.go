@@ -86,6 +86,7 @@ func newTagFleet(t *testing.T, strategy config.ModelRoutingStrategy, urls map[st
 
 	ctx := context.Background()
 	var endpoints []*domain.Endpoint
+	var registered []*domain.ModelInfo
 	for _, spec := range []struct{ name, typ, models string }{
 		{"ollama-1", domain.ProfileOllama, tagOllamaTags},
 		{"vllm-1", domain.ProfileVLLM, tagVLLMModels},
@@ -104,8 +105,17 @@ func newTagFleet(t *testing.T, strategy config.ModelRoutingStrategy, urls map[st
 		models, perr := prof.ParseModelsResponse([]byte(spec.models))
 		require.NoError(t, perr)
 		require.NoError(t, unified.RegisterModelsWithEndpoint(ctx, ep, models))
+		registered = append(registered, models...)
 	}
-	unified.WaitForUnification()
+	// Unification is asynchronous: wait until every native name resolves.
+	require.Eventually(t, func() bool {
+		for _, m := range registered {
+			if u, uerr := unified.GetUnifiedModel(ctx, m.Name); uerr != nil || u == nil {
+				return false
+			}
+		}
+		return true
+	}, 5*time.Second, 5*time.Millisecond)
 
 	appCfg := &config.Config{}
 	if sticky {
@@ -116,7 +126,6 @@ func newTagFleet(t *testing.T, strategy config.ModelRoutingStrategy, urls map[st
 		Config:           appCfg,
 		logger:           log,
 		inspectorChain:   chain,
-		pathInspector:    pathInspector,
 		profileFactory:   factory,
 		profileLookup:    factory,
 		discoveryService: &mockDiscoveryServiceWithHealthy{endpoints: endpoints},
@@ -194,7 +203,7 @@ func (f *tagFleet) do(t *testing.T, route tagRoute, model string) *httptest.Resp
 	switch route.handler {
 	case "detail":
 		mux := http.NewServeMux()
-		mux.HandleFunc("GET "+constants.PathOllaModelsPrefix, f.app.unifiedModelByAliasHandler)
+		mux.HandleFunc("GET /olla/models/", f.app.unifiedModelByAliasHandler)
 		mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, route.path+url.PathEscape(model), nil))
 		return w
 	case "anthropic":
