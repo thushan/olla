@@ -31,9 +31,12 @@ const (
 	// model name - capability-based or default routing applies instead.
 	modelScanSize = 8 * 1024 * 1024
 
-	// peekWindow bounds how much leading whitespace we tolerate before deciding a body is not
+	// peekWindow is the span of leading whitespace examined per step when deciding whether a body is
 	// a JSON object; it is also the bufio size, so it is the only per-request allocation added.
 	peekWindow = 256
+
+	// maxLeadingWhitespace caps how much leading whitespace we look past before giving up.
+	maxLeadingWhitespace = 4096
 )
 
 type modelRequest struct {
@@ -106,6 +109,13 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 
 	if _, err := io.Copy(buffer, limitedReader); err != nil {
 		bi.logger.Debug("Failed to read request body", "error", err)
+		// Hand back what we consumed ahead of the original body, which will surface the same
+		// read error to downstream; dropping the prefix would turn a partial body into an empty one.
+		origBody := r.Body
+		r.Body = readCloser{
+			Reader: io.MultiReader(bytes.NewReader(append([]byte(nil), buffer.Bytes()...)), origBody),
+			Closer: origBody,
+		}
 		return nil
 	}
 
@@ -196,31 +206,48 @@ func (bi *BodyInspector) opaqueBody(r *http.Request) bool {
 func (bi *BodyInspector) looksLikeJSONObject(r *http.Request) bool {
 	origBody := r.Body
 	br := bufio.NewReaderSize(origBody, peekWindow)
-	r.Body = readCloser{Reader: br, Closer: origBody}
 
-	for n := 1; n <= peekWindow; n++ {
-		head, err := br.Peek(n)
-		if len(head) < n {
-			// EOF or read error before any decision byte: nothing to inspect.
-			_ = err
+	// skipped holds whitespace consumed to look further ahead; it is replayed ahead of br so
+	// the body is always left readable from its first byte. Only a padded body allocates it.
+	var skipped []byte
+	defer func() {
+		var rd io.Reader = br
+		if len(skipped) > 0 {
+			rd = io.MultiReader(bytes.NewReader(skipped), br)
+		}
+		r.Body = readCloser{Reader: rd, Closer: origBody}
+	}()
+
+	for {
+		for n := 1; n <= peekWindow; n++ {
+			head, _ := br.Peek(n)
+			if len(head) < n {
+				// EOF or read error before any decision byte: nothing to inspect.
+				return false
+			}
+			switch head[n-1] {
+			case ' ', '\t', '\r', '\n':
+				continue
+			case '{':
+				return true
+			default:
+				bi.logger.Debug("Skipping body inspection for non-object body")
+				return false
+			}
+		}
+		// The window is all whitespace. Keep looking, but only up to a fixed bound: a body that
+		// is still blank after that is not a JSON request, and handing unbounded whitespace to
+		// the streaming decoder makes it rescan the accumulated prefix on every short read.
+		if len(skipped)+peekWindow >= maxLeadingWhitespace {
+			bi.logger.Debug("Skipping body inspection for whitespace-padded body")
 			return false
 		}
-		switch c := head[n-1]; c {
-		case ' ', '\t', '\r', '\n':
-			if n == peekWindow {
-				// Whitespace filled the whole window: inconclusive, not "not JSON". The
-				// JSON parser skips any amount of leading whitespace, so let it decide.
-				return true
-			}
-			continue
-		case '{':
-			return true
-		default:
-			bi.logger.Debug("Skipping body inspection for non-object body")
+		head, _ := br.Peek(peekWindow)
+		skipped = append(skipped, head...)
+		if _, err := br.Discard(peekWindow); err != nil {
 			return false
 		}
 	}
-	return false
 }
 
 // inspectLarge scans r.Body for the top-level "model" key using a TeeReader so every byte read

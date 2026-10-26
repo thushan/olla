@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -890,4 +891,93 @@ func TestBodyInspector_ChunkedLimitBoundary(t *testing.T) {
 			assert.True(t, body == string(got), "body must be restored byte-for-byte")
 		})
 	}
+}
+
+// errAfterReader returns data, then err, mimicking a client that drops mid-body.
+type errAfterReader struct {
+	data []byte
+	err  error
+}
+
+func (e *errAfterReader) Read(p []byte) (int, error) {
+	if len(e.data) == 0 {
+		return 0, e.err
+	}
+	n := copy(p, e.data)
+	e.data = e.data[n:]
+	return n, nil
+}
+
+func TestBodyInspector_PartialBodySurvivesReadError(t *testing.T) {
+	t.Parallel()
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+	bi, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+	require.NoError(t, err)
+
+	for _, ct := range []string{"application/json", "text/plain", ""} {
+		prefix := `{"model":"x","input":"par`
+		closer := &closeTracker{Reader: &errAfterReader{data: []byte(prefix), err: io.ErrUnexpectedEOF}}
+		req := &http.Request{Body: closer, Header: make(http.Header), ContentLength: -1}
+		if ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		require.NoError(t, bi.Inspect(context.Background(), req, domain.NewRequestProfile("/x")))
+
+		got, rerr := io.ReadAll(req.Body)
+		assert.Equal(t, prefix, string(got), "consumed prefix must reach downstream (ct %q)", ct)
+		assert.ErrorIs(t, rerr, io.ErrUnexpectedEOF, "read error must propagate")
+		require.NoError(t, req.Body.Close())
+		assert.True(t, closer.closed)
+	}
+}
+
+// countingReader records how many bytes the inspector pulled from the client.
+type countingReader struct {
+	r io.Reader
+	n int
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += n
+	return n, err
+}
+
+func TestBodyInspector_LeadingWhitespaceIsBounded(t *testing.T) {
+	t.Parallel()
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+	bi, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+	require.NoError(t, err)
+
+	t.Run("blank 2MiB chunked body is skipped after the cap", func(t *testing.T) {
+		t.Parallel()
+		body := strings.Repeat(" ", 2*MaxBodySize) + `{"model":"x"}`
+		cr := &countingReader{r: iotest.OneByteReader(strings.NewReader(body))}
+		req := &http.Request{Body: io.NopCloser(cr), Header: make(http.Header), ContentLength: -1}
+		profile := domain.NewRequestProfile("/x")
+
+		require.NoError(t, bi.Inspect(context.Background(), req, profile))
+		assert.Empty(t, profile.ModelName)
+		// Work is bounded by the cap (plus one read-ahead window), not by body size.
+		assert.LessOrEqual(t, cr.n, maxLeadingWhitespace+2*peekWindow)
+
+		got, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.True(t, body == string(got), "body must be restored byte-for-byte")
+	})
+
+	t.Run("padding under the cap is still inspected through short reads", func(t *testing.T) {
+		t.Parallel()
+		body := strings.Repeat(" \n", maxLeadingWhitespace/2-peekWindow) + `{"model":"x","input":"hi"}`
+		req := &http.Request{Body: io.NopCloser(iotest.OneByteReader(strings.NewReader(body))), Header: make(http.Header), ContentLength: -1}
+		profile := domain.NewRequestProfile("/v1/embeddings")
+
+		require.NoError(t, bi.Inspect(context.Background(), req, profile))
+		assert.Equal(t, "x", profile.ModelName)
+		got, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.True(t, body == string(got), "body must be restored byte-for-byte")
+	})
 }
