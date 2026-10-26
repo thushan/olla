@@ -219,7 +219,7 @@ curl http://localhost:40114/olla/tei/metrics
 
 ### Single model per instance
 
-Each TEI instance serves exactly one model. When Olla discovers the instance it registers that single model (the `served_model_name`, or `model_id` as a fallback). Requests may name any model; TEI accepts the request and reports the model it actually serves.
+Each TEI instance serves exactly one model. When Olla discovers the instance it registers that single model (the `served_model_name`, or `model_id` as a fallback). TEI itself ignores the `model` field and answers with the one model it loaded, but Olla's routing does not: it picks the backend by the requested name. Under the default `strict` model routing (`model_registry.routing_strategy.type` in `config.yaml`) a name Olla has not discovered returns 404, so use the model the instance reports in `/info`, or one of its aliases. Model-less TEI requests (`/embed`, `/rerank`, `/predict` and the like carry no `model` field) are routed by kind instead.
 
 ### Model discovery via /info
 
