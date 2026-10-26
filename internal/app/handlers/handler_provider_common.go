@@ -140,6 +140,12 @@ func (a *Application) getProviderEndpoints(ctx context.Context, providerType str
 		// that decision's status/message over its own provider-type 404,
 		// which would silently mask a same-type outage as "model not found"
 		// instead of "no <type> endpoints available".
+		//
+		// The one decision allowed through is capability_unavailable: a model-less
+		// request whose only capable hosts are down is an outage, not a missing provider.
+		if refusal := a.capabilityRefusal(pr.profile, pr.requestLogger); refusal != nil {
+			pr.profile.RoutingDecision = refusal
+		}
 		return providerEndpoints, nil
 	}
 

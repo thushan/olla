@@ -31,6 +31,8 @@ type fleetEndpoint struct {
 	// offline hosts keep their discovered models, as a real endpoint that has
 	// stopped answering health checks does, but are not routable
 	offline bool
+	// busy hosts are routable but left out of the healthy list, as GetHealthyEndpoints does
+	busy bool
 }
 
 const (
@@ -171,14 +173,19 @@ func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *i
 	unified := registry.NewUnifiedMemoryModelRegistry(styledLog, nil, &cfg, nil)
 
 	healthy := make([]*domain.Endpoint, 0, len(fleet))
+	all := make([]*domain.Endpoint, 0, len(fleet))
 	wantModels := 0
 	for _, fe := range fleet {
 		u, perr := url.Parse("http://" + fe.name + ":8080")
 		require.NoError(t, perr)
 		ep := &domain.Endpoint{Name: fe.name, URL: u, URLString: u.String(), Type: fe.typ, Status: domain.StatusHealthy}
-		if fe.offline {
+		all = append(all, ep)
+		switch {
+		case fe.offline:
 			ep.Status = domain.StatusOffline
-		} else {
+		case fe.busy:
+			ep.Status = domain.StatusBusy
+		default:
 			healthy = append(healthy, ep)
 		}
 
@@ -202,9 +209,10 @@ func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *i
 		logger:         styledLog,
 		profileFactory: profileFactory,
 		inspectorChain: chain,
-		discoveryService: &mockDiscoveryServiceWithFunc{getHealthyEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) {
-			return healthy, nil
-		}},
+		discoveryService: &mockDiscoveryServiceWithFunc{
+			getHealthyEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) { return healthy, nil },
+			getEndpointsFunc:        func(context.Context) ([]*domain.Endpoint, error) { return all, nil },
+		},
 		modelRegistry: unified,
 		proxyService: &mockProxyService{
 			proxyFunc: func(_ context.Context, w http.ResponseWriter, _ *http.Request, eps []*domain.Endpoint, _ *ports.RequestStats, _ logger.StyledLogger) error {
@@ -273,6 +281,7 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 	ollama := func(models string, offline bool) fleetEndpoint {
 		return fleetEndpoint{name: "ollama-1", typ: domain.ProfileOllama, modelsJSON: models, offline: offline}
 	}
+	teiBusy := fleetEndpoint{name: "tei-embed", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoSnowflake, busy: true}
 	vllmChat := fleetEndpoint{name: "vllm-chat", typ: domain.ProfileVLLM, modelsJSON: vllmChatModel}
 
 	tests := []struct {
@@ -291,6 +300,10 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 			[]fleetEndpoint{ollama(ollamaTagsEmbedAndVision, true), vllmChat}},
 		{"model-less vision with the only vision host down", chatPath, visionBody, constants.RoutingReasonCapabilityUnavailable, nil,
 			[]fleetEndpoint{ollama(ollamaTagsEmbedAndVision, true), vllmChat}},
+		{"model-less embed on the tei provider route with every tei host offline", "/olla/tei/embed", inputsBody, constants.RoutingReasonCapabilityUnavailable, nil,
+			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, true), vllmChat}},
+		{"model-less embed with the only embedder busy is not refused", "/olla/proxy/embed", inputsBody, "", []string{"tei-classify", "tei-rerank"},
+			[]fleetEndpoint{teiBusy, tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false)}},
 		{"model-less embed routes to a second embedder that is up", "/olla/proxy/embed", inputsBody, "", []string{"tei-embed-2"},
 			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-embed-2", teiInfoBGESmall, false), tei("tei-rerank", teiInfoReranker, false)}},
 		{"model-less embed with no embedder model anywhere keeps the fallback", "/olla/proxy/embed", inputsBody, "", []string{"tei-classify", "tei-rerank"},

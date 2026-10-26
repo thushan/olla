@@ -841,14 +841,41 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 	}
 
 	filtered := a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger)
-	if !anyCapableHost(endpoints, capableModels) && a.allCapableHostsUnhealthy(capableModels) {
-		logger.Warn("Models with the required capabilities exist but none are on a healthy endpoint",
-			"capabilities", requiredCapabilities,
-			"capable_endpoints", len(capableModels))
-		return []*domain.Endpoint{}, ports.NewRoutingDecision(constants.RoutingStrategyCapability, ports.RoutingActionRejected,
-			constants.RoutingReasonCapabilityUnavailable)
+	if refusal := a.capabilityRefusalFor(endpoints, capableModels, requiredCapabilities, logger); refusal != nil {
+		return []*domain.Endpoint{}, refusal
 	}
 	return filtered, nil
+}
+
+// capabilityRefusalFor returns the capability_unavailable decision when none of candidates
+// hosts a capable model and every host that does is unroutable; otherwise nil.
+func (a *Application) capabilityRefusalFor(candidates []*domain.Endpoint, capableModels map[string]bool, requiredCapabilities []string, logger logger.StyledLogger) *domain.ModelRoutingDecision {
+	if anyCapableHost(candidates, capableModels) || !a.allCapableHostsUnroutable(capableModels) {
+		return nil
+	}
+	logger.Warn("Models with the required capabilities exist but none are on a routable endpoint",
+		"capabilities", requiredCapabilities,
+		"capable_endpoints", len(capableModels))
+	return ports.NewRoutingDecision(constants.RoutingStrategyCapability, ports.RoutingActionRejected,
+		constants.RoutingReasonCapabilityUnavailable)
+}
+
+// capabilityRefusal is the refusal check for callers with no candidate endpoints left, such
+// as a provider route whose provider type has no routable host. A model-less request that
+// needs a capability only a downed host has is refused here rather than masked as a 404.
+func (a *Application) capabilityRefusal(profile *domain.RequestProfile, logger logger.StyledLogger) *domain.ModelRoutingDecision {
+	if profile == nil || profile.ModelName != "" || profile.ModelCapabilities == nil || a.modelRegistry == nil {
+		return nil
+	}
+	required := a.extractRequiredCapabilities(profile.ModelCapabilities)
+	if len(required) == 0 {
+		return nil
+	}
+	capableModels := a.findCapableModels(required, logger)
+	if len(capableModels) == 0 {
+		return nil
+	}
+	return a.capabilityRefusalFor(nil, capableModels, required, logger)
 }
 
 // anyCapableHost reports whether any of endpoints serves a capable model.
@@ -861,19 +888,25 @@ func anyCapableHost(endpoints []*domain.Endpoint, capableModels map[string]bool)
 	return false
 }
 
-// allCapableHostsUnhealthy reports whether no host serving a capable model is healthy. The
+// allCapableHostsUnroutable reports whether no host serving a capable model is routable. The
 // registry keeps a model's source endpoints while the host is down, so the capable set still
-// names hosts the healthy list no longer contains. When health cannot be read the answer is
+// names hosts that are gone. Routable (not merely healthy) is the test: a Busy or Warming host
+// is still handed requests by the balancers. When endpoint state cannot be read the answer is
 // no, which keeps the old fallback rather than refusing on a guess.
-func (a *Application) allCapableHostsUnhealthy(capableModels map[string]bool) bool {
+func (a *Application) allCapableHostsUnroutable(capableModels map[string]bool) bool {
 	if a.discoveryService == nil {
 		return false
 	}
-	healthy, err := a.discoveryService.GetHealthyEndpoints(context.Background())
+	all, err := a.discoveryService.GetEndpoints(context.Background())
 	if err != nil {
 		return false
 	}
-	return !anyCapableHost(healthy, capableModels)
+	for _, endpoint := range all {
+		if capableModels[endpoint.GetURLString()] && endpoint.Status.IsRoutable() {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities) []string {
