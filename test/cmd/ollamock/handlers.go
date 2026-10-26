@@ -611,28 +611,41 @@ func teiInputCount(raw json.RawMessage, field string) (count int, blank, err *te
 			return 1, nil, nil
 		}
 		for _, item := range v {
-			switch it := item.(type) {
-			case string:
-				if it == "" {
-					blank = emptyInput
-				}
-			case []any:
-				if len(it) == 0 {
-					blank = emptyInput
-				}
-				for _, id := range it {
-					if _, ok := id.(float64); !ok {
-						return 0, nil, teiValidationErr("`" + field + "` token ids must be numbers")
-					}
-				}
-			default:
-				return 0, nil, teiValidationErr("`" + field + "` must be a string or an array of strings")
+			itemBlank, err := teiBatchItem(item, field, emptyInput)
+			if err != nil {
+				return 0, nil, err
+			}
+			if itemBlank != nil {
+				blank = itemBlank
 			}
 		}
 		return len(v), blank, nil
 	default:
 		return 0, nil, teiValidationErr("`" + field + "` must be a string or an array of strings")
 	}
+}
+
+// teiBatchItem validates one element of a batch: a string or an array of token
+// ids. It returns emptyInput as blank when the element is empty.
+func teiBatchItem(item any, field string, emptyInput *teiError) (blank, err *teiError) {
+	switch it := item.(type) {
+	case string:
+		if it == "" {
+			return emptyInput, nil
+		}
+	case []any:
+		for _, id := range it {
+			if _, ok := id.(float64); !ok {
+				return nil, teiValidationErr("`" + field + "` token ids must be numbers")
+			}
+		}
+		if len(it) == 0 {
+			return emptyInput, nil
+		}
+	default:
+		return nil, teiValidationErr("`" + field + "` must be a string or an array of strings")
+	}
+	return nil, nil
 }
 
 // teiAllNumbers reports whether every element is a JSON number. Callers have
