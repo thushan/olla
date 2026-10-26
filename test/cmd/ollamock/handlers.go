@@ -608,6 +608,9 @@ func teiInputCount(raw json.RawMessage, field string) (count int, blank, err *te
 		// A flat array of numbers is one sequence of token ids (TEI's InputIds),
 		// not a batch of items.
 		if teiAllNumbers(v) {
+			if !teiValidTokenIDs(v) {
+				return 0, nil, teiValidationErr(teiTokenIDMsg(field))
+			}
 			return 1, nil, nil
 		}
 		for _, item := range v {
@@ -639,6 +642,9 @@ func teiBatchItem(item any, field string, emptyInput *teiError) (blank, err *tei
 				return nil, teiValidationErr("`" + field + "` token ids must be numbers")
 			}
 		}
+		if !teiValidTokenIDs(it) {
+			return nil, teiValidationErr(teiTokenIDMsg(field))
+		}
 		if len(it) == 0 {
 			return emptyInput, nil
 		}
@@ -653,6 +659,27 @@ func teiBatchItem(item any, field string, emptyInput *teiError) (blank, err *tei
 func teiAllNumbers(v []any) bool {
 	for _, item := range v {
 		if _, ok := item.(float64); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// teiMaxTokenID is the largest value TEI accepts as a token id: it types them as
+// u32 (InputType::Ids(Vec<u32>)), so fractional, negative or larger values fail
+// deserialisation.
+const teiMaxTokenID = 4294967295
+
+func teiTokenIDMsg(field string) string {
+	return "invalid `" + field + "`: token ids must be unsigned 32-bit integers"
+}
+
+// teiValidTokenIDs reports whether every element is a number that fits a u32.
+// Callers have already checked each element is a float64.
+func teiValidTokenIDs(v []any) bool {
+	for _, item := range v {
+		f, _ := item.(float64)
+		if f < 0 || f > teiMaxTokenID || f != math.Trunc(f) {
 			return false
 		}
 	}

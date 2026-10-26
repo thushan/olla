@@ -691,6 +691,43 @@ func TestTEIEmbedAcceptsTokenIDInput(t *testing.T) {
 	}
 }
 
+// Real TEI types token ids as u32, so anything outside that range fails
+// deserialisation with a 422, in both the flat and the batch form.
+func TestTEIEmbedTokenIDRange(t *testing.T) {
+	t.Parallel()
+	ts := testServerWith(t, serverConfig{teiKind: teiKindEmbedding})
+
+	cases := []struct {
+		name, body string
+		want       int
+	}{
+		{"zero single", `{"inputs":[0]}`, http.StatusOK},
+		{"max u32 single", `{"inputs":[4294967295]}`, http.StatusOK},
+		{"zero and max batch", `{"inputs":[[0],[4294967295]]}`, http.StatusOK},
+		{"fractional single", `{"inputs":[101,1.5]}`, http.StatusUnprocessableEntity},
+		{"negative single", `{"inputs":[101,-1]}`, http.StatusUnprocessableEntity},
+		{"overflow single", `{"inputs":[101,4294967296]}`, http.StatusUnprocessableEntity},
+		{"fractional batch", `{"inputs":[[101],[1.5]]}`, http.StatusUnprocessableEntity},
+		{"negative batch", `{"inputs":[[101],[-1]]}`, http.StatusUnprocessableEntity},
+		{"overflow batch", `{"inputs":[[101],[4294967296]]}`, http.StatusUnprocessableEntity},
+		{"openai overflow single", `{"input":[4294967296]}`, http.StatusUnprocessableEntity},
+		{"openai negative batch", `{"input":[[-1]]}`, http.StatusUnprocessableEntity},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := "/embed"
+			if strings.HasPrefix(tc.body, `{"input":`) {
+				path = "/v1/embeddings"
+			}
+			status, _, raw := teiRaw(t, ts, path, tc.body)
+			if status != tc.want {
+				t.Fatalf("status = %d, want %d (body %s)", status, tc.want, raw)
+			}
+		})
+	}
+}
+
 // teiRaw posts body and returns the status, Content-Type and raw body, for the
 // answers that are not JSON.
 func teiRaw(t *testing.T, ts *httptest.Server, path, body string) (status int, contentType, raw string) {
