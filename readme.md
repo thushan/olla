@@ -93,7 +93,7 @@ Olla proxies the following self-hosted inference backends. The **Anthropic API**
 | [Lemonade SDK](https://github.com/lemonade-sdk/lemonade) | [Integration](https://thushan.github.io/olla/integrations/backend/lemonade/) | 🔄 Translation |
 | [LiteLLM](https://github.com/BerriAI/litellm) | [Integration](https://thushan.github.io/olla/integrations/backend/litellm/) | 🔄 Translation |
 | OpenAI-compatible (generic) | [Integration](https://thushan.github.io/olla/integrations/overview/) | 🔄 Translation |
-| [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference) | [Integration](https://thushan.github.io/olla/integrations/backend/text-embeddings-inference/) | N/A (embeddings only) |
+| [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference) | [Integration](https://thushan.github.io/olla/integrations/backend/text-embeddings-inference/) | N/A (no chat or text generation) |
 
 > **⚡ Passthrough**: Olla forwards Anthropic-format requests directly; the backend handles them natively, with no translation overhead. \
 > **🔄 Translation**: Olla converts Anthropic ↔ OpenAI format automatically; any OpenAI-compatible backend works transparently.
