@@ -337,6 +337,10 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 	r.unificationMutex.Lock()
 	defer r.unificationMutex.Unlock()
 
+	// The unifier keeps its own catalogue, which GetUnifiedModel falls back to for
+	// aliases. Leaving the endpoint in it would keep offering a host that is gone.
+	r.removeEndpointFromUnifier(ctx, endpointURL)
+
 	// Remove endpoint from all unified models
 	r.globalUnified.Range(func(id string, live *domain.UnifiedModel) bool {
 		// Copy-on-write: lock-free readers hold the published pointer, and
@@ -390,6 +394,32 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 	})
 
 	return nil
+}
+
+// endpointRemover is implemented by unifiers that track per-endpoint state of their own
+// (the lifecycle unifier also drops the endpoint's circuit breaker and health record).
+type endpointRemover interface {
+	RemoveEndpoint(ctx context.Context, endpointURL string) error
+}
+
+// removeEndpointFromUnifier drops endpointURL's models from the unifier's catalogue.
+// Callers hold unificationMutex.
+func (r *UnifiedMemoryModelRegistry) removeEndpointFromUnifier(ctx context.Context, endpointURL string) {
+	if remover, ok := r.unifier.(endpointRemover); ok {
+		if err := remover.RemoveEndpoint(ctx, endpointURL); err != nil {
+			r.logger.Warn("Error removing endpoint from unifier", "url", endpointURL, "error", err)
+		}
+		return
+	}
+
+	// An empty model list is how a unifier is told an endpoint has none left.
+	endpoint, ok := r.endpoints.Load(endpointURL)
+	if !ok {
+		endpoint = &domain.Endpoint{URLString: endpointURL, Name: endpointURL}
+	}
+	if _, err := r.unifier.UnifyModels(ctx, []*domain.ModelInfo{}, endpoint); err != nil {
+		r.logger.Warn("Error removing endpoint from unifier", "url", endpointURL, "error", err)
+	}
 }
 
 // GetHealthyEndpointsForModel returns healthy endpoints that have a specific model
