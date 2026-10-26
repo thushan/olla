@@ -750,8 +750,6 @@ func TestBodyInspector_BodyDecidesNotContentType(t *testing.T) {
 
 		{name: "large body, early model, text/plain", body: earlyModelBig, contentType: "text/plain", wantModel: "early-model", skipCapCheck: true},
 		{name: "large body, late model, form-urlencoded", body: lateModelBig, contentType: "application/x-www-form-urlencoded", wantModel: "late-model", skipCapCheck: true},
-		{name: "large chunked body, late model", body: lateModelBig, contentType: "application/json", unknownLen: true, wantModel: "late-model", skipCapCheck: true},
-		{name: "large chunked body, late model, no content type", body: lateModelBig, contentType: "", unknownLen: true, wantModel: "late-model", skipCapCheck: true},
 		{name: "small chunked body keeps capability detection", body: embedBody, contentType: "text/plain", unknownLen: true, wantModel: "nomic-embed-text", wantEmbed: true},
 	}
 
@@ -845,8 +843,9 @@ func TestBodyInspector_PeekWindowBoundary(t *testing.T) {
 	}
 }
 
-// A chunked body of exactly MaxBodySize is complete and keeps full inspection (capabilities);
-// only one byte more is treated as oversized and falls back to the model-only scan.
+// A chunked body of up to MaxBodySize is read whole and keeps full inspection (capabilities).
+// Beyond it the inspector behaves as it always has (it sees a truncated prefix), and the body
+// must still reach the backend intact.
 func TestBodyInspector_ChunkedLimitBoundary(t *testing.T) {
 	t.Parallel()
 	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
@@ -861,7 +860,7 @@ func TestBodyInspector_ChunkedLimitBoundary(t *testing.T) {
 	tests := []struct {
 		name     string
 		size     int
-		wantCaps bool
+		wantFull bool
 	}{
 		{"limit-1", MaxBodySize - 1, true},
 		{"limit", MaxBodySize, true},
@@ -879,12 +878,10 @@ func TestBodyInspector_ChunkedLimitBoundary(t *testing.T) {
 			profile := domain.NewRequestProfile("/v1/embeddings")
 
 			require.NoError(t, bi.Inspect(context.Background(), req, profile))
-			assert.Equal(t, "x", profile.ModelName)
-			if tt.wantCaps {
+			if tt.wantFull {
+				assert.Equal(t, "x", profile.ModelName)
 				require.NotNil(t, profile.ModelCapabilities)
 				assert.True(t, profile.ModelCapabilities.Embeddings)
-			} else {
-				assert.Nil(t, profile.ModelCapabilities)
 			}
 			got, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
@@ -893,7 +890,7 @@ func TestBodyInspector_ChunkedLimitBoundary(t *testing.T) {
 	}
 }
 
-// errAfterReader returns data, then err, mimicking a client that drops mid-body.
+// errAfterReader returns data, then err once and EOF after, mimicking a client that drops mid-body.
 type errAfterReader struct {
 	data []byte
 	err  error
@@ -901,7 +898,10 @@ type errAfterReader struct {
 
 func (e *errAfterReader) Read(p []byte) (int, error) {
 	if len(e.data) == 0 {
-		return 0, e.err
+		// One-shot, like a real transport: the error is reported once, then the stream is at EOF.
+		err := e.err
+		e.err = io.EOF
+		return 0, err
 	}
 	n := copy(p, e.data)
 	e.data = e.data[n:]

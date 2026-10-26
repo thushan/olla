@@ -103,32 +103,17 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		bi.bufferPool.Put(buffer)
 	}()
 
-	// One byte past the limit tells a body of exactly maxBodySize (complete, fully inspected)
-	// from an oversized one.
-	limitedReader := io.LimitReader(r.Body, bi.maxBodySize+1)
+	limitedReader := io.LimitReader(r.Body, bi.maxBodySize)
 
 	if _, err := io.Copy(buffer, limitedReader); err != nil {
 		bi.logger.Debug("Failed to read request body", "error", err)
-		// Hand back what we consumed ahead of the original body, which will surface the same
-		// read error to downstream; dropping the prefix would turn a partial body into an empty one.
-		origBody := r.Body
+		// Hand back what we consumed, then the same error: io.Copy has already taken it from
+		// the original body, which may well return a clean EOF next. Dropping the prefix would
+		// turn a partial body into an empty one; dropping the error would hide the truncation.
 		r.Body = readCloser{
-			Reader: io.MultiReader(bytes.NewReader(append([]byte(nil), buffer.Bytes()...)), origBody),
-			Closer: origBody,
+			Reader: io.MultiReader(bytes.NewReader(append([]byte(nil), buffer.Bytes()...)), errReader{err: err}),
+			Closer: r.Body,
 		}
-		return nil
-	}
-
-	// An unknown length (chunked) body that filled the buffer may be arbitrarily larger, and a
-	// model placed after a big field would be missed by parsing a truncated prefix. Hand it to
-	// the bounded scan, replaying what we have already read.
-	if r.ContentLength < 0 && int64(buffer.Len()) > bi.maxBodySize {
-		origBody := r.Body
-		r.Body = readCloser{
-			Reader: io.MultiReader(bytes.NewReader(append([]byte(nil), buffer.Bytes()...)), origBody),
-			Closer: origBody,
-		}
-		bi.inspectLarge(r, profile)
 		return nil
 	}
 
@@ -249,6 +234,11 @@ func (bi *BodyInspector) looksLikeJSONObject(r *http.Request) bool {
 		}
 	}
 }
+
+// errReader returns err on every read.
+type errReader struct{ err error }
+
+func (e errReader) Read([]byte) (int, error) { return 0, e.err }
 
 // inspectLarge scans r.Body for the top-level "model" key using a TeeReader so every byte read
 // is captured for restoration, with token-level iteration that skips large nested values
