@@ -305,6 +305,26 @@ logging:
   output: "stdout"
 ```
 
+### Rejection Log Sampling
+
+Rejections Olla generates itself are sampled so one abusive client cannot flood the log: rate limit
+(`429`), request size (`413`/`431`), dashboard access (`403`), and the proxy's `Request rejected` and
+`Model routing rejected request` lines. For each client IP, the first rejection in a 10 second window
+is logged in full. The rest are counted and written once as `<message>, repeats suppressed`, with a
+`suppressed=N` field and a `layer` field naming the writer (`rate_limit`, `size_limit`, `proxy`,
+`routing`, `dashboard` or `request_log`). Each layer tracks at most 256 client IPs; further addresses
+share one summary with `client_ip=other`. Lapsed windows are settled by the next rejection in the
+same layer, and every layer writes what it still holds when Olla shuts down.
+
+The request log samples responses with status 401, 403, 413, 429 or 431 that carry no
+`X-Olla-Endpoint` header in the same way. A backend's own 4xx and 5xx responses are never sampled.
+Successful traffic is logged per request as usual. This window is fixed; there is no config key
+for it.
+
+The security counters (`olla_security_rate_limit_violations_total`,
+`olla_security_violations_total`, at `/internal/metrics`) count every rejection, so alert on those
+and use the log to identify who is responsible.
+
 ### Log Sensitive Data
 
 **Never log**:
@@ -545,7 +565,7 @@ Production deployment checklist:
 
 When detecting abuse:
 
-1. Check logs for source IPs
+1. Check logs for source IPs (one full line per client per 10 seconds, plus a `suppressed=` summary)
 2. Verify legitimate vs malicious traffic
 3. Adjust rate limits if needed
 4. Block malicious IPs at firewall
