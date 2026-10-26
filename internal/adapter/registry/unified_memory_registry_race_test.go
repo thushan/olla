@@ -107,7 +107,7 @@ func TestUnifiedRegistry_ReadersDuringSecondEndpointRegister(t *testing.T) {
 	for name := range readers(ctx, probe) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			for i := 0; i < registryRaceIterations; i++ {
+			for range registryRaceIterations {
 				r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 				require.NoError(t, r.RegisterModelsWithEndpoint(ctx, raceEndpoint("a", "http://a:11434"), []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}))
 				r.WaitForUnification()
@@ -129,7 +129,7 @@ func TestUnifiedRegistry_ReadersDuringRemoveEndpoint(t *testing.T) {
 	for name := range readers(ctx, probe) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			for i := 0; i < registryRaceIterations; i++ {
+			for range registryRaceIterations {
 				r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 				seedTwoEndpoints(t, r)
 
@@ -153,7 +153,7 @@ func TestUnifiedRegistry_ReadersDuringRediscoveryCycle(t *testing.T) {
 			seedTwoEndpoints(t, r)
 
 			writeWhileReading(readers(ctx, r)[name], func() {
-				for i := 0; i < 300; i++ {
+				for range 300 {
 					_ = r.RegisterModelsWithEndpoint(ctx, raceEndpoint("a", "http://a:11434"), []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")})
 					r.WaitForUnification()
 				}
@@ -175,7 +175,7 @@ func TestLifecycleRegistry_MarkEndpointOfflineDuringReads(t *testing.T) {
 	beforeState := before.GetEndpointByURL("http://b:11434").State
 
 	writeWhileReading(readers(ctx, r)["GetUnifiedModels"], func() {
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			require.NoError(t, lr.MarkEndpointOffline(ctx, "http://b:11434", "down"))
 		}
 	})
@@ -215,7 +215,7 @@ func TestUnifiedRegistry_GetUnifiedStatsDuringRegister(t *testing.T) {
 
 	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 	writeWhileReading(func() { _, _ = r.GetUnifiedStats(ctx) }, func() {
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			_ = r.RegisterModelsWithEndpoint(ctx, raceEndpoint("a", "http://a:11434"), []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")})
 			r.WaitForUnification()
 		}

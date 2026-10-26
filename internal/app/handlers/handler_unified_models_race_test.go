@@ -36,7 +36,7 @@ func TestUnifiedViewHandlers_ConcurrentWithRegistration(t *testing.T) {
 	epA, epB := newEndpoint("a"), newEndpoint("b")
 	ctx := context.Background()
 
-	for iter := 0; iter < 30; iter++ {
+	for range 30 {
 		reg := registry.NewUnifiedMemoryModelRegistry(&mockStyledLogger{}, nil, nil, nil)
 		reg.RegisterEndpoint(epA)
 		reg.RegisterEndpoint(epB)
@@ -81,7 +81,7 @@ func TestUnifiedViewHandlers_ConcurrentWithRegistration(t *testing.T) {
 		// second endpoint merges, then leaves, then the first re-registers
 		require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, epB, model("llama3-8b-b")))
 		reg.WaitForUnification()
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, epA, model("llama3:8b")))
 			reg.WaitForUnification()
 		}

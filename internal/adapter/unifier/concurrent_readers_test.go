@@ -96,7 +96,7 @@ func TestDefaultUnifier_ConcurrentReadersDuringMerge(t *testing.T) {
 			t.Run(sName+"/"+rName, func(t *testing.T) {
 				t.Parallel()
 				ctx := context.Background()
-				for i := 0; i < raceIterations; i++ {
+				for range raceIterations {
 					u := NewDefaultUnifier().(*DefaultUnifier)
 					_, err := u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
 					require.NoError(t, err)
@@ -131,7 +131,7 @@ func TestDefaultUnifier_GetStatsDuringUnify(t *testing.T) {
 	var done atomic.Bool
 	go func() {
 		defer done.Store(true)
-		for i := 0; i < 300; i++ {
+		for range 300 {
 			_, _ = u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("m", "d")}, ep)
 		}
 	}()
