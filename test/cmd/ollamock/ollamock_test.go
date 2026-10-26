@@ -546,7 +546,7 @@ func TestTEITokenizeShape(t *testing.T) {
 // is a batch (one prediction array per sequence).
 func TestTEIPredictShapes(t *testing.T) {
 	t.Parallel()
-	ts := testServer(t)
+	ts := testServerWith(t, serverConfig{teiKind: teiKindClassifier})
 
 	sorted := func(p []struct {
 		Score float64 `json:"score"`
@@ -601,11 +601,197 @@ func TestTEIPredictShapes(t *testing.T) {
 		}
 	}
 
-	for _, in := range []string{`[]`, `["a","b","c"]`, `["a",["b"]]`, `[["a","b","c"]]`, `[["a"],"b"]`, `5`} {
+	for _, in := range []string{`["a","b","c"]`, `["a",["b"]]`, `[["a","b","c"]]`, `[["a"],"b"]`, `5`} {
 		resp := postJSON(t, ts.URL+"/predict", `{"inputs":`+in+`}`)
 		resp.Body.Close()
 		if resp.StatusCode != http.StatusUnprocessableEntity {
 			t.Errorf("%s: want 422, got %d", in, resp.StatusCode)
 		}
+	}
+}
+
+// testServerWith builds an isolated server from an explicit config for tests
+// that need flags the default helper leaves off.
+func testServerWith(t *testing.T, cfg serverConfig) *httptest.Server {
+	t.Helper()
+	if cfg.name == "" {
+		cfg.name = "test"
+	}
+	if len(cfg.models) == 0 {
+		cfg.models = []string{"test-model"}
+	}
+	if cfg.streamChunks == 0 {
+		cfg.streamChunks = 3
+	}
+	ts := httptest.NewServer(newServer(cfg).handler())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// teiCall posts body to path and returns the status and decoded JSON body.
+func teiCall(t *testing.T, ts *httptest.Server, path, body string) (int, map[string]any) {
+	t.Helper()
+	resp := postJSON(t, ts.URL+path, body)
+	defer resp.Body.Close()
+	var out map[string]any
+	// success bodies are arrays for most routes, so a decode miss is not an error here
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	return resp.StatusCode, out
+}
+
+// Real TEI answers blank inputs with 400 error_type "Empty" and a wrongly shaped
+// body with 422 "Validation"; every handler has to agree, whatever its shape.
+func TestTEIErrorContract(t *testing.T) {
+	t.Parallel()
+	embedding := testServerWith(t, serverConfig{teiKind: teiKindEmbedding})
+	reranker := testServerWith(t, serverConfig{teiKind: teiKindReranker})
+	classifier := testServerWith(t, serverConfig{teiKind: teiKindClassifier})
+
+	cases := []struct {
+		srv        *httptest.Server
+		path, body string
+		status     int
+		errType    string
+	}{
+		{embedding, "/embed", `{"inputs":[]}`, 400, "Empty"},
+		{embedding, "/embed", `{"inputs":""}`, 400, "Empty"},
+		{embedding, "/embed", `{"inputs":["a",""]}`, 400, "Empty"},
+		{embedding, "/embed", `{"inputs":5}`, 422, "Validation"},
+		{embedding, "/embed", `{"inputs":["a",5]}`, 422, "Validation"},
+		{embedding, "/embed", `{}`, 422, "Validation"},
+		{embedding, "/embed", `{"inputs":`, 422, "Validation"},
+		{embedding, "/embed_all", `{"inputs":[]}`, 400, "Empty"},
+		{embedding, "/embed_all", `{"inputs":{"a":1}}`, 422, "Validation"},
+		{embedding, "/embed_sparse", `{"inputs":""}`, 400, "Empty"},
+		{embedding, "/embed_sparse", `{"inputs":true}`, 422, "Validation"},
+		{embedding, "/tokenize", `{"inputs":[]}`, 400, "Empty"},
+		{embedding, "/tokenize", `{"inputs":""}`, 400, "Empty"},
+		{embedding, "/tokenize", `{"inputs":[1]}`, 422, "Validation"},
+		{embedding, "/decode", `{"ids":"x"}`, 422, "Validation"},
+		{embedding, "/decode", `{"ids":["a"]}`, 422, "Validation"},
+		{embedding, "/decode", `{"ids":[[1],"b"]}`, 422, "Validation"},
+		{embedding, "/decode", `{}`, 422, "Validation"},
+		{embedding, "/similarity", `{"inputs":{"source_sentence":"a","sentences":[]}}`, 400, "Empty"},
+		{embedding, "/similarity", `{"inputs":{"source_sentence":"","sentences":["a"]}}`, 400, "Empty"},
+		{embedding, "/similarity", `{"inputs":"x"}`, 422, "Validation"},
+		{embedding, "/similarity", `{"inputs":{"sentences":["a"]}}`, 422, "Validation"},
+		{reranker, "/rerank", `{"query":"q","texts":[]}`, 400, "Empty"},
+		{reranker, "/rerank", `{"query":"q","texts":["a",""]}`, 400, "Empty"},
+		{reranker, "/rerank", `{"query":"","texts":["a"]}`, 400, "Empty"},
+		{reranker, "/rerank", `{"query":"q"}`, 422, "Validation"},
+		{reranker, "/rerank", `{"query":"q","texts":"a"}`, 422, "Validation"},
+		{reranker, "/rerank", `{"query":5,"texts":["a"]}`, 422, "Validation"},
+		{classifier, "/predict", `{"inputs":""}`, 400, "Empty"},
+		{classifier, "/predict", `{"inputs":[]}`, 400, "Empty"},
+		{classifier, "/predict", `{"inputs":[""]}`, 400, "Empty"},
+		{classifier, "/predict", `{"inputs":[["a"],[""]]}`, 400, "Empty"},
+		{classifier, "/predict", `{"inputs":5}`, 422, "Validation"},
+		{classifier, "/predict", `{}`, 422, "Validation"},
+		// a model of the wrong kind answers 424 even to a well-formed request
+		{embedding, "/rerank", `{"query":"q","texts":["a"]}`, 424, "Backend"},
+		{embedding, "/predict", `{"inputs":"a"}`, 424, "Backend"},
+		{reranker, "/embed", `{"inputs":"a"}`, 424, "Backend"},
+		{reranker, "/embed_all", `{"inputs":"a"}`, 424, "Backend"},
+		{reranker, "/embed_sparse", `{"inputs":"a"}`, 424, "Backend"},
+		{reranker, "/similarity", `{"inputs":{"source_sentence":"a","sentences":["b"]}}`, 424, "Backend"},
+		{classifier, "/embed", `{"inputs":"a"}`, 424, "Backend"},
+		{classifier, "/rerank", `{"query":"q","texts":["a"]}`, 424, "Backend"},
+		// blank input is reported before the kind is checked, as upstream does for /rerank
+		{embedding, "/rerank", `{"query":"q","texts":[]}`, 400, "Empty"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.path+" "+tc.body, func(t *testing.T) {
+			t.Parallel()
+			status, body := teiCall(t, tc.srv, tc.path, tc.body)
+			if status != tc.status {
+				t.Fatalf("status = %d, want %d (body %v)", status, tc.status, body)
+			}
+			if body["error_type"] != tc.errType {
+				t.Errorf("error_type = %v, want %s", body["error_type"], tc.errType)
+			}
+			if msg, _ := body["error"].(string); msg == "" {
+				t.Errorf("error message empty: %v", body)
+			}
+		})
+	}
+
+	t.Run("well-formed requests succeed on the right kind", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			srv        *httptest.Server
+			path, body string
+		}{
+			{embedding, "/embed", `{"inputs":["a","b"]}`},
+			{embedding, "/embed", `{"inputs":[[1,2,3]]}`},
+			{embedding, "/tokenize", `{"inputs":"a b"}`},
+			{embedding, "/decode", `{"ids":[1,2]}`},
+			{embedding, "/decode", `{"ids":[]}`},
+			{embedding, "/similarity", `{"inputs":{"source_sentence":"a","sentences":["b"]}}`},
+			{reranker, "/rerank", `{"query":"q","texts":["a","b"]}`},
+			{reranker, "/predict", `{"inputs":"a"}`},
+			{classifier, "/predict", `{"inputs":"a"}`},
+		} {
+			resp := postJSON(t, tc.srv.URL+tc.path, tc.body)
+			resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("%s %s: status %d, want 200", tc.path, tc.body, resp.StatusCode)
+			}
+		}
+	})
+
+	t.Run("v1/embeddings uses the OpenAI-compatible error shape", func(t *testing.T) {
+		t.Parallel()
+		for body, want := range map[string]struct {
+			status  int
+			errType string
+		}{
+			`{"input":[]}`:  {400, "Empty"},
+			`{"input":""}`:  {400, "Empty"},
+			`{"input":5}`:   {422, "Validation"},
+			`{"model":"x"}`: {422, "Validation"},
+			`{"input":"a" `: {422, "Validation"},
+		} {
+			status, got := teiCall(t, embedding, "/v1/embeddings", body)
+			if status != want.status || got["error_type"] != want.errType || got["code"] != float64(want.status) || got["message"] == "" {
+				t.Errorf("%s: status %d body %v, want %d %s with message and code", body, status, got, want.status, want.errType)
+			}
+		}
+		if status, _ := teiCall(t, reranker, "/v1/embeddings", `{"input":"a"}`); status != http.StatusFailedDependency {
+			t.Errorf("embeddings on a reranker: status %d, want 424", status)
+		}
+		if status, _ := teiCall(t, embedding, "/v1/embeddings", `{"input":["a","b"]}`); status != http.StatusOK {
+			t.Errorf("valid embeddings: status %d, want 200", status)
+		}
+	})
+}
+
+func TestTEIInfoModelType(t *testing.T) {
+	t.Parallel()
+	for kind, labels := range map[string]bool{teiKindEmbedding: false, teiKindReranker: true, teiKindClassifier: true, "": false} {
+		t.Run("kind="+kind, func(t *testing.T) {
+			t.Parallel()
+			ts := testServerWith(t, serverConfig{teiKind: kind})
+			resp := getURL(t, ts.URL+"/info")
+			defer resp.Body.Close()
+			var info struct {
+				ModelType map[string]map[string]any `json:"model_type"`
+			}
+			decodeJSON(t, resp, &info)
+
+			want := kind
+			if want == "" {
+				want = teiKindEmbedding
+			}
+			if len(info.ModelType) != 1 {
+				t.Fatalf("model_type should be a single-key tagged object, got %v", info.ModelType)
+			}
+			body, ok := info.ModelType[want]
+			if !ok {
+				t.Fatalf("model_type = %v, want key %q", info.ModelType, want)
+			}
+			if _, has := body["id2label"]; has != labels {
+				t.Errorf("id2label present = %v, want %v", has, labels)
+			}
+		})
 	}
 }

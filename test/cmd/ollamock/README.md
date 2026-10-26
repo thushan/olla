@@ -32,6 +32,7 @@ go run ./test/cmd/ollamock \
 | `--ttft-ms` | `0` | Delay before first streamed byte (milliseconds) |
 | `--tps` | `0` | Token-per-second pacing for stream chunks (0 = instant) |
 | `--stream-chunks` | `5` | Number of content chunks per streamed response |
+| `--tei-kind` | `embedding` | Kind a TEI instance reports in `GET /info` `model_type` and serves: `embedding`, `reranker` or `classifier`. Routes for another kind answer 424 |
 
 ## Protocol Endpoints
 
@@ -61,6 +62,26 @@ go run ./test/cmd/ollamock \
 | `POST /rerank` | TEI cross-encoder rerank scores |
 | `POST /similarity` | TEI sentence similarity scores |
 | `GET /metrics` | TEI Prometheus metrics (mock counters) |
+
+## TEI error contract
+
+The TEI routes follow real TEI's error shapes, so routing and client tests see what production would:
+
+| Condition | Status | `error_type` |
+|-----------|--------|--------------|
+| Blank input: `inputs: []`, `inputs: ""`, empty `texts`, empty `sentences`, a blank string in any of them | 400 | `Empty` |
+| Wrong shape: missing field, wrong JSON type, malformed JSON | 422 | `Validation` |
+| Route needs another kind (`/embed` on a reranker, `/rerank` on an embedder, `/predict` on an embedder) | 424 | `Backend` |
+
+Native routes return `{"error": "...", "error_type": "..."}`; `POST /v1/embeddings` returns the OpenAI-compatible `{"message": "...", "code": 400, "error_type": "..."}`. Blank input is reported before the kind check. `/decode` only checks shape: upstream reads `ids: []` as a single empty sequence, so it decodes rather than failing. `/tokenize`, `/decode`, `/info`, `/health` and `/metrics` work for every kind.
+
+Run one instance per kind to model a mixed TEI fleet:
+
+```bash
+go run ./test/cmd/ollamock --addr 127.0.0.1:19438 --name mock-tei-embed  --models BAAI/bge-small-en-v1.5 --tei-kind embedding
+go run ./test/cmd/ollamock --addr 127.0.0.1:19439 --name mock-tei-rerank --models BAAI/bge-reranker-base  --tei-kind reranker
+go run ./test/cmd/ollamock --addr 127.0.0.1:19440 --name mock-tei-class  --models SamLowe/roberta-go-emotions --tei-kind classifier
+```
 
 ## Behaviour Modes
 
