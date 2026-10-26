@@ -64,8 +64,7 @@ none, so it could land on any compatible host, including ones without the model 
 embeddings sent this way). `curl -d` sends form-urlencoded, `fetch()` with a string body sends
 `text/plain`, and plenty of scripts send nothing. Olla now decides from the body: a body that opens with
 `{` is read for its `model` and capabilities whatever the header says, and the request is forwarded
-unchanged. Multipart, form-encoded and compressed bodies are still not read, and chunked bodies over 1MB
-are now scanned for a late `model` field. Nothing to change on your side.
+unchanged. Multipart, form-encoded and compressed bodies are still not read. Nothing to change on your side.
 
 ### Fixed: Ollama `/api/embed` and embedding models in a fleet with TEI
 
