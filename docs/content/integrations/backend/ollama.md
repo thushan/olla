@@ -296,6 +296,8 @@ curl -X POST http://localhost:40114/olla/ollama/api/embeddings \
   }'
 ```
 
+Newer Ollama releases report each model's `capabilities` in `/api/tags`. Olla types a model that lists `embedding` but not `completion` as `embeddings`, so `/v1/embeddings` requests are routed to it and `?type=embeddings` on `/olla/models` includes it. Older Ollama versions omit the field and their embedding models stay untyped.
+
 ### List Available Models
 
 ```bash
