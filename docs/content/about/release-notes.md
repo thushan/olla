@@ -11,7 +11,68 @@ is written for an operator upgrading from a prior release: what changed, why, an
 exact migration step if a behaviour change affects you.
 
 Breaking changes are tagged **Breaking**. Additions and fixes are tagged **Added** or
-**Fixed**. Quoted field names and config keys are the literal wire or YAML identifiers.
+**Fixed**. Behaviour changes that need no migration are tagged **Changed**. Quoted field
+names and config keys are the literal wire or YAML identifiers.
+
+## v0.0.30
+
+### Added: Text Embeddings Inference backend
+
+Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)
+(TEI) servers. Set `type: "text-embeddings-inference"` on an endpoint; the provider routes are
+`/olla/tei/` and `/olla/text-embeddings-inference/`, and requests are forwarded to TEI's own paths
+(`/embed`, `/embed_all`, `/embed_sparse`, `/v1/embeddings`, `/rerank`, `/predict`, `/similarity`,
+`/tokenize`, `/decode`, `/info`, `/health`, `/metrics`). TEI has no `/v1/models`, so the shipped
+`text-embeddings-inference.yaml` profile discovers the single model each instance serves from `GET /info`
+(`served_model_name`, falling back to `model_id`) and reads its kind from `model_type`, giving
+embedding, reranker and classifier models their own types and capabilities. Mixed fleets work: a TEI
+host is never sent chat requests, and model-less native requests are steered to a TEI instance serving
+the matching kind. See the [TEI integration guide](../integrations/backend/text-embeddings-inference.md).
+
+### Added: Text Embeddings Inference model kinds
+
+TEI reranker and classifier models get their own types (`reranker`, `classifier`) with
+`rerank` and `classification` capabilities, and are never tagged `text-generation`. They show
+up under `/olla/models?type=reranker` and `?type=classifier`. Model-less `/embed`, `/embed_all`,
+`/embed_sparse`, `/similarity`, `/rerank` and `/predict` requests, whose bodies carry no `model`
+field, are routed to an instance serving a model of the matching kind. A custom `models.yaml`
+doesn't need `reranker` or `classifier` entries under `type_capabilities`: any `type_capabilities`
+or `context_thresholds` key your file omits falls back to the built-in default.
+
+### Changed: named-model requests skip capability filtering
+
+When a request names a model, endpoint selection now depends only on which endpoints host that model.
+Capability tags are heuristic, so a request for `llama3` could previously be narrowed away from its own
+hosts because some other model carried (or lacked) a tag. Capability filtering now applies only to
+requests that name no model (for example a model-less vision or `/rerank` request). When it does apply,
+the capabilities must all be on a single model: an endpoint hosting one vision model and a different
+tools model no longer satisfies a request needing both. A request needing `function_calling` no longer also
+requires the `tools` tag, which many backends never set. If you depended on a named request being
+steered by capability tags, name the model you want instead.
+
+### Changed: one-segment profile paths no longer claim deeper request paths
+
+TEI declares single-segment paths such as `/embed`, `/rerank`, `/health`, `/metrics` and `/tokenize`.
+Request path inspection matched paths by suffix, so those would also have claimed deeper paths on
+other backends (for example `/api/embed` or a `.../v1/rerank`). One-segment profile paths now match
+only a request path of that single segment.
+
+### Fixed: Ollama `/api/embed` and embedding models in a fleet with TEI
+
+The built-in Ollama profile now lists `/api/embed`, so Ollama's native embeddings route is not
+captured by TEI's `/embed`. Ollama embedding-only models are typed `embeddings` from the
+`capabilities` that `/api/tags` reports (newer Ollama releases; older ones report none and stay
+untyped), so `/v1/embeddings` still reaches them when a TEI instance is in the fleet.
+
+### Fixed: LM Studio model types and capabilities
+
+LM Studio models carry `"object": "model"` beside their real `type` (`llm`, `vlm`,
+`embeddings`), and the generic value used to mask the real one. LM Studio embedding
+models were never tagged `embeddings` and `vlm` models never got `vision`. The real type
+now wins, so those models gain the capabilities their type implies: `vision`,
+`multimodal` and `image-understanding` for `vlm`, `embeddings`, `similarity` and
+`vector-search` (without `text-generation`) for embeddings, and `chat` and `completion`
+for `llm`. Model-less vision and embeddings requests are steered to those models.
 
 ## v0.0.29
 
