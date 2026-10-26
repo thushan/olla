@@ -144,8 +144,18 @@ func (u *LifecycleUnifier) updateEndpointStates(models []*domain.UnifiedModel, e
 		}
 		if clone != nil {
 			models[idx] = clone
+			// persist the decoration: later lookups and discovery cycles read the catalogue
+			if p, ok := u.unifier.(modelPublisher); ok {
+				p.publishModel(clone)
+			}
 		}
 	}
+}
+
+// modelPublisher is implemented by unifiers that can swap a replacement record
+// into their catalogue; the clone passed in must not be touched afterwards.
+type modelPublisher interface {
+	publishModel(model *domain.UnifiedModel)
 }
 
 func (u *LifecycleUnifier) cleanupRoutine() {

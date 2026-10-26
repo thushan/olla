@@ -303,6 +303,11 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 	u.store.putOwned(unified)
 }
 
+// publishModel stores a caller-owned replacement for a catalogue record.
+func (u *DefaultUnifier) publishModel(model *domain.UnifiedModel) {
+	u.store.putOwned(model)
+}
+
 func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, newModel *Model) bool {
 	// Different digest means different model even with same name
 	if newModel.Digest != "" && existing.Metadata != nil {

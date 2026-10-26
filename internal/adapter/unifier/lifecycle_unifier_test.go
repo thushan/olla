@@ -358,3 +358,27 @@ func createTestLogger() logger.StyledLogger {
 	slogLogger := slog.New(handler)
 	return logger.NewPlainStyledLogger(slogLogger)
 }
+
+// The state decoration UnifyModels adds must be what the catalogue serves
+// afterwards, not just what the call returned.
+func TestLifecycleUnifier_StateDecorationPersistsInCatalogue(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	u := NewLifecycleUnifier(DefaultConfig(), createTestLogger()).(*LifecycleUnifier)
+	endpoint := &domain.Endpoint{URLString: "http://test-endpoint", Name: "test-endpoint"}
+
+	returned, err := u.UnifyModels(ctx, []*domain.ModelInfo{{Name: "llama3:8b"}}, endpoint)
+	require.NoError(t, err)
+	require.Len(t, returned, 1)
+	require.NotNil(t, returned[0].SourceEndpoints[0].StateInfo)
+
+	byID, err := u.ResolveModel(ctx, returned[0].ID)
+	require.NoError(t, err)
+	assert.NotNil(t, byID.SourceEndpoints[0].StateInfo, "ResolveModel lost the decoration")
+	assert.False(t, byID.SourceEndpoints[0].LastStateCheck.IsZero())
+
+	all, err := u.GetAllModels(ctx)
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.NotNil(t, all[0].SourceEndpoints[0].StateInfo, "GetAllModels lost the decoration")
+}
