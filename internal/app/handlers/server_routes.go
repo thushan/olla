@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/thushan/olla/internal/adapter/translator"
@@ -238,6 +239,12 @@ func (a *Application) registerProviderRoutes() {
 	}
 }
 
+// hasModelListingFormat reports whether a converter exists for a profile's
+// response format, i.e. whether Olla can answer a native model listing in it.
+func (a *Application) hasModelListingFormat(format string) bool {
+	return format != "" && a.converterFactory != nil && slices.Contains(a.converterFactory.GetSupportedFormats(), format)
+}
+
 // registerProviderPrefixRoutes creates the full routing table for one provider prefix.
 // This handles both native endpoints (e.g., Ollama's /api/tags) and OpenAI compatibility.
 func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, config *domain.ProfileConfig) {
@@ -270,13 +277,14 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 			a.routeRegistry.RegisterWithMethod(basePath+"api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", "POST")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
-		} else if profileName != constants.ProviderTypeTextEmbeddingsInference {
-			// Generic providers serve their discovery path as a model listing.
-			// TEI's discovery path is /info - model metadata, not a listing - so
-			// it is left to the catch-all proxy and forwarded verbatim to the
-			// backend instead of being served from the registry.
+		} else if a.hasModelListingFormat(config.Request.ResponseFormat) {
+			// Serve the discovery path from the registry in the profile's own
+			// response format. A format with no converter means the discovery
+			// path is not a model listing Olla can reproduce (TEI's /info is
+			// model metadata), so the route is left to the catch-all proxy and
+			// forwarded verbatim to the backend.
 			a.routeRegistry.RegisterWithMethod(nativePath,
-				a.genericProviderModelsHandler(prefix, "native"),
+				a.genericProviderModelsHandler(prefix, config.Request.ResponseFormat),
 				prefix+" models", "GET")
 		}
 	}
