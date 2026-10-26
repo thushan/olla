@@ -312,6 +312,14 @@ capabilities:
       - embeddings
       - similarity
       - vector-search
+    # reranker and classifier models (e.g. TEI) score or label text rather than
+    # generate it, so they carry no text-generation capability. Rerankers are
+    # sequence-classification models, so TEI's /predict serves them too.
+    reranker:
+      - rerank
+      - classification
+    classifier:
+      - classification
 
   # Capabilities inferred from model names
   name_patterns:

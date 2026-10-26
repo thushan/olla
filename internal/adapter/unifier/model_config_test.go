@@ -441,3 +441,71 @@ func TestConfigWithInvalidRegex(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to compile family pattern")
 }
+
+// oldCustomModelsYAML is a user file written before the reranker and
+// classifier kinds existed: it has type_capabilities for the old kinds only
+// and no context_thresholds.
+const oldCustomModelsYAML = `
+capabilities:
+  type_capabilities:
+    llm:
+      - text-generation
+      - chat
+    embeddings:
+      - embeddings
+`
+
+// A user models.yaml replaces the defaults wholesale, so keys it omits must
+// fall back to the built-ins or TEI rerankers and classifiers lose their tags.
+func TestCustomConfig_MissingCapabilityKeysFallBackToDefaults(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte(oldCustomModelsYAML), 0o644))
+	t.Chdir(t.TempDir())
+	t.Setenv("OLLA_CONFIG_DIR", dir)
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
+
+	tests := []struct {
+		name        string
+		kind        string
+		contextLen  int64
+		wantCaps    []string
+		notWantCaps []string
+	}{
+		{"reranker", "reranker", 0, []string{"rerank", "classification"}, []string{"text-generation"}},
+		{"classifier", "classifier", 0, []string{"classification"}, []string{"text-generation"}},
+		{"embeddings keeps the user's entry", "embeddings", 0, []string{"embeddings"}, []string{"text-generation", "similarity"}},
+		{"llm keeps the user's entry", "llm", 0, []string{"text-generation", "chat"}, []string{"completion"}},
+		{"short context is not ultra-long", "llm", 4096, []string{"text-generation"}, []string{"ultra-long-context", "long-context", "extended-context"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := inferCapabilitiesFromMetadata(tt.kind, "some-model", tt.contextLen, nil)
+			for _, c := range tt.wantCaps {
+				assert.Contains(t, got, c)
+			}
+			for _, c := range tt.notWantCaps {
+				assert.NotContains(t, got, c)
+			}
+		})
+	}
+}
+
+// Nothing in the config may be needed for a non-generative kind to stay out of
+// text-generation: the kind alone decides it.
+func TestInferCapabilities_NonGenerativeKindIndependentOfConfig(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "models.yaml"), []byte("capabilities:\n  type_capabilities:\n    llm: [text-generation]\n"), 0o644))
+	t.Chdir(t.TempDir())
+	t.Setenv("OLLA_CONFIG_DIR", dir)
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
+	cfg, err := LoadModelConfig()
+	require.NoError(t, err)
+	// drop the backfilled entries to prove the deletion doesn't lean on them
+	cfg.Capabilities.TypeCapabilities = map[string][]string{"llm": {"text-generation"}}
+
+	for _, kind := range []string{"reranker", "classifier", "embeddings", "embedding"} {
+		assert.NotContains(t, inferCapabilitiesFromMetadata(kind, "x", 0, nil), "text-generation", kind)
+	}
+}

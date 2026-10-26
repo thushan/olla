@@ -323,6 +323,34 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 			defaultType: "llm",
 			want:        "custom",
 		},
+		{
+			name: "specific model_type beats the generic model marker",
+			model: &domain.UnifiedModel{
+				Metadata: map[string]interface{}{
+					"type":       "model",
+					"model_type": "embeddings",
+				},
+			},
+			defaultType: "llm",
+			want:        "embeddings",
+		},
+		{
+			name: "generic model marker alone falls through to capabilities",
+			model: &domain.UnifiedModel{
+				Metadata:     map[string]interface{}{"type": "model"},
+				Capabilities: []string{"vision", "chat"},
+			},
+			defaultType: "llm",
+			want:        "vlm",
+		},
+		{
+			name: "reranker kind is reported as itself",
+			model: &domain.UnifiedModel{
+				Metadata: map[string]interface{}{"type": "reranker", "model_type": "reranker"},
+			},
+			defaultType: "llm",
+			want:        "reranker",
+		},
 	}
 
 	for _, tt := range tests {

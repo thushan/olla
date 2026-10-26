@@ -36,6 +36,7 @@ api:
     - /v1/chat/completions # 7: OpenAI compat
     - /v1/completions      # 8: OpenAI compat
     - /v1/embeddings       # 9: OpenAI compat
+    - /api/embed           # 10: generate embeddings (supersedes /api/embeddings)
   model_discovery_path: /api/tags
   health_check_path: /
 

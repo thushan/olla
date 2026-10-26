@@ -3,7 +3,7 @@
 > Single source of truth for agent guidance. `AGENTS.md` is a symlink to this file - edit here only.
 
 ## Overview
-Olla is a high-performance proxy and load balancer for LLM infrastructure, written in Go. It routes requests across local inference nodes (Ollama, LM Studio, LiteLLM, vLLM, vLLM-MLX, SGLang, llama.cpp, Lemonade, LMDeploy, Docker Model Runner, and OpenAI-compatible endpoints). The Anthropic Messages API is supported via passthrough or translation.
+Olla is a high-performance proxy and load balancer for LLM infrastructure, written in Go. It routes requests across local inference nodes (Ollama, LM Studio, LiteLLM, vLLM, vLLM-MLX, SGLang, llama.cpp, Lemonade, LMDeploy, Docker Model Runner, Text Embeddings Inference, and OpenAI-compatible endpoints). The Anthropic Messages API is supported via passthrough or translation.
 
 Two proxy engines: **Sherpa** (simple, maintenance-mode) and **Olla** (high-performance, where all new engine work goes). Olla is local-only - hosted API providers (Groq, Gemini, etc.) are out of scope.
 
@@ -35,7 +35,7 @@ Hexagonal architecture - domain (`internal/core`) → infrastructure (`internal/
 
 - `main.go` - entry point
 - `config.yaml` - default config; `config/config.local.yaml` - user overrides (gitignored)
-- `config/profiles/*.yaml` - one profile per backend type (ollama, vllm, vllm-mlx, sglang, llamacpp, lemonade, litellm, lmdeploy, dmr, openai-compatible). `type: "openai"` aliases `openai-compatible`.
+- `config/profiles/*.yaml` - one profile per backend type (ollama, vllm, vllm-mlx, sglang, llamacpp, lemonade, litellm, lmdeploy, dmr, text-embeddings-inference, openai-compatible). `type: "openai"` aliases `openai-compatible`.
 - `config/models.yaml` - model configuration
 - `internal/core/` - domain layer: `domain/` (entities), `ports/` (interfaces), `constants/`
 - `internal/adapter/` - infrastructure: `balancer/`, `health/` (+ circuit breakers), `proxy/` (`sherpa/`, `olla/`, shared `core/`), `registry/`, `translator/` (OpenAI ↔ provider), `unifier/`, `stats/`, `security/`, `discovery/`, `inspector/`, `metrics/`, `converter/`, `filter/`
@@ -66,17 +66,18 @@ Hexagonal architecture - domain (`internal/core`) → infrastructure (`internal/
 
 **Proxy**: `/olla/proxy/` (POST), `/olla/proxy/v1/models` (GET, OpenAI-compatible).
 
-**Provider prefixes** (profile-driven, see `server_routes.go`): `/olla/{ollama,vllm,vllm-mlx,sglang,lmdeploy,llamacpp,lemonade,litellm,dmr}/`, `/olla/lmstudio/` (+ `lm-studio`, `lm_studio` aliases), `/olla/openai/` and `/olla/openai-compatible/` (both served by `openai-compatible.yaml`).
+**Provider prefixes** (profile-driven, see `server_routes.go`): `/olla/{ollama,vllm,vllm-mlx,sglang,lmdeploy,llamacpp,lemonade,litellm,dmr,tei,text-embeddings-inference}/`, `/olla/lmstudio/` (+ `lm-studio`, `lm_studio` aliases), `/olla/openai/` and `/olla/openai-compatible/` (both served by `openai-compatible.yaml`).
 
 **Translator** (dynamically registered): `/olla/anthropic/v1/messages` (POST, passthrough + translation), `/olla/anthropic/v1/models` (GET), `/olla/anthropic/v1/messages/count_tokens` (POST).
 
 ## Response Headers
-`X-Olla-Endpoint` (backend name), `X-Olla-Model`, `X-Olla-Backend-Type` (ollama, lm-studio, litellm, vllm, vllm-mlx, sglang, llamacpp, lmdeploy, lemonade, openai, openai-compatible, docker-model-runner, omlx), `X-Olla-Request-ID`, `X-Olla-Response-Time`, `X-Olla-Mode` (`passthrough` or absent for translation), `X-Olla-Routing-{Strategy,Decision,Reason}`, `X-Olla-Sticky-Session` (hit/miss/repin/disabled), `X-Olla-Sticky-Key-Source`, `X-Olla-Session-ID`.
+`X-Olla-Endpoint` (backend name), `X-Olla-Model`, `X-Olla-Backend-Type` (ollama, lm-studio, litellm, vllm, vllm-mlx, sglang, llamacpp, lmdeploy, lemonade, openai, openai-compatible, docker-model-runner, omlx, text-embeddings-inference), `X-Olla-Request-ID`, `X-Olla-Response-Time`, `X-Olla-Mode` (`passthrough` or absent for translation), `X-Olla-Routing-{Strategy,Decision,Reason}`, `X-Olla-Sticky-Session` (hit/miss/repin/disabled), `X-Olla-Sticky-Key-Source`, `X-Olla-Session-ID`.
 
 ## Architecture Notes
 - **Translator layer** - API format translation (e.g. OpenAI ↔ Anthropic) with passthrough optimisation. **Passthrough mode**: when a backend natively supports the Anthropic Messages API (vLLM, llama.cpp, LM Studio, Ollama), requests bypass translation entirely.
 - **Translator metrics** - thread-safe per-translator stats (passthrough/translation rates, fallback reasons, latency, streaming breakdown) in `stats/translator_collector.go`.
 - **Sticky sessions** - optional decorator on the endpoint selector that pins multi-turn conversations to the backend that handled the first turn, maximising KV-cache reuse. 64-bit FNV-1a hashed keys, TTL + LRU bounded, purged on routable→non-routable health transitions (`balancer/sticky.go`).
+- **Capability routing** - only model-less requests are narrowed by capability (vision, tools, embeddings, TEI `rerank`/`classification` from the path); a request naming a model skips it. The capabilities must all sit on one model. TEI kinds (embedding, reranker, classifier) come from `/info` `model_type` and are never `text-generation`.
 - **Load balancing** - priority-based recommended for production.
 - **Version management** - build-time injection via `internal/version`.
 

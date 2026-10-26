@@ -67,7 +67,7 @@ Profiles optimise response handling for specific workload patterns.
 ### [Profile System](profile-system.md)
 Provider-specific configuration templates:
 
-- Pre-configured profiles for Ollama, LM Studio, LMDeploy, vLLM, vLLM-MLX, SGLang, llama.cpp, Lemonade SDK, LiteLLM, oMLX, Docker Model Runner, OpenAI-compatible
+- Pre-configured profiles for Ollama, LM Studio, LMDeploy, vLLM, vLLM-MLX, SGLang, llama.cpp, Lemonade SDK, LiteLLM, oMLX, Docker Model Runner, Text Embeddings Inference, OpenAI-compatible
 - Custom header mappings and endpoint patterns
 - Model format converters for each provider
 

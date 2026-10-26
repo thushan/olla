@@ -103,6 +103,28 @@ Controls what happens when the requested model isn't available on any healthy en
 - **`all`**: Route to any healthy endpoint even if they don't have the model
 - **`none`**: Never fall back, always reject with 404 if model not found
 
+## Requests Without a Model Name
+
+Some requests name no model: a vision request sent to the unified route, TEI's native `/rerank`, `/predict` and `/embed`, whose bodies carry no `model` field. Olla narrows the candidate endpoints by what the request needs instead:
+
+| Signal | Required capability |
+|--------|---------------------|
+| Image content in `messages` | `vision` |
+| `tools`, `functions`, `tool_choice` or `function_call` in the body | `function_calling` |
+| An `input` field in the body | `embeddings` |
+| Code generation hints in the body | `code` |
+| Path `/embed`, `/embed_all`, `/embed_sparse` or `/similarity` | `embeddings` |
+| Path `/rerank`, `/v1/rerank` or `/v2/rerank` | `rerank` |
+| Path `/predict` | `classification` |
+
+An endpoint stays in the candidate set when it hosts at least one single model carrying every required capability. A vision model on one endpoint and a tools model on another do not combine to satisfy a request needing both. A rerank or classification path takes precedence over the embeddings guess from the body, because no model is both an embedder and a reranker.
+
+Capability filtering never rejects a request. If no model carries the capabilities, or no candidate endpoint hosts one, Olla uses the unfiltered candidates. A backend that cannot serve the request then answers for itself, as TEI does with `424` for a request sent to the wrong model kind.
+
+The single-segment paths above (`/embed`, `/rerank`, `/predict`) match only that exact request path, so `/api/embed` (Ollama's embeddings route) is never read as TEI's `/embed`. A model's capabilities come from its type and name patterns; see [Model Unification](model-unification.md).
+
+**Named models skip capability filtering.** When the request names a model, only the routing strategy above decides which endpoints are used, namely those hosting that model. A capability tag on some other model can't remove the hosts of the one you asked for.
+
 ## Response Headers
 
 Routing decisions are exposed via HTTP headers for observability:

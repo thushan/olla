@@ -93,6 +93,13 @@ func TestFilterEndpointsByCapabilities(t *testing.T) {
 						{EndpointURL: "http://localhost:11437", LastSeen: time.Now()},
 					},
 				},
+				{
+					ID:           "gpt-4-vision",
+					Capabilities: []string{"vision", "chat", "function_calling"},
+					SourceEndpoints: []domain.SourceEndpoint{
+						{EndpointURL: "http://localhost:11436", LastSeen: time.Now()},
+					},
+				},
 			},
 			"embeddings": {
 				{
@@ -216,6 +223,53 @@ func TestFilterEndpointsByCapabilities(t *testing.T) {
 	}
 }
 
+// An endpoint hosting a vision model and, separately, a tools model must not
+// satisfy a vision+tools request: only a single model with both qualifies.
+func TestFilterEndpointsByCapabilities_IntersectsPerModel(t *testing.T) {
+	styledLog := &mockStyledLogger{}
+
+	mk := func(name, rawURL string) *domain.Endpoint {
+		u, _ := url.Parse(rawURL)
+		return &domain.Endpoint{Name: name, URL: u, URLString: rawURL, Type: domain.ProfileOpenAICompatible}
+	}
+	split := mk("split", "http://localhost:11434")
+	single := mk("single", "http://localhost:11435")
+	endpoints := []*domain.Endpoint{split, single}
+
+	src := func(rawURLs ...string) []domain.SourceEndpoint {
+		out := make([]domain.SourceEndpoint, 0, len(rawURLs))
+		for _, u := range rawURLs {
+			out = append(out, domain.SourceEndpoint{EndpointURL: u, LastSeen: time.Now()})
+		}
+		return out
+	}
+	visionA := &domain.UnifiedModel{ID: "vision-a", SourceEndpoints: src("http://localhost:11434")}
+	toolsB := &domain.UnifiedModel{ID: "tools-b", SourceEndpoints: src("http://localhost:11434")}
+	both := &domain.UnifiedModel{ID: "vision-tools-c", SourceEndpoints: src("http://localhost:11435")}
+
+	app := &Application{
+		logger: styledLog,
+		modelRegistry: &mockCapabilityModelRegistry{
+			modelsByCapability: map[string][]*domain.UnifiedModel{
+				"vision": {visionA, both},
+				// the real registry answers function_calling for models tagged
+				// either function_calling or tools, so one key covers both
+				"function_calling": {toolsB, both},
+			},
+		},
+	}
+
+	profile := &domain.RequestProfile{
+		Path:              "/v1/chat/completions",
+		ModelCapabilities: &domain.ModelCapabilities{VisionUnderstanding: true, FunctionCalling: true},
+	}
+
+	filtered := app.filterEndpointsByCapabilities(endpoints, profile, styledLog)
+
+	assert.Len(t, filtered, 1)
+	assert.Equal(t, "single", filtered[0].Name)
+}
+
 func TestFilterEndpointsByProfile_WithCapabilities(t *testing.T) {
 	// Create mock logger
 	styledLog := &mockStyledLogger{}
@@ -278,10 +332,10 @@ func TestFilterEndpointsByProfile_WithCapabilities(t *testing.T) {
 		logger:        styledLog,
 	}
 
-	t.Run("capability filtering takes precedence over model name", func(t *testing.T) {
+	t.Run("named model is never narrowed by capability tags", func(t *testing.T) {
 		profile := &domain.RequestProfile{
 			Path:      "/v1/chat/completions",
-			ModelName: "llava:13b",
+			ModelName: "llama3.1:8b",
 			ModelCapabilities: &domain.ModelCapabilities{
 				VisionUnderstanding: true,
 				ChatCompletion:      true,
@@ -291,9 +345,10 @@ func TestFilterEndpointsByProfile_WithCapabilities(t *testing.T) {
 
 		filtered := app.filterEndpointsByProfile(endpoints, profile, styledLog)
 
-		// Should return only endpoint1 (has llava:13b with vision)
+		// llama3.1:8b carries no vision tag and lives on the non-vision endpoint;
+		// the request names it, so the vision tag on other models must not evict it
 		assert.Len(t, filtered, 1)
-		assert.Equal(t, "ollama-vision", filtered[0].Name)
+		assert.Equal(t, "ollama-basic", filtered[0].Name)
 	})
 
 	t.Run("falls back to profile filtering when no capability match", func(t *testing.T) {
@@ -396,3 +451,26 @@ func (m *mockFullModelRegistry) GetRoutableEndpointsForModel(ctx context.Context
 // Ensure our mocks implement the interface
 var _ domain.ModelRegistry = (*mockCapabilityModelRegistry)(nil)
 var _ domain.ModelRegistry = (*mockFullModelRegistry)(nil)
+
+func TestExtractRequiredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{}
+	tests := []struct {
+		name string
+		caps *domain.ModelCapabilities
+		want []string
+	}{
+		{"function calling needs one tag, not two", &domain.ModelCapabilities{FunctionCalling: true}, []string{"function_calling"}},
+		{"embeddings", &domain.ModelCapabilities{Embeddings: true}, []string{"embeddings"}},
+		{"rerank", &domain.ModelCapabilities{Rerank: true}, []string{"rerank"}},
+		{"classification", &domain.ModelCapabilities{Classification: true}, []string{"classification"}},
+		{"chat only needs nothing", &domain.ModelCapabilities{ChatCompletion: true, TextGeneration: true}, []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, app.extractRequiredCapabilities(tt.caps))
+		})
+	}
+}

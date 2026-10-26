@@ -45,6 +45,7 @@ var (
 		"vllm-mlx",
 		"openai_compatible",
 		"docker-model-runner",
+		"text-embeddings-inference",
 	}
 	ExperimentalCapabilities = []string{
 		"translation_anthropic",

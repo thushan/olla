@@ -653,3 +653,51 @@ func (m *mockStyledLogger) InfoWithContext(msg string, endpoint string, ctx logg
 func (m *mockStyledLogger) WarnWithContext(msg string, endpoint string, ctx logger.LogContext)  {}
 func (m *mockStyledLogger) ErrorWithContext(msg string, endpoint string, ctx logger.LogContext) {}
 func (m *mockStyledLogger) InfoConfigChange(oldName, newName string)                            {}
+
+// The path inspector runs first and may already have set what the path implies;
+// a body that detects its own capabilities must not erase them. For rerank and
+// classification the path is the stronger signal: their bodies carry `input`,
+// which the body detector reads as embeddings, and no model does both.
+func TestBodyInspector_PathCapabilitiesVersusBody(t *testing.T) {
+	t.Parallel()
+
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+	inspector, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		prior          *domain.ModelCapabilities
+		body           string
+		wantRerank     bool
+		wantClassify   bool
+		wantEmbeddings bool
+		wantFunctions  bool
+	}{
+		{"rerank path beats body input", &domain.ModelCapabilities{Rerank: true}, `{"input":"hello"}`, true, false, false, false},
+		{"classification path beats body input", &domain.ModelCapabilities{Classification: true}, `{"input":"hello"}`, false, true, false, false},
+		{"rerank path still merges function calling", &domain.ModelCapabilities{Rerank: true}, `{"input":"hello","tools":[{"type":"function"}]}`, true, false, false, true},
+		{"embed path keeps embeddings", &domain.ModelCapabilities{Embeddings: true}, `{"input":"hello"}`, false, false, true, false},
+		{"embed path merges function calling", &domain.ModelCapabilities{Embeddings: true}, `{"tools":[{"type":"function"}]}`, false, false, true, true},
+		{"no path capability uses body embeddings", nil, `{"input":"hello"}`, false, false, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			reqProfile := domain.NewRequestProfile("/x")
+			reqProfile.ModelCapabilities = tt.prior
+
+			req, err := http.NewRequest(http.MethodPost, "/x", strings.NewReader(tt.body))
+			require.NoError(t, err)
+			req.Header.Set("Content-Type", "application/json")
+			require.NoError(t, inspector.Inspect(context.Background(), req, reqProfile))
+
+			require.NotNil(t, reqProfile.ModelCapabilities)
+			assert.Equal(t, tt.wantRerank, reqProfile.ModelCapabilities.Rerank, "rerank")
+			assert.Equal(t, tt.wantClassify, reqProfile.ModelCapabilities.Classification, "classification")
+			assert.Equal(t, tt.wantEmbeddings, reqProfile.ModelCapabilities.Embeddings, "embeddings")
+			assert.Equal(t, tt.wantFunctions, reqProfile.ModelCapabilities.FunctionCalling, "function calling")
+		})
+	}
+}

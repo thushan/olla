@@ -44,7 +44,7 @@ checklist in `.claude/skills/olla-validate/areas/`), and writes a report to
 `test/cmd/ollamock` is a stdlib-only mock LLM backend that speaks the wire
 formats of every provider Olla fronts: OpenAI chat completions (including SSE
 streaming), Ollama's native `/api/*` protocol (NDJSON streaming), LM Studio,
-Lemonade and the Anthropic Messages API. Responses carry real token-usage
+Lemonade, Text Embeddings Inference (TEI) and the Anthropic Messages API. Responses carry real token-usage
 fields so metrics extraction works, and every response is tagged with a
 `BACKEND:{name}` marker plus an `X-Ollamock-Instance` header so tests can
 assert exactly which backend served a request.

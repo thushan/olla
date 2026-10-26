@@ -25,6 +25,7 @@ Olla natively supports the following backends:
 | [LiteLLM](./backend/litellm.md) | `litellm` | Native support for [LiteLLM](https://github.com/BerriAI/litellm), providing unified gateway to 100+ LLM providers |
 | [Docker Model Runner](./backend/docker-model-runner.md) | `docker-model-runner` | Native support for [Docker Model Runner](https://docs.docker.com/ai/model-runner/), Docker Desktop's built-in LLM inference server with multi-engine support (llama.cpp and vLLM), OCI model distribution, and native Anthropic Messages API |
 | [oMLX](./backend/omlx.md) | `omlx` | Native support for [oMLX](https://github.com/jundot/omlx), a multi-model Apple Silicon (MLX) inference server managed from the macOS menu bar, with native Anthropic Messages API passthrough |
+| [Text Embeddings Inference](./backend/text-embeddings-inference.md) | `text-embeddings-inference` | Native support for [Text Embeddings Inference (TEI)](https://github.com/huggingface/text-embeddings-inference), Hugging Face's high-performance embedding inference server with OpenAI-compatible and native endpoints |
 | [OpenAI Compatible](https://platform.openai.com/docs/overview) | `openai` | Generic support for any OpenAI-compatible API |
 
 You can use the `type` in [Endpoint Configurations](/olla/configuration/overview/#endpoint-configuration) when adding new endpoints.

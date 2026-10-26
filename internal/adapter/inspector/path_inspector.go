@@ -20,6 +20,58 @@ const (
 	PathInspectorName = "path"
 )
 
+// pathCapability sets the capability a request path implies when its body
+// cannot: TEI's native /rerank, /predict and /embed bodies carry no model field,
+// so without this a model-less request lands on whichever instance the balancer
+// picks, and TEI answers 424 when that instance serves the wrong kind.
+type pathCapability struct {
+	apply  func(*domain.ModelCapabilities)
+	suffix string
+}
+
+// Matching rules (see pathMatches): the single-segment names TEI serves
+// (/rerank, /predict, /embed...) only mean those things as the whole path, so
+// they must not claim /api/rerank or Ollama's /api/embed. The versioned
+// vLLM-style variants are listed in full so they keep matching behind a prefix.
+var pathCapabilities = []pathCapability{
+	{suffix: "/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
+	{suffix: "/v1/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
+	{suffix: "/v2/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
+	{suffix: "/predict", apply: func(c *domain.ModelCapabilities) { c.Classification = true }},
+	{suffix: "/embed", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{suffix: "/embed_all", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{suffix: "/embed_sparse", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{suffix: "/similarity", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+}
+
+// pathMatches reports whether a request path belongs to a profile path. They
+// match when equal, or when the request path carries extra leading segments (a
+// mount prefix the route did not strip, such as the translators' /olla/anthropic)
+// and the profile path has two or more segments. A single segment such as
+// /embed, /health or /version is too common a name to claim every deeper path
+// that happens to end with it. A suffix always starts at a '/', so it can only
+// begin on a segment boundary.
+func pathMatches(requestPath, profilePath string) bool {
+	if requestPath == profilePath {
+		return true
+	}
+	return strings.Count(profilePath, "/") >= 2 && strings.HasPrefix(profilePath, "/") && strings.HasSuffix(requestPath, profilePath)
+}
+
+// capabilitiesForPath returns the capabilities a path implies, or nil.
+func capabilitiesForPath(path string) *domain.ModelCapabilities {
+	var caps *domain.ModelCapabilities
+	for _, pc := range pathCapabilities {
+		if pathMatches(path, pc.suffix) {
+			if caps == nil {
+				caps = &domain.ModelCapabilities{}
+			}
+			pc.apply(caps)
+		}
+	}
+	return caps
+}
+
 func NewPathInspector(profileFactory *profile.Factory, logger logger.StyledLogger) *PathInspector {
 	inspector := &PathInspector{
 		profileFactory: profileFactory,
@@ -106,6 +158,10 @@ func (pi *PathInspector) Inspect(_ context.Context, _ *http.Request, profile *do
 		return nil
 	}
 
+	if caps := capabilitiesForPath(path); caps != nil {
+		profile.ModelCapabilities = caps
+	}
+
 	// First try exact match
 	if supportedProfiles, exists := pi.pathToProfiles[path]; exists {
 		for _, supportedProfile := range supportedProfiles {
@@ -120,10 +176,10 @@ func (pi *PathInspector) Inspect(_ context.Context, _ *http.Request, profile *do
 		return nil
 	}
 
-	// If no exact match, try suffix match (for paths with prefixes)
+	// No exact match: try profile paths behind a mount prefix (see pathMatches)
 	var supportedProfiles []string
 	for mapPath, profiles := range pi.pathToProfiles {
-		if strings.HasSuffix(path, mapPath) {
+		if pathMatches(path, mapPath) {
 			for _, profileName := range profiles {
 				// Check if this profile is already in the supported list
 				alreadySupported := false

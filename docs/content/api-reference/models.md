@@ -27,7 +27,7 @@ Returns all available models across all configured and healthy endpoints.
 | `format` | string | `unified` | Response format (`unified`, `openai`, `ollama`, `lmstudio`, `vllm`) |
 | `endpoint` | string | all | Filter to models served by a specific endpoint name (e.g. `local-ollama`) |
 | `family` | string | all | Filter by model family (e.g. `llama`, `qwen`, `mistral`) |
-| `type` | string | all | Filter by model type (`llm`, `vlm`, `embeddings`) |
+| `type` | string | all | Filter by model type (`llm`, `vlm`, `embeddings`, `reranker`, `classifier`) |
 | `capability` | string | all | Legacy alias for `type` (`vision`/`multimodal` → `vlm`, `embedding`/`embeddings`/`vector_search` → `embeddings`, `chat`/`text_generation`/`completion` → `llm`) |
 | `available` | bool | unset | When `true`, return only models reported available right now; when `false`, return only currently unavailable models |
 | `include_unavailable` | bool | `false` | When `true`, include models from endpoints that aren't currently healthy. The response then carries availability metadata per model |

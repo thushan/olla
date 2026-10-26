@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -996,4 +998,15 @@ func TestHashModelStatusResponse_StableAcrossCalls(t *testing.T) {
 			t.Fatalf("hashModelStatusResponse not stable: got %q, want %q", got, first)
 		}
 	}
+}
+
+func TestInferCapabilities_NonGenerativeKinds(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{}
+	kind := func(k string) *domain.ModelDetails { return &domain.ModelDetails{Type: &k} }
+
+	assert.Equal(t, []string{"embeddings", "vector_search"}, app.inferCapabilities(kind("embeddings")))
+	assert.Equal(t, []string{"rerank", "classification"}, app.inferCapabilities(kind("reranker")))
+	assert.Equal(t, []string{"classification"}, app.inferCapabilities(kind("classifier")))
 }

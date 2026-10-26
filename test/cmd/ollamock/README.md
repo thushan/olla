@@ -2,7 +2,7 @@
 
 A multi-protocol mock LLM backend for end-to-end validation of Olla's proxy and routing logic without requiring real inference infrastructure.
 
-It speaks Ollama, LM Studio, OpenAI-compatible, Lemonade, and Anthropic wire formats and supports controllable fault injection via an HTTP control plane.
+It speaks Ollama, LM Studio, OpenAI-compatible, Lemonade, Anthropic, and Text Embeddings Inference (TEI) wire formats and supports controllable fault injection via an HTTP control plane.
 
 ## Running
 
@@ -32,6 +32,7 @@ go run ./test/cmd/ollamock \
 | `--ttft-ms` | `0` | Delay before first streamed byte (milliseconds) |
 | `--tps` | `0` | Token-per-second pacing for stream chunks (0 = instant) |
 | `--stream-chunks` | `5` | Number of content chunks per streamed response |
+| `--tei-kind` | `embedding` | Kind a TEI instance reports in `GET /info` `model_type` and serves: `embedding`, `reranker` or `classifier`. Routes for another kind answer 424 |
 
 ## Protocol Endpoints
 
@@ -50,6 +51,50 @@ go run ./test/cmd/ollamock \
 | `GET /api/v1/models` | Lemonade model listing |
 | `POST /api/v1/chat/completions` | Lemonade chat (OpenAI shape) |
 | `POST /v1/messages` | Anthropic Messages API |
+| `GET /info` | TEI server info (carries the served model name) |
+| `POST /v1/embeddings` | TEI embeddings (OpenAI shape, single model per instance) |
+| `POST /embed` | TEI native embeddings (bare vector arrays) |
+| `POST /embed_all` | TEI per-token embeddings without pooling |
+| `POST /embed_sparse` | TEI sparse (SPLADE) embeddings |
+| `POST /tokenize` | TEI tokenise inputs to token objects |
+| `POST /decode` | TEI decode token IDs to text |
+| `POST /predict` | TEI sequence classification predictions |
+| `POST /rerank` | TEI cross-encoder rerank scores |
+| `POST /similarity` | TEI sentence similarity scores |
+| `GET /metrics` | TEI Prometheus metrics (mock counters) |
+
+## TEI error contract
+
+The TEI routes follow real TEI's error shapes, so routing and client tests see what production would:
+
+| Condition | Status | Body |
+|-----------|--------|------|
+| Empty input: `inputs: []`, `inputs: ""`, empty `texts`, empty `sentences`, an empty string in any of them (a rerank or predict pair only when both halves are empty) | 400 | `Empty` |
+| Wrong shape: missing field, wrong JSON type | 422 | axum's plain text, `Failed to deserialize the JSON body into the target type: ...` |
+| Not JSON at all | 400 | axum's plain text, `Failed to parse the request body as JSON: ...` |
+| Route needs another kind (`/embed` on a reranker, `/rerank` on an embedder, `/predict` on an embedder) | 424 | `Backend`, `Backend error: Model is not an embedding model` (re-ranker: lower-case `model is not a re-ranker model`, as upstream writes it) |
+
+Handler errors return `{"error": "...", "error_type": "..."}`; `POST /v1/embeddings` returns the OpenAI-compatible `{"message": "...", "code": 400, "type": "..."}` (the key is `type` there, not `error_type`). The order matches upstream: shape, then an empty array (400), then the kind check (424), then the tokeniser, which is where an empty string is found. So `{"inputs":""}` sent to the wrong kind is 424, while `{"inputs":[]}` is 400 on every kind. Whitespace-only text and a blank rerank `query` are valid input. The 415 for a missing `Content-Type: application/json` is not modelled. `/decode` only checks shape: upstream reads `ids: []` as a single empty sequence, so it decodes rather than failing. `/tokenize`, `/decode`, `/info`, `/health` and `/metrics` work for every kind.
+
+## TEI request and response shapes
+
+The embedding routes (`/embed`, `/embed_all`, `/embed_sparse`, and `/v1/embeddings` through its `input` field) take a string, an array of strings, an array of token IDs (one sequence) or an array of token-ID arrays (a batch). Token IDs must be unsigned 32-bit integers, 0 to 4294967295. A negative, fractional or larger value, or a non-number in an ID array, answers 422. `/tokenize` takes strings only.
+
+| Route | Mock behaviour |
+|-------|----------------|
+| `/tokenize` | One array per input: `[CLS]`, one token per whitespace-separated word, `[SEP]`. Each token is `{id, text, special, start, stop}`; `start` and `stop` are byte offsets, and null on the special tokens. IDs are deterministic |
+| `/decode` | `ids` is one sequence or a batch. Returns placeholder strings (`decoded-0`, `decoded-1`), not real text |
+| `/predict` | Served by classifier and reranker instances. A string, `["a"]` or a pair `["a","b"]` is one sequence and returns a flat `[{score, label}]`; only an array of arrays is a batch, returning one such array per sequence. Each is sorted by score, descending |
+| `/rerank` | Reranker instances only. Returns `[{index, score}]` in input order with descending scores |
+| `/similarity` | Embedding instances only. Returns one score per sentence |
+
+Run one instance per kind to model a mixed TEI fleet:
+
+```bash
+go run ./test/cmd/ollamock --addr 127.0.0.1:19438 --name mock-tei-embed  --models BAAI/bge-small-en-v1.5 --tei-kind embedding
+go run ./test/cmd/ollamock --addr 127.0.0.1:19439 --name mock-tei-rerank --models BAAI/bge-reranker-base  --tei-kind reranker
+go run ./test/cmd/ollamock --addr 127.0.0.1:19440 --name mock-tei-class  --models SamLowe/roberta-go-emotions --tei-kind classifier
+```
 
 ## Behaviour Modes
 

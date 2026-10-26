@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -35,7 +36,13 @@ func main() {
 	ttftMS := flag.Int("ttft-ms", 0, "delay in milliseconds before first streamed byte")
 	tps := flag.Int("tps", 0, "tokens per second pacing (0 = instant)")
 	streamChunks := flag.Int("stream-chunks", 5, "number of content chunks per streamed response")
+	teiKind := flag.String("tei-kind", teiKindEmbedding, "kind of model a TEI instance reports in /info and serves: embedding, reranker or classifier")
 	flag.Parse()
+
+	if !slices.Contains([]string{teiKindEmbedding, teiKindReranker, teiKindClassifier}, *teiKind) {
+		slog.Error("invalid --tei-kind", "value", *teiKind, "want", "embedding, reranker or classifier")
+		os.Exit(2)
+	}
 
 	modelList := parseModels(*models)
 
@@ -45,6 +52,7 @@ func main() {
 		ttftMS:       *ttftMS,
 		tps:          *tps,
 		streamChunks: *streamChunks,
+		teiKind:      *teiKind,
 	}
 
 	srv := newServer(cfg)

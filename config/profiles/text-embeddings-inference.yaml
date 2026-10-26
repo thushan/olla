@@ -1,0 +1,139 @@
+# Hugging Face Text Embeddings Inference (TEI) profile
+# Docs: https://github.com/huggingface/text-embeddings-inference
+# TEI serves a single model per instance (embedding, sequence classification
+# or reranker). The model ID is not exposed via an OpenAI-style /v1/models
+# list; it is reported by the /info endpoint (served_model_name, falling back
+# to model_id), so this profile uses a dedicated response_format parser for
+# discovery.
+#
+# Every path below is forwarded verbatim to the backend by the provider
+# catch-all route (prefix stripped) - no per-endpoint handlers exist. The
+# list matters for unified-route path-based routing hints: TEI's native
+# request bodies carry no model field, so the path is often the only signal
+# that a request belongs on a TEI endpoint.
+name: text-embeddings-inference
+version: "1.0"
+display_name: "Text Embeddings Inference"
+description: "Hugging Face Text Embeddings Inference server (embeddings, classification, reranking)"
+
+# Routing configuration
+routing:
+  prefixes:
+    - text-embeddings-inference
+    - tei
+
+# API compatibility
+api:
+  # /v1/embeddings follows the OpenAI embeddings wire format, so provider and
+  # unified routing can treat TEI as OpenAI-compatible for that path.
+  openai_compatible: true
+  paths:
+    # Indices below are the real array positions; path_indices further down
+    # must stay in step with these.
+    # OpenAI-compatible
+    - /v1/embeddings   # 0: OpenAI-compatible embeddings
+
+    # Native embedding endpoints
+    - /embed           # 1: native embeddings (primary)
+    - /embed_all       # 2: per-token embeddings without pooling
+    - /embed_sparse    # 3: sparse (SPLADE) embeddings
+
+    # Tokenisation
+    - /tokenize        # 4: encode text to token IDs
+    - /decode          # 5: decode token IDs to text
+
+    # Classification and reranking
+    - /predict         # 6: sequence classification predictions
+    - /rerank          # 7: cross-encoder rerank scores
+    - /similarity      # 8: sentence similarity scores
+
+    # System endpoints
+    - /info            # 9: server info, carries the served model ID
+    - /health          # 10: health check
+    - /metrics         # 11: Prometheus metrics
+  model_discovery_path: /info
+  health_check_path: /health
+
+# Platform characteristics
+characteristics:
+  timeout: 2m
+  max_concurrent_requests: 100  # TEI batches requests internally
+  default_priority: 50
+  streaming_support: false      # embeddings are single-shot responses
+  auth:
+    required: false
+    types:
+      - bearer   # HF_TOKEN or custom API key when deployed behind auth
+
+# Detection hints for auto-discovery
+detection:
+  path_indicators:
+    - "/info"
+    - "/v1/embeddings"
+    - "/embed"
+  default_ports:
+    - 80    # TEI container default
+    - 3000  # TEI binary default
+
+# Model handling
+models:
+  name_format: "{{.Name}}"
+  # TEI instances serve embedding, classification or reranker models. The
+  # served model's real kind (from /info's model_type) becomes its Olla model
+  # type, which tags it embeddings, rerank or classification and never
+  # text-generation, so model-less /embed, /rerank and /predict requests are
+  # steered to an instance serving a model of the matching kind. This pattern
+  # only feeds profile-level capability checks, where every TEI model is
+  # non-generative.
+  capability_patterns:
+    embeddings:
+      - "*"
+
+# Request/response handling
+request:
+  model_field_paths:
+    - "model"
+  response_format: "text-embeddings-inference"
+  parsing_rules:
+    model_field_name: "model"
+    supports_streaming: false
+
+# Path indices for specific functions, matching the enabled entries in
+# api.paths above. The remaining native endpoints are documentation only -
+# Olla's PathIndices struct only reads health, models, completions,
+# chat_completions and embeddings.
+path_indices:
+  health: 10
+  models: 9
+  embeddings: 0
+
+# Resource management
+resources:
+  defaults:
+    min_memory_gb: 4
+    recommended_memory_gb: 8
+    requires_gpu: false     # CPU inference supported
+    estimated_load_time_ms: 10000
+
+  concurrency_limits:
+    - min_memory_gb: 0
+      max_concurrent: 100
+
+  timeout_scaling:
+    base_timeout_seconds: 120
+    load_time_buffer: true
+
+# Metrics extraction for TEI responses
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    # OpenAI embeddings response shape (/v1/embeddings only): usage carries
+    # prompt/total tokens, there is no choices array or finish_reason. The
+    # native endpoints return bare arrays with no usage block, so extraction
+    # is a silent no-op for them.
+    paths:
+      model: "$.model"
+      input_tokens: "$.usage.prompt_tokens"
+      total_tokens: "$.usage.total_tokens"

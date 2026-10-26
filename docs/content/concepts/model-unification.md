@@ -396,7 +396,7 @@ Model unification's family/publisher/quantisation/capability extraction is drive
 
 ### What it controls
 
-`models.yaml` has four top-level sections (all optional - an omitted section falls back to Olla's built-in defaults):
+`models.yaml` has four top-level sections (all optional). Apart from the `type_capabilities` and `context_thresholds` keys noted below, a section or entry your file omits is empty rather than defaulted:
 
 | Section | Field | Type | Purpose |
 |---|---|---|---|
@@ -406,10 +406,22 @@ Model unification's family/publisher/quantisation/capability extraction is drive
 | | `publisher_mappings` | map of string to string | Map a publisher/org prefix to a canonical name |
 | `quantization` | `mappings` | map of string to string | Normalise quantisation labels (e.g. `q4_k_m` variants) |
 | `capabilities` | `name_patterns` | list of `{pattern, capabilities}` | Regex patterns matched against a model name to infer capabilities (e.g. `vision`, `code-generation`) |
-| | `type_capabilities` | map of string to list of string | Capabilities implied by a model's declared type |
-| | `context_thresholds` | map of string to int64 | Token thresholds for `extended_context` / `long_context` / `ultra_long_context` labels |
+| | `type_capabilities` | map of string to list of string | Capabilities implied by a model's declared type. Types your file omits (such as `reranker` and `classifier`) keep the built-in entry |
+| | `context_thresholds` | map of string to int64 | Token thresholds for `extended_context` / `long_context` / `ultra_long_context` labels. Thresholds your file omits keep the built-in value |
 | `special_rules` | `preserve_family` | list of string | Family names that must not be rewritten by pattern matching |
 | | `generic_names` | list of string | Names treated as generic rather than a real family (excluded from family-based grouping) |
+
+The built-in `type_capabilities` are:
+
+| Model type | Capabilities |
+|---|---|
+| `llm` | `text-generation`, `chat`, `completion` |
+| `vlm` | `text-generation`, `vision`, `multimodal`, `image-understanding` |
+| `embeddings` (or `embedding`) | `embeddings`, `similarity`, `vector-search` |
+| `reranker` | `rerank`, `classification` |
+| `classifier` | `classification` |
+
+Models typed `embeddings`, `embedding`, `reranker` or `classifier` never carry `text-generation`, whatever your `type_capabilities` lists for them. Model-less requests use these capabilities to pick endpoints; see [Requests Without a Model Name](model-routing.md#requests-without-a-model-name).
 
 ### Where Olla looks for it
 

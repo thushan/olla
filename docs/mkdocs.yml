@@ -182,6 +182,7 @@ nav:
             - llama.cpp: integrations/backend/llamacpp.md
             - Docker Model Runner: integrations/backend/docker-model-runner.md
             - oMLX: integrations/backend/omlx.md
+            - Text Embeddings Inference: integrations/backend/text-embeddings-inference.md
         - Frontends:
             - OpenWebUI + Ollama: integrations/frontend/openwebui.md
             - OpenWebUI + OpenAI: integrations/frontend/openwebui-openai.md
@@ -221,5 +222,6 @@ nav:
           - Docker Model Runner: api-reference/docker-model-runner.md
           - oMLX: api-reference/omlx.md
           - OpenAI: api-reference/openai.md
+          - Text Embeddings Inference: api-reference/text-embeddings-inference.md
       - Translated APIs:
           - Anthropic Messages: api-reference/anthropic.md

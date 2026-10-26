@@ -206,6 +206,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		constants.PathV1ChatCompletions,
 		constants.PathV1Completions,
 		"/v1/embeddings",
+		"/api/embed", // supersedes /api/embeddings per Ollama's docs
 	}
 	ollamaConfig.API.ModelDiscoveryPath = "/api/tags"
 	ollamaConfig.API.HealthCheckPath = "/"

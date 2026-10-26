@@ -54,6 +54,8 @@ type ModelCapabilities struct {
 	ChatCompletion      bool
 	TextGeneration      bool
 	Embeddings          bool
+	Rerank              bool
+	Classification      bool
 	VisionUnderstanding bool
 	CodeGeneration      bool
 	FunctionCalling     bool

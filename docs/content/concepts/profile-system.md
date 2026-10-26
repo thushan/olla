@@ -171,7 +171,10 @@ Some profiles have native handlers that intercept specific endpoints instead of 
 | ollama | `/api/tags` | Aggregates models across instances |
 | ollama | `/v1/models` | Converts to OpenAI format |
 | lmstudio | `/v1/models` | Handles LM Studio format |
+| text-embeddings-inference | `/v1/models` | Converts to OpenAI format |
 | all | `/api/pull` | Blocks model management |
+
+All other provider paths - including every TEI native endpoint such as `/embed`, `/rerank`, `/predict`, `/tokenize` and `/info` - are forwarded verbatim to a single backend with the `/olla/<prefix>` prefix stripped. No per-endpoint handlers exist for them.
 
 Generally, any time a backend returns models, Olla intercepts the call and returns a unified representation of all models in instances of the backend.
 
@@ -673,6 +676,7 @@ Don't update versions in natively supported profiles however.
 | litellm | `litellm` | `litellm` | None |
 | lmdeploy | `lmdeploy` | `lmdeploy` | None |
 | dmr | `docker-model-runner` | `dmr` | None |
+| text-embeddings-inference | `text-embeddings-inference` | `text-embeddings-inference`, `tei` | `/v1/models` |
 | openai-compatible | `openai-compatible` (or `openai`, alias) | `openai`, `openai-compatible` | None |
 
 ### Required Fields

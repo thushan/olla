@@ -128,6 +128,15 @@ func extractParameterSize(sizeStr string) (string, int64) {
 	return normalizedSize, paramCount
 }
 
+// nonGenerativeModelTypes are model types that never produce text, so they must
+// not inherit the text-generation default.
+var nonGenerativeModelTypes = map[string]struct{}{
+	"embeddings": {},
+	"embedding":  {},
+	"reranker":   {},
+	"classifier": {},
+}
+
 // inferCapabilitiesFromMetadata infers model capabilities from various metadata fields
 func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]interface{}) []string {
 	capabilities := make(map[string]bool)
@@ -140,10 +149,12 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 		for _, cap := range typeCaps {
 			capabilities[cap] = true
 		}
-		// Embedding models don't generate text, they encode it
-		if modelTypeLower == "embeddings" || modelTypeLower == "embedding" {
-			delete(capabilities, "text-generation")
-		}
+	}
+	// embedding, rerank and classification models encode or score text, they
+	// don't generate it. The kind alone decides this, so it must not depend on
+	// the config having a type_capabilities entry for it.
+	if _, nonGenerative := nonGenerativeModelTypes[modelTypeLower]; nonGenerative {
+		delete(capabilities, "text-generation")
 	}
 
 	// Name-based inference using patterns from configuration

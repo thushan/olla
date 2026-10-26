@@ -199,6 +199,10 @@ The following endpoints are supported by the Ollama integration profile:
     <td>Generate Embeddings</td>
   </tr>
   <tr>
+    <td><code>/api/embed</code></td>
+    <td>Generate Embeddings (supersedes <code>/api/embeddings</code>)</td>
+  </tr>
+  <tr>
     <td><code>/api/tags</code></td>
     <td>List Local Models</td>
   </tr>
@@ -295,6 +299,10 @@ curl -X POST http://localhost:40114/olla/ollama/api/embeddings \
     "prompt": "The quick brown fox jumps over the lazy dog"
   }'
 ```
+
+The newer `/api/embed` endpoint works the same way. Olla checks its `model` field against the models it knows, so give the full name as Ollama lists it, tag included (`nomic-embed-text:latest`, not `nomic-embed-text`). A bare name gets a 404 `model_not_found`.
+
+Newer Ollama releases report each model's `capabilities` in `/api/tags`. Olla types a model that lists `embedding` but not `completion` as `embeddings`, so `/v1/embeddings` requests are routed to it and `?type=embeddings` on `/olla/models` includes it. Older Ollama versions omit the field and their embedding models stay untyped.
 
 ### List Available Models
 
