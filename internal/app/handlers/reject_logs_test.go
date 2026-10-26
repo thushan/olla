@@ -1,14 +1,18 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
 )
@@ -24,6 +28,12 @@ func newWarnCounter() *warnCounter {
 }
 
 func (w *warnCounter) Warn(msg string, _ ...any) {
+	w.mu.Lock()
+	w.counts[msg]++
+	w.mu.Unlock()
+}
+
+func (w *warnCounter) Error(msg string, _ ...any) {
 	w.mu.Lock()
 	w.counts[msg]++
 	w.mu.Unlock()
@@ -115,4 +125,72 @@ func TestApplication_FlushRejectLogsReportsPendingSummaries(t *testing.T) {
 
 	app.FlushRejectLogs()
 	assert.Equal(t, 1, log.count("Request rejected, repeats suppressed"), "a flushed count is not reported twice")
+}
+
+// A strict-routing alias whose target is absent used to write an alias-resolution WARN per
+// request ahead of the sampled rejection. Both diagnostics are now Debug.
+func TestResolveAliasEndpoints_AbsentTargetWritesNoWarnPerRequest(t *testing.T) {
+	t.Parallel()
+
+	log := newWarnCounter()
+	u, _ := url.Parse("http://ollama-1:11434")
+	other, _ := url.Parse("http://ollama-2:11434")
+	candidates := []*domain.Endpoint{{Name: "a", URL: u, URLString: u.String(), Type: domain.ProfileOllama, Status: domain.StatusHealthy}}
+	app := &Application{
+		logger:    log,
+		rejectLog: newRejectLogs(log, nil),
+		aliasResolver: registry.NewAliasResolver(map[string][]string{
+			"gone":    {"gone:1b"},
+			"offline": {"offline:1b"},
+		}, log),
+		// "offline" is served only by an endpoint that is not among the candidates
+		modelRegistry: &mockSimpleModelRegistry{strict: true, endpointsForModel: map[string][]string{
+			"offline:1b": {other.String()},
+		}},
+	}
+
+	for range 300 {
+		for _, alias := range []string{"gone", "offline"} {
+			profile := &domain.RequestProfile{Path: "/v1/chat/completions", ModelName: alias, SupportedBy: []string{domain.ProfileOllama}}
+			app.resolveAliasEndpoints(t.Context(), profile, candidates, log)
+		}
+	}
+	assert.Zero(t, log.count("Model alias resolved to no endpoints, falling back to standard routing"))
+	assert.Zero(t, log.count("No healthy endpoints found for model alias"))
+}
+
+// A chunked body over the cap fails mid-read; the handler answers 413. Logging that as an
+// ERROR per request floods the log, so it takes the sampled rejection path instead.
+func TestLogRequestResult_BodyTooLargeIsSampledNotErrored(t *testing.T) {
+	t.Parallel()
+
+	log := newWarnCounter()
+	app := &Application{logger: log, rejectLog: newRejectLogs(log, nil)}
+	err := fmt.Errorf("failed to read request body: %w", &http.MaxBytesError{Limit: 16})
+
+	for range 300 {
+		app.logRequestResult(&proxyRequest{
+			requestLogger: log, clientIP: "203.0.113.7", stats: &ports.RequestStats{StartTime: time.Now()},
+		}, err)
+	}
+	assert.Zero(t, log.count("Request failed"))
+	assert.Equal(t, 1, log.count("Request rejected"))
+
+	app.logRequestResult(&proxyRequest{
+		requestLogger: log, clientIP: "203.0.113.7", stats: &ports.RequestStats{StartTime: time.Now()},
+	}, errors.New("backend exploded"))
+	assert.Equal(t, 1, log.count("Request failed"), "other failures still log per request")
+}
+
+// The throttle truncates long keys. With a long forwarded identity as the client, a 404 must
+// not suppress the first 503 from the same client.
+func TestRejectLogs_LongClientIdentityKeepsStatusInKey(t *testing.T) {
+	t.Parallel()
+
+	r := newRejectLogs(newWarnCounter(), nil)
+	client := strings.Repeat("9", 100)
+
+	assert.True(t, r.allowRequest(client, 404))
+	assert.True(t, r.allowRequest(client, 503), "a different status is a different stream")
+	assert.False(t, r.allowRequest(client, 404))
 }

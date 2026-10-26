@@ -317,7 +317,7 @@ writer. The key depends on the layer:
 | `rate_limit` | `Rate limit exceeded` | client IP |
 | `size_limit` | `Request rejected` | client IP and kind (`body` or `headers`) |
 | `dashboard` | `dashboard access denied` | client IP |
-| `proxy` | `Request rejected` (no routable endpoint, unknown model, provider with no healthy host) | client IP and response status |
+| `proxy` | `Request rejected` (no routable endpoint, unknown model, provider with no healthy host, chunked body over the size cap) | response status and client IP |
 | `request_log` | `Rejected request` | client IP |
 
 Each layer tracks at most 256 keys; further keys share one summary with the key `other`. Lapsed

@@ -244,7 +244,12 @@ func (h *RetryHandler) preserveRequestBody(r *http.Request) ([]byte, error) {
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		h.logger.Error("Failed to read request body for retry preservation", "error", err)
+		// An oversized chunked body is a client rejection the handler answers with 413 and
+		// samples; an ERROR here would write one line per request.
+		var maxBytesErr *http.MaxBytesError
+		if !errors.As(err, &maxBytesErr) {
+			h.logger.Error("Failed to read request body for retry preservation", "error", err)
+		}
 		return nil, fmt.Errorf("failed to read request body: %w", err)
 	}
 

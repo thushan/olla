@@ -10,7 +10,8 @@ import (
 // unknown model under strict routing, a model or provider with no healthy host). A client
 // can repeat these at wire speed, and each repeat used to write full detail lines.
 //
-// The key is the client IP plus the response status. The status is a finite cause, so one
+// The key is the response status plus the client IP, status first because the throttle truncates
+// long keys and a long forwarded identity must not push the status off the end. The status is a finite cause, so one
 // client's 404s do not hide its 503s, while a client rotating model names still costs one
 // line per window rather than one per name. The throttle caps its tracked keys.
 type rejectLogs struct {
@@ -27,7 +28,7 @@ func newRejectLogs(log logger.StyledLogger, set *logger.ThrottleSet) *rejectLogs
 // allowRequest is true when this client's rejection should be logged in full. A nil receiver
 // (an Application built without NewApplication, as in tests) logs everything.
 func (r *rejectLogs) allowRequest(clientIP string, status int) bool {
-	return r == nil || r.request.Allow(clientIP+"|"+strconv.Itoa(status))
+	return r == nil || r.request.Allow(strconv.Itoa(status)+"|"+clientIP)
 }
 
 // newThrottleSet exists because NewApplication's logger parameter shadows the package.

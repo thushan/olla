@@ -409,6 +409,14 @@ func (a *Application) logRequestRejected(pr *proxyRequest, status int, reason st
 }
 
 func (a *Application) logRequestResult(pr *proxyRequest, err error) {
+	// A chunked body over the size cap fails mid-read and is answered 413 by handleProxyError.
+	// It is a client rejection, so it takes the sampled path rather than an ERROR per request.
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		a.logRequestRejected(pr, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+
 	duration := time.Since(pr.stats.StartTime)
 
 	if err != nil {
@@ -721,7 +729,9 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 		if err != nil {
 			logFields = append(logFields, "error", err)
 		}
-		logger.Warn("Model alias resolved to no endpoints, falling back to standard routing",
+		// Debug: a strict-routing miss is rejected right after this, and the sampled
+		// "Request rejected" line reports it. Warning here would write one line per request.
+		logger.Debug("Model alias resolved to no endpoints, falling back to standard routing",
 			logFields...)
 
 		// fall through to standard routing in case the alias name itself is a known model
@@ -737,7 +747,7 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 	}
 
 	if len(aliasEndpoints) == 0 {
-		logger.Warn("No healthy endpoints found for model alias",
+		logger.Debug("No healthy endpoints found for model alias",
 			"alias", aliasName,
 			"resolved_endpoints", len(endpointToModel))
 
