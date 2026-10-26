@@ -580,7 +580,8 @@ func teiPresent(raw json.RawMessage) bool {
 
 // teiInputCount validates a native "inputs" (or OpenAI "input") value for the
 // embedding routes and returns how many inputs it carries. TEI takes a string, or
-// an array whose elements are strings or arrays of token ids; anything else is a
+// an array of strings, an array of token ids (one sequence) or an array of token id
+// arrays (a batch); anything else is a
 // shape error. An empty array is Empty (400) straight away, as the handler checks
 // it. An empty string, or empty id array, is only found when the tokeniser runs,
 // which is after the model-kind check, so it comes back as blank for the caller to
@@ -603,6 +604,11 @@ func teiInputCount(raw json.RawMessage, field string) (count int, blank, err *te
 	case []any:
 		if len(v) == 0 {
 			return 0, nil, emptyInput
+		}
+		// A flat array of numbers is one sequence of token ids (TEI's InputIds),
+		// not a batch of items.
+		if teiAllNumbers(v) {
+			return 1, nil, nil
 		}
 		for _, item := range v {
 			switch it := item.(type) {
@@ -627,6 +633,17 @@ func teiInputCount(raw json.RawMessage, field string) (count int, blank, err *te
 	default:
 		return 0, nil, teiValidationErr("`" + field + "` must be a string or an array of strings")
 	}
+}
+
+// teiAllNumbers reports whether every element is a JSON number. Callers have
+// already rejected the empty array.
+func teiAllNumbers(v []any) bool {
+	for _, item := range v {
+		if _, ok := item.(float64); !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // teiKindThenBlank applies the model-kind check, then reports blank input: TEI

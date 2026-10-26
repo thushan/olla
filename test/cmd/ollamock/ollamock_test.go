@@ -638,6 +638,59 @@ func teiCall(t *testing.T, ts *httptest.Server, path, body string) (int, map[str
 	return resp.StatusCode, out
 }
 
+// TEI accepts embedding input as a string, strings, one sequence of token ids or
+// a batch of token id arrays; the mock must too, on every route that takes it.
+func TestTEIEmbedAcceptsTokenIDInput(t *testing.T) {
+	t.Parallel()
+	ts := testServerWith(t, serverConfig{teiKind: teiKindEmbedding})
+
+	cases := []struct {
+		name, path, body string
+		wantRows         int
+	}{
+		{"embed single sequence", "/embed", `{"inputs":[101,42,102]}`, 1},
+		{"embed batch of sequences", "/embed", `{"inputs":[[101,42],[7,8,9]]}`, 2},
+		{"embed_all single sequence", "/embed_all", `{"inputs":[101,42,102]}`, 1},
+		{"embed_sparse single sequence", "/embed_sparse", `{"inputs":[101,42,102]}`, 1},
+		{"openai embeddings single sequence", "/v1/embeddings", `{"input":[101,42,102]}`, 1},
+		{"openai embeddings batch", "/v1/embeddings", `{"input":[[101,42],[7]]}`, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			resp := postJSON(t, ts.URL+tc.path, tc.body)
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				b, _ := io.ReadAll(resp.Body)
+				t.Fatalf("status = %d, want 200 (body %s)", resp.StatusCode, b)
+			}
+			var raw json.RawMessage
+			if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+				t.Fatal(err)
+			}
+			var rows []json.RawMessage
+			if err := json.Unmarshal(raw, &rows); err != nil {
+				var obj struct {
+					Data []json.RawMessage `json:"data"`
+				}
+				if err := json.Unmarshal(raw, &obj); err != nil {
+					t.Fatal(err)
+				}
+				rows = obj.Data
+			}
+			if len(rows) != tc.wantRows {
+				t.Fatalf("got %d rows, want %d (%s)", len(rows), tc.wantRows, raw)
+			}
+		})
+	}
+
+	// mixed element types are still a shape error
+	status, _, _ := teiRaw(t, ts, "/embed", `{"inputs":[101,"a"]}`)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("mixed ids and strings: status = %d, want 422", status)
+	}
+}
+
 // teiRaw posts body and returns the status, Content-Type and raw body, for the
 // answers that are not JSON.
 func teiRaw(t *testing.T, ts *httptest.Server, path, body string) (status int, contentType, raw string) {
