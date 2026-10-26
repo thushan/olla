@@ -55,7 +55,7 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// name is available; inject into context before endpoint selection.
 	// The outcome pointer is stored in context; the proxy engine reads it before WriteHeader.
 	if a.Config.Proxy.StickySessions.Enabled {
-		ctx, r, _ = a.injectStickyKey(ctx, r, pr.model)
+		ctx, r, _ = a.injectStickyKey(ctx, r, a.canonicalModelName(pr.model))
 	}
 
 	endpoints, err := a.getCompatibleEndpoints(ctx, pr)
@@ -194,6 +194,30 @@ func (a *Application) setupRequestContext(r *http.Request, stats *ports.RequestS
 	ctx := context.WithValue(r.Context(), constants.ContextRequestIdKey, stats.RequestID)
 	ctx = context.WithValue(ctx, constants.ContextRequestTimeKey, stats.StartTime)
 	return ctx, r.WithContext(ctx)
+}
+
+// modelCanonicaliser is implemented by registries that know which native name a bare
+// Ollama model name resolves to.
+type modelCanonicaliser interface {
+	CanonicalModelName(name string) string
+}
+
+// canonicalModelName names the model a request resolves to, so "foo" and "foo:latest"
+// share a stats row and a sticky key instead of splitting one conversation in two. It
+// is for keys and labels only; the forwarded body keeps the client's spelling. A
+// configured model alias is left alone because its own routing decides the target.
+func (a *Application) canonicalModelName(name string) string {
+	if name == "" {
+		return name
+	}
+	canon, ok := a.modelRegistry.(modelCanonicaliser)
+	if !ok {
+		return name
+	}
+	if a.aliasResolver != nil && a.aliasResolver.IsAlias(name) {
+		return name
+	}
+	return canon.CanonicalModelName(name)
 }
 
 func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *proxyRequest) {
