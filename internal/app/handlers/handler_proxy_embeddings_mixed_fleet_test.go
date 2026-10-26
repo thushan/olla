@@ -134,12 +134,12 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		for _, strat := range strategies {
-			t.Run(tt.name+"/"+strat.name, func(t *testing.T) {
+		for _, strategy := range strategies {
+			t.Run(tt.name+"/"+strategy.name, func(t *testing.T) {
 				t.Parallel()
 
 				ctx := context.Background()
-				cfg := strat.cfg
+				cfg := strategy.cfg
 				unified := registry.NewUnifiedMemoryModelRegistry(styledLog, nil, &cfg, nil)
 
 				endpoints := make([]*domain.Endpoint, 0, len(tt.fleet))
