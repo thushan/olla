@@ -25,6 +25,7 @@ type UnifiedMemoryModelRegistry struct {
 	endpoints         *xsync.Map[string, *domain.Endpoint]             // URL -> Endpoint mapping
 	modelEndpointSets *xsync.Map[string, *xsync.Map[string, struct{}]] // ModelID -> Set of endpoint URLs (cached for fast lookup)
 	unificationMutex  sync.Mutex
+	unifyWG           sync.WaitGroup // tracks in-flight unifyModelsAsync goroutines
 }
 
 // NewUnifiedMemoryModelRegistry creates a new registry with unification support
@@ -125,9 +126,20 @@ func (r *UnifiedMemoryModelRegistry) RegisterModels(ctx context.Context, endpoin
 	}
 
 	// Then unify them
-	go r.unifyModelsAsync(ctx, endpointURL, models)
+	r.unifyWG.Add(1)
+	go func() {
+		defer r.unifyWG.Done()
+		r.unifyModelsAsync(ctx, endpointURL, models)
+	}()
 
 	return nil
+}
+
+// WaitForUnification blocks until every unification started by a prior
+// RegisterModels call has been published to the unified view. Callers that need
+// read-your-writes (tests, shutdown) use it instead of polling.
+func (r *UnifiedMemoryModelRegistry) WaitForUnification() {
+	r.unifyWG.Wait()
 }
 
 // unifyModelsAsync performs model unification in the background
@@ -320,13 +332,19 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 	defer r.unificationMutex.Unlock()
 
 	// Remove endpoint from all unified models
-	r.globalUnified.Range(func(id string, model *domain.UnifiedModel) bool {
+	r.globalUnified.Range(func(id string, live *domain.UnifiedModel) bool {
+		// Copy-on-write: lock-free readers hold the published pointer, and
+		// RemoveEndpoint shifts elements inside the SourceEndpoints backing array.
+		if live.GetEndpointByURL(endpointURL) == nil {
+			return true
+		}
+		model := live.Clone()
 		// we're capturing model metadata BEFORE mutation to avoid accessing empty slices
 		// when the last endpoint is removed (model.RemoveEndpoint empties SourceEndpoints)
-		sourceEndpoints := make([]domain.SourceEndpoint, len(model.SourceEndpoints))
-		copy(sourceEndpoints, model.SourceEndpoints)
-		aliases := make([]domain.AliasEntry, len(model.Aliases))
-		copy(aliases, model.Aliases)
+		sourceEndpoints := make([]domain.SourceEndpoint, len(live.SourceEndpoints))
+		copy(sourceEndpoints, live.SourceEndpoints)
+		aliases := make([]domain.AliasEntry, len(live.Aliases))
+		copy(aliases, live.Aliases)
 
 		if model.RemoveEndpoint(endpointURL) {
 			// If no endpoints left, remove the unified model and its cached sets
@@ -344,6 +362,7 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 				// Update the model
 				model.DiskSize = model.GetTotalDiskSize()
 				model.LastSeen = time.Now()
+				r.globalUnified.Store(id, model)
 
 				// update cached endpoint set to reflect the removed endpoint
 				var endpointURLs []string

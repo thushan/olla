@@ -132,8 +132,18 @@ func (r *LifecycleUnifiedRegistry) GetEndpointHealth(ctx context.Context) (map[s
 }
 
 func (r *LifecycleUnifiedRegistry) MarkEndpointOffline(ctx context.Context, endpointURL string, reason string) error {
-	r.globalUnified.Range(func(id string, model *domain.UnifiedModel) bool {
+	// Copy-on-write under the same lock RemoveEndpoint and unification use:
+	// readers hold the published pointers without any lock.
+	r.unificationMutex.Lock()
+	defer r.unificationMutex.Unlock()
+
+	r.globalUnified.Range(func(id string, live *domain.UnifiedModel) bool {
+		if live.GetEndpointByURL(endpointURL) == nil {
+			return true
+		}
+		model := live.Clone()
 		model.MarkEndpointOffline(endpointURL, reason)
+		r.globalUnified.Store(id, model)
 		return true
 	})
 
