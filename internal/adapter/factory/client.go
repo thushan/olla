@@ -13,7 +13,7 @@ const (
 	maxBackendRedirects = 10
 )
 
-// BackendClientOptions tunes the pool and timeouts of a credentialed backend
+// BackendClientOptions tunes the pool and timeouts of a credentialled backend
 // client. Zero values leave the corresponding net/http default.
 type BackendClientOptions struct {
 	Timeout               time.Duration
@@ -55,18 +55,31 @@ func NewBackendHTTPClient(opts BackendClientOptions) *http.Client {
 }
 
 // RefuseCrossOriginRedirect is an http.Client.CheckRedirect that follows a
-// redirect only when it keeps the scheme and host:port of the original request,
-// and otherwise returns the 3xx response unfollowed so the caller sees a
-// non-success status.
+// redirect only when it keeps the host:port of the original request and the
+// scheme, with one exception: http may upgrade to https on the same host:port,
+// which a backend behind a TLS-terminating front end does routinely and which
+// can only move credentials onto a safer channel. Any other scheme, host or
+// port change, and any downgrade from a hop that was already https, returns the
+// 3xx response unfollowed so the caller sees a non-success status.
 func RefuseCrossOriginRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= maxBackendRedirects {
 		return http.ErrUseLastResponse
 	}
 	origin := via[0].URL
-	if req.URL.Scheme != origin.Scheme || req.URL.Host != origin.Host {
+	if req.URL.Host != origin.Host {
 		return http.ErrUseLastResponse
 	}
-	return nil
+	if req.URL.Scheme == origin.Scheme {
+		// an upgrade earlier in the chain must not be undone by a later hop
+		if prev := via[len(via)-1].URL; prev.Scheme == "https" && req.URL.Scheme != "https" {
+			return http.ErrUseLastResponse
+		}
+		return nil
+	}
+	if origin.Scheme == "http" && req.URL.Scheme == "https" {
+		return nil
+	}
+	return http.ErrUseLastResponse
 }
 
 type SharedClientFactory struct {

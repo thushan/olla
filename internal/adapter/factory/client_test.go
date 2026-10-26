@@ -41,7 +41,11 @@ func TestRefuseCrossOriginRedirect(t *testing.T) {
 		{"same origin", "http://backend:11434/api/ps", "http://backend:11434/api/ps/", true},
 		{"different host", "http://backend:11434/x", "http://evil:11434/x", false},
 		{"different port", "http://backend:11434/x", "http://backend:9999/x", false},
-		{"scheme downgrade or upgrade", "http://backend:11434/x", "https://backend:11434/x", false},
+		{"http to https upgrade on the same host", "http://backend:11434/x", "https://backend:11434/x", true},
+		{"upgrade to a different port", "http://backend:11434/x", "https://backend:8443/x", false},
+		{"upgrade to a different host", "http://backend/x", "https://evil/x", false},
+		{"https to http downgrade", "https://backend/x", "http://backend/x", false},
+		{"other scheme", "http://backend/x", "ftp://backend/x", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -59,6 +63,14 @@ func TestRefuseCrossOriginRedirect(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("downgrade after an upgrade stays refused", func(t *testing.T) {
+		t.Parallel()
+		first, _ := http.NewRequest(http.MethodGet, "http://b/x", http.NoBody)
+		upgraded, _ := http.NewRequest(http.MethodGet, "https://b/x", http.NoBody)
+		back, _ := http.NewRequest(http.MethodGet, "http://b/x", http.NoBody)
+		assert.ErrorIs(t, RefuseCrossOriginRedirect(back, []*http.Request{first, upgraded}), http.ErrUseLastResponse)
+	})
 
 	t.Run("hop limit", func(t *testing.T) {
 		t.Parallel()
