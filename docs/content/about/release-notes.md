@@ -65,9 +65,9 @@ captured by TEI's `/embed`. Ollama embedding-only models are typed `embeddings` 
 untyped), so `/v1/embeddings` still reaches them when a TEI instance is in the fleet.
 
 Because `/api/embed` is now a recognised Ollama path, `/olla/ollama/api/embed` checks the requested
-model like Ollama's other routes. Name the model as Ollama lists it, tag included: a model pulled
-without a tag lists as `all-minilm:latest`, and a bare `all-minilm` now gets a 404 `model_not_found`
-here, as it already did on `/api/chat`. Resolving bare names to `:latest` is a separate fix.
+model like Ollama's other routes. A model pulled
+without a tag lists as `all-minilm:latest`; a bare `all-minilm` resolves to it here, as it now does
+on every other route (see the untagged-names fix below).
 
 ### Fixed: LM Studio model types and capabilities
 
@@ -79,18 +79,14 @@ now wins, so those models gain the capabilities their type implies: `vision`,
 `vector-search` (without `text-generation`) for embeddings, and `chat` and `completion`
 for `llm`. Model-less vision and embeddings requests are steered to those models.
 
-### Fixed: a model name without a tag reaches the Ollama model `:latest`
+### Fixed: Ollama model names without a tag
 
-Ollama lists a default-tag pull as `all-minilm:latest`, and Ollama itself accepts `all-minilm` for it,
-but Olla only matched the listed spelling: `all-minilm` was a 404 `model_not_found` on every route
-(`/olla/proxy/`, the provider prefixes, `/api/chat`, `/api/generate`, `/api/embed`, `/api/embeddings`,
-`/v1/embeddings`, `/olla/anthropic/v1/messages` and `GET /olla/models/{id}`), strict or optimistic.
-A name with no tag now resolves to `<name>:latest` when the exact lookup finds nothing, and only to
-models an Ollama endpoint serves. An exact match always wins, so a vLLM model called `foo` is chosen
-over an Ollama `foo:latest` for a request for `foo`; nothing else strips or adds `:latest`, so a vLLM
-`foo:latest` never answers `foo`. This applies with model unification on or off. The request body is
-forwarded exactly as the client wrote it. Per-model stats and sticky session keys use the native name,
-so `foo` and `foo:latest` share one row and one affinity key.
+A model pulled with `ollama pull all-minilm` is listed as `all-minilm:latest`, and Ollama accepts
+`all-minilm` for it, but Olla returned a 404 `model_not_found` for the bare name on `/olla/proxy/`,
+the provider prefixes, `/olla/anthropic/v1/messages` and `GET /olla/models/{id}`. When no endpoint
+serves the exact name, Olla now retries once as `<name>:latest` against Ollama endpoints only, so a
+vLLM `foo:latest` still never answers `foo`. The request goes to Ollama as you wrote it, and `foo`
+and `foo:latest` share one stats row and one sticky session key. Nothing to change on your side.
 
 ## v0.0.29
 
