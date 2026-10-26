@@ -51,7 +51,7 @@ func NewSizeValidator(limits config.ServerRequestLimits, metrics ports.SecurityM
 	}
 	// Oversized requests can be sent at wire speed, so the WARN is sampled per
 	// client IP; the violation counters still see every rejection.
-	sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_ip", nil)
+	sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_kind", nil)
 	return sv
 }
 
@@ -246,12 +246,15 @@ func (sv *SizeValidator) CreateNonProxyMiddleware() func(http.Handler) http.Hand
 func (sv *SizeValidator) recordViolation(r *http.Request, req ports.SecurityRequest, result ports.SecurityResult) {
 	clientIP := util.GetClientIP(r, false, nil)
 
+	// Body and header rejections sample separately, so a client that trips one does not
+	// hide the diagnostic for the other.
+	kind, size := "body", req.BodySize
+	if strings.Contains(result.Reason, "headers too large") {
+		kind, size = "headers", req.HeaderSize
+	}
+
 	if sv.metrics != nil {
 		violationType := constants.ViolationSizeLimit
-		size := req.BodySize
-		if strings.Contains(result.Reason, "headers too large") {
-			size = req.HeaderSize
-		}
 
 		violation := ports.SecurityViolation{
 			ClientID:      clientIP,
@@ -263,7 +266,7 @@ func (sv *SizeValidator) recordViolation(r *http.Request, req ports.SecurityRequ
 		_ = sv.metrics.RecordViolation(r.Context(), violation)
 	}
 
-	if !sv.rejectLog.Allow(clientIP) {
+	if !sv.rejectLog.Allow(clientIP + "|" + kind) {
 		return
 	}
 	sv.logger.Warn("Request rejected",

@@ -117,7 +117,9 @@ func (t *Throttle) Allow(key string) bool {
 		allow, own.suppressed = t.touch(e, now)
 		own.key = key
 	case len(t.entries) < t.maxKeys:
-		t.entries[key] = &throttleEntry{start: now}
+		// Clone: the key is often a substring of a much larger request value (a model name),
+		// and keeping it would pin that whole allocation for every tracked key.
+		t.entries[strings.Clone(key)] = &throttleEntry{start: now}
 		allow = true
 	default:
 		// full: the sweep above already reclaimed what had lapsed

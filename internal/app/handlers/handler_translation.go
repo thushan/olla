@@ -417,7 +417,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 			a.setStickyResponseHeadersFromRequest(w, r)
 
 			a.logRequestStart(pr, 0)
-			a.logRequestRejected(pr, status)
+			a.logRequestRejected(pr, status, reason)
 
 			a.writeTranslatorError(w, trans, pr, errors.New(reason), status)
 			a.recordTranslatorMetrics(trans, pr, constants.TranslatorModeTranslation, constants.FallbackReasonNoCompatibleEndpoints)

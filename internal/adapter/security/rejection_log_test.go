@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/adapter/stats"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
@@ -189,6 +190,9 @@ func TestRateLimitMiddleware_DistinctIPStormKeepsThrottleBounded(t *testing.T) {
 	log, records := newCaptureLogger()
 	v := NewRateLimitValidator(config.ServerRateLimits{PerIPRequestsPerMinute: 1, BurstSize: 1}, nil, log)
 	defer v.Stop()
+	// frozen clock: a slow race runner must not be able to open a second window mid-storm
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	v.rejectLog = logger.NewRejectThrottle(log, "Rate limit exceeded", "rate_limit", "client_ip", clock.Now)
 	h := v.CreateMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 
 	const total = 100_000
@@ -210,7 +214,7 @@ func TestRateLimitMiddleware_DistinctIPStormKeepsThrottleBounded(t *testing.T) {
 	wg.Wait()
 
 	require.LessOrEqual(t, v.rejectLog.Len(), logger.DefaultThrottleMaxKeys)
-	require.LessOrEqual(t, countExact(records(), "Rate limit exceeded"), logger.DefaultThrottleMaxKeys+1,
+	require.Equal(t, logger.DefaultThrottleMaxKeys+1, countExact(records(), "Rate limit exceeded"),
 		"a storm of distinct IPs logs a bounded number of full lines")
 }
 
@@ -249,7 +253,7 @@ func TestSizeValidator_RejectionLogIsThrottledPerClient(t *testing.T) {
 			metrics := &countingMetrics{}
 			sv := NewSizeValidator(config.ServerRequestLimits{MaxBodySize: 16, MaxHeaderSize: 1 << 20}, metrics, log)
 			clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
-			sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_ip", clock.Now)
+			sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_kind", clock.Now)
 			h := tt.middleware(sv)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 
 			const total = 2_000
@@ -300,4 +304,68 @@ func TestAdaptersStop_FlushesSizeValidatorSummary(t *testing.T) {
 
 	adapters.Stop()
 	require.Equal(t, 1, countExact(records(), "Request rejected, repeats suppressed"))
+}
+
+// The production metrics adapter used to WARN "Large request blocked" for every violation
+// over 50 MiB, ahead of the size limiter's own sampling. That line is gone; the counters
+// still see every rejection.
+func TestSizeValidator_OversizedFloodWithProductionMetricsLogsOnce(t *testing.T) {
+	t.Parallel()
+
+	log, records := newCaptureLogger()
+	collector := stats.NewCollector(log)
+	sv := NewSizeValidator(config.ServerRequestLimits{MaxBodySize: 1 << 20, MaxHeaderSize: 1 << 20},
+		NewSecurityMetricsAdapter(collector, log), log)
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_kind", clock.Now)
+	h := sv.CreateMiddleware()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	const total = 200
+	for range total {
+		req := httptest.NewRequest(http.MethodPost, "/olla/proxy/v1/chat/completions", nil)
+		req.ContentLength = 100*1024*1024 + 1
+		req.RemoteAddr = "203.0.113.50:9999"
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
+	}
+
+	require.Zero(t, countExact(records(), "Large request blocked"))
+	require.Equal(t, 1, countExact(records(), "Request rejected"))
+	require.EqualValues(t, total, collector.GetSecurityStats().SizeLimitViolations)
+}
+
+// A client that trips the body limit and then the header limit inside one window must
+// still get a diagnostic for each: they are different causes.
+func TestSizeValidator_BodyAndHeaderRejectionsSampleSeparately(t *testing.T) {
+	t.Parallel()
+
+	log, records := newCaptureLogger()
+	sv := NewSizeValidator(config.ServerRequestLimits{MaxBodySize: 16, MaxHeaderSize: 4096}, &countingMetrics{}, log)
+	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
+	sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_kind", clock.Now)
+	h := sv.CreateMiddleware()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+
+	send := func(mutate func(*http.Request)) {
+		req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(""))
+		req.RemoteAddr = "203.0.113.50:9999"
+		mutate(req)
+		h.ServeHTTP(httptest.NewRecorder(), req)
+	}
+	for range 5 {
+		send(func(r *http.Request) { r.ContentLength = 64 })
+	}
+	for range 5 {
+		send(func(r *http.Request) { r.Header.Set("X-Pad", strings.Repeat("p", 8192)) })
+	}
+
+	var reasons []string
+	for _, r := range records() {
+		if r.msg == "Request rejected" {
+			reasons = append(reasons, r.attrs["reason"].(string))
+		}
+	}
+	require.Len(t, reasons, 2)
+	require.Contains(t, reasons[0], "body too large")
+	require.Contains(t, strings.ToLower(reasons[1]), "headers too large")
 }

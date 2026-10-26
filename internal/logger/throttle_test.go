@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/stretchr/testify/require"
 )
@@ -237,5 +238,24 @@ func TestThrottle_LongKeysAreBounded(t *testing.T) {
 	require.Len(t, rec.got, 1)
 	for k := range rec.got {
 		require.LessOrEqual(t, len(k), MaxThrottleKeyLen)
+	}
+}
+
+// A key is often a substring of a much larger request value. Storing it as-is would pin
+// that whole allocation for as long as the entry lives.
+func TestThrottle_StoredKeysDoNotPinTheirSource(t *testing.T) {
+	t.Parallel()
+
+	th := NewThrottle(ThrottleConfig{})
+	big := strings.Repeat("m", 1<<20)
+	for _, key := range []string{big[:10], big[:MaxThrottleKeyLen], big} {
+		th.Allow(key)
+	}
+	require.Equal(t, 2, th.Len(), "the 64-byte prefix and the oversized key truncate to one entry")
+
+	th.mu.Lock()
+	defer th.mu.Unlock()
+	for k := range th.entries {
+		require.NotSame(t, unsafe.StringData(big), unsafe.StringData(k), "key shares the source's backing array")
 	}
 }

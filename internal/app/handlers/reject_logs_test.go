@@ -1,8 +1,8 @@
 package handlers
 
 import (
+	"fmt"
 	"net/url"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -35,9 +35,39 @@ func (w *warnCounter) count(msg string) int {
 	return w.counts[msg]
 }
 
-// A client repeating a refused request must not write a line per attempt, in either of the
-// two places a refusal is logged. A different model or client is not hidden by it.
+func rejectedRequest(ip, model string) *proxyRequest {
+	return &proxyRequest{
+		requestLogger: nil, clientIP: ip, model: model, stats: &ports.RequestStats{StartTime: time.Now()},
+	}
+}
+
+// A client repeating a refused request, or rotating the model name it asks for, must not
+// write a line per attempt. A different client or status is not hidden by it.
 func TestRejectLogs_RepeatedRefusalsAreSampled(t *testing.T) {
+	t.Parallel()
+
+	log := newWarnCounter()
+	app := &Application{logger: log, rejectLog: newRejectLogs(log, nil)}
+	reject := func(ip, model string, status int) {
+		pr := rejectedRequest(ip, model)
+		pr.requestLogger = log
+		app.logRequestRejected(pr, status, "model not found")
+	}
+
+	for i := range 300 {
+		reject("203.0.113.7", fmt.Sprintf("no-such-model-%d", i), 404)
+	}
+	assert.Equal(t, 1, log.count("Request rejected"), "rotating model names is one stream")
+
+	reject("198.51.100.9", "x", 404)
+	assert.Equal(t, 2, log.count("Request rejected"), "a different client is its own stream")
+	reject("203.0.113.7", "x", 503)
+	assert.Equal(t, 3, log.count("Request rejected"), "a different status is a different cause")
+}
+
+// Strict-routing and fail-closed provider rejections used to write their own WARN per
+// request before the final rejection line; only the sampled final line may remain.
+func TestFilterEndpointsByProfile_RejectionsWriteNoWarnPerRequest(t *testing.T) {
 	t.Parallel()
 
 	log := newWarnCounter()
@@ -49,52 +79,25 @@ func TestRejectLogs_RepeatedRefusalsAreSampled(t *testing.T) {
 		modelRegistry: &mockSimpleModelRegistry{strict: true, endpointsForModel: map[string][]string{}},
 	}
 
-	route := func(model string) {
-		profile := &domain.RequestProfile{Path: "/v1/chat/completions", ModelName: model, SupportedBy: []string{domain.ProfileOllama}}
-		require.Empty(t, app.filterEndpointsByProfile(endpoints, profile, log))
-	}
 	for range 300 {
-		route("no-such-model")
-	}
-	assert.Equal(t, 1, log.count("Model routing rejected request"))
-	route("another-missing-model")
-	assert.Equal(t, 2, log.count("Model routing rejected request"), "a different model is its own stream")
+		strict := &domain.RequestProfile{Path: "/v1/chat/completions", ModelName: "missing", SupportedBy: []string{domain.ProfileOllama}}
+		require.Empty(t, app.filterEndpointsByProfile(endpoints, strict, log))
 
-	for range 300 {
-		app.logRequestRejected(&proxyRequest{
-			requestLogger: log, clientIP: "203.0.113.7", stats: &ports.RequestStats{StartTime: time.Now()},
-		}, 404)
+		closed := &domain.RequestProfile{Path: "/x", SupportedBy: []string{domain.ProfileVLLM}, FailClosedOnNoMatch: true}
+		require.Empty(t, app.filterEndpointsByProfile(endpoints, closed, log))
 	}
-	assert.Equal(t, 1, log.count("Request rejected"))
-	app.logRequestRejected(&proxyRequest{
-		requestLogger: log, clientIP: "198.51.100.9", stats: &ports.RequestStats{StartTime: time.Now()},
-	}, 404)
-	assert.Equal(t, 2, log.count("Request rejected"), "a different client is its own stream")
+	assert.Zero(t, log.count("Model routing rejected request"))
+	assert.Zero(t, log.count("No compatible endpoints found for provider-scoped path, failing closed"))
 }
 
 func TestRejectLogs_NilLogsEverything(t *testing.T) {
 	t.Parallel()
 	var r *rejectLogs
-	assert.True(t, r.allowRequest("x"))
-	assert.True(t, r.allowRequest("x"))
+	assert.True(t, r.allowRequest("x", 404))
+	assert.True(t, r.allowRequest("x", 404))
 }
 
-// The throttle truncates keys, so a long model name must not push the status out of the key:
-// the same model rejected with 404 and 503 are different causes and each gets its own line.
-func TestRejectLogs_LongModelNameKeepsStatusInKey(t *testing.T) {
-	t.Parallel()
-
-	log := newWarnCounter()
-	r := newRejectLogs(log, nil)
-	model := strings.Repeat("m", 100)
-
-	assert.True(t, r.allowRouting(model, &domain.ModelRoutingDecision{StatusCode: 404}))
-	assert.True(t, r.allowRouting(model, &domain.ModelRoutingDecision{StatusCode: 503}),
-		"a different status for the same long model is a different stream")
-	assert.False(t, r.allowRouting(model, &domain.ModelRoutingDecision{StatusCode: 404}))
-}
-
-// Shutdown must report what the handler throttles are still holding, under the layer that wrote it.
+// Shutdown must report what the handler throttle is still holding, under the layer that wrote it.
 func TestApplication_FlushRejectLogsReportsPendingSummaries(t *testing.T) {
 	t.Parallel()
 
@@ -103,14 +106,12 @@ func TestApplication_FlushRejectLogsReportsPendingSummaries(t *testing.T) {
 	app := &Application{logger: log, rejectLog: newRejectLogs(log, set), throttles: set}
 
 	for range 5 {
-		app.rejectLog.allowRequest("203.0.113.7")
-		app.rejectLog.allowRouting("m", &domain.ModelRoutingDecision{StatusCode: 404})
+		app.rejectLog.allowRequest("203.0.113.7", 404)
 	}
 	assert.Zero(t, log.count("Request rejected, repeats suppressed"))
 
 	app.FlushRejectLogs()
 	assert.Equal(t, 1, log.count("Request rejected, repeats suppressed"))
-	assert.Equal(t, 1, log.count("Model routing rejected request, repeats suppressed"))
 
 	app.FlushRejectLogs()
 	assert.Equal(t, 1, log.count("Request rejected, repeats suppressed"), "a flushed count is not reported twice")
