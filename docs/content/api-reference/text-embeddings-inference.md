@@ -20,6 +20,9 @@ Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers. Availa
 | POST | `/olla/tei/rerank` | Cross-encoder rerank scores |
 | POST | `/olla/tei/similarity` | Sentence similarity scores |
 
+!!! info "Routing across TEI instances"
+    A TEI instance serves one model of one kind. TEI's native bodies carry no `model` field, so Olla routes by path: `/embed`, `/embed_all`, `/embed_sparse` and `/similarity` go to an instance serving an embedding model, `/rerank` to a reranker and `/predict` to a classifier. A request that names a model, such as `/v1/embeddings`, is routed by that name. If no healthy instance serves the needed kind, the request goes to any compatible instance and TEI answers `424`. See [Model kinds and routing](../integrations/backend/text-embeddings-inference.md#model-kinds-and-routing).
+
 ---
 
 ## GET /olla/tei/info
@@ -273,7 +276,9 @@ curl -X POST http://localhost:40114/olla/tei/decode \
 
 ## POST /olla/tei/predict
 
-Sequence classification predictions. Returns score/label objects per input, sorted by score.
+Sequence classification predictions, sorted by score descending. Routed to an instance serving a classifier model.
+
+`inputs` is read as a single sequence when it is a string, `["text"]` or a sentence pair `["a", "b"]`, and the response is one flat array of `{score, label}` objects. It is a batch only when it is an array of arrays (`[["a"], ["b", "c"]]`), and the response is then an array of such arrays, one per sequence.
 
 ### Request
 
@@ -298,7 +303,7 @@ curl -X POST http://localhost:40114/olla/tei/predict \
 
 ## POST /olla/tei/rerank
 
-Cross-encoder rerank scores for a query against a set of texts.
+Cross-encoder rerank scores for a query against a set of texts. Routed to an instance serving a reranker model.
 
 ### Request
 

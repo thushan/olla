@@ -79,7 +79,7 @@ keywords: TEI, Text Embeddings Inference, Olla proxy, embeddings, reranking, sen
 
 TEI serves a single model per instance (an embedding, sequence-classification or reranker model) and does not expose an OpenAI-style `/v1/models` list. Instead, Olla discovers the served model from the `/info` endpoint (`served_model_name`, falling back to `model_id`) using a dedicated parser. Every native TEI endpoint is forwarded verbatim by the provider catch-all route; there are no per-endpoint handlers.
 
-Chat and generation traffic does not reach a TEI endpoint for two reasons: the TEI profile declares no chat or completion paths, so those requests are never sent to TEI instances, and a request naming a chat model is routed by model name to the endpoints hosting that model. [Capability tagging](#capability-tagging) covers what that means for rerank and classification traffic.
+Chat and generation traffic does not reach a TEI endpoint for two reasons: the TEI profile declares no chat or completion paths, so those requests are never sent to TEI instances, and a request naming a chat model is routed by model name to the endpoints hosting that model. [Model kinds and routing](#model-kinds-and-routing) covers how embed, rerank and classify requests find the right instance.
 
 ## Configuration
 
@@ -225,11 +225,31 @@ Each TEI instance serves exactly one model. When Olla discovers the instance it 
 
 Unlike LLM backends, TEI has no `/v1/models` listing. Olla's dedicated parser reads the served model from `/info`, so `model_url` should point at `/info` (the profile default).
 
-### Capability tagging
+### Model kinds and routing
 
-Every TEI model is tagged `embeddings` whatever its real type, and never `text-generation`. That tag is not what keeps chat and generation traffic away from TEI: the TEI profile declares no chat paths, and requests that name a model are routed by model name. The tag does not route `/rerank` or `/predict` to a model of the matching kind: those requests carry no `model` field, so point the endpoint at the instance serving the model you want. TEI answers `424` when a request does not match the served model type, for example `/v1/embeddings` against a reranker instance.
+Olla reads each instance's kind from `/info`'s `model_type` and gives the model a matching type and capabilities. None of them include `text-generation`.
 
-Olla records the model's real kind (parsed from `/info`'s `model_type`) internally, so rerank and classify routing can use it later. It is not yet returned by any Olla API; to see the kind, query the TEI instance's `/info` directly.
+| TEI kind | Olla model type | Capabilities |
+|----------|-----------------|--------------|
+| `embedding` | `embeddings` | `embeddings`, `similarity`, `vector-search` |
+| `reranker` | `reranker` | `rerank` |
+| `classifier` | `classifier` | `classification` |
+
+An instance whose `/info` has no `model_type` (older TEI) or a kind Olla does not know is treated as an embedding model.
+
+TEI's native request bodies carry no `model` field, so for those requests Olla picks the instance from the request path:
+
+| Request path | Routed to an instance serving |
+|--------------|-------------------------------|
+| `/embed`, `/embed_all`, `/embed_sparse`, `/similarity` | an embedding model |
+| `/rerank` | a reranker model |
+| `/predict` | a classifier model |
+
+This applies to the unified route (`/olla/proxy/rerank`) and the provider route (`/olla/tei/rerank`) alike, so a fleet can mix embedding, reranker and classifier instances behind one Olla. A request that names a model (for example `/v1/embeddings` with `"model": "..."`) is routed by that model name instead, and capability is not consulted.
+
+If no healthy endpoint hosts a model of the needed kind, Olla does not reject the request: it falls back to every compatible endpoint, as it does for other capability-based routing. TEI then answers `424` when the instance it reaches serves a different kind, for example `/rerank` sent to an embedding instance. The same `424` applies to a request you pin to a specific instance yourself.
+
+The kind is also visible through Olla: `/olla/models?type=reranker` and `?type=classifier` filter by it, and each model's `capabilities` list shows `rerank` or `classification`.
 
 ## Starting a TEI Server
 
