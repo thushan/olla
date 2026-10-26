@@ -76,6 +76,18 @@ The TEI routes follow real TEI's error shapes, so routing and client tests see w
 
 Handler errors return `{"error": "...", "error_type": "..."}`; `POST /v1/embeddings` returns the OpenAI-compatible `{"message": "...", "code": 400, "type": "..."}` (the key is `type` there, not `error_type`). The order matches upstream: shape, then an empty array (400), then the kind check (424), then the tokeniser, which is where an empty string is found. So `{"inputs":""}` sent to the wrong kind is 424, while `{"inputs":[]}` is 400 on every kind. Whitespace-only text and a blank rerank `query` are valid input. The 415 for a missing `Content-Type: application/json` is not modelled. `/decode` only checks shape: upstream reads `ids: []` as a single empty sequence, so it decodes rather than failing. `/tokenize`, `/decode`, `/info`, `/health` and `/metrics` work for every kind.
 
+## TEI request and response shapes
+
+The embedding routes (`/embed`, `/embed_all`, `/embed_sparse`, and `/v1/embeddings` through its `input` field) take a string, an array of strings, an array of token IDs (one sequence) or an array of token-ID arrays (a batch). Token IDs must be unsigned 32-bit integers, 0 to 4294967295. A negative, fractional or larger value, or a non-number in an ID array, answers 422. `/tokenize` takes strings only.
+
+| Route | Mock behaviour |
+|-------|----------------|
+| `/tokenize` | One array per input: `[CLS]`, one token per whitespace-separated word, `[SEP]`. Each token is `{id, text, special, start, stop}`; `start` and `stop` are byte offsets, and null on the special tokens. IDs are deterministic |
+| `/decode` | `ids` is one sequence or a batch. Returns placeholder strings (`decoded-0`, `decoded-1`), not real text |
+| `/predict` | Served by classifier and reranker instances. A string, `["a"]` or a pair `["a","b"]` is one sequence and returns a flat `[{score, label}]`; only an array of arrays is a batch, returning one such array per sequence. Each is sorted by score, descending |
+| `/rerank` | Reranker instances only. Returns `[{index, score}]` in input order with descending scores |
+| `/similarity` | Embedding instances only. Returns one score per sentence |
+
 Run one instance per kind to model a mixed TEI fleet:
 
 ```bash
