@@ -149,11 +149,12 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 		for _, cap := range typeCaps {
 			capabilities[cap] = true
 		}
-		// embedding, rerank and classification models encode or score text, they
-		// don't generate it
-		if _, nonGenerative := nonGenerativeModelTypes[modelTypeLower]; nonGenerative {
-			delete(capabilities, "text-generation")
-		}
+	}
+	// embedding, rerank and classification models encode or score text, they
+	// don't generate it. The kind alone decides this, so it must not depend on
+	// the config having a type_capabilities entry for it.
+	if _, nonGenerative := nonGenerativeModelTypes[modelTypeLower]; nonGenerative {
+		delete(capabilities, "text-generation")
 	}
 
 	// Name-based inference using patterns from configuration

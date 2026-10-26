@@ -227,10 +227,40 @@ func loadConfigFromFile() (*ModelUnificationConfig, string, []string) {
 			continue
 		}
 
+		config.fillMissingDefaults()
 		return &config, path, warnings
 	}
 
 	return getDefaultConfig(), "", warnings
+}
+
+// fillMissingDefaults backfills keyed capability settings a user file omits.
+// A user models.yaml replaces the defaults wholesale, so a file written before
+// the reranker and classifier kinds existed would otherwise lose their
+// capability tags. context_thresholds needs it too: a missing key reads as 0,
+// which would tag every model ultra-long-context. Keys the file does set win.
+// Lists and mappings elsewhere are left alone, as an absent entry there reads
+// as the operator's choice rather than a gap.
+func (c *ModelUnificationConfig) fillMissingDefaults() {
+	defaults := getDefaultConfig()
+
+	if c.Capabilities.TypeCapabilities == nil {
+		c.Capabilities.TypeCapabilities = make(map[string][]string, len(defaults.Capabilities.TypeCapabilities))
+	}
+	for kind, caps := range defaults.Capabilities.TypeCapabilities {
+		if _, ok := c.Capabilities.TypeCapabilities[kind]; !ok {
+			c.Capabilities.TypeCapabilities[kind] = caps
+		}
+	}
+
+	if c.Capabilities.ContextThresholds == nil {
+		c.Capabilities.ContextThresholds = make(map[string]int64, len(defaults.Capabilities.ContextThresholds))
+	}
+	for name, v := range defaults.Capabilities.ContextThresholds {
+		if _, ok := c.Capabilities.ContextThresholds[name]; !ok {
+			c.Capabilities.ContextThresholds[name] = v
+		}
+	}
 }
 
 // isEffectivelyEmpty reports whether a successfully-parsed config carries no
