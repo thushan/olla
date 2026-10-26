@@ -79,6 +79,10 @@ now wins, so those models gain the capabilities their type implies: `vision`,
 `vector-search` (without `text-generation`) for embeddings, and `chat` and `completion`
 for `llm`. Model-less vision and embeddings requests are steered to those models.
 
+### Fixed: crash under concurrent model discovery and requests
+
+Olla could exit with `fatal error: concurrent map iteration and map write` (or `concurrent map write`) when a model listing, alias lookup or status request ran while discovery was merging the same model from a second endpoint, re-registering it, or removing an endpoint. The unifier was editing model records that request handlers were still reading. It now edits a private copy and publishes it, so readers always see a complete record. The unified-stats counters behind the status endpoints are also guarded now. Nothing needs changing in your config.
+
 ## v0.0.29
 
 ### Breaking: userinfo URLs now fail startup
