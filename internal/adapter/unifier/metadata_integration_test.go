@@ -7,8 +7,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"
 )
+
+// parseOllamaModels runs an Ollama /api/tags body through the shipped profile's
+// real parser, so cases built from it break if parsing and unification drift.
+func parseOllamaModels(t *testing.T, body string) []*domain.ModelInfo {
+	t.Helper()
+	factory, err := profile.NewFactory("../../../config/profiles")
+	require.NoError(t, err)
+	ollama, err := factory.GetProfile(domain.ProfileOllama)
+	require.NoError(t, err)
+	models, err := ollama.ParseModelsResponse([]byte(body))
+	require.NoError(t, err)
+	return models
+}
 
 // TestDefaultUnifier_MetadataExtraction validates metadata extraction
 func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
@@ -154,17 +168,8 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
-			// Shape produced by the Ollama parser: no top-level Type, only Details.Type.
-			name: "Ollama embedding-only model typed from capabilities",
-			models: []*domain.ModelInfo{
-				{
-					Name: "all-minilm:latest",
-					Details: &domain.ModelDetails{
-						Type:   ptrString("embeddings"),
-						Family: ptrString("bert"),
-					},
-				},
-			},
+			name:     "Ollama embedding-only model typed from capabilities",
+			models:   parseOllamaModels(t, `{"models":[{"name":"all-minilm:latest","details":{"family":"bert"},"capabilities":["embedding"]}]}`),
 			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
 				assert.Contains(t, model.Capabilities, "embeddings")
@@ -174,13 +179,8 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
-			name: "Ollama completion model keeps text-generation without embeddings",
-			models: []*domain.ModelInfo{
-				{
-					Name:    "qwen3-vl:8b",
-					Details: &domain.ModelDetails{Family: ptrString("qwen3vl")},
-				},
-			},
+			name:     "Ollama completion model keeps text-generation without embeddings",
+			models:   parseOllamaModels(t, `{"models":[{"name":"qwen3-vl:8b","details":{"family":"qwen3vl"},"capabilities":["completion","vision","tools"]}]}`),
 			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
 				assert.Contains(t, model.Capabilities, "text-generation")
