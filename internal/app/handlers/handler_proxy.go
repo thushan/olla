@@ -649,7 +649,12 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 	// caller names a model, stage 3 alone decides which endpoints host it. a
 	// tag on some other model must never evict the hosts of the requested one.
 	if profile != nil && profile.ModelName == "" && profile.ModelCapabilities != nil && a.modelRegistry != nil {
-		capabilityFiltered := a.filterEndpointsByCapabilities(profileFiltered, profile, logger)
+		capabilityFiltered, refusal := a.filterEndpointsByCapabilities(profileFiltered, profile, logger)
+		if refusal != nil {
+			// empty result makes dispatchToEndpoints answer with the decision's 503
+			profile.RoutingDecision = refusal
+			return []*domain.Endpoint{}
+		}
 		if len(capabilityFiltered) > 0 {
 			profileFiltered = capabilityFiltered
 		}
@@ -811,14 +816,20 @@ func (a *Application) routeByAliasName(ctx context.Context, aliasName string, pr
 	return routableEndpoints
 }
 
-func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
+// filterEndpointsByCapabilities narrows endpoints to hosts of a model with the capabilities a
+// model-less request needs. It returns a rejection decision, and no endpoints, only when models
+// with the capability exist and every host serving one is unhealthy: the request would otherwise
+// fall back to hosts of a different kind. Capability tags are heuristic, so every other "nothing
+// matched" case, including a capable host that is healthy but outside the candidates, keeps the
+// unfiltered fallback.
+func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) ([]*domain.Endpoint, *domain.ModelRoutingDecision) {
 	if profile.ModelCapabilities == nil {
-		return endpoints
+		return endpoints, nil
 	}
 
 	requiredCapabilities := a.extractRequiredCapabilities(profile.ModelCapabilities)
 	if len(requiredCapabilities) == 0 {
-		return endpoints
+		return endpoints, nil
 	}
 
 	capableModels := a.findCapableModels(requiredCapabilities, logger)
@@ -826,10 +837,43 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 		logger.Warn("No models found with required capabilities",
 			"model", profile.ModelName,
 			"capabilities", requiredCapabilities)
-		return endpoints
+		return endpoints, nil
 	}
 
-	return a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger)
+	filtered := a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger)
+	if !anyCapableHost(endpoints, capableModels) && a.allCapableHostsUnhealthy(capableModels) {
+		logger.Warn("Models with the required capabilities exist but none are on a healthy endpoint",
+			"capabilities", requiredCapabilities,
+			"capable_endpoints", len(capableModels))
+		return []*domain.Endpoint{}, ports.NewRoutingDecision(constants.RoutingStrategyCapability, ports.RoutingActionRejected,
+			constants.RoutingReasonCapabilityUnavailable)
+	}
+	return filtered, nil
+}
+
+// anyCapableHost reports whether any of endpoints serves a capable model.
+func anyCapableHost(endpoints []*domain.Endpoint, capableModels map[string]bool) bool {
+	for _, endpoint := range endpoints {
+		if capableModels[endpoint.GetURLString()] {
+			return true
+		}
+	}
+	return false
+}
+
+// allCapableHostsUnhealthy reports whether no host serving a capable model is healthy. The
+// registry keeps a model's source endpoints while the host is down, so the capable set still
+// names hosts the healthy list no longer contains. When health cannot be read the answer is
+// no, which keeps the old fallback rather than refusing on a guess.
+func (a *Application) allCapableHostsUnhealthy(capableModels map[string]bool) bool {
+	if a.discoveryService == nil {
+		return false
+	}
+	healthy, err := a.discoveryService.GetHealthyEndpoints(context.Background())
+	if err != nil {
+		return false
+	}
+	return !anyCapableHost(healthy, capableModels)
 }
 
 func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities) []string {

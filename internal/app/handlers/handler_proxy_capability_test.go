@@ -216,7 +216,7 @@ func TestFilterEndpointsByCapabilities(t *testing.T) {
 				SupportedBy:       []string{domain.ProfileOllama, domain.ProfileOpenAICompatible},
 			}
 
-			filtered := app.filterEndpointsByCapabilities(endpoints, profile, styledLog)
+			filtered, _ := app.filterEndpointsByCapabilities(endpoints, profile, styledLog)
 
 			assert.Len(t, filtered, tt.expectedCount, tt.description)
 		})
@@ -264,7 +264,7 @@ func TestFilterEndpointsByCapabilities_IntersectsPerModel(t *testing.T) {
 		ModelCapabilities: &domain.ModelCapabilities{VisionUnderstanding: true, FunctionCalling: true},
 	}
 
-	filtered := app.filterEndpointsByCapabilities(endpoints, profile, styledLog)
+	filtered, _ := app.filterEndpointsByCapabilities(endpoints, profile, styledLog)
 
 	assert.Len(t, filtered, 1)
 	assert.Equal(t, "single", filtered[0].Name)
