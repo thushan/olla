@@ -247,7 +247,7 @@ TEI's native request bodies carry no `model` field, so for those requests Olla p
 
 This applies to the unified route (`/olla/proxy/rerank`) and the provider route (`/olla/tei/rerank`) alike, so a fleet can mix embedding, reranker and classifier instances behind one Olla. A request that names a model (for example `/v1/embeddings` with `"model": "..."`) is routed by that model name instead, and capability is not consulted.
 
-If no healthy endpoint hosts a model of the needed kind, Olla does not reject the request: it falls back to every compatible endpoint, as it does for other capability-based routing. TEI then answers `424` when the instance it reaches serves a different kind, for example `/rerank` sent to an embedding instance. The same `424` applies to a request you pin to a specific instance yourself.
+If a model of the needed kind exists but every endpoint hosting one is unhealthy, Olla answers `503` with `X-Olla-Routing-Reason: capability_unavailable` rather than sending the request to instances of another kind. If no model of that kind has ever been discovered, Olla does not reject the request: it falls back to every compatible endpoint, as it does for other capability-based routing. TEI then answers `424` when the instance it reaches serves a different kind, for example `/rerank` sent to an embedding instance. The same `424` applies to a request you pin to a specific instance yourself.
 
 The kind is also visible through Olla: `/olla/models?type=reranker` and `?type=classifier` filter by it, and each model's `capabilities` list shows `rerank` and/or `classification`.
 
