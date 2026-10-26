@@ -25,19 +25,19 @@ const (
 // so without this a model-less request lands on whichever instance the balancer
 // picks, and TEI answers 424 when that instance serves the wrong kind.
 type pathCapability struct {
-	suffix string
 	apply  func(*domain.ModelCapabilities)
+	suffix string
 }
 
 // suffix matching covers route prefixes and the versioned vLLM-style variants
 // (/v1/rerank, /v2/rerank) with one entry.
 var pathCapabilities = []pathCapability{
-	{"/rerank", func(c *domain.ModelCapabilities) { c.Rerank = true }},
-	{"/predict", func(c *domain.ModelCapabilities) { c.Classification = true }},
-	{"/embed", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
-	{"/embed_all", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
-	{"/embed_sparse", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
-	{"/similarity", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{suffix: "/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
+	{suffix: "/predict", apply: func(c *domain.ModelCapabilities) { c.Classification = true }},
+	{suffix: "/embed", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{suffix: "/embed_all", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{suffix: "/embed_sparse", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{suffix: "/similarity", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
 }
 
 // capabilitiesForPath returns the capabilities a path implies, or nil.
