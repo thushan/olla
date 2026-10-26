@@ -280,6 +280,23 @@ func (r *UnifiedMemoryModelRegistry) GetEndpointsForModel(ctx context.Context, m
 		return []string{}, nil
 	}
 
+	// A bare name that only matched through the Ollama default tag may use the
+	// Ollama sources alone: the merged model can also be served elsewhere (the
+	// catalogue merges names case-insensitively), and those hosts do not know "name".
+	// The fallback is one-way on purpose: Ollama always lists models tagged, so a
+	// native bare "foo" never comes from Ollama and "foo:latest" needs no toggle to it.
+	tagged, bare := domain.OllamaDefaultTagName(modelName)
+	if bare && !namesModel(unified, modelName) {
+		var ollamaURLs []string
+		for i := range unified.SourceEndpoints {
+			src := &unified.SourceEndpoints[i]
+			if src.Platform == domain.ProfileOllama && strings.EqualFold(src.NativeName, tagged) {
+				ollamaURLs = append(ollamaURLs, src.EndpointURL)
+			}
+		}
+		return ollamaURLs, nil
+	}
+
 	// Extract endpoints from unified model
 	var endpointURLs []string
 	for _, endpoint := range unified.SourceEndpoints {
@@ -287,6 +304,19 @@ func (r *UnifiedMemoryModelRegistry) GetEndpointsForModel(ctx context.Context, m
 	}
 
 	return endpointURLs, nil
+}
+
+// namesModel reports whether name is the model's ID or one of its aliases, ignoring case.
+func namesModel(m *domain.UnifiedModel, name string) bool {
+	if strings.EqualFold(m.ID, name) {
+		return true
+	}
+	for i := range m.Aliases {
+		if strings.EqualFold(m.Aliases[i].Name, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetUnifiedStats returns statistics including unification metrics

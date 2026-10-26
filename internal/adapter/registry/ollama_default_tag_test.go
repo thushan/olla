@@ -132,6 +132,23 @@ func TestUnifiedRegistry_OllamaDefaultTag_GetUnifiedModel(t *testing.T) {
 	assert.Error(t, err, "a non-ollama latest tag must not answer to the bare name")
 }
 
+// Ollama lists "FOO:latest" and vLLM lists "foo:latest". The unifier merges them
+// case-insensitively, but only the Ollama host answers to the bare "foo".
+func TestUnifiedRegistry_OllamaDefaultTag_MixedCaseKeepsToOllama(t *testing.T) {
+	t.Parallel()
+
+	reg := buildUnified(t,
+		tagFixture{url: ollamaURL, name: "ollama-1", typ: domain.ProfileOllama, models: []string{"FOO:latest"}},
+		tagFixture{url: vllmURL, name: "vllm-1", typ: domain.ProfileVLLM, models: []string{"foo:latest"}},
+	)
+	ctx := context.Background()
+
+	got, err := reg.GetEndpointsForModel(ctx, "foo")
+	require.NoError(t, err)
+	assert.Equal(t, []string{ollamaURL}, got, "the bare name must not reach the vLLM host")
+
+}
+
 func TestUnifiedRegistry_OllamaDefaultTag_CanonicalName(t *testing.T) {
 	t.Parallel()
 
