@@ -86,7 +86,7 @@ A model pulled with `ollama pull all-minilm` is listed as `all-minilm:latest`, a
 the provider prefixes, `/olla/anthropic/v1/messages` and `GET /olla/models/{id}`. When no endpoint
 serves the exact name, Olla now retries once as `<name>:latest` against Ollama endpoints only, so a
 vLLM `foo:latest` still never answers `foo`. The request goes to Ollama as you wrote it, and `foo`
-and `foo:latest` share one stats row and one sticky session key. Nothing to change on your side.
+and `foo:latest` share one stats row, and one sticky key when it is built from the model name (`prefix_hash` hashes the raw body, so it still differs). Nothing to change on your side.
 
 ## v0.0.29
 
