@@ -307,23 +307,32 @@ logging:
 
 ### Rejection Log Sampling
 
-Rejections Olla generates itself are sampled so one abusive client cannot flood the log: rate limit
-(`429`), request size (`413`/`431`), dashboard access (`403`), and the proxy's `Request rejected` and
-`Model routing rejected request` lines. For each client IP, the first rejection in a 10 second window
-is logged in full. The rest are counted and written once as `<message>, repeats suppressed`, with a
-`suppressed=N` field and a `layer` field naming the writer (`rate_limit`, `size_limit`, `proxy`,
-`routing`, `dashboard` or `request_log`). Each layer tracks at most 256 client IPs; further addresses
-share one summary with `client_ip=other`. Lapsed windows are settled by the next rejection in the
-same layer, and every layer writes what it still holds when Olla shuts down.
+Rejections Olla generates itself are sampled so one abusive client cannot flood the log. For each
+key, the first rejection in a 10 second window is logged in full. The rest are counted and written
+once as `<message>, repeats suppressed`, with a `suppressed=N` field and a `layer` field naming the
+writer. The key depends on the layer:
+
+| Layer | Message | Key |
+|---|---|---|
+| `rate_limit` | `Rate limit exceeded` | client IP |
+| `size_limit` | `Request rejected` | client IP and kind (`body` or `headers`) |
+| `dashboard` | `dashboard access denied` | client IP |
+| `proxy` | `Request rejected` (no routable endpoint, unknown model, provider with no healthy host) | client IP and response status |
+| `request_log` | `Rejected request` | client IP |
+
+Each layer tracks at most 256 keys; further keys share one summary with the key `other`. Lapsed
+windows are settled by the next rejection in the same layer, and every layer writes what it still
+holds when Olla shuts down. The window is fixed; there is no config key for it.
 
 The request log samples responses with status 401, 403, 413, 429 or 431 that carry no
-`X-Olla-Endpoint` header in the same way. A backend's own 4xx and 5xx responses are never sampled.
-Successful traffic is logged per request as usual. This window is fixed; there is no config key
-for it.
+`X-Olla-Endpoint` header in the same way. A backend's own 4xx and 5xx responses are never sampled,
+and successful traffic is logged per request as usual. Access log lines for other Olla-generated
+statuses, such as the 404 for an unknown model, are still written per request.
 
-The security counters (`olla_security_rate_limit_violations_total`,
-`olla_security_violations_total`, at `/internal/metrics`) count every rejection, so alert on those
-and use the log to identify who is responsible.
+Only rate limit and size limit rejections increment the security counters
+(`olla_security_rate_limit_violations_total`, `olla_security_violations_total`, at
+`/internal/metrics`), and they count every one. Dashboard and routing rejections have no counter, so
+read the `suppressed=` field for their volume.
 
 ### Log Sensitive Data
 
