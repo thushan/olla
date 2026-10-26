@@ -411,6 +411,18 @@ Model unification's family/publisher/quantisation/capability extraction is drive
 | `special_rules` | `preserve_family` | list of string | Family names that must not be rewritten by pattern matching |
 | | `generic_names` | list of string | Names treated as generic rather than a real family (excluded from family-based grouping) |
 
+The built-in `type_capabilities` are:
+
+| Model type | Capabilities |
+|---|---|
+| `llm` | `text-generation`, `chat`, `completion` |
+| `vlm` | `text-generation`, `vision`, `multimodal`, `image-understanding` |
+| `embeddings` (or `embedding`) | `embeddings`, `similarity`, `vector-search` |
+| `reranker` | `rerank`, `classification` |
+| `classifier` | `classification` |
+
+Models typed `embeddings`, `embedding`, `reranker` or `classifier` never carry `text-generation`, whatever your `type_capabilities` lists for them. Model-less requests use these capabilities to pick endpoints; see [Requests Without a Model Name](model-routing.md#requests-without-a-model-name).
+
 ### Where Olla looks for it
 
 At startup, Olla tries these candidate paths in order and uses the first one that exists, reads and parses successfully, and isn't empty:

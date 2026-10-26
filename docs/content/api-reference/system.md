@@ -401,7 +401,7 @@ Query parameters:
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | Model name as reported by the backend |
-| `type` | string \| omitted | Model type (`llm`, `embeddings`) when the backend reports one |
+| `type` | string \| omitted | Model type (`llm`, `vlm`, `embeddings`, `reranker`, `classifier`) when the backend reports one |
 | `family` | string \| omitted | Inferred model family |
 | `params` | string \| omitted | Parameter size label |
 | `quant` | string \| omitted | Quantisation label |
@@ -411,7 +411,7 @@ Query parameters:
 | `endpoints` | []string | Sorted display names of every endpoint hosting this model |
 | `endpoint_ids` | []string \| omitted | Opaque, process/config-relative endpoint anchors for every endpoint hosting this model, positionally paired with `endpoints`. Not durable database identifiers - the value is derived from the sanitised URL and positional `-N` suffixes can renumber when sanitised-URL siblings are added, removed, or renamed (see the [ID derivation contract](../about/release-notes.md#breaking-endpoint-id-derivation-changed)). Use this slice (not the names) as the click-through key to `/internal/status/endpoints`, since two endpoints can share a display name |
 | `aliases` | []string \| omitted | Other identifiers for the same unified model (alias names plus the canonical unified ID). Empty when the registry has no unified view or the model has a single identifier |
-| `capabilities` | []string \| omitted | Inferred capabilities (`text_generation`, `chat`, `vision`, `multimodal`, `embeddings`, `vector_search`, `long_context`, `high_precision`) |
+| `capabilities` | []string \| omitted | Inferred capabilities (`text_generation`, `chat`, `vision`, `multimodal`, `embeddings`, `vector_search`, `rerank`, `classification`, `long_context`, `high_precision`) |
 
 A model hosted on several endpoints has its scalar metadata (`family`, `params`, `quant`, `capabilities`, `size`) merged prefer-non-empty: the endpoint with the lowest sorted URL populates each empty field, and conflicting non-empty values keep the one already on the summary. This keeps the ETag stable across polls despite randomised map iteration.
 
