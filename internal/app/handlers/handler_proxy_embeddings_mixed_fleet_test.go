@@ -173,11 +173,13 @@ func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *i
 	unified := registry.NewUnifiedMemoryModelRegistry(styledLog, nil, &cfg, nil)
 
 	healthy := make([]*domain.Endpoint, 0, len(fleet))
+	all := make([]*domain.Endpoint, 0, len(fleet))
 	wantModels := 0
 	for _, fe := range fleet {
 		u, perr := url.Parse("http://" + fe.name + ":8080")
 		require.NoError(t, perr)
 		ep := &domain.Endpoint{Name: fe.name, URL: u, URLString: u.String(), Type: fe.typ, Status: domain.StatusHealthy}
+		all = append(all, ep)
 		switch {
 		case fe.offline:
 			ep.Status = domain.StatusOffline
@@ -207,9 +209,9 @@ func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *i
 		logger:         styledLog,
 		profileFactory: profileFactory,
 		inspectorChain: chain,
-		discoveryService: &mockDiscoveryServiceWithFunc{getHealthyEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) {
-			return healthy, nil
-		}},
+		discoveryService: &mockDiscoveryServiceWithFunc{getHealthyEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) { return healthy, nil },
+			getEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) { return all, nil },
+		},
 		modelRegistry: unified,
 		proxyService: &mockProxyService{
 			proxyFunc: func(_ context.Context, w http.ResponseWriter, _ *http.Request, eps []*domain.Endpoint, _ *ports.RequestStats, _ logger.StyledLogger) error {
@@ -304,6 +306,13 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 			[]fleetEndpoint{teiBusy, tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false)}},
 		{"model-less embed on the tei provider route with the only embedder busy", "/olla/tei/embed", inputsBody, constants.RoutingReasonCapabilityUnavailable, nil,
 			[]fleetEndpoint{teiBusy, tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false)}},
+		// a healthy embedder of a type the path can't use (Ollama for TEI's /embed) must not veto the refusal
+		{"model-less embed with the tei embedder down and a healthy ollama embedder", "/olla/proxy/embed", inputsBody, constants.RoutingReasonCapabilityUnavailable, nil,
+			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
+		{"model-less embed on the tei provider route with the tei embedder down and a healthy ollama embedder", "/olla/tei/embed", inputsBody, constants.RoutingReasonCapabilityUnavailable, nil,
+			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
+		{"model-less embed on the tei provider route whose only embedder is a healthy ollama keeps the fallback", "/olla/tei/embed", inputsBody, "", []string{"tei-classify", "tei-rerank"},
+			[]fleetEndpoint{tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
 		{"model-less embed routes to a second embedder that is up", "/olla/proxy/embed", inputsBody, "", []string{"tei-embed-2"},
 			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-embed-2", teiInfoBGESmall, false), tei("tei-rerank", teiInfoReranker, false)}},
 		{"model-less embed with no embedder model anywhere keeps the fallback", "/olla/proxy/embed", inputsBody, "", []string{"tei-classify", "tei-rerank"},

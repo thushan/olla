@@ -501,8 +501,17 @@ func TestFilterEndpointsByCapabilities_RefusalWritesNoWarn(t *testing.T) {
 
 	app := &Application{
 		logger: rec,
-		// embedder host is absent from the healthy list, as when it is down
-		discoveryService: &mockDiscoveryServiceWithHealthy{endpoints: []*domain.Endpoint{mk("reranker", otherURL)}},
+		// the embedder host is known but absent from the healthy list, as when it is down
+		discoveryService: &mockDiscoveryServiceWithFunc{
+			getHealthyEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) {
+				return []*domain.Endpoint{mk("reranker", otherURL)}, nil
+			},
+			getEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) {
+				down := mk("embedder", capableURL)
+				down.Status = domain.StatusOffline
+				return []*domain.Endpoint{down, mk("reranker", otherURL)}, nil
+			},
+		},
 		modelRegistry: &mockCapabilityModelRegistry{
 			modelsByCapability: map[string][]*domain.UnifiedModel{"embeddings": {embedder}},
 		},

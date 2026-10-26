@@ -841,16 +841,23 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 	}
 
 	filtered := a.filterEndpointsByCapableModels(endpoints, capableModels, requiredCapabilities, logger)
-	if refusal := a.capabilityRefusalFor(endpoints, capableModels, requiredCapabilities, logger); refusal != nil {
+	if refusal := a.capabilityRefusalFor(endpoints, capableModels, profile, requiredCapabilities, logger); refusal != nil {
 		return []*domain.Endpoint{}, refusal
 	}
 	return filtered, nil
 }
 
 // capabilityRefusalFor returns the capability_unavailable decision when none of candidates
-// hosts a capable model and every host that does is unhealthy; otherwise nil.
-func (a *Application) capabilityRefusalFor(candidates []*domain.Endpoint, capableModels map[string]bool, requiredCapabilities []string, logger logger.StyledLogger) *domain.ModelRoutingDecision {
-	if anyCapableHost(candidates, capableModels) || !a.allCapableHostsUnhealthy(capableModels) {
+// hosts a capable model and every capable host the request could be sent to is unhealthy;
+// otherwise nil. Capable hosts of a type the request can't use (an Ollama embedder for a
+// TEI-only /embed) are ignored: they can never be candidates, so letting them veto the refusal
+// would send the request to hosts of the wrong kind.
+func (a *Application) capabilityRefusalFor(candidates []*domain.Endpoint, capableModels map[string]bool, profile *domain.RequestProfile, requiredCapabilities []string, logger logger.StyledLogger) *domain.ModelRoutingDecision {
+	if anyCapableHost(candidates, capableModels) {
+		return nil
+	}
+	servable := a.servableCapableHosts(capableModels, profile)
+	if len(servable) == 0 || !a.allCapableHostsUnhealthy(servable) {
 		return nil
 	}
 	// Debug, not Warn: the "Request rejected" line already records routing_reason=capability_unavailable,
@@ -877,7 +884,27 @@ func (a *Application) capabilityRefusal(profile *domain.RequestProfile, logger l
 	if len(capableModels) == 0 {
 		return nil
 	}
-	return a.capabilityRefusalFor(nil, capableModels, required, logger)
+	return a.capabilityRefusalFor(nil, capableModels, profile, required, logger)
+}
+
+// servableCapableHosts narrows capableModels to known hosts whose type the request can be
+// sent to. When endpoint state can't be read the result is empty, which keeps the fallback
+// rather than refusing on a guess.
+func (a *Application) servableCapableHosts(capableModels map[string]bool, profile *domain.RequestProfile) map[string]bool {
+	servable := make(map[string]bool, len(capableModels))
+	if a.discoveryService == nil || profile == nil {
+		return servable
+	}
+	all, err := a.discoveryService.GetEndpoints(context.Background())
+	if err != nil {
+		return servable
+	}
+	for _, ep := range all {
+		if capableModels[ep.GetURLString()] && profile.IsCompatibleWith(NormaliseProviderType(ep.Type)) {
+			servable[ep.GetURLString()] = true
+		}
+	}
+	return servable
 }
 
 // anyCapableHost reports whether any of endpoints serves a capable model.
