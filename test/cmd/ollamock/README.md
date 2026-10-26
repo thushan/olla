@@ -67,13 +67,14 @@ go run ./test/cmd/ollamock \
 
 The TEI routes follow real TEI's error shapes, so routing and client tests see what production would:
 
-| Condition | Status | `error_type` |
-|-----------|--------|--------------|
-| Blank input: `inputs: []`, `inputs: ""`, empty `texts`, empty `sentences`, a blank string in any of them | 400 | `Empty` |
-| Wrong shape: missing field, wrong JSON type, malformed JSON | 422 | `Validation` |
-| Route needs another kind (`/embed` on a reranker, `/rerank` on an embedder, `/predict` on an embedder) | 424 | `Backend` |
+| Condition | Status | Body |
+|-----------|--------|------|
+| Empty input: `inputs: []`, `inputs: ""`, empty `texts`, empty `sentences`, an empty string in any of them (a rerank or predict pair only when both halves are empty) | 400 | `Empty` |
+| Wrong shape: missing field, wrong JSON type | 422 | axum's plain text, `Failed to deserialize the JSON body into the target type: ...` |
+| Not JSON at all | 400 | axum's plain text, `Failed to parse the request body as JSON: ...` |
+| Route needs another kind (`/embed` on a reranker, `/rerank` on an embedder, `/predict` on an embedder) | 424 | `Backend`, `Backend error: Model is not an embedding model` (re-ranker: lower-case `model is not a re-ranker model`, as upstream writes it) |
 
-Native routes return `{"error": "...", "error_type": "..."}`; `POST /v1/embeddings` returns the OpenAI-compatible `{"message": "...", "code": 400, "error_type": "..."}`. Blank input is reported before the kind check. `/decode` only checks shape: upstream reads `ids: []` as a single empty sequence, so it decodes rather than failing. `/tokenize`, `/decode`, `/info`, `/health` and `/metrics` work for every kind.
+Handler errors return `{"error": "...", "error_type": "..."}`; `POST /v1/embeddings` returns the OpenAI-compatible `{"message": "...", "code": 400, "type": "..."}` (the key is `type` there, not `error_type`). The order matches upstream: shape, then an empty array (400), then the kind check (424), then the tokeniser, which is where an empty string is found. So `{"inputs":""}` sent to the wrong kind is 424, while `{"inputs":[]}` is 400 on every kind. Whitespace-only text and a blank rerank `query` are valid input. The 415 for a missing `Content-Type: application/json` is not modelled. `/decode` only checks shape: upstream reads `ids: []` as a single empty sequence, so it decodes rather than failing. `/tokenize`, `/decode`, `/info`, `/health` and `/metrics` work for every kind.
 
 Run one instance per kind to model a mixed TEI fleet:
 

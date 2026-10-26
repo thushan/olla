@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -529,15 +530,13 @@ func TestTEITokenizeShape(t *testing.T) {
 	}
 	resp3.Body.Close()
 
-	// Missing inputs is a 422 Validation error, as upstream TEI reports it.
-	resp4 := postJSON(t, ts.URL+"/tokenize", `{}`)
-	var errBody map[string]string
-	decodeJSON(t, resp4, &errBody)
-	if resp4.StatusCode != http.StatusUnprocessableEntity {
-		t.Errorf("missing inputs want 422, got %d", resp4.StatusCode)
+	// Missing inputs is axum's plain-text 422, as upstream TEI reports it.
+	status, ctype, raw := teiRaw(t, ts, "/tokenize", `{}`)
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("missing inputs want 422, got %d", status)
 	}
-	if errBody["error_type"] != "Validation" {
-		t.Errorf("want error_type Validation, got %q", errBody["error_type"])
+	if !strings.HasPrefix(ctype, "text/plain") || !strings.HasPrefix(raw, "Failed to deserialize the JSON body") {
+		t.Errorf("want a plain-text axum rejection, got %q %q", ctype, raw)
 	}
 }
 
@@ -639,14 +638,33 @@ func teiCall(t *testing.T, ts *httptest.Server, path, body string) (int, map[str
 	return resp.StatusCode, out
 }
 
-// Real TEI answers blank inputs with 400 error_type "Empty" and a wrongly shaped
-// body with 422 "Validation"; every handler has to agree, whatever its shape.
+// teiRaw posts body and returns the status, Content-Type and raw body, for the
+// answers that are not JSON.
+func teiRaw(t *testing.T, ts *httptest.Server, path, body string) (status int, contentType, raw string) {
+	t.Helper()
+	resp := postJSON(t, ts.URL+path, body)
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resp.StatusCode, resp.Header.Get("Content-Type"), string(b)
+}
+
+// Real TEI answers empty inputs with 400 error_type "Empty". A body axum cannot
+// fit to the request type never reaches the handler: JSON of the wrong shape is a
+// plain-text 422 and text that is not JSON a plain-text 400. The model-kind check
+// (424) comes before the tokeniser, so an empty string on the wrong kind is 424
+// while an empty array, which the handler checks itself, stays 400. Every handler
+// has to agree, whatever its shape.
 func TestTEIErrorContract(t *testing.T) {
 	t.Parallel()
 	embedding := testServerWith(t, serverConfig{teiKind: teiKindEmbedding})
 	reranker := testServerWith(t, serverConfig{teiKind: teiKindReranker})
 	classifier := testServerWith(t, serverConfig{teiKind: teiKindClassifier})
 
+	// plainRejection marks an axum extractor rejection, which has no error_type.
+	const plainRejection = ""
 	cases := []struct {
 		srv        *httptest.Server
 		path, body string
@@ -656,37 +674,42 @@ func TestTEIErrorContract(t *testing.T) {
 		{embedding, "/embed", `{"inputs":[]}`, 400, "Empty"},
 		{embedding, "/embed", `{"inputs":""}`, 400, "Empty"},
 		{embedding, "/embed", `{"inputs":["a",""]}`, 400, "Empty"},
-		{embedding, "/embed", `{"inputs":5}`, 422, "Validation"},
-		{embedding, "/embed", `{"inputs":["a",5]}`, 422, "Validation"},
-		{embedding, "/embed", `{}`, 422, "Validation"},
-		{embedding, "/embed", `{"inputs":`, 422, "Validation"},
+		{embedding, "/embed", `{"inputs":5}`, 422, plainRejection},
+		{embedding, "/embed", `{"inputs":["a",5]}`, 422, plainRejection},
+		{embedding, "/embed", `{}`, 422, plainRejection},
+		{embedding, "/embed", `{"inputs":`, 400, plainRejection},
 		{embedding, "/embed_all", `{"inputs":[]}`, 400, "Empty"},
-		{embedding, "/embed_all", `{"inputs":{"a":1}}`, 422, "Validation"},
+		{embedding, "/embed_all", `{"inputs":{"a":1}}`, 422, plainRejection},
 		{embedding, "/embed_sparse", `{"inputs":""}`, 400, "Empty"},
-		{embedding, "/embed_sparse", `{"inputs":true}`, 422, "Validation"},
+		{embedding, "/embed_sparse", `{"inputs":true}`, 422, plainRejection},
 		{embedding, "/tokenize", `{"inputs":[]}`, 400, "Empty"},
 		{embedding, "/tokenize", `{"inputs":""}`, 400, "Empty"},
-		{embedding, "/tokenize", `{"inputs":[1]}`, 422, "Validation"},
-		{embedding, "/decode", `{"ids":"x"}`, 422, "Validation"},
-		{embedding, "/decode", `{"ids":["a"]}`, 422, "Validation"},
-		{embedding, "/decode", `{"ids":[[1],"b"]}`, 422, "Validation"},
-		{embedding, "/decode", `{}`, 422, "Validation"},
+		{embedding, "/tokenize", `{"inputs":[1]}`, 422, plainRejection},
+		{embedding, "/decode", `{"ids":"x"}`, 422, plainRejection},
+		{embedding, "/decode", `{"ids":["a"]}`, 422, plainRejection},
+		{embedding, "/decode", `{"ids":[[1],"b"]}`, 422, plainRejection},
+		{embedding, "/decode", `{}`, 422, plainRejection},
 		{embedding, "/similarity", `{"inputs":{"source_sentence":"a","sentences":[]}}`, 400, "Empty"},
 		{embedding, "/similarity", `{"inputs":{"source_sentence":"","sentences":["a"]}}`, 400, "Empty"},
-		{embedding, "/similarity", `{"inputs":"x"}`, 422, "Validation"},
-		{embedding, "/similarity", `{"inputs":{"sentences":["a"]}}`, 422, "Validation"},
+		{embedding, "/similarity", `{"inputs":"x"}`, 422, plainRejection},
+		{embedding, "/similarity", `{"inputs":{"sentences":["a"]}}`, 422, plainRejection},
 		{reranker, "/rerank", `{"query":"q","texts":[]}`, 400, "Empty"},
-		{reranker, "/rerank", `{"query":"q","texts":["a",""]}`, 400, "Empty"},
-		{reranker, "/rerank", `{"query":"","texts":["a"]}`, 400, "Empty"},
-		{reranker, "/rerank", `{"query":"q"}`, 422, "Validation"},
-		{reranker, "/rerank", `{"query":"q","texts":"a"}`, 422, "Validation"},
-		{reranker, "/rerank", `{"query":5,"texts":["a"]}`, 422, "Validation"},
+		{reranker, "/rerank", `{"query":"","texts":[""]}`, 400, "Empty"},
+		{reranker, "/embed", `{"inputs":""}`, 424, "Backend"},
+		{reranker, "/embed", `{"inputs":[]}`, 400, "Empty"},
+		{embedding, "/predict", `{"inputs":""}`, 424, "Backend"},
+		{embedding, "/rerank", `{"query":"","texts":[""]}`, 424, "Backend"},
+		{reranker, "/similarity", `{"inputs":{"source_sentence":"","sentences":["a"]}}`, 424, "Backend"},
+		{reranker, "/rerank", `{"query":"q"}`, 422, plainRejection},
+		{reranker, "/rerank", `{"query":"q","texts":"a"}`, 422, plainRejection},
+		{reranker, "/rerank", `{"query":5,"texts":["a"]}`, 422, plainRejection},
 		{classifier, "/predict", `{"inputs":""}`, 400, "Empty"},
+		{classifier, "/predict", `{"inputs":["",""]}`, 400, "Empty"},
 		{classifier, "/predict", `{"inputs":[]}`, 400, "Empty"},
 		{classifier, "/predict", `{"inputs":[""]}`, 400, "Empty"},
 		{classifier, "/predict", `{"inputs":[["a"],[""]]}`, 400, "Empty"},
-		{classifier, "/predict", `{"inputs":5}`, 422, "Validation"},
-		{classifier, "/predict", `{}`, 422, "Validation"},
+		{classifier, "/predict", `{"inputs":5}`, 422, plainRejection},
+		{classifier, "/predict", `{}`, 422, plainRejection},
 		// a model of the wrong kind answers 424 even to a well-formed request
 		{embedding, "/rerank", `{"query":"q","texts":["a"]}`, 424, "Backend"},
 		{embedding, "/predict", `{"inputs":"a"}`, 424, "Backend"},
@@ -696,12 +719,19 @@ func TestTEIErrorContract(t *testing.T) {
 		{reranker, "/similarity", `{"inputs":{"source_sentence":"a","sentences":["b"]}}`, 424, "Backend"},
 		{classifier, "/embed", `{"inputs":"a"}`, 424, "Backend"},
 		{classifier, "/rerank", `{"query":"q","texts":["a"]}`, 424, "Backend"},
-		// blank input is reported before the kind is checked, as upstream does for /rerank
+		// an empty texts array is checked by the handler, ahead of the kind
 		{embedding, "/rerank", `{"query":"q","texts":[]}`, 400, "Empty"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.path+" "+tc.body, func(t *testing.T) {
 			t.Parallel()
+			if tc.errType == plainRejection {
+				status, ctype, raw := teiRaw(t, tc.srv, tc.path, tc.body)
+				if status != tc.status || !strings.HasPrefix(ctype, "text/plain") || !strings.HasPrefix(raw, "Failed to ") {
+					t.Fatalf("got %d %q %q, want %d plain-text axum rejection", status, ctype, raw, tc.status)
+				}
+				return
+			}
 			status, body := teiCall(t, tc.srv, tc.path, tc.body)
 			if status != tc.status {
 				t.Fatalf("status = %d, want %d (body %v)", status, tc.status, body)
@@ -723,6 +753,14 @@ func TestTEIErrorContract(t *testing.T) {
 		}{
 			{embedding, "/embed", `{"inputs":["a","b"]}`},
 			{embedding, "/embed", `{"inputs":[[1,2,3]]}`},
+			// whitespace-only text is not empty to TEI
+			{embedding, "/embed", `{"inputs":"   "}`},
+			{embedding, "/tokenize", `{"inputs":" "}`},
+			{reranker, "/rerank", `{"query":"","texts":["a"]}`},
+			{reranker, "/rerank", `{"query":"q","texts":["a",""]}`},
+			{reranker, "/rerank", `{"query":"  ","texts":[" "]}`},
+			{classifier, "/predict", `{"inputs":["a",""]}`},
+			{embedding, "/similarity", `{"inputs":{"source_sentence":" ","sentences":[" "]}}`},
 			{embedding, "/tokenize", `{"inputs":"a b"}`},
 			{embedding, "/decode", `{"ids":[1,2]}`},
 			{embedding, "/decode", `{"ids":[]}`},
@@ -745,16 +783,25 @@ func TestTEIErrorContract(t *testing.T) {
 			status  int
 			errType string
 		}{
-			`{"input":[]}`:  {400, "Empty"},
-			`{"input":""}`:  {400, "Empty"},
-			`{"input":5}`:   {422, "Validation"},
-			`{"model":"x"}`: {422, "Validation"},
-			`{"input":"a" `: {422, "Validation"},
+			`{"input":[]}`: {400, "Empty"},
+			`{"input":""}`: {400, "Empty"},
 		} {
 			status, got := teiCall(t, embedding, "/v1/embeddings", body)
-			if status != want.status || got["error_type"] != want.errType || got["code"] != float64(want.status) || got["message"] == "" {
+			if status != want.status || got["type"] != want.errType || got["code"] != float64(want.status) || got["message"] == "" {
 				t.Errorf("%s: status %d body %v, want %d %s with message and code", body, status, got, want.status, want.errType)
 			}
+			if _, has := got["error_type"]; has {
+				t.Errorf("%s: OpenAI shape must use \"type\", not \"error_type\": %v", body, got)
+			}
+		}
+		for body, want := range map[string]int{`{"input":5}`: 422, `{"model":"x"}`: 422, `{"input":"a" `: 400} {
+			if status, ctype, raw := teiRaw(t, embedding, "/v1/embeddings", body); status != want || !strings.HasPrefix(ctype, "text/plain") || raw == "" {
+				t.Errorf("%s: got %d %q %q, want %d plain text", body, status, ctype, raw, want)
+			}
+		}
+		status, got := teiCall(t, reranker, "/v1/embeddings", `{"input":""}`)
+		if status != http.StatusFailedDependency || got["type"] != "Backend" || got["message"] != "Backend error: Model is not an embedding model" {
+			t.Errorf("empty string on a reranker: %d %v, want 424 Backend with upstream's message", status, got)
 		}
 		if status, _ := teiCall(t, reranker, "/v1/embeddings", `{"input":"a"}`); status != http.StatusFailedDependency {
 			t.Errorf("embeddings on a reranker: status %d, want 424", status)
@@ -793,5 +840,24 @@ func TestTEIInfoModelType(t *testing.T) {
 				t.Errorf("id2label present = %v, want %v", has, labels)
 			}
 		})
+	}
+}
+
+func TestTEIWrongKindMessages(t *testing.T) {
+	t.Parallel()
+	embedding := testServerWith(t, serverConfig{teiKind: teiKindEmbedding})
+	reranker := testServerWith(t, serverConfig{teiKind: teiKindReranker})
+	for _, tc := range []struct {
+		srv        *httptest.Server
+		path, body string
+		want       string
+	}{
+		{reranker, "/embed", `{"inputs":"a"}`, "Backend error: Model is not an embedding model"},
+		{embedding, "/predict", `{"inputs":"a"}`, "Backend error: Model is not a classifier model"},
+		{embedding, "/rerank", `{"query":"q","texts":["a"]}`, "Backend error: model is not a re-ranker model"},
+	} {
+		if _, body := teiCall(t, tc.srv, tc.path, tc.body); body["error"] != tc.want {
+			t.Errorf("%s: error = %v, want %q", tc.path, body["error"], tc.want)
+		}
 	}
 }

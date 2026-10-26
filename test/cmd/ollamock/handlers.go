@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -482,14 +483,27 @@ type teiError struct {
 	errType string
 	msg     string
 	status  int
+	// plain marks an axum extractor rejection: a text/plain body rather than the
+	// JSON error envelope, because the request never reached TEI's own handler.
+	plain bool
 }
 
 func teiEmptyErr(msg string) *teiError {
 	return &teiError{status: http.StatusBadRequest, errType: "Empty", msg: msg}
 }
 
+// teiValidationErr is a body that parses as JSON but does not fit the request type
+// (a missing field, a wrong JSON type). axum 0.7's Json extractor rejects it with a
+// plain-text 422 before the handler runs, so there is no error_type to report.
 func teiValidationErr(msg string) *teiError {
-	return &teiError{status: http.StatusUnprocessableEntity, errType: "Validation", msg: msg}
+	return &teiError{status: http.StatusUnprocessableEntity, plain: true,
+		msg: "Failed to deserialize the JSON body into the target type: " + msg}
+}
+
+// teiSyntaxErr is a body that is not JSON at all: axum answers a plain-text 400.
+func teiSyntaxErr(msg string) *teiError {
+	return &teiError{status: http.StatusBadRequest, plain: true,
+		msg: "Failed to parse the request body as JSON: " + msg}
 }
 
 // teiWrongKindErr is what TEI answers when a route needs a different kind of
@@ -498,14 +512,30 @@ func teiWrongKindErr(msg string) *teiError {
 	return &teiError{status: http.StatusFailedDependency, errType: "Backend", msg: msg}
 }
 
+// writePlain emits an axum extractor rejection.
+func (e *teiError) writePlain(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(e.status)
+	_, _ = io.WriteString(w, e.msg)
+}
+
 // write emits the native {"error","error_type"} shape.
 func (e *teiError) write(w http.ResponseWriter) {
+	if e.plain {
+		e.writePlain(w)
+		return
+	}
 	writeJSON(w, e.status, map[string]any{"error": e.msg, "error_type": e.errType})
 }
 
-// writeOpenAI emits the OpenAI-compatible shape /v1/embeddings uses.
+// writeOpenAI emits the OpenAI-compatible shape /v1/embeddings uses. Its key is
+// "type": OpenAICompatErrorResponse renames error_type on serialisation.
 func (e *teiError) writeOpenAI(w http.ResponseWriter) {
-	writeJSON(w, e.status, map[string]any{"message": e.msg, "code": e.status, "error_type": e.errType})
+	if e.plain {
+		e.writePlain(w)
+		return
+	}
+	writeJSON(w, e.status, map[string]any{"message": e.msg, "code": e.status, "type": e.errType})
 }
 
 // requireTEIKind answers 424 unless this instance serves one of the allowed kinds.
@@ -516,17 +546,27 @@ func (srv *mockServer) requireTEIKind(msg string, allowed ...string) *teiError {
 	return teiWrongKindErr(msg)
 }
 
+// The wrong-kind messages are upstream's, behind the "Backend error: " prefix of
+// TextEmbeddingsError::Backend. core/src/infer.rs capitalises its two; the
+// re-ranker one is written in router/src/http/server.rs and is not.
 const (
-	teiNotEmbeddingMsg  = "model is not an embedding model"
-	teiNotRerankerMsg   = "model is not a re-ranker model"
-	teiNotClassifierMsg = "model is not a classifier model"
+	teiNotEmbeddingMsg  = "Backend error: Model is not an embedding model"
+	teiNotRerankerMsg   = "Backend error: model is not a re-ranker model"
+	teiNotClassifierMsg = "Backend error: Model is not a classifier model"
 )
 
-// teiDecode reads a JSON object body. A body that is not valid JSON of the right
-// shape is a Validation error, as axum's Json rejection is.
+// teiDecode reads a JSON object body as axum 0.7's Json extractor does: text that
+// is not JSON is a 400, JSON of the wrong shape a 422, both plain text.
 func teiDecode(r *http.Request, v any) *teiError {
-	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
-		return teiValidationErr("invalid request body: " + err.Error())
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return teiSyntaxErr(err.Error())
+	}
+	if !json.Valid(body) {
+		return teiSyntaxErr("invalid JSON")
+	}
+	if err := json.Unmarshal(body, v); err != nil {
+		return teiValidationErr(err.Error())
 	}
 	return nil
 }
@@ -538,49 +578,62 @@ func teiPresent(raw json.RawMessage) bool {
 
 // teiInputCount validates a native "inputs" (or OpenAI "input") value for the
 // embedding routes and returns how many inputs it carries. TEI takes a string, or
-// an array whose elements are strings or arrays of token ids. A blank string or an
-// empty array is Empty (400); any other shape is Validation (422).
-func teiInputCount(raw json.RawMessage, field string) (int, *teiError) {
+// an array whose elements are strings or arrays of token ids; anything else is a
+// shape error. An empty array is Empty (400) straight away, as the handler checks
+// it. An empty string, or empty id array, is only found when the tokeniser runs,
+// which is after the model-kind check, so it comes back as blank for the caller to
+// report once the kind is known. Whitespace-only text is not empty to TEI.
+func teiInputCount(raw json.RawMessage, field string) (count int, blank, err *teiError) {
 	if !teiPresent(raw) {
-		return 0, teiValidationErr("missing field `" + field + "`")
+		return 0, nil, teiValidationErr("missing field `" + field + "`")
 	}
 	var input any
 	if err := json.Unmarshal(raw, &input); err != nil {
-		return 0, teiValidationErr("invalid `" + field + "`: " + err.Error())
+		return 0, nil, teiValidationErr("invalid `" + field + "`: " + err.Error())
 	}
+	emptyInput := teiEmptyErr("`" + field + "` cannot be empty")
 	switch v := input.(type) {
 	case string:
-		if strings.TrimSpace(v) == "" {
-			return 0, teiEmptyErr("`" + field + "` cannot be empty")
+		if v == "" {
+			blank = emptyInput
 		}
-		return 1, nil
+		return 1, blank, nil
 	case []any:
 		if len(v) == 0 {
-			return 0, teiEmptyErr("`" + field + "` cannot be empty")
+			return 0, nil, emptyInput
 		}
 		for _, item := range v {
 			switch it := item.(type) {
 			case string:
-				if strings.TrimSpace(it) == "" {
-					return 0, teiEmptyErr("`" + field + "` cannot contain an empty input")
+				if it == "" {
+					blank = emptyInput
 				}
 			case []any:
 				if len(it) == 0 {
-					return 0, teiEmptyErr("`" + field + "` cannot contain an empty input")
+					blank = emptyInput
 				}
 				for _, id := range it {
 					if _, ok := id.(float64); !ok {
-						return 0, teiValidationErr("`" + field + "` token ids must be numbers")
+						return 0, nil, teiValidationErr("`" + field + "` token ids must be numbers")
 					}
 				}
 			default:
-				return 0, teiValidationErr("`" + field + "` must be a string or an array of strings")
+				return 0, nil, teiValidationErr("`" + field + "` must be a string or an array of strings")
 			}
 		}
-		return len(v), nil
+		return len(v), blank, nil
 	default:
-		return 0, teiValidationErr("`" + field + "` must be a string or an array of strings")
+		return 0, nil, teiValidationErr("`" + field + "` must be a string or an array of strings")
 	}
+}
+
+// teiKindThenBlank applies the model-kind check, then reports blank input: TEI
+// only discovers an empty string once it tokenises, after the kind check.
+func (srv *mockServer) teiKindThenBlank(blank *teiError, msg string, allowed ...string) *teiError {
+	if err := srv.requireTEIKind(msg, allowed...); err != nil {
+		return err
+	}
+	return blank
 }
 
 // teiEmbeddingInputs is the shared prologue of the native embedding routes: parse
@@ -592,11 +645,11 @@ func (srv *mockServer) teiEmbeddingInputs(r *http.Request) (int, *teiError) {
 	if err := teiDecode(r, &req); err != nil {
 		return 0, err
 	}
-	count, err := teiInputCount(req.Inputs, "inputs")
+	count, blank, err := teiInputCount(req.Inputs, "inputs")
 	if err != nil {
 		return 0, err
 	}
-	return count, srv.requireTEIKind(teiNotEmbeddingMsg, teiKindEmbedding)
+	return count, srv.teiKindThenBlank(blank, teiNotEmbeddingMsg, teiKindEmbedding)
 }
 
 func (srv *mockServer) handleTEIEmbeddings(w http.ResponseWriter, r *http.Request) {
@@ -608,9 +661,9 @@ func (srv *mockServer) handleTEIEmbeddings(w http.ResponseWriter, r *http.Reques
 		err.writeOpenAI(w)
 		return
 	}
-	inputCount, err := teiInputCount(req.Input, "input")
+	inputCount, blank, err := teiInputCount(req.Input, "input")
 	if err == nil {
-		err = srv.requireTEIKind(teiNotEmbeddingMsg, teiKindEmbedding)
+		err = srv.teiKindThenBlank(blank, teiNotEmbeddingMsg, teiKindEmbedding)
 	}
 	if err != nil {
 		err.writeOpenAI(w)
@@ -745,7 +798,7 @@ func teiStringInputs(r *http.Request) ([]string, *teiError) {
 	}
 	switch v := input.(type) {
 	case string:
-		if strings.TrimSpace(v) == "" {
+		if v == "" {
 			return nil, teiEmptyErr("`inputs` cannot be empty")
 		}
 		return []string{v}, nil
@@ -759,7 +812,7 @@ func teiStringInputs(r *http.Request) ([]string, *teiError) {
 			if !ok {
 				return nil, teiValidationErr("`inputs` must be a string or an array of strings")
 			}
-			if strings.TrimSpace(s) == "" {
+			if s == "" {
 				return nil, teiEmptyErr("`inputs` cannot contain an empty input")
 			}
 			inputs = append(inputs, s)
@@ -869,78 +922,91 @@ func (srv *mockServer) handleTEIDecode(w http.ResponseWriter, r *http.Request) {
 // (router/src/http/types.rs). A string, ["a"] or ["a","b"] is ONE sequence (the
 // last being a sentence pair); only an array whose first element is itself an
 // array is a batch, with each element a 1 or 2 string sequence. It returns the
-// sequence count and whether the request was a batch. Blank text and an empty
-// batch are Empty (400); every other malformed shape is Validation (422).
-func teiPredictInputs(r *http.Request) (count int, batch bool, err *teiError) {
+// sequence count and whether the request was a batch. An empty array is Empty
+// (400) at once; blank text is only found by the tokeniser, after the kind check,
+// so it comes back as blank. Every other malformed shape is Validation (422).
+func teiPredictInputs(r *http.Request) (count int, batch bool, blank, err *teiError) {
 	var req struct {
 		Inputs json.RawMessage `json:"inputs"`
 	}
 	if err := teiDecode(r, &req); err != nil {
-		return 0, false, err
+		return 0, false, nil, err
 	}
 	if !teiPresent(req.Inputs) {
-		return 0, false, teiValidationErr("missing field `inputs`")
+		return 0, false, nil, teiValidationErr("missing field `inputs`")
 	}
 	var in any
 	if err := json.Unmarshal(req.Inputs, &in); err != nil {
-		return 0, false, teiValidationErr("invalid `inputs`: " + err.Error())
+		return 0, false, nil, teiValidationErr("invalid `inputs`: " + err.Error())
 	}
+	emptyInput := teiEmptyErr("`inputs` cannot be empty")
 	if str, ok := in.(string); ok {
-		if strings.TrimSpace(str) == "" {
-			return 0, false, teiEmptyErr("`inputs` cannot be empty")
+		if str == "" {
+			blank = emptyInput
 		}
-		return 1, false, nil
+		return 1, false, blank, nil
 	}
 	items, ok := in.([]any)
 	if !ok {
-		return 0, false, teiValidationErr("inputs must be a string, a string pair or a batch")
+		return 0, false, nil, teiValidationErr("inputs must be a string, a string pair or a batch")
 	}
 	if len(items) == 0 {
-		return 0, false, teiEmptyErr("`inputs` cannot be empty")
+		return 0, false, nil, emptyInput
 	}
 	if _, nested := items[0].([]any); !nested {
 		if len(items) > 2 {
-			return 0, false, teiValidationErr("a sequence is one string or a pair")
+			return 0, false, nil, teiValidationErr("a sequence is one string or a pair")
 		}
-		if err := teiSequenceTexts(items); err != nil {
-			return 0, false, err
+		blank, err := teiSequenceTexts(items, emptyInput)
+		if err != nil {
+			return 0, false, nil, err
 		}
-		return 1, false, nil
+		return 1, false, blank, nil
 	}
 	for _, it := range items {
 		seq, isArr := it.([]any)
 		if !isArr || len(seq) < 1 || len(seq) > 2 {
-			return 0, false, teiValidationErr("batch elements must be 1 or 2 strings")
+			return 0, false, nil, teiValidationErr("batch elements must be 1 or 2 strings")
 		}
-		if err := teiSequenceTexts(seq); err != nil {
-			return 0, false, err
+		b, err := teiSequenceTexts(seq, emptyInput)
+		if err != nil {
+			return 0, false, nil, err
+		}
+		if b != nil {
+			blank = b
 		}
 	}
-	return len(items), true, nil
+	return len(items), true, blank, nil
 }
 
-// teiSequenceTexts checks one predict sequence is made of non-blank strings.
-func teiSequenceTexts(seq []any) *teiError {
+// teiSequenceTexts checks one predict sequence is made of strings. TEI calls a
+// single string empty when it is "", and a pair empty only when both halves are,
+// so ["a",""] is a valid pair.
+func teiSequenceTexts(seq []any, emptyInput *teiError) (blank, err *teiError) {
+	empty := true
 	for _, e := range seq {
 		str, isStr := e.(string)
 		if !isStr {
-			return teiValidationErr("sequence elements must be strings")
+			return nil, teiValidationErr("sequence elements must be strings")
 		}
-		if strings.TrimSpace(str) == "" {
-			return teiEmptyErr("`inputs` cannot contain an empty input")
+		if str != "" {
+			empty = false
 		}
 	}
-	return nil
+	if empty {
+		return emptyInput, nil
+	}
+	return nil, nil
 }
 
 // handleTEIPredict answers with a flat [{score,label}] for a single sequence
 // and one such array per sequence for a batch, each sorted by score descending
 // as upstream does. Scores vary by position so batches are distinguishable.
 func (srv *mockServer) handleTEIPredict(w http.ResponseWriter, r *http.Request) {
-	count, batch, err := teiPredictInputs(r)
+	count, batch, blank, err := teiPredictInputs(r)
 	if err == nil {
 		// a reranker is a sequence classifier too, so it answers /predict
-		err = srv.requireTEIKind(teiNotClassifierMsg, teiKindClassifier, teiKindReranker)
+		err = srv.teiKindThenBlank(blank, teiNotClassifierMsg, teiKindClassifier, teiKindReranker)
 	}
 	if err != nil {
 		err.write(w)
@@ -964,8 +1030,9 @@ func (srv *mockServer) handleTEIPredict(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleTEIRerank validates in upstream's order: body shape (422), blank texts
-// (400), then whether the loaded model is a re-ranker (424).
+// handleTEIRerank validates in upstream's order: body shape (422), empty texts
+// (400), whether the loaded model is a re-ranker (424), then the pairs. A blank
+// query or text is fine; only a pair with both halves empty fails (400).
 func (srv *mockServer) handleTEIRerank(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Query json.RawMessage `json:"query"`
@@ -989,12 +1056,12 @@ func (srv *mockServer) handleTEIRerank(w http.ResponseWriter, r *http.Request) {
 		teiEmptyErr("`texts` cannot be empty").write(w)
 		return
 	}
-	if strings.TrimSpace(query) == "" || slices.ContainsFunc(texts, func(t string) bool { return strings.TrimSpace(t) == "" }) {
-		teiEmptyErr("`query` and `texts` cannot contain blank text").write(w)
-		return
-	}
 	if err := srv.requireTEIKind(teiNotRerankerMsg, teiKindReranker); err != nil {
 		err.write(w)
+		return
+	}
+	if query == "" && slices.Contains(texts, "") {
+		teiEmptyErr("`inputs` cannot be empty").write(w)
 		return
 	}
 	ranks := make([]map[string]any, len(texts))
@@ -1026,12 +1093,12 @@ func (srv *mockServer) handleTESimilarity(w http.ResponseWriter, r *http.Request
 		teiEmptyErr("`inputs.sentences` cannot be empty").write(w)
 		return
 	}
-	if strings.TrimSpace(*req.Inputs.SourceSentence) == "" || slices.ContainsFunc(sentences, func(t string) bool { return strings.TrimSpace(t) == "" }) {
-		teiEmptyErr("`inputs` cannot contain blank text").write(w)
-		return
-	}
 	if err := srv.requireTEIKind(teiNotEmbeddingMsg, teiKindEmbedding); err != nil {
 		err.write(w)
+		return
+	}
+	if *req.Inputs.SourceSentence == "" || slices.Contains(sentences, "") {
+		teiEmptyErr("`inputs` cannot be empty").write(w)
 		return
 	}
 	scores := make([]float64, len(sentences))
