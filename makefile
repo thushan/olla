@@ -211,10 +211,11 @@ ready-tools: fmt vet lint align
 ready: test-short test-race fmt vet lint align
 	@echo -e "\033[32mCode is ready for commit!\033[0m"
 
-# Build binaries only (no archives) to ./build directory
+# Build binaries only (no archives) to ./build directory. --output names the binary file:
+# the goreleaser before-hooks make build/ a directory, so a bare ./build/ collides with it.
 build-local:
 	@echo "Building local binaries to ./build/..."
-	@goreleaser build --snapshot --clean --single-target --output ./build/
+	@goreleaser build --snapshot --clean --single-target --output ./build/olla$(shell go env GOEXE)
 	@echo "Binary created: ./build/olla$(shell go env GOEXE)"
 
 # Build full snapshot release (with archives) to ./dist directory
@@ -615,7 +616,7 @@ help:
 	@echo "  validate-darwin - Build and test macOS binaries (Intel + Apple Silicon)"
 	@echo "  validate-windows- Build and test Windows binaries (AMD64 + ARM64)"
 	@echo "  validate-all-platforms - Build all 6 platform combinations (local testing)"
-	@echo "  build-local     - Build binary only to ./build/ (fast, for testing)"
+	@echo "  build-local     - Build binary only to ./build/olla (fast, for testing)"
 	@echo "  build-snapshot  - Build full release to ./dist/ (archives, checksums, etc)"
 	@echo "  docker-build    - Build Docker images locally"
 	@echo "  docker-run      - Run Docker image with local config"
