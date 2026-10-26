@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -473,4 +475,46 @@ func TestExtractRequiredCapabilities(t *testing.T) {
 			assert.Equal(t, tt.want, app.extractRequiredCapabilities(tt.caps))
 		})
 	}
+}
+
+// warnRecorder counts Warn calls by message; every other level is a no-op.
+type warnRecorder struct {
+	mockStyledLogger
+	warns map[string]int
+}
+
+func (w *warnRecorder) Warn(msg string, _ ...any) { w.warns[msg]++ }
+
+// A refusal is logged once by the "Request rejected" line, so the filter itself must not
+// write a Warn per request while a client keeps retrying against a downed backend.
+func TestFilterEndpointsByCapabilities_RefusalWritesNoWarn(t *testing.T) {
+	t.Parallel()
+
+	rec := &warnRecorder{warns: map[string]int{}}
+	capableURL := "http://embedder:8080"
+	otherURL := "http://reranker:8080"
+	mk := func(name, rawURL string) *domain.Endpoint {
+		u, _ := url.Parse(rawURL)
+		return &domain.Endpoint{Name: name, URL: u, URLString: rawURL, Type: domain.ProfileOpenAICompatible, Status: domain.StatusHealthy}
+	}
+	embedder := &domain.UnifiedModel{ID: "embedder", SourceEndpoints: []domain.SourceEndpoint{{EndpointURL: capableURL, LastSeen: time.Now()}}}
+
+	app := &Application{
+		logger: rec,
+		// embedder host is absent from the healthy list, as when it is down
+		discoveryService: &mockDiscoveryServiceWithHealthy{endpoints: []*domain.Endpoint{mk("reranker", otherURL)}},
+		modelRegistry: &mockCapabilityModelRegistry{
+			modelsByCapability: map[string][]*domain.UnifiedModel{"embeddings": {embedder}},
+		},
+	}
+	profile := &domain.RequestProfile{Path: "/embed", ModelCapabilities: &domain.ModelCapabilities{Embeddings: true}}
+
+	for range 100 {
+		filtered, refusal := app.filterEndpointsByCapabilities([]*domain.Endpoint{mk("reranker", otherURL)}, profile, rec)
+		require.Empty(t, filtered)
+		require.NotNil(t, refusal)
+		require.Equal(t, constants.RoutingReasonCapabilityUnavailable, refusal.Reason)
+	}
+
+	assert.Zero(t, rec.warns["Models with the required capabilities exist but none are on a healthy endpoint"])
 }

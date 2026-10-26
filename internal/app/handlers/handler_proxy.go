@@ -853,7 +853,9 @@ func (a *Application) capabilityRefusalFor(candidates []*domain.Endpoint, capabl
 	if anyCapableHost(candidates, capableModels) || !a.allCapableHostsUnhealthy(capableModels) {
 		return nil
 	}
-	logger.Warn("Models with the required capabilities exist but none are on a healthy endpoint",
+	// Debug, not Warn: the "Request rejected" line already records routing_reason=capability_unavailable,
+	// and a client retrying while the backend is down would otherwise log a Warn per request.
+	logger.Debug("Models with the required capabilities exist but none are on a healthy endpoint",
 		"capabilities", requiredCapabilities,
 		"capable_endpoints", len(capableModels))
 	return ports.NewRoutingDecision(constants.RoutingStrategyCapability, ports.RoutingActionRejected,
