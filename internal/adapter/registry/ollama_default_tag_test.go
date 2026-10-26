@@ -47,11 +47,20 @@ func buildUnified(t *testing.T, fleet ...tagFixture) *UnifiedMemoryModelRegistry
 	for _, f := range fleet {
 		require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, newEndpoint(f), modelInfos(f.models)))
 	}
-	// Unification is asynchronous: wait until every native name resolves.
+	// Unification is asynchronous. Names resolve case-insensitively, so one source
+	// of a merged model would satisfy a bare lookup: wait for every source URL.
 	require.Eventually(t, func() bool {
 		for _, f := range fleet {
 			for _, n := range f.models {
-				if u, err := reg.GetUnifiedModel(ctx, n); err != nil || u == nil {
+				u, err := reg.GetUnifiedModel(ctx, n)
+				if err != nil || u == nil {
+					return false
+				}
+				found := false
+				for i := range u.SourceEndpoints {
+					found = found || u.SourceEndpoints[i].EndpointURL == f.url
+				}
+				if !found {
 					return false
 				}
 			}
