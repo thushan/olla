@@ -34,6 +34,28 @@ type ModelInfo struct {
 	Size        int64         `json:"size,omitempty"` // Disk size in bytes
 }
 
+// genericModelTypes are values backends put in a top-level type field to mark
+// "this JSON object is a model" (OpenAI-style "object": "model"), not what kind
+// of model it is.
+var genericModelTypes = map[string]struct{}{"model": {}}
+
+// ModelKindFromMetadata returns the model's kind (llm, vlm, embeddings,
+// reranker, classifier) from unified model metadata. The specific kind lives in
+// "model_type" (ModelDetails.Type); the generic "type" (ModelInfo.Type) is only
+// a fallback, and generic object markers such as "model" never count as a
+// kind, otherwise they mask the real one.
+func ModelKindFromMetadata(metadata map[string]any) string {
+	if kind, _ := metadata["model_type"].(string); kind != "" {
+		return kind
+	}
+	if kind, _ := metadata["type"].(string); kind != "" {
+		if _, generic := genericModelTypes[kind]; !generic {
+			return kind
+		}
+	}
+	return ""
+}
+
 type EndpointModels struct {
 	LastUpdated time.Time `json:"last_updated"`
 	// EndpointURL is used for internal map-keying only; it must not appear in

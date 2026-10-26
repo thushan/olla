@@ -195,15 +195,11 @@ func (e *ModelExtractor) ExtractFamilyAndVariant(modelName, modelFamily string, 
 	return family, variant
 }
 
-// ExtractModelType extracts the model type from metadata
+// ExtractModelType extracts the model kind from metadata. The specific kind
+// (model_type) wins over the generic top-level type, which OpenAI-style and
+// LM Studio parsers set to "model" and which would otherwise hide it.
 func (e *ModelExtractor) ExtractModelType(metadata map[string]interface{}) string {
-	if typeStr, ok := metadata["type"].(string); ok {
-		return typeStr
-	}
-	if typeStr, ok := metadata["model_type"].(string); ok {
-		return typeStr
-	}
-	return ""
+	return domain.ModelKindFromMetadata(metadata)
 }
 
 // ExtractPublisher extracts publisher from model name and metadata

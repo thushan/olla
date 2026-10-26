@@ -11,17 +11,29 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
-// parseOllamaModels runs an Ollama /api/tags body through the shipped profile's
-// real parser, so cases built from it break if parsing and unification drift.
-func parseOllamaModels(t *testing.T, body string) []*domain.ModelInfo {
+// parseProfileModels runs a discovery body through the shipped profile's real
+// parser, so cases built from it break if parsing and unification drift.
+func parseProfileModels(t *testing.T, profileName, body string) []*domain.ModelInfo {
 	t.Helper()
 	factory, err := profile.NewFactory("../../../config/profiles")
 	require.NoError(t, err)
-	ollama, err := factory.GetProfile(domain.ProfileOllama)
+	prof, err := factory.GetProfile(profileName)
 	require.NoError(t, err)
-	models, err := ollama.ParseModelsResponse([]byte(body))
+	models, err := prof.ParseModelsResponse([]byte(body))
 	require.NoError(t, err)
 	return models
+}
+
+func parseOllamaModels(t *testing.T, body string) []*domain.ModelInfo {
+	t.Helper()
+	return parseProfileModels(t, domain.ProfileOllama, body)
+}
+
+// parseLMStudioModels feeds an LM Studio /api/v0/models body, which carries
+// "object": "model" beside the real kind in "type".
+func parseLMStudioModels(t *testing.T, body string) []*domain.ModelInfo {
+	t.Helper()
+	return parseProfileModels(t, domain.ProfileLmStudio, body)
 }
 
 // TestDefaultUnifier_MetadataExtraction validates metadata extraction
@@ -67,21 +79,8 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
-			name: "LM Studio model with type and context",
-			models: []*domain.ModelInfo{
-				{
-					Name: "microsoft/phi-4-mini-reasoning",
-					Type: "llm",
-					Details: &domain.ModelDetails{
-						Type:              ptrString("llm"),
-						Publisher:         ptrString("microsoft"),
-						Family:            ptrString("phi"),
-						QuantizationLevel: ptrString("Q4_K_M"),
-						MaxContextLength:  ptrInt64(131072),
-						State:             ptrString("not-loaded"),
-					},
-				},
-			},
+			name:     "LM Studio model with type and context",
+			models:   parseLMStudioModels(t, `{"data":[{"id":"microsoft/phi-4-mini-reasoning","object":"model","type":"llm","publisher":"microsoft","arch":"phi","quantization":"Q4_K_M","state":"not-loaded","max_context_length":131072}]}`),
 			endpoint: createTestEndpoint("http://localhost:1234", "LM Studio"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
 				assert.Equal(t, "phi", model.Family)
@@ -95,32 +94,31 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 				assert.Contains(t, model.Capabilities, "logic")
 				assert.Contains(t, model.Capabilities, "long-context")
 				assert.Equal(t, "microsoft", model.Metadata["publisher"])
-				assert.Equal(t, "llm", model.Metadata["type"])
+				assert.Equal(t, "llm", model.Metadata["model_type"])
 			},
 		},
 		{
-			name: "Vision model detection",
-			models: []*domain.ModelInfo{
-				{
-					Name: "llava-v1.6-mistral-7b",
-					Type: "vlm",
-					Details: &domain.ModelDetails{
-						Type:              ptrString("vlm"),
-						ParameterSize:     ptrString("7B"),
-						QuantizationLevel: ptrString("Q5_K_S"),
-						MaxContextLength:  ptrInt64(4096),
-					},
-				},
-			},
+			name:     "Vision model detection",
+			models:   parseLMStudioModels(t, `{"data":[{"id":"llava-v1.6-mistral-7b","object":"model","type":"vlm","quantization":"Q5_K_S","max_context_length":4096}]}`),
 			endpoint: createTestEndpoint("http://localhost:1234", "LM Studio"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
-				assert.Equal(t, "7b", model.ParameterSize)
 				assert.Equal(t, "q5ks", model.Quantization)
 				assert.Contains(t, model.Capabilities, "text-generation")
 				assert.Contains(t, model.Capabilities, "vision")
 				assert.Contains(t, model.Capabilities, "multimodal")
 				assert.Contains(t, model.Capabilities, "image-understanding")
 				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			// the model name carries no vision hint, so only the real "vlm" type
+			// can tag it; "object": "model" must not mask that type
+			name:     "LM Studio vlm tagged from its type, not its name",
+			models:   parseLMStudioModels(t, `{"data":[{"id":"acme/lookout-7b","object":"model","type":"vlm"}]}`),
+			endpoint: createTestEndpoint("http://localhost:1234", "LM Studio"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "vision")
+				assert.Contains(t, model.Capabilities, "multimodal")
 			},
 		},
 		{
@@ -147,20 +145,10 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
-			name: "Embedding model",
-			models: []*domain.ModelInfo{
-				{
-					Name: "all-minilm-l6-v2",
-					Type: "embeddings",
-					Details: &domain.ModelDetails{
-						Type:          ptrString("embeddings"),
-						ParameterSize: ptrString("22M"),
-					},
-				},
-			},
+			name:     "LM Studio embedding model",
+			models:   parseLMStudioModels(t, `{"data":[{"id":"text-embedding-nomic-embed-text-v1.5","object":"model","type":"embeddings","arch":"nomic-bert","quantization":"Q4_K_M","max_context_length":2048}]}`),
 			endpoint: createTestEndpoint("http://localhost:1234", "LM Studio"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
-				assert.Equal(t, "22m", model.ParameterSize)
 				assert.Contains(t, model.Capabilities, "embeddings")
 				assert.Contains(t, model.Capabilities, "similarity")
 				assert.Contains(t, model.Capabilities, "vector-search")

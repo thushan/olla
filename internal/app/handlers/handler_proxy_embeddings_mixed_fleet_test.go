@@ -24,14 +24,10 @@ import (
 // fleetEndpoint describes one backend in a routing-matrix fleet. modelsJSON is
 // fed through the shipped profile's real parser, so typing and tagging come from
 // the same code path production discovery uses.
-//
-// models bypasses the parser for fleets that need a tag the parser doesn't
-// currently surface (see lmStudioEmbed).
 type fleetEndpoint struct {
 	name       string
 	typ        string
 	modelsJSON string
-	models     []*domain.ModelInfo
 }
 
 const (
@@ -40,15 +36,9 @@ const (
 		{"name":"llava:13b","details":{"family":"llava"},"capabilities":["completion","vision"]}]}`
 	vllmBGE          = `{"data":[{"id":"BAAI/bge-m3","object":"model"}]}`
 	vllmQwenVL       = `{"data":[{"id":"Qwen/Qwen2.5-VL-7B-Instruct","object":"model"}]}`
+	lmStudioNomic    = `{"data":[{"id":"text-embedding-nomic-embed-text-v1.5","object":"model","type":"embeddings","publisher":"nomic-ai","arch":"nomic-bert","compatibility_type":"gguf","quantization":"Q4_K_M","state":"not-loaded","max_context_length":2048}]}`
 	teiInfoSnowflake = `{"model_id":"Snowflake/snowflake-arctic-embed-l-v2.0","model_type":{"embedding":{"pooling":"cls"}}}`
 )
-
-// lmStudioEmbed is registered as a prebuilt ModelInfo with the top-level
-// embeddings type. The real LM Studio parser puts "embeddings" in Details.Type
-// but sets the top-level Type to "model", and the unifier lets the latter mask
-// the former, so a parsed LM Studio embedding model is currently untagged. This
-// reproduces the tagged shape the routing bug needs without relying on that.
-var lmStudioEmbed = []*domain.ModelInfo{{Name: "text-embedding-nomic-embed-text-v1.5", Type: "embeddings"}}
 
 // TestProxyRouting_MixedFleetMatrix guards the regression where the capability
 // stage filtered endpoints to those hosting ANY model carrying the required tag,
@@ -93,7 +83,7 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 	vllmEmbed := fleetEndpoint{name: "vllm-1", typ: domain.ProfileVLLM, modelsJSON: vllmBGE}
 	vllmVision := fleetEndpoint{name: "vllm-1", typ: domain.ProfileVLLM, modelsJSON: vllmQwenVL}
 	tei := fleetEndpoint{name: "tei-1", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoSnowflake}
-	lmStudio := fleetEndpoint{name: "lmstudio-1", typ: constants.ProviderTypeLMStudio, models: lmStudioEmbed}
+	lmStudio := fleetEndpoint{name: "lmstudio-1", typ: constants.ProviderTypeLMStudio, modelsJSON: lmStudioNomic}
 
 	tests := []struct {
 		name         string
@@ -120,6 +110,7 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 		},
 		{"untagged vision model reaches its host beside llava host", chatPath, visionBody("Qwen/Qwen2.5-VL-7B-Instruct"), "vllm-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
 		{"llava reaches ollama beside untagged vision host", chatPath, visionBody("llava:13b"), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
+		{"model-less embeddings steered to a real lm studio embedding model beside vllm", embeddingsPath, embedBody(""), "lmstudio-1", []fleetEndpoint{lmStudio, vllmEmbed}},
 		{"model-less embeddings steered to tagged embedding host", embeddingsPath, embedBody(""), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmEmbed}},
 		{"model-less vision steered to vision-tagged host", chatPath, visionBody(""), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
 	}
@@ -150,13 +141,10 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 					ep := &domain.Endpoint{Name: fe.name, URL: u, URLString: u.String(), Type: fe.typ, Status: domain.StatusHealthy}
 					endpoints = append(endpoints, ep)
 
-					models := fe.models
-					if models == nil {
-						prof, perr := profileFactory.GetProfile(fe.typ)
-						require.NoError(t, perr)
-						models, perr = prof.ParseModelsResponse([]byte(fe.modelsJSON))
-						require.NoError(t, perr)
-					}
+					prof, perr := profileFactory.GetProfile(fe.typ)
+					require.NoError(t, perr)
+					models, perr := prof.ParseModelsResponse([]byte(fe.modelsJSON))
+					require.NoError(t, perr)
 					wantModels += len(models)
 
 					unified.RegisterEndpoint(ep)

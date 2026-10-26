@@ -114,8 +114,8 @@ func (b *BaseConverter) HasCapability(capabilities []string, capability string) 
 
 // DetermineModelType determines the model type based on capabilities and metadata
 func (b *BaseConverter) DetermineModelType(model *domain.UnifiedModel, defaultType string) string {
-	// Check metadata first
-	if modelType := b.ExtractMetadataString(model.Metadata, "type"); modelType != "" {
+	// Check metadata first; the specific kind beats the generic "model" marker
+	if modelType := domain.ModelKindFromMetadata(model.Metadata); modelType != "" {
 		return modelType
 	}
 
