@@ -79,6 +79,19 @@ now wins, so those models gain the capabilities their type implies: `vision`,
 `vector-search` (without `text-generation`) for embeddings, and `chat` and `completion`
 for `llm`. Model-less vision and embeddings requests are steered to those models.
 
+### Fixed: a model name without a tag reaches the Ollama model `:latest`
+
+Ollama lists a default-tag pull as `all-minilm:latest`, and Ollama itself accepts `all-minilm` for it,
+but Olla only matched the listed spelling: `all-minilm` was a 404 `model_not_found` on every route
+(`/olla/proxy/`, the provider prefixes, `/api/chat`, `/api/generate`, `/api/embed`, `/api/embeddings`,
+`/v1/embeddings`, `/olla/anthropic/v1/messages` and `GET /olla/models/{id}`), strict or optimistic.
+A name with no tag now resolves to `<name>:latest` when the exact lookup finds nothing, and only to
+models an Ollama endpoint serves. An exact match always wins, so a vLLM model called `foo` is chosen
+over an Ollama `foo:latest` for a request for `foo`; nothing else strips or adds `:latest`, so a vLLM
+`foo:latest` never answers `foo`. This applies with model unification on or off. The request body is
+forwarded exactly as the client wrote it. Per-model stats and sticky session keys use the native name,
+so `foo` and `foo:latest` share one row and one affinity key.
+
 ## v0.0.29
 
 ### Breaking: userinfo URLs now fail startup
