@@ -15,6 +15,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
 )
 
 type warnCounter struct {
@@ -32,6 +33,9 @@ func (w *warnCounter) Warn(msg string, _ ...any) {
 	w.counts[msg]++
 	w.mu.Unlock()
 }
+
+// WithRequestID keeps the counter in place when a handler derives a per-request logger.
+func (w *warnCounter) WithRequestID(string) logger.StyledLogger { return w }
 
 func (w *warnCounter) Error(msg string, _ ...any) {
 	w.mu.Lock()
