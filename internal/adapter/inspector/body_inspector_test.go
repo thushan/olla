@@ -3,6 +3,7 @@ package inspector
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -817,3 +818,76 @@ type closeTracker struct {
 }
 
 func (c *closeTracker) Close() error { c.closed = true; return nil }
+
+func TestBodyInspector_PeekWindowBoundary(t *testing.T) {
+	t.Parallel()
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+
+	for _, spaces := range []int{peekWindow - 1, peekWindow, peekWindow + 1, 4 * peekWindow} {
+		t.Run(fmt.Sprintf("%d leading spaces", spaces), func(t *testing.T) {
+			t.Parallel()
+			bi, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+			require.NoError(t, err)
+
+			body := strings.Repeat(" ", spaces) + `{"model":"x","input":"hi"}`
+			req := &http.Request{Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), ContentLength: int64(len(body))}
+			req.Header.Set("Content-Type", "application/json")
+			profile := domain.NewRequestProfile("/v1/embeddings")
+
+			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+			assert.Equal(t, "x", profile.ModelName)
+			got, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			assert.True(t, body == string(got), "body must be restored byte-for-byte")
+		})
+	}
+}
+
+// A chunked body of exactly MaxBodySize is complete and keeps full inspection (capabilities);
+// only one byte more is treated as oversized and falls back to the model-only scan.
+func TestBodyInspector_ChunkedLimitBoundary(t *testing.T) {
+	t.Parallel()
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+
+	const prefix = `{"model":"x","input":"hi","pad":"`
+	const suffix = `"}`
+	build := func(total int) string {
+		return prefix + strings.Repeat("a", total-len(prefix)-len(suffix)) + suffix
+	}
+
+	tests := []struct {
+		name     string
+		size     int
+		wantCaps bool
+	}{
+		{"limit-1", MaxBodySize - 1, true},
+		{"limit", MaxBodySize, true},
+		{"limit+1", MaxBodySize + 1, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			bi, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+			require.NoError(t, err)
+
+			body := build(tt.size)
+			require.Len(t, body, tt.size)
+			req := &http.Request{Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), ContentLength: -1}
+			profile := domain.NewRequestProfile("/v1/embeddings")
+
+			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+			assert.Equal(t, "x", profile.ModelName)
+			if tt.wantCaps {
+				require.NotNil(t, profile.ModelCapabilities)
+				assert.True(t, profile.ModelCapabilities.Embeddings)
+			} else {
+				assert.Nil(t, profile.ModelCapabilities)
+			}
+			got, err := io.ReadAll(req.Body)
+			require.NoError(t, err)
+			assert.True(t, body == string(got), "body must be restored byte-for-byte")
+		})
+	}
+}

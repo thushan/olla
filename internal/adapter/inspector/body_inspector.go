@@ -100,7 +100,9 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		bi.bufferPool.Put(buffer)
 	}()
 
-	limitedReader := io.LimitReader(r.Body, bi.maxBodySize)
+	// One byte past the limit tells a body of exactly maxBodySize (complete, fully inspected)
+	// from an oversized one.
+	limitedReader := io.LimitReader(r.Body, bi.maxBodySize+1)
 
 	if _, err := io.Copy(buffer, limitedReader); err != nil {
 		bi.logger.Debug("Failed to read request body", "error", err)
@@ -110,7 +112,7 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 	// An unknown length (chunked) body that filled the buffer may be arbitrarily larger, and a
 	// model placed after a big field would be missed by parsing a truncated prefix. Hand it to
 	// the bounded scan, replaying what we have already read.
-	if r.ContentLength < 0 && int64(buffer.Len()) >= bi.maxBodySize {
+	if r.ContentLength < 0 && int64(buffer.Len()) > bi.maxBodySize {
 		origBody := r.Body
 		r.Body = readCloser{
 			Reader: io.MultiReader(bytes.NewReader(append([]byte(nil), buffer.Bytes()...)), origBody),
@@ -205,6 +207,11 @@ func (bi *BodyInspector) looksLikeJSONObject(r *http.Request) bool {
 		}
 		switch c := head[n-1]; c {
 		case ' ', '\t', '\r', '\n':
+			if n == peekWindow {
+				// Whitespace filled the whole window: inconclusive, not "not JSON". The
+				// JSON parser skips any amount of leading whitespace, so let it decide.
+				return true
+			}
 			continue
 		case '{':
 			return true
