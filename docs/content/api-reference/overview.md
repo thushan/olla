@@ -112,6 +112,12 @@ Proxy endpoints for oMLX, the multi-model Apple Silicon (MLX) inference server.
 - `/olla/omlx/*` - oMLX API endpoints
 - OpenAI-compatible endpoints with native Anthropic Messages API passthrough
 
+### [Text Embeddings Inference API](text-embeddings-inference.md)
+Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers.
+
+- `/olla/tei/*` and `/olla/text-embeddings-inference/*` - TEI API endpoints
+- Embedding, reranker and classifier models, with `/v1/embeddings` in OpenAI format
+
 ## Translated APIs
 
 APIs that translate between different formats in real-time.

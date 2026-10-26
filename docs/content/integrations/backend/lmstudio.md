@@ -227,6 +227,18 @@ LM Studio differs from other backends:
 - **Single Concurrency**: Only one request processed at a time
 - **Fast Response**: No model loading delay during requests
 
+### Model Types and Capabilities
+
+Olla reads each model's `type` (`llm`, `vlm` or `embeddings`) from LM Studio's `/api/v0/models` and derives its capabilities from it:
+
+| LM Studio type | Capabilities |
+|----------------|--------------|
+| `llm` | `text-generation`, `chat`, `completion` |
+| `vlm` | `text-generation`, `vision`, `multimodal`, `image-understanding` |
+| `embeddings` | `embeddings`, `similarity`, `vector-search` (no `text-generation`) |
+
+`/olla/models?type=embeddings` lists the embedding models, and requests that name no model (vision requests, or `/v1/embeddings` with no `model`) are steered to endpoints hosting a model with the matching capability. See [Requests Without a Model Name](../../concepts/model-routing.md#requests-without-a-model-name). Before v0.0.30 the generic `"object": "model"` value in LM Studio's response hid the real type, so these tags were missing.
+
 ### Resource Configuration
 
 The LM Studio profile includes optimised resource settings:
