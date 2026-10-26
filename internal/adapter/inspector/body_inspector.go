@@ -152,9 +152,17 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 			// the path inspector may already have set what the path implies
 			// (rerank, classification, native embed); keep it beside the body's
 			if prior := profile.ModelCapabilities; prior != nil {
-				capabilities.Embeddings = capabilities.Embeddings || prior.Embeddings
 				capabilities.Rerank = prior.Rerank
 				capabilities.Classification = prior.Classification
+				// a rerank or classification path outranks the body's embeddings
+				// guess: rerank bodies carry `input`/`texts`, and no model is
+				// both an embedder and a reranker, so keeping both would
+				// match nothing
+				if prior.Rerank || prior.Classification {
+					capabilities.Embeddings = prior.Embeddings
+				} else {
+					capabilities.Embeddings = capabilities.Embeddings || prior.Embeddings
+				}
 			}
 			profile.ModelCapabilities = capabilities
 			bi.logger.Debug("Detected required capabilities from request",
