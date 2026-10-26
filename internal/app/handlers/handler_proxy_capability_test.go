@@ -252,8 +252,9 @@ func TestFilterEndpointsByCapabilities_IntersectsPerModel(t *testing.T) {
 		modelRegistry: &mockCapabilityModelRegistry{
 			modelsByCapability: map[string][]*domain.UnifiedModel{
 				"vision":           {visionA, both},
+				// the real registry answers function_calling for models tagged
+				// either function_calling or tools, so one key covers both
 				"function_calling": {toolsB, both},
-				"tools":            {toolsB, both},
 			},
 		},
 	}

@@ -839,7 +839,7 @@ func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities
 		requiredCapabilities = append(requiredCapabilities, "vision")
 	}
 	if caps.FunctionCalling {
-		requiredCapabilities = append(requiredCapabilities, "function_calling", "tools")
+		requiredCapabilities = append(requiredCapabilities, "function_calling")
 	}
 	if caps.Embeddings {
 		requiredCapabilities = append(requiredCapabilities, "embeddings")
