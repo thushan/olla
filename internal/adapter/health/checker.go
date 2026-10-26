@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"sort"
 	"strconv"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pterm/pterm"
+	"github.com/thushan/olla/internal/adapter/factory"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -63,22 +63,18 @@ func (c *HTTPHealthChecker) SetUnhealthyCallback(callback UnhealthyCallback) {
 
 func NewHTTPHealthCheckerWithDefaults(repository domain.EndpointRepository, logger logger.StyledLogger) *HTTPHealthChecker {
 	// We want to enable connection pooling and reuse with some sane defaults
-	client := &http.Client{
-		Timeout: DefaultHealthCheckerTimeout,
-		Transport: &http.Transport{
-			MaxIdleConns:        10,
-			MaxIdleConnsPerHost: 2,
-			IdleConnTimeout:     30 * time.Second,
-			DisableKeepAlives:   false,
-			// Per-probe timeouts are already enforced by the CheckTimeout context in
-			// performSingleCheck; this header timeout is a backstop against backends
-			// that accept the TCP connection but then never send a response header.
-			ResponseHeaderTimeout: DefaultHealthCheckerResponseHeaderTimeout,
-			// No proxy: health probes now carry auth credentials (Authorization / API key
-			// headers injected by the endpoint auth config). Routing them through an
-			// environment proxy risks leaking those credentials to a third party.
-		},
-	}
+	// Probes carry the endpoint's auth headers, so the client comes from the shared
+	// backend constructor: no environment proxy and no cross-origin redirects.
+	// Per-probe timeouts are already enforced by the CheckTimeout context in
+	// performSingleCheck; the header timeout is a backstop against backends that
+	// accept the TCP connection but then never send a response header.
+	client := factory.NewBackendHTTPClient(factory.BackendClientOptions{
+		Timeout:               DefaultHealthCheckerTimeout,
+		MaxIdleConns:          10,
+		MaxIdleConnsPerHost:   2,
+		IdleConnTimeout:       30 * time.Second,
+		ResponseHeaderTimeout: DefaultHealthCheckerResponseHeaderTimeout,
+	})
 	return NewHTTPHealthChecker(repository, logger, client)
 }
 

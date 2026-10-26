@@ -1,0 +1,100 @@
+package factory
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewBackendTransport_NeverUsesEnvironmentProxy(t *testing.T) {
+	t.Parallel()
+
+	tr := NewBackendTransport(BackendClientOptions{MaxIdleConns: 3, IdleConnTimeout: time.Second})
+	assert.Nil(t, tr.Proxy, "credentialled clients must not take HTTP(S)_PROXY from the environment")
+	assert.Equal(t, 3, tr.MaxIdleConns)
+
+	for name, client := range map[string]*http.Client{
+		"backend client":  NewBackendHTTPClient(BackendClientOptions{}),
+		"shared health":   NewSharedClientFactory().GetHealthClient(),
+		"shared discover": NewSharedClientFactory().GetDiscoveryClient(),
+	} {
+		got, ok := client.Transport.(*http.Transport)
+		require.Truef(t, ok, "%s: own transport required, not http.DefaultTransport", name)
+		assert.Nilf(t, got.Proxy, "%s: Proxy must be nil", name)
+		assert.NotNilf(t, client.CheckRedirect, "%s: redirect policy required", name)
+	}
+}
+
+func TestRefuseCrossOriginRedirect(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		from   string
+		to     string
+		follow bool
+	}{
+		{"same origin", "http://backend:11434/api/ps", "http://backend:11434/api/ps/", true},
+		{"different host", "http://backend:11434/x", "http://evil:11434/x", false},
+		{"different port", "http://backend:11434/x", "http://backend:9999/x", false},
+		{"scheme downgrade or upgrade", "http://backend:11434/x", "https://backend:11434/x", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			orig, err := http.NewRequest(http.MethodGet, tt.from, http.NoBody)
+			require.NoError(t, err)
+			next, err := http.NewRequest(http.MethodGet, tt.to, http.NoBody)
+			require.NoError(t, err)
+
+			err = RefuseCrossOriginRedirect(next, []*http.Request{orig})
+			if tt.follow {
+				assert.NoError(t, err)
+			} else {
+				assert.ErrorIs(t, err, http.ErrUseLastResponse)
+			}
+		})
+	}
+
+	t.Run("hop limit", func(t *testing.T) {
+		t.Parallel()
+		orig, _ := http.NewRequest(http.MethodGet, "http://b/x", http.NoBody)
+		via := make([]*http.Request, maxBackendRedirects)
+		for i := range via {
+			via[i] = orig
+		}
+		assert.ErrorIs(t, RefuseCrossOriginRedirect(orig, via), http.ErrUseLastResponse)
+	})
+}
+
+// A real cross-host redirect must not replay API-key or custom headers.
+func TestNewBackendHTTPClient_DoesNotReplayHeadersAcrossHosts(t *testing.T) {
+	t.Parallel()
+
+	leaked := make(chan http.Header, 1)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		leaked <- r.Header.Clone()
+	}))
+	t.Cleanup(target.Close)
+	origin := httptest.NewServer(http.RedirectHandler(target.URL+"/api/tags", http.StatusFound))
+	t.Cleanup(origin.Close)
+
+	req, err := http.NewRequest(http.MethodGet, origin.URL, http.NoBody)
+	require.NoError(t, err)
+	req.Header.Set("X-Api-Key", "sk-SECRET-123")
+
+	resp, err := NewBackendHTTPClient(BackendClientOptions{Timeout: 5 * time.Second}).Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+
+	assert.Equal(t, http.StatusFound, resp.StatusCode, "the 3xx is returned, not followed")
+	select {
+	case h := <-leaked:
+		t.Fatalf("redirect target received a request carrying %q", h.Get("X-Api-Key"))
+	default:
+	}
+}
