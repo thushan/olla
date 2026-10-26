@@ -78,14 +78,13 @@ detection:
 # Model handling
 models:
   name_format: "{{.Name}}"
-  # TEI instances serve embedding, classification or reranker models. Olla's
-  # capability set has no rerank or classify entry, so tagging every served
-  # model as an embedding model is an interim choice: it keeps capability
-  # routing from sending chat or generation traffic to TEI endpoints, but it
-  # does not route /rerank or /predict to a matching model. The real kind is
-  # recorded per model in its details (parsed from /info's model_type); native
-  # /predict and /rerank requests carry no model field and are unaffected by
-  # capability filtering.
+  # TEI instances serve embedding, classification or reranker models. The
+  # served model's real kind (from /info's model_type) becomes its Olla model
+  # type, which tags it embeddings, rerank or classification and never
+  # text-generation, so model-less /embed, /rerank and /predict requests are
+  # steered to an instance serving a model of the matching kind. This pattern
+  # only feeds profile-level capability checks, where every TEI model is
+  # non-generative.
   capability_patterns:
     embeddings:
       - "*"

@@ -20,6 +20,40 @@ const (
 	PathInspectorName = "path"
 )
 
+// pathCapability sets the capability a request path implies when its body
+// cannot: TEI's native /rerank, /predict and /embed bodies carry no model field,
+// so without this a model-less request lands on whichever instance the balancer
+// picks, and TEI answers 424 when that instance serves the wrong kind.
+type pathCapability struct {
+	suffix string
+	apply  func(*domain.ModelCapabilities)
+}
+
+// suffix matching covers route prefixes and the versioned vLLM-style variants
+// (/v1/rerank, /v2/rerank) with one entry.
+var pathCapabilities = []pathCapability{
+	{"/rerank", func(c *domain.ModelCapabilities) { c.Rerank = true }},
+	{"/predict", func(c *domain.ModelCapabilities) { c.Classification = true }},
+	{"/embed", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{"/embed_all", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{"/embed_sparse", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+	{"/similarity", func(c *domain.ModelCapabilities) { c.Embeddings = true }},
+}
+
+// capabilitiesForPath returns the capabilities a path implies, or nil.
+func capabilitiesForPath(path string) *domain.ModelCapabilities {
+	var caps *domain.ModelCapabilities
+	for _, pc := range pathCapabilities {
+		if strings.HasSuffix(path, pc.suffix) {
+			if caps == nil {
+				caps = &domain.ModelCapabilities{}
+			}
+			pc.apply(caps)
+		}
+	}
+	return caps
+}
+
 func NewPathInspector(profileFactory *profile.Factory, logger logger.StyledLogger) *PathInspector {
 	inspector := &PathInspector{
 		profileFactory: profileFactory,
@@ -104,6 +138,10 @@ func (pi *PathInspector) Inspect(_ context.Context, _ *http.Request, profile *do
 	path := profile.Path
 	if path == "" {
 		return nil
+	}
+
+	if caps := capabilitiesForPath(path); caps != nil {
+		profile.ModelCapabilities = caps
 	}
 
 	// First try exact match

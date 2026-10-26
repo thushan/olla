@@ -17,13 +17,15 @@ type TEIInfoResponse struct {
 	ServedModelName string         `json:"served_model_name"`
 }
 
-// teiModelTypes are the keys TEI uses in model_type's externally tagged
-// object ({"embedding":{...}}, {"reranker":{...}}, {"classifier":{...}}).
-// Anything else means a TEI version serving a kind we do not know about.
-var teiModelTypes = map[string]struct{}{
-	"embedding":  {},
-	"reranker":   {},
-	"classifier": {},
+// teiModelTypes maps the keys TEI uses in model_type's externally tagged object
+// ({"embedding":{...}}, {"reranker":{...}}, {"classifier":{...}}) to Olla model
+// types. The embedding kind uses "embeddings", the type LM Studio and Ollama
+// already use, so one capability set covers every embedding backend. Anything
+// else means a TEI version serving a kind we do not know about.
+var teiModelTypes = map[string]string{
+	"embedding":  "embeddings",
+	"reranker":   "reranker",
+	"classifier": "classifier",
 }
 
 type textEmbeddingInferenceParser struct{}
@@ -49,11 +51,12 @@ func (p *textEmbeddingInferenceParser) Parse(data []byte) ([]*domain.ModelInfo, 
 		return nil, errors.New("tei /info response contains neither served_model_name nor model_id")
 	}
 
-	// "embeddings" rather than the provider type: capability inference keys off
-	// this field to tag the model as an embedding model and drop text-generation.
-	// Olla has no rerank/classify capability yet, so this stays "embeddings" for
-	// every TEI model; the real kind travels in Details.Type (surfaced as the
-	// model_type metadata key) so the limitation is at least observable.
+	// The model type is the real kind, not the provider type: capability
+	// inference keys off it to tag embedding, rerank and classification models
+	// and drop text-generation, and path-based routing steers /rerank and
+	// /predict to a model of the matching kind. A missing or unrecognised kind
+	// (older TEI without model_type, or a kind we do not know) stays
+	// "embeddings": untyped would gain text-generation, which TEI never serves.
 	modelInfo := &domain.ModelInfo{
 		Name:     name,
 		Type:     "embeddings",
@@ -61,22 +64,23 @@ func (p *textEmbeddingInferenceParser) Parse(data []byte) ([]*domain.ModelInfo, 
 	}
 
 	if kind, ok := teiModelKind(response.ModelType); ok {
+		modelInfo.Type = kind
 		modelInfo.Details = &domain.ModelDetails{Type: &kind}
 	}
 
 	return []*domain.ModelInfo{modelInfo}, nil
 }
 
-// teiModelKind extracts the tag key from model_type's single-key object.
-// An absent, empty or multi-key object yields no kind: guessing among
-// several tags would mislabel the model.
+// teiModelKind maps the tag key of model_type's single-key object to an Olla
+// model type. An absent, empty or multi-key object yields no kind: guessing
+// among several tags would mislabel the model.
 func teiModelKind(modelType map[string]any) (string, bool) {
 	if len(modelType) != 1 {
 		return "", false
 	}
 	for key := range modelType {
-		if _, known := teiModelTypes[key]; known {
-			return key, true
+		if kind, known := teiModelTypes[key]; known {
+			return kind, true
 		}
 	}
 	return "", false

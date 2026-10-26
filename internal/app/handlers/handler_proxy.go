@@ -833,7 +833,7 @@ func (a *Application) filterEndpointsByCapabilities(endpoints []*domain.Endpoint
 }
 
 func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities) []string {
-	requiredCapabilities := make([]string, 0, 5)
+	requiredCapabilities := make([]string, 0, 7)
 
 	if caps.VisionUnderstanding {
 		requiredCapabilities = append(requiredCapabilities, "vision")
@@ -843,6 +843,12 @@ func (a *Application) extractRequiredCapabilities(caps *domain.ModelCapabilities
 	}
 	if caps.Embeddings {
 		requiredCapabilities = append(requiredCapabilities, "embeddings")
+	}
+	if caps.Rerank {
+		requiredCapabilities = append(requiredCapabilities, "rerank")
+	}
+	if caps.Classification {
+		requiredCapabilities = append(requiredCapabilities, "classification")
 	}
 	if caps.CodeGeneration {
 		requiredCapabilities = append(requiredCapabilities, "code")

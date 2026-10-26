@@ -70,8 +70,8 @@ func TestTextEmbeddingsInferenceParser_Parse(t *testing.T) {
 		require.Len(t, models, 1)
 		require.NotNil(t, models[0].Details)
 		require.NotNil(t, models[0].Details.Type)
-		assert.Equal(t, "embedding", *models[0].Details.Type)
-		assert.Equal(t, "embeddings", models[0].Type, "Details.Type must not change the embeddings capability type")
+		assert.Equal(t, "embeddings", *models[0].Details.Type)
+		assert.Equal(t, "embeddings", models[0].Type)
 	})
 
 	t.Run("records reranker model_type in details", func(t *testing.T) {
@@ -83,7 +83,7 @@ func TestTextEmbeddingsInferenceParser_Parse(t *testing.T) {
 		require.NotNil(t, models[0].Details)
 		require.NotNil(t, models[0].Details.Type)
 		assert.Equal(t, "reranker", *models[0].Details.Type)
-		assert.Equal(t, "embeddings", models[0].Type, "rerankers must stay embeddings-typed so they never gain text-generation")
+		assert.Equal(t, "reranker", models[0].Type, "rerankers carry their own type so rerank routing can find them")
 	})
 
 	t.Run("records classifier model_type in details", func(t *testing.T) {
@@ -95,7 +95,7 @@ func TestTextEmbeddingsInferenceParser_Parse(t *testing.T) {
 		require.NotNil(t, models[0].Details)
 		require.NotNil(t, models[0].Details.Type)
 		assert.Equal(t, "classifier", *models[0].Details.Type)
-		assert.Equal(t, "embeddings", models[0].Type)
+		assert.Equal(t, "classifier", models[0].Type)
 	})
 
 	t.Run("leaves details unset when model_type is missing", func(t *testing.T) {
@@ -106,6 +106,7 @@ func TestTextEmbeddingsInferenceParser_Parse(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, models, 1)
 		assert.Nil(t, models[0].Details)
+		assert.Equal(t, "embeddings", models[0].Type, "an unknown kind must not gain text-generation")
 	})
 
 	t.Run("leaves details unset for unrecognised model_type", func(t *testing.T) {
@@ -226,5 +227,5 @@ func TestShippedTextEmbeddingsInferenceProfile(t *testing.T) {
 	assert.Equal(t, "Snowflake/snowflake-arctic-embed-l-v2.0", models[0].Name)
 	require.NotNil(t, models[0].Details)
 	require.NotNil(t, models[0].Details.Type)
-	assert.Equal(t, "embedding", *models[0].Details.Type, "shipped profile must route /info's model_type into model details")
+	assert.Equal(t, "embeddings", *models[0].Details.Type, "shipped profile must route /info's model_type into model details")
 }

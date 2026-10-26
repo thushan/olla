@@ -149,6 +149,13 @@ func (bi *BodyInspector) Inspect(ctx context.Context, r *http.Request, profile *
 		// Only set capabilities if they require special features beyond basic chat
 		if capabilities.VisionUnderstanding || capabilities.FunctionCalling ||
 			capabilities.Embeddings || capabilities.CodeGeneration {
+			// the path inspector may already have set what the path implies
+			// (rerank, classification, native embed); keep it beside the body's
+			if prior := profile.ModelCapabilities; prior != nil {
+				capabilities.Embeddings = capabilities.Embeddings || prior.Embeddings
+				capabilities.Rerank = prior.Rerank
+				capabilities.Classification = prior.Classification
+			}
 			profile.ModelCapabilities = capabilities
 			bi.logger.Debug("Detected required capabilities from request",
 				"vision", capabilities.VisionUnderstanding,

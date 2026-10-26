@@ -37,6 +37,8 @@ const (
 	vllmBGE          = `{"data":[{"id":"BAAI/bge-m3","object":"model"}]}`
 	vllmQwenVL       = `{"data":[{"id":"Qwen/Qwen2.5-VL-7B-Instruct","object":"model"}]}`
 	lmStudioNomic    = `{"data":[{"id":"text-embedding-nomic-embed-text-v1.5","object":"model","type":"embeddings","publisher":"nomic-ai","arch":"nomic-bert","compatibility_type":"gguf","quantization":"Q4_K_M","state":"not-loaded","max_context_length":2048}]}`
+	teiInfoReranker  = `{"model_id":"/data/bge-reranker-base","served_model_name":"BAAI/bge-reranker-base","model_type":{"reranker":{}}}`
+	teiInfoClassify  = `{"model_id":"/data/roberta-go-emotions","served_model_name":"SamLowe/roberta-base-go_emotions","model_type":{"classifier":{"id2label":{"0":"joy"}}}}`
 	teiInfoSnowflake = `{"model_id":"Snowflake/snowflake-arctic-embed-l-v2.0","model_type":{"embedding":{"pooling":"cls"}}}`
 )
 
@@ -72,6 +74,10 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 		}
 		return `{"model":"` + model + `","input":"hello"}`
 	}
+	const (
+		rerankBody = `{"query":"what is deep learning","texts":["deep learning is a subset of ml","paris is in france"]}`
+		inputsBody = `{"inputs":"hello"}`
+	)
 	visionBody := func(model string) string {
 		if model == "" {
 			return `{"messages":[{"role":"user","content":` + visionContent + `}]}`
@@ -83,6 +89,10 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 	vllmEmbed := fleetEndpoint{name: "vllm-1", typ: domain.ProfileVLLM, modelsJSON: vllmBGE}
 	vllmVision := fleetEndpoint{name: "vllm-1", typ: domain.ProfileVLLM, modelsJSON: vllmQwenVL}
 	tei := fleetEndpoint{name: "tei-1", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoSnowflake}
+	teiEmbed := fleetEndpoint{name: "tei-embed", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoSnowflake}
+	teiRerank := fleetEndpoint{name: "tei-rerank", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoReranker}
+	teiClassify := fleetEndpoint{name: "tei-classify", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoClassify}
+	teiTrio := []fleetEndpoint{teiEmbed, teiRerank, teiClassify}
 	lmStudio := fleetEndpoint{name: "lmstudio-1", typ: constants.ProviderTypeLMStudio, modelsJSON: lmStudioNomic}
 
 	tests := []struct {
@@ -110,6 +120,15 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 		},
 		{"untagged vision model reaches its host beside llava host", chatPath, visionBody("Qwen/Qwen2.5-VL-7B-Instruct"), "vllm-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
 		{"llava reaches ollama beside untagged vision host", chatPath, visionBody("llava:13b"), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
+		// TEI native bodies carry no model field: the path picks the kind
+		{"model-less rerank goes to the reranker", "/olla/proxy/rerank", rerankBody, "tei-rerank", teiTrio},
+		{"model-less predict goes to the classifier", "/olla/proxy/predict", inputsBody, "tei-classify", teiTrio},
+		{"model-less embed goes to the embedder", "/olla/proxy/embed", inputsBody, "tei-embed", teiTrio},
+		{"model-less embed_all goes to the embedder", "/olla/proxy/embed_all", inputsBody, "tei-embed", teiTrio},
+		{"tei provider route rerank goes to the reranker", "/olla/tei/rerank", rerankBody, "tei-rerank", teiTrio},
+		{"tei provider route predict goes to the classifier", "/olla/tei/predict", inputsBody, "tei-classify", teiTrio},
+		{"named embedding model reaches the embedder among tei kinds", embeddingsPath, embedBody("Snowflake/snowflake-arctic-embed-l-v2.0"), "tei-embed", teiTrio},
+		{"model-less rerank beside vllm still reaches the reranker", "/olla/proxy/rerank", rerankBody, "tei-rerank", []fleetEndpoint{vllmEmbed, teiEmbed, teiRerank}},
 		{"model-less embeddings steered to a real lm studio embedding model beside vllm", embeddingsPath, embedBody(""), "lmstudio-1", []fleetEndpoint{lmStudio, vllmEmbed}},
 		{"model-less embeddings steered to tagged embedding host", embeddingsPath, embedBody(""), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmEmbed}},
 		{"model-less vision steered to vision-tagged host", chatPath, visionBody(""), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
@@ -175,10 +194,16 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 
 				req := httptest.NewRequest(http.MethodPost, tt.path, strings.NewReader(tt.body))
 				req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
-				req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+				if strings.HasPrefix(tt.path, "/olla/proxy/") {
+					req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+				}
 				w := httptest.NewRecorder()
 
-				app.proxyHandler(w, req)
+				if strings.HasPrefix(tt.path, "/olla/tei/") {
+					app.providerProxyHandler(w, req)
+				} else {
+					app.proxyHandler(w, req)
+				}
 
 				require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 				require.NotEmpty(t, selected, "proxy engine must receive candidate endpoints")

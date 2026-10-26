@@ -552,6 +552,10 @@ func (a *Application) inferCapabilities(details *domain.ModelDetails) []string {
 			caps = append(caps, "embeddings", "vector_search")
 		case modelTypeLLM:
 			caps = append(caps, "text_generation", "chat")
+		case "reranker":
+			caps = append(caps, "rerank")
+		case "classifier":
+			caps = append(caps, "classification")
 		}
 	}
 

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -27,6 +28,12 @@ func parseProfileModels(t *testing.T, profileName, body string) []*domain.ModelI
 func parseOllamaModels(t *testing.T, body string) []*domain.ModelInfo {
 	t.Helper()
 	return parseProfileModels(t, domain.ProfileOllama, body)
+}
+
+// parseTEIModels feeds a TEI /info body, whose model_type names the real kind.
+func parseTEIModels(t *testing.T, body string) []*domain.ModelInfo {
+	t.Helper()
+	return parseProfileModels(t, constants.ProviderTypeTextEmbeddingsInference, body)
 }
 
 // parseLMStudioModels feeds an LM Studio /api/v0/models body, which carries
@@ -173,6 +180,43 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
 				assert.Contains(t, model.Capabilities, "text-generation")
 				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			name:     "TEI embedding kind gets embedding capabilities and no text-generation",
+			models:   parseTEIModels(t, `{"model_id":"BAAI/bge-small-en-v1.5","model_type":{"embedding":{"pooling":"cls"}}}`),
+			endpoint: createTestEndpoint("http://localhost:3000", "TEI"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.ElementsMatch(t, []string{"embeddings", "similarity", "vector-search"}, model.Capabilities)
+			},
+		},
+		{
+			name:     "TEI reranker kind gets rerank and no text-generation",
+			models:   parseTEIModels(t, `{"model_id":"BAAI/bge-reranker-base","model_type":{"reranker":{}}}`),
+			endpoint: createTestEndpoint("http://localhost:3001", "TEI"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "rerank")
+				assert.NotContains(t, model.Capabilities, "text-generation")
+				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			name:     "TEI classifier kind gets classification and no text-generation",
+			models:   parseTEIModels(t, `{"model_id":"SamLowe/roberta-base-go_emotions","model_type":{"classifier":{"id2label":{"0":"joy"}}}}`),
+			endpoint: createTestEndpoint("http://localhost:3002", "TEI"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "classification")
+				assert.NotContains(t, model.Capabilities, "text-generation")
+				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			name:     "TEI without model_type stays an embedding model",
+			models:   parseTEIModels(t, `{"model_id":"legacy/embedder"}`),
+			endpoint: createTestEndpoint("http://localhost:3003", "TEI"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "embeddings")
+				assert.NotContains(t, model.Capabilities, "text-generation")
 			},
 		},
 		{

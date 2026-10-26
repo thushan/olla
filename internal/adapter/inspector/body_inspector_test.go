@@ -653,3 +653,26 @@ func (m *mockStyledLogger) InfoWithContext(msg string, endpoint string, ctx logg
 func (m *mockStyledLogger) WarnWithContext(msg string, endpoint string, ctx logger.LogContext)  {}
 func (m *mockStyledLogger) ErrorWithContext(msg string, endpoint string, ctx logger.LogContext) {}
 func (m *mockStyledLogger) InfoConfigChange(oldName, newName string)                            {}
+
+// The path inspector runs first and may already have set what the path implies;
+// a body that detects its own capabilities must not erase them.
+func TestBodyInspector_KeepsPathCapabilities(t *testing.T) {
+	t.Parallel()
+
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+	inspector, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+	require.NoError(t, err)
+
+	reqProfile := domain.NewRequestProfile("/rerank")
+	reqProfile.ModelCapabilities = &domain.ModelCapabilities{Rerank: true}
+
+	req, err := http.NewRequest(http.MethodPost, "/rerank", strings.NewReader(`{"input":"hello"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	require.NoError(t, inspector.Inspect(context.Background(), req, reqProfile))
+
+	require.NotNil(t, reqProfile.ModelCapabilities)
+	assert.True(t, reqProfile.ModelCapabilities.Rerank, "path-derived rerank must survive body detection")
+	assert.True(t, reqProfile.ModelCapabilities.Embeddings, "body-detected embeddings must still apply")
+}

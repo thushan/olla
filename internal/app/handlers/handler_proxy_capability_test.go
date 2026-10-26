@@ -451,3 +451,26 @@ func (m *mockFullModelRegistry) GetRoutableEndpointsForModel(ctx context.Context
 // Ensure our mocks implement the interface
 var _ domain.ModelRegistry = (*mockCapabilityModelRegistry)(nil)
 var _ domain.ModelRegistry = (*mockFullModelRegistry)(nil)
+
+func TestExtractRequiredCapabilities(t *testing.T) {
+	t.Parallel()
+
+	app := &Application{}
+	tests := []struct {
+		name string
+		caps *domain.ModelCapabilities
+		want []string
+	}{
+		{"function calling needs one tag, not two", &domain.ModelCapabilities{FunctionCalling: true}, []string{"function_calling"}},
+		{"embeddings", &domain.ModelCapabilities{Embeddings: true}, []string{"embeddings"}},
+		{"rerank", &domain.ModelCapabilities{Rerank: true}, []string{"rerank"}},
+		{"classification", &domain.ModelCapabilities{Classification: true}, []string{"classification"}},
+		{"chat only needs nothing", &domain.ModelCapabilities{ChatCompletion: true, TextGeneration: true}, []string{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, app.extractRequiredCapabilities(tt.caps))
+		})
+	}
+}

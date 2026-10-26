@@ -363,3 +363,59 @@ func containsAllProfiles(got, expected []string) bool {
 	}
 	return true
 }
+
+// Native TEI bodies (/rerank, /predict, /embed) carry no model field, so the
+// path alone must say which kind of model the request needs.
+func TestPathInspector_RequiredCapabilitiesByPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		path           string
+		embeddings     bool
+		rerank         bool
+		classification bool
+		none           bool
+	}{
+		{path: "/rerank", rerank: true},
+		{path: "/v1/rerank", rerank: true},
+		{path: "/v2/rerank", rerank: true},
+		{path: "/predict", classification: true},
+		{path: "/embed", embeddings: true},
+		{path: "/embed_all", embeddings: true},
+		{path: "/embed_sparse", embeddings: true},
+		{path: "/similarity", embeddings: true},
+		{path: "/v1/chat/completions", none: true},
+		{path: "/tokenize", none: true},
+		{path: "/v1/models", none: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			t.Parallel()
+
+			inspector := NewPathInspector(nil, createTestLogger())
+			reqProfile := domain.NewRequestProfile(tt.path)
+			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+				t.Fatalf("Inspect() error = %v", err)
+			}
+
+			caps := reqProfile.ModelCapabilities
+			if tt.none {
+				if caps != nil {
+					t.Errorf("Inspect(%q) set capabilities %+v, want none", tt.path, *caps)
+				}
+				return
+			}
+			if caps == nil {
+				t.Fatalf("Inspect(%q) set no capabilities", tt.path)
+			}
+			if caps.Embeddings != tt.embeddings || caps.Rerank != tt.rerank || caps.Classification != tt.classification {
+				t.Errorf("Inspect(%q) = embeddings:%v rerank:%v classification:%v, want %v/%v/%v",
+					tt.path, caps.Embeddings, caps.Rerank, caps.Classification, tt.embeddings, tt.rerank, tt.classification)
+			}
+			if caps.ChatCompletion || caps.TextGeneration {
+				t.Errorf("Inspect(%q) offered chat or text generation: %+v", tt.path, *caps)
+			}
+		})
+	}
+}
