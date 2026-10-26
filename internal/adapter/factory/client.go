@@ -13,6 +13,9 @@ const (
 
 	// maxBackendRedirects mirrors net/http's own limit for followed redirects.
 	maxBackendRedirects = 10
+
+	schemeHTTP  = "http"
+	schemeHTTPS = "https"
 )
 
 // BackendClientOptions tunes the pool and timeouts of a credentialled backend
@@ -76,12 +79,12 @@ func RefuseCrossOriginRedirect(req *http.Request, via []*http.Request) error {
 	}
 	if req.URL.Scheme == origin.Scheme {
 		// an upgrade earlier in the chain must not be undone by a later hop
-		if prev := via[len(via)-1].URL; prev.Scheme == "https" && req.URL.Scheme != "https" {
+		if prev := via[len(via)-1].URL; prev.Scheme == schemeHTTPS && req.URL.Scheme != schemeHTTPS {
 			return http.ErrUseLastResponse
 		}
 		return nil
 	}
-	if origin.Scheme == "http" && req.URL.Scheme == "https" {
+	if origin.Scheme == schemeHTTP && req.URL.Scheme == schemeHTTPS {
 		return nil
 	}
 	return http.ErrUseLastResponse
