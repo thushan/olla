@@ -30,7 +30,7 @@ otherwise (check 5 deliberately sends curl's default). Anthropic calls also
 send `anthropic-version: 2023-06-01` and `x-api-key: validate`.
 
 The checklist has two sections. **Section A** (checks 1-12) holds on current
-main and a failure there is a FAIL. **Section B** (checks B1-B6) needs work that
+main and a failure there is a FAIL. **Section B** (checks B1-B7) needs work that
 is built on other branches and may not be merged yet; see its probes. Never
 count a Section B check as a failure because its feature is absent: record a skip
 naming the missing item.
@@ -85,9 +85,9 @@ naming the missing item.
    mock-ollama-h, and after the bare and tagged requests
    `GET /internal/stats/models` has a single `nomic-embed-text:latest` row (no
    `nomic-embed-text` row) counting both. A name no host serves, such as
-   `nomic-embed-text-v2`, never reaches a TEI host: this fleet's optimistic
-   routing falls back (`X-Olla-Routing-Reason: model_not_found_fallback`) rather than
-   404, so assert 200 or 404 and never 424.
+   `nomic-embed-text-v2`, is not asserted on here: this fleet's optimistic routing
+   falls back (`X-Olla-Routing-Reason: model_not_found_fallback`), and on main the
+   fallback is unfiltered, so it can land on a TEI host of the wrong kind (see B7).
 6. **Anthropic passthrough in a mixed fleet.** `POST /olla/anthropic/v1/messages`
    `{"model":"<m>","max_tokens":32,"messages":[{"role":"user","content":"ping"}]}`
    → 200, `type:"message"`, text containing `BACKEND:<mock>`, served by the
@@ -135,7 +135,7 @@ naming the missing item.
     with `input_tokens` ≥ 0; `GET /olla/anthropic/v1/models` → 200 with
     `type: "model"` entries.
 
-## Section B: requires #4 / #6 / #8 merged
+## Section B: requires #3 / #4 / #5 / #6 / #8 merged
 
 These depend on work that lives on other branches. Probe first, run what the
 probes allow, and record a skip (with the item number) for the rest. A tree that
@@ -146,7 +146,9 @@ has none of it must finish Section B with skips only.
 | #6 `olla.type` | `GET /olla/models`: entries carry an `olla.type` field | skip B1, B2, B3 (needs #6) |
 | #4 vision/tools | `GET /olla/models`: `qwen3-vl:8b` has `olla.type` `vlm` (or `type=vlm` filter returns it) | skip B4 (needs #4) |
 | #8 `/api/ps` | `GET /olla/ollama/api/ps` lists both `llama3.2:3b` and `qwen3:8b` with `olla_endpoint` on each entry (on a tree without #8 it answers 200 from a single Ollama and no `olla_endpoint`) | skip B5 (needs #8) |
-| profile-declared paths | `POST /olla/anthropic/v1/messages` for `sglang-chat-model` carries `X-Olla-Mode: passthrough` | skip B6 (needs the profile-declared-paths fix; sglang and lmdeploy are translated until then) |
+| #3 native Anthropic for sglang and lmdeploy | `POST /olla/anthropic/v1/messages` for `sglang-chat-model` carries `X-Olla-Mode: passthrough` | skip B6 (needs #3; main's sglang and lmdeploy profiles have no `anthropic_support`, so they are translated) |
+| #5 slash-id lookup | `GET /olla/models/BAAI/bge-reranker-base` is not 404 | skip B3 (needs #5) |
+| unfiltered-fallback fix | 8 requests for `nomic-embed-text-v2` (check 5 body) return no 424 | skip B7 (needs the unfiltered-fallback fix; known follow-up) |
 
 B1. **Types.** `olla.type` values: BAAI/bge-small-en-v1.5, intfloat/e5-base-v2,
     nomic-embed-text:latest, mxbai-embed-large = `embeddings`;
@@ -164,8 +166,7 @@ B3. **Slash ids.** `GET /olla/models/BAAI/bge-reranker-base` → 200, `id` equal
     the path, `type: "reranker"`, `endpoints` = [mock-tei-rerank]. Same for
     `/olla/models/intfloat/e5-base-v2` (`type: "embeddings"`, `endpoints` =
     [mock-vllm-j]). An unknown slash id such as `/olla/models/no/such-model` → 404.
-    (If the slash id answers 404 while B1 passes, skip with "needs slash-id
-    lookup", which is separate from #6.)
+    (Needs #5; skip with "needs #5" if the slash id answers 404.)
 B4. **Ollama vision and tools capabilities** (mock-ollama-h lists `qwen3-vl:8b`
     with `completion, vision, tools` and `llama3.2:3b` with `completion, tools`).
     `qwen3-vl:8b` is typed `vlm` and its capabilities include `vision` and
@@ -176,10 +177,12 @@ B5. **`/olla/ollama/api/ps` merges both Ollamas.** → 200 JSON with a `models`
     and `qwen3:8b` with `olla_endpoint: "mock-ollama-i"`. Every entry carries
     `olla_endpoint`. No `X-Olla-Partial` header (both hosts answered).
 
-B6. **Passthrough reaches non-Ollama hosts.** `sglang-chat-model` and
+B6. **Passthrough reaches non-Ollama hosts (needs #3).** `sglang-chat-model` and
     `lmdeploy-chat-model` Anthropic requests (check 6's body) carry
-    `X-Olla-Mode: passthrough`: Ollama's `/v1/messages` path declaration must not
-    evict them from the passthrough candidate set.
+    `X-Olla-Mode: passthrough`, served by mock-sglang-k and mock-lmdeploy-l.
+B7. **Unknown model never reaches a TEI host.** `nomic-embed-text-v2` ×8 on
+    `/olla/proxy/v1/embeddings` (check 5 body): every response is 200 or 404 and
+    never 424, which would mean the fallback picked a TEI host of the wrong kind.
 
 Not covered here because it needs fault injection: the `X-Olla-Partial` header
 when one Ollama fails `/api/ps` (unit-tested in

@@ -77,7 +77,8 @@ path-based routing of model-less TEI requests, `/olla/tei/*` isolation,
 named-model `/v1/embeddings` and Anthropic passthrough in a mixed fleet. It is
 separate from the main fleet so the main checklists' endpoint counts and
 per-route host sets stay fixed, and `--quick` never boots it. Its Section B
-checks (model `type`, vision and tools capabilities, merged `/api/ps`) need
+checks (model `type`, slash-id lookup, vision and tools capabilities, merged
+`/api/ps`, native Anthropic passthrough on sglang and lmdeploy) need
 work that may not be merged yet; each is probed first and recorded as a skip,
 never a failure, when the feature is absent.
 

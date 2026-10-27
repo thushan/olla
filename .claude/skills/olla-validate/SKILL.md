@@ -259,7 +259,7 @@ poll `/internal/status/endpoints` until all 8 are healthy and `/olla/models` lis
 `BAAI/bge-reranker-base` and `mxbai-embed-large`. Then spawn one agent
 (`model: haiku`) for `.claude/skills/olla-validate/areas/tei-routing.md`, nightly
 depth. It is read-only and shares nothing with the main fleet. Its section B needs
-unmerged work (#4, #6, #8) and probes for it, so it records skips, not failures,
+unmerged work (#3, #4, #5, #6, #8) and probes for it, so it records skips, not failures,
 on a tree without them. Kill these nine PIDs in Phase 7 with the rest.
 
 ### 6e. Soak + chaos
