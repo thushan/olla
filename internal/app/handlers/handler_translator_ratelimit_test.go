@@ -140,7 +140,7 @@ func TestTranslatorRoutes_RateLimitUsesTranslatorErrorFormat(t *testing.T) {
 			for _, path := range []string{"/olla/anthropic/v1/messages", "/olla/anthropic/v1/messages/count_tokens"} {
 				// Exhaust the single-token bucket, then expect the rejection.
 				var rec *httptest.ResponseRecorder
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					rec = httptest.NewRecorder()
 					mux.ServeHTTP(rec, translatorRequest(http.MethodPost, path, translatorBody))
 					if rec.Code == http.StatusTooManyRequests {
@@ -166,7 +166,7 @@ func TestTranslatorRoutes_RateLimitUsesTranslatorErrorFormat(t *testing.T) {
 
 			// A translator without an error writer still gets limited, in plain text.
 			var rec *httptest.ResponseRecorder
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				rec = httptest.NewRecorder()
 				mux.ServeHTTP(rec, translatorRequest(http.MethodPost, "/olla/plain/v1/messages", translatorBody))
 				if rec.Code == http.StatusTooManyRequests {
