@@ -41,8 +41,11 @@ type proxyRequest struct {
 	stickySource  string
 	sessionID     string
 	contentLength int64
-	hadError      bool
-	isStreaming   bool
+	// upstreamStatus is the HTTP status the client received for a request that reached the
+	// proxy engine; 0 when unknown. Logged so a backend's own 4xx/5xx is visible per request.
+	upstreamStatus int
+	hadError       bool
+	isStreaming    bool
 }
 
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -94,12 +97,15 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 	tracker := core.NewResponseStartedWriter(w)
 
 	err := a.executeProxyRequest(ctx, tracker, r, endpoints, pr)
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, err)
 
+	// The error response is written first so the logged status is what the client actually
+	// received (a 502 for a connection failure), not 0.
 	if err != nil {
 		a.handleProxyError(tracker, err)
 	}
+	pr.upstreamStatus = tracker.Status()
+	pr.captureStickyOutcome(ctx, r)
+	a.logRequestResult(pr, err)
 }
 
 // writeNoRoutableEndpoints short-circuits a request when endpoint selection produced
@@ -404,7 +410,14 @@ func (a *Application) logRequestStart(pr *proxyRequest, endpointCount int) {
 		logFields = append(logFields, "translator_mode", string(pr.translatorMode))
 	}
 
-	pr.requestLogger.Info("Request received", logFields...)
+	// A request with no routable endpoint is about to be logged by logRequestRejected, which
+	// carries the same identifying fields and is sampled. Writing Info here as well would
+	// leave an unthrottled line per request for a client repeating an unknown model.
+	if endpointCount == 0 {
+		pr.requestLogger.Debug("Request received", logFields...)
+	} else {
+		pr.requestLogger.Info("Request received", logFields...)
+	}
 
 	// Log additional details at DEBUG level
 	debugFields := []any{
@@ -468,6 +481,10 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 
 	if err != nil {
 		logFields := a.buildLogFields(pr, duration)
+		// What the client actually got, so a truncated 200 reads differently from a 502.
+		if pr.upstreamStatus > 0 {
+			logFields = append(logFields, "http_status", pr.upstreamStatus)
+		}
 		pr.requestLogger.Error("Request failed", append([]any{"error", err}, logFields...)...)
 	} else {
 		// Log essential completion info at INFO level
@@ -475,6 +492,10 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 			"endpoint", pr.stats.EndpointName,
 			"duration_ms", duration.Milliseconds(),
 			"status", "completed",
+		}
+
+		if pr.upstreamStatus > 0 {
+			infoFields = append(infoFields, "http_status", pr.upstreamStatus)
 		}
 
 		if pr.model != "" {
@@ -490,29 +511,7 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 			infoFields = append(infoFields, "translator_mode", string(pr.translatorMode))
 		}
 
-		// Add provider metrics if available
-		if pr.stats.ProviderMetrics != nil {
-			pm := pr.stats.ProviderMetrics
-			if pm.InputTokens > 0 {
-				infoFields = append(infoFields, "input_tokens", pm.InputTokens)
-			}
-			if pm.OutputTokens > 0 {
-				infoFields = append(infoFields, "output_tokens", pm.OutputTokens)
-			}
-			if pm.TotalTokens > 0 {
-				infoFields = append(infoFields, "total_tokens", pm.TotalTokens)
-			}
-			if pm.TokensPerSecond > 0 {
-				infoFields = append(infoFields, "tokens_per_sec", fmt.Sprintf("%.1f", pm.TokensPerSecond))
-			}
-			if pm.TTFTMs > 0 {
-				infoFields = append(infoFields, "ttft_ms", pm.TTFTMs)
-			}
-			// the model the backend actually ran, which can differ from the requested alias
-			if pm.Model != "" {
-				infoFields = append(infoFields, "provider_model", pm.Model)
-			}
-		}
+		infoFields = appendProviderMetricFields(infoFields, pr.stats.ProviderMetrics)
 
 		// routing fields at INFO so operators can see the strategy without enabling DEBUG
 		if rd := pr.stats.RoutingDecision; rd != nil {
@@ -544,12 +543,47 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 			infoFields = append(infoFields, "fallback_reason", pr.translatorFallbackReason)
 		}
 
-		pr.requestLogger.Info("Request completed", infoFields...)
+		// A backend 5xx is a backend fault the operator should see when filtering on WARN.
+		// It is per request by design: unlike Olla's own rejections (sampled by
+		// logRequestRejected) this is the only record of what the backend said. Backend 4xx
+		// is the caller's problem and stays at Info.
+		if pr.upstreamStatus >= http.StatusInternalServerError {
+			pr.requestLogger.Warn("Request completed", infoFields...)
+		} else {
+			pr.requestLogger.Info("Request completed", infoFields...)
+		}
 
 		// Log detailed metrics at DEBUG level
 		debugFields := a.buildLogFields(pr, duration)
 		pr.requestLogger.Debug("Request metrics", debugFields...)
 	}
+}
+
+// appendProviderMetricFields adds the backend-reported usage fields that are worth an INFO line.
+func appendProviderMetricFields(fields []any, pm *domain.ProviderMetrics) []any {
+	if pm == nil {
+		return fields
+	}
+	if pm.InputTokens > 0 {
+		fields = append(fields, "input_tokens", pm.InputTokens)
+	}
+	if pm.OutputTokens > 0 {
+		fields = append(fields, "output_tokens", pm.OutputTokens)
+	}
+	if pm.TotalTokens > 0 {
+		fields = append(fields, "total_tokens", pm.TotalTokens)
+	}
+	if pm.TokensPerSecond > 0 {
+		fields = append(fields, "tokens_per_sec", fmt.Sprintf("%.1f", pm.TokensPerSecond))
+	}
+	if pm.TTFTMs > 0 {
+		fields = append(fields, "ttft_ms", pm.TTFTMs)
+	}
+	// the model the backend actually ran, which can differ from the requested alias
+	if pm.Model != "" {
+		fields = append(fields, "provider_model", pm.Model)
+	}
+	return fields
 }
 
 func (a *Application) buildLogFields(pr *proxyRequest, duration time.Duration) []any {

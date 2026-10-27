@@ -182,6 +182,14 @@ request was routed as if it named none. `identity` means no encoding and is now 
 for capability routing, so a model-less request whose body Olla can't read is still kept off chat-only hosts, and
 is refused with `503` (`capability_unavailable`) when embedders exist but none is healthy. Requests that name a model are unaffected.
 
+### Fixed: a backend 5xx no longer looks like a normal completion in the log
+
+The per-request `Request completed` line did not say what status the client got, so a backend returning `502` or `503`
+read the same as a success. It now carries `http_status` on every proxy route (`/olla/proxy/`, provider routes and the
+Anthropic route, passthrough and translation, streaming included), and a backend `5xx` is logged at `WARN`. A backend `4xx`
+stays at `INFO`. Olla's own rejections are unchanged and still go through the sampled `Request rejected` line, and a
+rejected request no longer also writes an `INFO` `Request received` line.
+
 ### Fixed: model routing no longer depends on the Content-Type header
 
 A request that named a model but didn't send `Content-Type: application/json` was routed as if it named

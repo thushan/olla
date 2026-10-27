@@ -52,6 +52,7 @@ type ProxyFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request,
 type ResponseStartedWriter struct {
 	http.ResponseWriter
 	started bool
+	status  int
 }
 
 // NewResponseStartedWriter wraps w so callers can observe whether a response has
@@ -62,11 +63,18 @@ func NewResponseStartedWriter(w http.ResponseWriter) *ResponseStartedWriter {
 
 func (rw *ResponseStartedWriter) WriteHeader(code int) {
 	rw.started = true
+	// 1xx interim responses are not the final status the client sees.
+	if rw.status == 0 && code >= http.StatusOK {
+		rw.status = code
+	}
 	rw.ResponseWriter.WriteHeader(code)
 }
 
 func (rw *ResponseStartedWriter) Write(b []byte) (int, error) {
 	rw.started = true
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
 	return rw.ResponseWriter.Write(b)
 }
 
@@ -74,6 +82,12 @@ func (rw *ResponseStartedWriter) Write(b []byte) (int, error) {
 // client yet.
 func (rw *ResponseStartedWriter) Started() bool {
 	return rw.started
+}
+
+// Status is the final status code sent to the client: 0 until a response is committed,
+// and 200 when body bytes were written without an explicit WriteHeader.
+func (rw *ResponseStartedWriter) Status() int {
+	return rw.status
 }
 
 // Unwrap exposes the underlying ResponseWriter so http.NewResponseController can
@@ -92,8 +106,12 @@ func (rw *ResponseStartedWriter) Unwrap() http.ResponseWriter {
 // bytes to the client immediately, so the commit has already happened by the
 // time this call is made, even if the underlying flush itself then fails.
 func (rw *ResponseStartedWriter) FlushError() error {
-	wasStarted := rw.started
+	wasStarted, wasStatus := rw.started, rw.status
 	rw.started = true
+	// A bare flush commits an implicit 200, same as a body write.
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
 
 	rc := http.NewResponseController(rw.ResponseWriter)
 	if err := rc.Flush(); err != nil {
@@ -102,7 +120,7 @@ func (rw *ResponseStartedWriter) FlushError() error {
 		// (dead connection, etc.) may have partially written bytes before
 		// failing, so started stays true.
 		if errors.Is(err, http.ErrNotSupported) {
-			rw.started = wasStarted
+			rw.started, rw.status = wasStarted, wasStatus
 		}
 		return err
 	}

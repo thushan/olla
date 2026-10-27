@@ -515,3 +515,65 @@ func TestRetry_HTTPTestBackend_PostRSTBeforeBody(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, secondHit, "second endpoint must be tried after first fails without writing bytes")
 }
+
+func TestResponseStartedWriter_Status(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero until committed", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 0, NewResponseStartedWriter(httptest.NewRecorder()).Status())
+	})
+	t.Run("explicit status", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		rw.WriteHeader(http.StatusTooManyRequests)
+		assert.Equal(t, http.StatusTooManyRequests, rw.Status())
+	})
+	t.Run("body without header is 200", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		_, err := rw.Write([]byte("x"))
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rw.Status())
+	})
+	t.Run("interim and repeat headers do not replace the final status", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		rw.WriteHeader(http.StatusEarlyHints)
+		rw.WriteHeader(http.StatusBadGateway)
+		rw.WriteHeader(http.StatusOK)
+		assert.Equal(t, http.StatusBadGateway, rw.Status())
+	})
+}
+
+func TestResponseStartedWriter_FlushStatus(t *testing.T) {
+	t.Parallel()
+
+	t.Run("bare flush commits an implicit 200", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		require.NoError(t, rw.FlushError())
+		assert.Equal(t, http.StatusOK, rw.Status())
+	})
+	t.Run("flush keeps an explicit status", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		rw.WriteHeader(http.StatusBadGateway)
+		require.NoError(t, rw.FlushError())
+		assert.Equal(t, http.StatusBadGateway, rw.Status())
+	})
+	t.Run("unsupported flush restores status", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(noFlushWriter{httptest.NewRecorder()})
+		require.ErrorIs(t, rw.FlushError(), http.ErrNotSupported)
+		assert.False(t, rw.Started())
+		assert.Equal(t, 0, rw.Status())
+	})
+}
+
+// noFlushWriter hides the recorder's Flush so the chain cannot flush.
+type noFlushWriter struct{ rec *httptest.ResponseRecorder }
+
+func (n noFlushWriter) Header() http.Header         { return n.rec.Header() }
+func (n noFlushWriter) Write(b []byte) (int, error) { return n.rec.Write(b) }
+func (n noFlushWriter) WriteHeader(c int)           { n.rec.WriteHeader(c) }

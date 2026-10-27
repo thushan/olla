@@ -88,16 +88,19 @@ func (a *Application) executePassthroughRequest(
 	a.logRequestStart(pr, len(endpoints))
 
 	// Execute proxy
-	err = a.proxyService.ProxyRequestToEndpoints(ctx, w, r, endpoints, pr.stats, pr.requestLogger)
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, err)
+	tracker := core.NewResponseStartedWriter(w)
+	err = a.proxyService.ProxyRequestToEndpoints(ctx, tracker, r, endpoints, pr.stats, pr.requestLogger)
 
+	// Error response first, through the tracker, so the logged status is what the client got.
 	if err != nil {
 		// only write error if response hasn't started
 		if w.Header().Get(constants.HeaderContentType) == "" {
-			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
+			a.writeTranslatorError(tracker, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
 		}
 	}
+	pr.upstreamStatus = tracker.Status()
+	pr.captureStickyOutcome(ctx, r)
+	a.logRequestResult(pr, err)
 
 	pr.stats.EndTime = time.Now()
 }
@@ -246,6 +249,10 @@ func (a *Application) executeTranslationRequest(
 
 	a.logRequestStart(pr, len(endpoints))
 
+	// Observe the status the client receives so a backend's own 4xx/5xx is logged.
+	tracker := core.NewResponseStartedWriter(w)
+	w = tracker
+
 	// For streaming requests, seed the context with an estimated input token count
 	// computed from the original (pre-translation) request body. This lets the
 	// streaming translator populate a non-zero input_tokens in message_start, matching
@@ -267,15 +274,15 @@ func (a *Application) executeTranslationRequest(
 		proxyErr = a.executeTranslatedNonStreamingRequest(ctx, w, r, endpoints, pr, trans)
 	}
 
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, proxyErr)
-
 	if proxyErr != nil {
 		// only write error if response hasn't started
 		if w.Header().Get(constants.HeaderContentType) == "" {
 			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", proxyErr), http.StatusBadGateway)
 		}
 	}
+	pr.upstreamStatus = tracker.Status()
+	pr.captureStickyOutcome(ctx, r)
+	a.logRequestResult(pr, proxyErr)
 
 	pr.stats.EndTime = time.Now()
 	return ""

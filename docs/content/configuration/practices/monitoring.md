@@ -230,13 +230,16 @@ JSON format enables parsing:
   "time": "2024-01-15T10:30:00Z",
   "msg": "Request completed",
   "endpoint": "local-ollama",
-  "method": "POST",
-  "path": "/v1/chat/completions",
-  "status": 200,
+  "status": "completed",
+  "http_status": 200,
   "duration_ms": 125,
   "request_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
+
+`http_status` is the status the client received. A backend `5xx` is logged at `warn` so it stands out from
+normal completions; a backend `4xx` stays at `info`. Requests Olla refuses itself are logged once as
+`Request rejected` (sampled per client) instead.
 
 ## Prometheus Metrics
 
