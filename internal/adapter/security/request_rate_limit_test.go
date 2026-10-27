@@ -566,7 +566,7 @@ func TestRateLimitValidator_CheckIPLimit_ZeroLimitDoesNotPanic(t *testing.T) {
 	defer v.Stop()
 
 	for range 5 {
-		res, _ := v.checkIPLimit("a", 0, time.Now(), false)
+		res, _ := v.checkIPLimit(v.getOrCreateLimiter("a", 1), 0, time.Now())
 		if !res.Allowed {
 			t.Fatal("a zero per-IP limit means the tier is off; request must be allowed")
 		}
@@ -614,5 +614,41 @@ func TestRateLimitValidator_Middleware_GlobalRejectionHeaders(t *testing.T) {
 	}
 	if retry < 1 || retry > 3 {
 		t.Errorf("Retry-After = %d, want 1-3 seconds from the global bucket's refill", retry)
+	}
+}
+
+// TestRateLimitValidator_Validate_ConcurrentGlobalRejectionKeepsPerIPToken hammers
+// one client while the global tier rejects everything. Every per-IP token taken
+// must be handed back, even when the client's requests interleave.
+func TestRateLimitValidator_Validate_ConcurrentGlobalRejectionKeepsPerIPToken(t *testing.T) {
+	t.Parallel()
+
+	v := createTestRateLimitValidator(config.ServerRateLimits{
+		PerIPRequestsPerMinute: 60,
+		BurstSize:              1,
+		CleanupInterval:        time.Minute,
+	})
+	defer v.Stop()
+	v.globalLimiter = rate.NewLimiter(rate.Limit(0.001), 1)
+	v.globalLimiter.Allow() // drain: every request now fails globally
+
+	var wg sync.WaitGroup
+	for range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 300 {
+				_, _ = v.Validate(context.Background(), ports.SecurityRequest{ClientID: "a"})
+			}
+		}()
+	}
+	wg.Wait()
+
+	info, ok := v.ipLimiters.Load("a")
+	if !ok {
+		t.Fatal("per-IP limiter missing")
+	}
+	if tokens := info.limiter.Tokens(); tokens < 0.9 {
+		t.Errorf("per-IP bucket has %.2f tokens after only global rejections, want its full burst of 1", tokens)
 	}
 }

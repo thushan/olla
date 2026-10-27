@@ -80,6 +80,11 @@ type ipLimiterInfo struct {
 	tokensUsed   int
 	requestLimit int
 	mu           sync.RWMutex
+	// flow serialises one client's per-IP reserve, global decision and refund.
+	// x/time's CancelAt only restores a token exactly when no other reservation
+	// on that limiter has landed since, so interleaved requests from one client
+	// could lose a token on refund. Other clients are unaffected.
+	flow sync.Mutex
 }
 
 func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.SecurityMetricsService, log logger.StyledLogger) *RateLimitValidator {
@@ -146,7 +151,14 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 	result := ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}
 	var charge ipCharge
 	if limit > 0 {
-		result, charge = rl.checkIPLimit(req.ClientID, limit, now, req.IsHealthCheck)
+		bucketKey := req.ClientID
+		if req.IsHealthCheck {
+			bucketKey += ":health"
+		}
+		info := rl.getOrCreateLimiter(bucketKey, limit)
+		info.flow.Lock()
+		defer info.flow.Unlock()
+		result, charge = rl.checkIPLimit(info, limit, now)
 		if !result.Allowed {
 			return result, nil
 		}
@@ -186,18 +198,12 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 // Returns a SecurityResult with rate metadata and retry after guidance, plus a
 // charge that can return the consumed token when the request is later rejected
 // by the global tier (zero value unless the request was admitted).
-func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.Time, isHealthEndpoint bool) (ports.SecurityResult, ipCharge) {
+func (rl *RateLimitValidator) checkIPLimit(limiterInfo *ipLimiterInfo, limit int, now time.Time) (ports.SecurityResult, ipCharge) {
 	// Callers gate on limit > 0, but 60/limit below would panic if that ever slipped.
 	if limit <= 0 {
 		return ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}, ipCharge{}
 	}
 
-	bucketKey := clientIP
-	if isHealthEndpoint {
-		bucketKey = clientIP + ":health"
-	}
-
-	limiterInfo := rl.getOrCreateLimiter(bucketKey, limit)
 	limiterInfo.mu.Lock()
 	limiterInfo.lastAccess = now
 
