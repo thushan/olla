@@ -28,7 +28,7 @@ LDFLAGS := -ldflags "\
 	-X '$(PKG).Tool=$(TOOL)' \
 	-X '$(PKG).User=$(USER)'"
 
-.PHONY: run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration test-script-sticky test-auth-bearer test-auth-env-fatal test-auth-manual build-web install-web clean-web lint-web test-web ci-web check-fonts-web
+.PHONY: smoke-build-local run clean build test test-verbose test-short test-race test-cover bench version install-deps check-deps vet test-script-integration test-script-sticky test-auth-bearer test-auth-env-fatal test-auth-manual build-web install-web clean-web lint-web test-web ci-web check-fonts-web
 
 # Build the application with version info. Depends on build-web so the binary
 # always embeds the current frontend; this is where the "build fresh every
@@ -217,6 +217,11 @@ build-local:
 	@echo "Building local binaries to ./build/..."
 	@goreleaser build --snapshot --clean --single-target --output ./build/olla$(shell go env GOEXE)
 	@echo "Binary created: ./build/olla$(shell go env GOEXE)"
+
+# Prove build-local works from a clean and a pre-populated build/ (needs goreleaser and bun).
+# Deletes ./build, so it needs OLLA_SMOKE_OK=1 and belongs in a scratch worktree.
+smoke-build-local:
+	@./scripts/smoke-build-local.sh
 
 # Build full snapshot release (with archives) to ./dist directory
 build-snapshot:
@@ -617,6 +622,7 @@ help:
 	@echo "  validate-windows- Build and test Windows binaries (AMD64 + ARM64)"
 	@echo "  validate-all-platforms - Build all 6 platform combinations (local testing)"
 	@echo "  build-local     - Build binary only to ./build/olla (fast, for testing)"
+	@echo "  smoke-build-local - Check build-local from clean and dirty build/ (OLLA_SMOKE_OK=1)"
 	@echo "  build-snapshot  - Build full release to ./dist/ (archives, checksums, etc)"
 	@echo "  docker-build    - Build Docker images locally"
 	@echo "  docker-run      - Run Docker image with local config"
