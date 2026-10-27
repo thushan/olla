@@ -22,7 +22,7 @@ names and config keys are the literal wire or YAML identifiers.
 connection failed discovery for that endpoint until the next interval. Discovery now retries connection errors,
 timeouts and 5xx responses, doubling `retry_backoff` (capped at 30s) between attempts. All attempts share the
 existing `timeout`, so a cycle never runs longer than it did before. Parse errors, 4xx responses and listings over
-the 10MB cap are not retried, and a cycle that still fails counts as one failure towards the five-failure cooldown.
+the 10MB cap are not retried, and a cycle that still fails on a retryable error counts as one failure towards the five-failure cooldown.
 A negative `retry_backoff` is now rejected at startup.
 
 ### Fixed: model discovery no longer sends backend credentials to `HTTP_PROXY` or across hosts

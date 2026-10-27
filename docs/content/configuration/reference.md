@@ -514,9 +514,10 @@ straight away, since asking again moments later returns the same thing. The firs
 retries and the waits between them all share one `timeout`, so a discovery cycle (including the
 pass that runs before startup completes) never takes longer than `timeout` per endpoint, however
 many retries are set. A request that itself times out leaves nothing to retry with, and a retry
-whose wait would outlast the remaining time is skipped. A cycle that ends in failure counts as
-**one** failure towards the endpoint's five-failure cooldown, so a brief outage does not pause
-discovery for minutes. The discovery client's own failed-request metric counts every attempt, so it can
+whose wait would outlast the remaining time is skipped. A cycle that ends in a retryable failure
+counts as **one** failure towards the endpoint's five-failure cooldown, so a brief outage does not
+pause discovery for minutes. A 4xx response is not retried and pauses the endpoint for the cooldown
+straight away, as before. The discovery client's own failed-request metric counts every attempt, so it can
 exceed the cooldown's count. Stopping Olla mid-retry is not counted as a failure.
 
 Example:
