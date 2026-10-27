@@ -743,6 +743,10 @@ func TestBodyInspector_BodyDecidesNotContentType(t *testing.T) {
 		{name: "multipart even if body looks like JSON", body: embedBody, contentType: "multipart/form-data; boundary=b", wantUntouch: true},
 		{name: "gzip body", body: "\x1f\x8b\x08\x00binary", contentType: "application/json", encoding: "gzip", wantUntouch: true},
 		{name: "encoded header on JSON-looking body", body: embedBody, contentType: "application/json", encoding: "gzip", wantUntouch: true},
+		{name: "identity encoding is no encoding", body: embedBody, contentType: "application/json", encoding: "identity", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "identity encoding, padded and mixed case", body: embedBody, contentType: "application/json", encoding: "  Identity ", wantModel: "nomic-embed-text", wantEmbed: true},
+		{name: "br body", body: embedBody, contentType: "application/json", encoding: "br", wantUntouch: true},
+		{name: "encoding list with identity is still encoded", body: embedBody, contentType: "application/json", encoding: "gzip, identity", wantUntouch: true},
 		{name: "real form body", body: "model=nomic-embed-text&input=hi", contentType: "application/x-www-form-urlencoded", wantUntouch: true},
 		{name: "binary body", body: "\x00\x01\x02model\xff", contentType: "application/octet-stream", wantUntouch: true},
 		{name: "array body", body: `[{"model":"x"}]`, contentType: "application/json", wantUntouch: true},
@@ -980,4 +984,34 @@ func TestBodyInspector_LeadingWhitespaceIsBounded(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, body == string(got), "body must be restored byte-for-byte")
 	})
+}
+
+// A second Content-Encoding header line can carry a real coding even when the first says identity.
+func TestBodyInspector_RepeatedContentEncodingHeaders(t *testing.T) {
+	t.Parallel()
+	log, _, err := logger.New(&logger.Config{Level: "debug", PrettyLogs: false})
+	require.NoError(t, err)
+	bi, err := NewBodyInspector(&mockStyledLogger{underlying: log})
+	require.NoError(t, err)
+
+	const body = `{"model":"nomic-embed-text"}`
+	for _, tt := range []struct {
+		name      string
+		values    []string
+		wantModel string
+	}{
+		{"identity then gzip", []string{"identity", "gzip"}, ""},
+		{"identity twice", []string{"identity", "identity"}, "nomic-embed-text"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := &http.Request{Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), ContentLength: int64(len(body))}
+			for _, v := range tt.values {
+				req.Header.Add("Content-Encoding", v)
+			}
+			profile := domain.NewRequestProfile("/v1/chat/completions")
+			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+			assert.Equal(t, tt.wantModel, profile.ModelName)
+		})
+	}
 }
