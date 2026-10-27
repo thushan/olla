@@ -36,6 +36,12 @@ api:
 
     # Vision and multimodal (SGLang-specific)
     - /v1/chat/completions/vision # 10: vision chat completions
+    # Anthropic paths need SGLang 0.5.9+; older releases 404. /v1/rerank only answers
+    # when the server is serving a reranker model.
+    - /v1/responses # 11: OpenAI Responses API
+    - /v1/messages # 12: Anthropic Messages API
+    - /v1/messages/count_tokens # 13: Anthropic token count
+    - /v1/rerank # 14: reranking API
 
   model_discovery_path: /v1/models
   health_check_path: /health

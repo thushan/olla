@@ -375,6 +375,15 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
+		// /olla/anthropic/v1/messages is Olla's own route, not a path any backend serves,
+		// but the path inspector suffix-matches it against profiles that declare
+		// /v1/messages. Declaring that path on more profiles would otherwise evict the
+		// ones that don't (Lemonade, LiteLLM, TEI) from translation. Clear the narrowing
+		// until selection follows each backend's real chat path.
+		if pr.profile != nil {
+			pr.profile.SupportedBy = nil
+		}
+
 		// Inject sticky session key. bodyBytes is already buffered from the model-name
 		// extraction above, so pass it directly to avoid a second read/restore cycle.
 		// The outcome pointer is stored in context; sub-handlers read it before WriteHeader.

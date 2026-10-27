@@ -153,6 +153,10 @@ api:
 - Paths are exact matches (no wildcards)
 - Order matters for `path_indices` references
 
+**Mixed fleets:**
+
+Declared paths also pick the candidate backends for a request. When any profile in the fleet declares the request path, only the profiles that declare it stay candidates. A backend that serves a path but does not declare it is therefore dropped from that path as soon as another backend declares it. The shipped profiles declare the standard `/v1/responses`, `/v1/messages`, `/v1/messages/count_tokens` and `/v1/rerank` paths for the backends that serve them, and a custom profile in `config/profiles/` that serves them needs the same entries.
+
 **Security benefit:**
 
 - Prevents access to administrative or dangerous endpoints
