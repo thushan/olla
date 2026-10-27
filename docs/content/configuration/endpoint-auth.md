@@ -253,6 +253,18 @@ backend and that backend echoes the header back in its response, Olla removes it
 credential cannot leak back out. The strip is keyed on the header *name* you configured, not on
 anything the client sends, so custom client headers keep working as before.
 
+## Proxies and Redirects
+
+Credentials from `auth:` and `headers:` are sent on health checks, model discovery and
+proxied requests. For all three, Olla connects to the backend directly and ignores the
+`HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` environment variables, so a proxy on the Olla host
+never sees your tokens. Make each backend reachable from the Olla host.
+
+Health checks and model discovery follow a redirect only when it stays on the same host and
+port (a same-host `http` to `https` upgrade is fine). A redirect to anywhere else is treated
+as a failed check or discovery, so the credential headers are never replayed at a host you
+did not configure.
+
 ## Fatal Startup Behaviour
 
 Auth validation runs before the HTTP server starts. The process exits immediately on:

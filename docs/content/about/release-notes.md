@@ -16,6 +16,17 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.0.30
 
+### Fixed: model discovery no longer sends backend credentials to `HTTP_PROXY` or across hosts
+
+Model discovery still honoured `HTTP_PROXY`/`HTTPS_PROXY`, so with a proxy set in the environment, a plain-HTTP
+endpoint's `auth:` token or API key went to that proxy on every discovery cycle. Discovery and the health checker also
+followed redirects to other hosts, and Go only strips `Authorization` on those, so an `api_key` header or custom
+`headers:` entry could be replayed at the redirect target. Both now connect directly and stop at a redirect that
+leaves the configured host and port (a same-host `http` to `https` upgrade is still followed), so a cross-host redirect
+counts as a failed discovery or health check. Loopback endpoints were never proxied, so only setups that relied on `HTTP_PROXY`
+to let discovery reach a non-loopback backend are affected: that backend now needs to be reachable directly from the Olla host,
+as chat traffic already required.
+
 ### Added: Text Embeddings Inference backend
 
 Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)
@@ -74,9 +85,9 @@ captured by TEI's `/embed`. Ollama embedding-only models are typed `embeddings` 
 untyped), so `/v1/embeddings` still reaches them when a TEI instance is in the fleet.
 
 Because `/api/embed` is now a recognised Ollama path, `/olla/ollama/api/embed` checks the requested
-model like Ollama's other routes. Name the model as Ollama lists it, tag included: a model pulled
-without a tag lists as `all-minilm:latest`, and a bare `all-minilm` now gets a 404 `model_not_found`
-here, as it already did on `/api/chat`. Resolving bare names to `:latest` is a separate fix.
+model like Ollama's other routes. A model pulled
+without a tag lists as `all-minilm:latest`; a bare `all-minilm` resolves to it here, as it now does
+on every other route (see the untagged-names fix below).
 
 ### Fixed: LM Studio model types and capabilities
 
@@ -87,6 +98,19 @@ now wins, so those models gain the capabilities their type implies: `vision`,
 `multimodal` and `image-understanding` for `vlm`, `embeddings`, `similarity` and
 `vector-search` (without `text-generation`) for embeddings, and `chat` and `completion`
 for `llm`. Model-less vision and embeddings requests are steered to those models.
+
+### Fixed: crash under concurrent model discovery and requests
+
+Olla could exit with `fatal error: concurrent map iteration and map write` (or `concurrent map write`) when a model listing, alias lookup or status request ran while discovery was merging the same model from a second endpoint, re-registering it, or removing an endpoint. The unifier was editing model records that request handlers were still reading. It now edits a private copy and publishes it, so readers always see a complete record. The unified-stats counters behind the status endpoints are also guarded now. Nothing needs changing in your config.
+
+### Fixed: Ollama model names without a tag
+
+A model pulled with `ollama pull all-minilm` is listed as `all-minilm:latest`, and Ollama accepts
+`all-minilm` for it, but Olla returned a 404 `model_not_found` for the bare name on `/olla/proxy/`,
+the provider prefixes, `/olla/anthropic/v1/messages` and `GET /olla/models/{id}`. When no endpoint
+serves the exact name, Olla now retries once as `<name>:latest` against Ollama endpoints only, so a
+vLLM `foo:latest` still never answers `foo`. The request goes to Ollama as you wrote it, and `foo`
+and `foo:latest` share one stats row, and one sticky key when it is built from the model name (`prefix_hash` hashes the raw body, so it still differs). Nothing to change on your side.
 
 ## v0.0.29
 

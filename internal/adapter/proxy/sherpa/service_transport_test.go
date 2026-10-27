@@ -43,7 +43,8 @@ func newSherpaServiceForTransportTest(t *testing.T) *Service {
 // TestSherpaTransport_NoProxyFromEnvironment asserts that the Sherpa proxy
 // transport does NOT honour HTTP_PROXY/HTTPS_PROXY. Olla targets local
 // inference backends; routing credentialled requests through an outbound proxy
-// on plain HTTP is a credential-exposure risk. Health probes keep the env proxy.
+// on plain HTTP is a credential-exposure risk. Health probes and model discovery
+// follow the same policy.
 func TestSherpaTransport_NoProxyFromEnvironment(t *testing.T) {
 	t.Parallel()
 

@@ -10,7 +10,7 @@ Proxy endpoints for Ollama instances. All Ollama API endpoints are available thr
 | POST | `/olla/ollama/api/generate` | Generate completion |
 | POST | `/olla/ollama/api/chat` | Chat completion |
 | POST | `/olla/ollama/api/embeddings` | Generate embeddings |
-| POST | `/olla/ollama/api/embed` | Generate embeddings (newer form of `/api/embeddings`; `model` must be the full tag, such as `nomic-embed-text:latest`) |
+| POST | `/olla/ollama/api/embed` | Generate embeddings (newer form of `/api/embeddings`; a name without a tag, such as `nomic-embed-text`, resolves to `nomic-embed-text:latest`) |
 | GET | `/olla/ollama/api/tags` | List local models |
 | POST | `/olla/ollama/api/show` | _Not supported in multi-instance proxy_ (returns 501) |
 | POST | `/olla/ollama/api/pull` | _Not supported in multi-instance proxy_ (returns 501) |

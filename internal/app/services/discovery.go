@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"sync/atomic"
+	"time"
 
 	"github.com/thushan/olla/internal/adapter/discovery"
+	"github.com/thushan/olla/internal/adapter/factory"
 	"github.com/thushan/olla/internal/adapter/health"
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -143,9 +145,7 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 	}
 
 	if s.config.ModelDiscovery.Enabled {
-		httpClient := &http.Client{
-			Timeout: s.config.ModelDiscovery.Timeout,
-		}
+		httpClient := newDiscoveryHTTPClient(s.config.ModelDiscovery.Timeout)
 		profileFactory, err := profile.NewFactoryWithDefaults()
 		if err != nil {
 			return fmt.Errorf("failed to create profile factory: %w", err)
@@ -296,4 +296,18 @@ func (s *DiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoint *d
 		return errors.New("endpoint repository not initialized")
 	}
 	return s.endpointRepo.UpdateEndpoint(ctx, endpoint)
+}
+
+// newDiscoveryHTTPClient builds the client model discovery uses. Discovery sends
+// the endpoint's auth and custom headers, so it must not route through an
+// environment proxy or follow a redirect to another host; both come from the
+// shared backend constructor. Timeout is the configured per-request budget.
+func newDiscoveryHTTPClient(timeout time.Duration) *http.Client {
+	return factory.NewBackendHTTPClient(factory.BackendClientOptions{
+		Timeout:             timeout,
+		MaxIdleConns:        discovery.DefaultMaxIdleConnections,
+		MaxIdleConnsPerHost: discovery.DefaultMaxIdleConnectionsPerHost,
+		IdleConnTimeout:     discovery.DefaultIdleConnTimeout,
+		TLSHandshakeTimeout: 10 * time.Second,
+	})
 }

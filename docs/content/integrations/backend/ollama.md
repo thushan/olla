@@ -300,7 +300,7 @@ curl -X POST http://localhost:40114/olla/ollama/api/embeddings \
   }'
 ```
 
-The newer `/api/embed` endpoint works the same way. Olla checks its `model` field against the models it knows, so give the full name as Ollama lists it, tag included (`nomic-embed-text:latest`, not `nomic-embed-text`). A bare name gets a 404 `model_not_found`.
+The newer `/api/embed` endpoint works the same way. Olla checks its `model` field against the models it knows, and a name without a tag is looked up as `name:latest`, so `nomic-embed-text` and `nomic-embed-text:latest` reach the same model.
 
 Newer Ollama releases report each model's `capabilities` in `/api/tags`. Olla types a model that lists `embedding` but not `completion` as `embeddings`, so `/v1/embeddings` requests are routed to it and `?type=embeddings` on `/olla/models` includes it. Older Ollama versions omit the field and their embedding models stay untyped.
 

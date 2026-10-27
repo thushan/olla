@@ -38,6 +38,7 @@ type SourceEndpoint struct {
 	EndpointURL    string             `json:"-"` // Hidden from JSON output for security
 	EndpointName   string             `json:"endpoint_name"`
 	NativeName     string             `json:"native_name"` // Original name on this platform
+	Platform       string             `json:"-"`           // Platform that serves it (ollama, vllm, ...); scopes name rules such as the Ollama default tag
 	State          string             `json:"state"`       // loaded, not-loaded, etc.
 	ModelState     ModelState         `json:"model_state"` // New typed state
 	DiskSize       int64              `json:"disk_size"`
@@ -95,6 +96,85 @@ func (u *UnifiedModel) HasAlias(alias string) bool {
 		}
 	}
 	return false
+}
+
+// Clone returns a deep copy that shares no mutable memory with the receiver,
+// including nested Metadata maps and slices. The unifier catalog and the
+// registry publish *UnifiedModel pointers to lock-free readers, so every writer
+// must clone, mutate the clone and swap it in rather than touch a published model.
+func (u *UnifiedModel) Clone() *UnifiedModel {
+	if u == nil {
+		return nil
+	}
+	c := *u
+	if u.MaxContextLength != nil {
+		v := *u.MaxContextLength
+		c.MaxContextLength = &v
+	}
+	if u.Aliases != nil {
+		c.Aliases = make([]AliasEntry, len(u.Aliases))
+		copy(c.Aliases, u.Aliases)
+	}
+	if u.Capabilities != nil {
+		c.Capabilities = make([]string, len(u.Capabilities))
+		copy(c.Capabilities, u.Capabilities)
+	}
+	if u.SourceEndpoints != nil {
+		c.SourceEndpoints = make([]SourceEndpoint, len(u.SourceEndpoints))
+		for i, se := range u.SourceEndpoints {
+			if se.StateInfo != nil {
+				info := *se.StateInfo
+				info.Metadata = cloneMetadataMap(se.StateInfo.Metadata)
+				se.StateInfo = &info
+			}
+			c.SourceEndpoints[i] = se
+		}
+	}
+	c.Metadata = cloneMetadataMap(u.Metadata)
+	return &c
+}
+
+func cloneMetadataMap(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		out[k] = cloneMetadataValue(v)
+	}
+	return out
+}
+
+// cloneMetadataValue copies the container types that metadata is known to carry
+// (the unifier keeps a map[string]bool under "platforms"). Scalars and unknown
+// types are shared, which is safe because nothing mutates them in place.
+func cloneMetadataValue(v interface{}) interface{} {
+	switch t := v.(type) {
+	case map[string]interface{}:
+		return cloneMetadataMap(t)
+	case map[string]bool:
+		out := make(map[string]bool, len(t))
+		for k, b := range t {
+			out[k] = b
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]string, len(t))
+		for k, s := range t {
+			out[k] = s
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(t))
+		for i, e := range t {
+			out[i] = cloneMetadataValue(e)
+		}
+		return out
+	case []string:
+		return append([]string(nil), t...)
+	default:
+		return v
+	}
 }
 
 // GetAliasStrings returns a slice of alias names for backward compatibility

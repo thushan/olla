@@ -189,7 +189,7 @@ A request for `"model": "llama3"` will:
 **Solutions**:
 
 1. Check discovered models: `curl http://localhost:40114/olla/models`
-2. Verify model names match exactly (including tags like `:latest`)
+2. Verify model names match exactly (including tags like `:latest`; only Ollama models answer to a name without one)
 3. Wait for model discovery to complete or trigger a refresh
 
 ### Wrong Model Name Sent to Backend
