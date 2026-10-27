@@ -478,6 +478,10 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 
 	if err != nil {
 		logFields := a.buildLogFields(pr, duration)
+		// What the client actually got, so a truncated 200 reads differently from a 502.
+		if pr.upstreamStatus > 0 {
+			logFields = append(logFields, "http_status", pr.upstreamStatus)
+		}
 		pr.requestLogger.Error("Request failed", append([]any{"error", err}, logFields...)...)
 	} else {
 		// Log essential completion info at INFO level

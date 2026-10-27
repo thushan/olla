@@ -179,6 +179,7 @@ func TestRequestCompleted_CarriesBackendStatus(t *testing.T) {
 		{"backend 429 is the caller's problem", http.StatusTooManyRequests, false, "INFO"},
 		{"backend 502", http.StatusBadGateway, false, "WARN"},
 		{"backend 503", http.StatusServiceUnavailable, false, "WARN"},
+		{"backend 502 streaming", http.StatusBadGateway, true, "WARN"},
 	}
 
 	for _, engine := range []string{"sherpa", "olla"} {
@@ -235,5 +236,40 @@ func TestRequestRejected_NotDuplicatedByCompletion(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// errorCapturingLogger records the fields of Error calls.
+type errorCapturingLogger struct {
+	mockStyledLogger
+	errFields []any
+}
+
+func (e *errorCapturingLogger) Error(_ string, args ...any) { e.errFields = args }
+
+// A failure after the response was committed must say what the client got.
+func TestLogRequestResult_FailureCarriesHTTPStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		status int
+		want   bool
+	}{{http.StatusOK, true}, {0, false}} {
+		el := &errorCapturingLogger{}
+		cl := &capturingLogger{}
+		pr := makeTestPR(cl)
+		pr.requestLogger = el
+		pr.upstreamStatus = tc.status
+
+		(&Application{logger: cl}).logRequestResult(pr, fmt.Errorf("stream broke"))
+
+		has := false
+		for i := 0; i+1 < len(el.errFields); i += 2 {
+			if el.errFields[i] == "http_status" {
+				has = true
+				assert.Equal(t, tc.status, el.errFields[i+1])
+			}
+		}
+		assert.Equal(t, tc.want, has, "status %d fields %v", tc.status, el.errFields)
 	}
 }

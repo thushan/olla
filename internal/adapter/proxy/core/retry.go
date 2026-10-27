@@ -106,8 +106,12 @@ func (rw *ResponseStartedWriter) Unwrap() http.ResponseWriter {
 // bytes to the client immediately, so the commit has already happened by the
 // time this call is made, even if the underlying flush itself then fails.
 func (rw *ResponseStartedWriter) FlushError() error {
-	wasStarted := rw.started
+	wasStarted, wasStatus := rw.started, rw.status
 	rw.started = true
+	// A bare flush commits an implicit 200, same as a body write.
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
 
 	rc := http.NewResponseController(rw.ResponseWriter)
 	if err := rc.Flush(); err != nil {
@@ -116,7 +120,7 @@ func (rw *ResponseStartedWriter) FlushError() error {
 		// (dead connection, etc.) may have partially written bytes before
 		// failing, so started stays true.
 		if errors.Is(err, http.ErrNotSupported) {
-			rw.started = wasStarted
+			rw.started, rw.status = wasStarted, wasStatus
 		}
 		return err
 	}
