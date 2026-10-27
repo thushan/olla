@@ -459,6 +459,9 @@ func TestTranslation_PreservePathBaseNotDuplicated(t *testing.T) {
 		{"docker-model-runner", "/engines/llama.cpp", "/engines/llama.cpp/v1/chat/completions", "/engines/llama.cpp/v1/chat/completions"},
 		{"docker-model-runner", "/engines/vllm/", "/engines/vllm/v1/chat/completions", "/engines/vllm/v1/chat/completions"},
 		{"vllm", "/gw", rootChatPath, "/gw/v1/chat/completions"},
+		{"lemonade", "/gw/api", lemonadeChatPath, "/gw/api/v1/chat/completions"},
+		{"docker-model-runner", "/gw/engines/llama.cpp", "", "/gw/engines/llama.cpp/v1/chat/completions"},
+		{"docker-model-runner", "/gw", "", "/gw/engines/v1/chat/completions"},
 	}
 	for _, engine := range translationEngines {
 		for _, st := range translationStreaming {

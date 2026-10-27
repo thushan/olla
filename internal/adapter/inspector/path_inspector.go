@@ -191,14 +191,22 @@ func (pi *PathInspector) ResolveTargetPath(profileName, target string) (string, 
 	return "", false
 }
 
-// DeclaresPath reports whether a profile declares exactly path. Unknown profile names are
-// treated as OpenAI-compatible, as in ResolveTargetPath.
-func (pi *PathInspector) DeclaresPath(profileName, path string) bool {
+// MountPrefixes returns the prefixes under which a profile mounts target: for DMR and
+// /v1/chat/completions that is /engines, /engines/llama.cpp and /engines/vllm. A target served
+// at the root contributes nothing. Unknown profile names are treated as OpenAI-compatible, as
+// in ResolveTargetPath.
+func (pi *PathInspector) MountPrefixes(profileName, target string) []string {
 	paths, ok := pi.profilePaths[profileName]
 	if !ok {
 		paths = pi.profilePaths[domain.ProfileOpenAICompatible]
 	}
-	return slices.Contains(paths, path)
+	var out []string
+	for _, p := range paths {
+		if prefix, found := strings.CutSuffix(p, target); found && prefix != "" && strings.HasPrefix(prefix, "/") {
+			out = append(out, prefix)
+		}
+	}
+	return out
 }
 
 // KnowsProfile reports whether name is a profile the inspector holds paths for. Endpoint types

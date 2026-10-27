@@ -317,11 +317,11 @@ func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, tar
 }
 
 // relativeToPreservedBase adjusts a resolved chat path for a preserve_path endpoint. The proxy
-// joins the endpoint's base onto the request path, so the path sent must be relative to it:
-//   - a base that is itself a declared mount (DMR at http://host/engines/llama.cpp) takes the
-//     plain target, which is what main sent;
-//   - a resolved path that repeats the base (Lemonade at http://host/api, resolved to
-//     /api/v1/chat/completions) loses it, or the request would hit /api/api/v1/...
+// joins the endpoint's base onto the request path, so when the base already ends in one of the
+// profile's mounts (Lemonade at http://host/api, DMR at http://host/gw/engines/llama.cpp) the
+// plain target is what must be sent; the resolved path would repeat the mount and 404. This is
+// what main sent. A base with no mount in it (a gateway prefix such as /gw) keeps the resolved
+// path, which is the mount the profile declares first.
 func (a *Application) relativeToPreservedBase(ep *domain.Endpoint, profileName, target, resolved string) string {
 	if !ep.PreservePath || ep.URL == nil {
 		return resolved
@@ -330,11 +330,10 @@ func (a *Application) relativeToPreservedBase(ep *domain.Endpoint, profileName, 
 	if base == "" {
 		return resolved
 	}
-	if a.pathInspector.DeclaresPath(profileName, base+target) {
-		return target
-	}
-	if strings.HasPrefix(resolved, base+"/") {
-		return resolved[len(base):]
+	for _, mount := range a.pathInspector.MountPrefixes(profileName, target) {
+		if base == mount || strings.HasSuffix(base, mount) {
+			return target
+		}
 	}
 	return resolved
 }
