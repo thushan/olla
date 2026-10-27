@@ -199,12 +199,12 @@ A request for `"model": "llama3"` will:
 **Possible Causes**:
 
 - Actual model name in the alias list doesn't exactly match the model name reported by the backend
-- Request body is not JSON
+- Request body is not a JSON object (the body decides, the `Content-Type` header is ignored)
 
 **Solutions**:
 
 1. Compare alias model names against discovered models: `curl http://localhost:40114/olla/models`
-2. Ensure requests use `Content-Type: application/json`
+2. Ensure the request body is a JSON object with a top-level `model` field
 
 ### Alias Overriding a Real Model
 

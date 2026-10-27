@@ -171,10 +171,8 @@ Global and per-IP rate limits are enforced:
 
 ## Request Headers
 
-### Required Headers
-- `Content-Type: application/json` for POST requests
-
 ### Optional Headers
+- `Content-Type: application/json` for POST requests (recommended; Olla reads the model from a JSON body whatever the header says)
 - `X-Request-ID` - Custom request ID for tracing
 
 ## Response Headers
