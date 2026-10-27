@@ -138,7 +138,7 @@ Sizing guidelines:
 
 - Set global limit to 80% of tested capacity
 - Per-IP limits prevent single client abuse
-- Health endpoints need higher limits for monitoring
+- Health endpoints are not rate limited, so monitoring is never throttled
 - Burst size handles temporary spikes
 
 ### Request Size Limits

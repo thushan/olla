@@ -31,7 +31,7 @@ long" on Git Bash/Windows.
    `Retry-After` or an `X-RateLimit-*` header — FAIL if neither is present.
    A 403 in place of 429 is a FAIL (it was the pre-fix masking bug).
 5. Health exemption: while rate-limited, `GET /internal/health` on 41142
-   still 200 (health has its own generous limit).
+   still 200 (health endpoints are not rate limited).
 6. Malformed JSON (`{"model":`) → must not 5xx and must not hang; record the
    observed status (2xx or 4xx are both acceptable). Olla is a transparent
    proxy and delegates body validation to the backend by design — it

@@ -166,7 +166,7 @@ Global and per-IP rate limits are enforced:
 |------------|---------------|
 | Global requests/minute | 1000 |
 | Per-IP requests/minute | 100 |
-| Health endpoint requests/minute | 1000 |
+| Health endpoint requests/minute | Not applied (health endpoints are not rate limited) |
 | Burst size | 50 |
 
 ## Request Headers

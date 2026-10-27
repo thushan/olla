@@ -87,8 +87,8 @@ proxy:
   # Failover: when a connection to a backend fails (refused, reset, timeout,
   # network unreachable), Olla marks that endpoint unhealthy and retries the
   # request on the other healthy endpoints, each tried once. This is automatic
-  # and not configurable; there is no proxy.retry block, and only a
-  # single-endpoint setup avoids it.
+  # and not configurable; there is no proxy.retry block. A request with only
+  # one eligible endpoint has nowhere to fail over to.
 
 discovery:
   type: "static"

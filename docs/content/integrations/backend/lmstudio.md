@@ -347,7 +347,7 @@ discovery:
         type: "lm-studio"
 ```
 
-`priority` balancing does not help here: it sends every request to the highest-priority healthy endpoint and only moves to the next when that endpoint is unhealthy, not when it is busy.
+`priority` balancing with unequal priorities does not help here: it sends every request to the highest-priority healthy endpoints and only moves to a lower tier when those are unhealthy, not when they are busy.
 
 ## Best Practices
 
