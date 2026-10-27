@@ -174,12 +174,37 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
-			name:     "Ollama completion model keeps text-generation without embeddings",
+			name:     "Ollama vision model is a vlm that still generates text",
 			models:   parseOllamaModels(t, `{"models":[{"name":"qwen3-vl:8b","details":{"family":"qwen3vl"},"capabilities":["completion","vision","tools"]}]}`),
 			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
-				assert.Contains(t, model.Capabilities, "text-generation")
+				assert.Equal(t, "vlm", domain.ModelKindFromMetadata(model.Metadata))
+				assert.Contains(t, model.Capabilities, "text-generation", "a vlm is generative, so the kind must not strip it")
+				assert.Contains(t, model.Capabilities, "vision")
+				assert.Contains(t, model.Capabilities, "multimodal")
+				assert.Contains(t, model.Capabilities, "function_calling")
 				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			name:     "Ollama tools model has function calling and keeps text-generation",
+			models:   parseOllamaModels(t, `{"models":[{"name":"gpt-oss:20b","capabilities":["completion","tools"]}]}`),
+			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "text-generation")
+				assert.Contains(t, model.Capabilities, "function_calling")
+				assert.NotContains(t, model.Capabilities, "vision")
+				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			name:     "Ollama completion-only model has neither vision nor function calling",
+			models:   parseOllamaModels(t, `{"models":[{"name":"llama3:8b","details":{"family":"llama"},"capabilities":["completion"]}]}`),
+			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "text-generation")
+				assert.NotContains(t, model.Capabilities, "vision")
+				assert.NotContains(t, model.Capabilities, "function_calling")
 			},
 		},
 		{

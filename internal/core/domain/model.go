@@ -23,6 +23,10 @@ type ModelDetails struct {
 	Checkpoint        *string    `json:"checkpoint,omitempty"` // Lemonade: HuggingFace model path
 	Recipe            *string    `json:"recipe,omitempty"`     // Lemonade: inference engine (oga-cpu, oga-npu, llamacpp, flm)
 	Families          []string   `json:"families,omitempty"`
+	// Capabilities are capabilities the backend declared for the model, already in
+	// Olla's vocabulary (vision, function_calling). They are added to what the
+	// model's kind and name imply.
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 type ModelInfo struct {

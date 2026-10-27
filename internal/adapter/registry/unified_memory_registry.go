@@ -587,7 +587,7 @@ func capabilityMatches(modelCap, requestedCap string) bool {
 		return modelCap == "vision" || modelCap == "vision_understanding" || modelCap == "image"
 	case capabilityCode, "code_generation":
 		return modelCap == capabilityCode || modelCap == "code_generation"
-	case "function", "function_calling":
+	case "function", "function_calling", "tools":
 		return modelCap == "function" || modelCap == "function_calling" || modelCap == "tools"
 	case "streaming", "stream":
 		return modelCap == "streaming" || modelCap == "stream"

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry"
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
@@ -201,4 +202,76 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Ollama 0.30+ reports vision and tools in /api/tags. A vision model with no vision hint in
+// its name must list as vlm, and a pre-0.30 host (no capabilities field) must not change.
+func TestUnifiedModelsHandler_OllamaCapabilitiesListVision(t *testing.T) {
+	t.Parallel()
+
+	log, _, _ := logger.New(&logger.Config{Level: "error", Theme: "default"})
+	styledLogger := logger.NewPlainStyledLogger(log)
+	ctx := context.Background()
+
+	ollamaURL, _ := url.Parse("http://ollama-new:11434")
+	oldURL, _ := url.Parse("http://ollama-old:11434")
+	newHost := &domain.Endpoint{Name: "ollama-new", URL: ollamaURL, URLString: ollamaURL.String(), Status: domain.StatusHealthy, Type: domain.ProfileOllama}
+	oldHost := &domain.Endpoint{Name: "ollama-old", URL: oldURL, URLString: oldURL.String(), Status: domain.StatusHealthy, Type: domain.ProfileOllama}
+
+	profileFactory, err := profile.NewFactory("../../../config/profiles")
+	require.NoError(t, err)
+	prof, err := profileFactory.GetProfile(domain.ProfileOllama)
+	require.NoError(t, err)
+
+	reg := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
+	register := func(ep *domain.Endpoint, tags string) {
+		models, perr := prof.ParseModelsResponse([]byte(tags))
+		require.NoError(t, perr)
+		reg.RegisterEndpoint(ep)
+		require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, ep, models))
+	}
+	register(newHost, `{"models":[
+		{"name":"qwen3-vl:8b","details":{"family":"qwen3vl"},"capabilities":["completion","vision","tools"]},
+		{"name":"gpt-oss:20b","capabilities":["completion","tools"]}]}`)
+	register(oldHost, `{"models":[{"name":"mistral-small3.2:24b"}]}`)
+	require.Eventually(t, func() bool {
+		models, gerr := reg.GetUnifiedModels(ctx)
+		return gerr == nil && len(models) == 3
+	}, 5*time.Second, 10*time.Millisecond, "async unification did not complete")
+
+	app := &Application{
+		modelRegistry:    reg,
+		repository:       &mockRepository{endpoints: []*domain.Endpoint{newHost, oldHost}},
+		converterFactory: converter.NewConverterFactory(),
+		logger:           styledLogger,
+	}
+
+	list := func(query string) map[string][]string {
+		w := httptest.NewRecorder()
+		app.unifiedModelsHandler(w, httptest.NewRequest(http.MethodGet, "/olla/models?"+query, nil))
+		require.Equal(t, http.StatusOK, w.Code, query)
+		var resp converter.UnifiedModelResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		got := make(map[string][]string, len(resp.Data))
+		for _, m := range resp.Data {
+			require.NotNil(t, m.Olla)
+			got[m.ID] = m.Olla.Capabilities
+		}
+		return got
+	}
+
+	for _, query := range []string{"type=vlm", "capability=vision", "capability=multimodal"} {
+		got := list(query)
+		require.Len(t, got, 1, query)
+		assert.Contains(t, got["qwen3-vl:8b"], "vision", query)
+		assert.Contains(t, got["qwen3-vl:8b"], "function_calling", query)
+		assert.Contains(t, got["qwen3-vl:8b"], "text-generation", query)
+	}
+
+	all := list("")
+	require.Len(t, all, 3)
+	assert.Contains(t, all["gpt-oss:20b"], "function_calling")
+	assert.NotContains(t, all["gpt-oss:20b"], "vision")
+	assert.NotContains(t, all["mistral-small3.2:24b"], "vision", "a host with no capabilities field is unchanged")
+	assert.NotContains(t, all["mistral-small3.2:24b"], "function_calling")
 }
