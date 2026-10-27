@@ -329,7 +329,7 @@ characteristics:
 
 **Issue**: Concurrent requests fail
 
-**Solution**: Olla does not cap or queue concurrent requests per endpoint (`max_concurrent_requests` is profile metadata and is not enforced), so requests that arrive together are all forwarded to LM Studio. Limit parallelism with LM Studio's own concurrency settings. To spread load, run more than one endpoint serving the model and use `least-connections` or `round-robin`:
+**Solution**: Olla does not apply the profile's `max_concurrent_requests` (it is metadata and is not enforced), so requests that arrive together are forwarded to LM Studio up to the proxy's own per-host connection cap. Limit parallelism with LM Studio's own concurrency settings. To spread load, run more than one endpoint serving the model and use `least-connections` or `round-robin`:
 
 ```yaml
 proxy:

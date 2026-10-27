@@ -736,9 +736,12 @@ discovery:
 
 ### 3. Rank Backends by Hardware
 
-Use `priority` to prefer faster hardware, with the others as failover:
+Use `priority` to prefer faster hardware, with the others as failover. Priorities only take effect with the `priority` load balancer:
 
 ```yaml
+proxy:
+  load_balancer: "priority"
+
 discovery:
   static:
     endpoints:
