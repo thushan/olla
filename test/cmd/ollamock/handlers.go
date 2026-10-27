@@ -38,11 +38,16 @@ type serverConfig struct {
 	name string
 	// teiKind is the model_type /info reports and the TEI routes enforce:
 	// teiKindEmbedding (also the zero value), teiKindReranker or teiKindClassifier.
-	teiKind      string
-	models       []string
+	teiKind string
+	models  []string
+	// loaded names the models /api/ps reports as resident. Empty means none.
+	loaded       []string
 	ttftMS       int
 	tps          int
 	streamChunks int
+	// tagsCapabilities makes /api/tags carry per-model capabilities, as Ollama 0.30+
+	// does. Off (the default) keeps the pre-existing listing for the main fleet.
+	tagsCapabilities bool
 }
 
 // mockServer is the central state container wired into the HTTP mux.
@@ -80,6 +85,7 @@ func (srv *mockServer) handler() http.Handler {
 	mux.HandleFunc("GET /v1/models", srv.wrap(srv.handleOpenAIModels))
 	mux.HandleFunc("GET /api/tags", srv.wrap(srv.handleOllamaTags))
 	mux.HandleFunc("GET /api/version", srv.wrap(srv.handleOllamaVersion))
+	mux.HandleFunc("GET /api/ps", srv.wrap(srv.handleOllamaPS))
 	mux.HandleFunc("GET /api/v0/models", srv.wrap(srv.handleLMStudioModels))
 	mux.HandleFunc("GET /api/v1/models", srv.wrap(srv.handleLemonadeModels))
 
@@ -102,6 +108,7 @@ func (srv *mockServer) handler() http.Handler {
 	// Inference endpoints - streaming handled in streaming.go.
 	mux.HandleFunc("POST /api/chat", srv.wrap(srv.handleOllamaChat))
 	mux.HandleFunc("POST /api/generate", srv.wrap(srv.handleOllamaGenerate))
+	mux.HandleFunc("POST /api/embed", srv.wrap(srv.handleOllamaEmbed))
 	mux.HandleFunc("POST /v1/chat/completions", srv.wrap(srv.handleOpenAIChat))
 	mux.HandleFunc("POST /v1/completions", srv.wrap(srv.handleOpenAICompletion))
 	mux.HandleFunc("POST /api/v1/chat/completions", srv.wrap(srv.handleOpenAIChat))
@@ -218,7 +225,9 @@ func (srv *mockServer) handleOllamaTags(w http.ResponseWriter, _ *http.Request) 
 		Digest     string  `json:"digest"`
 		Name       string  `json:"name"`
 		Model      string  `json:"model"`
-		Size       int64   `json:"size"`
+		// omitted entirely when empty, which is what older Ollama sends
+		Capabilities []string `json:"capabilities,omitempty"`
+		Size         int64    `json:"size"`
 	}
 	type response struct {
 		Models []model `json:"models"`
@@ -240,8 +249,160 @@ func (srv *mockServer) handleOllamaTags(w http.ResponseWriter, _ *http.Request) 
 				QuantizationLevel: q,
 			},
 		}
+		if srv.cfg.tagsCapabilities {
+			models[i].Capabilities = ollamaCapabilities(m)
+		}
 	}
 	writeJSON(w, http.StatusOK, response{Models: models})
+}
+
+// handleOllamaPS reports the models named by --loaded as resident, in Ollama's
+// /api/ps shape. Loaded state is per instance in real Ollama too, which is what
+// makes a merge across instances worth testing.
+func (srv *mockServer) handleOllamaPS(w http.ResponseWriter, _ *http.Request) {
+	type model struct {
+		Details       map[string]string `json:"details"`
+		ExpiresAt     string            `json:"expires_at"`
+		Name          string            `json:"name"`
+		Model         string            `json:"model"`
+		Digest        string            `json:"digest"`
+		Runner        string            `json:"runner"`
+		Size          int64             `json:"size"`
+		SizeVRAM      int64             `json:"size_vram"`
+		ContextLength int               `json:"context_length"`
+	}
+
+	expires := time.Now().Add(5 * time.Minute).UTC().Format(time.RFC3339)
+	models := make([]model, 0, len(srv.cfg.loaded))
+	for _, m := range srv.cfg.loaded {
+		fam, pdisp, billions, q := modelMetadata(m)
+		size := sizeBytes(billions, q)
+		models = append(models, model{
+			Name:      m,
+			Model:     m,
+			Size:      size,
+			SizeVRAM:  size,
+			ExpiresAt: expires,
+			Digest:    fmt.Sprintf("sha256:ollamock%s%s", srv.cfg.name, m),
+			Details:   map[string]string{"family": fam, "parameter_size": pdisp, "quantization_level": q},
+			// Ollama reports the loaded context window and the runner serving it
+			// (api.ProcessModelResponse); fixed plausible values, as for size.
+			ContextLength: 4096,
+			Runner:        "ggml",
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models})
+}
+
+// handleOllamaEmbed answers Ollama's native /api/embed: "input" is a string or an
+// array of strings and the reply carries one vector per input. It reuses the TEI
+// deterministic vectors so tests can tell which instance answered by header, not
+// by content. Like Ollama's EmbedHandler, an unknown model is a 404 and empty or
+// absent input is a 200 with an empty embeddings array, not an error. A request
+// with no model at all is still served: the harness sends model-less bodies to
+// check routing.
+func (srv *mockServer) handleOllamaEmbed(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Model string          `json:"model"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if req.Model != "" && len(srv.cfg.models) > 0 && !srv.hasOllamaModel(req.Model) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": fmt.Sprintf("model '%s' not found", req.Model)})
+		return
+	}
+	count, ok := ollamaEmbedInputCount(req.Input)
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid input type"})
+		return
+	}
+	embeddings := make([][]float64, count)
+	for i := range embeddings {
+		embeddings[i] = teiVector(i)
+	}
+	resp := map[string]any{"model": req.Model, "embeddings": embeddings}
+	if count > 0 {
+		resp["total_duration"] = 1000000
+		resp["load_duration"] = 500000
+		resp["prompt_eval_count"] = count
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ollamaEmbedInputCount counts the inputs of an /api/embed body. Absent, null and
+// "" all mean none; ok is false for any other type.
+func ollamaEmbedInputCount(raw json.RawMessage) (count int, ok bool) {
+	if !teiPresent(raw) {
+		return 0, true
+	}
+	var in any
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return 0, false
+	}
+	switch v := in.(type) {
+	case string:
+		if v == "" {
+			return 0, true
+		}
+		return 1, true
+	case []any:
+		for _, item := range v {
+			if _, isStr := item.(string); !isStr {
+				return 0, false
+			}
+		}
+		return len(v), true
+	}
+	return 0, false
+}
+
+// hasOllamaModel reports whether the instance serves name, treating a bare name
+// as :latest the way Ollama does.
+func (srv *mockServer) hasOllamaModel(name string) bool {
+	withTag := func(m string) string {
+		if !strings.Contains(m, ":") {
+			return m + ":latest"
+		}
+		return m
+	}
+	return slices.ContainsFunc(srv.cfg.models, func(m string) bool { return withTag(m) == withTag(name) })
+}
+
+// embedderNameHints are substrings that mark a model name as an embedder. The
+// mock has no model files to inspect, so the name stands in for what Ollama
+// reads from the model's architecture.
+var embedderNameHints = []string{"embed", "minilm", "bge-", "mxbai", "gte-", "e5-", "stella", "msmarco", "multi-qa"}
+
+// Name hints for the capabilities beyond embedding. As with embedders, the name
+// stands in for what Ollama reads from the model's template and projector.
+var (
+	visionNameHints = []string{"-vl", "llava", "vision", "gemma3", "minicpm-v"}
+	toolsNameHints  = []string{"llama3.1", "llama3.2", "llama3.3", "qwen3", "qwen2.5", "mistral", "-vl"}
+)
+
+// ollamaCapabilities returns the capabilities Ollama 0.30+ lists for a model:
+// "embedding" alone for embedders, otherwise "completion" plus "vision" and
+// "tools" where the name suggests them. Order follows Ollama's: completion first.
+func ollamaCapabilities(name string) []string {
+	lower := strings.ToLower(name)
+	if containsAny(lower, embedderNameHints) {
+		return []string{"embedding"}
+	}
+	caps := []string{"completion"}
+	if containsAny(lower, visionNameHints) {
+		caps = append(caps, "vision")
+	}
+	if containsAny(lower, toolsNameHints) {
+		caps = append(caps, "tools")
+	}
+	return caps
+}
+
+func containsAny(s string, hints []string) bool {
+	return slices.ContainsFunc(hints, func(h string) bool { return strings.Contains(s, h) })
 }
 
 // modelMetadata derives a plausible family, parameter size and quantisation

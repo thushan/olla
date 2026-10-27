@@ -36,6 +36,8 @@ func main() {
 	ttftMS := flag.Int("ttft-ms", 0, "delay in milliseconds before first streamed byte")
 	tps := flag.Int("tps", 0, "tokens per second pacing (0 = instant)")
 	streamChunks := flag.Int("stream-chunks", 5, "number of content chunks per streamed response")
+	tagsCapabilities := flag.Bool("tags-capabilities", false, "emit per-model capabilities in /api/tags, as Ollama 0.30+ does; off by default so the main fleet's listing is unchanged")
+	loaded := flag.String("loaded", "", "comma-separated models /api/ps reports as resident (empty = none)")
 	teiKind := flag.String("tei-kind", teiKindEmbedding, "kind of model a TEI instance reports in /info and serves: embedding, reranker or classifier")
 	flag.Parse()
 
@@ -47,12 +49,14 @@ func main() {
 	modelList := parseModels(*models)
 
 	cfg := serverConfig{
-		name:         *name,
-		models:       modelList,
-		ttftMS:       *ttftMS,
-		tps:          *tps,
-		streamChunks: *streamChunks,
-		teiKind:      *teiKind,
+		name:             *name,
+		models:           modelList,
+		ttftMS:           *ttftMS,
+		tps:              *tps,
+		streamChunks:     *streamChunks,
+		tagsCapabilities: *tagsCapabilities,
+		loaded:           parseLoaded(*loaded),
+		teiKind:          *teiKind,
 	}
 
 	srv := newServer(cfg)
@@ -101,6 +105,18 @@ func parseModels(s string) []string {
 	}
 	if len(out) == 0 {
 		out = []string{"test-model"}
+	}
+	return out
+}
+
+// parseLoaded splits the --loaded list. Unlike --models it has no default: an
+// empty value means nothing is resident.
+func parseLoaded(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
 	}
 	return out
 }

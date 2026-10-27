@@ -26,8 +26,9 @@ One reusable suite, two depths:
 **If neither flag is given, ask** with AskUserQuestion: "Which validation depth?" - options **Quick (Recommended after major changes)** (5–10 min smoke gate) and **Nightly** (multi-hour exhaustive pre-release gate). `--soak-minutes=N` overrides the nightly soak duration (default 30).
 
 The harness never touches real backends. All traffic goes to `test/cmd/ollamock`
-instances (stdlib Go mock speaking OpenAI, Ollama-native, LM Studio, Lemonade
-and Anthropic protocols, with a `/_mock/` fault-injection control plane).
+instances (stdlib Go mock speaking OpenAI, Ollama-native, LM Studio, Lemonade,
+Anthropic and Text Embeddings Inference protocols, with a `/_mock/`
+fault-injection control plane).
 
 ## Model assignment (token efficiency)
 
@@ -39,7 +40,8 @@ delegate the whole run to a single agent.
 Spawned area agents get an explicit `model` on every Agent call:
 
 - **haiku** - mechanical curl-and-assert checklists that never mutate state:
-  core-routing, openai-api, observability, limits-failures (client section).
+  core-routing, openai-api, observability, limits-failures (client section),
+  tei-routing (nightly only, read-only).
 - **sonnet** - anything that mutates mock/Olla state or needs protocol-
   sequence judgement: resilience, anthropic (both sections - SSE event-order
   and translation validation), limits-failures (upstream section).
@@ -66,6 +68,23 @@ so endpoints sharing a URL silently collapse to one (last declared wins).
 | 41141 | olla (main) | `test/validate/config.validate.yaml` - 7 endpoints, unifier, sticky, anthropic translator | |
 | 41142 | olla (limits) | `test/validate/config.validate.limits.yaml` - 256KB body cap, 30 req/min per-IP, backed by mock-a | |
 
+Nightly only (never booted for `--quick`): a third Olla over eight further mocks,
+for the model-kind routing checks in `areas/tei-routing.md`. These sit outside the
+main fleet on purpose: the main checklists count endpoints and enumerate eligible
+hosts per route, and these backends would change both.
+
+| Port | Process | Endpoint (type) | Models |
+|---|---|---|---|
+| 19438 | ollamock `mock-tei-embed` (`--tei-kind embedding`) | mock-tei-embed (text-embeddings-inference) | BAAI/bge-small-en-v1.5 |
+| 19439 | ollamock `mock-tei-rerank` (`--tei-kind reranker`) | mock-tei-rerank (text-embeddings-inference) | BAAI/bge-reranker-base |
+| 19440 | ollamock `mock-tei-class` (`--tei-kind classifier`) | mock-tei-class (text-embeddings-inference) | SamLowe/roberta-go-emotions |
+| 19441 | ollamock `mock-ollama-h` (`--tags-capabilities --loaded llama3.2:3b`) | mock-ollama-h (ollama, tags carry capabilities) | llama3.2:3b, nomic-embed-text:latest, qwen3-vl:8b |
+| 19442 | ollamock `mock-ollama-i` (`--loaded qwen3:8b`) | mock-ollama-i (ollama, old: tags omit capabilities) | qwen3:8b, mxbai-embed-large |
+| 19443 | ollamock `mock-vllm-j` | mock-vllm-j (vllm) | intfloat/e5-base-v2, vllm-chat-model |
+| 19444 | ollamock `mock-sglang-k` | mock-sglang-k (sglang) | sglang-chat-model |
+| 19445 | ollamock `mock-lmdeploy-l` | mock-lmdeploy-l (lmdeploy) | lmdeploy-chat-model |
+| 41143 | olla (kinds) | `test/validate/config.validate.kinds.yaml` - 8 endpoints for path/capability/model routing | |
+
 Mock fault injection: `POST http://127.0.0.1:194NN/_mock/behaviour` with
 `{"mode":"ok|error|flaky|hang|slow","error_status":503,"error_rate":0.5,"latency_ms":0,"fail_health":false,"drop_mid_stream":false,"malformed_json":false}`;
 `POST /_mock/reset` restores defaults; `GET /_mock/stats` gives per-path request
@@ -84,7 +103,7 @@ LOGDIR=$RESULTS/logs/olla-validate-$RUN_TS
 mkdir -p "$LOGDIR"
 ```
 
-Check ports 19431–19437, 41141–41142 are free (`netstat -ano | grep <port>` or
+Check ports 19431–19437, 41141–41142 (nightly also 19438–19445, 41143) are free (`netstat -ano | grep <port>` or
 curl probe); if occupied, kill stale ollamock/olla-validate processes from a
 previous run, otherwise abort with a clear message.
 
@@ -219,7 +238,31 @@ core-routing, openai-api and anthropic (passthrough) - three parallel agents
 Sherpa is maintenance-mode: quick depth is deliberate. Restore the original
 config and readiness afterwards.
 
-### 6d. Soak + chaos
+### 6d. Model-kinds pass (tei-routing)
+Boots the nightly-only fleet from the topology table, so `--quick` and the
+phases above never see it. Check ports 19438-19445 and 41143 are free first.
+
+```bash
+build/validate/ollamock$EXE --addr 127.0.0.1:19438 --name mock-tei-embed  --models "BAAI/bge-small-en-v1.5"      --tei-kind embedding  > "$LOGDIR/mock-tei-embed.log" 2>&1
+build/validate/ollamock$EXE --addr 127.0.0.1:19439 --name mock-tei-rerank --models "BAAI/bge-reranker-base"      --tei-kind reranker   > "$LOGDIR/mock-tei-rerank.log" 2>&1
+build/validate/ollamock$EXE --addr 127.0.0.1:19440 --name mock-tei-class  --models "SamLowe/roberta-go-emotions" --tei-kind classifier > "$LOGDIR/mock-tei-class.log" 2>&1
+build/validate/ollamock$EXE --addr 127.0.0.1:19441 --name mock-ollama-h   --models "llama3.2:3b,nomic-embed-text:latest,qwen3-vl:8b" --loaded "llama3.2:3b" --tags-capabilities > "$LOGDIR/mock-ollama-h.log" 2>&1
+build/validate/ollamock$EXE --addr 127.0.0.1:19442 --name mock-ollama-i   --models "qwen3:8b,mxbai-embed-large"  --loaded "qwen3:8b" > "$LOGDIR/mock-ollama-i.log" 2>&1
+build/validate/ollamock$EXE --addr 127.0.0.1:19443 --name mock-vllm-j     --models "intfloat/e5-base-v2,vllm-chat-model" > "$LOGDIR/mock-vllm-j.log" 2>&1
+build/validate/ollamock$EXE --addr 127.0.0.1:19444 --name mock-sglang-k   --models "sglang-chat-model"            > "$LOGDIR/mock-sglang-k.log" 2>&1
+build/validate/ollamock$EXE --addr 127.0.0.1:19445 --name mock-lmdeploy-l --models "lmdeploy-chat-model"          > "$LOGDIR/mock-lmdeploy-l.log" 2>&1
+build/validate/olla$EXE --config test/validate/config.validate.kinds.yaml > "$LOGDIR/olla-kinds.log" 2>&1
+```
+
+Readiness: each mock answers `/health`; `curl -sf http://127.0.0.1:41143/internal/health`;
+poll `/internal/status/endpoints` until all 8 are healthy and `/olla/models` lists
+`BAAI/bge-reranker-base` and `mxbai-embed-large`. Then spawn one agent
+(`model: haiku`) for `.claude/skills/olla-validate/areas/tei-routing.md`, nightly
+depth. It is read-only and shares nothing with the main fleet. Its section B needs
+unmerged work (#3, #4, #5, #6, #8) and probes for it, so it records skips, not failures,
+on a tree without them. Kill these nine PIDs in Phase 7 with the rest.
+
+### 6e. Soak + chaos
 Run for `$SOAK_MINUTES` minutes against olla-main (olla engine, original
 config):
 
@@ -240,7 +283,7 @@ of ≤5s after each injection); goroutine count at end within 25% of the
 pre-soak baseline after a 60s settle; heap not monotonically growing across
 the final third of samples. Anything outside → FAIL with the samples quoted.
 
-### 6e. Bench snapshot
+### 6f. Bench snapshot
 ```bash
 make bench-balancer 2>&1 | tee "$LOGDIR/bench-balancer.log"
 ```

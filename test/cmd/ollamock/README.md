@@ -33,6 +33,8 @@ go run ./test/cmd/ollamock \
 | `--tps` | `0` | Token-per-second pacing for stream chunks (0 = instant) |
 | `--stream-chunks` | `5` | Number of content chunks per streamed response |
 | `--tei-kind` | `embedding` | Kind a TEI instance reports in `GET /info` `model_type` and serves: `embedding`, `reranker` or `classifier`. Routes for another kind answer 424 |
+| `--loaded` | (none) | Comma-separated models `GET /api/ps` reports as resident; empty reports none. Lets a fleet of instances hold different loaded sets |
+| `--tags-capabilities` | `false` | Emit per-model `capabilities` in `GET /api/tags`, as Ollama 0.30+ does: `["embedding"]` for names that look like embedders, otherwise `["completion"]` plus `"vision"` for names such as `qwen3-vl` or `llava` and `"tools"` for names such as `llama3.2` or `qwen3`. Off omits the field, which is what an older Ollama sends |
 
 ## Protocol Endpoints
 
@@ -40,10 +42,12 @@ go run ./test/cmd/ollamock \
 |-------|----------|
 | `GET /health` | Health check |
 | `GET /` | Ollama root liveness (`"Ollama is running"`) |
-| `GET /api/tags` | Ollama model listing |
+| `GET /api/tags` | Ollama model listing (`capabilities` with `--tags-capabilities`) |
+| `GET /api/ps` | Ollama loaded models (from `--loaded`) |
 | `GET /api/version` | Ollama version |
 | `POST /api/chat` | Ollama chat (streaming default) |
 | `POST /api/generate` | Ollama generate (streaming default) |
+| `POST /api/embed` | Ollama native embeddings (`input` string or array). Empty or absent input is a 200 with empty `embeddings`; a named model the instance does not serve is a 404; a body with no model is served |
 | `GET /api/v0/models` | LM Studio model listing |
 | `GET /v1/models` | OpenAI-compatible model listing |
 | `POST /v1/chat/completions` | OpenAI chat completions |
