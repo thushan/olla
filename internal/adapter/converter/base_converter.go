@@ -126,8 +126,32 @@ func (b *BaseConverter) DetermineModelType(model *domain.UnifiedModel, defaultTy
 	if b.HasCapability(model.Capabilities, "embedding") || b.HasCapability(model.Capabilities, "embeddings") {
 		return "embeddings"
 	}
+	// backends that report no kind (vLLM) get rerank and classification from
+	// the model name, so the capability is all there is to type them by
+	if b.HasCapability(model.Capabilities, "rerank") {
+		return "reranker"
+	}
+	if b.HasCapability(model.Capabilities, "classification") {
+		return "classifier"
+	}
 
 	return defaultType
+}
+
+// ModelKind is the model kind (llm, vlm, embeddings, reranker, classifier) the
+// API reports for a unified model. A model whose backend names no kind and
+// whose capabilities say nothing else but text generation is an llm; anything
+// else unclassifiable reports "" so the field is omitted rather than guessed.
+func ModelKind(model *domain.UnifiedModel) string {
+	base := NewBaseConverter("")
+	if kind := base.DetermineModelType(model, ""); kind != "" {
+		return kind
+	}
+	if base.HasCapability(model.Capabilities, "text-generation") || base.HasCapability(model.Capabilities, "chat") ||
+		base.HasCapability(model.Capabilities, "completion") {
+		return "llm"
+	}
+	return ""
 }
 
 // ConversionHelper groups all helper methods for use in concrete converters

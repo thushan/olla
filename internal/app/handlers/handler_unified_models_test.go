@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry"
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -201,4 +204,132 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newKindFixture registers models through the shipped profile parsers so the
+// kinds under test come from real parsed metadata, not hand-built fixtures.
+func newKindFixture(t *testing.T) (*Application, *http.ServeMux) {
+	t.Helper()
+	styled := &mockStyledLogger{}
+	profileFactory, err := profile.NewFactory("../../../config/profiles")
+	require.NoError(t, err)
+
+	reg := registry.NewUnifiedMemoryModelRegistry(styled, nil, nil, nil)
+	ctx := context.Background()
+	var endpoints []*domain.Endpoint
+	wantUnified := 0
+	register := func(name, typ, body string) {
+		u, perr := url.Parse("http://" + name + ":8080")
+		require.NoError(t, perr)
+		ep := &domain.Endpoint{Name: name, URL: u, URLString: u.String(), Type: typ, Status: domain.StatusHealthy}
+		endpoints = append(endpoints, ep)
+		reg.RegisterEndpoint(ep)
+		prof, perr := profileFactory.GetProfile(typ)
+		require.NoError(t, perr)
+		models, perr := prof.ParseModelsResponse([]byte(body))
+		require.NoError(t, perr)
+		require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, ep, models))
+		wantUnified += len(models)
+		// count only: the unifier mutates models in place while it merges
+		require.Eventually(t, func() bool {
+			unified, gerr := reg.GetUnifiedModels(ctx)
+			return gerr == nil && len(unified) >= wantUnified
+		}, 5*time.Second, 10*time.Millisecond, "async unification of %s did not complete", name)
+	}
+	register("ollama-1", domain.ProfileOllama, `{"models":[{"name":"llama3.1:8b","details":{"family":"llama"}},{"name":"all-minilm:latest","details":{"family":"bert"},"capabilities":["embedding"]}]}`)
+	register("lms-1", constants.ProviderTypeLMStudio, `{"data":[{"id":"acme/lookout-7b","object":"model","type":"vlm"}]}`)
+	// vLLM reports no kind and writes no provider name into the type
+	register("vllm-1", domain.ProfileVLLM, `{"data":[{"id":"Qwen/Qwen3-8B","object":"model"}]}`)
+	register("sglang-1", domain.ProfileSGLang, `{"data":[{"id":"meta-llama/Llama-3-8B-Instruct","object":"model"}]}`)
+
+	app := &Application{
+		modelRegistry:    reg,
+		repository:       &mockRepository{endpoints: endpoints},
+		converterFactory: converter.NewConverterFactory(),
+		logger:           styled,
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET "+"/olla/models/", app.unifiedModelByAliasHandler)
+	return app, mux
+}
+
+// The kind is reported as olla.type in the listing and as type on the detail
+// response, and ?type= selects on that same value.
+func TestUnifiedModels_ModelKind(t *testing.T) {
+	t.Parallel()
+	app, mux := newKindFixture(t)
+
+	want := map[string]string{
+		"all-minilm:latest":              "embeddings", // Ollama capabilities
+		"acme/lookout-7b":                "vlm",        // LM Studio type
+		"llama3.1:8b":                    "llm",        // no kind reported
+		"Qwen/Qwen3-8B":                  "llm",        // vLLM, provider name no longer in type
+		"meta-llama/Llama-3-8B-Instruct": "llm",        // SGLang, ditto
+	}
+
+	t.Run("detail", func(t *testing.T) {
+		t.Parallel()
+		for id, kind := range want {
+			// the detail route only matches a single path segment until slash
+			// ids are supported, so slash-bearing ids are covered by the listing
+			if strings.Contains(id, "/") {
+				continue
+			}
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/olla/models/"+id, nil))
+			require.Equal(t, http.StatusOK, w.Code, id)
+
+			var summary UnifiedModelSummary
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &summary))
+			assert.Equal(t, kind, summary.Type, id)
+		}
+	})
+
+	list := func(t *testing.T, query string) map[string]string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		app.unifiedModelsHandler(w, httptest.NewRequest(http.MethodGet, "/olla/models?include_unavailable=true"+query, nil))
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp converter.UnifiedModelResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		got := make(map[string]string, len(resp.Data))
+		for _, m := range resp.Data {
+			got[m.ID] = m.Olla.Type
+		}
+		return got
+	}
+
+	t.Run("listing", func(t *testing.T) {
+		t.Parallel()
+		got := list(t, "")
+		for id, kind := range want {
+			assert.Equal(t, kind, got[id], id)
+		}
+	})
+
+	t.Run("filter agrees with reported kind", func(t *testing.T) {
+		t.Parallel()
+		for _, kind := range []string{"llm", "vlm", "embeddings", "reranker", "classifier"} {
+			var wantIDs []string
+			for id, k := range want {
+				if k == kind {
+					wantIDs = append(wantIDs, id)
+				}
+			}
+			got := list(t, "&type="+kind)
+			gotIDs := make([]string, 0, len(got))
+			for id, k := range got {
+				assert.Equal(t, kind, k, "?type=%s listed %s", kind, id)
+				gotIDs = append(gotIDs, id)
+			}
+			assert.ElementsMatch(t, wantIDs, gotIDs, "?type=%s", kind)
+		}
+	})
+
+	t.Run("type is omitted when no kind can be told", func(t *testing.T) {
+		t.Parallel()
+		raw, err := json.Marshal(UnifiedModelSummary{ID: "x"})
+		require.NoError(t, err)
+		assert.NotContains(t, string(raw), `"type"`)
+	})
 }

@@ -27,6 +27,7 @@ type OllaExtensions struct {
 	MaxContextLength *int64           `json:"max_context_length,omitempty"`
 	Family           string           `json:"family"`
 	Variant          string           `json:"variant"`
+	Type             string           `json:"type,omitempty"`
 	ParameterSize    string           `json:"parameter_size"`
 	Quantization     string           `json:"quantization"`
 	PromptTemplateID string           `json:"prompt_template_id,omitempty"`
@@ -95,6 +96,7 @@ func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModel
 		Olla: &OllaExtensions{
 			Family:           model.Family,
 			Variant:          model.Variant,
+			Type:             ModelKind(model),
 			ParameterSize:    model.ParameterSize,
 			Quantization:     model.Quantization,
 			Aliases:          model.GetAliasStrings(),
@@ -175,35 +177,12 @@ func matchesFamilyFilter(model *domain.UnifiedModel, family string) bool {
 	return family == "" || model.Family == family
 }
 
+// matchesTypeFilter selects on the same ModelKind the response reports as
+// olla.type, so the filter and the field it filters on cannot disagree. Capability
+// matching on top of that would only contradict the reported kind: an embedder
+// that picks up "chat" from an "instruct" name would still be listed under llm.
 func matchesTypeFilter(model *domain.UnifiedModel, filterType string) bool {
-	if filterType == "" {
-		return true
-	}
-
-	// Use base converter to determine model type
-	base := NewBaseConverter("")
-	modelType := base.DetermineModelType(model, "")
-
-	// If model type matches directly, return true
-	if modelType == filterType {
-		return true
-	}
-
-	// Also check capabilities for backward compatibility
-	return matchesTypeByCapabilities(model.Capabilities, filterType)
-}
-
-func matchesTypeByCapabilities(capabilities []string, filterType string) bool {
-	switch filterType {
-	case "llm":
-		return hasCapability(capabilities, "chat") || hasCapability(capabilities, "completion")
-	case "vlm":
-		return hasCapability(capabilities, "vision")
-	case "embeddings":
-		return hasCapability(capabilities, "embedding") || hasCapability(capabilities, "embeddings")
-	default:
-		return false
-	}
+	return filterType == "" || ModelKind(model) == filterType
 }
 
 func hasCapability(capabilities []string, capability string) bool {

@@ -307,6 +307,22 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 			want:        "embeddings",
 		},
 		{
+			name: "rerank capability types a reranker whose backend reports no kind",
+			model: &domain.UnifiedModel{
+				Capabilities: []string{"rerank"},
+			},
+			defaultType: "llm",
+			want:        "reranker",
+		},
+		{
+			name: "classification capability types a classifier",
+			model: &domain.UnifiedModel{
+				Capabilities: []string{"classification"},
+			},
+			defaultType: "llm",
+			want:        "classifier",
+		},
+		{
 			name:        "uses default",
 			model:       &domain.UnifiedModel{},
 			defaultType: "llm",
@@ -357,6 +373,30 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := base.DetermineModelType(tt.model, tt.defaultType)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestModelKind(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		model *domain.UnifiedModel
+		want  string
+	}{
+		{"reported kind wins", &domain.UnifiedModel{Metadata: map[string]any{"model_type": "reranker"}, Capabilities: []string{"rerank"}}, "reranker"},
+		{"generic model marker is not a kind", &domain.UnifiedModel{Metadata: map[string]any{"type": "model"}, Capabilities: []string{"text-generation"}}, "llm"},
+		{"text generation alone is an llm", &domain.UnifiedModel{Capabilities: []string{"text-generation"}}, "llm"},
+		{"chat alone is an llm", &domain.UnifiedModel{Capabilities: []string{"chat"}}, "llm"},
+		{"vision capability is a vlm", &domain.UnifiedModel{Capabilities: []string{"text-generation", "vision"}}, "vlm"},
+		{"embeddings capability is an embedder", &domain.UnifiedModel{Capabilities: []string{"embeddings"}}, "embeddings"},
+		{"nothing to go on reports no kind", &domain.UnifiedModel{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ModelKind(tt.model))
 		})
 	}
 }
