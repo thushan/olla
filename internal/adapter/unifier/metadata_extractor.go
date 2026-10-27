@@ -142,6 +142,39 @@ var nonGenerativeModelTypes = map[string]struct{}{
 	"classifier": {},
 }
 
+var embedderCapabilities = []string{"embeddings", "similarity", "vector-search"}
+
+// nonGenerativeCapabilities mark a model that scores or encodes text. Name
+// patterns can add them to a model whose backend doesn't report a kind (a vLLM
+// reranker, an OpenAI-style BGE embedder), and such a model must not keep the
+// text-generation default any more than a typed one does.
+var nonGenerativeCapabilities = []string{"embeddings", "rerank", "classification"}
+
+// dropGenerativeForNonGenerative removes the generative defaults from a model
+// that name patterns tagged as an embedder, reranker or classifier.
+func dropGenerativeForNonGenerative(capabilities map[string]bool, modelType string) {
+	// no model is both a reranker and an embedder, and "rerank" is the stronger
+	// signal (granite-embedding-reranker-*), so the embedder tags go. A model the
+	// backend typed as an embedder keeps them.
+	if capabilities["rerank"] {
+		if _, typedNonGenerative := nonGenerativeModelTypes[modelType]; !typedNonGenerative || modelType == "reranker" {
+			for _, c := range embedderCapabilities {
+				delete(capabilities, c)
+			}
+		}
+	}
+	for _, cap := range nonGenerativeCapabilities {
+		if capabilities[cap] {
+			delete(capabilities, "text-generation")
+			// chat reaches an unreported-kind model only through an instruct/chat
+			// name pattern (gte-Qwen2-7B-instruct is still an embedder); a
+			// declaration from the backend is re-applied later
+			delete(capabilities, "chat")
+			return
+		}
+	}
+}
+
 // inferCapabilitiesFromMetadata infers model capabilities from various metadata fields
 func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]interface{}) []string {
 	capabilities := make(map[string]bool)
@@ -170,6 +203,13 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 				capabilities[cap] = true
 			}
 		}
+	}
+
+	// A backend that reports a generative kind (LM Studio's "llm", a "vlm") has
+	// said what the model is, so the name must not strip it. Only an unreported
+	// kind (vLLM) is left to the name patterns.
+	if modelTypeLower != "llm" && modelTypeLower != "vlm" {
+		dropGenerativeForNonGenerative(capabilities, modelTypeLower)
 	}
 
 	// Context window size determines long-form processing capabilities
