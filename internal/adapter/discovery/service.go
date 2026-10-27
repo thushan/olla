@@ -162,12 +162,9 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 		return contextErr
 	}
 
-	discoveryCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
-	defer cancel()
-
-	models, err := s.client.DiscoverModels(discoveryCtx, endpoint)
+	models, err := s.fetchModelsWithRetry(ctx, endpoint)
 	if err != nil {
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && !errors.Is(err, errDiscoveryStopped) {
 			s.handleDiscoveryError(endpoint, err)
 		}
 		return err
@@ -210,6 +207,89 @@ func (s *ModelDiscoveryService) DiscoverEndpoint(ctx context.Context, endpoint *
 	s.resetFailureCount(endpoint.URLString)
 	s.logger.InfoWithEndpoint(" ", endpoint.Name, "models", len(filteredModels))
 	return nil
+}
+
+// maxRetryBackoff caps the doubling so a generous retry_attempts cannot park a
+// discovery worker for minutes inside one cycle.
+const maxRetryBackoff = 30 * time.Second
+
+// errDiscoveryStopped is returned when the service is stopped mid-retry. It wraps
+// context.Canceled so callers treat it like any other cancellation, and
+// DiscoverEndpoint matches it to avoid charging the endpoint for our shutdown.
+var errDiscoveryStopped = fmt.Errorf("discovery service stopped: %w", context.Canceled)
+
+// nextRetryBackoff doubles the wait up to maxRetryBackoff.
+func nextRetryBackoff(d time.Duration) time.Duration {
+	return min(d*2, maxRetryBackoff)
+}
+
+// fetchModelsWithRetry asks the backend for its models, retrying transient
+// failures up to RetryAttempts more times with RetryBackoff doubling between
+// them. All attempts and backoffs share one Timeout budget, so a single cycle
+// (including the synchronous pass at startup) takes no longer than a single
+// request always did, whatever retry_attempts is set to. A retry whose backoff
+// would outlast what is left of the budget is not started.
+//
+// The retries ride out a blip inside one discovery cycle, so the whole sequence
+// counts as a single failure towards MaxConsecutiveFailures (handled by the
+// caller once this gives up). Counting each attempt would trip the five-failure
+// cooldown, which pauses the endpoint for minutes, off one brief outage.
+func (s *ModelDiscoveryService) fetchModelsWithRetry(ctx context.Context, endpoint *domain.Endpoint) ([]*domain.ModelInfo, error) {
+	retries := max(s.config.RetryAttempts, 0)
+	// config validation rejects negatives; clamp anyway for callers that build the config directly
+	backoff := max(s.config.RetryBackoff, 0)
+
+	cycleCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
+	defer cancel()
+	deadline, _ := cycleCtx.Deadline()
+
+	for attempt := 0; ; attempt++ {
+		models, err := s.client.DiscoverModels(cycleCtx, endpoint)
+
+		if err == nil || attempt >= retries || ctx.Err() != nil || !isRetryableWithinCycle(err) {
+			return models, err
+		}
+		if time.Until(deadline) <= backoff {
+			return models, err
+		}
+
+		s.logger.Debug("Model discovery attempt failed, retrying",
+			"endpoint", endpoint.Name, "attempt", attempt+1, "of", retries+1, "backoff", backoff, "error", err)
+
+		if backoff > 0 {
+			timer := time.NewTimer(backoff)
+			select {
+			case <-timer.C:
+			case <-ctx.Done():
+				timer.Stop()
+				return nil, ctx.Err()
+			case <-s.stopCh:
+				timer.Stop()
+				return nil, errDiscoveryStopped
+			}
+			backoff = nextRetryBackoff(backoff)
+		}
+	}
+}
+
+// isRetryableWithinCycle separates failures a second request moments later can
+// fix (connection trouble, 5xx, a truncated body) from ones it cannot. A parse
+// failure is recoverable across cycles (IsRecoverable) because a backend upgrade
+// can repair it, but the same body comes back seconds later, as does a 4xx.
+func isRetryableWithinCycle(err error) bool {
+	var parseErr *ParseError
+	if errors.As(err, &parseErr) {
+		return false
+	}
+	var profileErr *ProfileNotFoundError
+	if errors.As(err, &profileErr) {
+		return false
+	}
+	// An oversized listing is the backend's steady state, not a blip.
+	if errors.Is(err, ErrResponseTooLarge) {
+		return false
+	}
+	return IsRecoverable(err)
 }
 
 func (s *ModelDiscoveryService) discoverConcurrently(ctx context.Context, endpoints []*domain.Endpoint) error {
