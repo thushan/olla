@@ -11,9 +11,23 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+// CanonicalModel records that a client's model name resolved to a different native
+// name without being rewritten, as when "all-minilm" is served as "all-minilm:latest".
+// The forwarded body keeps the client's spelling; this only names the model for stats.
+//
+// Targets does the same for an alias: it maps the model name an alias rewrites to
+// (what the backend receives) onto its native name, so alias and direct requests for
+// one model record under one stats key.
+type CanonicalModel struct {
+	Targets   map[string]string
+	Requested string
+	Native    string
+}
+
 // ResolvedModelName returns the model name actually dispatched to endpoint:
-// the alias map's per-endpoint entry if the request was alias-resolved,
-// otherwise requestedModel unchanged (the common case, where the requested
+// the alias map's per-endpoint entry if the request was alias-resolved, the
+// native name when a bare Ollama name was resolved to it, otherwise
+// requestedModel unchanged (the common case, where the requested
 // name already is the resolved name). Callers should use this - not the raw
 // requested/alias name - when recording model-level stats
 // (StatsCollector.RecordModelRequest via RecordSuccess/RecordFailure), so
@@ -21,12 +35,18 @@ import (
 // served rather than fragmenting across whatever alias each client happened
 // to send.
 func ResolvedModelName(ctx context.Context, endpoint *domain.Endpoint, requestedModel string) string {
-	aliasMap, ok := ctx.Value(constants.ContextModelAliasMapKey).(map[string]string)
-	if !ok || endpoint == nil {
-		return requestedModel
+	if aliasMap, ok := ctx.Value(constants.ContextModelAliasMapKey).(map[string]string); ok && endpoint != nil {
+		if actualModel, ok := aliasMap[endpoint.GetURLString()]; ok {
+			if canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel); ok {
+				if native, ok := canonical.Targets[actualModel]; ok {
+					return native
+				}
+			}
+			return actualModel
+		}
 	}
-	if actualModel, ok := aliasMap[endpoint.GetURLString()]; ok {
-		return actualModel
+	if canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel); ok && canonical.Native != "" && canonical.Requested == requestedModel {
+		return canonical.Native
 	}
 	return requestedModel
 }

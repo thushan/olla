@@ -27,6 +27,11 @@ const (
 	// request body to match what the selected backend expects
 	ContextModelAliasMapKey = "model_alias_map"
 
+	// ContextCanonicalModelKey carries the native name a bare Ollama model name resolved to
+	// (see core.CanonicalModel), so stats aggregate under one row. It is never used to
+	// rewrite the forwarded request: the client's spelling is what the backend receives.
+	ContextCanonicalModelKey = contextKey("canonical-model")
+
 	// ContextInputTokensKey carries a prompt token estimate through the translation
 	// pipeline so the streaming translator can populate input_tokens in message_start
 	// before the upstream usage chunk arrives (which only comes at the end of the stream).

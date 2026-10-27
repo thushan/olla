@@ -316,7 +316,10 @@ func skipValueTokens(dec *json.Decoder) error {
 func (bi *BodyInspector) normalizeModelName(model string) string {
 	model = strings.TrimSpace(model)
 	model = strings.ToLower(model)
-	// Model aliasing and tag handling is delegated to the registry layer
+	// Only whitespace and case are normalised here. Tags are left alone on purpose:
+	// the registry applies Ollama's default tag (a bare "foo" is "foo:latest"), and only
+	// for Ollama-sourced models, after an exact lookup misses. Doing it here would hand
+	// every other platform a name it does not serve. Aliases are resolved in the handler.
 	return model
 }
 

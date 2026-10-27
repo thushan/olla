@@ -38,6 +38,7 @@ type SourceEndpoint struct {
 	EndpointURL    string             `json:"-"` // Hidden from JSON output for security
 	EndpointName   string             `json:"endpoint_name"`
 	NativeName     string             `json:"native_name"` // Original name on this platform
+	Platform       string             `json:"-"`           // Platform that serves it (ollama, vllm, ...); scopes name rules such as the Ollama default tag
 	State          string             `json:"state"`       // loaded, not-loaded, etc.
 	ModelState     ModelState         `json:"model_state"` // New typed state
 	DiskSize       int64              `json:"disk_size"`
