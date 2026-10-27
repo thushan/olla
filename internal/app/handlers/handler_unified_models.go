@@ -262,16 +262,17 @@ func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpo
 func (a *Application) unifiedModelByAliasHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// Extract model ID/alias from path
-	// This assumes the route is something like /olla/models/{id}
-	pathParts := strings.Split(r.URL.Path, "/")
-	if len(pathParts) < 4 {
+	// Everything after the prefix is the id: Hugging Face style ids such as
+	// BAAI/bge-small-en-v1.5 contain slashes, so taking one path segment can
+	// never resolve them. URL.Path is already decoded exactly once by net/http
+	// (which also rejects malformed escapes before routing), so a raw slash and
+	// %2F are equivalent and %252F stays the literal id "%2F".
+	modelAlias, found := strings.CutPrefix(r.URL.Path, constants.PathOllaModelsPrefix)
+	if !found {
 		http.Error(w, "Invalid path", http.StatusBadRequest)
 		return
 	}
-
-	modelAlias := pathParts[3]
-	if modelAlias == "" {
+	if modelAlias == "" || strings.HasSuffix(modelAlias, "/") {
 		http.Error(w, "Model ID or alias required", http.StatusBadRequest)
 		return
 	}

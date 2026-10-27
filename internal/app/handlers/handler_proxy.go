@@ -23,6 +23,7 @@ type proxyRequest struct {
 	requestLogger            logger.StyledLogger
 	stats                    *ports.RequestStats
 	profile                  *domain.RequestProfile
+	endpointPaths            map[string]string
 	clientIP                 string
 	targetPath               string
 	model                    string
@@ -651,6 +652,19 @@ func (a *Application) handleProxyError(w *core.ResponseStartedWriter, err error)
 	http.Error(w, fmt.Sprintf("Proxy error: %v", err), http.StatusBadGateway)
 }
 
+// logNoCompatibleFallback records the widen-to-all fallback; translator routes expect it for a
+// chat-less fleet and log it at Debug (see RequestProfile.QuietNoMatchFallback).
+func logNoCompatibleFallback(log logger.StyledLogger, profile *domain.RequestProfile, total int) {
+	logFn := log.Warn
+	if profile.QuietNoMatchFallback {
+		logFn = log.Debug
+	}
+	logFn("No compatible endpoints found for path, falling back to all endpoints",
+		"path", profile.Path,
+		"supported_by", profile.SupportedBy,
+		"total_endpoints", total)
+}
+
 func (a *Application) stripRoutePrefix(ctx context.Context, path string) string {
 	return util.StripRoutePrefix(ctx, path, constants.ContextRoutePrefixKey)
 }
@@ -689,10 +703,7 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 					"total_endpoints", len(endpoints))
 				return nil
 			}
-			logger.Warn("No compatible endpoints found for path, falling back to all endpoints",
-				"path", profile.Path,
-				"supported_by", profile.SupportedBy,
-				"total_endpoints", len(endpoints))
+			logNoCompatibleFallback(logger, profile, len(endpoints))
 			profileFiltered = endpoints
 		} else {
 			logger.Debug("Filtered endpoints by profile compatibility",

@@ -32,6 +32,7 @@ keywords: LMDeploy, Olla proxy, TurboMind, InternLM, LLM inference, GPU optimisa
                 <li>Model Unification</li>
                 <li>Model Detection &amp; Normalisation</li>
                 <li>OpenAI API Compatibility</li>
+                <li>Native Anthropic Messages API (v0.13.0+)</li>
                 <li>Token Encoding API</li>
                 <li>Reward/Score Pooling</li>
                 <li>VLM Inference (same <code>api_server</code>)</li>
@@ -184,7 +185,74 @@ proxy:
     <td><code>/is_sleeping</code></td>
     <td>Sleep State Probe</td>
   </tr>
+  <tr>
+    <td><code>/v1/responses</code></td>
+    <td>OpenAI Responses API</td>
+  </tr>
+  <tr>
+    <td><code>/v1/messages</code></td>
+    <td>Anthropic Messages API (passthrough)</td>
+  </tr>
+  <tr>
+    <td><code>/v1/messages/count_tokens</code></td>
+    <td>Anthropic Token Counting (passthrough)</td>
+  </tr>
 </table>
+
+## Anthropic Messages API Support
+
+LMDeploy v0.13.0+ natively supports the Anthropic Messages API, enabling Olla to forward Anthropic-format requests directly without translation overhead (passthrough mode).
+
+When Olla detects that a LMDeploy endpoint supports native Anthropic format (via the `anthropic_support` section in `config/profiles/lmdeploy.yaml`), it will bypass the Anthropic-to-OpenAI translation pipeline and forward requests directly to `/v1/messages` on the backend.
+
+**Profile configuration** (from `config/profiles/lmdeploy.yaml`):
+
+```yaml
+api:
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: true
+    min_version: "0.13.0"
+    limitations:
+      - no_tool_use
+```
+
+**Key details**:
+
+- Minimum LMDeploy version: **v0.13.0**
+- Token counting metadata (`token_count: true`): the backend serves `/v1/messages/count_tokens`; Olla's own `/olla/anthropic/v1/messages/count_tokens` still answers from local estimation
+- Passthrough mode is automatic -- no client-side configuration needed
+- Responses include `X-Olla-Mode: passthrough` header when passthrough is active
+- Falls back to translation mode when the profile or a declared limitation rules passthrough out (the backend's version is never checked)
+- Passthrough is **on by default**. LMDeploy older than v0.13.0 has no `/v1/messages` and answers 404, so Anthropic requests to it fail rather than fall back; `min_version` in the profile is documentation and is not enforced
+- Requests that carry `tools` or `tool_choice` are translated, not passed through: v0.13.0 to v0.17.x reject those fields, and Claude Code always sends tools. The profile declares the `no_tool_use` limitation for this, so tool requests to v0.18.0 and later also translate; remove the limitation in a local copy of the profile if your whole fleet is 0.18+
+- LMDeploy rejects requests without an `anthropic-version` header; Anthropic clients send it and Olla forwards it unchanged
+
+### Switching SGLang or LMDeploy back to translation
+
+Passthrough is on by default for these two backends because current releases serve `/v1/messages` themselves. A release older than the minimum above returns 404 (Olla passes the backend's 404 to the client unchanged, with `X-Olla-Mode: passthrough`) for it, and Olla does not check the backend's version, so a fleet with an older LMDeploy has to opt out. A local profile with the same `name` replaces the shipped one, but only if its filename sorts after it (see [Profile Overrides](../../concepts/profile-system.md)). Copy the shipped profile to a `zz-` file, then turn the block off:
+
+```bash
+cp config/profiles/lmdeploy.yaml config/profiles/zz-lmdeploy.yaml
+```
+
+```yaml
+# config/profiles/zz-lmdeploy.yaml: keep the rest of the copied profile as it is
+api:
+  anthropic_support:
+    enabled: false
+```
+
+Only the `enabled` line changes; leave `name: lmdeploy` and the remaining keys of the copy alone. Restart Olla, then send a request to `/olla/anthropic/v1/messages`: `X-Olla-Mode: passthrough` is absent when the request is translated. In Docker, mount just the override file; mounting the whole config directory replaces the shipped profiles:
+
+```bash
+docker run -v $(pwd)/config/profiles/zz-lmdeploy.yaml:/app/config/profiles/zz-lmdeploy.yaml ...
+```
+
+Editing `config/profiles/lmdeploy.yaml` in place works too, but a package upgrade can overwrite it. To translate for every backend rather than just LMDeploy, set `translators.anthropic.passthrough_enabled: false` in `config.yaml` instead.
+
+For more information, see [API Translation](../../concepts/api-translation.md#passthrough-mode) and [Anthropic API Reference](../../api-reference/anthropic.md).
 
 ## Usage Examples
 

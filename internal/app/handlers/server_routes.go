@@ -20,6 +20,7 @@ type staticRoute struct {
 	description string
 	method      string
 	isProxy     bool
+	rateLimited bool // takes the proxy security chain without being the catch-all
 }
 
 // staticProvider bundles routes with their URL prefixes for test scenarios
@@ -51,7 +52,7 @@ func (a *Application) registerRoutes() {
 
 	// Unified model views aggregate across all providers
 	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/models/", a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
+	a.routeRegistry.RegisterWithMethod(constants.PathOllaModelsPrefix, a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
 
 	// Legacy proxy paths for backward compatibility
 	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
@@ -245,6 +246,10 @@ func (a *Application) hasModelListingFormat(format string) bool {
 	return format != "" && a.converterFactory != nil && slices.Contains(a.converterFactory.GetSupportedFormats(), format)
 }
 
+// routeMethodAny labels a route that answers every HTTP method. The registry only
+// records Method for the startup table, so a specific verb there would misstate it.
+const routeMethodAny = "ANY"
+
 // registerProviderPrefixRoutes creates the full routing table for one provider prefix.
 // This handles both native endpoints (e.g., Ollama's /api/tags) and OpenAI compatibility.
 func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, config *domain.ProfileConfig) {
@@ -263,20 +268,28 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 				a.ollamaModelsHandler,
 				prefix+" models listing", "GET")
 
-			// Ollama-specific model inspection
-			a.routeRegistry.RegisterWithMethod(basePath+"api/list",
+			// Loaded state lives on each instance, so /api/ps is fanned out and merged
+			// rather than forwarded to whichever instance the balancer picks.
+			// It fans out to every Ollama host, so it takes the proxy route's rate-limit
+			// chain (the registry applies that to proxy routes only), as it did when it
+			// was forwarded through the proxy.
+			a.routeRegistry.RegisterProxyRoute(basePath+"api/ps",
 				a.ollamaRunningModelsHandler,
 				prefix+" running models", "GET")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/show",
 				a.ollamaModelShowHandler,
-				prefix+" model details", "POST")
+				prefix+" model details", routeMethodAny)
 
-			// Model management would require persistent storage - explicitly unsupported
-			a.routeRegistry.RegisterWithMethod(basePath+"api/pull", a.unsupportedModelManagementHandler, "Model pull (unsupported)", "POST")
-			a.routeRegistry.RegisterWithMethod(basePath+"api/push", a.unsupportedModelManagementHandler, "Model push (unsupported)", "POST")
-			a.routeRegistry.RegisterWithMethod(basePath+"api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", "POST")
-			a.routeRegistry.RegisterWithMethod(basePath+"api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", "POST")
-			a.routeRegistry.RegisterWithMethod(basePath+"api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", "DELETE")
+			// Model management would require persistent storage - explicitly unsupported.
+			// RouteRegistry.WireUp does not filter by method, so these answer 501 to every
+			// method (HEAD and OPTIONS included); routeMethodAny says so in the route table.
+			a.routeRegistry.RegisterWithMethod(basePath+"api/pull", a.unsupportedModelManagementHandler, "Model pull (unsupported)", routeMethodAny)
+			a.routeRegistry.RegisterWithMethod(basePath+"api/push", a.unsupportedModelManagementHandler, "Model push (unsupported)", routeMethodAny)
+			a.routeRegistry.RegisterWithMethod(basePath+"api/create", a.unsupportedModelManagementHandler, "Model create (unsupported)", routeMethodAny)
+			a.routeRegistry.RegisterWithMethod(basePath+"api/copy", a.unsupportedModelManagementHandler, "Model copy (unsupported)", routeMethodAny)
+			a.routeRegistry.RegisterWithMethod(basePath+"api/delete", a.unsupportedModelManagementHandler, "Model delete (unsupported)", routeMethodAny)
+			// blob upload is the first step of api/create, so it is refused with it
+			a.routeRegistry.RegisterWithMethod(basePath+"api/blobs/", a.unsupportedModelManagementHandler, "Model blobs (unsupported)", routeMethodAny)
 		} else if a.hasModelListingFormat(config.Request.ResponseFormat) {
 			// Serve the discovery path from the registry in the profile's own
 			// response format. A format with no converter means the discovery
@@ -355,13 +368,14 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 			routes: []staticRoute{
 				{path: "api/tags", handler: a.ollamaModelsHandler, description: "models listing", method: "GET"},
 				{path: "v1/models", handler: a.ollamaOpenAIModelsHandler, description: "models (OpenAI format)", method: "GET"},
-				{path: "api/list", handler: a.ollamaRunningModelsHandler, description: "running models", method: "GET"},
-				{path: "api/show", handler: a.ollamaModelShowHandler, description: "model details", method: "POST"},
-				{path: "api/pull", handler: a.unsupportedModelManagementHandler, description: "Model pull (unsupported)", method: "POST"},
-				{path: "api/push", handler: a.unsupportedModelManagementHandler, description: "Model push (unsupported)", method: "POST"},
-				{path: "api/create", handler: a.unsupportedModelManagementHandler, description: "Model create (unsupported)", method: "POST"},
-				{path: "api/copy", handler: a.unsupportedModelManagementHandler, description: "Model copy (unsupported)", method: "POST"},
-				{path: "api/delete", handler: a.unsupportedModelManagementHandler, description: "Model delete (unsupported)", method: "DELETE"},
+				{path: "api/ps", handler: a.ollamaRunningModelsHandler, description: "running models", method: "GET", rateLimited: true},
+				{path: "api/show", handler: a.ollamaModelShowHandler, description: "model details", method: routeMethodAny},
+				{path: "api/pull", handler: a.unsupportedModelManagementHandler, description: "Model pull (unsupported)", method: routeMethodAny},
+				{path: "api/push", handler: a.unsupportedModelManagementHandler, description: "Model push (unsupported)", method: routeMethodAny},
+				{path: "api/create", handler: a.unsupportedModelManagementHandler, description: "Model create (unsupported)", method: routeMethodAny},
+				{path: "api/copy", handler: a.unsupportedModelManagementHandler, description: "Model copy (unsupported)", method: routeMethodAny},
+				{path: "api/delete", handler: a.unsupportedModelManagementHandler, description: "Model delete (unsupported)", method: routeMethodAny},
+				{path: "api/blobs/", handler: a.unsupportedModelManagementHandler, description: "Model blobs (unsupported)", method: routeMethodAny},
 				{path: "", handler: a.providerProxyHandler, description: "proxy", isProxy: true},
 			},
 		},
@@ -455,9 +469,12 @@ func (a *Application) registerStaticProviderRoutes() {
 				fullPath := basePath + route.path
 				desc := fmt.Sprintf("%s %s", displayName, route.description)
 
-				if route.isProxy {
+				switch {
+				case route.isProxy:
 					a.routeRegistry.RegisterProxyRoute(basePath, route.handler, desc, "")
-				} else {
+				case route.rateLimited:
+					a.routeRegistry.RegisterProxyRoute(fullPath, route.handler, desc, route.method)
+				default:
 					a.routeRegistry.RegisterWithMethod(fullPath, route.handler, desc, route.method)
 				}
 			}
