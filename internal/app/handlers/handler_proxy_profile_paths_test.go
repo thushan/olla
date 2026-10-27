@@ -58,8 +58,8 @@ func TestProxyRouting_DeclaredPaths_NamedModelReachesServingHost(t *testing.T) {
 		typ   string
 		paths []string
 	}{
-		{domain.ProfileOpenAICompatible, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
-		{domain.ProfileVLLM, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages"}},
+		{domain.ProfileOpenAICompatible, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages"}},
+		{domain.ProfileVLLM, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens"}},
 		{domain.ProfileVLLMMLX, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
 		{domain.ProfileLlamaCpp, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
 		{domain.ProfileSGLang, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
@@ -111,6 +111,41 @@ func TestProxyRouting_OllamaNativePathsNarrowToOllama(t *testing.T) {
 
 				require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 				assert.ElementsMatch(t, []string{"ollama-1", "ollama-2"}, offeredNames(selected))
+			})
+		}
+	}
+}
+
+// Ollama and LM Studio are implicitly compatible with openai-compatible's paths, so a
+// path declared there makes them candidates. Ollama and LM Studio do not serve
+// /v1/rerank or /v1/messages/count_tokens (both 404), hence the generic profile does not
+// declare them and a model-less request stays with the hosts that do.
+func TestProxyRouting_DeclaredPaths_GenericProfileDoesNotAdmitNonServingHosts(t *testing.T) {
+	t.Parallel()
+
+	profileFactory, chain, styledLog := mixedFleetDeps(t)
+
+	cases := []struct {
+		path, body string
+		want       []string
+	}{
+		{"/olla/proxy/v1/rerank", `{"query":"q","documents":["a"]}`, []string{"vllm-1"}},
+		{"/olla/proxy/v1/messages/count_tokens", `{"messages":[{"role":"user","content":"hi"}]}`, []string{"vllm-1"}},
+	}
+	for _, tc := range cases {
+		for _, strategy := range profilePathStrategies {
+			t.Run(tc.path+"/"+strategy.name, func(t *testing.T) {
+				t.Parallel()
+				fleet := []fleetEndpoint{
+					{name: "ollama-1", typ: domain.ProfileOllama, modelsJSON: ollamaTagsPlainChat},
+					{name: "lmstudio-1", typ: domain.ProfileLmStudio, modelsJSON: lmStudioNomic},
+					{name: "oai-1", typ: domain.ProfileOpenAICompatible, modelsJSON: openAIModelsOnlyHost},
+					{name: "vllm-1", typ: domain.ProfileVLLM, modelsJSON: vllmChatModel},
+				}
+				w, selected := runMixedFleet(t, profileFactory, chain, styledLog, strategy.cfg, fleet, tc.path, tc.body)
+
+				require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+				assert.Equal(t, tc.want, offeredNames(selected))
 			})
 		}
 	}
