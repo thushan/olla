@@ -120,6 +120,10 @@ serves the exact name, Olla now retries once as `<name>:latest` against Ollama e
 vLLM `foo:latest` still never answers `foo`. The request goes to Ollama as you wrote it, and `foo`
 and `foo:latest` share one stats row, and one sticky key when it is built from the model name (`prefix_hash` hashes the raw body, so it still differs). Nothing to change on your side.
 
+### Fixed: a model hosted on several backends no longer flips its listed id
+
+When the same model (matched by digest) was registered from more than one backend, the merged alias list was rebuilt in random order, and `/olla/models` and the provider listings emit the first alias as the model id. The id could change between refreshes. Merging now keeps a stable order and leads with the model's own id.
+
 ## v0.0.29
 
 ### Breaking: userinfo URLs now fail startup
