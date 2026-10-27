@@ -27,6 +27,12 @@ const (
 	// request body to match what the selected backend expects
 	ContextModelAliasMapKey = "model_alias_map"
 
+	// ContextEndpointPathMapKey stores a map[string]string of endpoint URL to the request path
+	// that endpoint serves, for requests a translator rewrote to a path that not every backend
+	// mounts at the same place (DMR serves /engines/v1/chat/completions, not /v1/...). The
+	// proxy builds each attempt's URL from it, so failover across mixed backends stays correct.
+	ContextEndpointPathMapKey = contextKey("endpoint-path-map")
+
 	// ContextCanonicalModelKey carries the native name a bare Ollama model name resolved to
 	// (see core.CanonicalModel), so stats aggregate under one row. It is never used to
 	// rewrite the forwarded request: the client's spelling is what the backend receives.

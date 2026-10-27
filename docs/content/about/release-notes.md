@@ -16,6 +16,17 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.0.30
 
+### Fixed: Anthropic translation sends each backend its own chat path
+
+In translation mode Olla sent every backend `/v1/chat/completions`. Docker Model Runner serves the OpenAI API under
+`/engines/v1/` (the root `/v1/` alias only exists in recent builds) and Lemonade under `/api/v1/`, so on those hosts
+translated requests 404ed, and because a 404 is not retried the client saw the error even when another healthy
+backend could have answered. Olla now resolves the chat path from each endpoint's profile and applies it per attempt,
+so a fleet mixing DMR, Lemonade, vLLM and Ollama works, and failover between them uses the right path each time.
+Backends that speak Anthropic natively are still passed through to their `anthropic_support.messages_path`. Endpoints
+whose profile has no chat path (Text Embeddings Inference) are never sent translated requests; if nothing selected can
+serve chat the request is refused with a 404 that is logged as a sampled "Request rejected" line.
+
 ### Fixed: `/olla/models/{id}` for IDs containing slashes
 
 `GET /olla/models/BAAI/bge-small-en-v1.5` returned 404 because only the first path
@@ -33,6 +44,20 @@ leaves the configured host and port (a same-host `http` to `https` upgrade is st
 counts as a failed discovery or health check. Loopback endpoints were never proxied, so only setups that relied on `HTTP_PROXY`
 to let discovery reach a non-loopback backend are affected: that backend now needs to be reachable directly from the Olla host,
 as chat traffic already required.
+
+### Changed: SGLang and LMDeploy use native Anthropic passthrough by default
+
+SGLang (v0.5.9+) and LMDeploy (v0.13.0+) serve the Anthropic Messages API themselves, so their shipped
+profiles now carry `anthropic_support` and `/olla/anthropic/v1/messages` forwards to them as-is
+(`X-Olla-Mode: passthrough`) rather than translating through `/v1/chat/completions`. Older builds answer
+404 for `/v1/messages`, and `min_version` is informational: Olla does not enforce it. If any SGLang or
+LMDeploy in your fleet predates those versions, copy the profile to `config/profiles/zz-sglang.yaml` or
+`zz-lmdeploy.yaml` and set `api.anthropic_support.enabled: false` in the copy (steps on the
+[SGLang](../integrations/backend/sglang.md#switching-sglang-or-lmdeploy-back-to-translation) and
+[LMDeploy](../integrations/backend/lmdeploy.md#switching-sglang-or-lmdeploy-back-to-translation) pages), or
+set `translators.anthropic.passthrough_enabled: false` to translate for every backend. LMDeploy v0.13.0 to
+v0.17.x reject Anthropic `tools`, so its profile declares `no_tool_use` and requests carrying tools are still
+translated, including on v0.18.0 and later.
 
 ### Added: Text Embeddings Inference backend
 
@@ -71,6 +96,29 @@ steered by capability tags, name the model you want instead.
 ### Fixed: a model-less request is refused when the only capable backend is down
 
 A request that names no model but needs a capability (for example `/embed`, `/rerank`, `/v1/embeddings` or a request with images) is steered to hosts with a model of that kind. When none of those hosts was healthy, Olla fell back to every compatible endpoint, so with the only embedder stopped, `/embed` went to the reranker and classifier instances and TEI answered `424`. Olla now answers `503` with `X-Olla-Routing-Reason: capability_unavailable` and `X-Olla-Routing-Strategy: capability` when models with the capability exist but none is on a healthy endpoint. Nothing to change on your side: if no model with the capability has ever been discovered, the unfiltered fallback still applies, and requests that name a model are unaffected.
+
+### Fixed: profile paths now list what each backend serves
+
+`/olla/proxy/v1/responses` and `/olla/proxy/v1/messages` were narrowed to the profiles that
+declared them, evicting backends that serve them without saying so. The shipped profiles
+now declare `/v1/responses` (vLLM, SGLang, LMDeploy, llama.cpp, LM Studio, vLLM-MLX, LiteLLM,
+Ollama, OpenAI-compatible, Lemonade, Docker Model Runner),
+`/v1/messages` (vLLM, SGLang, LMDeploy, llama.cpp, LM Studio, vLLM-MLX, LiteLLM, Lemonade, Ollama),
+`/v1/messages/count_tokens` (vLLM, SGLang, LMDeploy, llama.cpp, vLLM-MLX, LiteLLM) and `/v1/rerank`
+(SGLang, llama.cpp, vLLM-MLX). These paths only exist in newer backend releases (for example Ollama 0.14.0 for `/v1/messages`, vLLM 0.11.1, LM Studio 0.4.1), and older ones answer 404; `/v1/rerank` on llama.cpp also needs `--reranking`. Ollama also declares `/api/ps` and `/api/version`, so a proxy call to
+them goes to Ollama hosts only. Lemonade serves `/v1/responses` at `/api/v1/responses` and
+`/v1/responses`, and Docker Model Runner registers it under `/v1` and `/engines/v1`; both are declared
+at the unprefixed path so a standard `/olla/proxy/v1/responses` call keeps them as candidates.
+Docker Model Runner also declares `/anthropic/v1/messages` and `/anthropic/v1/messages/count_tokens`,
+which a direct proxy call used to miss in a mixed fleet.
+
+The generic OpenAI-compatible profile stands in for servers Olla has no profile for, such as a remote
+vLLM or SGLang typed `openai`, so it declares `/v1/responses` and `/v1/messages`: it stays a candidate
+for each of them in a fleet where other profiles declare the path. It does not declare
+`/v1/messages/count_tokens` or `/v1/rerank`, because the paths of this profile also admit Ollama and
+LM Studio, which answer 404 on both; a remote server that serves them needs its own profile. Declaring a path is not Anthropic passthrough
+(`anthropic_support` stays disabled), and a request that names a model is still routed by that
+model. A custom profile in `config/profiles/` that serves these paths needs the same entries.
 
 ### Changed: one-segment profile paths no longer claim deeper request paths
 
@@ -126,6 +174,19 @@ the provider prefixes, `/olla/anthropic/v1/messages` and `GET /olla/models/{id}`
 serves the exact name, Olla now retries once as `<name>:latest` against Ollama endpoints only, so a
 vLLM `foo:latest` still never answers `foo`. The request goes to Ollama as you wrote it, and `foo`
 and `foo:latest` share one stats row, and one sticky key when it is built from the model name (`prefix_hash` hashes the raw body, so it still differs). Nothing to change on your side.
+
+### Fixed: `/olla/ollama/api/ps` covers every Ollama endpoint; `/api/list` removed
+
+`/olla/ollama/api/ps` was forwarded to one arbitrary instance, so with several Ollama
+endpoints it reported a fraction of what was loaded. It now queries every healthy Ollama
+endpoint and merges the results, one entry per loaded model per host with an added
+`olla_endpoint` field; endpoints that fail are skipped and flagged with `X-Olla-Partial`.
+Each endpoint is queried with its own credentials only, ignoring `HTTP_PROXY`.
+
+`POST /olla/ollama/api/blobs/{digest}` now returns 501 like the other model-management
+routes, which answer 501 to every method. `/olla/ollama/api/list` returned 501 but is not
+an Ollama endpoint, so the route is gone: requests to it now reach the backend and get
+Ollama's own 404.
 
 ## v0.0.29
 
