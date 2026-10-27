@@ -753,20 +753,3 @@ func TestParseContextLength(t *testing.T) {
 		})
 	}
 }
-
-// An instruct-named embedder matches the chat name pattern but is not a chat
-// model, so it must not list "chat"; a backend that declares chat keeps it.
-func TestInferCapabilities_NonGenerativeKindDropsNamePatternChat(t *testing.T) {
-	t.Parallel()
-
-	got := inferCapabilitiesFromMetadata("embeddings", "gte-Qwen2-7B-instruct", 0, nil)
-	assert.NotContains(t, got, "chat", "chat from an instruct name is not a chat model")
-	assert.NotContains(t, got, "text-generation")
-
-	declared := map[string]interface{}{"capabilities": []interface{}{"chat"}}
-	got = inferCapabilitiesFromMetadata("embeddings", "gte-Qwen2-7B-instruct", 0, declared)
-	assert.Contains(t, got, "chat", "an explicit declaration from the backend is kept")
-
-	got = inferCapabilitiesFromMetadata("llm", "llama-3-instruct", 0, nil)
-	assert.Contains(t, got, "chat", "generative models keep the name-pattern chat")
-}

@@ -242,6 +242,10 @@ func newKindFixture(t *testing.T) (*Application, *http.ServeMux) {
 	register("vllm-1", domain.ProfileVLLM, `{"data":[{"id":"Qwen/Qwen3-8B","object":"model"}]}`)
 	register("sglang-1", domain.ProfileSGLang, `{"data":[{"id":"meta-llama/Llama-3-8B-Instruct","object":"model"}]}`)
 
+	register("tei-1", constants.ProviderTypeTextEmbeddingsInference, `{"model_id":"/data/bge-reranker-base","served_model_name":"BAAI/bge-reranker-base","model_type":{"reranker":{}}}`)
+	// an embedder whose name matches the instruct/chat pattern
+	register("tei-2", constants.ProviderTypeTextEmbeddingsInference, `{"served_model_name":"Alibaba-NLP/gte-Qwen2-7B-instruct","model_type":{"embedding":{"pooling":"last-token"}}}`)
+
 	app := &Application{
 		modelRegistry:    reg,
 		repository:       &mockRepository{endpoints: endpoints},
@@ -260,11 +264,13 @@ func TestUnifiedModels_ModelKind(t *testing.T) {
 	app, mux := newKindFixture(t)
 
 	want := map[string]string{
-		"all-minilm:latest":              "embeddings", // Ollama capabilities
-		"acme/lookout-7b":                "vlm",        // LM Studio type
-		"llama3.1:8b":                    "llm",        // no kind reported
-		"Qwen/Qwen3-8B":                  "llm",        // vLLM, provider name no longer in type
-		"meta-llama/Llama-3-8B-Instruct": "llm",        // SGLang, ditto
+		"all-minilm:latest":                 "embeddings", // Ollama capabilities
+		"acme/lookout-7b":                   "vlm",        // LM Studio type
+		"llama3.1:8b":                       "llm",        // no kind reported
+		"Qwen/Qwen3-8B":                     "llm",        // vLLM, provider name no longer in type
+		"BAAI/bge-reranker-base":            "reranker",   // TEI reports the kind
+		"Alibaba-NLP/gte-Qwen2-7B-instruct": "embeddings", // "instruct" in the name does not make it a chat model
+		"meta-llama/Llama-3-8B-Instruct":    "llm",        // SGLang, ditto
 	}
 
 	t.Run("detail", func(t *testing.T) {
@@ -324,6 +330,26 @@ func TestUnifiedModels_ModelKind(t *testing.T) {
 			}
 			assert.ElementsMatch(t, wantIDs, gotIDs, "?type=%s", kind)
 		}
+	})
+
+	// ?type= is the kind, exactly: the instruct-named embedder is not an llm and
+	// the vlm is not either, while the legacy ?capability=chat means "can chat"
+	// and so still includes the vlm.
+	t.Run("type filter is the exact kind", func(t *testing.T) {
+		t.Parallel()
+		llms := list(t, "&type=llm")
+		assert.NotContains(t, llms, "Alibaba-NLP/gte-Qwen2-7B-instruct")
+		assert.NotContains(t, llms, "acme/lookout-7b")
+		assert.Contains(t, llms, "llama3.1:8b")
+		assert.Equal(t, map[string]string{"BAAI/bge-reranker-base": "reranker"}, list(t, "&type=reranker"))
+	})
+
+	t.Run("capability chat still matches models that can chat", func(t *testing.T) {
+		t.Parallel()
+		chat := list(t, "&capability=chat")
+		assert.Contains(t, chat, "acme/lookout-7b", "a vlm can chat")
+		assert.Contains(t, chat, "llama3.1:8b")
+		assert.NotContains(t, chat, "BAAI/bge-reranker-base")
 	})
 
 	t.Run("type is omitted when no kind can be told", func(t *testing.T) {

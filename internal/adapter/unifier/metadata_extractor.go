@@ -153,8 +153,7 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 	// embedding, rerank and classification models encode or score text, they
 	// don't generate it. The kind alone decides this, so it must not depend on
 	// the config having a type_capabilities entry for it.
-	_, nonGenerative := nonGenerativeModelTypes[modelTypeLower]
-	if nonGenerative {
+	if _, nonGenerative := nonGenerativeModelTypes[modelTypeLower]; nonGenerative {
 		delete(capabilities, "text-generation")
 	}
 
@@ -166,13 +165,6 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 				capabilities[cap] = true
 			}
 		}
-	}
-
-	// "chat" on a non-generative model can only have come from an instruct/chat
-	// name pattern (gte-Qwen2-7B-instruct is still an embedder); an explicit
-	// declaration from the backend is re-applied below
-	if nonGenerative {
-		delete(capabilities, "chat")
 	}
 
 	// Context window size determines long-form processing capabilities

@@ -178,7 +178,8 @@ func (a *Application) parseUnifiedModelsQuery(qry url.Values) (ports.ModelFilter
 		case "embedding", "embeddings", "vector_search":
 			filters.Type = "embeddings"
 		case "chat", "text_generation", "completion":
-			filters.Type = modelTypeLLM
+			// a capability, not the llm kind: vision models can chat too
+			filters.Capability = "chat"
 		}
 	}
 

@@ -110,7 +110,7 @@ func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModel
 
 // filterModels applies the specified filters to the models
 func filterModels(models []*domain.UnifiedModel, filters ports.ModelFilters) []*domain.UnifiedModel {
-	if filters.Endpoint == "" && filters.Available == nil && filters.Family == "" && filters.Type == "" {
+	if filters.Endpoint == "" && filters.Available == nil && filters.Family == "" && filters.Type == "" && filters.Capability == "" {
 		return models
 	}
 
@@ -139,6 +139,10 @@ func matchesFilters(model *domain.UnifiedModel, filters ports.ModelFilters) bool
 	}
 
 	if !matchesTypeFilter(model, filters.Type) {
+		return false
+	}
+
+	if !matchesCapabilityFilter(model, filters.Capability) {
 		return false
 	}
 
@@ -183,6 +187,21 @@ func matchesFamilyFilter(model *domain.UnifiedModel, family string) bool {
 // that picks up "chat" from an "instruct" name would still be listed under llm.
 func matchesTypeFilter(model *domain.UnifiedModel, filterType string) bool {
 	return filterType == "" || ModelKind(model) == filterType
+}
+
+// matchesCapabilityFilter is deliberately wider than the kind filter: "chat"
+// matches every model that can chat or complete, vision models included.
+func matchesCapabilityFilter(model *domain.UnifiedModel, capability string) bool {
+	switch capability {
+	case "":
+		return true
+	case "chat":
+		// text-generation is what a vision model carries instead of chat
+		return hasCapability(model.Capabilities, "chat") || hasCapability(model.Capabilities, "completion") ||
+			hasCapability(model.Capabilities, "text-generation")
+	default:
+		return hasCapability(model.Capabilities, capability)
+	}
 }
 
 func hasCapability(capabilities []string, capability string) bool {
