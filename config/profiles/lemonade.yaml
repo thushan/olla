@@ -37,7 +37,7 @@ api:
     # without the /api prefix, which is the form a client calling /v1/responses sends.
     - /api/v1/responses   # 11: OpenAI Responses API
     - /v1/responses       # 12: OpenAI Responses API (unprefixed)
-    # Anthropic Messages API for local models (Lemonade 10.9.0+; older releases 404).
+    # Anthropic Messages API (Lemonade 10.0.0+; models on its internal vLLM backend need 10.9.0+).
     - /v1/messages        # 13: Anthropic Messages API
 
   model_discovery_path: /api/v1/models
