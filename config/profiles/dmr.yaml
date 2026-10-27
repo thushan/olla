@@ -49,7 +49,8 @@ api:
     - /engines/vllm/v1/completions         # 10: text completions (vLLM)
     - /engines/vllm/v1/embeddings          # 11: embeddings (vLLM)
 
-    # The Anthropic and Responses paths below need Docker Model Runner 1.0.11+; older releases 404.
+    # The Anthropic paths and unprefixed /v1/responses need Docker Model Runner 1.0.11+;
+    # /engines/v1/responses needs 1.2.7+. Older releases 404.
     # Anthropic Messages API lives outside /engines; declared so a direct
     # /olla/proxy/anthropic/v1/messages call is not narrowed to other profiles'
     # /v1/messages (which suffix-match it) and DMR evicted.
