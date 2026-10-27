@@ -469,11 +469,12 @@ func (a *Application) registerStaticProviderRoutes() {
 				fullPath := basePath + route.path
 				desc := fmt.Sprintf("%s %s", displayName, route.description)
 
-				if route.isProxy {
+				switch {
+				case route.isProxy:
 					a.routeRegistry.RegisterProxyRoute(basePath, route.handler, desc, "")
-				} else if route.rateLimited {
+				case route.rateLimited:
 					a.routeRegistry.RegisterProxyRoute(fullPath, route.handler, desc, route.method)
-				} else {
+				default:
 					a.routeRegistry.RegisterWithMethod(fullPath, route.handler, desc, route.method)
 				}
 			}
