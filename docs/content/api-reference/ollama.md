@@ -299,7 +299,12 @@ loaded state lives on the instance and is not tracked by Olla.
 - Each endpoint is queried with its own configured headers and credentials, and those are never
   sent to any other endpoint. Environment proxies are not used, and redirects to a different
   host are not followed.
-- The whole fan-out is bounded to 5 seconds. An endpoint that errors, times out or returns
+- The route is rate limited like the other proxy routes, since one call queries every host.
+  A failing endpoint is logged at `WARN` once per window, with every failure at debug level.
+- A single endpoint's response is capped at 4 MiB; a larger one counts as a failure.
+- `/olla/proxy/api/ps` is unchanged and still goes to a single instance; use the Ollama prefix
+  for the merged view.
+- The whole fan-out is bounded to a fixed 5 seconds (not configurable). An endpoint that errors, times out or returns
   malformed JSON is left out and the response carries `X-Olla-Partial: N of M endpoints failed`.
   If every endpoint fails the response is `502`. With no healthy Ollama endpoints it is
   `{"models":[]}`.

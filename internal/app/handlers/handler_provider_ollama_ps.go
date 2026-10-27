@@ -92,7 +92,10 @@ func (a *Application) ollamaRunningModelsHandler(w http.ResponseWriter, r *http.
 		for i, res := range results {
 			if res.err != nil {
 				failed++
-				a.logger.Warn("Ollama /api/ps failed", "endpoint", targets[i].Name, "error", res.err)
+				a.logger.Debug("Ollama /api/ps failed", "endpoint", targets[i].Name, "error", res.err)
+				if a.rejectLog.allowPSFailure(targets[i].Name) {
+					a.logger.Warn("Ollama /api/ps failed", "endpoint", targets[i].Name, "error", res.err)
+				}
 				continue
 			}
 			models = append(models, res.models...)

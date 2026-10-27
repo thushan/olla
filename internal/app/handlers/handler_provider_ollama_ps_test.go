@@ -386,3 +386,84 @@ func TestOllamaPSClient_PooledAndNeverProxied(t *testing.T) {
 	}
 	assert.EqualValues(t, 1, conns.Load(), "sequential fetches should reuse one keep-alive connection")
 }
+
+type countingLogger struct {
+	mockStyledLogger
+	warns, debugs atomic.Int32
+}
+
+func (c *countingLogger) Warn(string, ...any)  { c.warns.Add(1) }
+func (c *countingLogger) Debug(string, ...any) { c.debugs.Add(1) }
+
+// A dashboard polling an instance whose /api/ps keeps failing must not write a
+// WARN per poll (the flood #237 removed elsewhere): one WARN per endpoint per
+// window, every failure still visible at Debug.
+func TestOllamaRunningModels_FailureWarnIsSampled(t *testing.T) {
+	t.Parallel()
+
+	log := &countingLogger{}
+	app := &Application{
+		logger:     log,
+		rejectLog:  newRejectLogs(log, newThrottleSet()),
+		repository: &mockRepository{},
+	}
+	good := psBackend(t, 200, `{"models":[]}`)
+	bad := psBackend(t, 500, `boom`)
+	app.repository = &mockRepository{endpoints: []*domain.Endpoint{
+		psEndpoint("good", "ollama", good, domain.StatusHealthy),
+		psEndpoint("bad1", "ollama", bad, domain.StatusHealthy),
+		psEndpoint("bad2", "ollama", bad, domain.StatusHealthy),
+	}}
+
+	const polls = 20
+	for range polls {
+		w := httptest.NewRecorder()
+		app.ollamaRunningModelsHandler(w, httptest.NewRequest(http.MethodGet, "/olla/ollama/api/ps", nil))
+		require.Equal(t, http.StatusOK, w.Code)
+	}
+	assert.EqualValues(t, 2, log.warns.Load(), "one WARN per failing endpoint, not per poll")
+	assert.EqualValues(t, 2*polls, log.debugs.Load(), "every failure stays visible at Debug")
+}
+
+// The fan-out hits every Ollama host, so it must sit behind the same rate limiter
+// as the proxy routes; a plain registration would leave it unthrottled.
+func TestOllamaPS_RouteIsRateLimited(t *testing.T) {
+	t.Parallel()
+
+	factory, err := profile.NewFactory("../../../config/profiles")
+	require.NoError(t, err)
+	reg := router.NewRouteRegistry(&mockStyledLogger{})
+	app := &Application{
+		Config:           &config.Config{},
+		logger:           &mockStyledLogger{},
+		routeRegistry:    reg,
+		profileFactory:   factory,
+		repository:       &mockRepository{},
+		converterFactory: converter.NewConverterFactory(),
+	}
+	app.registerProviderRoutes()
+
+	sec := &SecurityAdapters{securityAdapters: buildTightSecurityAdapters(t), logger: &mockStyledLogger{}}
+	mux := http.NewServeMux()
+	reg.WireUpWithSecurityChain(mux, sec)
+
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/olla/ollama/api/ps", nil))
+	assert.Equal(t, http.StatusTooManyRequests, rec.Code, rec.Body.String())
+}
+
+// One instance cannot make Olla buffer more than ollamaPSMaxBody.
+func TestFetchOllamaPS_BodyCap(t *testing.T) {
+	t.Parallel()
+
+	pad := strings.Repeat("x", ollamaPSMaxBody)
+	big := psBackend(t, 200, `{"models":[{"name":"m","pad":"`+pad+`"}]}`)
+	_, err := fetchOllamaPS(context.Background(), psEndpoint("big", "ollama", big, domain.StatusHealthy))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds")
+
+	small := psBackend(t, 200, `{"models":[{"name":"m","pad":"`+strings.Repeat("x", 1<<20)+`"}]}`)
+	got, err := fetchOllamaPS(context.Background(), psEndpoint("small", "ollama", small, domain.StatusHealthy))
+	require.NoError(t, err)
+	assert.Len(t, got, 1)
+}

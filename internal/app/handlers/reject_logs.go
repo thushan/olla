@@ -16,12 +16,16 @@ import (
 // line per window rather than one per name. The throttle caps its tracked keys.
 type rejectLogs struct {
 	request *logger.Throttle
+	// psFailure samples the per-endpoint /api/ps failure WARN, keyed by endpoint name
+	// (a finite, operator-configured set).
+	psFailure *logger.Throttle
 }
 
 // newRejectLogs registers the throttle in set (nil is allowed) so Application can flush it at shutdown.
 func newRejectLogs(log logger.StyledLogger, set *logger.ThrottleSet) *rejectLogs {
 	return &rejectLogs{
-		request: set.Track(logger.NewRejectThrottle(log, "Request rejected", "proxy", "client_status", nil)),
+		request:   set.Track(logger.NewRejectThrottle(log, "Request rejected", "proxy", "client_status", nil)),
+		psFailure: set.Track(logger.NewRejectThrottle(log, "Ollama /api/ps failed", "ollama_ps", "endpoint", nil)),
 	}
 }
 
@@ -29,6 +33,13 @@ func newRejectLogs(log logger.StyledLogger, set *logger.ThrottleSet) *rejectLogs
 // (an Application built without NewApplication, as in tests) logs everything.
 func (r *rejectLogs) allowRequest(clientIP string, status int) bool {
 	return r == nil || r.request.Allow(strconv.Itoa(status)+"|"+clientIP)
+}
+
+// allowPSFailure is true when this endpoint's /api/ps failure should be logged at WARN. A
+// dashboard polling an instance that hangs would otherwise write a WARN per poll. A nil
+// receiver logs everything.
+func (r *rejectLogs) allowPSFailure(endpoint string) bool {
+	return r == nil || r.psFailure.Allow(endpoint)
 }
 
 // newThrottleSet exists because NewApplication's logger parameter shadows the package.

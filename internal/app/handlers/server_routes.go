@@ -20,6 +20,7 @@ type staticRoute struct {
 	description string
 	method      string
 	isProxy     bool
+	rateLimited bool // takes the proxy security chain without being the catch-all
 }
 
 // staticProvider bundles routes with their URL prefixes for test scenarios
@@ -269,7 +270,10 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 
 			// Loaded state lives on each instance, so /api/ps is fanned out and merged
 			// rather than forwarded to whichever instance the balancer picks.
-			a.routeRegistry.RegisterWithMethod(basePath+"api/ps",
+			// It fans out to every Ollama host, so it takes the proxy route's rate-limit
+			// chain (the registry applies that to proxy routes only), as it did when it
+			// was forwarded through the proxy.
+			a.routeRegistry.RegisterProxyRoute(basePath+"api/ps",
 				a.ollamaRunningModelsHandler,
 				prefix+" running models", "GET")
 			a.routeRegistry.RegisterWithMethod(basePath+"api/show",
@@ -364,7 +368,7 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 			routes: []staticRoute{
 				{path: "api/tags", handler: a.ollamaModelsHandler, description: "models listing", method: "GET"},
 				{path: "v1/models", handler: a.ollamaOpenAIModelsHandler, description: "models (OpenAI format)", method: "GET"},
-				{path: "api/ps", handler: a.ollamaRunningModelsHandler, description: "running models", method: "GET"},
+				{path: "api/ps", handler: a.ollamaRunningModelsHandler, description: "running models", method: "GET", rateLimited: true},
 				{path: "api/show", handler: a.ollamaModelShowHandler, description: "model details", method: routeMethodAny},
 				{path: "api/pull", handler: a.unsupportedModelManagementHandler, description: "Model pull (unsupported)", method: routeMethodAny},
 				{path: "api/push", handler: a.unsupportedModelManagementHandler, description: "Model push (unsupported)", method: routeMethodAny},
@@ -467,6 +471,8 @@ func (a *Application) registerStaticProviderRoutes() {
 
 				if route.isProxy {
 					a.routeRegistry.RegisterProxyRoute(basePath, route.handler, desc, "")
+				} else if route.rateLimited {
+					a.routeRegistry.RegisterProxyRoute(fullPath, route.handler, desc, route.method)
 				} else {
 					a.routeRegistry.RegisterWithMethod(fullPath, route.handler, desc, route.method)
 				}
