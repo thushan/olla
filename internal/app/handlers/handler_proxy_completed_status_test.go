@@ -273,3 +273,31 @@ func TestLogRequestResult_FailureCarriesHTTPStatus(t *testing.T) {
 		assert.Equal(t, tc.want, has, "status %d fields %v", tc.status, el.errFields)
 	}
 }
+
+// A backend that refuses the connection fails before anything is committed; the error
+// response Olla writes is the status the client sees, and the ERROR line must carry it.
+func TestRequestFailed_CarriesWrittenErrorStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, engine := range []string{"sherpa", "olla"} {
+		for _, route := range statusRoutes() {
+			t.Run(engine+"/"+route.name, func(t *testing.T) {
+				t.Parallel()
+
+				dead := statusBackend(t, http.StatusOK, false)
+				deadURL := dead.URL
+				dead.Close()
+				h := newStatusHarness(t, engine, route, deadURL)
+
+				w := h.post(tagBareChat, false)
+
+				failed := h.logs.lines(t, "Request failed")
+				require.Len(t, failed, 1, "response %d: %s", w.Code, w.Body.String())
+				assert.Equal(t, "ERROR", failed[0].Level)
+				require.NotNil(t, failed[0].HTTPStatus, "failure line must carry the status written to the client")
+				assert.EqualValues(t, w.Code, *failed[0].HTTPStatus)
+				assert.Equal(t, http.StatusBadGateway, w.Code)
+			})
+		}
+	}
+}

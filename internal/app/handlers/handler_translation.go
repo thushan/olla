@@ -89,16 +89,17 @@ func (a *Application) executePassthroughRequest(
 	// Execute proxy
 	tracker := core.NewResponseStartedWriter(w)
 	err = a.proxyService.ProxyRequestToEndpoints(ctx, tracker, r, endpoints, pr.stats, pr.requestLogger)
-	pr.upstreamStatus = tracker.Status()
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, err)
 
+	// Error response first, through the tracker, so the logged status is what the client got.
 	if err != nil {
 		// only write error if response hasn't started
 		if w.Header().Get(constants.HeaderContentType) == "" {
-			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
+			a.writeTranslatorError(tracker, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
 		}
 	}
+	pr.upstreamStatus = tracker.Status()
+	pr.captureStickyOutcome(ctx, r)
+	a.logRequestResult(pr, err)
 
 	pr.stats.EndTime = time.Now()
 }
@@ -255,16 +256,15 @@ func (a *Application) executeTranslationRequest(
 		proxyErr = a.executeTranslatedNonStreamingRequest(ctx, w, r, endpoints, pr, trans)
 	}
 
-	pr.upstreamStatus = tracker.Status()
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, proxyErr)
-
 	if proxyErr != nil {
 		// only write error if response hasn't started
 		if w.Header().Get(constants.HeaderContentType) == "" {
 			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", proxyErr), http.StatusBadGateway)
 		}
 	}
+	pr.upstreamStatus = tracker.Status()
+	pr.captureStickyOutcome(ctx, r)
+	a.logRequestResult(pr, proxyErr)
 
 	pr.stats.EndTime = time.Now()
 }

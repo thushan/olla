@@ -96,13 +96,15 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 	tracker := core.NewResponseStartedWriter(w)
 
 	err := a.executeProxyRequest(ctx, tracker, r, endpoints, pr)
-	pr.upstreamStatus = tracker.Status()
-	pr.captureStickyOutcome(ctx, r)
-	a.logRequestResult(pr, err)
 
+	// The error response is written first so the logged status is what the client actually
+	// received (a 502 for a connection failure), not 0.
 	if err != nil {
 		a.handleProxyError(tracker, err)
 	}
+	pr.upstreamStatus = tracker.Status()
+	pr.captureStickyOutcome(ctx, r)
+	a.logRequestResult(pr, err)
 }
 
 // writeNoRoutableEndpoints short-circuits a request when endpoint selection produced
