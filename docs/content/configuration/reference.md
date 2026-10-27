@@ -213,7 +213,7 @@ proxy:
 
 ### Retry Behaviour
 
-As of v0.0.16, the retry mechanism is automatic and built-in for connection failures. When a connection error occurs (e.g., connection refused, network unreachable, timeout), Olla will automatically:
+As of v0.0.16, the retry mechanism is automatic and built-in for connection failures. When a connection error occurs (e.g., connection refused, connection reset, network unreachable), Olla will automatically:
 
 1. Mark the failed endpoint as unhealthy
 2. Try the next available healthy endpoint 

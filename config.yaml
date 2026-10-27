@@ -84,7 +84,7 @@ proxy:
   # max_retries: 3        # Not configurable: failover is automatic
   # retry_backoff: 500ms  # Not configurable: failover is automatic
 
-  # Failover: when a connection to a backend fails (refused, reset, timeout,
+  # Failover: when a connection to a backend fails (refused, reset,
   # network unreachable), Olla marks that endpoint unhealthy and retries the
   # request on the other healthy endpoints, each tried once (not after response
   # headers have been sent, so a reset mid-generation is not retried). This is automatic
