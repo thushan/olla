@@ -428,8 +428,6 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		"/v1/embeddings",
 		"/v1/responses",
 		"/v1/messages",
-		"/v1/messages/count_tokens",
-		"/v1/rerank",
 	}
 	openAIConfig.API.ModelDiscoveryPath = DefaultModelsUri
 	openAIConfig.API.HealthCheckPath = DefaultModelsUri

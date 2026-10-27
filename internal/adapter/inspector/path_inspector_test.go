@@ -571,9 +571,9 @@ var knownServers = map[string][]string{
 	"/v1/models":                {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
 	"/v1/embeddings":            {"llamacpp", "lm-studio", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "text-embeddings-inference", "vllm", "vllm-mlx"},
 	"/v1/responses":             {"docker-model-runner", "lemonade", "llamacpp", "lm-studio", "litellm", "lmdeploy", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
-	"/v1/messages":              {"llamacpp", "litellm", "lm-studio", "lmdeploy", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
-	"/v1/messages/count_tokens": {"llamacpp", "litellm", "lmdeploy", "omlx", "openai-compatible", "sglang", "vllm-mlx"},
-	"/v1/rerank":                {"llamacpp", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/messages":              {"lemonade", "llamacpp", "litellm", "lm-studio", "lmdeploy", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/messages/count_tokens": {"llamacpp", "litellm", "lmdeploy", "omlx", "sglang", "vllm", "vllm-mlx"},
+	"/v1/rerank":                {"llamacpp", "omlx", "sglang", "vllm", "vllm-mlx"},
 }
 
 func TestShippedProfiles_StandardPathDeclarationsMatchKnownServers(t *testing.T) {

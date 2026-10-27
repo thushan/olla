@@ -82,8 +82,8 @@ A request that names no model but needs a capability (for example `/embed`, `/re
 declared them, evicting backends that serve them without saying so. The shipped profiles
 now declare `/v1/responses` (vLLM, SGLang, LMDeploy, llama.cpp, LM Studio, vLLM-MLX, LiteLLM,
 Ollama, OpenAI-compatible, Lemonade, Docker Model Runner),
-`/v1/messages` (vLLM, SGLang, LMDeploy, llama.cpp, LM Studio, vLLM-MLX, LiteLLM, Ollama),
-`/v1/messages/count_tokens` (SGLang, LMDeploy, llama.cpp, vLLM-MLX, LiteLLM) and `/v1/rerank`
+`/v1/messages` (vLLM, SGLang, LMDeploy, llama.cpp, LM Studio, vLLM-MLX, LiteLLM, Lemonade, Ollama),
+`/v1/messages/count_tokens` (vLLM, SGLang, LMDeploy, llama.cpp, vLLM-MLX, LiteLLM) and `/v1/rerank`
 (SGLang, llama.cpp, vLLM-MLX). These paths only exist in newer backend releases (for example Ollama 0.14.0 for `/v1/messages`, vLLM 0.11.1, LM Studio 0.4.1), and older ones answer 404; `/v1/rerank` on llama.cpp also needs `--reranking`. Ollama also declares `/api/ps` and `/api/version`, so a proxy call to
 them goes to Ollama hosts only. Lemonade serves `/v1/responses` at `/api/v1/responses` and
 `/v1/responses`, and Docker Model Runner registers it under `/v1` and `/engines/v1`; both are declared
@@ -92,9 +92,10 @@ Docker Model Runner also declares `/anthropic/v1/messages` and `/anthropic/v1/me
 which a direct proxy call used to miss in a mixed fleet.
 
 The generic OpenAI-compatible profile stands in for servers Olla has no profile for, such as a remote
-vLLM or SGLang typed `openai`, so it declares `/v1/responses`, `/v1/messages`,
-`/v1/messages/count_tokens` and `/v1/rerank`: it stays a candidate for each of them in a fleet where
-other profiles declare the path. Declaring a path is not Anthropic passthrough
+vLLM or SGLang typed `openai`, so it declares `/v1/responses` and `/v1/messages`: it stays a candidate
+for each of them in a fleet where other profiles declare the path. It does not declare
+`/v1/messages/count_tokens` or `/v1/rerank`, because the paths of this profile also admit Ollama and
+LM Studio, which answer 404 on both; a remote server that serves them needs its own profile. Declaring a path is not Anthropic passthrough
 (`anthropic_support` stays disabled), and a request that names a model is still routed by that
 model. A custom profile in `config/profiles/` that serves these paths needs the same entries.
 
