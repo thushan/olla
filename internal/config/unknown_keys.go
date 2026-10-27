@@ -93,6 +93,12 @@ func walkStruct(n *yaml.Node, t reflect.Type, path string, depth int, out *[]Unk
 		}
 		ft, ok := fields[k.Value]
 		if !ok {
+			// Top-level "x-" keys are the compose-style extension convention,
+			// used purely to hold anchors. Content merged from them into a real
+			// section is still checked there.
+			if path == "" && strings.HasPrefix(k.Value, "x-") {
+				continue
+			}
 			if !freeForm {
 				*out = append(*out, UnknownKey{Path: joinKeyPath(path, k.Value), Line: k.Line})
 			}

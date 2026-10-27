@@ -140,7 +140,7 @@ func TestBuildValidationReport_IgnoredKeysListedWithoutChangingVerdict(t *testin
 		{Name: "profiles", Detail: "9 profile(s) loaded"},
 	}
 	withIgnored := []validationItem{
-		{Name: "config.yaml", Detail: "loaded from config.yaml", Ignored: []string{"proxy.retry (line 91)", "server.rate_limits.per_endpoint (line 42)"}},
+		{Name: "config.yaml", Detail: "loaded from config.yaml", IgnoredIn: "etc/olla.yaml", Ignored: []string{"proxy.retry (line 91)", "server.rate_limits.per_endpoint (line 42)"}},
 		{Name: "profiles", Detail: "9 profile(s) loaded"},
 	}
 
@@ -159,7 +159,7 @@ func TestBuildValidationReport_IgnoredKeysListedWithoutChangingVerdict(t *testin
 	if !strings.Contains(report, "[OK]   config.yaml") {
 		t.Errorf("config.yaml should still be OK, got:\n%s", report)
 	}
-	for _, want := range []string{"Ignored keys in config.yaml (2)", "proxy.retry (line 91)", "server.rate_limits.per_endpoint (line 42)"} {
+	for _, want := range []string{"Ignored keys in etc/olla.yaml (2)", "proxy.retry (line 91)", "server.rate_limits.per_endpoint (line 42)"} {
 		if !strings.Contains(report, want) {
 			t.Errorf("expected %q in report:\n%s", want, report)
 		}
@@ -173,7 +173,7 @@ func TestBuildValidationReport_IgnoredKeysDoNotMaskRealFailures(t *testing.T) {
 	t.Parallel()
 
 	_, code := buildValidationReport([]validationItem{
-		{Name: "config.yaml", Detail: "loaded", Ignored: []string{"a (line 1)"}},
+		{Name: "config.yaml", Detail: "loaded", IgnoredIn: "c.yaml", Ignored: []string{"a (line 1)"}},
 		{Name: "models.yaml", Warnings: []string{"broken"}},
 	})
 	if code != 1 {
@@ -188,6 +188,9 @@ func TestRunValidateConfig_UnknownKeyReportedAndExitUnchanged(t *testing.T) {
 	}
 	report, code := runValidateConfig(path)
 
+	if !strings.Contains(report, "Ignored keys in "+path) {
+		t.Errorf("expected the heading to name the real file %s, got:\n%s", path, report)
+	}
 	if !strings.Contains(report, "proxy.bogus_key (line 2)") {
 		t.Errorf("expected the unknown key in the report, got:\n%s", report)
 	}

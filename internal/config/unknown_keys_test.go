@@ -60,7 +60,17 @@ func TestFindUnknownKeys(t *testing.T) {
 		{
 			name: "anchor and alias reuse",
 			yaml: "x-base: &base\n  engine: olla\nproxy: *base\n",
-			want: []string{"x-base (line 1)"},
+			want: nil,
+		},
+		{
+			name: "x- extension key is skipped but merged unknowns are still reported",
+			yaml: "x-base: &base\n  engine: olla\n  bogus: 1\nproxy:\n  <<: *base\n",
+			want: []string{"proxy.bogus (line 3)"},
+		},
+		{
+			name: "x- prefix only exempts top-level keys",
+			yaml: "proxy:\n  x-thing: 1\nx-top: 1\nxray: 1\n",
+			want: []string{"proxy.x-thing (line 2)", "xray (line 4)"},
 		},
 		{
 			name: "merge key pulls known keys without flagging them",

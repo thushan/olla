@@ -14,11 +14,12 @@ import (
 // so the formatting/exit-code logic can be tested without touching the real
 // filesystem or config packages.
 type validationItem struct {
-	Err      error    // the source is entirely unusable
-	Name     string   // e.g. "config.yaml"
-	Detail   string   // human-readable summary, shown when there's no fatal Err
-	Warnings []string // non-fatal issues - the source is usable, typically via fallback
-	Ignored  []string // keys the file sets that nothing reads; reported but never affect the verdict
+	Err       error    // the source is entirely unusable
+	Name      string   // e.g. "config.yaml"
+	Detail    string   // human-readable summary, shown when there's no fatal Err
+	Warnings  []string // non-fatal issues - the source is usable, typically via fallback
+	IgnoredIn string   // file the ignored keys came from, for the section heading
+	Ignored   []string // keys the file sets that nothing reads; reported but never affect the verdict
 }
 
 // buildValidationReport formats a human-readable --validate-config summary
@@ -58,7 +59,7 @@ func buildValidationReport(items []validationItem) (report string, exitCode int)
 		if len(item.Ignored) == 0 {
 			continue
 		}
-		fmt.Fprintf(&buf, "\nIgnored keys in %s (%d) - not read by Olla, no effect on the result:\n", item.Name, len(item.Ignored))
+		fmt.Fprintf(&buf, "\nIgnored keys in %s (%d) - not read by Olla, no effect on the result:\n", item.IgnoredIn, len(item.Ignored))
 		for _, k := range item.Ignored {
 			fmt.Fprintf(&buf, "         - %s\n", k)
 		}
@@ -92,7 +93,7 @@ func runValidateConfig(configFile string) (string, int) {
 		} else {
 			source = "loaded from " + source
 		}
-		items = append(items, validationItem{Name: "config.yaml", Detail: source, Ignored: unknownKeyStrings(cfg.UnknownKeys)})
+		items = append(items, validationItem{Name: "config.yaml", Detail: source, IgnoredIn: cfg.Filename, Ignored: unknownKeyStrings(cfg.UnknownKeys)})
 	}
 
 	_, modelErr := unifier.LoadModelConfig()
