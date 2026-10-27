@@ -143,6 +143,21 @@ var nonGenerativeModelTypes = map[string]struct{}{
 // text-generation default any more than a typed one does.
 var nonGenerativeCapabilities = []string{"embeddings", "rerank", "classification"}
 
+// dropGenerativeForNonGenerative removes the generative defaults from a model
+// that name patterns tagged as an embedder, reranker or classifier.
+func dropGenerativeForNonGenerative(capabilities map[string]bool) {
+	for _, cap := range nonGenerativeCapabilities {
+		if capabilities[cap] {
+			delete(capabilities, "text-generation")
+			// chat reaches an unreported-kind model only through an instruct/chat
+			// name pattern (gte-Qwen2-7B-instruct is still an embedder); a
+			// declaration from the backend is re-applied later
+			delete(capabilities, "chat")
+			return
+		}
+	}
+}
+
 // inferCapabilitiesFromMetadata infers model capabilities from various metadata fields
 func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]interface{}) []string {
 	capabilities := make(map[string]bool)
@@ -177,16 +192,7 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 	// said what the model is, so the name must not strip it. Only an unreported
 	// kind (vLLM) is left to the name patterns.
 	if modelTypeLower != "llm" && modelTypeLower != "vlm" {
-		for _, cap := range nonGenerativeCapabilities {
-			if capabilities[cap] {
-				delete(capabilities, "text-generation")
-				// chat reaches an unreported-kind model only through an instruct/chat
-				// name pattern (gte-Qwen2-7B-instruct is still an embedder); a
-				// declaration from the backend is re-applied below
-				delete(capabilities, "chat")
-				break
-			}
-		}
+		dropGenerativeForNonGenerative(capabilities)
 	}
 
 	// Context window size determines long-form processing capabilities
