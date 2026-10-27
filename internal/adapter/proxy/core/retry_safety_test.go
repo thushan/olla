@@ -515,3 +515,33 @@ func TestRetry_HTTPTestBackend_PostRSTBeforeBody(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, secondHit, "second endpoint must be tried after first fails without writing bytes")
 }
+
+func TestResponseStartedWriter_Status(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zero until committed", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, 0, NewResponseStartedWriter(httptest.NewRecorder()).Status())
+	})
+	t.Run("explicit status", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		rw.WriteHeader(http.StatusTooManyRequests)
+		assert.Equal(t, http.StatusTooManyRequests, rw.Status())
+	})
+	t.Run("body without header is 200", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		_, err := rw.Write([]byte("x"))
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rw.Status())
+	})
+	t.Run("interim and repeat headers do not replace the final status", func(t *testing.T) {
+		t.Parallel()
+		rw := NewResponseStartedWriter(httptest.NewRecorder())
+		rw.WriteHeader(http.StatusEarlyHints)
+		rw.WriteHeader(http.StatusBadGateway)
+		rw.WriteHeader(http.StatusOK)
+		assert.Equal(t, http.StatusBadGateway, rw.Status())
+	})
+}

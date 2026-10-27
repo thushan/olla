@@ -52,6 +52,7 @@ type ProxyFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request,
 type ResponseStartedWriter struct {
 	http.ResponseWriter
 	started bool
+	status  int
 }
 
 // NewResponseStartedWriter wraps w so callers can observe whether a response has
@@ -62,11 +63,18 @@ func NewResponseStartedWriter(w http.ResponseWriter) *ResponseStartedWriter {
 
 func (rw *ResponseStartedWriter) WriteHeader(code int) {
 	rw.started = true
+	// 1xx interim responses are not the final status the client sees.
+	if rw.status == 0 && code >= http.StatusOK {
+		rw.status = code
+	}
 	rw.ResponseWriter.WriteHeader(code)
 }
 
 func (rw *ResponseStartedWriter) Write(b []byte) (int, error) {
 	rw.started = true
+	if rw.status == 0 {
+		rw.status = http.StatusOK
+	}
 	return rw.ResponseWriter.Write(b)
 }
 
@@ -74,6 +82,12 @@ func (rw *ResponseStartedWriter) Write(b []byte) (int, error) {
 // client yet.
 func (rw *ResponseStartedWriter) Started() bool {
 	return rw.started
+}
+
+// Status is the final status code sent to the client: 0 until a response is committed,
+// and 200 when body bytes were written without an explicit WriteHeader.
+func (rw *ResponseStartedWriter) Status() int {
+	return rw.status
 }
 
 // Unwrap exposes the underlying ResponseWriter so http.NewResponseController can
