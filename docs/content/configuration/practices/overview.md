@@ -134,7 +134,7 @@ server:
     burst_size: 50
 ```
 
-Sizing guidelines:
+Sizing guidelines (see [Rate Limit Best Practices](rate-limits.md) for Claude Code and agent traffic):
 
 - Set global limit to 80% of tested capacity
 - Per-IP limits prevent single client abuse

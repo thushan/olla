@@ -113,6 +113,11 @@ server:
 | `rate_limits.trust_proxy_headers` | bool | `false` | Trust X-Forwarded-For |
 | `rate_limits.trusted_proxy_cidrs` | []string | `["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]` | Trusted proxy CIDRs |
 
+Rate limits and the request size limits apply to the proxy routes and to the translator routes
+(`/olla/anthropic/v1/messages`, `/olla/anthropic/v1/messages/count_tokens` and `/olla/anthropic/v1/models`);
+a translator registered later is covered the same way. Translator routes answer a rejection in the translator's own
+error format. See [Rate Limit Best Practices](practices/rate-limits.md) for sizing.
+
 Example:
 
 ```yaml

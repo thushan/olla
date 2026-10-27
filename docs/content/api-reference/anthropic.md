@@ -704,7 +704,8 @@ curl -X POST http://localhost:40114/olla/anthropic/v1/messages \
 
 ## Rate Limiting
 
-Standard Olla rate limits apply:
+`/v1/messages`, `/v1/messages/count_tokens` and `/v1/models` are rate limited and size limited like the other proxy routes,
+and share each client's per-IP bucket with them:
 
 | Limit Type | Default |
 |------------|---------|
@@ -721,6 +722,17 @@ server:
     per_ip_requests_per_minute: 100
     burst_size: 50
 ```
+
+A limited request gets `429` with a `Retry-After` header (seconds) and an Anthropic error body, which Claude Code and the
+Anthropic SDKs retry:
+
+```json
+{"type":"error","error":{"type":"rate_limit_error","message":"Too Many Requests"}}
+```
+
+A body over `server.request_limits.max_body_size` gets `413` with `request_too_large` in the same shape.
+Claude Code at its usual pace stays well inside the defaults; for many parallel sessions behind one IP see
+[Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 
 
 ## Error Responses

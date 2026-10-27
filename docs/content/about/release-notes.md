@@ -43,7 +43,24 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   `retry_backoff` fails startup. See [discovery retries](#fixed-model-discovery-now-retries-failed-fetches).
 - **Name patterns tag rerankers and embedders** on backends that report no kind, so those models drop `text-generation` and `chat`.
   A custom `models.yaml` with its own `name_patterns` needs the two new entries. See [name patterns](#added-rerankers-and-embedders-recognised-by-name-on-backends-that-report-no-kind).
+- **Anthropic and Claude Code traffic is now rate limited.** `/olla/anthropic/v1/messages`, `/messages/count_tokens` and
+  `/models` take the same limits as the proxy routes (default 100 requests per minute per IP, burst 50, 1000 globally),
+  and share each client's per-IP bucket with them. Claude Code stays well inside these, including a few parallel sessions,
+  but many sessions behind one IP (a team behind NAT, CI runners, parallel agents) may now see 429s: raise
+  `server.rate_limits.per_ip_requests_per_minute` and `burst_size`. See [Anthropic rate limits](#fixed-anthropic-routes-are-now-rate-limited).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
+
+### Fixed: Anthropic routes are now rate limited
+
+`/olla/anthropic/v1/messages`, `/messages/count_tokens` and `/models` were registered as plain routes, so neither the rate limit
+nor the request size limit reached them, although the API reference said the standard limits applied. They are the main entry point for
+Claude Code. Translator routes now register through `RegisterTranslatorRoute` and sit behind the same chain as the proxy
+routes, and a translator added later is covered without extra wiring. A limited request gets `429` with `Retry-After` and
+Anthropic's `rate_limit_error` body, and an oversized one gets `413` with `request_too_large`, so Claude Code retries and
+reports them properly. Measured against a real Ollama, one Claude Code session peaked at 3 requests a minute and three parallel
+sessions at 10 a minute with a burst of 4, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
+behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
+Reported by @infodancer.
 
 ### Fixed: Anthropic translation sends each backend its own chat path
 

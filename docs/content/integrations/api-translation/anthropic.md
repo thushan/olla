@@ -672,6 +672,14 @@ Configure Crush in `~/.config/crush/crush.json` (`%LOCALAPPDATA%\crush\crush.jso
 
 See [Crush CLI Integration](../frontend/crush-cli.md) for complete setup.
 
+## Rate Limits
+
+The Anthropic routes are covered by Olla's rate limits (default 100 requests per minute per IP, burst 50, 1000 globally)
+and by the request size limit. Claude Code stays well inside them, including with a few parallel sessions. A limited
+request gets `429` with `Retry-After` and an Anthropic `rate_limit_error` body, and Claude Code retries it. If many
+sessions share one IP, raise `server.rate_limits.per_ip_requests_per_minute`; see
+[Rate Limit Best Practices](../../configuration/practices/rate-limits.md).
+
 ## Feature Support
 
 ### Fully Supported

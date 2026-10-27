@@ -166,6 +166,7 @@ nav:
           - Overview: configuration/practices/overview.md
           - Configuration: configuration/practices/configuration.md
           - Security: configuration/practices/security.md
+          - Rate Limits: configuration/practices/rate-limits.md
           - Performance: configuration/practices/performance.md
           - Monitoring: configuration/practices/monitoring.md
   - Integrations:
