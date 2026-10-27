@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func keyStrings(keys []UnknownKey) []string {
@@ -86,6 +87,11 @@ func TestFindUnknownKeys(t *testing.T) {
 			name: "merge sequence",
 			yaml: "a: &a\n  bogus_a: 1\nb: &b\n  bogus_b: 1\nproxy:\n  <<: [*a, *b]\n",
 			want: []string{"a (line 1)", "b (line 3)", "proxy.bogus_a (line 2)", "proxy.bogus_b (line 4)"},
+		},
+		{
+			name: "alias used as a key resolves to the anchored name",
+			yaml: "x-key: &section proxy\n*section:\n  bogus: 1\n",
+			want: []string{"proxy.bogus (line 3)"},
 		},
 		{name: "scalar document", yaml: "42\n", want: nil},
 		{name: "null document", yaml: "~\n", want: nil},
@@ -188,5 +194,20 @@ func TestFindUnknownKeys_ShippedConfigWellFormed(t *testing.T) {
 		if k.Path == "" || k.Line < 1 || strings.HasPrefix(k.Path, ".") {
 			t.Errorf("malformed unknown key: %+v", k)
 		}
+	}
+}
+
+func TestFindUnknownKeys_MergeBombTerminates(t *testing.T) {
+	t.Parallel()
+	doc := "x-bomb: &bomb\n  <<: [*bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb]\n  bogus: 1\nx-root: &root {proxy: *bomb}\n<<: *root\nproxy: {}\n"
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = FindUnknownKeys([]byte(doc))
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("walker did not terminate on a self-referencing merge")
 	}
 }
