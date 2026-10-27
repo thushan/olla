@@ -128,6 +128,13 @@ func (sv *SizeValidator) validateBodySize(req ports.SecurityRequest) error {
 }
 
 func (sv *SizeValidator) CreateMiddleware() func(http.Handler) http.Handler {
+	return sv.CreateMiddlewareWithReject(nil)
+}
+
+// CreateMiddlewareWithReject is CreateMiddleware with a caller-supplied rejection
+// writer, so routes that speak a specific wire format (the translator routes) can
+// return a rejection their clients understand. A nil reject keeps the plain-text default.
+func (sv *SizeValidator) CreateMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			req := ports.SecurityRequest{
@@ -148,9 +155,9 @@ func (sv *SizeValidator) CreateMiddleware() func(http.Handler) http.Handler {
 				sv.recordViolation(r, req, result)
 
 				if r.ContentLength > sv.maxBodySize {
-					http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+					writeReject(w, reject, http.StatusRequestEntityTooLarge, "Request body too large")
 				} else {
-					http.Error(w, "Request headers too large", http.StatusRequestHeaderFieldsTooLarge)
+					writeReject(w, reject, http.StatusRequestHeaderFieldsTooLarge, "Request headers too large")
 				}
 				return
 			}

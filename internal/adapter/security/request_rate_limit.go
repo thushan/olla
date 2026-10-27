@@ -261,6 +261,12 @@ func (rl *RateLimitValidator) Stop() {
 }
 
 func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler {
+	return rl.CreateMiddlewareWithReject(nil)
+}
+
+// CreateMiddlewareWithReject is CreateMiddleware with a caller-supplied rejection
+// writer; see RejectFunc. A nil reject keeps the plain-text 429.
+func (rl *RateLimitValidator) CreateMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientIP := util.GetClientIP(r, rl.trustProxyHeaders, rl.trustedCIDRs)
@@ -309,7 +315,7 @@ func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler
 						"retry_after", result.RetryAfter)
 				}
 
-				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				writeReject(w, reject, http.StatusTooManyRequests, "Too Many Requests")
 				return
 			}
 

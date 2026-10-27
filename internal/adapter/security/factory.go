@@ -60,10 +60,20 @@ func (sa *Adapters) Stop() {
 // allocated four closures per request for no reason - the underlying
 // validators don't change after startup.
 func (sa *Adapters) CreateChainMiddleware() func(http.Handler) http.Handler {
-	rateLimitMiddleware := sa.CreateRateLimitMiddleware()
+	return sa.CreateChainMiddlewareWithReject(nil)
+}
+
+// CreateChainMiddlewareWithReject is CreateChainMiddleware for routes whose clients
+// expect a specific error format: both validators write their rejections through
+// reject. A nil reject keeps the plain-text responses.
+func (sa *Adapters) CreateChainMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler {
+	rateLimitMiddleware := func(next http.Handler) http.Handler { return next }
+	if sa.RateLimit != nil {
+		rateLimitMiddleware = sa.RateLimit.CreateMiddlewareWithReject(reject)
+	}
 	sizeMiddleware := func(next http.Handler) http.Handler { return next }
 	if sa.SizeValidation != nil {
-		sizeMiddleware = sa.SizeValidation.CreateMiddleware()
+		sizeMiddleware = sa.SizeValidation.CreateMiddlewareWithReject(reject)
 	}
 
 	return func(next http.Handler) http.Handler {

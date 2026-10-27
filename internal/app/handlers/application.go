@@ -49,6 +49,13 @@ func (s *SecurityAdapters) loggingMiddleware() func(http.Handler) http.Handler {
 // per-validator status codes (429 rate-limit, 413 body-too-large) are preserved. The abstract
 // securityChain path is kept as a fallback for test contexts where only the chain is wired.
 func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handler {
+	return s.CreateChainMiddlewareWithReject(nil)
+}
+
+// CreateChainMiddlewareWithReject is CreateChainMiddleware for routes whose clients
+// expect a specific error format (the translator routes). Rejections are written through
+// reject; nil keeps the plain-text responses.
+func (s *SecurityAdapters) CreateChainMiddlewareWithReject(reject security.RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		// Wrap with logging so every proxy request is recorded regardless of which
 		// security path runs below.
@@ -58,7 +65,7 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 			// Delegate to the concrete adapter chain. It sets the correct status codes
 			// (429 + Retry-After/X-RateLimit-* for rate limiting, 413 for oversized
 			// bodies) rather than flattening everything to 403.
-			concreteChain := s.securityAdapters.CreateChainMiddleware()(withAccessLogging)
+			concreteChain := s.securityAdapters.CreateChainMiddlewareWithReject(reject)(withAccessLogging)
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				concreteChain.ServeHTTP(w, r)
 			})
@@ -80,6 +87,10 @@ func (s *SecurityAdapters) CreateChainMiddleware() func(http.Handler) http.Handl
 
 				result, err := s.securityChain.Validate(r.Context(), secReq)
 				if err != nil || !result.Allowed {
+					if reject != nil {
+						reject(w, http.StatusForbidden, "Security validation failed")
+						return
+					}
 					http.Error(w, "Security validation failed", http.StatusForbidden)
 					return
 				}

@@ -11,12 +11,20 @@ import (
 	"github.com/thushan/olla/internal/logger"
 )
 
+// RejectFunc writes a security rejection (rate or size limit) in the wire format a
+// route's clients expect. Headers such as Retry-After are already set when it runs.
+type RejectFunc = func(w http.ResponseWriter, status int, message string)
+
 type RouteInfo struct {
 	Handler     http.HandlerFunc
+	Reject      RejectFunc
 	Description string
 	Method      string
 	Order       int
 	IsProxy     bool
+	// IsTranslator marks an inference route served by an API translator. It gets
+	// the same rate and size limits as proxy routes, with rejections written by Reject.
+	IsTranslator bool
 }
 
 type RouteRegistry struct {
@@ -47,6 +55,18 @@ func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFun
 		handler(w, req.WithContext(ctx))
 	}
 	r.registerWithMethod(route, wrappedHandler, description, method, true)
+}
+
+// RegisterTranslatorRoute registers a route served by an API translator (for example
+// /olla/anthropic/v1/messages). These are inference entry points, so they sit behind
+// the same rate and size limits as proxy routes. reject lets the translator answer a
+// rejection in its own error schema; nil falls back to plain text.
+func (r *RouteRegistry) RegisterTranslatorRoute(route string, handler http.HandlerFunc, description, method string, reject RejectFunc) {
+	r.registerWithMethod(route, handler, description, method, false)
+	info := r.routes[route]
+	info.IsTranslator = true
+	info.Reject = reject
+	r.routes[route] = info
 }
 
 func (r *RouteRegistry) registerWithMethod(route string, handler http.HandlerFunc, description, method string, isProxy bool) {
@@ -120,12 +140,19 @@ func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdap
 		CreateRateLimitMiddleware() func(http.Handler) http.Handler
 	}
 
+	// Optional: lets translator routes get the proxy chain with rejections written
+	// in the translator's own error format.
+	type rejectChainProvider interface {
+		CreateChainMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler
+	}
+
 	// Optional: size validation for non-proxy routes. The full security chain
 	// (proxy routes) already includes size enforcement; this ensures non-proxy
 	// routes (status, health, stats) are also protected against oversized bodies.
 	// Rate limiting on non-proxy routes is intentionally omitted: these endpoints
 	// are internal/observability-only and applying a per-IP token bucket would
-	// complicate operations without meaningful security benefit.
+	// complicate operations without meaningful security benefit. Translator routes
+	// are inference entry points, not observability, so they take the proxy chain.
 	type sizeMiddlewareProvider interface {
 		CreateSizeMiddleware() func(http.Handler) http.Handler
 	}
@@ -142,8 +169,12 @@ func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdap
 	for route, info := range r.routes {
 		var handler http.Handler = info.Handler
 
-		if info.IsProxy {
-			handler = adapters.CreateChainMiddleware()(handler)
+		if info.IsProxy || info.IsTranslator {
+			chain := adapters.CreateChainMiddleware()
+			if rc, ok := securityAdapters.(rejectChainProvider); ok && info.IsTranslator {
+				chain = rc.CreateChainMiddlewareWithReject(info.Reject)
+			}
+			handler = chain(handler)
 			mux.Handle(route, handler)
 		} else {
 			// Non-proxy routes (status, health, stats) get logging via
