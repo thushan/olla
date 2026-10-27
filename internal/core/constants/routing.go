@@ -20,6 +20,10 @@ const (
 	RoutingReasonModelUnavailableNoRefresh      = "model_unavailable_no_refresh"
 	RoutingReasonModelUnavailableAfterDiscovery = "model_unavailable_after_discovery"
 
+	// Capability unavailable (503 Service Unavailable): a model-less request needs a capability
+	// the fleet has models for, but every host serving one is unhealthy
+	RoutingReasonCapabilityUnavailable = "capability_unavailable"
+
 	// Fallback scenarios (200 OK with fallback action)
 	RoutingReasonAllHealthyFallback       = "all_healthy_fallback"
 	RoutingReasonAllHealthyAfterDiscovery = "all_healthy_after_discovery"
@@ -31,6 +35,10 @@ const (
 	RoutingReasonDiscoveryErrorFallback        = "discovery_error_fallback"
 	RoutingReasonDiscoveryError                = "discovery_error"
 )
+
+// RoutingStrategyCapability names the routing decision made by capability filtering, which
+// runs for requests that name no model and so has no configured strategy behind it.
+const RoutingStrategyCapability = "capability"
 
 // Fallback behavior constants for routing strategies
 const (

@@ -61,6 +61,10 @@ tools model no longer satisfies a request needing both. A request needing `funct
 requires the `tools` tag, which many backends never set. If you depended on a named request being
 steered by capability tags, name the model you want instead.
 
+### Fixed: a model-less request is refused when the only capable backend is down
+
+A request that names no model but needs a capability (for example `/embed`, `/rerank`, `/v1/embeddings` or a request with images) is steered to hosts with a model of that kind. When none of those hosts was healthy, Olla fell back to every compatible endpoint, so with the only embedder stopped, `/embed` went to the reranker and classifier instances and TEI answered `424`. Olla now answers `503` with `X-Olla-Routing-Reason: capability_unavailable` and `X-Olla-Routing-Strategy: capability` when models with the capability exist but none is on a healthy endpoint. Nothing to change on your side: if no model with the capability has ever been discovered, the unfiltered fallback still applies, and requests that name a model are unaffected.
+
 ### Changed: one-segment profile paths no longer claim deeper request paths
 
 TEI declares single-segment paths such as `/embed`, `/rerank`, `/health`, `/metrics` and `/tokenize`.

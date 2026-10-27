@@ -21,7 +21,7 @@ Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers. Availa
 | POST | `/olla/tei/similarity` | Sentence similarity scores |
 
 !!! info "Routing across TEI instances"
-    A TEI instance serves one model of one kind. TEI's native bodies carry no `model` field, so Olla routes by path: `/embed`, `/embed_all`, `/embed_sparse` and `/similarity` go to an instance serving an embedding model, `/rerank` to a reranker and `/predict` to a classifier. A request that names a model, such as `/v1/embeddings`, is routed by that name. If no healthy instance serves the needed kind, the request goes to any compatible instance and TEI answers `424`. See [Model kinds and routing](../integrations/backend/text-embeddings-inference.md#model-kinds-and-routing).
+    A TEI instance serves one model of one kind. TEI's native bodies carry no `model` field, so Olla routes by path: `/embed`, `/embed_all`, `/embed_sparse` and `/similarity` go to an instance serving an embedding model, `/rerank` to a reranker and `/predict` to a classifier. A request that names a model, such as `/v1/embeddings`, is routed by that name. If every instance serving the needed kind is unhealthy, Olla answers `503` (`X-Olla-Routing-Reason: capability_unavailable`). If no instance has ever served that kind, the request goes to any compatible instance and TEI answers `424`. See [Model kinds and routing](../integrations/backend/text-embeddings-inference.md#model-kinds-and-routing).
 
 ---
 

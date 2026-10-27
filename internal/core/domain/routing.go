@@ -27,6 +27,10 @@ type RequestProfile struct {
 	Path                 string
 	ModelName            string
 	SupportedBy          []string
+	// ProviderScope is the endpoint types a provider route (/olla/<provider>/) is confined to,
+	// empty on /olla/proxy/. SupportedBy alone can't express it: a path shared with another
+	// provider (/v1/embeddings) lists both, but provider filtering has already dropped one.
+	ProviderScope []string
 
 	RequestType     RequestType // Chat, completion, embedding, etc.
 	EstimatedTokens int         // For capacity planning
