@@ -819,7 +819,6 @@ features:
 | Memory Usage | -15% | baseline | 15% less |
 | Cache Hit Rate | 90% | 65% | +38% |
 | TTFT (ms) | 45 | 65 | -31% |
-| Max Concurrent | 150 | 100 | +50% |
 
 *Results with Llama-3.1-8B on A100 80GB*
 

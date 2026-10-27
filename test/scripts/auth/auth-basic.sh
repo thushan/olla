@@ -97,8 +97,6 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: false
-  unification:
-    enabled: false
   routing_strategy:
     type: "optimistic"
     options:

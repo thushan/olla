@@ -734,9 +734,9 @@ discovery:
         check_interval: 10s # Check frequency
 ```
 
-### 3. Tag Backends by Hardware
+### 3. Rank Backends by Hardware
 
-Use tags for hardware-specific routing:
+Use `priority` to prefer faster hardware, with the others as failover:
 
 ```yaml
 discovery:
@@ -745,9 +745,11 @@ discovery:
       - url: "http://npu-server:8000"
         name: "lemonade-npu"
         type: "lemonade"
+        priority: 100
       - url: "http://cpu-server:8000"
         name: "lemonade-cpu"
         type: "lemonade"
+        priority: 50
 ```
 
 ### 4. Monitor Health Actively

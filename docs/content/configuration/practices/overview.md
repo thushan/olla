@@ -128,7 +128,7 @@ server:
     per_ip_requests_per_minute: 100
     
     # Monitoring endpoints
-    health_requests_per_minute: 5000
+    health_requests_per_minute: 5000  # Not applied: health endpoints are not rate limited
     
     # Burst allowance
     burst_size: 50
