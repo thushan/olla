@@ -181,8 +181,8 @@ func createOptimisedTransport(config *Configuration) *http.Transport {
 		ResponseHeaderTimeout: config.GetResponseHeaderTimeout(),
 		// Olla targets local inference backends; outbound proxy env vars are not
 		// honoured here because they would route credentialled requests through an
-		// intermediary on plain HTTP. Health probes (no credentials) keep the proxy
-		// so corporate monitoring infra still works for connectivity checks.
+		// intermediary on plain HTTP. The health checker and model discovery follow
+		// the same policy (adapter/factory.NewBackendHTTPClient).
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			dialer := &net.Dialer{
 				Timeout:   config.GetConnectionTimeout(),
