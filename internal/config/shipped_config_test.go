@@ -235,9 +235,8 @@ func TestDefaultConfig_MatchesShippedDashboardAccessPolicy(t *testing.T) {
 
 // TestShippedConfig_DashboardKnownFields makes silent dashboard key drops
 // loud: any field under `dashboard:` that the DashboardConfig schema does not
-// accept fails the test. Scoped to the dashboard node only because running
-// KnownFields across the whole Config trips on unrelated legacy keys elsewhere
-// in config.yaml that are pre-existing silent-drop bugs and out of scope.
+// accept fails the test. Scoped to the dashboard node for a precise failure
+// message; TestShippedYAML_NoUnknownConfigKeys covers the whole Config.
 func TestShippedConfig_DashboardKnownFields(t *testing.T) {
 	t.Parallel()
 
@@ -253,5 +252,38 @@ func TestShippedConfig_DashboardKnownFields(t *testing.T) {
 	if err := dec.Decode(&dc); err != nil {
 		t.Fatalf("shipped dashboard block contains a key the DashboardConfig "+
 			"schema does not accept; this is the silent-drop bug class: %v", err)
+	}
+}
+
+// TestShippedYAML_NoUnknownConfigKeys decodes every config the repo ships or
+// uses as a template onto the full Config with KnownFields(true). Load itself
+// is lenient, so a key the schema lacks (per_endpoint, proxy.retry and
+// discovery.health_check were all copied around this way) is silently dropped
+// and the file promises behaviour Olla does not have. Profiles and
+// config/models.yaml are separate schemas and are not covered here.
+func TestShippedYAML_NoUnknownConfigKeys(t *testing.T) {
+	t.Parallel()
+
+	files := []string{repoConfigPath, repoRootConfigPath}
+	for _, pattern := range []string{"../../examples/*/olla.yaml", "../../test/validate/*.yaml", "../../test/manual/*.yaml"} {
+		matches, err := filepath.Glob(pattern)
+		require.NoError(t, err)
+		require.NotEmpty(t, matches, "no files matched %s", pattern)
+		files = append(files, matches...)
+	}
+
+	for _, path := range files {
+		t.Run(filepath.ToSlash(path), func(t *testing.T) {
+			t.Parallel()
+
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+
+			var cfg Config
+			dec := yaml.NewDecoder(bytes.NewReader(data))
+			dec.KnownFields(true)
+			require.NoError(t, dec.Decode(&cfg),
+				"%s carries a key the Config schema does not accept; Olla would silently ignore it", path)
+		})
 	}
 }

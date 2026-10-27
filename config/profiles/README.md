@@ -78,7 +78,7 @@ api:
 # Platform characteristics
 characteristics:
   timeout: 2m                    # Request timeout
-  max_concurrent_requests: 5     # Concurrent request limit
+  max_concurrent_requests: 5     # Metadata only, not enforced by Olla
   default_priority: 50           # Default endpoint priority (0-100)
   streaming_support: true        # Supports streaming responses
 
@@ -139,7 +139,7 @@ To customise an existing profile:
 
 ### Characteristics Section
 - `timeout`: Maximum time to wait for responses
-- `max_concurrent_requests`: How many requests can be processed simultaneously
+- `max_concurrent_requests`: How many requests the platform can process simultaneously. Not currently enforced: Olla reads it as metadata and does not queue or reject requests against it. The backend's own concurrency settings are what limit parallelism today
 - `default_priority`: Priority for load balancing (higher = preferred)
 - `streaming_support`: Whether the platform supports streaming responses
 
@@ -185,7 +185,7 @@ api:
 
 characteristics:
   timeout: 2m
-  max_concurrent_requests: 100  # vLLM handles high concurrency well
+  max_concurrent_requests: 100  # vLLM handles high concurrency well (metadata only, not enforced)
   default_priority: 80
   streaming_support: true
 

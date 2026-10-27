@@ -17,8 +17,6 @@ server:
     per_ip_requests_per_minute: 200  # Higher for local development
     health_requests_per_minute: 1000
     burst_size: 100
-    per_endpoint:
-      default_requests_per_minute: 500
     cleanup_interval: 5m
     trust_proxy_headers: false
     trusted_proxy_cidrs: [

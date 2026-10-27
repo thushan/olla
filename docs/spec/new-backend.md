@@ -115,7 +115,7 @@ api:
 
 characteristics:
   timeout: 2m
-  max_concurrent_requests: 50
+  max_concurrent_requests: 50  # not enforced
   default_priority: 80                      # 0-100, higher = preferred
   streaming_support: true
 
@@ -176,7 +176,7 @@ resources:
     recommended_memory_gb: 8
     requires_gpu: false
     estimated_load_time_ms: 5000
-  concurrency_limits:
+  concurrency_limits:  # metadata only, not enforced (the backend's own settings limit parallelism)
     - min_memory_gb: 30
       max_concurrent: 2
     - min_memory_gb: 0

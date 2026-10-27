@@ -434,9 +434,9 @@ routing:
 characteristics:
   timeout: 10m
 
-# Adjust concurrency for your hardware
+# Adjust concurrency for your hardware (metadata only, Olla does not enforce it)
 resources:
-  concurrency_limits:
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 30
       max_concurrent: 1   # Reduce for constrained hardware
     - min_memory_gb: 8

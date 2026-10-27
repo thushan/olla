@@ -396,7 +396,7 @@ The SGLang profile includes GPU-optimised settings with enhanced efficiency:
 ```yaml
 characteristics:
   timeout: 2m
-  max_concurrent_requests: 150  # Higher than vLLM (100)
+  max_concurrent_requests: 150  # Higher than vLLM (100) - not enforced
   streaming_support: true
 
 resources:
@@ -408,6 +408,8 @@ resources:
 ### Memory Requirements
 
 SGLang requires less memory than vLLM due to RadixAttention efficiency:
+
+The Max Concurrent column is a guide for sizing your SGLang server, not a limit Olla applies.
 
 | Model Size | GPU Memory Required | Recommended | Max Concurrent |
 |------------|-------------------|-------------|----------------|
@@ -500,11 +502,11 @@ routing:
 # Adjust for larger models
 characteristics:
   timeout: 5m     # Increase for 70B models
-  max_concurrent_requests: 200  # Leverage SGLang's efficiency
+  max_concurrent_requests: 200  # Leverage SGLang's efficiency - not enforced
 
-# Modify concurrency limits
+# Modify concurrency limits (profile metadata, Olla does not enforce these)
 resources:
-  concurrency_limits:
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 100
       max_concurrent: 20    # Higher than vLLM due to efficiency
     - min_memory_gb: 50
@@ -817,7 +819,6 @@ features:
 | Memory Usage | -15% | baseline | 15% less |
 | Cache Hit Rate | 90% | 65% | +38% |
 | TTFT (ms) | 45 | 65 | -31% |
-| Max Concurrent | 150 | 100 | +50% |
 
 *Results with Llama-3.1-8B on A100 80GB*
 

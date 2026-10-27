@@ -95,7 +95,6 @@ model_registry:
       discovery_timeout: 5s
       discovery_refresh_on_miss: false
   unification:
-    enabled: true
     stale_threshold: 24h
     cleanup_interval: 10m
 
@@ -199,7 +198,6 @@ model_registry:
       discovery_timeout: 2s
       discovery_refresh_on_miss: false
   unification:
-    enabled: true
     stale_threshold: 1h  # More aggressive cleanup
     cleanup_interval: 5m
 
@@ -267,7 +265,6 @@ model_registry:
       discovery_timeout: 10s
       discovery_refresh_on_miss: true  # Auto-refresh in dev
   unification:
-    enabled: true
     stale_threshold: 1h
     cleanup_interval: 5m
 
@@ -344,7 +341,6 @@ model_registry:
       discovery_timeout: 2s
       discovery_refresh_on_miss: false
   unification:
-    enabled: true
     stale_threshold: 12h
     cleanup_interval: 15m
 ```
@@ -726,7 +722,6 @@ model_registry:
   type: "memory"
   enable_unifier: true
   unification:
-    enabled: true
     stale_threshold: 30m  # Faster detection of failures
     cleanup_interval: 2m
 
@@ -791,7 +786,6 @@ model_registry:
   type: "memory"
   enable_unifier: true
   unification:
-    enabled: true
     stale_threshold: 1h  # Quick cleanup of stale models
     cleanup_interval: 5m
 
