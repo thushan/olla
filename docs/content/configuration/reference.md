@@ -1053,9 +1053,9 @@ Each line is `[OK]`, `[WARN]` (usable but with issues, e.g. a `models.yaml` cand
 Unknown keys in `config.yaml` (typos, or keys Olla does not read) do not affect the result or exit code. They are listed after the per-source lines so they are easy to spot:
 
 ```text
-Ignored keys in config.yaml (2) - not read by Olla, no effect on the result:
-         - proxy.retry (line 91)
-         - discovery.health_check (line 107)
+Ignored keys in config/config.yaml (2) - not read by Olla, no effect on the result:
+         - proxy.engnie (line 12)
+         - server.rate_limit (line 20)
 ```
 
 The same keys are logged as a single WARN line when the server starts. Only the main config is checked, not `models.yaml` or profiles. Top-level keys starting with `x-` are skipped, so they can hold YAML anchors.

@@ -190,19 +190,21 @@ func TestLoad_NoUnknownKeysWhenClean(t *testing.T) {
 	}
 }
 
-// The shipped file is allowed to carry dead keys until they are removed, so
-// this only checks that detection runs over it without blowing up and that
-// every report is well formed - not which keys exist.
-func TestFindUnknownKeys_ShippedConfigWellFormed(t *testing.T) {
+// Guards the shipped defaults against dead keys creeping back in; the startup
+// WARN would otherwise fire on every default install.
+func TestShippedConfigsHaveNoUnknownKeys(t *testing.T) {
 	t.Parallel()
-	data, err := os.ReadFile("../../config/config.yaml")
-	if err != nil {
-		t.Skip("shipped config not found")
-	}
-	for _, k := range FindUnknownKeys(data) {
-		if k.Path == "" || k.Line < 1 || strings.HasPrefix(k.Path, ".") {
-			t.Errorf("malformed unknown key: %+v", k)
-		}
+	for _, path := range []string{"../../config.yaml", "../../config/config.yaml"} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			if got := keyStrings(FindUnknownKeys(data)); len(got) != 0 {
+				t.Errorf("%s has keys Olla ignores: %v", path, got)
+			}
+		})
 	}
 }
 
