@@ -54,7 +54,20 @@ func normalizeQuantization(quant string) string {
 
 	// Try to extract quantization from model name patterns
 	// e.g., "llama-3.2-1b-instruct-q4_k_m.gguf" -> "q4km"
-	patterns := []struct {
+	lowercaseQuant := strings.ToLower(quant)
+	for _, p := range quantNamePatterns {
+		if matches := p.regex.FindStringSubmatch(lowercaseQuant); matches != nil {
+			return p.regex.ReplaceAllString(matches[0], p.replacement)
+		}
+	}
+
+	return strings.ToLower(quant)
+}
+
+// Compiled once: these used to be rebuilt on every call, which was a quarter of the time
+// spent unifying a model list.
+var (
+	quantNamePatterns = []struct {
 		regex       *regexp.Regexp
 		replacement string
 	}{
@@ -65,16 +78,9 @@ func normalizeQuantization(quant string) string {
 		{regexp.MustCompile(`(?i)fp(\d+)`), "f$1"},
 		{regexp.MustCompile(`(?i)int(\d+)`), "int$1"},
 	}
-
-	lowercaseQuant := strings.ToLower(quant)
-	for _, p := range patterns {
-		if matches := p.regex.FindStringSubmatch(lowercaseQuant); matches != nil {
-			return p.regex.ReplaceAllString(matches[0], p.replacement)
-		}
-	}
-
-	return strings.ToLower(quant)
-}
+	paramSizePattern     = regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([BM]?)$`)
+	nameDelimiterPattern = regexp.MustCompile(`[-_:/]`)
+)
 
 // extractParameterSize extracts and normalizes parameter size from various formats
 func extractParameterSize(sizeStr string) (string, int64) {
@@ -85,8 +91,7 @@ func extractParameterSize(sizeStr string) (string, int64) {
 	originalStr := sizeStr
 	sizeStr = strings.TrimSpace(strings.ToUpper(sizeStr))
 
-	re := regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([BM]?)$`)
-	matches := re.FindStringSubmatch(sizeStr)
+	matches := paramSizePattern.FindStringSubmatch(sizeStr)
 
 	if len(matches) != 3 {
 		return originalStr, 0
@@ -354,7 +359,7 @@ var knownDelimiterFamilies = []string{
 // Config-driven FamilyAliases are checked first (e.g. "devstral" -> "mistral"),
 // falling back to the known bare family names mapping to themselves.
 func extractFromDelimiters(modelName string, config *ModelUnificationConfig) string {
-	parts := regexp.MustCompile(`[-_:/]`).Split(modelName, -1)
+	parts := nameDelimiterPattern.Split(modelName, -1)
 	if len(parts) == 0 {
 		return ""
 	}
