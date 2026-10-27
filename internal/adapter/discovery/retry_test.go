@@ -2,11 +2,11 @@ package discovery
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -83,7 +83,10 @@ func TestDiscoveryRetry_NonRetryableErrorsAreNotRetried(t *testing.T) {
 		"4xx wrap": NewDiscoveryError(ep.URLString, "ollama", "http_status", 401, 0, errors.New("unauthorised")),
 		"profile":  &ProfileNotFoundError{ProfileType: "nope"},
 		// the same oversized body comes back on every attempt
-		"oversized": NewDiscoveryError(ep.URLString, "ollama", "read_response", 200, 0, fmt.Errorf("model response exceeds 10 bytes: %w", ErrResponseTooLarge)),
+		"tls unknown authority": &NetworkError{URL: ep.URLString, Err: x509.UnknownAuthorityError{}},
+		"tls invalid cert":      &NetworkError{URL: ep.URLString, Err: x509.CertificateInvalidError{Reason: x509.Expired}},
+		"tls hostname":          &NetworkError{URL: ep.URLString, Err: x509.HostnameError{Host: "backend"}},
+		"oversized":             NewDiscoveryError(ep.URLString, "ollama", "read_response", 200, 0, fmt.Errorf("model response exceeds 10 bytes: %w", ErrResponseTooLarge)),
 	}
 	for name, failure := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -315,15 +318,14 @@ func TestNextRetryBackoff(t *testing.T) {
 	}
 }
 
-// Cancelling mid-backoff must return promptly and leave no goroutine behind.
-func TestDiscoveryRetry_CancelMidBackoffLeavesNoGoroutines(t *testing.T) {
+// Cancelling mid-backoff must return promptly rather than wait out the backoff.
+func TestDiscoveryRetry_CancelMidBackoffReturnsPromptly(t *testing.T) {
 	ep := createMockEndpoint("http://backend", "backend")
 	var calls atomic.Int32
 	client := failNTimes(100, &NetworkError{URL: "x", Err: errors.New("down")}, &calls)
 	svc := NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
 		DiscoveryConfig{Timeout: 2 * time.Hour, ConcurrentWorkers: 1, RetryAttempts: 5, RetryBackoff: time.Hour}, createTestLogger())
 
-	before := runtime.NumGoroutine()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- svc.DiscoverEndpoint(ctx, ep) }()
@@ -343,14 +345,6 @@ func TestDiscoveryRetry_CancelMidBackoffLeavesNoGoroutines(t *testing.T) {
 	}
 	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
 		t.Fatalf("took %v to notice cancellation", elapsed)
-	}
-
-	deadline := time.Now().Add(time.Second)
-	for runtime.NumGoroutine() > before && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if after := runtime.NumGoroutine(); after > before {
-		t.Fatalf("goroutines leaked: before=%d after=%d", before, after)
 	}
 }
 

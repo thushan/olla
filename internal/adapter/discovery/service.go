@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"sync"
@@ -287,6 +288,13 @@ func isRetryableWithinCycle(err error) bool {
 	}
 	// An oversized listing is the backend's steady state, not a blip.
 	if errors.Is(err, ErrResponseTooLarge) {
+		return false
+	}
+	// A certificate the client rejects is rejected again on the next handshake.
+	var unknownAuthority x509.UnknownAuthorityError
+	var certInvalid x509.CertificateInvalidError
+	var hostname x509.HostnameError
+	if errors.As(err, &unknownAuthority) || errors.As(err, &certInvalid) || errors.As(err, &hostname) {
 		return false
 	}
 	return IsRecoverable(err)
