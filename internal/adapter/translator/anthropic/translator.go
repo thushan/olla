@@ -15,6 +15,10 @@ import (
 	"github.com/thushan/olla/pkg/pool"
 )
 
+// openAIChatCompletionsPath is where translated requests are sent. Backends
+// are selected on this path, not on the Anthropic route the client called.
+const openAIChatCompletionsPath = "/v1/chat/completions"
+
 // Translator converts between Anthropic and OpenAI API formats
 // Uses buffer pooling to minimise memory allocations during translation
 type Translator struct {
@@ -74,6 +78,12 @@ func (t *Translator) Name() string {
 // Returns the Anthropic Messages API endpoint path
 func (t *Translator) GetAPIPath() string {
 	return "/olla/anthropic/v1/messages"
+}
+
+// TranslationTargetPath implements translator.TargetPathProvider: the OpenAI
+// path an Anthropic request is translated onto when it cannot be passed through.
+func (t *Translator) TranslationTargetPath() string {
+	return openAIChatCompletionsPath
 }
 
 // MaxBodySize implements BodySizeLimiter so the handler can apply the

@@ -170,7 +170,7 @@ api:
 - Native token counting metadata (`/anthropic/v1/messages/count_tokens`): Supported by the DMR profile. Olla's public `/olla/anthropic/v1/messages/count_tokens` endpoint currently uses local translator estimation rather than proxying DMR's native endpoint.
 - Passthrough mode is automatic, no client-side configuration needed
 - Responses include `X-Olla-Mode: passthrough` header when passthrough is active
-- Falls back to translation mode if passthrough conditions are not met
+- Falls back to translation mode if passthrough conditions are not met. Translated requests are sent to `/engines/v1/chat/completions`, the path the profile declares, so Docker Desktop builds without the root `/v1/*` alias work too
 
 For more information, see [API Translation](../../concepts/api-translation.md#passthrough-mode) and [Anthropic API Reference](../../api-reference/anthropic.md).
 

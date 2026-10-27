@@ -239,6 +239,7 @@ func TestTranslationHandler_DeclaredPaths_DoesNotEvictUndeclaringBackends(t *tes
 					Config:         &config.Config{},
 					logger:         log,
 					inspectorChain: chain,
+					pathInspector:  pathInspector,
 					profileFactory: factory,
 					profileLookup:  factory,
 					discoveryService: &mockDiscoveryServiceWithFunc{getHealthyEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) {

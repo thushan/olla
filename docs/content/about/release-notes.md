@@ -16,6 +16,17 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.0.30
 
+### Fixed: Anthropic translation sends each backend its own chat path
+
+In translation mode Olla sent every backend `/v1/chat/completions`. Docker Model Runner serves the OpenAI API under
+`/engines/v1/` (the root `/v1/` alias only exists in recent builds) and Lemonade under `/api/v1/`, so on those hosts
+translated requests 404ed, and because a 404 is not retried the client saw the error even when another healthy
+backend could have answered. Olla now resolves the chat path from each endpoint's profile and applies it per attempt,
+so a fleet mixing DMR, Lemonade, vLLM and Ollama works, and failover between them uses the right path each time.
+Backends that speak Anthropic natively are still passed through to their `anthropic_support.messages_path`. Endpoints
+whose profile has no chat path (Text Embeddings Inference) are never sent translated requests; if nothing selected can
+serve chat the request is refused with a 404 that is logged as a sampled "Request rejected" line.
+
 ### Fixed: model discovery no longer sends backend credentials to `HTTP_PROXY` or across hosts
 
 Model discovery still honoured `HTTP_PROXY`/`HTTPS_PROXY`, so with a proxy set in the environment, a plain-HTTP

@@ -619,3 +619,71 @@ func TestShippedProfiles_AnthropicSupportImpliesDeclaredPaths(t *testing.T) {
 		})
 	}
 }
+
+// Translators rewrite every request to one OpenAI path, but backends mount it in
+// different places. The path a profile resolves to must be one it declares, and
+// profiles with no chat surface (TEI) must resolve to nothing.
+func TestPathInspector_ResolveTargetPath_ShippedProfiles(t *testing.T) {
+	t.Parallel()
+	factory, byProfile := shippedProfilePaths(t)
+	inspector := NewPathInspector(factory, createTestLogger())
+
+	const target = "/v1/chat/completions"
+	want := map[string]string{
+		"docker-model-runner": "/engines/v1/chat/completions",
+		"lemonade":            "/api/v1/chat/completions",
+		"ollama":              target, // native /api/chat exists, but the compat path is declared
+		"vllm":                target,
+		"llamacpp":            target,
+		"lm-studio":           target,
+		"openai-compatible":   target,
+	}
+	for profile, path := range want {
+		got, ok := inspector.ResolveTargetPath(profile, target)
+		if !ok || got != path {
+			t.Errorf("ResolveTargetPath(%q) = %q, %v; want %q", profile, got, ok, path)
+		}
+	}
+
+	// anything we resolve must be a path the profile declares
+	for profile, declared := range byProfile {
+		got, ok := inspector.ResolveTargetPath(profile, target)
+		if ok && !slices.Contains(declared, got) {
+			t.Errorf("ResolveTargetPath(%q) = %q, not in its declared paths %v", profile, got, declared)
+		}
+	}
+
+	if got, ok := inspector.ResolveTargetPath("text-embeddings-inference", target); ok {
+		t.Errorf("TEI has no chat surface, resolved %q", got)
+	}
+	// unknown provider types are treated as OpenAI-compatible, as the profile factory does
+	if got, ok := inspector.ResolveTargetPath("some-new-engine", target); !ok || got != target {
+		t.Errorf("unknown type resolved %q, %v; want %q", got, ok, target)
+	}
+	if _, ok := inspector.ResolveTargetPath("vllm", ""); ok {
+		t.Error("empty target must not resolve")
+	}
+	// a single segment would suffix-match unrelated paths
+	if _, ok := inspector.ResolveTargetPath("docker-model-runner", "/completions"); ok {
+		t.Error("single-segment target must only match exactly")
+	}
+}
+
+func TestPathInspector_TranslationProfiles(t *testing.T) {
+	t.Parallel()
+	factory, _ := shippedProfilePaths(t)
+	inspector := NewPathInspector(factory, createTestLogger())
+
+	got := inspector.TranslationProfiles("/v1/chat/completions")
+	for _, name := range []string{"docker-model-runner", "lemonade", "ollama", "vllm", "llamacpp", "lm-studio"} {
+		if !slices.Contains(got, name) {
+			t.Errorf("TranslationProfiles missing %q: %v", name, got)
+		}
+	}
+	if slices.Contains(got, "text-embeddings-inference") {
+		t.Errorf("TEI serves no chat completions: %v", got)
+	}
+	if len(inspector.TranslationProfiles("")) != 0 {
+		t.Error("empty target must yield nothing")
+	}
+}
