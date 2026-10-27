@@ -472,7 +472,7 @@ version: "1.0"
 # Override default timeouts
 characteristics:
   timeout: 5m  # Increase for large models
-  max_concurrent_requests: 50
+  max_concurrent_requests: 50  # metadata only, Olla does not enforce it
 
 # Add custom routing prefixes
 routing:

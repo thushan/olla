@@ -39,7 +39,7 @@ Each backend type (Ollama, LM Studio, vLLM, OpenAI Compatibility) has a profile 
 - **Model Discovery** - How to find and parse available models
 - **Request Handling** - How to parse and route requests
 - **Native Intercepts** - Special handlers for platform-specific endpoints
-- **Resource Management** - Memory requirements and concurrency limits
+- **Resource Management** - Memory requirements and concurrency hints (metadata only: Olla does not currently enforce concurrency limits)
 - **Capability Detection** - Identifying model features (vision, embeddings, code)
 
 ## Profile Loading
@@ -362,7 +362,7 @@ api:
 # Platform characteristics
 characteristics:
   timeout: 5m                     # Request timeout
-  max_concurrent_requests: 10    # Concurrent request limit
+  max_concurrent_requests: 10  # Concurrent request limit - not enforced
   default_priority: 100           # Default endpoint priority
   streaming_support: true         # Supports streaming responses
 
@@ -424,7 +424,7 @@ resources:
     requires_gpu: false
     estimated_load_time_ms: 5000
   
-  concurrency_limits:             # Dynamic concurrency
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 30
       max_concurrent: 1
     - min_memory_gb: 0
@@ -451,6 +451,9 @@ features:
       - /tokenize
       - /detokenize
 ```
+
+!!! note "Concurrency settings are not enforced"
+    Olla reads `characteristics.max_concurrent_requests` and `resources.concurrency_limits` as metadata only. It does not queue, reject or throttle requests against them, so the backend's own concurrency settings are what limit parallelism today.
 
 ## Creating Custom Profiles {#creating-custom-profiles}
 
@@ -479,7 +482,7 @@ api:
 
 characteristics:
   timeout: 2m
-  max_concurrent_requests: 5
+  max_concurrent_requests: 5  # not enforced
   streaming_support: true
 ```
 
@@ -645,9 +648,9 @@ Configure realistic resource requirements:
 
 ```yaml
 resources:
-  concurrency_limits:
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 0
-      max_concurrent: 1  # LM Studio limitation
+      max_concurrent: 1  # LM Studio limitation (not enforced by Olla)
 ```
 
 ### 5. Version Your Profiles

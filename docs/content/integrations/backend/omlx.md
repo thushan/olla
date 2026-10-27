@@ -317,12 +317,12 @@ oMLX discovers models from subdirectories, so model IDs are directory names such
 
 ### Resource Configuration
 
-The oMLX profile uses Apple Silicon-oriented defaults. Concurrency is deliberately conservative because several models may share unified memory simultaneously:
+The oMLX profile uses Apple Silicon-oriented defaults. Concurrency is deliberately conservative because several models may share unified memory simultaneously. These values are metadata only: Olla does not enforce them, and oMLX's own settings limit parallelism:
 
 ```yaml
 characteristics:
   timeout: 3m                 # Absorbs cold-start model loads
-  max_concurrent_requests: 4
+  max_concurrent_requests: 4  # not enforced
   streaming_support: true
 
 resources:
@@ -392,9 +392,9 @@ routing:
 characteristics:
   timeout: 5m
 
-# Raise concurrency on a high-memory Mac
+# Raise concurrency on a high-memory Mac (metadata only, not enforced)
 resources:
-  concurrency_limits:
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 0
       max_concurrent: 8
 ```
