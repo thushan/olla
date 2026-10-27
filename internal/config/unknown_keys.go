@@ -75,7 +75,11 @@ func walkKnownKeys(n *yaml.Node, t reflect.Type, path string, depth int, out *[]
 				}
 				walkKnownKeys(n.Content[i+1], t.Elem(), joinKeyPath(path, n.Content[i].Value), depth+1, out)
 			}
+		default:
+			// Scalars and interfaces in this position have no keys to check.
 		}
+	default:
+		// Scalar and null nodes carry no keys.
 	}
 }
 
@@ -113,6 +117,8 @@ func walkMerged(v *yaml.Node, t reflect.Type, path string, depth int, out *[]Unk
 		}
 	case yaml.MappingNode:
 		walkStruct(v, t, path, depth+1, out)
+	default:
+		// A non-mapping merge value is a decode error, which already failed Load.
 	}
 }
 
@@ -131,7 +137,7 @@ func joinKeyPath(parent, key string) string {
 // structs. freeForm is true when an inline map accepts arbitrary keys.
 func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) {
 	fields = make(map[string]reflect.Type, t.NumField())
-	for i := 0; i < t.NumField(); i++ {
+	for i := range t.NumField() {
 		f := t.Field(i)
 		if f.PkgPath != "" && !f.Anonymous {
 			continue
@@ -155,6 +161,8 @@ func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) 
 				freeForm = freeForm || sf
 			case reflect.Map:
 				freeForm = true
+			default:
+				// yaml.v3 rejects other inline types at decode time.
 			}
 			continue
 		}
