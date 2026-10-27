@@ -52,6 +52,27 @@ type RateLimitValidator struct {
 	trustProxyHeaders       bool
 }
 
+// ipCharge is the per-IP token a request took. It is a value (not a closure)
+// so the admit path, which is every successful request, stays allocation-free.
+type ipCharge struct {
+	at          time.Time
+	reservation *rate.Reservation
+	info        *ipLimiterInfo
+}
+
+// refund hands the token back; a no-op on the zero value.
+func (c ipCharge) refund() {
+	if c.reservation == nil {
+		return
+	}
+	c.reservation.CancelAt(c.at)
+	c.info.mu.Lock()
+	if c.info.tokensUsed > 0 {
+		c.info.tokensUsed--
+	}
+	c.info.mu.Unlock()
+}
+
 type ipLimiterInfo struct {
 	lastAccess   time.Time
 	windowStart  time.Time
@@ -123,9 +144,9 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 	}
 
 	result := ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}
-	var rollback func()
+	var charge ipCharge
 	if limit > 0 {
-		result, rollback = rl.checkIPLimit(req.ClientID, limit, now, req.IsHealthCheck)
+		result, charge = rl.checkIPLimit(req.ClientID, limit, now, req.IsHealthCheck)
 		if !result.Allowed {
 			return result, nil
 		}
@@ -136,9 +157,7 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 		delay := reservation.Delay()
 		if !reservation.OK() || delay > 0 {
 			reservation.Cancel()
-			if rollback != nil {
-				rollback()
-			}
+			charge.refund()
 			// A reservation that can never be satisfied (zero burst) reports an
 			// infinite delay, so fall back to the full window.
 			retryAfter := 60
@@ -165,12 +184,12 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 
 // checkIPLimit handles per-IP rate enforcement, including health check separation.
 // Returns a SecurityResult with rate metadata and retry after guidance, plus a
-// rollback that returns the consumed token when the request is later rejected
-// by the global tier (nil unless the request was admitted).
-func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.Time, isHealthEndpoint bool) (ports.SecurityResult, func()) {
+// charge that can return the consumed token when the request is later rejected
+// by the global tier (zero value unless the request was admitted).
+func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.Time, isHealthEndpoint bool) (ports.SecurityResult, ipCharge) {
 	// Callers gate on limit > 0, but 60/limit below would panic if that ever slipped.
 	if limit <= 0 {
-		return ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}, nil
+		return ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}, ipCharge{}
 	}
 
 	bucketKey := clientIP
@@ -203,7 +222,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 			Remaining:  0,
 			ResetTime:  now.Add(time.Minute),
 			Reason:     "Rate limit exceeded",
-		}, nil
+		}, ipCharge{}
 	}
 
 	delay := reservation.Delay()
@@ -221,7 +240,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 			Remaining:  remaining,
 			ResetTime:  now.Add(time.Minute),
 			Reason:     "Rate limit exceeded",
-		}, nil
+		}, ipCharge{}
 	}
 
 	limiterInfo.mu.Lock()
@@ -229,21 +248,12 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 	remaining := rl.calculateRemaining(limiterInfo, limit)
 	limiterInfo.mu.Unlock()
 
-	rollback := func() {
-		reservation.CancelAt(reservedAt)
-		limiterInfo.mu.Lock()
-		if limiterInfo.tokensUsed > 0 {
-			limiterInfo.tokensUsed--
-		}
-		limiterInfo.mu.Unlock()
-	}
-
 	return ports.SecurityResult{
 		Allowed:   true,
 		RateLimit: limit,
 		Remaining: remaining,
 		ResetTime: now.Add(time.Minute),
-	}, rollback
+	}, ipCharge{reservation: reservation, at: reservedAt, info: limiterInfo}
 }
 
 func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, limit int) int {
@@ -313,7 +323,7 @@ func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientIP := util.GetClientIP(r, rl.trustProxyHeaders, rl.trustedCIDRs)
 
-			//  Thisis n't so nice to do this but we want to ignore the Heatcheck endpoint
+			//  This isn't so nice to do this but we want to ignore the healthcheck endpoint
 			isHealthEndpoint := r.URL.Path == constants.DefaultHealthCheckEndpoint
 
 			req := ports.SecurityRequest{

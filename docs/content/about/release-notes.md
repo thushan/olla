@@ -43,7 +43,7 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   `retry_backoff` fails startup. See [discovery retries](#fixed-model-discovery-now-retries-failed-fetches).
 - **Name patterns tag rerankers and embedders** on backends that report no kind, so those models drop `text-generation` and `chat`.
   A custom `models.yaml` with its own `name_patterns` needs the two new entries. See [name patterns](#added-rerankers-and-embedders-recognised-by-name-on-backends-that-report-no-kind).
-- **`per_ip_requests_per_minute: 0` no longer turns rate limiting off.** If you set `per_ip_requests_per_minute: 0` to turn rate limiting off,
+- **`per_ip_requests_per_minute: 0` no longer turns rate limiting off.** If you set `per_ip_requests_per_minute: 0` (or `OLLA_SERVER_PER_IP_RATE_LIMIT=0`) to turn rate limiting off,
   the global limit (default 1000/min, burst 50) now applies; set `global_requests_per_minute: 0` as well to disable both.
   See [rate limit tiers](#fixed-the-global-rate-limit-applies-when-the-per-ip-limit-is-0).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).

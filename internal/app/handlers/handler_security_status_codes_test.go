@@ -14,7 +14,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 
@@ -206,12 +205,6 @@ func TestSecurityChainMiddleware_FallbackPath_Returns403(t *testing.T) {
 	}
 }
 
-// rateLimitExcludedPrefixes lists proxy-style route prefixes the rate-limit
-// route-table test skips. /olla/anthropic/* are registered as non-proxy routes
-// today, so they carry no limiter and another change is bringing them in.
-// Once that lands, delete the entry here and the loop covers them.
-var rateLimitExcludedPrefixes = []string{"/olla/anthropic/"}
-
 // TestRateLimit_EveryProxyRouteIsLimited loops the real route table (not a
 // hand-written list) so a new inference route that skips the security chain
 // fails here. Each tier is exercised on its own: a global-only config is the
@@ -223,6 +216,8 @@ func TestRateLimit_EveryProxyRouteIsLimited(t *testing.T) {
 	factory, err := profile.NewFactory("../../../config/profiles")
 	require.NoError(t, err, "shipped profiles must load")
 
+	// Translator routes (/olla/anthropic/*) are not in this fixture because
+	// translatorRegistry is nil; the Anthropic rate-limit change (U3) adds them.
 	tests := []struct {
 		name      string
 		limits    config.ServerRateLimits
@@ -250,14 +245,23 @@ func TestRateLimit_EveryProxyRouteIsLimited(t *testing.T) {
 			}
 			app.registerRoutes()
 
+			// Swap in a recorder so a route that escapes the limiter fails on the
+			// assertion below instead of running a real handler with nil deps.
+			reached := map[string]bool{}
+			for path, info := range reg.GetRoutes() {
+				info.Handler = func(w http.ResponseWriter, _ *http.Request) {
+					reached[path] = true
+					w.WriteHeader(http.StatusOK)
+				}
+				reg.GetRoutes()[path] = info
+			}
+
 			mux := http.NewServeMux()
 			reg.WireUpWithSecurityChain(mux, adapters)
 
 			checked := 0
 			for path, info := range reg.GetRoutes() {
-				if !info.IsProxy || slices.ContainsFunc(rateLimitExcludedPrefixes, func(p string) bool {
-					return strings.HasPrefix(path, p)
-				}) {
+				if !info.IsProxy {
 					continue
 				}
 				checked++
@@ -267,6 +271,7 @@ func TestRateLimit_EveryProxyRouteIsLimited(t *testing.T) {
 				rec := httptest.NewRecorder()
 				mux.ServeHTTP(rec, req)
 
+				assert.False(t, reached[path], "route %s reached its handler; it must be rate limited", path)
 				assert.Equal(t, http.StatusTooManyRequests, rec.Code, "route %s must be rate limited", path)
 				assert.Equal(t, tt.wantLimit, rec.Header().Get("X-RateLimit-Limit"), "route %s reported the wrong tier", path)
 			}
