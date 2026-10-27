@@ -766,6 +766,8 @@ var (
 		"Alibaba-NLP/gte-multilingual-reranker-base",
 		"Alibaba-NLP/gte-reranker-modernbert-base",
 		"BAAI/bge-reranker-v2-gemma",
+		"cross-encoder/msmarco-MiniLM-L6-en-de-v1",
+		"ibm-granite/granite-embedding-reranker-english-r2",
 	}
 	nameKindEmbedders = []string{
 		"BAAI/bge-small-en-v1.5",
@@ -883,6 +885,10 @@ func TestInferCapabilities_ReportedKindAndDeclarationsBeatNamePatterns(t *testin
 
 	t.Run("TEI reranker keeps rerank and classification", func(t *testing.T) {
 		got := inferCapabilitiesFromMetadata("reranker", "BAAI/bge-reranker-v2-m3", 0, nil)
+		assert.ElementsMatch(t, []string{"rerank", "classification"}, got)
+	})
+	t.Run("TEI reranker named like an embedder gains no embedder tags", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("reranker", "ibm-granite/granite-embedding-reranker-english-r2", 0, nil)
 		assert.ElementsMatch(t, []string{"rerank", "classification"}, got)
 	})
 	t.Run("TEI classifier is untouched by the name", func(t *testing.T) {

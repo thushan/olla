@@ -351,9 +351,10 @@ capabilities:
         - image-understanding
 
     # rerankers: BAAI/bge-reranker-v2-m3, jinaai/jina-reranker-v2-base-multilingual,
-    # mixedbread-ai/mxbai-rerank-large-v1, Qwen/Qwen3-Reranker-0.6B. Backends such
+    # mixedbread-ai/mxbai-rerank-large-v1, Qwen/Qwen3-Reranker-0.6B, cross-encoder/msmarco-*
+    # (a reranker, unlike the msmarco bi-encoders below). Backends such
     # as vLLM don't report a model kind, so the name is all there is.
-    - pattern: "rerank"
+    - pattern: "(rerank|cross-encoder/ms-?marco)"
       capabilities:
         - rerank
 

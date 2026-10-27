@@ -637,7 +637,7 @@ func getDefaultConfig() *ModelUnificationConfig {
 			Capabilities: []string{"vision", "multimodal", "image-understanding"},
 		},
 		{
-			Pattern:      "rerank",
+			Pattern:      "(rerank|cross-encoder/ms-?marco)",
 			Capabilities: []string{"rerank"},
 		},
 		{
