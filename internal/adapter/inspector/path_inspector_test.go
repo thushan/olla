@@ -382,11 +382,14 @@ func TestPathInspector_RequiredCapabilitiesByPath(t *testing.T) {
 		{path: "/v1/rerank", rerank: true},
 		{path: "/v2/rerank", rerank: true},
 		{path: "/predict", classification: true},
+		{path: "/v1/embeddings", embeddings: true},
+		{path: "/olla/proxy/v1/embeddings", embeddings: true},
 		{path: "/embed", embeddings: true},
 		{path: "/embed_all", embeddings: true},
 		{path: "/embed_sparse", embeddings: true},
 		{path: "/similarity", embeddings: true},
 		{path: "/olla/tei/v1/rerank", rerank: true},
+		{path: "/api/embeddings", none: true}, // Ollama's legacy embeddings; model and input are in the body
 		{path: "/api/embed", none: true},      // Ollama's embed carries its model in the body
 		{path: "/api/rerank", none: true},     // not a TEI path
 		{path: "/prefix/predict", none: true}, // single-segment names match whole paths only

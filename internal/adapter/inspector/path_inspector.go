@@ -37,6 +37,9 @@ var pathCapabilities = []pathCapability{
 	{suffix: "/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
 	{suffix: "/v1/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
 	{suffix: "/v2/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
+	// OpenAI-style embeddings. The body's `input` field is the primary signal, but it is only
+	// readable when the body is; the path keeps embeddings requests off chat-only hosts either way.
+	{suffix: "/v1/embeddings", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
 	{suffix: "/predict", apply: func(c *domain.ModelCapabilities) { c.Classification = true }},
 	{suffix: "/embed", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
 	{suffix: "/embed_all", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
