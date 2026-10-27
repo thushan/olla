@@ -689,9 +689,4 @@ curl -X GET http://localhost:40114/internal/stats/translators
 
 ## Rate Limits
 
-System endpoints have elevated rate limits:
-
-- 1000 requests per minute
-- Burst size: 50 requests
-
-This ensures monitoring systems can poll frequently without being rate-limited.
+System endpoints (`/internal/*`, `/version`) are not rate limited, so monitoring systems can poll as often as they like. Rate limits apply only to proxied requests; see [Rate Limits](../configuration/reference.md#rate-limiting) for the list of routes.

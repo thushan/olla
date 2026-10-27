@@ -107,11 +107,20 @@ server:
 |-------|------|---------|-------------|
 | `rate_limits.global_requests_per_minute` | int | `1000` | Global rate limit (0=disabled) |
 | `rate_limits.per_ip_requests_per_minute` | int | `100` | Per-IP rate limit (0=disabled) |
-| `rate_limits.health_requests_per_minute` | int | `1000` | Health endpoint limit |
+| `rate_limits.health_requests_per_minute` | int | `1000` | Not applied: health endpoints are not rate limited |
 | `rate_limits.burst_size` | int | `50` | Token bucket burst size |
 | `rate_limits.cleanup_interval` | duration | `5m` | Rate limiter cleanup |
 | `rate_limits.trust_proxy_headers` | bool | `false` | Trust X-Forwarded-For |
 | `rate_limits.trusted_proxy_cidrs` | []string | `["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]` | Trusted proxy CIDRs |
+
+Rate limits apply to proxied requests only:
+
+| Rate limited | Not rate limited |
+|--------------|------------------|
+| `/olla/proxy/` | `/internal/*` (health, status, stats, process, metrics) and `/version` |
+| Requests forwarded to a backend through the provider prefixes, such as `/olla/ollama/`, `/olla/vllm/` and `/olla/openai/` | `/olla/models` and `/olla/models/{id}` |
+| Ollama `GET /olla/ollama/api/ps` | Model listings Olla builds itself, such as `/olla/proxy/v1/models` and the provider `/v1/models` routes |
+| | `/olla/ollama/api/show` and the unsupported Ollama model-management stubs (`pull`, `push`, `create`, `copy`, `delete`) |
 
 Example:
 
