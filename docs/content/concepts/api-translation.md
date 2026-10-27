@@ -249,7 +249,7 @@ The translator performs semantic mapping for tool choice parameters:
 
 ### What is Passthrough?
 
-Passthrough mode is an optimisation that bypasses the translation pipeline entirely when a backend natively supports the incoming request format. For example, vLLM (v0.11.1+), vLLM-MLX, llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), and Docker Model Runner all natively support the Anthropic Messages API. When Olla detects a compatible backend, it forwards the request directly without any Anthropic-to-OpenAI-and-back conversion.
+Passthrough mode is an optimisation that bypasses the translation pipeline entirely when a backend natively supports the incoming request format. For example, vLLM (v0.11.1+), vLLM-MLX, SGLang (v0.5.9+), LMDeploy (v0.13.0+), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), and Docker Model Runner all natively support the Anthropic Messages API. When Olla detects a compatible backend, it forwards the request directly without any Anthropic-to-OpenAI-and-back conversion.
 
 **Key Benefit**: Zero translation overhead -- requests are forwarded as-is, preserving the original wire format.
 
@@ -303,6 +303,12 @@ Backends that support passthrough (native Anthropic Messages API):
 | Ollama | v0.14.0+ | No | `config/profiles/ollama.yaml` |
 | oMLX | v0.4.2+ | No (not yet forwarded) | `config/profiles/omlx.yaml` |
 | Docker Model Runner | recent | Yes | `config/profiles/dmr.yaml` |
+| SGLang | v0.5.9+ | Yes | `config/profiles/sglang.yaml` |
+| LMDeploy | v0.13.0+ | Yes | `config/profiles/lmdeploy.yaml` |
+
+"Token Counting" is the profile's `token_count` flag: the backend serves `/v1/messages/count_tokens`, but Olla's own count endpoint still answers from local estimation. LMDeploy v0.13.0 to v0.17.x reject Anthropic `tools`, so its profile declares `no_tool_use` and requests carrying tools are translated rather than passed through.
+
+SGLang and LMDeploy have passthrough on by default. Releases older than the minimum version return 404 on `/v1/messages`, and Olla does not enforce `min_version`, so a fleet with an older SGLang or LMDeploy must switch them back to translation: copy the profile to `config/profiles/zz-sglang.yaml` (or `zz-lmdeploy.yaml`) and set `api.anthropic_support.enabled: false` in the copy. The steps are on the [SGLang](../integrations/backend/sglang.md#switching-sglang-or-lmdeploy-back-to-translation) and [LMDeploy](../integrations/backend/lmdeploy.md#switching-sglang-or-lmdeploy-back-to-translation) pages.
 
 ### Backend Profile Configuration
 
@@ -504,7 +510,7 @@ Easy to add new translations:
 - Proportional to content size for vision models
 - Buffer pool reduces allocation overhead
 
-**Recommendation**: Use passthrough mode when backends support native Anthropic format (vLLM, vLLM-MLX, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner) for zero translation overhead. Use native endpoints when translation isn't needed for maximum performance.
+**Recommendation**: Use passthrough mode when backends support native Anthropic format (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner) for zero translation overhead. Use native endpoints when translation isn't needed for maximum performance.
 
 ### Feature Parity
 

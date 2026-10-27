@@ -13,6 +13,18 @@ routing:
 # API compatibility
 api:
   openai_compatible: true
+
+  # SGLang v0.5.9+ serves the Anthropic Messages API natively (/v1/messages and
+  # /v1/messages/count_tokens, http_server.py), so requests bypass translation.
+  # Older releases answer 404 on /v1/messages. min_version is documentation only:
+  # Olla does not enforce it, so set enabled: false (in a local copy of this
+  # profile) if any SGLang in the fleet is older than 0.5.9.
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: true
+    min_version: "0.5.9"
+
   paths:
     # Health and system endpoints
     - /health              # 0: health check
