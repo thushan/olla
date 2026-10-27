@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -92,6 +93,11 @@ func TestFindUnknownKeys(t *testing.T) {
 			name: "alias used as a key resolves to the anchored name",
 			yaml: "x-key: &section proxy\n*section:\n  bogus: 1\n",
 			want: []string{"proxy.bogus (line 3)"},
+		},
+		{
+			name: "aliased merge tag is a plain unknown key, as yaml.v3 decodes it",
+			yaml: "x-key: &key !!merge '<<'\nproxy:\n  *key : {engine: sherpa}\n",
+			want: []string{"proxy.<< (line 3)"},
 		},
 		{name: "scalar document", yaml: "42\n", want: nil},
 		{name: "null document", yaml: "~\n", want: nil},
@@ -209,5 +215,18 @@ func TestFindUnknownKeys_MergeBombTerminates(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("walker did not terminate on a self-referencing merge")
+	}
+}
+
+func TestFindUnknownKeys_ReportsAreBounded(t *testing.T) {
+	t.Parallel()
+	var b strings.Builder
+	b.WriteString("x-bomb: &bomb\n  <<: [*bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb]\n")
+	for i := range 1000 {
+		fmt.Fprintf(&b, "  f%d: 1\n", i)
+	}
+	b.WriteString("x-root: &root {proxy: *bomb}\n<<: *root\nproxy: {}\n")
+	if got := len(FindUnknownKeys([]byte(b.String()))); got > maxKeyWalkVisits {
+		t.Errorf("reports exceeded the visit budget: %d", got)
 	}
 }

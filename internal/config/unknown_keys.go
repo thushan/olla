@@ -102,15 +102,20 @@ func walkKnownKeys(n *yaml.Node, t reflect.Type, path string, depth int, w *keyW
 func walkStruct(n *yaml.Node, t reflect.Type, path string, depth int, w *keyWalk) {
 	fields, freeForm := structKeys(t)
 	for i := 0; i+1 < len(n.Content); i += 2 {
+		// Each entry costs a visit, so reports are bounded by the same budget.
+		if !w.step() {
+			return
+		}
 		k, v := n.Content[i], n.Content[i+1]
+		// yaml.v3 only honours a merge written literally as `<<`, not an alias to one.
+		if isMergeKey(k) {
+			walkMerged(v, t, path, depth+1, w)
+			continue
+		}
 		keyLine := k.Line
 		// A key written as an alias (*anchor) resolves to the anchored scalar.
 		if k.Kind == yaml.AliasNode && k.Alias != nil {
 			k = k.Alias
-		}
-		if isMergeKey(k) {
-			walkMerged(v, t, path, depth+1, w)
-			continue
 		}
 		ft, ok := fields[k.Value]
 		if !ok {
