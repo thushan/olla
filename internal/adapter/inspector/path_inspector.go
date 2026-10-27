@@ -191,6 +191,16 @@ func (pi *PathInspector) ResolveTargetPath(profileName, target string) (string, 
 	return "", false
 }
 
+// DeclaresPath reports whether a profile declares exactly path. Unknown profile names are
+// treated as OpenAI-compatible, as in ResolveTargetPath.
+func (pi *PathInspector) DeclaresPath(profileName, path string) bool {
+	paths, ok := pi.profilePaths[profileName]
+	if !ok {
+		paths = pi.profilePaths[domain.ProfileOpenAICompatible]
+	}
+	return slices.Contains(paths, path)
+}
+
 // KnowsProfile reports whether name is a profile the inspector holds paths for. Endpoint types
 // outside it (custom or "auto" types) are served as OpenAI-compatible, as ResolveTargetPath does.
 func (pi *PathInspector) KnowsProfile(name string) bool {

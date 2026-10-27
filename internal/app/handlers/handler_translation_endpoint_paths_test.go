@@ -93,13 +93,12 @@ func (b *pathBackend) paths() []string {
 	return append([]string(nil), b.hits...)
 }
 
-// closedBackendURL returns the address of a listener that has been shut, so connecting is refused.
+// closedBackendURL returns an address nothing listens on, so connecting is refused and the
+// engines fail over. A port freed by a closed httptest server can be reissued to another
+// parallel test, so a privileged port is used instead.
 func closedBackendURL(t *testing.T) string {
 	t.Helper()
-	s := httptest.NewServer(http.NotFoundHandler())
-	u := s.URL
-	s.Close()
-	return u
+	return "http://127.0.0.1:1"
 }
 
 func liveEndpoint(t *testing.T, name, typ, rawURL string, priority int) *domain.Endpoint {
@@ -457,6 +456,8 @@ func TestTranslation_PreservePathBaseNotDuplicated(t *testing.T) {
 	cases := []struct{ typ, base, chat, wantHit string }{
 		{"lemonade", "/api", lemonadeChatPath, lemonadeChatPath},
 		{"docker-model-runner", "/engines", dmrChatPath, dmrChatPath},
+		{"docker-model-runner", "/engines/llama.cpp", "/engines/llama.cpp/v1/chat/completions", "/engines/llama.cpp/v1/chat/completions"},
+		{"docker-model-runner", "/engines/vllm/", "/engines/vllm/v1/chat/completions", "/engines/vllm/v1/chat/completions"},
 		{"vllm", "/gw", rootChatPath, "/gw/v1/chat/completions"},
 	}
 	for _, engine := range translationEngines {

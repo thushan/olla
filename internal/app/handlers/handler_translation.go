@@ -298,11 +298,12 @@ func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, tar
 	paths := make(map[string]string, len(endpoints))
 	differs := false
 	for _, ep := range endpoints {
-		resolved, ok := a.pathInspector.ResolveTargetPath(NormaliseProviderType(ep.Type), targetPath)
+		profileName := NormaliseProviderType(ep.Type)
+		resolved, ok := a.pathInspector.ResolveTargetPath(profileName, targetPath)
 		if !ok {
 			continue
 		}
-		resolved = trimPreservedBase(ep, resolved)
+		resolved = a.relativeToPreservedBase(ep, profileName, targetPath, resolved)
 		usable = append(usable, ep)
 		paths[ep.GetURLString()] = resolved
 		if resolved != targetPath {
@@ -315,15 +316,24 @@ func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, tar
 	return usable, paths
 }
 
-// trimPreservedBase drops the endpoint's own base path from a resolved chat path. With
-// preserve_path the proxy joins the base onto the request path, so a Lemonade endpoint
-// configured as http://host/api would otherwise be sent /api/api/v1/chat/completions.
-func trimPreservedBase(ep *domain.Endpoint, resolved string) string {
+// relativeToPreservedBase adjusts a resolved chat path for a preserve_path endpoint. The proxy
+// joins the endpoint's base onto the request path, so the path sent must be relative to it:
+//   - a base that is itself a declared mount (DMR at http://host/engines/llama.cpp) takes the
+//     plain target, which is what main sent;
+//   - a resolved path that repeats the base (Lemonade at http://host/api, resolved to
+//     /api/v1/chat/completions) loses it, or the request would hit /api/api/v1/...
+func (a *Application) relativeToPreservedBase(ep *domain.Endpoint, profileName, target, resolved string) string {
 	if !ep.PreservePath || ep.URL == nil {
 		return resolved
 	}
 	base := strings.TrimRight(ep.URL.Path, "/")
-	if base != "" && strings.HasPrefix(resolved, base+"/") {
+	if base == "" {
+		return resolved
+	}
+	if a.pathInspector.DeclaresPath(profileName, base+target) {
+		return target
+	}
+	if strings.HasPrefix(resolved, base+"/") {
 		return resolved[len(base):]
 	}
 	return resolved
