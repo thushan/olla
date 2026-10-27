@@ -23,6 +23,7 @@ type proxyRequest struct {
 	requestLogger            logger.StyledLogger
 	stats                    *ports.RequestStats
 	profile                  *domain.RequestProfile
+	endpointPaths            map[string]string
 	clientIP                 string
 	targetPath               string
 	model                    string
