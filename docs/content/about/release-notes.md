@@ -16,6 +16,17 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.0.30
 
+### Fixed: model discovery no longer sends backend credentials to `HTTP_PROXY` or across hosts
+
+Model discovery still honoured `HTTP_PROXY`/`HTTPS_PROXY`, so with a proxy set in the environment, a plain-HTTP
+endpoint's `auth:` token or API key went to that proxy on every discovery cycle. Discovery and the health checker also
+followed redirects to other hosts, and Go only strips `Authorization` on those, so an `api_key` header or custom
+`headers:` entry could be replayed at the redirect target. Both now connect directly and stop at a redirect that
+leaves the configured host and port (a same-host `http` to `https` upgrade is still followed), so a cross-host redirect
+counts as a failed discovery or health check. Loopback endpoints were never proxied, so only setups that relied on `HTTP_PROXY`
+to let discovery reach a non-loopback backend are affected: that backend now needs to be reachable directly from the Olla host,
+as chat traffic already required.
+
 ### Added: Text Embeddings Inference backend
 
 Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)

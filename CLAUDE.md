@@ -16,7 +16,7 @@ make ready-tools     # Tools only: fmt + vet + lint + align
 make ci-web          # Frontend gate: vitest + svelte-check + font integrity
 make test            # All tests          make test-race   # With race detection
 make test-stress     # Stress tests       make bench        # All benchmarks
-make build           # Optimised binary   make build-local  # Fast build to ./build/
+make build           # Optimised binary   make build-local  # Fast build to ./build/olla
 make run             # Run                make run-debug    # Run with debug logging
 make docker-build-local        # Build amd64 image locally (no goreleaser)
 make docker-build-local-arm64  # Build ARM64 image locally (no goreleaser)

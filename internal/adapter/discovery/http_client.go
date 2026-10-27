@@ -13,6 +13,7 @@ import (
 
 	"github.com/thushan/olla/internal/version"
 
+	"github.com/thushan/olla/internal/adapter/factory"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
@@ -26,7 +27,6 @@ const (
 
 	DefaultMaxIdleConnections        = 10
 	DefaultIdleConnTimeout           = 60 * time.Second
-	DefaultDisableCompression        = false
 	DefaultMaxIdleConnectionsPerHost = 5
 )
 
@@ -39,6 +39,10 @@ type HTTPModelDiscoveryClient struct {
 	mu             sync.RWMutex
 }
 
+// NewHTTPModelDiscoveryClient uses httpClient verbatim. Discovery sends the
+// endpoint's auth and custom headers, so production callers must build the
+// client with factory.NewBackendHTTPClient (no environment proxy, no
+// cross-origin redirects).
 func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.StyledLogger, httpClient *http.Client) *HTTPModelDiscoveryClient {
 	return &HTTPModelDiscoveryClient{
 		httpClient:     httpClient,
@@ -52,15 +56,12 @@ func NewHTTPModelDiscoveryClient(profileFactory *profile.Factory, logger logger.
 
 func NewHTTPModelDiscoveryClientWithDefaults(profileFactory *profile.Factory, logger logger.StyledLogger) *HTTPModelDiscoveryClient {
 	return &HTTPModelDiscoveryClient{
-		httpClient: &http.Client{
-			Timeout: DefaultTimeout,
-			Transport: &http.Transport{
-				MaxIdleConns:        DefaultMaxIdleConnections,
-				IdleConnTimeout:     DefaultIdleConnTimeout,
-				DisableCompression:  DefaultDisableCompression,
-				MaxIdleConnsPerHost: DefaultMaxIdleConnectionsPerHost,
-			},
-		},
+		httpClient: factory.NewBackendHTTPClient(factory.BackendClientOptions{
+			Timeout:             DefaultTimeout,
+			MaxIdleConns:        DefaultMaxIdleConnections,
+			IdleConnTimeout:     DefaultIdleConnTimeout,
+			MaxIdleConnsPerHost: DefaultMaxIdleConnectionsPerHost,
+		}),
 		profileFactory: profileFactory,
 		logger:         logger,
 		metrics: DiscoveryMetrics{

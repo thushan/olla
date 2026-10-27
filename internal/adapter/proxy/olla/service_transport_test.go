@@ -93,7 +93,8 @@ func TestCreateOptimisedTransport_FieldsAreDistinct(t *testing.T) {
 // TestCreateOptimisedTransport_NoProxyFromEnvironment asserts that the Olla proxy
 // transport does NOT honour HTTP_PROXY/HTTPS_PROXY. Olla targets local
 // inference backends; routing credentialled requests through an outbound proxy
-// on plain HTTP is a credential-exposure risk. Health probes keep the env proxy.
+// on plain HTTP is a credential-exposure risk. Health probes and model discovery
+// follow the same policy.
 func TestCreateOptimisedTransport_NoProxyFromEnvironment(t *testing.T) {
 	t.Parallel()
 

@@ -1,11 +1,15 @@
 package health
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"runtime"
+	"sync/atomic"
 	"testing"
 
+	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
 
@@ -78,5 +82,36 @@ func TestHealthClientTransport_ResponseHeaderTimeout(t *testing.T) {
 	const want = DefaultHealthCheckerResponseHeaderTimeout
 	if transport.ResponseHeaderTimeout != want {
 		t.Errorf("transport.ResponseHeaderTimeout = %v, want %v", transport.ResponseHeaderTimeout, want)
+	}
+}
+
+// TestHealthClient_RefusesCrossHostRedirect proves a probe is never replayed at a
+// host the operator did not configure: Go strips only Authorization and Cookie on a
+// cross-host redirect, so an API-key header would otherwise reach the target.
+func TestHealthClient_RefusesCrossHostRedirect(t *testing.T) {
+	t.Parallel()
+
+	var hits atomic.Int32
+	var leakedKey atomic.Value
+	target := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		leakedKey.Store(r.Header.Get("X-Api-Key"))
+	}))
+	t.Cleanup(target.Close)
+	origin := httptest.NewServer(http.RedirectHandler(target.URL, http.StatusFound))
+	t.Cleanup(origin.Close)
+
+	checker := NewHTTPHealthCheckerWithDefaults(newMockRepository(), newHealthTestLogger(t))
+	ep := makeEndpoint(t, origin.URL)
+	ep.AuthHeaderName = "X-Api-Key"
+	ep.AuthHeaderValue = "sk-SECRET-123"
+
+	result, _ := checker.Check(context.Background(), ep)
+
+	if hits.Load() != 0 {
+		t.Fatalf("redirect target was reached %d times with X-Api-Key=%v", hits.Load(), leakedKey.Load())
+	}
+	if result.Status == domain.StatusHealthy {
+		t.Errorf("a redirect to another host must not count as healthy, got %v", result.Status)
 	}
 }
