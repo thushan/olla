@@ -40,17 +40,6 @@ func (a *Application) ollamaModelShowHandler(w http.ResponseWriter, r *http.Requ
 	http.Error(w, "model show not supported in multi-instance proxy", http.StatusNotImplemented)
 }
 
-// ollamaRunningModelsHandler returns currently loaded/running models.
-// endpoint: GET /olla/ollama/api/list
-//
-// this would need to aggregate running models across all ollama instances
-// which adds complexity around state synchronisation
-func (a *Application) ollamaRunningModelsHandler(w http.ResponseWriter, r *http.Request) {
-	// running model tracking across instances is complex
-	// would need to poll each instance and merge results
-	http.Error(w, "running models list not supported in multi-instance proxy", http.StatusNotImplemented)
-}
-
 // ollamaOpenAIModelsHandler returns models in openai-compatible format.
 // ollama experimental compatibility layer for openai clients
 // endpoint: GET /olla/ollama/v1/models

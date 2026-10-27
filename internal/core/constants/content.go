@@ -109,6 +109,7 @@ const (
 	HeaderXOllaRoutingDecision = "X-Olla-Routing-Decision"
 	HeaderXOllaRoutingReason   = "X-Olla-Routing-Reason"
 	HeaderXOllaMode            = "X-Olla-Mode"
+	HeaderXOllaPartial         = "X-Olla-Partial" // merged /api/ps answer is missing endpoints
 
 	// Sticky session headers
 	HeaderXOllaSessionID       = "X-Olla-Session-ID"        // client-supplied or echoed session identifier

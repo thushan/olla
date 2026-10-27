@@ -168,6 +168,19 @@ serves the exact name, Olla now retries once as `<name>:latest` against Ollama e
 vLLM `foo:latest` still never answers `foo`. The request goes to Ollama as you wrote it, and `foo`
 and `foo:latest` share one stats row, and one sticky key when it is built from the model name (`prefix_hash` hashes the raw body, so it still differs). Nothing to change on your side.
 
+### Fixed: `/olla/ollama/api/ps` covers every Ollama endpoint; `/api/list` removed
+
+`/olla/ollama/api/ps` was forwarded to one arbitrary instance, so with several Ollama
+endpoints it reported a fraction of what was loaded. It now queries every healthy Ollama
+endpoint and merges the results, one entry per loaded model per host with an added
+`olla_endpoint` field; endpoints that fail are skipped and flagged with `X-Olla-Partial`.
+Each endpoint is queried with its own credentials only, ignoring `HTTP_PROXY`.
+
+`POST /olla/ollama/api/blobs/{digest}` now returns 501 like the other model-management
+routes, which answer 501 to every method. `/olla/ollama/api/list` returned 501 but is not
+an Ollama endpoint, so the route is gone: requests to it now reach the backend and get
+Ollama's own 404.
+
 ## v0.0.29
 
 ### Breaking: userinfo URLs now fail startup
