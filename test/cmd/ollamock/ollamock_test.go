@@ -951,3 +951,159 @@ func TestTEIWrongKindMessages(t *testing.T) {
 		}
 	}
 }
+
+// --- Ollama capabilities, /api/ps and /api/embed ---
+
+func ollamaServer(t *testing.T, cfg serverConfig) *httptest.Server {
+	t.Helper()
+	if cfg.name == "" {
+		cfg.name = "ollama-test"
+	}
+	return testServerWith(t, cfg)
+}
+
+func TestOllamaTags_Capabilities(t *testing.T) {
+	t.Parallel()
+
+	models := []string{"llama3.2:3b", "qwen3-vl:8b", "nomic-embed-text:latest", "gemma2:2b"}
+	want := map[string][]string{
+		"llama3.2:3b":             {"completion", "tools"},
+		"qwen3-vl:8b":             {"completion", "vision", "tools"},
+		"nomic-embed-text:latest": {"embedding"},
+		"gemma2:2b":               {"completion"},
+	}
+
+	t.Run("on lists capabilities per model", func(t *testing.T) {
+		t.Parallel()
+		ts := ollamaServer(t, serverConfig{models: models, tagsCapabilities: true})
+		var body struct {
+			Models []struct {
+				Name         string   `json:"name"`
+				Capabilities []string `json:"capabilities"`
+			} `json:"models"`
+		}
+		decodeJSON(t, getURL(t, ts.URL+"/api/tags"), &body)
+		if len(body.Models) != len(models) {
+			t.Fatalf("got %d models, want %d", len(body.Models), len(models))
+		}
+		for _, m := range body.Models {
+			if got := strings.Join(m.Capabilities, ","); got != strings.Join(want[m.Name], ",") {
+				t.Errorf("%s capabilities = %q, want %q", m.Name, got, strings.Join(want[m.Name], ","))
+			}
+		}
+	})
+
+	t.Run("off omits the field like an older Ollama", func(t *testing.T) {
+		t.Parallel()
+		ts := ollamaServer(t, serverConfig{models: models})
+		var body struct {
+			Models []map[string]any `json:"models"`
+		}
+		decodeJSON(t, getURL(t, ts.URL+"/api/tags"), &body)
+		for _, m := range body.Models {
+			if _, present := m["capabilities"]; present {
+				t.Errorf("%v: capabilities present with tagsCapabilities off", m["name"])
+			}
+		}
+	})
+}
+
+func TestOllamaPS(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reports only the loaded models", func(t *testing.T) {
+		t.Parallel()
+		ts := ollamaServer(t, serverConfig{models: []string{"llama3.2:3b", "qwen3:8b"}, loaded: []string{"qwen3:8b"}})
+		var body struct {
+			Models []struct {
+				Name          string `json:"name"`
+				Model         string `json:"model"`
+				ExpiresAt     string `json:"expires_at"`
+				Size          int64  `json:"size"`
+				SizeVRAM      int64  `json:"size_vram"`
+				ContextLength int    `json:"context_length"`
+			} `json:"models"`
+		}
+		decodeJSON(t, getURL(t, ts.URL+"/api/ps"), &body)
+		if len(body.Models) != 1 || body.Models[0].Name != "qwen3:8b" || body.Models[0].Model != "qwen3:8b" {
+			t.Fatalf("models = %+v, want only qwen3:8b", body.Models)
+		}
+		m := body.Models[0]
+		if m.ExpiresAt == "" || m.Size == 0 || m.SizeVRAM == 0 || m.ContextLength == 0 {
+			t.Errorf("entry missing fields: %+v", m)
+		}
+	})
+
+	t.Run("nothing loaded is an empty array, not null", func(t *testing.T) {
+		t.Parallel()
+		ts := ollamaServer(t, serverConfig{models: []string{"llama3.2:3b"}})
+		_, raw := rawGet(t, ts.URL+"/api/ps")
+		if !strings.Contains(raw, `"models":[]`) {
+			t.Errorf("body = %s, want an empty models array", raw)
+		}
+	})
+}
+
+func rawGet(t *testing.T, url string) (int, string) {
+	t.Helper()
+	resp := getURL(t, url)
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	return resp.StatusCode, string(b)
+}
+
+func TestOllamaEmbed(t *testing.T) {
+	t.Parallel()
+
+	ts := ollamaServer(t, serverConfig{models: []string{"nomic-embed-text:latest"}})
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+		wantCount  int
+	}{
+		{"string input", `{"model":"nomic-embed-text","input":"hi"}`, http.StatusOK, 1},
+		{"array input, bare name resolves to :latest", `{"model":"nomic-embed-text","input":["a","b","c"]}`, http.StatusOK, 3},
+		{"tagged name", `{"model":"nomic-embed-text:latest","input":"hi"}`, http.StatusOK, 1},
+		{"model-less body is still served", `{"input":"hi"}`, http.StatusOK, 1},
+		{"empty string is 200 with no embeddings", `{"model":"nomic-embed-text","input":""}`, http.StatusOK, 0},
+		{"absent input is 200 with no embeddings", `{"model":"nomic-embed-text"}`, http.StatusOK, 0},
+		{"unknown model is 404", `{"model":"nope","input":"hi"}`, http.StatusNotFound, -1},
+		{"number input is 400", `{"model":"nomic-embed-text","input":5}`, http.StatusBadRequest, -1},
+		{"mixed array is 400", `{"model":"nomic-embed-text","input":["a",1]}`, http.StatusBadRequest, -1},
+		{"malformed JSON is 400", `{`, http.StatusBadRequest, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			resp := postJSON(t, ts.URL+"/api/embed", tt.body)
+			var body struct {
+				Error      string      `json:"error"`
+				Embeddings [][]float64 `json:"embeddings"`
+			}
+			status := resp.StatusCode
+			decodeJSON(t, resp, &body)
+			if status != tt.wantStatus {
+				t.Fatalf("status = %d, want %d (error %q)", status, tt.wantStatus, body.Error)
+			}
+			if tt.wantCount < 0 {
+				if body.Error == "" {
+					t.Error("error status without an error message")
+				}
+				return
+			}
+			if len(body.Embeddings) != tt.wantCount {
+				t.Errorf("embeddings = %d, want %d", len(body.Embeddings), tt.wantCount)
+			}
+			for i, v := range body.Embeddings {
+				if len(v) == 0 {
+					t.Errorf("embedding %d is empty", i)
+				}
+			}
+		})
+	}
+}
