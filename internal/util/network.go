@@ -50,9 +50,11 @@ func NormaliseBaseURL(baseURL string) string {
 	return baseURL
 }
 
-// IsPortAvailable checks if a port is available by attempting to bind to it
+// IsPortAvailable checks if a port is available by attempting to bind to it.
+// Strips brackets from IPv6 addresses since net.JoinHostPort adds them.
 func IsPortAvailable(host string, port int) bool {
-	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	ipStr := strings.Trim(host, "[]")
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", net.JoinHostPort(ipStr, strconv.Itoa(port)))
 	if err != nil {
 		return false
 	}
