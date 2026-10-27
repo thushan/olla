@@ -646,8 +646,6 @@ With multiple Ollama instances, enable unification:
 ```yaml
 model_registry:
   enable_unifier: true
-  unification:
-    enabled: true
 ```
 
 This provides a single model catalogue across all instances.

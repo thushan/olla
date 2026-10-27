@@ -306,7 +306,6 @@ model_registry:
       discovery_timeout: 2s
       discovery_refresh_on_miss: false
   unification:
-    enabled: true
     stale_threshold: 24h   # Model retention time
     cleanup_interval: 10m  # Cleanup frequency
 ```

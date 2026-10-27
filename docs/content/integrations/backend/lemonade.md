@@ -141,27 +141,18 @@ discovery:
         name: "lemonade-npu"
         type: "lemonade"
         priority: 100
-        tags:
-          hardware: npu
-          location: office
 
       # Secondary GPU-optimised instance
       - url: "http://gpu-server:8000"
         name: "lemonade-gpu"
         type: "lemonade"
         priority: 90
-        tags:
-          hardware: igpu
-          location: office
 
       # Fallback CPU instance
       - url: "http://cpu-server:8000"
         name: "lemonade-cpu"
         type: "lemonade"
         priority: 75
-        tags:
-          hardware: cpu
-          location: backup
 ```
 
 Olla will:
@@ -719,8 +710,6 @@ Enable unified model catalogue:
 ```yaml
 model_registry:
   enable_unifier: true
-  unification:
-    enabled: true
 ```
 
 Benefits:
@@ -756,15 +745,9 @@ discovery:
       - url: "http://npu-server:8000"
         name: "lemonade-npu"
         type: "lemonade"
-        tags:
-          hardware: npu
-          recipe: oga-npu
       - url: "http://cpu-server:8000"
         name: "lemonade-cpu"
         type: "lemonade"
-        tags:
-          hardware: cpu
-          recipe: oga-cpu
 ```
 
 ### 4. Monitor Health Actively
