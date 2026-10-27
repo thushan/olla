@@ -66,7 +66,7 @@ func TestProxyRouting_DeclaredPaths_NamedModelReachesServingHost(t *testing.T) {
 		{"lmdeploy", []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens"}},
 		{domain.ProfileLmStudio, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages"}},
 		{"litellm", []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens"}},
-		{domain.ProfileLemonade, []string{"/olla/proxy/v1/responses"}},
+		{domain.ProfileLemonade, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages"}},
 		{"docker-model-runner", []string{"/olla/proxy/v1/responses", "/olla/proxy/anthropic/v1/messages", "/olla/proxy/anthropic/v1/messages/count_tokens"}},
 	}
 
