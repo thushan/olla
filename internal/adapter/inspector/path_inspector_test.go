@@ -619,6 +619,7 @@ func TestShippedProfiles_AnthropicSupportImpliesDeclaredPaths(t *testing.T) {
 		})
 	}
 }
+
 // Translators rewrite every request to one OpenAI path, but backends mount it in
 // different places. The path a profile resolves to must be one it declares, and
 // profiles with no chat surface (TEI) must resolve to nothing.
