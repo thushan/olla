@@ -256,6 +256,9 @@ func Load(flagConfigFile ...string) (*Config, error) {
 			}
 			configLoaded = true
 			configFilename = path
+			// Lax decoding is kept so old configs still load; the unknown keys
+			// are surfaced to the operator instead of failing the load.
+			config.UnknownKeys = FindUnknownKeys(data)
 			// Cache any settings so we don't reparse etc
 			ApplyConfigCaches(config)
 			break
