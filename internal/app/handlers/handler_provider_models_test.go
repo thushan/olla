@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry"
+	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
@@ -343,6 +344,256 @@ func TestProviderModelFiltering(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &lmstudioResponse))
 	assert.Len(t, lmstudioResponse.Data, 1) // Only TheBloke model
 	assert.Equal(t, "TheBloke/Llama-2-7B-Chat-GGUF", lmstudioResponse.Data[0].ID)
+}
+
+// TestModelAliasesMode tests the model_aliases_mode configuration
+func TestModelAliasesMode(t *testing.T) {
+	// Setup logger
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, _, _ := logger.New(loggerCfg)
+	styledLogger := logger.NewPlainStyledLogger(log)
+
+	// Create test endpoints
+	ollamaURL, _ := url.Parse("http://ollama:11434")
+	openaiURL, _ := url.Parse("http://openai:8080")
+
+	endpoints := []*domain.Endpoint{
+		{
+			Name:      "ollama-1",
+			URL:       ollamaURL,
+			URLString: ollamaURL.String(),
+			Status:    domain.StatusHealthy,
+			Type:      "ollama",
+		},
+		{
+			Name:      "openai-1",
+			URL:       openaiURL,
+			URLString: openaiURL.String(),
+			Status:    domain.StatusHealthy,
+			Type:      "openai",
+		},
+	}
+
+	// Create registry and register models
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
+	ctx := context.Background()
+
+	for _, ep := range endpoints {
+		unifiedRegistry.RegisterEndpoint(ep)
+	}
+
+	// Register models: llama3 on ollama, gpt-3.5-turbo on openai
+	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[0], []*domain.ModelInfo{{Name: "llama3:latest"}}))
+	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[1], []*domain.ModelInfo{{Name: "gpt-3.5-turbo"}}))
+
+	// Wait for async unification to complete
+	require.Eventually(t, func() bool {
+		models, err := unifiedRegistry.GetUnifiedModels(ctx)
+		return err == nil && len(models) >= 2
+	}, 5*time.Second, 10*time.Millisecond, "async unification did not complete")
+
+	// Create converter factory
+	converterFactory := converter.NewConverterFactory()
+
+	tests := []struct {
+		name               string
+		modelAliases       map[string][]string
+		modelAliasesMode   string
+		expectedModelCount int
+		expectedIDs        []string
+		notExpectedIDs     []string
+	}{
+		{
+			name: "disabled_mode_only_targets",
+			modelAliases: map[string][]string{
+				"my-llama": {"llama3:latest"},
+				"my-gpt":   {"gpt-3.5-turbo"},
+			},
+			modelAliasesMode:   constants.StickyOutcomeResultDisabled,
+			expectedModelCount: 2, // only llama3:latest and gpt-3.5-turbo
+			expectedIDs:        []string{"llama3:latest", "gpt-3.5-turbo"},
+			notExpectedIDs:     []string{"my-llama", "my-gpt"},
+		},
+		{
+			name: "append_mode_both_aliases_and_targets",
+			modelAliases: map[string][]string{
+				"my-llama": {"llama3:latest"},
+				"my-gpt":   {"gpt-3.5-turbo"},
+			},
+			modelAliasesMode:   "append",
+			expectedModelCount: 4, // 2 targets + 2 aliases
+			expectedIDs:        []string{"llama3:latest", "gpt-3.5-turbo", "my-llama", "my-gpt"},
+			notExpectedIDs:     []string{},
+		},
+		{
+			name: "hidden_mode_only_aliases",
+			modelAliases: map[string][]string{
+				"my-llama": {"llama3:latest"},
+				"my-gpt":   {"gpt-3.5-turbo"},
+			},
+			modelAliasesMode:   "hidden",
+			expectedModelCount: 2, // only my-llama and my-gpt
+			expectedIDs:        []string{"my-llama", "my-gpt"},
+			notExpectedIDs:     []string{"llama3:latest", "gpt-3.5-turbo"},
+		},
+		{
+			name: "hidden_mode_multiple_targets_per_alias",
+			modelAliases: map[string][]string{
+				"my-gpt": {"gpt-3.5-turbo", "gpt-4"}, // gpt-4 not registered, should still work
+			},
+			modelAliasesMode:   "hidden",
+			expectedModelCount: 2, // my-gpt (alias) + llama3:latest (not a target of any alias)
+			expectedIDs:        []string{"my-gpt", "llama3:latest"},
+			notExpectedIDs:     []string{"gpt-3.5-turbo"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create application with alias config
+			cfg := config.DefaultConfig()
+			cfg.ModelAliases = tt.modelAliases
+			cfg.ModelAliasesMode = tt.modelAliasesMode
+
+			aliasResolver := registry.NewAliasResolver(cfg.ModelAliases, styledLogger)
+
+			app := &Application{
+				modelRegistry:    unifiedRegistry,
+				repository:       &mockRepository{endpoints: endpoints},
+				converterFactory: converterFactory,
+				logger:           styledLogger,
+				aliasResolver:    aliasResolver,
+				Config:           cfg,
+			}
+
+			// Test /olla/proxy/v1/models (openai format)
+			req := httptest.NewRequest("GET", "/olla/proxy/v1/models", nil)
+			w := httptest.NewRecorder()
+			app.openaiModelsHandler(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code)
+			assert.Equal(t, constants.ContentTypeJSON, w.Header().Get(constants.HeaderContentType))
+
+			var response converter.OpenAIModelResponse
+			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+			assert.Equal(t, "list", response.Object)
+
+			modelIDs := make([]string, len(response.Data))
+			for i, model := range response.Data {
+				modelIDs[i] = model.ID
+			}
+
+			// Check expected models are present
+			for _, id := range tt.expectedIDs {
+				assert.Contains(t, modelIDs, id, "expected model %s not found in %v", id, modelIDs)
+			}
+
+			// Check unexpected models are NOT present
+			for _, id := range tt.notExpectedIDs {
+				assert.NotContains(t, modelIDs, id, "unexpected model %s found in %v", id, modelIDs)
+			}
+
+			assert.Len(t, response.Data, tt.expectedModelCount, "model count mismatch for %s: got %d, want %d", tt.name, len(response.Data), tt.expectedModelCount)
+		})
+	}
+}
+
+// TestModelAliasesModeProviderSpecific tests that aliases work with provider-specific endpoints
+func TestModelAliasesModeProviderSpecific(t *testing.T) {
+	loggerCfg := &logger.Config{Level: "error", Theme: "default"}
+	log, _, _ := logger.New(loggerCfg)
+	styledLogger := logger.NewPlainStyledLogger(log)
+
+	ollamaURL, _ := url.Parse("http://ollama:11434")
+	lmstudioURL, _ := url.Parse("http://lmstudio:1234")
+
+	endpoints := []*domain.Endpoint{
+		{
+			Name:      "ollama-1",
+			URL:       ollamaURL,
+			URLString: ollamaURL.String(),
+			Status:    domain.StatusHealthy,
+			Type:      "ollama",
+		},
+		{
+			Name:      "lmstudio-1",
+			URL:       lmstudioURL,
+			URLString: lmstudioURL.String(),
+			Status:    domain.StatusHealthy,
+			Type:      "lm-studio",
+		},
+	}
+
+	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
+	ctx := context.Background()
+
+	for _, ep := range endpoints {
+		unifiedRegistry.RegisterEndpoint(ep)
+	}
+
+	// Register different models on different providers
+	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[0], []*domain.ModelInfo{{Name: "llama3:latest"}}))
+	require.NoError(t, unifiedRegistry.RegisterModelsWithEndpoint(ctx, endpoints[1], []*domain.ModelInfo{{Name: "TheBloke/Llama-2-7B-Chat-GGUF"}}))
+
+	require.Eventually(t, func() bool {
+		models, err := unifiedRegistry.GetUnifiedModels(ctx)
+		return err == nil && len(models) >= 2
+	}, 5*time.Second, 10*time.Millisecond, "async unification did not complete")
+
+	converterFactory := converter.NewConverterFactory()
+
+	cfg := config.DefaultConfig()
+	cfg.ModelAliases = map[string][]string{
+		"my-llama": {"llama3:latest", "TheBloke/Llama-2-7B-Chat-GGUF"},
+	}
+	cfg.ModelAliasesMode = "hidden"
+
+	aliasResolver := registry.NewAliasResolver(cfg.ModelAliases, styledLogger)
+
+	app := &Application{
+		modelRegistry:    unifiedRegistry,
+		repository:       &mockRepository{endpoints: endpoints},
+		converterFactory: converterFactory,
+		logger:           styledLogger,
+		aliasResolver:    aliasResolver,
+		Config:           cfg,
+	}
+
+	// Test /olla/ollama/v1/models - should show my-llama since it has targets on ollama
+	req := httptest.NewRequest("GET", "/olla/ollama/v1/models", nil)
+	w := httptest.NewRecorder()
+	app.ollamaOpenAIModelsHandler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var ollamaResponse converter.OpenAIModelResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &ollamaResponse))
+
+	ollamaIDs := make([]string, len(ollamaResponse.Data))
+	for i, m := range ollamaResponse.Data {
+		ollamaIDs[i] = m.ID
+	}
+	assert.Contains(t, ollamaIDs, "my-llama", "alias should appear in ollama endpoint")
+	assert.NotContains(t, ollamaIDs, "llama3:latest", "target should be hidden in hidden mode")
+	assert.NotContains(t, ollamaIDs, "TheBloke/Llama-2-7B-Chat-GGUF", "target should be hidden in hidden mode")
+
+	// Test /olla/lmstudio/v1/models - should show my-llama since it has targets on lmstudio
+	req = httptest.NewRequest("GET", "/olla/lmstudio/v1/models", nil)
+	w = httptest.NewRecorder()
+	app.lmstudioOpenAIModelsHandler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var lmstudioResponse converter.OpenAIModelResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &lmstudioResponse))
+
+	lmstudioIDs := make([]string, len(lmstudioResponse.Data))
+	for i, m := range lmstudioResponse.Data {
+		lmstudioIDs[i] = m.ID
+	}
+	assert.Contains(t, lmstudioIDs, "my-llama", "alias should appear in lmstudio endpoint")
+	assert.NotContains(t, lmstudioIDs, "llama3:latest", "target should be hidden in hidden mode")
+	assert.NotContains(t, lmstudioIDs, "TheBloke/Llama-2-7B-Chat-GGUF", "target should be hidden in hidden mode")
 }
 
 // TestUnifiedModelsFormatFiltering tests that format parameter filters models by provider

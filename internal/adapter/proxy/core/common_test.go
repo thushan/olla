@@ -731,8 +731,8 @@ func TestSetStickySessionHeaders(t *testing.T) {
 		},
 		{
 			name:          "disabled_source_none_skips_key_source_header",
-			outcome:       &domain.StickyOutcome{Result: "disabled", Source: "none"},
-			expectSession: "disabled",
+			outcome:       &domain.StickyOutcome{Result: constants.StickyOutcomeResultDisabled, Source: "none"},
+			expectSession: constants.StickyOutcomeResultDisabled,
 			expectSource:  "", // "none" must not be written
 		},
 		{

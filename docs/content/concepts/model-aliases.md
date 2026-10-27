@@ -140,6 +140,48 @@ Aliases are separate from model unification. Unification merges model catalogues
 
 Both the Olla and Sherpa proxy engines support model alias rewriting. The rewrite happens transparently before the request is forwarded to the backend.
 
+## Alias Visibility in Model Listings
+
+By default, configured aliases are **not** shown in model listing endpoints (e.g., `/olla/proxy/v1/models`, `/olla/ollama/v1/models`, `/olla/openai/v1/models`, etc.). Only actual models discovered from backends are returned.
+
+You can change this behavior with the `model_aliases_mode` configuration option:
+
+| Mode | Description |
+|------|-------------|
+| `disabled` (default) | Aliases are hidden from model listings. Only actual backend models are shown. |
+| `append` | Aliases are added to listings alongside their target models. Both alias and actual model names appear. |
+| `hidden` | Aliases are shown in listings, but their target models are excluded from the top-level listing. Target models remain accessible by direct request and are still visible through alias metadata (e.g., the `aliases` field). |
+
+Configuration example:
+
+```yaml
+model_aliases:
+  my-llama:
+    - "llama3.1:8b"                          # Ollama
+    - llama-3.1-8b-instruct                  # LM Studio
+model_aliases_mode: "hidden"
+```
+
+With `model_aliases_mode: "hidden"`, a request to `/olla/proxy/v1/models` returns:
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "my-llama",
+      "object": "model",
+      "created": 1705334400,
+      "owned_by": "olla"
+    }
+  ]
+}
+```
+
+The alias `my-llama` appears in the list, but `llama3.1:8b` and `llama-3.1-8b-instruct` are hidden. A client can still request `"model": "llama3.1:8b"` directly and it will work.
+
+When using `hidden` or `append` mode, alias entries include their target models in the `aliases` field (in unified format) or as additional metadata, allowing clients to discover underlying model names if needed.
+
 ## Example Scenario
 
 Consider a home lab with three backends:

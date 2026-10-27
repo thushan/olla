@@ -163,6 +163,7 @@ func DefaultConfig() *Config {
 			// The field ships now so a later change needs no config migration.
 			GateInternalAPI: false,
 		},
+		ModelAliasesMode: "disabled",
 		Translators: TranslatorsConfig{
 			Anthropic: AnthropicTranslatorConfig{
 				Enabled:            true,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/constants"
@@ -219,7 +220,10 @@ func (a *Application) getProviderModels(ctx context.Context, providerType string
 		return nil, fmt.Errorf("failed to filter models by health: %w", err)
 	}
 
-	providerModels, err := a.filterModelsByProvider(ctx, healthyModels, providerType)
+	// Inject configured aliases (add alias models, optionally hide targets)
+	modelsWithAliases := a.injectConfiguredAliases(ctx, healthyModels)
+
+	providerModels, err := a.filterModelsByProvider(ctx, modelsWithAliases, providerType)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter models by provider: %w", err)
 	}
@@ -242,4 +246,131 @@ func (a *Application) convertModelsToProviderFormat(models []*domain.UnifiedMode
 	}
 
 	return response, nil
+}
+
+// injectConfiguredAliases injects configured model aliases into the model list.
+// If ModelAliasesMode is "hidden" or "append", creates synthetic UnifiedModel entries
+// for each alias. In "hidden" mode, filters out target models that appear in any alias.
+func (a *Application) injectConfiguredAliases(ctx context.Context, models []*domain.UnifiedModel) []*domain.UnifiedModel {
+	// An unset mode must behave like "disabled" to keep listings backward compatible.
+	if a.aliasResolver == nil || a.Config.ModelAliasesMode == "" || a.Config.ModelAliasesMode == constants.StickyOutcomeResultDisabled {
+		return models
+	}
+
+	// Collect all target model names from configured aliases
+	allAliases := a.aliasResolver.GetAllAliases()
+	targetModels := make(map[string]bool)
+	for _, targets := range allAliases {
+		for _, t := range targets {
+			targetModels[t] = true
+		}
+	}
+
+	// Map iteration order is randomised, so sort to keep listings stable across calls.
+	aliasNames := make([]string, 0, len(allAliases))
+	for aliasName := range allAliases {
+		aliasNames = append(aliasNames, aliasName)
+	}
+	sort.Strings(aliasNames)
+
+	// Create synthetic alias models
+	var aliasModels []*domain.UnifiedModel
+	for _, aliasName := range aliasNames {
+		targetNames := allAliases[aliasName]
+		var mergedEndpoints []domain.SourceEndpoint
+		var firstTarget *domain.UnifiedModel
+
+		for _, targetName := range targetNames {
+			if um, err := a.getUnifiedModelByName(ctx, targetName); err == nil && um != nil {
+				if firstTarget == nil {
+					firstTarget = um
+				}
+				mergedEndpoints = append(mergedEndpoints, um.SourceEndpoints...)
+			}
+		}
+
+		if len(mergedEndpoints) == 0 || firstTarget == nil {
+			continue // no endpoints for this alias
+		}
+
+		// Deduplicate endpoints by URL, set NativeName to alias name
+		uniqEndpoints := deduplicateEndpointsByURL(mergedEndpoints, aliasName)
+
+		aliasModels = append(aliasModels, &domain.UnifiedModel{
+			ID:               aliasName,
+			Aliases:          toAliasEntries(targetNames, "config"),
+			SourceEndpoints:  uniqEndpoints,
+			Family:           firstTarget.Family,
+			Variant:          firstTarget.Variant,
+			ParameterSize:    firstTarget.ParameterSize,
+			Quantization:     firstTarget.Quantization,
+			Format:           firstTarget.Format,
+			Capabilities:     firstTarget.Capabilities,
+			MaxContextLength: firstTarget.MaxContextLength,
+			ParameterCount:   firstTarget.ParameterCount,
+		})
+	}
+
+	// Filter target models in "hidden" mode
+	if a.Config.ModelAliasesMode == "hidden" {
+		models = filterOutTargetModels(models, targetModels)
+	}
+	// "append" mode: keep all models + add aliases
+
+	return append(models, aliasModels...)
+}
+
+// getUnifiedModelByName retrieves a unified model by its ID or native name
+func (a *Application) getUnifiedModelByName(ctx context.Context, name string) (*domain.UnifiedModel, error) {
+	unifiedRegistry, ok := a.modelRegistry.(*registry.UnifiedMemoryModelRegistry)
+	if !ok {
+		return nil, errors.New("unified models not supported")
+	}
+	return unifiedRegistry.GetUnifiedModel(ctx, name)
+}
+
+// deduplicateEndpointsByURL deduplicates source endpoints by URL, keeping the first occurrence
+// and setting NativeName to the provided aliasName for all entries
+func deduplicateEndpointsByURL(endpoints []domain.SourceEndpoint, aliasName string) []domain.SourceEndpoint {
+	seen := make(map[string]bool)
+	var result []domain.SourceEndpoint
+	for _, ep := range endpoints {
+		if !seen[ep.EndpointURL] {
+			seen[ep.EndpointURL] = true
+			ep.NativeName = aliasName
+			result = append(result, ep)
+		}
+	}
+	return result
+}
+
+// filterOutTargetModels removes models whose ID or any native name matches a target model in the alias config
+func filterOutTargetModels(models []*domain.UnifiedModel, targetModels map[string]bool) []*domain.UnifiedModel {
+	var result []*domain.UnifiedModel
+	for _, m := range models {
+		if targetModels[m.ID] {
+			continue
+		}
+		// Also check if any source endpoint's native name is a target model
+		isTarget := false
+		for _, ep := range m.SourceEndpoints {
+			if targetModels[ep.NativeName] {
+				isTarget = true
+				break
+			}
+		}
+		if !isTarget {
+			result = append(result, m)
+		}
+	}
+	return result
+}
+
+// toAliasEntries converts a slice of model names to AliasEntry with the given source
+func toAliasEntries(names []string, source string) []domain.AliasEntry {
+	entries := make([]domain.AliasEntry, len(names))
+	for i, n := range names {
+		entries[i] = domain.AliasEntry{Name: n, Source: source}
+	}
+	return entries
 }

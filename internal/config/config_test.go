@@ -1052,6 +1052,37 @@ func TestValidateModelAliases_SelfReferencingAlias(t *testing.T) {
 	}
 }
 
+func TestValidateModelAliasesMode_Invalid(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliases = map[string][]string{"test": {"model1"}}
+	cfg.ModelAliasesMode = "invalid"
+	err := cfg.ValidateModelAliases()
+	if err == nil {
+		t.Error("expected error for invalid model_aliases_mode")
+	}
+}
+
+func TestValidateModelAliasesMode_Valid(t *testing.T) {
+	for _, mode := range []string{"disabled", "append", "hidden"} {
+		cfg := DefaultConfig()
+		cfg.ModelAliases = map[string][]string{"test": {"model1"}}
+		cfg.ModelAliasesMode = mode
+		err := cfg.ValidateModelAliases()
+		if err != nil {
+			t.Errorf("expected no error for valid mode %q, got: %v", mode, err)
+		}
+	}
+}
+
+func TestValidateModelAliasesMode_EmptyNoAliases(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ModelAliasesMode = "disabled"
+	err := cfg.ValidateModelAliases()
+	if err != nil {
+		t.Errorf("expected no error for empty aliases with mode, got: %v", err)
+	}
+}
+
 // TestDefaultConfig_ModelDiscovery verifies the ModelDiscovery block is
 // populated with safe, non-zero defaults so the ticker and errgroup won't panic
 // on a fresh install.

@@ -469,7 +469,7 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 		}
 
 		// "disabled" carries no signal; omit it to avoid noise in deployments without sticky sessions
-		if pr.stickyOutcome != "" && pr.stickyOutcome != "disabled" {
+		if pr.stickyOutcome != "" && pr.stickyOutcome != constants.StickyOutcomeResultDisabled {
 			infoFields = append(infoFields, "sticky_outcome", pr.stickyOutcome)
 		}
 

@@ -32,6 +32,12 @@ const (
 	RoutingReasonDiscoveryError                = "discovery_error"
 )
 
+// StickyOutcomeResultDisabled is the sentinel StickySessionWrapper.Select sets
+// on the StickyOutcome when no affinity key exists on the context; the value is
+// returned in X-Olla-Sticky-Session but omitted from INFO request logs because
+// it carries no actionable signal.
+const StickyOutcomeResultDisabled = "disabled"
+
 // Fallback behavior constants for routing strategies
 const (
 	// FallbackBehaviorNone never falls back to other endpoints
