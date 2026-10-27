@@ -381,7 +381,7 @@ These requests are **forwarded transparently** to the Lemonade SDK backend. Olla
 
 ### Anthropic Messages API
 
-Lemonade has no native Anthropic endpoint, so `/olla/anthropic/v1/messages` requests are translated to OpenAI chat and sent to `/api/v1/chat/completions`, the path the Lemonade profile declares. This also holds when Lemonade shares a fleet with backends that mount the API elsewhere (the path is chosen per endpoint, including on failover). See [API Translation](../../concepts/api-translation.md).
+The Lemonade profile does not enable Anthropic passthrough (it declares `/v1/messages` only so direct `/olla/proxy/v1/messages` calls keep it as a candidate), so `/olla/anthropic/v1/messages` requests are translated to OpenAI chat and sent to `/api/v1/chat/completions`, the path the Lemonade profile declares. This also holds when Lemonade shares a fleet with backends that mount the API elsewhere (the path is chosen per endpoint, including on failover). See [API Translation](../../concepts/api-translation.md).
 
 ## Lemonade SDK Features (Proxied)
 
