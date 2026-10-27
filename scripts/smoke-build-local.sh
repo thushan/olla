@@ -8,10 +8,17 @@
 # Not wired into CI or `make ready`: it is slow, needs goreleaser and bun, and
 # `make ci` already covers the plain build. It replaces ./build (gitignored
 # build output) wholesale and removes it again on exit, so it refuses to run
-# until you confirm with OLLA_SMOKE_OK=1. Nothing outside ./build is touched.
+# until you confirm with OLLA_SMOKE_OK=1. The script itself only deletes
+# ./build, but `make build-local` runs `goreleaser --clean`, which also clears
+# ./dist, as it always has.
 set -euo pipefail
 
+# A CDPATH match would make `cd scripts/..` land in another tree, and the
+# cleanup below would then delete the wrong build/.
+unset CDPATH
 cd "$(dirname "$0")/.."
+
+[[ -f makefile && -f go.mod ]] || { echo "smoke-build-local: $(pwd) is not the olla repo root" >&2; exit 2; }
 
 if [[ "${OLLA_SMOKE_OK:-}" != "1" ]]; then
   echo "smoke-build-local: this deletes $(pwd)/build. Set OLLA_SMOKE_OK=1 to confirm:" >&2
@@ -40,11 +47,11 @@ check() {
 }
 
 rm -rf ./build
-make build-local
+"${MAKE:-make}" build-local
 check "clean"
 
 # a second run over junk must be idempotent
 mkdir -p build/junk
 touch build/stale.txt build/junk/leftover
-make build-local
+"${MAKE:-make}" build-local
 check "pre-populated"
