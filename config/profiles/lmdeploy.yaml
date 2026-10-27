@@ -13,6 +13,27 @@ routing:
 # API compatibility
 api:
   openai_compatible: true
+
+  # LMDeploy v0.13.0+ serves the Anthropic Messages API natively (/v1/messages and
+  # /v1/messages/count_tokens, serve/anthropic/endpoints), so requests bypass
+  # translation. Older releases answer 404 on /v1/messages. The server insists on an
+  # anthropic-version header, which Anthropic clients send and Olla forwards untouched.
+  #
+  # v0.13.0 to v0.17.x reject the Anthropic tools and tool_choice fields with a
+  # NotImplementedError (serve/anthropic/adapter.py); v0.18.0 accepts them. Claude Code
+  # always sends tools, so no_tool_use makes those requests translate instead. It is
+  # a limitation rather than a min_version bump because min_version is not enforced
+  # at runtime. The cost is that tool requests to 0.18+ also translate; drop the
+  # limitation in a local copy of this profile if every LMDeploy in the fleet is 0.18+.
+  # min_version is documentation only; Olla does not check the backend's version.
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: true
+    min_version: "0.13.0"
+    limitations:
+      - no_tool_use
+
   paths:
     # Health and system endpoints
     - /health              # 0: health check (HTTP 200, empty body)
