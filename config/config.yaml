@@ -86,8 +86,9 @@ proxy:
 
   # Failover: when a connection to a backend fails (refused, reset,
   # network unreachable), Olla marks that endpoint unhealthy and retries the
-  # request on the other healthy endpoints, each tried once (not after response
-  # headers have been sent, so a reset mid-generation is not retried). This is automatic
+  # request on the other healthy endpoints, each tried once (a non-idempotent request
+  # such as an inference POST is not retried once the response has started, so a
+  # reset mid-generation is not retried). This is automatic
   # and not configurable; there is no proxy.retry block. A request with only
   # one eligible endpoint has nowhere to fail over to.
 

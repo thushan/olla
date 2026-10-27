@@ -130,9 +130,12 @@ discovery:
 
 ### Production Setup: Multiple Instances
 
-Load balance across multiple Lemonade SDK instances:
+Load balance across multiple Lemonade SDK instances. Priorities only take effect with the `priority` load balancer:
 
 ```yaml
+proxy:
+  load_balancer: "priority"
+
 discovery:
   static:
     endpoints:
