@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/thushan/olla/internal/adapter/security"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -20,7 +21,7 @@ import (
 // routes (to keep the test focused on item 3 only).
 type capAdapters struct{}
 
-func (c *capAdapters) CreateChainMiddleware() func(http.Handler) http.Handler {
+func (c *capAdapters) CreateChainMiddleware(security.RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler { return next }
 }
 
@@ -138,7 +139,7 @@ func (m *mockRouteLogger) ErrorWithContext(msg string, endpoint string, ctx logg
 // produce the 429, so the test can tell whether a route took the chain.
 type chainOnlyAdapters struct{ capAdapters }
 
-func (chainOnlyAdapters) CreateChainMiddleware() func(http.Handler) http.Handler {
+func (chainOnlyAdapters) CreateChainMiddleware(security.RejectFunc) func(http.Handler) http.Handler {
 	return func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusTooManyRequests)
@@ -149,7 +150,7 @@ func (chainOnlyAdapters) CreateChainMiddleware() func(http.Handler) http.Handler
 // rejectAdapters adds the optional translator chain, which writes through the route's Reject.
 type rejectAdapters struct{ chainOnlyAdapters }
 
-func (rejectAdapters) CreateChainMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler {
+func (rejectAdapters) CreateTranslatorChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler {
 	return func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			reject(w, http.StatusTooManyRequests, "slow down")

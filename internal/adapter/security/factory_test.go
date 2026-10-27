@@ -254,7 +254,7 @@ func TestSecurityAdapters_CreateChainMiddleware(t *testing.T) {
 	_, adapters := createNewTestSecurityServices()
 	defer adapters.Stop()
 
-	middleware := adapters.CreateChainMiddleware()
+	middleware := adapters.CreateChainMiddleware(nil)
 	if middleware == nil {
 		t.Error("CreateChainMiddleware returned nil")
 	}

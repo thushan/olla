@@ -118,7 +118,7 @@ func TestRateLimitMiddleware_FloodLogsBoundedAndSummarisesExactly(t *testing.T) 
 	v.rejectLog = logger.NewRejectThrottle(log, "Rate limit exceeded", "rate_limit", "client_ip", clock.Now)
 
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	h := v.CreateMiddleware()(next)
+	h := v.CreateMiddleware(nil)(next)
 
 	const total = 10_000
 	var allowed, limited int
@@ -165,7 +165,7 @@ func TestRateLimitMiddleware_WindowRolloverLogsNextFirstEventInFull(t *testing.T
 	defer v.Stop()
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	v.rejectLog = logger.NewRejectThrottle(log, "Rate limit exceeded", "rate_limit", "client_ip", clock.Now)
-	h := v.CreateMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	h := v.CreateMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 
 	hit := func() {
 		req := httptest.NewRequest(http.MethodPost, "/x", nil)
@@ -193,7 +193,7 @@ func TestRateLimitMiddleware_DistinctIPStormKeepsThrottleBounded(t *testing.T) {
 	// frozen clock: a slow race runner must not be able to open a second window mid-storm
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	v.rejectLog = logger.NewRejectThrottle(log, "Rate limit exceeded", "rate_limit", "client_ip", clock.Now)
-	h := v.CreateMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	h := v.CreateMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 
 	const total = 100_000
 	const workers = 8
@@ -243,8 +243,8 @@ func TestSizeValidator_RejectionLogIsThrottledPerClient(t *testing.T) {
 		name       string
 		middleware func(*SizeValidator) func(http.Handler) http.Handler
 	}{
-		{"proxy chain", (*SizeValidator).CreateMiddleware},
-		{"non-proxy chain", (*SizeValidator).CreateNonProxyMiddleware},
+		{"proxy chain", func(sv *SizeValidator) func(http.Handler) http.Handler { return sv.CreateMiddleware(nil) }},
+		{"non-proxy chain", func(sv *SizeValidator) func(http.Handler) http.Handler { return sv.CreateNonProxyMiddleware(nil) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -292,7 +292,7 @@ func TestAdaptersStop_FlushesSizeValidatorSummary(t *testing.T) {
 
 	log, records := newCaptureLogger()
 	adapters := &Adapters{SizeValidation: NewSizeValidator(config.ServerRequestLimits{MaxBodySize: 16, MaxHeaderSize: 1 << 20}, &countingMetrics{}, log)}
-	h := adapters.SizeValidation.CreateMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	h := adapters.SizeValidation.CreateMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
 
 	const total = 10
 	for range total {
@@ -318,7 +318,7 @@ func TestSizeValidator_OversizedFloodWithProductionMetricsLogsOnce(t *testing.T)
 		NewSecurityMetricsAdapter(collector, log), log)
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_kind", clock.Now)
-	h := sv.CreateMiddleware()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	h := sv.CreateMiddleware(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	const total = 200
 	for range total {
@@ -344,7 +344,7 @@ func TestSizeValidator_BodyAndHeaderRejectionsSampleSeparately(t *testing.T) {
 	sv := NewSizeValidator(config.ServerRequestLimits{MaxBodySize: 16, MaxHeaderSize: 4096}, &countingMetrics{}, log)
 	clock := &fakeClock{t: time.Unix(1_700_000_000, 0)}
 	sv.rejectLog = logger.NewRejectThrottle(log, "Request rejected", "size_limit", "client_kind", clock.Now)
-	h := sv.CreateMiddleware()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	h := sv.CreateMiddleware(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 
 	send := func(mutate func(*http.Request)) {
 		req := httptest.NewRequest(http.MethodPost, "/x", strings.NewReader(""))

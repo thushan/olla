@@ -258,7 +258,7 @@ func TestSizeValidator_ChunkedProxyBody_EndToEnd(t *testing.T) {
 		MaxBodySize: cap,
 	}, nil, mockLogger)
 
-	handler := validator.CreateMiddleware()(http.HandlerFunc(app.proxyHandler))
+	handler := validator.CreateMiddleware(nil)(http.HandlerFunc(app.proxyHandler))
 
 	t.Run("chunked over cap returns 413", func(t *testing.T) {
 		t.Parallel()

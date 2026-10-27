@@ -7,12 +7,13 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/thushan/olla/internal/adapter/security"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/app/handlers/dashboard"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
-	"github.com/thushan/olla/internal/router"
+	"github.com/thushan/olla/internal/util"
 )
 
 // staticRoute captures the minimal routing info needed when profile loading is unavailable
@@ -115,7 +116,7 @@ func (a *Application) mountDashboard() {
 // translatorRejectWriter returns the writer that formats a security rejection in the
 // translator's own error schema, or nil (plain text) when it has none. The quiet variant
 // is preferred: the rate limiter already reports the rejection through its sampled log.
-func translatorRejectWriter(trans translator.RequestTranslator) router.RejectFunc {
+func translatorRejectWriter(trans translator.RequestTranslator) security.RejectFunc {
 	var write func(w http.ResponseWriter, err error, statusCode int)
 	switch ew := trans.(type) {
 	case translator.QuietErrorWriter:
@@ -126,6 +127,11 @@ func translatorRejectWriter(trans translator.RequestTranslator) router.RejectFun
 		return nil
 	}
 	return func(w http.ResponseWriter, status int, message string) {
+		// The access-log middleware that assigns the request ID sits behind the security
+		// chain, so a rejection has none yet; SDKs read request-id for correlation.
+		if w.Header().Get(constants.HeaderXOllaRequestID) == "" {
+			w.Header().Set(constants.HeaderXOllaRequestID, util.GenerateRequestID())
+		}
 		write(w, errors.New(message), status)
 	}
 }

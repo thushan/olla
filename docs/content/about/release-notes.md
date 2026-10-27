@@ -52,12 +52,13 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
 
 ### Fixed: Anthropic routes are now rate limited
 
-`/olla/anthropic/v1/messages`, `/messages/count_tokens` and `/models` were registered as plain routes, so neither the rate limit
-nor the request size limit reached them, although the API reference said the standard limits applied. They are the main entry point for
-Claude Code. Translator routes now register through `RegisterTranslatorRoute` and sit behind the same chain as the proxy
+`/olla/anthropic/v1/messages`, `/messages/count_tokens` and `/models` were registered as plain routes, so the rate limit
+never reached them, although the API reference said the standard limits applied. They are the main entry point for
+Claude Code. Translator routes now register through `RegisterTranslatorRoute` and sit behind the same rate limit as the proxy
 routes, and a translator added later is covered without extra wiring. A limited request gets `429` with `Retry-After` and
-Anthropic's `rate_limit_error` body, and an oversized one gets `413` with `request_too_large`, so Claude Code retries and
-reports them properly. Measured against a real Ollama, one Claude Code session peaked at 3 requests a minute and three parallel
+Anthropic's `rate_limit_error` body, and an oversized one gets `413` with `request_too_large`, both carrying a `request-id`,
+so Claude Code retries and reports them properly. The size limit already applied to these routes; it now answers in the same
+Anthropic shape. Measured against a real Ollama, one Claude Code session peaked at 3 requests a minute and three parallel
 sessions at 10 a minute with a burst of 4, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
 behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 Reported by @infodancer.

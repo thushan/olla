@@ -260,13 +260,9 @@ func (rl *RateLimitValidator) Stop() {
 	})
 }
 
-func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler {
-	return rl.CreateMiddlewareWithReject(nil)
-}
-
-// CreateMiddlewareWithReject is CreateMiddleware with a caller-supplied rejection
-// writer; see RejectFunc. A nil reject keeps the plain-text 429.
-func (rl *RateLimitValidator) CreateMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler {
+// CreateMiddleware builds the rate-limit middleware. reject writes the 429 for routes whose
+// clients expect a specific error format (see RejectFunc); nil keeps the plain-text 429.
+func (rl *RateLimitValidator) CreateMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientIP := util.GetClientIP(r, rl.trustProxyHeaders, rl.trustedCIDRs)

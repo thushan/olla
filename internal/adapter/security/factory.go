@@ -58,22 +58,32 @@ func (sa *Adapters) Stop() {
 // CreateChainMiddleware builds the rate-limit -> size-validation chain once,
 // at wiring time. Building it fresh on every request (as this used to do)
 // allocated four closures per request for no reason - the underlying
-// validators don't change after startup.
-func (sa *Adapters) CreateChainMiddleware() func(http.Handler) http.Handler {
-	return sa.CreateChainMiddlewareWithReject(nil)
+// validators don't change after startup. This is the streaming (proxy) chain;
+// reject writes rejections for routes that need a specific error format, nil
+// keeps the plain-text responses.
+func (sa *Adapters) CreateChainMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
+	return sa.chain(reject, func(sv *SizeValidator) func(http.Handler) http.Handler {
+		return sv.CreateMiddleware(reject)
+	})
 }
 
-// CreateChainMiddlewareWithReject is CreateChainMiddleware for routes whose clients
-// expect a specific error format: both validators write their rejections through
-// reject. A nil reject keeps the plain-text responses.
-func (sa *Adapters) CreateChainMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler {
+// CreateTranslatorChainMiddleware is the chain for translator routes: the same rate limit,
+// with the buffering size variant because the translator handler reads the whole body anyway.
+// That keeps an oversized chunked body a counted 413 rather than a failed read in the handler.
+func (sa *Adapters) CreateTranslatorChainMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
+	return sa.chain(reject, func(sv *SizeValidator) func(http.Handler) http.Handler {
+		return sv.CreateNonProxyMiddleware(reject)
+	})
+}
+
+func (sa *Adapters) chain(reject RejectFunc, size func(*SizeValidator) func(http.Handler) http.Handler) func(http.Handler) http.Handler {
 	rateLimitMiddleware := func(next http.Handler) http.Handler { return next }
 	if sa.RateLimit != nil {
-		rateLimitMiddleware = sa.RateLimit.CreateMiddlewareWithReject(reject)
+		rateLimitMiddleware = sa.RateLimit.CreateMiddleware(reject)
 	}
 	sizeMiddleware := func(next http.Handler) http.Handler { return next }
 	if sa.SizeValidation != nil {
-		sizeMiddleware = sa.SizeValidation.CreateMiddlewareWithReject(reject)
+		sizeMiddleware = size(sa.SizeValidation)
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -83,7 +93,7 @@ func (sa *Adapters) CreateChainMiddlewareWithReject(reject RejectFunc) func(http
 
 func (sa *Adapters) CreateRateLimitMiddleware() func(http.Handler) http.Handler {
 	if sa.RateLimit != nil {
-		return sa.RateLimit.CreateMiddleware()
+		return sa.RateLimit.CreateMiddleware(nil)
 	}
 	return func(next http.Handler) http.Handler {
 		return next
@@ -98,7 +108,7 @@ func (sa *Adapters) CreateRateLimitMiddleware() func(http.Handler) http.Handler 
 // not be buffered.
 func (sa *Adapters) CreateSizeMiddleware() func(http.Handler) http.Handler {
 	if sa.SizeValidation != nil {
-		return sa.SizeValidation.CreateNonProxyMiddleware()
+		return sa.SizeValidation.CreateNonProxyMiddleware(nil)
 	}
 	return func(next http.Handler) http.Handler {
 		return next

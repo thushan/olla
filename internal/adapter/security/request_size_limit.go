@@ -127,14 +127,10 @@ func (sv *SizeValidator) validateBodySize(req ports.SecurityRequest) error {
 	return nil
 }
 
-func (sv *SizeValidator) CreateMiddleware() func(http.Handler) http.Handler {
-	return sv.CreateMiddlewareWithReject(nil)
-}
-
-// CreateMiddlewareWithReject is CreateMiddleware with a caller-supplied rejection
-// writer, so routes that speak a specific wire format (the translator routes) can
-// return a rejection their clients understand. A nil reject keeps the plain-text default.
-func (sv *SizeValidator) CreateMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler {
+// CreateMiddleware enforces the size limits on streaming (proxy) routes, capping the body
+// with MaxBytesReader rather than buffering it. reject writes the rejection for routes whose
+// clients expect a specific error format (see RejectFunc); nil keeps the plain-text default.
+func (sv *SizeValidator) CreateMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			req := ports.SecurityRequest{
@@ -183,7 +179,9 @@ func (sv *SizeValidator) CreateMiddlewareWithReject(reject RejectFunc) func(http
 //
 // Proxy routes must NOT use this middleware — they stream large bodies
 // legitimately and must not be buffered. Use CreateMiddleware for those paths.
-func (sv *SizeValidator) CreateNonProxyMiddleware() func(http.Handler) http.Handler {
+// Translator routes do use it: their handler buffers the whole body anyway, and this
+// keeps an oversized chunked body a counted 413 instead of a failed read later on.
+func (sv *SizeValidator) CreateNonProxyMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			req := ports.SecurityRequest{
@@ -204,9 +202,9 @@ func (sv *SizeValidator) CreateNonProxyMiddleware() func(http.Handler) http.Hand
 				sv.recordViolation(r, req, result)
 
 				if r.ContentLength > sv.maxBodySize {
-					http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+					writeReject(w, reject, http.StatusRequestEntityTooLarge, "Request body too large")
 				} else {
-					http.Error(w, "Request headers too large", http.StatusRequestHeaderFieldsTooLarge)
+					writeReject(w, reject, http.StatusRequestHeaderFieldsTooLarge, "Request headers too large")
 				}
 				return
 			}
@@ -234,7 +232,7 @@ func (sv *SizeValidator) CreateNonProxyMiddleware() func(http.Handler) http.Hand
 						Reason:  fmt.Sprintf("Request body too large: chunked body exceeds limit %d", sv.maxBodySize),
 					}
 					sv.recordViolation(r, overflowReq, overflowResult)
-					http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
+					writeReject(w, reject, http.StatusRequestEntityTooLarge, "Request body too large")
 					return
 				}
 				// Restore the buffered body so downstream handlers that do read it

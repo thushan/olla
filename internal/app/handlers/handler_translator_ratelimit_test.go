@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/security"
+	"github.com/thushan/olla/internal/adapter/stats"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
@@ -32,21 +33,25 @@ type plainTranslator struct {
 func (plainTranslator) GetAPIPath() string { return "/olla/plain/v1/messages" }
 
 // translatorSecurity builds adapters that allow `burst` rapid requests per client before
-// limiting, and cap bodies at maxBody bytes.
-func translatorSecurity(t *testing.T, burst int, maxBody int64) *security.Adapters {
+// limiting, and cap bodies at maxBody bytes. The global limit is off so that only the per-IP
+// bucket can answer 429: the tests then prove per-IP limiting of these routes, not the global
+// bucket draining. The collector is returned so tests can read the recorded violations.
+func translatorSecurity(t *testing.T, burst int, maxBody int64) (*security.Adapters, *stats.Collector) {
 	t.Helper()
 
 	cfg := &config.Config{Server: config.ServerConfig{
 		RateLimits: config.ServerRateLimits{
-			GlobalRequestsPerMinute: 100000,
+			GlobalRequestsPerMinute: 0,
 			PerIPRequestsPerMinute:  60,
 			BurstSize:               burst,
 		},
 		RequestLimits: config.ServerRequestLimits{MaxBodySize: maxBody},
 	}}
-	_, adapters := security.NewSecurityServices(cfg, &mockStatsCollector{}, &mockStyledLogger{})
+	quiet := logger.NewStyledLogger(slog.New(slog.NewTextHandler(io.Discard, nil)), &theme.Theme{}, false)
+	collector := stats.NewCollector(quiet)
+	_, adapters := security.NewSecurityServices(cfg, collector, &mockStyledLogger{})
 	t.Cleanup(adapters.Stop)
-	return adapters
+	return adapters, collector
 }
 
 // wireTranslatorRoutes registers the translator routes of a real engine-backed app and
@@ -71,6 +76,8 @@ func wireTranslatorRoutes(t *testing.T, engine string, adapters *security.Adapte
 	return reg, mux
 }
 
+func mustAdapters(a *security.Adapters, _ *stats.Collector) *security.Adapters { return a }
+
 func translatorRequest(method, path, body string) *http.Request {
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
@@ -91,7 +98,7 @@ func TestTranslatorRoutes_AreRateLimited(t *testing.T) {
 			t.Parallel()
 
 			const burst = 3
-			reg, _ := wireTranslatorRoutes(t, engine, translatorSecurity(t, burst, 1<<20))
+			reg, _ := wireTranslatorRoutes(t, engine, mustAdapters(translatorSecurity(t, burst, 1<<20)))
 
 			var translatorRoutes []string
 			for path, info := range reg.GetRoutes() {
@@ -104,7 +111,7 @@ func TestTranslatorRoutes_AreRateLimited(t *testing.T) {
 			for _, path := range translatorRoutes {
 				t.Run(path, func(t *testing.T) {
 					// A fresh client and mux per route keeps the buckets independent.
-					_, mux := wireTranslatorRoutes(t, engine, translatorSecurity(t, burst, 1<<20))
+					_, mux := wireTranslatorRoutes(t, engine, mustAdapters(translatorSecurity(t, burst, 1<<20)))
 					method := reg.GetRoutes()[path].Method
 
 					var limited *httptest.ResponseRecorder
@@ -116,6 +123,13 @@ func TestTranslatorRoutes_AreRateLimited(t *testing.T) {
 						}
 					}
 					require.NotNil(t, limited, "%s was never rate limited", path)
+
+					// Only the per-IP bucket is enabled, so another client is unaffected.
+					other := translatorRequest(method, path, translatorBody)
+					other.RemoteAddr = "198.51.100.77:5000"
+					rec := httptest.NewRecorder()
+					mux.ServeHTTP(rec, other)
+					assert.NotEqual(t, http.StatusTooManyRequests, rec.Code, "a different client must have its own bucket")
 
 					retry, err := strconv.Atoi(limited.Header().Get("Retry-After"))
 					require.NoError(t, err, "Retry-After must be whole seconds")
@@ -135,7 +149,7 @@ func TestTranslatorRoutes_RateLimitUsesTranslatorErrorFormat(t *testing.T) {
 		t.Run(engine, func(t *testing.T) {
 			t.Parallel()
 
-			_, mux := wireTranslatorRoutes(t, engine, translatorSecurity(t, 1, 1<<20))
+			_, mux := wireTranslatorRoutes(t, engine, mustAdapters(translatorSecurity(t, 1, 1<<20)))
 
 			for _, path := range []string{"/olla/anthropic/v1/messages", "/olla/anthropic/v1/messages/count_tokens"} {
 				// Exhaust the single-token bucket, then expect the rejection.
@@ -162,6 +176,7 @@ func TestTranslatorRoutes_RateLimitUsesTranslatorErrorFormat(t *testing.T) {
 				assert.Equal(t, "error", body.Type)
 				assert.Equal(t, "rate_limit_error", body.Error.Type)
 				assert.NotEmpty(t, body.Error.Message)
+				assert.NotEmpty(t, rec.Header().Get("request-id"), "rejections carry a request id like Anthropic's")
 			}
 
 			// A translator without an error writer still gets limited, in plain text.
@@ -179,34 +194,43 @@ func TestTranslatorRoutes_RateLimitUsesTranslatorErrorFormat(t *testing.T) {
 	}
 }
 
-// The size cap used to be skipped on /olla/anthropic/v1/messages for streamed bodies; it now
-// applies as it does on the proxy routes, and answers in the Anthropic error schema.
+// The size cap applies to the translator routes as it does on the proxy routes, answers in the
+// Anthropic error schema, and counts the violation, for Content-Length and chunked bodies alike.
 func TestTranslatorRoutes_SizeLimitApplies(t *testing.T) {
 	t.Parallel()
 
+	big := `{"model":"m","max_tokens":16,"messages":[{"role":"user","content":"` + strings.Repeat("x", 512) + `"}]}`
+
 	for _, engine := range translationEngines {
-		t.Run(engine, func(t *testing.T) {
-			t.Parallel()
+		for _, path := range []string{"/olla/anthropic/v1/messages", "/olla/anthropic/v1/messages/count_tokens"} {
+			for _, chunked := range []bool{false, true} {
+				name := engine + path
+				if chunked {
+					name += "/chunked"
+				}
+				t.Run(name, func(t *testing.T) {
+					t.Parallel()
 
-			_, mux := wireTranslatorRoutes(t, engine, translatorSecurity(t, 100, 64))
+					adapters, collector := translatorSecurity(t, 100, 64)
+					_, mux := wireTranslatorRoutes(t, engine, adapters)
 
-			big := `{"model":"m","max_tokens":16,"messages":[{"role":"user","content":"` + strings.Repeat("x", 512) + `"}]}`
-			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, translatorRequest(http.MethodPost, "/olla/anthropic/v1/messages", big))
-			require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code, rec.Body.String())
+					req := translatorRequest(http.MethodPost, path, big)
+					if chunked {
+						// No Content-Length, so the cap has to hold while the body is read.
+						req.ContentLength = -1
+						req.Body = readCloser{bytes.NewReader([]byte(big))}
+					}
+					rec := httptest.NewRecorder()
+					mux.ServeHTTP(rec, req)
 
-			var body map[string]any
-			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), rec.Body.String())
-			assert.Equal(t, "request_too_large", body["error"].(map[string]any)["type"])
-
-			// Chunked bodies carry no Content-Length, so the cap has to hold while streaming.
-			chunked := translatorRequest(http.MethodPost, "/olla/anthropic/v1/messages", "")
-			chunked.ContentLength = -1
-			chunked.Body = readCloser{bytes.NewReader([]byte(big))}
-			rec = httptest.NewRecorder()
-			mux.ServeHTTP(rec, chunked)
-			assert.NotEqual(t, http.StatusOK, rec.Code, "an oversized chunked body must not be served")
-		})
+					require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code, rec.Body.String())
+					var body map[string]any
+					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), rec.Body.String())
+					assert.Equal(t, "request_too_large", body["error"].(map[string]any)["type"])
+					assert.Equal(t, int64(1), collector.GetSecurityStats().SizeLimitViolations, "the rejection must be counted")
+				})
+			}
+		}
 	}
 }
 
@@ -223,12 +247,46 @@ func TestTranslatorRoutes_WithinLimitsStillServed(t *testing.T) {
 		t.Run(engine, func(t *testing.T) {
 			t.Parallel()
 
-			_, mux := wireTranslatorRoutes(t, engine, translatorSecurity(t, 50, 1<<20))
+			_, mux := wireTranslatorRoutes(t, engine, mustAdapters(translatorSecurity(t, 50, 1<<20)))
 
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, translatorRequest(http.MethodPost, "/olla/anthropic/v1/messages", translatorBody))
 			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 			assert.Contains(t, rec.Body.String(), `"type":"message"`)
 		})
+	}
+}
+
+// If an oversized chunked body ever reaches the handlers (a route that skipped the security
+// chain), the MaxBytesReader error is a quiet 413, not a 400 and an ERROR line per request.
+func TestTranslatorHandlers_MaxBytesErrorIsQuiet413(t *testing.T) {
+	t.Parallel()
+
+	big := `{"model":"m","max_tokens":16,"messages":[{"role":"user","content":"` + strings.Repeat("x", 512) + `"}]}`
+
+	for _, engine := range translationEngines {
+		for _, route := range []string{"messages", "count_tokens"} {
+			t.Run(engine+"/"+route, func(t *testing.T) {
+				t.Parallel()
+
+				f := newTranslationPathApp(t, engine, false, false, nil, nil)
+				handler := f.handler
+				if route == "count_tokens" {
+					handler = f.app.tokenCountHandler(f.trans)
+				}
+
+				rec := httptest.NewRecorder()
+				req := translatorRequest(http.MethodPost, "/olla/anthropic/v1/"+route, "")
+				req.ContentLength = -1
+				req.Body = http.MaxBytesReader(rec, readCloser{bytes.NewReader([]byte(big))}, 64)
+				handler.ServeHTTP(rec, req)
+
+				require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code, rec.Body.String())
+				var body map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body), rec.Body.String())
+				assert.Equal(t, "request_too_large", body["error"].(map[string]any)["type"])
+				assert.Zero(t, f.log.errors, "an oversized body must not write an ERROR line")
+			})
+		}
 	}
 }

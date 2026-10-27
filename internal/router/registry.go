@@ -7,17 +7,14 @@ import (
 	"sort"
 
 	"github.com/pterm/pterm"
+	"github.com/thushan/olla/internal/adapter/security"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
 )
 
-// RejectFunc writes a security rejection (rate or size limit) in the wire format a
-// route's clients expect. Headers such as Retry-After are already set when it runs.
-type RejectFunc = func(w http.ResponseWriter, status int, message string)
-
 type RouteInfo struct {
 	Handler     http.HandlerFunc
-	Reject      RejectFunc
+	Reject      security.RejectFunc
 	Description string
 	Method      string
 	Order       int
@@ -61,7 +58,7 @@ func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFun
 // /olla/anthropic/v1/messages). These are inference entry points, so they sit behind
 // the same rate and size limits as proxy routes. reject lets the translator answer a
 // rejection in its own error schema; nil falls back to plain text.
-func (r *RouteRegistry) RegisterTranslatorRoute(route string, handler http.HandlerFunc, description, method string, reject RejectFunc) {
+func (r *RouteRegistry) RegisterTranslatorRoute(route string, handler http.HandlerFunc, description, method string, reject security.RejectFunc) {
 	r.registerWithMethod(route, handler, description, method, false)
 	info := r.routes[route]
 	info.IsTranslator = true
@@ -136,14 +133,14 @@ func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
 
 func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters interface{}) {
 	type securityAdapterProvider interface {
-		CreateChainMiddleware() func(http.Handler) http.Handler
+		CreateChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler
 		CreateRateLimitMiddleware() func(http.Handler) http.Handler
 	}
 
-	// Optional: lets translator routes get the proxy chain with rejections written
-	// in the translator's own error format.
-	type rejectChainProvider interface {
-		CreateChainMiddlewareWithReject(reject RejectFunc) func(http.Handler) http.Handler
+	// Optional: the chain for translator routes (buffering size variant), with rejections
+	// written in the translator's own error format.
+	type translatorChainProvider interface {
+		CreateTranslatorChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler
 	}
 
 	// Optional: size validation for non-proxy routes. The full security chain
@@ -170,9 +167,9 @@ func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdap
 		var handler http.Handler = info.Handler
 
 		if info.IsProxy || info.IsTranslator {
-			chain := adapters.CreateChainMiddleware()
-			if rc, ok := securityAdapters.(rejectChainProvider); ok && info.IsTranslator {
-				chain = rc.CreateChainMiddlewareWithReject(info.Reject)
+			chain := adapters.CreateChainMiddleware(info.Reject)
+			if tc, ok := securityAdapters.(translatorChainProvider); ok && info.IsTranslator {
+				chain = tc.CreateTranslatorChainMiddleware(info.Reject)
 			}
 			handler = chain(handler)
 			mux.Handle(route, handler)
