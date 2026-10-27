@@ -197,6 +197,10 @@ routes, which answer 501 to every method. `/olla/ollama/api/list` returned 501 b
 an Ollama endpoint, so the route is gone: requests to it now reach the backend and get
 Ollama's own 404.
 
+### Fixed: a model hosted on several backends no longer flips its listed id
+
+When the same model (matched by digest) was registered from more than one backend, the merged alias list was rebuilt in random order, and `/olla/models` and the provider listings emit the first alias as the model id. The id could change between refreshes. Merging now keeps a stable order and leads with the model's own id.
+
 ## v0.0.29
 
 ### Breaking: userinfo URLs now fail startup

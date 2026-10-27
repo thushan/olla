@@ -32,6 +32,19 @@ func NewCatalogStore(cleanupInterval time.Duration) *CatalogStore {
 	}
 }
 
+// Reset empties the store in place under its lock. Callers hold the store pointer without
+// synchronisation, so replacing the store would race with every concurrent reader.
+func (c *CatalogStore) Reset() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.catalog = make(map[string]*atomic.Pointer[domain.UnifiedModel])
+	c.digestIndex = make(map[string][]string)
+	c.nameIndex = make(map[string][]string)
+	c.endpointModels = make(map[string][]string)
+	c.lastCleanup = time.Now()
+}
+
 func (c *CatalogStore) GetModel(id string) (*domain.UnifiedModel, bool) {
 	c.mu.RLock()
 	ptr := c.catalog[id]
