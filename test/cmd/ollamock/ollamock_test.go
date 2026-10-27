@@ -982,7 +982,7 @@ func TestOllamaTags_Capabilities(t *testing.T) {
 				Capabilities []string `json:"capabilities"`
 			} `json:"models"`
 		}
-		decodeJSON(t, getURL(t, ts.URL+"/api/tags"), &body)
+		getJSON(t, ts.URL+"/api/tags", &body)
 		if len(body.Models) != len(models) {
 			t.Fatalf("got %d models, want %d", len(body.Models), len(models))
 		}
@@ -999,7 +999,7 @@ func TestOllamaTags_Capabilities(t *testing.T) {
 		var body struct {
 			Models []map[string]any `json:"models"`
 		}
-		decodeJSON(t, getURL(t, ts.URL+"/api/tags"), &body)
+		getJSON(t, ts.URL+"/api/tags", &body)
 		for _, m := range body.Models {
 			if _, present := m["capabilities"]; present {
 				t.Errorf("%v: capabilities present with tagsCapabilities off", m["name"])
@@ -1024,7 +1024,7 @@ func TestOllamaPS(t *testing.T) {
 				ContextLength int    `json:"context_length"`
 			} `json:"models"`
 		}
-		decodeJSON(t, getURL(t, ts.URL+"/api/ps"), &body)
+		getJSON(t, ts.URL+"/api/ps", &body)
 		if len(body.Models) != 1 || body.Models[0].Name != "qwen3:8b" || body.Models[0].Model != "qwen3:8b" {
 			t.Fatalf("models = %+v, want only qwen3:8b", body.Models)
 		}
@@ -1042,6 +1042,16 @@ func TestOllamaPS(t *testing.T) {
 			t.Errorf("body = %s, want an empty models array", raw)
 		}
 	})
+}
+
+// getJSON GETs url and decodes the body into v.
+func getJSON(t *testing.T, url string, v any) {
+	t.Helper()
+	resp := getURL(t, url)
+	defer resp.Body.Close()
+	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
+		t.Fatalf("decode %s: %v", url, err)
+	}
 }
 
 func rawGet(t *testing.T, url string) (int, string) {
