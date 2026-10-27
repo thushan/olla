@@ -34,6 +34,13 @@ Olla implements intelligent model routing strategies to handle scenarios where r
 
 When a request specifies a model (e.g., `phi3.5:latest`), Olla needs to determine which endpoints can handle that request. Not all endpoints have all models, and endpoints can become unhealthy during operation.
 
+### Ollama model names without a tag
+
+Ollama lists a model pulled without a tag as `name:latest` and accepts `name` for it. Olla does the
+same: when no endpoint serves the exact name you asked for, a name with no tag is looked up as
+`name:latest` on Ollama endpoints. An exact match always wins, only Ollama endpoints answer to the
+untagged name, and the request is forwarded exactly as you wrote it. The lookup only goes one way, `name` to `name:latest`, because Ollama always lists models with a tag.
+
 ## Routing Strategies
 
 ### Strict Mode (Default)
@@ -119,7 +126,9 @@ Some requests name no model: a vision request sent to the unified route, TEI's n
 
 An endpoint stays in the candidate set when it hosts at least one single model carrying every required capability. A vision model on one endpoint and a tools model on another do not combine to satisfy a request needing both. A rerank or classification path takes precedence over the embeddings guess from the body, because no model is both an embedder and a reranker.
 
-Capability filtering never rejects a request. If no model carries the capabilities, or no candidate endpoint hosts one, Olla uses the unfiltered candidates. A backend that cannot serve the request then answers for itself, as TEI does with `424` for a request sent to the wrong model kind.
+Capability tags are heuristic, so the filter only refuses in one case: models with the required capability exist, but every endpoint hosting one is down. A Busy or otherwise unhealthy host counts as down here, matching how Olla already picks endpoints. Olla then answers `503` with `X-Olla-Routing-Reason: capability_unavailable` (see [Routing Reasons](#routing-reasons)) rather than sending the request to hosts of another kind. When no model with the capability has been discovered at all, or a capable host is healthy but outside the candidates, the request falls back to every compatible endpoint as before. Requests that name a model skip this filter.
+
+Outside that case capability filtering does not reject a request. If no model carries the capabilities, or a capable host is routable but not among the candidates, Olla uses the unfiltered candidates. A backend that cannot serve the request then answers for itself, as TEI does with `424` for a request sent to the wrong model kind.
 
 The single-segment paths above (`/embed`, `/rerank`, `/predict`) match only that exact request path, so `/api/embed` (Ollama's embeddings route) is never read as TEI's `/embed`. A model's capabilities come from its type and name patterns; see [Model Unification](model-unification.md).
 
@@ -178,6 +187,7 @@ The `X-Olla-Routing-Reason` header provides detailed information about routing d
 | `model_not_found_fallback` | 200 | Model not found but falling back to all endpoints |
 | `model_unavailable_no_fallback` | 503 | Model exists but unavailable, no fallback |
 | `model_unavailable_compatible_only` | 503 | Model exists but unavailable, `compatible_only` prevents fallback |
+| `capability_unavailable` | 503 | A request naming no model needs a capability (embeddings, rerank, vision, ...) that models in the fleet have, but every endpoint hosting one is unhealthy. `X-Olla-Routing-Strategy` is `capability` |
 | `all_healthy_fallback` | 200 | Using all healthy endpoints as fallback |
 | `discovery_failed_no_fallback` | 503 | Discovery refresh failed, no fallback configured |
 | `discovery_failed_compatible_only` | 503 | Discovery refresh failed, `compatible_only` prevents fallback |

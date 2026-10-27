@@ -40,9 +40,9 @@ func (c *CatalogStore) GetModel(id string) (*domain.UnifiedModel, bool) {
 	if ptr == nil {
 		return nil, false
 	}
-	// Zero-copy read via atomic load
-	// WARNING: Returned model MUST be treated as read-only
-	// Callers that need to modify should call deepCopyForModification
+	// Zero-copy read via atomic load. The stored model is immutable: it is
+	// shared with lock-free readers, so callers must never write to it (or to
+	// its slices and maps). Writers call Clone, mutate the clone and PutModel it.
 	return ptr.Load(), true
 }
 
@@ -53,8 +53,12 @@ func (c *CatalogStore) PutModel(model *domain.UnifiedModel) {
 
 	// Copy-on-write: deep copy before storing
 	// this allows callers to modify their reference while we store immutable version
-	modelCopy := c.deepCopyForModification(model)
+	c.putOwned(model.Clone())
+}
 
+// putOwned stores a model the caller has already cloned and will not touch again,
+// saving the second copy PutModel makes for writers that cloned to mutate.
+func (c *CatalogStore) putOwned(modelCopy *domain.UnifiedModel) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -91,10 +95,55 @@ func (c *CatalogStore) GetAllModels() []*domain.UnifiedModel {
 	return models
 }
 
+// ResolveByName finds a model by ID or alias. An exact match always wins; only a
+// miss on a name without a tag tries "<name>:latest", and that only matches a model
+// an Ollama endpoint serves under that native name (see domain.OllamaDefaultTagName).
 func (c *CatalogStore) ResolveByName(name string) (*domain.UnifiedModel, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
+	if model, ok := c.lookupLocked(name, true); ok {
+		return model, true
+	}
+
+	tagged, ok := domain.OllamaDefaultTagName(name)
+	if !ok {
+		return nil, false
+	}
+	// The alias index already holds every alias, so the full scan adds nothing here.
+	model, ok := c.lookupLocked(tagged, false)
+	if !ok || !servedByOllamaAs(model, tagged) {
+		return nil, false
+	}
+	return model, true
+}
+
+// ResolveExactName is ResolveByName without the Ollama default-tag fallback. Ingest
+// uses it to decide whether a discovered model is one already in the catalogue: a
+// vLLM model called "foo" is not the Ollama model "foo:latest" and must not merge
+// into it.
+func (c *CatalogStore) ResolveExactName(name string) (*domain.UnifiedModel, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.lookupLocked(name, true)
+}
+
+// servedByOllamaAs reports whether an Ollama endpoint serves model under nativeName.
+// A merged model can also be served by other platforms under the same name, and
+// those must not make a bare name resolve.
+func servedByOllamaAs(model *domain.UnifiedModel, nativeName string) bool {
+	for i := range model.SourceEndpoints {
+		src := &model.SourceEndpoints[i]
+		if src.Platform == domain.ProfileOllama && strings.EqualFold(src.NativeName, nativeName) {
+			return true
+		}
+	}
+	return false
+}
+
+// lookupLocked resolves name by ID, then the lower-cased alias index, then (when scan
+// is set) an alias scan. Callers hold c.mu.
+func (c *CatalogStore) lookupLocked(name string, scan bool) (*domain.UnifiedModel, bool) {
 	// Direct ID lookup is fastest
 	if ptr, exists := c.catalog[name]; exists && ptr != nil {
 		if model := ptr.Load(); model != nil {
@@ -109,6 +158,10 @@ func (c *CatalogStore) ResolveByName(name string) (*domain.UnifiedModel, bool) {
 				return model, true
 			}
 		}
+	}
+
+	if !scan {
+		return nil, false
 	}
 
 	// Fallback to full scan for aliases
@@ -280,70 +333,4 @@ func (c *CatalogStore) removeFromIndex(index map[string][]string, key, value str
 			index[key] = newValues
 		}
 	}
-}
-
-// deepCopyForModification creates a deep copy for the copy-on-write pattern.
-// This ensures modifications by callers don't affect the stored immutable version.
-func (c *CatalogStore) deepCopyForModification(model *domain.UnifiedModel) *domain.UnifiedModel {
-	if model == nil {
-		return nil
-	}
-	modelCopy := &domain.UnifiedModel{
-		ID:               model.ID,
-		Family:           model.Family,
-		Variant:          model.Variant,
-		ParameterSize:    model.ParameterSize,
-		Quantization:     model.Quantization,
-		Format:           model.Format,
-		PromptTemplateID: model.PromptTemplateID,
-		ParameterCount:   model.ParameterCount,
-		DiskSize:         model.DiskSize,
-		LastSeen:         model.LastSeen,
-		MaxContextLength: model.MaxContextLength,
-	}
-
-	if model.Aliases != nil {
-		modelCopy.Aliases = make([]domain.AliasEntry, len(model.Aliases))
-		copy(modelCopy.Aliases, model.Aliases)
-	}
-
-	if model.Capabilities != nil {
-		modelCopy.Capabilities = make([]string, len(model.Capabilities))
-		copy(modelCopy.Capabilities, model.Capabilities)
-	}
-
-	// Source endpoints need special handling to avoid data races
-	if model.SourceEndpoints != nil {
-		modelCopy.SourceEndpoints = make([]domain.SourceEndpoint, len(model.SourceEndpoints))
-		for i, endpoint := range model.SourceEndpoints {
-			modelCopy.SourceEndpoints[i] = domain.SourceEndpoint{
-				EndpointURL:    endpoint.EndpointURL,
-				EndpointName:   endpoint.EndpointName,
-				NativeName:     endpoint.NativeName,
-				State:          endpoint.State,
-				ModelState:     endpoint.ModelState,
-				DiskSize:       endpoint.DiskSize,
-				LastSeen:       endpoint.LastSeen,
-				LastStateCheck: endpoint.LastStateCheck,
-			}
-			if endpoint.StateInfo != nil {
-				modelCopy.SourceEndpoints[i].StateInfo = &domain.EndpointStateInfo{
-					State:               endpoint.StateInfo.State,
-					ConsecutiveFailures: endpoint.StateInfo.ConsecutiveFailures,
-					LastStateChange:     endpoint.StateInfo.LastStateChange,
-					LastError:           endpoint.StateInfo.LastError,
-					Metadata:            endpoint.StateInfo.Metadata,
-				}
-			}
-		}
-	}
-
-	if model.Metadata != nil {
-		modelCopy.Metadata = make(map[string]interface{}, len(model.Metadata))
-		for k, v := range model.Metadata {
-			modelCopy.Metadata[k] = v
-		}
-	}
-
-	return modelCopy
 }

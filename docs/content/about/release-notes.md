@@ -16,6 +16,17 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.0.30
 
+### Fixed: model discovery no longer sends backend credentials to `HTTP_PROXY` or across hosts
+
+Model discovery still honoured `HTTP_PROXY`/`HTTPS_PROXY`, so with a proxy set in the environment, a plain-HTTP
+endpoint's `auth:` token or API key went to that proxy on every discovery cycle. Discovery and the health checker also
+followed redirects to other hosts, and Go only strips `Authorization` on those, so an `api_key` header or custom
+`headers:` entry could be replayed at the redirect target. Both now connect directly and stop at a redirect that
+leaves the configured host and port (a same-host `http` to `https` upgrade is still followed), so a cross-host redirect
+counts as a failed discovery or health check. Loopback endpoints were never proxied, so only setups that relied on `HTTP_PROXY`
+to let discovery reach a non-loopback backend are affected: that backend now needs to be reachable directly from the Olla host,
+as chat traffic already required.
+
 ### Added: Text Embeddings Inference backend
 
 Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)
@@ -50,6 +61,10 @@ tools model no longer satisfies a request needing both. A request needing `funct
 requires the `tools` tag, which many backends never set. If you depended on a named request being
 steered by capability tags, name the model you want instead.
 
+### Fixed: a model-less request is refused when the only capable backend is down
+
+A request that names no model but needs a capability (for example `/embed`, `/rerank`, `/v1/embeddings` or a request with images) is steered to hosts with a model of that kind. When none of those hosts was healthy, Olla fell back to every compatible endpoint, so with the only embedder stopped, `/embed` went to the reranker and classifier instances and TEI answered `424`. Olla now answers `503` with `X-Olla-Routing-Reason: capability_unavailable` and `X-Olla-Routing-Strategy: capability` when models with the capability exist but none is on a healthy endpoint. Nothing to change on your side: if no model with the capability has ever been discovered, the unfiltered fallback still applies, and requests that name a model are unaffected.
+
 ### Changed: one-segment profile paths no longer claim deeper request paths
 
 TEI declares single-segment paths such as `/embed`, `/rerank`, `/health`, `/metrics` and `/tokenize`.
@@ -61,6 +76,15 @@ only a request path of that single segment.
 
 Olla wrote a WARN for every request it rejected, so a client hammering a rate limit produced millions of identical lines in minutes and pushed useful history out of the rotated log. Rate limit (`429`), request size (`413`/`431`), dashboard access (`403`) and proxy routing rejections are now sampled: the first in each 10 second window logs in full, and the rest become one summary such as `WARN Rate limit exceeded, repeats suppressed layer=rate_limit client_ip=203.0.113.7 suppressed=19994 window=10s`. The `Model routing rejected request` and `Large request blocked` WARNs are gone, since the sampled `Request rejected` line carries the same detail. Responses, and the rate limit and size limit counters, are unchanged, and a backend's own 4xx and 5xx responses are still logged per request.
 
+### Fixed: model routing no longer depends on the Content-Type header
+
+A request that named a model but didn't send `Content-Type: application/json` was routed as if it named
+none, so it could land on any compatible host, including ones without the model (TEI answered 424 for
+embeddings sent this way). `curl -d` sends form-urlencoded, `fetch()` with a string body sends
+`text/plain`, and plenty of scripts send nothing. Olla now decides from the body: a body that opens with
+`{` is read for its `model` and capabilities whatever the header says, and the request is forwarded
+unchanged. Multipart, form-encoded and compressed bodies are still not read. Nothing to change on your side.
+
 ### Fixed: Ollama `/api/embed` and embedding models in a fleet with TEI
 
 The built-in Ollama profile now lists `/api/embed`, so Ollama's native embeddings route is not
@@ -69,9 +93,9 @@ captured by TEI's `/embed`. Ollama embedding-only models are typed `embeddings` 
 untyped), so `/v1/embeddings` still reaches them when a TEI instance is in the fleet.
 
 Because `/api/embed` is now a recognised Ollama path, `/olla/ollama/api/embed` checks the requested
-model like Ollama's other routes. Name the model as Ollama lists it, tag included: a model pulled
-without a tag lists as `all-minilm:latest`, and a bare `all-minilm` now gets a 404 `model_not_found`
-here, as it already did on `/api/chat`. Resolving bare names to `:latest` is a separate fix.
+model like Ollama's other routes. A model pulled
+without a tag lists as `all-minilm:latest`; a bare `all-minilm` resolves to it here, as it now does
+on every other route (see the untagged-names fix below).
 
 ### Fixed: LM Studio model types and capabilities
 
@@ -82,6 +106,19 @@ now wins, so those models gain the capabilities their type implies: `vision`,
 `multimodal` and `image-understanding` for `vlm`, `embeddings`, `similarity` and
 `vector-search` (without `text-generation`) for embeddings, and `chat` and `completion`
 for `llm`. Model-less vision and embeddings requests are steered to those models.
+
+### Fixed: crash under concurrent model discovery and requests
+
+Olla could exit with `fatal error: concurrent map iteration and map write` (or `concurrent map write`) when a model listing, alias lookup or status request ran while discovery was merging the same model from a second endpoint, re-registering it, or removing an endpoint. The unifier was editing model records that request handlers were still reading. It now edits a private copy and publishes it, so readers always see a complete record. The unified-stats counters behind the status endpoints are also guarded now. Nothing needs changing in your config.
+
+### Fixed: Ollama model names without a tag
+
+A model pulled with `ollama pull all-minilm` is listed as `all-minilm:latest`, and Ollama accepts
+`all-minilm` for it, but Olla returned a 404 `model_not_found` for the bare name on `/olla/proxy/`,
+the provider prefixes, `/olla/anthropic/v1/messages` and `GET /olla/models/{id}`. When no endpoint
+serves the exact name, Olla now retries once as `<name>:latest` against Ollama endpoints only, so a
+vLLM `foo:latest` still never answers `foo`. The request goes to Ollama as you wrote it, and `foo`
+and `foo:latest` share one stats row, and one sticky key when it is built from the model name (`prefix_hash` hashes the raw body, so it still differs). Nothing to change on your side.
 
 ## v0.0.29
 

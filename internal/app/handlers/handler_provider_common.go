@@ -100,7 +100,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	// is populated; inject into context before endpoint selection so the sticky
 	// balancer wrapper observes the key during Select(). Mirrors proxyHandler.
 	if a.Config.Proxy.StickySessions.Enabled {
-		ctx, r, _ = a.injectStickyKey(ctx, r, pr.model)
+		ctx, r, _ = a.injectStickyKey(ctx, r, a.canonicalModelName(pr.model))
 	}
 
 	endpoints, err := a.getProviderEndpoints(ctx, providerType, pr)
@@ -126,6 +126,11 @@ func (a *Application) getProviderEndpoints(ctx context.Context, providerType str
 	providerProfile := a.createProviderProfile(providerType)
 	providerProfile.Path = pr.targetPath
 
+	// Record the provider boundary so the capability refusal judges only hosts the route can reach.
+	if pr.profile != nil {
+		pr.profile.ProviderScope = providerProfile.SupportedBy
+	}
+
 	providerEndpoints := a.filterEndpointsByProfile(endpoints, providerProfile, pr.requestLogger)
 
 	if providerProfile.FailClosedOnNoMatch && len(providerEndpoints) == 0 {
@@ -140,6 +145,12 @@ func (a *Application) getProviderEndpoints(ctx context.Context, providerType str
 		// that decision's status/message over its own provider-type 404,
 		// which would silently mask a same-type outage as "model not found"
 		// instead of "no <type> endpoints available".
+		//
+		// The one decision allowed through is capability_unavailable: a model-less
+		// request whose only capable hosts are down is an outage, not a missing provider.
+		if refusal := a.capabilityRefusal(pr.profile, pr.requestLogger); refusal != nil {
+			pr.profile.RoutingDecision = refusal
+		}
 		return providerEndpoints, nil
 	}
 

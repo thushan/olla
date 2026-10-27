@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/thushan/olla/internal/adapter/proxy/core"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
@@ -378,7 +379,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// extraction above, so pass it directly to avoid a second read/restore cycle.
 		// The outcome pointer is stored in context; sub-handlers read it before WriteHeader.
 		if a.Config.Proxy.StickySessions.Enabled {
-			ctx, r, _ = a.injectStickyKeyWithBody(ctx, r, pr.model, bodyBytes)
+			ctx, r, _ = a.injectStickyKeyWithBody(ctx, r, a.canonicalModelName(pr.model), bodyBytes)
 		}
 
 		// Get compatible endpoints for this request
@@ -500,6 +501,9 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, pr *proxyRequest) (context.Context, *http.Request) {
 	if pr.model != "" {
 		ctx = context.WithValue(ctx, constants.ContextModelKey, pr.model)
+		if native := a.canonicalModelName(pr.model); native != pr.model {
+			ctx = context.WithValue(ctx, constants.ContextCanonicalModelKey, core.CanonicalModel{Requested: pr.model, Native: native})
+		}
 		r = r.WithContext(ctx)
 	}
 
@@ -513,6 +517,7 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.ContextModelAliasMapKey); ok {
 			if aliasMap, ok := aliasMapRaw.(map[string]string); ok {
 				ctx = context.WithValue(ctx, constants.ContextModelAliasMapKey, aliasMap)
+				ctx = a.withCanonicalAliasTargets(ctx, pr.model, aliasMap)
 				r = r.WithContext(ctx)
 			}
 		}

@@ -127,15 +127,35 @@ func (u *LifecycleUnifier) updateEndpointStates(models []*domain.UnifiedModel, e
 		return
 	}
 
-	// Models from UnifyModels are fresh instances, safe to modify
-	for _, model := range models {
+	// UnifyModels returns the store's live immutable pointers, which lock-free
+	// readers may hold. Decorate private clones and swap them into the result
+	// rather than writing through the shared pointers.
+	for idx, model := range models {
+		var clone *domain.UnifiedModel
 		for i := range model.SourceEndpoints {
-			if model.SourceEndpoints[i].EndpointURL == endpointURL {
-				model.SourceEndpoints[i].StateInfo = stateInfo
-				model.SourceEndpoints[i].LastStateCheck = time.Now()
+			if model.SourceEndpoints[i].EndpointURL != endpointURL {
+				continue
+			}
+			if clone == nil {
+				clone = model.Clone()
+			}
+			clone.SourceEndpoints[i].StateInfo = stateInfo
+			clone.SourceEndpoints[i].LastStateCheck = time.Now()
+		}
+		if clone != nil {
+			models[idx] = clone
+			// persist the decoration: later lookups and discovery cycles read the catalogue
+			if p, ok := u.unifier.(modelPublisher); ok {
+				p.publishModel(clone)
 			}
 		}
 	}
+}
+
+// modelPublisher is implemented by unifiers that can swap a replacement record
+// into their catalogue; the clone passed in must not be touched afterwards.
+type modelPublisher interface {
+	publishModel(model *domain.UnifiedModel)
 }
 
 func (u *LifecycleUnifier) cleanupRoutine() {
