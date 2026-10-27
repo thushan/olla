@@ -117,6 +117,7 @@ type Application struct {
 	discoveryService   ports.DiscoveryService
 	repository         domain.EndpointRepository
 	inspectorChain     *inspector.Chain
+	pathInspector      *inspector.PathInspector
 	securityAdapters   *SecurityAdapters
 	routeRegistry      *router.RouteRegistry
 	converterFactory   *converter.ConverterFactory
@@ -232,6 +233,7 @@ func NewApplication(
 		discoveryService:   discoveryService,
 		repository:         repository,
 		inspectorChain:     inspectorChain,
+		pathInspector:      pathInspector,
 		securityAdapters:   securityAdapters,
 		routeRegistry:      routeRegistry,
 		profileFactory:     profileFactory,

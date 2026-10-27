@@ -1,12 +1,15 @@
 package common
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -761,4 +764,34 @@ func BenchmarkBuildTargetURL(b *testing.B) {
 			}
 		})
 	}
+}
+
+// A request can hold one path while the fleet needs several: the handler puts a per-endpoint
+// map in the context and each attempt's URL is built from the entry for the selected backend.
+func TestBuildTargetURL_PerEndpointPath(t *testing.T) {
+	t.Parallel()
+
+	dmr := &domain.Endpoint{URL: &url.URL{Scheme: "http", Host: "dmr:12434"}, URLString: "http://dmr:12434"}
+	ollama := &domain.Endpoint{URL: &url.URL{Scheme: "http", Host: "ollama:11434"}, URLString: "http://ollama:11434"}
+	based := &domain.Endpoint{
+		URL: &url.URL{Scheme: "http", Host: "lemon:8000", Path: "/gw"}, URLString: "http://lemon:8000/gw", PreservePath: true,
+	}
+
+	paths := map[string]string{
+		dmr.URLString:   "/engines/v1/chat/completions",
+		based.URLString: "/api/v1/chat/completions",
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions?stream=true", nil)
+	req = req.WithContext(context.WithValue(req.Context(), constants.ContextEndpointPathMapKey, paths))
+
+	assert.Equal(t, "http://dmr:12434/engines/v1/chat/completions?stream=true", BuildTargetURL(req, dmr, "/olla/proxy").String())
+	assert.Equal(t, "http://lemon:8000/gw/api/v1/chat/completions?stream=true", BuildTargetURL(req, based, "/olla/proxy").String(),
+		"preserve_path still joins the endpoint's base path")
+	assert.Equal(t, "http://ollama:11434/v1/chat/completions?stream=true", BuildTargetURL(req, ollama, "/olla/proxy").String(),
+		"an endpoint missing from the map keeps the request path")
+
+	// the map's path is the backend's own, so a proxy prefix must not be stripped from it
+	prefixed := map[string]string{dmr.URLString: "/olla/proxy/odd"}
+	req = req.WithContext(context.WithValue(context.Background(), constants.ContextEndpointPathMapKey, prefixed))
+	assert.Equal(t, "http://dmr:12434/olla/proxy/odd?stream=true", BuildTargetURL(req, dmr, "/olla/proxy").String())
 }

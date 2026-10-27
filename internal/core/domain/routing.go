@@ -49,6 +49,11 @@ type RequestProfile struct {
 	// openai-compatible backend) is a correctness bug, not graceful
 	// degradation, and must produce the normal no-routable-endpoints 404/503.
 	FailClosedOnNoMatch bool
+
+	// QuietNoMatchFallback logs the widen-to-all fallback at Debug rather than Warn. Set for
+	// translator routes, where a fleet with no chat-capable backend widens and is then refused
+	// with a sampled 404: a Warn per request would flood the log ahead of it.
+	QuietNoMatchFallback bool
 }
 
 func NewRequestProfile(path string) *RequestProfile {

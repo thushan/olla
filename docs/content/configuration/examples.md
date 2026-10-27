@@ -1030,7 +1030,7 @@ discovery:
   type: "static"
   static:
     endpoints:
-      # SGLang does not have native Anthropic support - uses translation
+      # SGLang v0.5.9+ has native Anthropic support, but passthrough_enabled: false forces translation
       - url: "http://localhost:30000"
         name: "sglang-server"
         type: "sglang"

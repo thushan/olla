@@ -50,7 +50,7 @@ Coding assistants and agent harnesses, connected over whichever API format they 
 | [Crush CLI](./frontend/crush-cli.md) | Modern terminal AI assistant by Charmbracelet | Dual OpenAI/Anthropic support |
 | [Hermes Agent](./frontend/hermes-agent.md) | Nous Research's agent harness | OpenAI-compatible custom provider, plus a sticky-session recipe |
 
-Clients using the Anthropic Messages API reach any supported backend through Olla's translation layer. Backends with native Anthropic support (Ollama, LM Studio, vLLM, vLLM-MLX, llama.cpp, Docker Model Runner, oMLX) use zero-overhead passthrough; the rest (SGLang, LMDeploy, Lemonade, LiteLLM, generic OpenAI-compatible) are served via translation.
+Clients using the Anthropic Messages API reach any supported backend through Olla's translation layer. Backends with native Anthropic support (Ollama, LM Studio, vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, Docker Model Runner, oMLX) use zero-overhead passthrough; the rest (Lemonade, LiteLLM, generic OpenAI-compatible) are served via translation.
 
 Multi-turn agent sessions benefit from [sticky sessions](../concepts/sticky-sessions.md), which pin a conversation to one backend so its KV-cache stays warm across turns.
 

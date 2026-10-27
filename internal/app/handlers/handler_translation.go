@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -184,7 +185,7 @@ func (a *Application) executeTranslationRequest(
 	pr *proxyRequest,
 	trans translator.RequestTranslator,
 	transformedReq *translator.TransformedRequest,
-) {
+) constants.TranslatorFallbackReason {
 	// Capture streaming flag for metrics before proxying
 	pr.isStreaming = transformedReq.IsStreaming
 
@@ -195,7 +196,7 @@ func (a *Application) executeTranslationRequest(
 	openaiBody, err := json.Marshal(transformedReq.OpenAIRequest)
 	if err != nil {
 		a.writeTranslatorError(w, trans, pr, errors.New("failed to serialize request"), http.StatusInternalServerError)
-		return
+		return ""
 	}
 
 	r.Body = io.NopCloser(bytes.NewReader(openaiBody))
@@ -225,6 +226,23 @@ func (a *Application) executeTranslationRequest(
 			"original_path", r.URL.Path,
 			"note", "This may cause routing issues if translation requires different endpoint")
 	}
+
+	// Resolve the chat path each candidate actually serves. The default r.URL.Path above is
+	// only right for backends that mount the OpenAI API at the root.
+	var usable []*domain.Endpoint
+	usable, pr.endpointPaths = a.translationEndpointPaths(endpoints, r.URL.Path)
+	if len(usable) == 0 {
+		// A routing rejection like the no-endpoints one in the caller: sampled log line,
+		// quiet error write, and the no-compatible-endpoints reason in the metrics.
+		reason := fmt.Sprintf("no selected endpoint serves %s", r.URL.Path)
+		pr.translatorFallbackReason = string(constants.FallbackReasonNoCompatibleEndpoints)
+		a.setStickyResponseHeadersFromRequest(w, r)
+		a.logRequestStart(pr, 0)
+		a.logRequestRejected(pr, http.StatusNotFound, reason)
+		a.respondTranslatorError(w, trans, pr, errors.New(reason), http.StatusNotFound, true)
+		return constants.FallbackReasonNoCompatibleEndpoints
+	}
+	endpoints = usable
 
 	a.logRequestStart(pr, len(endpoints))
 
@@ -260,6 +278,131 @@ func (a *Application) executeTranslationRequest(
 	}
 
 	pr.stats.EndTime = time.Now()
+	return ""
+}
+
+// translationEndpointPaths pins each candidate to the path it serves for the translator's
+// target path, and drops candidates that serve none. The translator rewrites every request
+// to one OpenAI path, but DMR mounts it at /engines/v1/chat/completions and Lemonade at
+// /api/v1/chat/completions, so sending the fixed path 404s there. Returns the usable
+// endpoints and, when any of them needs a path other than targetPath, the per-endpoint map.
+//
+// Without a path inspector (no profiles loaded) nothing can be resolved and the list is
+// returned untouched.
+func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, targetPath string) ([]*domain.Endpoint, map[string]string) {
+	if a.pathInspector == nil || targetPath == "" {
+		return endpoints, nil
+	}
+
+	usable := make([]*domain.Endpoint, 0, len(endpoints))
+	paths := make(map[string]string, len(endpoints))
+	differs := false
+	for _, ep := range endpoints {
+		profileName := NormaliseProviderType(ep.Type)
+		resolved, ok := a.pathInspector.ResolveTargetPath(profileName, targetPath)
+		if !ok {
+			continue
+		}
+		resolved = a.relativeToPreservedBase(ep, profileName, targetPath, resolved)
+		usable = append(usable, ep)
+		paths[ep.GetURLString()] = resolved
+		if resolved != targetPath {
+			differs = true
+		}
+	}
+	if !differs {
+		return usable, nil
+	}
+	return usable, paths
+}
+
+// relativeToPreservedBase adjusts a resolved chat path for a preserve_path endpoint. The proxy
+// joins the endpoint's base onto the request path, so when the base already ends in one of the
+// profile's mounts (Lemonade at http://host/api, DMR at http://host/gw/engines/llama.cpp) the
+// plain target is what must be sent; the resolved path would repeat the mount and 404. This is
+// what main sent. A base with no mount in it (a gateway prefix such as /gw) keeps the resolved
+// path, which is the mount the profile declares first.
+func (a *Application) relativeToPreservedBase(ep *domain.Endpoint, profileName, target, resolved string) string {
+	if !ep.PreservePath || ep.URL == nil {
+		return resolved
+	}
+	base := strings.TrimRight(ep.URL.Path, "/")
+	if base == "" {
+		return resolved
+	}
+	for _, mount := range a.pathInspector.MountPrefixes(profileName, target) {
+		if base == mount || strings.HasSuffix(base, mount) {
+			return target
+		}
+	}
+	return resolved
+}
+
+// scopeProfileToTranslation replaces the stage-1 compatibility set that analyzeRequest
+// derived from the translator's own public route.
+//
+// Translator routes are registered without a prefix strip, so the inspector sees
+// /olla/anthropic/v1/messages and suffix-matches it against /v1/messages, which only
+// some profiles declare. Backends that speak Anthropic through anthropic_support (vLLM,
+// llama.cpp, LM Studio) may not list that path, and Lemonade, LiteLLM and TEI never did,
+// so the URL-derived set evicted them. What the request will actually hit decides who is
+// compatible: passthrough sends it to backends with anthropic_support enabled,
+// translation sends it to the translator's target path, wherever the profile mounts it.
+//
+// The anthropic_support profiles are added whether or not passthrough is enabled, because
+// that is only known after endpoint selection. Where passthrough then declines,
+// translationEndpointPaths drops any of them that serve no chat path, so the union cannot
+// send a translated request somewhere it cannot land.
+//
+// Endpoint types with no profile of their own (custom types) are served as OpenAI-compatible
+// by ResolveTargetPath, so they are added by name; otherwise stage 1 would evict them.
+//
+// An empty result leaves stage 1 permissive (all endpoints). When nothing matches (a TEI-only
+// fleet) stage 1 still widens to all, as main does, so model routing keeps its own 503/404
+// decisions; translationEndpointPaths then refuses with the sampled 404. The widening is
+// logged at Debug here because it is the expected path for that fleet.
+func (a *Application) scopeProfileToTranslation(ctx context.Context, pr *proxyRequest, trans translator.RequestTranslator) {
+	if pr.profile == nil {
+		return
+	}
+
+	supported := make([]string, 0, 8)
+
+	// The per-endpoint path is resolved later (translationEndpointPaths), so a profile that
+	// mounts the OpenAI API elsewhere is a candidate rather than being evicted here.
+	if tp, ok := trans.(translator.TargetPathProvider); ok {
+		if a.pathInspector == nil {
+			// Without the profile paths the set would hold only the passthrough profiles and
+			// evict every translation-only backend; stay permissive instead.
+			pr.profile.SupportedBy = nil
+			return
+		}
+		supported = append(supported, a.pathInspector.TranslationProfiles(tp.TranslationTargetPath())...)
+	}
+
+	if _, ok := trans.(translator.PassthroughCapable); ok && a.profileFactory != nil && a.profileLookup != nil {
+		for _, name := range a.profileFactory.GetAvailableProfiles() {
+			if support := a.profileLookup.GetAnthropicSupport(name); support != nil && support.Enabled {
+				supported = append(supported, name)
+			}
+		}
+	}
+
+	if a.pathInspector != nil && a.discoveryService != nil {
+		if endpoints, err := a.discoveryService.GetHealthyEndpoints(ctx); err == nil {
+			for _, ep := range endpoints {
+				if name := NormaliseProviderType(ep.Type); !a.pathInspector.KnowsProfile(name) {
+					supported = append(supported, name)
+				}
+			}
+		}
+	}
+
+	pr.profile.SupportedBy = pr.profile.SupportedBy[:0]
+	for _, name := range supported {
+		pr.profile.AddSupportedProfile(name)
+	}
+	pr.profile.QuietNoMatchFallback = true
 }
 
 // tryPassthrough attempts to serve the request via passthrough mode if the translator
@@ -375,6 +518,8 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
+		a.scopeProfileToTranslation(ctx, pr, trans)
+
 		// Inject sticky session key. bodyBytes is already buffered from the model-name
 		// extraction above, so pass it directly to avoid a second read/restore cycle.
 		// The outcome pointer is stored in context; sub-handlers read it before WriteHeader.
@@ -451,7 +596,11 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		}
 
 		// Sticky headers are written inside executeTranslationRequest before WriteHeader.
-		a.executeTranslationRequest(ctx, w, r, endpoints, pr, trans, transformedReq)
+		// It returns a fallback reason only when no candidate serves the translated chat
+		// path (a 404 rejection), which replaces the usual translation reason in metrics.
+		if rejected := a.executeTranslationRequest(ctx, w, r, endpoints, pr, trans, transformedReq); rejected != "" {
+			fallbackReason = rejected
+		}
 		a.recordTranslatorMetrics(trans, pr, mode, fallbackReason)
 	}
 }
@@ -504,6 +653,12 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 		if native := a.canonicalModelName(pr.model); native != pr.model {
 			ctx = context.WithValue(ctx, constants.ContextCanonicalModelKey, core.CanonicalModel{Requested: pr.model, Native: native})
 		}
+		r = r.WithContext(ctx)
+	}
+
+	// endpoints that serve the request at different paths each get their own
+	if len(pr.endpointPaths) > 0 {
+		ctx = context.WithValue(ctx, constants.ContextEndpointPathMapKey, pr.endpointPaths)
 		r = r.WithContext(ctx)
 	}
 
@@ -1115,8 +1270,13 @@ func detectRequestFeatures(body []byte) requestFeatures {
 
 	var f requestFeatures
 
-	// Non-empty tools array → tool use is active.
+	// Non-empty tools array → tool use is active. A bare tool_choice counts too:
+	// backends that reject tool fields (LMDeploy before 0.18) reject it even
+	// without tools, e.g. {"type":"none"}.
 	if tools := gjson.GetBytes(body, "tools"); tools.IsArray() && len(tools.Array()) > 0 {
+		f.toolUse = true
+	}
+	if gjson.GetBytes(body, "tool_choice").Exists() {
 		f.toolUse = true
 	}
 
