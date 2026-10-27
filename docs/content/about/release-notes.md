@@ -82,7 +82,7 @@ A client that sent `Content-Encoding: identity` had its body skipped, so the mod
 request was routed as if it named none. `identity` means no encoding and is now read like any plain body; `gzip`,
 `br` and lists such as `gzip, identity` are still skipped. Separately, `/v1/embeddings` is now an embeddings path
 for capability routing, so a model-less request whose body Olla can't read is still kept off chat-only hosts, and
-is refused with `503` (`capability_unavailable`) when no embedder is healthy. Requests that name a model are unaffected.
+is refused with `503` (`capability_unavailable`) when embedders exist but none is healthy. Requests that name a model are unaffected.
 
 ### Fixed: model routing no longer depends on the Content-Type header
 
