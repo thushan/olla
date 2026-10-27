@@ -3,6 +3,7 @@ package unifier
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -35,6 +36,9 @@ type DefaultUnifier struct {
 	extractor      *ModelExtractor
 	stats          DeduplicationStats
 	staleThreshold time.Duration
+	// statsMu guards stats: UnifyModels writes it while GetStats (the status
+	// endpoints) reads it from other goroutines.
+	statsMu sync.Mutex
 }
 
 func NewDefaultUnifier() ports.ModelUnifier {
@@ -103,11 +107,13 @@ func (u *DefaultUnifier) UnifyModels(ctx context.Context, models []*domain.Model
 	}
 
 	u.store.SetEndpointModels(endpointURL, newModelIDs)
+	u.statsMu.Lock()
 	u.stats.TotalModels = u.store.Size()
 	u.stats.UnifiedModels = len(processedModels)
 	u.stats.LastUpdated = time.Now()
+	u.statsMu.Unlock()
 
-	// Store returns deep copies to prevent races if caller modifies the models
+	// Results are the store's live immutable pointers; callers must not modify them
 	result := make([]*domain.UnifiedModel, 0, len(processedModels))
 	for _, model := range processedModels {
 		if modelCopy, found := u.store.GetModel(model.ID); found {
@@ -126,7 +132,9 @@ func (u *DefaultUnifier) processModel(modelInfo *domain.ModelInfo, endpoint *dom
 		if existingModels, found := u.store.ResolveByDigest(model.Digest); found && len(existingModels) > 0 {
 			existing := existingModels[0]
 			u.mergeModel(existing, model, endpoint)
+			u.statsMu.Lock()
 			u.stats.DigestMatches++
+			u.statsMu.Unlock()
 			updated, _ := u.store.GetModel(existing.ID)
 			return updated
 		}
@@ -136,7 +144,9 @@ func (u *DefaultUnifier) processModel(modelInfo *domain.ModelInfo, endpoint *dom
 	if existing, found := u.store.ResolveExactName(model.Name); found {
 		if u.canMergeByName(existing, model) {
 			u.mergeModel(existing, model, endpoint)
+			u.statsMu.Lock()
 			u.stats.NameMatches++
+			u.statsMu.Unlock()
 			updated, _ := u.store.GetModel(existing.ID)
 			return updated
 		}
@@ -218,7 +228,9 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 		return
 	}
 
-	// Safe to modify - store returns deep copies
+	// The store hands out its live, immutable pointer to lock-free readers, so
+	// mutate a private clone and publish it with putOwned.
+	unified = unified.Clone()
 
 	endpointURL := endpoint.GetURLString()
 
@@ -290,7 +302,12 @@ func (u *DefaultUnifier) mergeModel(unified *domain.UnifiedModel, model *Model, 
 
 	u.mergeMetadata(unified, model)
 	unified.LastSeen = time.Now()
-	u.store.PutModel(unified)
+	u.store.putOwned(unified)
+}
+
+// publishModel stores a caller-owned replacement for a catalogue record.
+func (u *DefaultUnifier) publishModel(model *domain.UnifiedModel) {
+	u.store.putOwned(model)
 }
 
 func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, newModel *Model) bool {
@@ -352,7 +369,8 @@ func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL string) {
 		return
 	}
 
-	// GetModel returns a deep copy
+	// GetModel returns the live immutable pointer: clone before editing
+	model = model.Clone()
 	newSources := make([]domain.SourceEndpoint, 0, len(model.SourceEndpoints))
 	for _, source := range model.SourceEndpoints {
 		if source.EndpointURL != endpointURL {
@@ -369,7 +387,7 @@ func (u *DefaultUnifier) removeModelFromEndpoint(modelID, endpointURL string) {
 			totalSize += source.DiskSize
 		}
 		model.DiskSize = totalSize
-		u.store.PutModel(model)
+		u.store.putOwned(model)
 	}
 }
 
@@ -490,12 +508,16 @@ func (u *DefaultUnifier) GetAliases(ctx context.Context, unifiedID string) ([]st
 }
 
 func (u *DefaultUnifier) GetStats() domain.UnificationStats {
+	u.statsMu.Lock()
+	st := u.stats
+	u.statsMu.Unlock()
+
 	return domain.UnificationStats{
-		TotalUnified:       int64(u.stats.UnifiedModels),
+		TotalUnified:       int64(st.UnifiedModels),
 		TotalErrors:        0,
-		CacheHits:          int64(u.stats.DigestMatches + u.stats.NameMatches),
-		CacheMisses:        int64(u.stats.TotalModels - u.stats.DigestMatches - u.stats.NameMatches),
-		LastUnificationAt:  u.stats.LastUpdated,
+		CacheHits:          int64(st.DigestMatches + st.NameMatches),
+		CacheMisses:        int64(st.TotalModels - st.DigestMatches - st.NameMatches),
+		LastUnificationAt:  st.LastUpdated,
 		AverageUnifyTimeMs: 0,
 	}
 }
@@ -578,6 +600,8 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 
 func (u *DefaultUnifier) Clear(ctx context.Context) error {
 	u.store = NewCatalogStore(5 * time.Minute)
+	u.statsMu.Lock()
 	u.stats = DeduplicationStats{}
+	u.statsMu.Unlock()
 	return nil
 }

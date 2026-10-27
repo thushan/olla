@@ -40,9 +40,9 @@ func (c *CatalogStore) GetModel(id string) (*domain.UnifiedModel, bool) {
 	if ptr == nil {
 		return nil, false
 	}
-	// Zero-copy read via atomic load
-	// WARNING: Returned model MUST be treated as read-only
-	// Callers that need to modify should call deepCopyForModification
+	// Zero-copy read via atomic load. The stored model is immutable: it is
+	// shared with lock-free readers, so callers must never write to it (or to
+	// its slices and maps). Writers call Clone, mutate the clone and PutModel it.
 	return ptr.Load(), true
 }
 
@@ -53,8 +53,12 @@ func (c *CatalogStore) PutModel(model *domain.UnifiedModel) {
 
 	// Copy-on-write: deep copy before storing
 	// this allows callers to modify their reference while we store immutable version
-	modelCopy := c.deepCopyForModification(model)
+	c.putOwned(model.Clone())
+}
 
+// putOwned stores a model the caller has already cloned and will not touch again,
+// saving the second copy PutModel makes for writers that cloned to mutate.
+func (c *CatalogStore) putOwned(modelCopy *domain.UnifiedModel) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -329,71 +333,4 @@ func (c *CatalogStore) removeFromIndex(index map[string][]string, key, value str
 			index[key] = newValues
 		}
 	}
-}
-
-// deepCopyForModification creates a deep copy for the copy-on-write pattern.
-// This ensures modifications by callers don't affect the stored immutable version.
-func (c *CatalogStore) deepCopyForModification(model *domain.UnifiedModel) *domain.UnifiedModel {
-	if model == nil {
-		return nil
-	}
-	modelCopy := &domain.UnifiedModel{
-		ID:               model.ID,
-		Family:           model.Family,
-		Variant:          model.Variant,
-		ParameterSize:    model.ParameterSize,
-		Quantization:     model.Quantization,
-		Format:           model.Format,
-		PromptTemplateID: model.PromptTemplateID,
-		ParameterCount:   model.ParameterCount,
-		DiskSize:         model.DiskSize,
-		LastSeen:         model.LastSeen,
-		MaxContextLength: model.MaxContextLength,
-	}
-
-	if model.Aliases != nil {
-		modelCopy.Aliases = make([]domain.AliasEntry, len(model.Aliases))
-		copy(modelCopy.Aliases, model.Aliases)
-	}
-
-	if model.Capabilities != nil {
-		modelCopy.Capabilities = make([]string, len(model.Capabilities))
-		copy(modelCopy.Capabilities, model.Capabilities)
-	}
-
-	// Source endpoints need special handling to avoid data races
-	if model.SourceEndpoints != nil {
-		modelCopy.SourceEndpoints = make([]domain.SourceEndpoint, len(model.SourceEndpoints))
-		for i, endpoint := range model.SourceEndpoints {
-			modelCopy.SourceEndpoints[i] = domain.SourceEndpoint{
-				EndpointURL:    endpoint.EndpointURL,
-				EndpointName:   endpoint.EndpointName,
-				NativeName:     endpoint.NativeName,
-				Platform:       endpoint.Platform,
-				State:          endpoint.State,
-				ModelState:     endpoint.ModelState,
-				DiskSize:       endpoint.DiskSize,
-				LastSeen:       endpoint.LastSeen,
-				LastStateCheck: endpoint.LastStateCheck,
-			}
-			if endpoint.StateInfo != nil {
-				modelCopy.SourceEndpoints[i].StateInfo = &domain.EndpointStateInfo{
-					State:               endpoint.StateInfo.State,
-					ConsecutiveFailures: endpoint.StateInfo.ConsecutiveFailures,
-					LastStateChange:     endpoint.StateInfo.LastStateChange,
-					LastError:           endpoint.StateInfo.LastError,
-					Metadata:            endpoint.StateInfo.Metadata,
-				}
-			}
-		}
-	}
-
-	if model.Metadata != nil {
-		modelCopy.Metadata = make(map[string]interface{}, len(model.Metadata))
-		for k, v := range model.Metadata {
-			modelCopy.Metadata[k] = v
-		}
-	}
-
-	return modelCopy
 }

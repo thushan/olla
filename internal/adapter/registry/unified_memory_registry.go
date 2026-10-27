@@ -26,6 +26,7 @@ type UnifiedMemoryModelRegistry struct {
 	endpoints         *xsync.Map[string, *domain.Endpoint]             // URL -> Endpoint mapping
 	modelEndpointSets *xsync.Map[string, *xsync.Map[string, struct{}]] // ModelID -> Set of endpoint URLs (cached for fast lookup)
 	unificationMutex  sync.Mutex
+	unifyWG           sync.WaitGroup // tracks in-flight unifyModelsAsync goroutines
 }
 
 // NewUnifiedMemoryModelRegistry creates a new registry with unification support
@@ -128,9 +129,20 @@ func (r *UnifiedMemoryModelRegistry) RegisterModels(ctx context.Context, endpoin
 	}
 
 	// Then unify them
-	go r.unifyModelsAsync(ctx, endpointURL, models)
+	r.unifyWG.Add(1)
+	go func() {
+		defer r.unifyWG.Done()
+		r.unifyModelsAsync(ctx, endpointURL, models)
+	}()
 
 	return nil
+}
+
+// WaitForUnification blocks until every unification started by a prior
+// RegisterModels call has been published to the unified view. Callers that need
+// read-your-writes (tests, shutdown) use it instead of polling.
+func (r *UnifiedMemoryModelRegistry) WaitForUnification() {
+	r.unifyWG.Wait()
 }
 
 // unifyModelsAsync performs model unification in the background
@@ -248,6 +260,12 @@ func (r *UnifiedMemoryModelRegistry) GetUnifiedModel(ctx context.Context, idOrAl
 	unified, err := r.unifier.ResolveAlias(ctx, idOrAlias)
 	if err != nil {
 		return nil, fmt.Errorf("model not found: %s", idOrAlias)
+	}
+
+	// globalUnified is where RemoveEndpoint and MarkEndpointOffline publish
+	// their replacements, so prefer it over the unifier's catalogue copy
+	if current, exists := r.globalUnified.Load(unified.ID); exists {
+		return current, nil
 	}
 
 	return unified, nil
@@ -389,14 +407,24 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 	r.unificationMutex.Lock()
 	defer r.unificationMutex.Unlock()
 
+	// The unifier keeps its own catalogue, which GetUnifiedModel falls back to for
+	// aliases. Leaving the endpoint in it would keep offering a host that is gone.
+	r.removeEndpointFromUnifier(ctx, endpointURL)
+
 	// Remove endpoint from all unified models
-	r.globalUnified.Range(func(id string, model *domain.UnifiedModel) bool {
+	r.globalUnified.Range(func(id string, live *domain.UnifiedModel) bool {
+		// Copy-on-write: lock-free readers hold the published pointer, and
+		// RemoveEndpoint shifts elements inside the SourceEndpoints backing array.
+		if live.GetEndpointByURL(endpointURL) == nil {
+			return true
+		}
+		model := live.Clone()
 		// we're capturing model metadata BEFORE mutation to avoid accessing empty slices
 		// when the last endpoint is removed (model.RemoveEndpoint empties SourceEndpoints)
-		sourceEndpoints := make([]domain.SourceEndpoint, len(model.SourceEndpoints))
-		copy(sourceEndpoints, model.SourceEndpoints)
-		aliases := make([]domain.AliasEntry, len(model.Aliases))
-		copy(aliases, model.Aliases)
+		sourceEndpoints := make([]domain.SourceEndpoint, len(live.SourceEndpoints))
+		copy(sourceEndpoints, live.SourceEndpoints)
+		aliases := make([]domain.AliasEntry, len(live.Aliases))
+		copy(aliases, live.Aliases)
 
 		if model.RemoveEndpoint(endpointURL) {
 			r.dropBareNameSets(sourceEndpoints)
@@ -415,6 +443,7 @@ func (r *UnifiedMemoryModelRegistry) RemoveEndpoint(ctx context.Context, endpoin
 				// Update the model
 				model.DiskSize = model.GetTotalDiskSize()
 				model.LastSeen = time.Now()
+				r.globalUnified.Store(id, model)
 
 				// update cached endpoint set to reflect the removed endpoint
 				var endpointURLs []string
@@ -449,6 +478,32 @@ func (r *UnifiedMemoryModelRegistry) dropBareNameSet(nativeName string) {
 func (r *UnifiedMemoryModelRegistry) dropBareNameSets(sources []domain.SourceEndpoint) {
 	for i := range sources {
 		r.dropBareNameSet(sources[i].NativeName)
+	}
+}
+
+// endpointRemover is implemented by unifiers that track per-endpoint state of their own
+// (the lifecycle unifier also drops the endpoint's circuit breaker and health record).
+type endpointRemover interface {
+	RemoveEndpoint(ctx context.Context, endpointURL string) error
+}
+
+// removeEndpointFromUnifier drops endpointURL's models from the unifier's catalogue.
+// Callers hold unificationMutex.
+func (r *UnifiedMemoryModelRegistry) removeEndpointFromUnifier(ctx context.Context, endpointURL string) {
+	if remover, ok := r.unifier.(endpointRemover); ok {
+		if err := remover.RemoveEndpoint(ctx, endpointURL); err != nil {
+			r.logger.Warn("Error removing endpoint from unifier", "url", endpointURL, "error", err)
+		}
+		return
+	}
+
+	// An empty model list is how a unifier is told an endpoint has none left.
+	endpoint, ok := r.endpoints.Load(endpointURL)
+	if !ok {
+		endpoint = &domain.Endpoint{URLString: endpointURL, Name: endpointURL}
+	}
+	if _, err := r.unifier.UnifyModels(ctx, []*domain.ModelInfo{}, endpoint); err != nil {
+		r.logger.Warn("Error removing endpoint from unifier", "url", endpointURL, "error", err)
 	}
 }
 
