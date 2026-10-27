@@ -105,6 +105,7 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 	}
 	ollamaVision := fleetEndpoint{name: "ollama-1", typ: domain.ProfileOllama, modelsJSON: ollamaTagsVisionAndTools}
 	ollamaPlain := fleetEndpoint{name: "ollama-1", typ: domain.ProfileOllama, modelsJSON: ollamaTagsPlainChat}
+	ollamaPlain2 := fleetEndpoint{name: "ollama-2", typ: domain.ProfileOllama, modelsJSON: ollamaTagsPlainChat}
 	vllmChatHost := fleetEndpoint{name: "vllm-chat", typ: domain.ProfileVLLM, modelsJSON: vllmChatModel}
 
 	tests := []struct {
@@ -153,6 +154,9 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 		{"model-less tools steered to an ollama tools model beside an untagged vllm chat host", chatPath, toolsBody(""), "ollama-1", []fleetEndpoint{ollamaVision, vllmChatHost}},
 		{"model-less tools keeps every host when no model anywhere declares tools", chatPath, toolsBody(""), "", []fleetEndpoint{ollamaPlain, vllmChatHost}},
 		{"named vllm model with tools is not evicted by ollama tools models", chatPath, toolsBody("Qwen/Qwen3-32B"), "vllm-chat", []fleetEndpoint{ollamaVision, vllmChatHost}},
+		// provider routes confine candidates with ProviderScope before the capability stage
+		{"model-less tools on the ollama provider route reaches the ollama tools host", "/olla/ollama/v1/chat/completions", toolsBody(""), "ollama-1", []fleetEndpoint{ollamaVision, ollamaPlain2, vllmChatHost}},
+		{"named tools model on the ollama provider route reaches its host", "/olla/ollama/v1/chat/completions", toolsBody("gpt-oss:20b"), "ollama-1", []fleetEndpoint{ollamaVision, vllmChatHost}},
 		{"named vision request for a vllm model is not evicted by ollama vision models", chatPath, visionBody("Qwen/Qwen3-32B"), "vllm-chat", []fleetEndpoint{ollamaVision, vllmChatHost}},
 	}
 
@@ -262,7 +266,7 @@ func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *i
 	}
 	w := httptest.NewRecorder()
 
-	if strings.HasPrefix(path, "/olla/tei/") {
+	if !strings.HasPrefix(path, "/olla/proxy/") {
 		app.providerProxyHandler(w, req)
 	} else {
 		app.proxyHandler(w, req)
@@ -335,6 +339,8 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 		{"model-less vision with the only ollama vision model down, declared by capability not name", chatPath, visionBody, constants.RoutingReasonCapabilityUnavailable, nil,
 			[]fleetEndpoint{ollama(ollamaTagsVisionAndTools, true), vllmChat}},
 		{"model-less tools with the only tools host down", chatPath, toolsBody, constants.RoutingReasonCapabilityUnavailable, nil,
+			[]fleetEndpoint{ollama(ollamaTagsVisionAndTools, true), vllmChat}},
+		{"model-less tools on the ollama provider route with the only tools host down", "/olla/ollama/v1/chat/completions", toolsBody, constants.RoutingReasonCapabilityUnavailable, nil,
 			[]fleetEndpoint{ollama(ollamaTagsVisionAndTools, true), vllmChat}},
 		{"named model is unaffected when the only ollama vision host is down", chatPath, `{"model":"Qwen/Qwen3-32B","messages":[{"role":"user","content":[{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`, "", []string{"vllm-chat"},
 			[]fleetEndpoint{ollama(ollamaTagsVisionAndTools, true), vllmChat}},

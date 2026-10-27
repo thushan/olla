@@ -92,7 +92,7 @@ func (p *ollamaParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 func createOllamaModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 	details := &domain.ModelDetails{}
 
-	// Ollama 0.30+ reports what a model can do. The kind is single-valued, so a model
+	// Newer Ollama releases report what a model can do. The kind is single-valued, so a model
 	// that lists vision is a vlm (it still generates text, so it keeps text-generation)
 	// and an embedding-only model is embeddings. A hybrid embedding+completion model
 	// stays untyped and keeps text-generation unless it also lists vision. Vision and

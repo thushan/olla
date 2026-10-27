@@ -204,8 +204,8 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 	}
 }
 
-// Ollama 0.30+ reports vision and tools in /api/tags. A vision model with no vision hint in
-// its name must list as vlm, and a pre-0.30 host (no capabilities field) must not change.
+// Newer Ollama reports vision and tools in /api/tags. A vision model with no vision hint in
+// its name must list as vlm, and a older host (no capabilities field) must not change.
 func TestUnifiedModelsHandler_OllamaCapabilitiesListVision(t *testing.T) {
 	t.Parallel()
 

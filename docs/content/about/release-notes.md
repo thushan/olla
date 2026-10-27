@@ -29,7 +29,7 @@ as chat traffic already required.
 
 ### Fixed: Ollama vision models list as `vlm` and tool support is recorded
 
-Ollama 0.30+ reports `capabilities` in `/api/tags`, but only `embedding` was read, so models such as
+Newer Ollama releases report `capabilities` in `/api/tags`, but only `embedding` was read, so models such as
 `qwen3-vl:8b` listed as `llm` and `?type=vlm` and `?capability=vision` returned nothing. A model that lists
 `vision` is now `vlm` with the `vision` capability (it keeps `text-generation`), and `tools` becomes the
 `function_calling` capability. Model-less requests that carry images or `tools` now prefer hosts with a
