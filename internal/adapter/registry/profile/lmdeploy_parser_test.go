@@ -46,7 +46,7 @@ func TestLMDeployParser_Parse(t *testing.T) {
 
 		internlm := models[0]
 		assert.Equal(t, "internlm/internlm2_5-7b-chat", internlm.Name)
-		assert.Equal(t, "lmdeploy", internlm.Type)
+		assert.Empty(t, internlm.Type, "provider names are not model kinds")
 		// owned_by "lmdeploy" is the default — publisher should not be set
 		require.NotNil(t, internlm.Details)
 		assert.Nil(t, internlm.Details.Publisher)
@@ -55,7 +55,7 @@ func TestLMDeployParser_Parse(t *testing.T) {
 
 		llama := models[1]
 		assert.Equal(t, "meta-llama/Meta-Llama-3.1-8B-Instruct", llama.Name)
-		assert.Equal(t, "lmdeploy", llama.Type)
+		assert.Empty(t, llama.Type, "provider names are not model kinds")
 		require.NotNil(t, llama.Details)
 		require.NotNil(t, llama.Details.Publisher)
 		assert.Equal(t, "meta-llama", *llama.Details.Publisher)
