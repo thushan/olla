@@ -88,8 +88,8 @@ Olla proxies the following self-hosted inference backends. The **Anthropic API**
 | [llama.cpp](https://github.com/ggerganov/llama.cpp) | [Integration](https://thushan.github.io/olla/integrations/backend/llamacpp/) | ⚡ Passthrough (b4847+) |
 | [Docker Model Runner](https://docs.docker.com/ai/model-runner/) | [Integration](https://thushan.github.io/olla/integrations/backend/docker-model-runner/) | ⚡ Passthrough |
 | [oMLX](https://github.com/jundot/omlx) | [Integration](https://thushan.github.io/olla/integrations/backend/omlx/) | ⚡ Passthrough (v0.4.2+) |
-| [SGLang](https://github.com/sgl-project/sglang) | [Integration](https://thushan.github.io/olla/integrations/backend/sglang/) | 🔄 Translation |
-| [LMDeploy](https://github.com/InternLM/lmdeploy) | [Integration](https://thushan.github.io/olla/integrations/backend/lmdeploy/) | 🔄 Translation |
+| [SGLang](https://github.com/sgl-project/sglang) | [Integration](https://thushan.github.io/olla/integrations/backend/sglang/) | ⚡ Passthrough (v0.5.9+) |
+| [LMDeploy](https://github.com/InternLM/lmdeploy) | [Integration](https://thushan.github.io/olla/integrations/backend/lmdeploy/) | ⚡ Passthrough (v0.13.0+) |
 | [Lemonade SDK](https://github.com/lemonade-sdk/lemonade) | [Integration](https://thushan.github.io/olla/integrations/backend/lemonade/) | 🔄 Translation |
 | [LiteLLM](https://github.com/BerriAI/litellm) | [Integration](https://thushan.github.io/olla/integrations/backend/litellm/) | 🔄 Translation |
 | OpenAI-compatible (generic) | [Integration](https://thushan.github.io/olla/integrations/overview/) | 🔄 Translation |
@@ -273,7 +273,7 @@ You can learn more about [OpenWebUI Ollama with Olla](https://thushan.github.io/
 
 Olla's Anthropic Messages API support (v0.0.20+) is **enabled by default**, allowing you to use CLI tools like Claude Code with local AI models on your machine via `/olla/anthropic`. It operates in two modes depending on your backend:
 
-- ⚡ **Passthrough**: requests are forwarded as-is for backends with native Anthropic support (vLLM, vLLM-MLX, llama.cpp, Ollama, LM Studio, Docker Model Runner, oMLX)
+- ⚡ **Passthrough**: requests are forwarded as-is for backends with native Anthropic support (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, Ollama, LM Studio, Docker Model Runner, oMLX)
 - 🔄 **Translation**: Anthropic ↔ OpenAI format conversion for backends that don't natively support the Anthropic Messages API
 
 Still actively being improved -- please report any issues or feedback.

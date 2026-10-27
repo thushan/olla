@@ -31,7 +31,6 @@ func (p *lemonadeParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
-			Type:     "lemonade",
 			LastSeen: now,
 		}
 

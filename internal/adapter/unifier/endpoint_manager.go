@@ -32,6 +32,18 @@ func NewEndpointManager(config Config, logger logger.StyledLogger) *EndpointMana
 	}
 }
 
+// Reset forgets every endpoint's state in place. Replacing the manager instead would race
+// with the readers that hold it without a lock.
+func (m *EndpointManager) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.endpointStates = make(map[string]*domain.EndpointStateInfo)
+	m.endpointFailures = make(map[string]int)
+	m.circuitBreakers = make(map[string]*CircuitBreaker)
+	m.lastEndpointCheck = make(map[string]time.Time)
+}
+
 // RecordFailure records an endpoint failure
 func (m *EndpointManager) RecordFailure(endpointURL string, err error) {
 	m.mu.Lock()

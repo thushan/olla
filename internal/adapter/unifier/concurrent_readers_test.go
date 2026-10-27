@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 )
 
 // The catalog store hands out live pointers that lock-free readers keep using
@@ -224,4 +225,42 @@ func TestUnifiedModelClone_NestedMetadataIsIndependent(t *testing.T) {
 	require.Equal(t, "v", orig.Metadata["nested"].(map[string]interface{})["k"].([]interface{})[0])
 	require.Equal(t, "y", orig.SourceEndpoints[0].StateInfo.Metadata["x"])
 	require.Empty(t, orig.SourceEndpoints[0].StateInfo.LastError)
+}
+
+// Clear used to swap the store pointer (and the lifecycle unifier's endpoint manager) while
+// request goroutines held and read them without a lock. Clearing now resets in place.
+func TestUnifiers_ClearDuringUse(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for name, u := range map[string]ports.ModelUnifier{
+		"default":   NewDefaultUnifier(),
+		"lifecycle": NewLifecycleUnifier(DefaultConfig(), createTestLogger()),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var stop atomic.Bool
+			var wg sync.WaitGroup
+			for range 4 {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					for !stop.Load() {
+						_, _ = u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
+						_, _ = u.ResolveAlias(ctx, "llama3:8b")
+						_ = u.GetStats()
+					}
+				}()
+			}
+			for range raceIterations {
+				require.NoError(t, u.Clear(ctx))
+			}
+			stop.Store(true)
+			wg.Wait()
+
+			require.NoError(t, u.Clear(ctx))
+			_, err := u.ResolveAlias(ctx, "llama3:8b")
+			require.Error(t, err, "Clear must leave the catalogue empty")
+		})
+	}
 }

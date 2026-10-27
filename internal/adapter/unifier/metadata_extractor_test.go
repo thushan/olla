@@ -753,3 +753,169 @@ func TestParseContextLength(t *testing.T) {
 		})
 	}
 }
+
+// Backends such as vLLM report no model kind, so name patterns are the only
+// way a reranker or embedder gets its tag. The chat corpus guards the other
+// side: nothing here may be mistaken for either.
+var (
+	nameKindRerankers = []string{
+		"BAAI/bge-reranker-v2-m3",
+		"jinaai/jina-reranker-v2-base-multilingual",
+		"mixedbread-ai/mxbai-rerank-large-v1",
+		"Qwen/Qwen3-Reranker-0.6B",
+		"Alibaba-NLP/gte-multilingual-reranker-base",
+		"Alibaba-NLP/gte-reranker-modernbert-base",
+		"BAAI/bge-reranker-v2-gemma",
+		"cross-encoder/msmarco-MiniLM-L6-en-de-v1",
+		"ibm-granite/granite-embedding-reranker-english-r2",
+	}
+	nameKindEmbedders = []string{
+		"BAAI/bge-small-en-v1.5",
+		"BAAI/bge-m3",
+		"BAAI/bge-large-zh-v1.5",
+		"BAAI/bge-multilingual-gemma2",
+		"intfloat/e5-base-v2",
+		"intfloat/multilingual-e5-large-instruct",
+		"intfloat/e5-mistral-7b-instruct",
+		"thenlper/gte-large",
+		"Alibaba-NLP/gte-Qwen2-7B-instruct",
+		"Alibaba-NLP/gte-multilingual-base",
+		"Alibaba-NLP/gte-modernbert-base",
+		"nomic-ai/nomic-embed-text-v1.5",
+		"Snowflake/snowflake-arctic-embed-l-v2.0",
+		"snowflake-arctic-embed2",
+		"jinaai/jina-embeddings-v3",
+		"Qwen/Qwen3-Embedding-0.6B",
+		"google/embeddinggemma-300m",
+		"mixedbread-ai/mxbai-embed-large-v1",
+		"text-embedding-3-small",
+		"all-minilm",
+		"all-minilm:latest",
+		"sentence-transformers/all-MiniLM-L6-v2",
+		"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+		"sentence-transformers/all-mpnet-base-v2",
+		"dunzhang/stella_en_400M_v5",
+		"sentence-transformers/multi-qa-mpnet-base-dot-v1",
+		"sentence-transformers/multi-qa-MiniLM-L6-cos-v1",
+		"sentence-transformers/msmarco-MiniLM-L6-v3",
+		"sentence-transformers/msmarco-distilbert-base-v4",
+		"infgrad/stella-base-en-v2",
+		"infgrad/stella-large-zh-v3-1792d",
+		"infgrad/stella-zh-v2",
+	}
+	nameKindChat = []string{
+		"meta-llama/Llama-3.1-8B-Instruct",
+		"llama3.1:8b",
+		"Qwen/Qwen3-32B",
+		"Qwen/Qwen2.5-Coder-32B-Instruct",
+		"Qwen/Qwen2.5-VL-7B-Instruct",
+		"google/gemma-3-27b-it",
+		"gemma3:12b",
+		"mistralai/Mistral-7B-Instruct-v0.3",
+		"mistral-nemo:12b",
+		"microsoft/Phi-4",
+		"phi3:mini",
+		"deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+		"deepseek-r1:14b",
+		"openai/gpt-oss-120b",
+		"zai-org/GLM-4.5-Air",
+		"HuggingFaceTB/SmolLM3-3B",
+		"NousResearch/Hermes-3-Llama-3.1-8B",
+		"unsloth/embedded-systems-helper-7b",
+		"embedded-llm-7b",
+		"acme/bge-chat-7b",
+		"Llama-3-8B-E5-merge",
+		"acme/stellar-chat-7b",
+		"stellar-7b",
+		"acme/stella-chat-7b",
+		"msmarco-chat",
+		"acme/multi-qa-chat-7b",
+	}
+)
+
+func TestInferCapabilities_RerankAndEmbedNamePatterns(t *testing.T) {
+	// the embedded defaults and the shipped config/models.yaml must agree
+	shipped, err := filepath.Abs(filepath.Join("..", "..", "..", "config"))
+	require.NoError(t, err)
+	configs := map[string]string{"defaults": "", "shipped models.yaml": shipped}
+	for label, dir := range configs {
+		t.Run(label, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			t.Setenv("OLLA_CONFIG_DIR", dir)
+			resetConfigSingleton()
+			t.Cleanup(resetConfigSingleton)
+
+			for _, name := range nameKindRerankers {
+				t.Run("reranker/"+name, func(t *testing.T) {
+					got := inferCapabilitiesFromMetadata("vllm", name, 0, nil)
+					assert.Contains(t, got, "rerank")
+					assert.NotContains(t, got, "text-generation", "a name-tagged reranker doesn't generate text")
+					assert.NotContains(t, got, "chat")
+					assert.NotContains(t, got, "embeddings")
+				})
+			}
+			for _, name := range nameKindEmbedders {
+				t.Run("embedder/"+name, func(t *testing.T) {
+					got := inferCapabilitiesFromMetadata("vllm", name, 0, nil)
+					assert.Contains(t, got, "embeddings")
+					assert.NotContains(t, got, "text-generation")
+					assert.NotContains(t, got, "chat", "an instruct-named embedder is still not a chat model")
+					assert.NotContains(t, got, "rerank")
+				})
+			}
+			for _, name := range nameKindChat {
+				t.Run("chat/"+name, func(t *testing.T) {
+					got := inferCapabilitiesFromMetadata("vllm", name, 0, nil)
+					assert.Contains(t, got, "text-generation")
+					assert.NotContains(t, got, "embeddings")
+					assert.NotContains(t, got, "rerank")
+				})
+			}
+		})
+	}
+}
+
+// A kind the backend does report wins over what the name suggests, and an
+// explicit capability declaration from the backend is never stripped.
+func TestInferCapabilities_ReportedKindAndDeclarationsBeatNamePatterns(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("OLLA_CONFIG_DIR", "")
+	resetConfigSingleton()
+	t.Cleanup(resetConfigSingleton)
+
+	t.Run("TEI reranker keeps rerank and classification", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("reranker", "BAAI/bge-reranker-v2-m3", 0, nil)
+		assert.ElementsMatch(t, []string{"rerank", "classification"}, got)
+	})
+	t.Run("TEI reranker named like an embedder gains no embedder tags", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("reranker", "ibm-granite/granite-embedding-reranker-english-r2", 0, nil)
+		assert.ElementsMatch(t, []string{"rerank", "classification"}, got)
+	})
+	t.Run("TEI classifier is untouched by the name", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("classifier", "acme/sentiment-chat", 0, nil)
+		assert.Contains(t, got, "classification")
+		assert.NotContains(t, got, "text-generation")
+	})
+	t.Run("reported llm kind still gets chat", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("llm", "meta-llama/Llama-3.1-8B-Instruct", 0, nil)
+		assert.Contains(t, got, "chat")
+		assert.Contains(t, got, "text-generation")
+	})
+	t.Run("reported llm kind wins over a reranker name", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("llm", "Qwen/Qwen3-Reranker-0.6B", 0, nil)
+		assert.Contains(t, got, "text-generation")
+		assert.Contains(t, got, "chat")
+	})
+	t.Run("reported vlm kind wins over an embedder name", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("vlm", "acme/vision-embed-7b", 0, nil)
+		assert.Contains(t, got, "text-generation")
+		assert.Contains(t, got, "vision")
+	})
+	t.Run("declared chat survives on a name-tagged embedder", func(t *testing.T) {
+		meta := map[string]interface{}{"capabilities": []interface{}{"chat"}}
+		got := inferCapabilitiesFromMetadata("vllm", "intfloat/e5-mistral-7b-instruct", 0, meta)
+		assert.Contains(t, got, "chat")
+		assert.Contains(t, got, "embeddings")
+		assert.NotContains(t, got, "text-generation")
+	})
+}

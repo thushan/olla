@@ -54,7 +54,20 @@ func normalizeQuantization(quant string) string {
 
 	// Try to extract quantization from model name patterns
 	// e.g., "llama-3.2-1b-instruct-q4_k_m.gguf" -> "q4km"
-	patterns := []struct {
+	lowercaseQuant := strings.ToLower(quant)
+	for _, p := range quantNamePatterns {
+		if matches := p.regex.FindStringSubmatch(lowercaseQuant); matches != nil {
+			return p.regex.ReplaceAllString(matches[0], p.replacement)
+		}
+	}
+
+	return strings.ToLower(quant)
+}
+
+// Compiled once: these used to be rebuilt on every call, which was a quarter of the time
+// spent unifying a model list.
+var (
+	quantNamePatterns = []struct {
 		regex       *regexp.Regexp
 		replacement string
 	}{
@@ -65,16 +78,9 @@ func normalizeQuantization(quant string) string {
 		{regexp.MustCompile(`(?i)fp(\d+)`), "f$1"},
 		{regexp.MustCompile(`(?i)int(\d+)`), "int$1"},
 	}
-
-	lowercaseQuant := strings.ToLower(quant)
-	for _, p := range patterns {
-		if matches := p.regex.FindStringSubmatch(lowercaseQuant); matches != nil {
-			return p.regex.ReplaceAllString(matches[0], p.replacement)
-		}
-	}
-
-	return strings.ToLower(quant)
-}
+	paramSizePattern     = regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([BM]?)$`)
+	nameDelimiterPattern = regexp.MustCompile(`[-_:/]`)
+)
 
 // extractParameterSize extracts and normalizes parameter size from various formats
 func extractParameterSize(sizeStr string) (string, int64) {
@@ -85,8 +91,7 @@ func extractParameterSize(sizeStr string) (string, int64) {
 	originalStr := sizeStr
 	sizeStr = strings.TrimSpace(strings.ToUpper(sizeStr))
 
-	re := regexp.MustCompile(`^(\d+(?:\.\d+)?)\s*([BM]?)$`)
-	matches := re.FindStringSubmatch(sizeStr)
+	matches := paramSizePattern.FindStringSubmatch(sizeStr)
 
 	if len(matches) != 3 {
 		return originalStr, 0
@@ -137,6 +142,39 @@ var nonGenerativeModelTypes = map[string]struct{}{
 	"classifier": {},
 }
 
+var embedderCapabilities = []string{"embeddings", "similarity", "vector-search"}
+
+// nonGenerativeCapabilities mark a model that scores or encodes text. Name
+// patterns can add them to a model whose backend doesn't report a kind (a vLLM
+// reranker, an OpenAI-style BGE embedder), and such a model must not keep the
+// text-generation default any more than a typed one does.
+var nonGenerativeCapabilities = []string{"embeddings", "rerank", "classification"}
+
+// dropGenerativeForNonGenerative removes the generative defaults from a model
+// that name patterns tagged as an embedder, reranker or classifier.
+func dropGenerativeForNonGenerative(capabilities map[string]bool, modelType string) {
+	// no model is both a reranker and an embedder, and "rerank" is the stronger
+	// signal (granite-embedding-reranker-*), so the embedder tags go. A model the
+	// backend typed as an embedder keeps them.
+	if capabilities["rerank"] {
+		if _, typedNonGenerative := nonGenerativeModelTypes[modelType]; !typedNonGenerative || modelType == "reranker" {
+			for _, c := range embedderCapabilities {
+				delete(capabilities, c)
+			}
+		}
+	}
+	for _, cap := range nonGenerativeCapabilities {
+		if capabilities[cap] {
+			delete(capabilities, "text-generation")
+			// chat reaches an unreported-kind model only through an instruct/chat
+			// name pattern (gte-Qwen2-7B-instruct is still an embedder); a
+			// declaration from the backend is re-applied later
+			delete(capabilities, "chat")
+			return
+		}
+	}
+}
+
 // inferCapabilitiesFromMetadata infers model capabilities from various metadata fields
 func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]interface{}) []string {
 	capabilities := make(map[string]bool)
@@ -165,6 +203,13 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 				capabilities[cap] = true
 			}
 		}
+	}
+
+	// A backend that reports a generative kind (LM Studio's "llm", a "vlm") has
+	// said what the model is, so the name must not strip it. Only an unreported
+	// kind (vLLM) is left to the name patterns.
+	if modelTypeLower != "llm" && modelTypeLower != "vlm" {
+		dropGenerativeForNonGenerative(capabilities, modelTypeLower)
 	}
 
 	// Context window size determines long-form processing capabilities
@@ -354,7 +399,7 @@ var knownDelimiterFamilies = []string{
 // Config-driven FamilyAliases are checked first (e.g. "devstral" -> "mistral"),
 // falling back to the known bare family names mapping to themselves.
 func extractFromDelimiters(modelName string, config *ModelUnificationConfig) string {
-	parts := regexp.MustCompile(`[-_:/]`).Split(modelName, -1)
+	parts := nameDelimiterPattern.Split(modelName, -1)
 	if len(parts) == 0 {
 		return ""
 	}

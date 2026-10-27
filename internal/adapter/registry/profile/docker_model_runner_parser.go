@@ -32,7 +32,6 @@ func (p *dockerModelRunnerParser) Parse(data []byte) ([]*domain.ModelInfo, error
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
-			Type:     constants.ProviderTypeDockerMR,
 			LastSeen: now,
 		}
 

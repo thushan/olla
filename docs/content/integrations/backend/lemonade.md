@@ -379,6 +379,10 @@ curl -X POST http://localhost:40114/olla/lemonade/api/v1/load \
 
 These requests are **forwarded transparently** to the Lemonade SDK backend. Olla does not process or modify them beyond routing.
 
+### Anthropic Messages API
+
+Lemonade has no native Anthropic endpoint, so `/olla/anthropic/v1/messages` requests are translated to OpenAI chat and sent to `/api/v1/chat/completions`, the path the Lemonade profile declares. This also holds when Lemonade shares a fleet with backends that mount the API elsewhere (the path is chosen per endpoint, including on failover). See [API Translation](../../concepts/api-translation.md).
+
 ## Lemonade SDK Features (Proxied)
 
 The following features are **provided by Lemonade SDK** and accessed through Olla's proxy:

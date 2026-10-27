@@ -421,7 +421,7 @@ The built-in `type_capabilities` are:
 | `reranker` | `rerank`, `classification` |
 | `classifier` | `classification` |
 
-Models typed `embeddings`, `embedding`, `reranker` or `classifier` never carry `text-generation`, whatever your `type_capabilities` lists for them. Model-less requests use these capabilities to pick endpoints; see [Requests Without a Model Name](model-routing.md#requests-without-a-model-name).
+Models typed `embeddings`, `embedding`, `reranker` or `classifier` never carry `text-generation`, whatever your `type_capabilities` lists for them. Backends that report no model kind (vLLM, for one) get the same treatment from the built-in `name_patterns`: names such as `bge-reranker-v2-m3` gain `rerank`, and `bge-m3`, `e5-large`, `nomic-embed`, `snowflake-arctic-embed2`, `all-MiniLM`, `multi-qa-*`, `msmarco-*` and `stella-*` gain `embeddings`, and none of them keep `text-generation` or `chat`. A kind the backend reports, or capabilities it declares, are not overridden. If your `models.yaml` sets its own `name_patterns`, copy the `rerank` and embedder entries from the shipped file. Model-less requests use these capabilities to pick endpoints; see [Requests Without a Model Name](model-routing.md#requests-without-a-model-name).
 
 ### Where Olla looks for it
 

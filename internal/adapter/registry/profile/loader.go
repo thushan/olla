@@ -207,6 +207,10 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		constants.PathV1Completions,
 		"/v1/embeddings",
 		"/api/embed", // supersedes /api/embeddings per Ollama's docs
+		"/api/ps",
+		"/api/version",
+		"/v1/responses",
+		"/v1/messages",
 	}
 	ollamaConfig.API.ModelDiscoveryPath = "/api/tags"
 	ollamaConfig.API.HealthCheckPath = "/"
@@ -330,6 +334,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		constants.PathV1Completions,
 		"/v1/embeddings",
 		"/api/v0/models",
+		"/v1/responses",
+		"/v1/messages",
 	}
 	lmStudioConfig.API.ModelDiscoveryPath = "/api/v0/models"
 	lmStudioConfig.API.HealthCheckPath = DefaultModelsUri
@@ -420,6 +426,8 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		constants.PathV1ChatCompletions,
 		constants.PathV1Completions,
 		"/v1/embeddings",
+		"/v1/responses",
+		"/v1/messages",
 	}
 	openAIConfig.API.ModelDiscoveryPath = DefaultModelsUri
 	openAIConfig.API.HealthCheckPath = DefaultModelsUri
@@ -518,6 +526,10 @@ func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.Inference
 		"/tokenize",
 		"/detokenize",
 		"/infill",
+		"/v1/responses",
+		"/v1/messages",
+		"/v1/messages/count_tokens",
+		"/v1/rerank",
 	}
 	llamaCppConfig.API.ModelDiscoveryPath = DefaultModelsUri
 	llamaCppConfig.API.HealthCheckPath = "/health"

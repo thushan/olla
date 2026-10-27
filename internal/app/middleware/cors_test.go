@@ -205,6 +205,7 @@ func TestDefaultCORSExposedHeaders(t *testing.T) {
 		constants.HeaderXOllaRoutingDecision,
 		constants.HeaderXOllaRoutingReason,
 		constants.HeaderXOllaMode,
+		constants.HeaderXOllaPartial,
 		constants.HeaderXOllaStickySession,
 		constants.HeaderXOllaStickyKeySource,
 		constants.HeaderXOllaSessionID,

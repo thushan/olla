@@ -27,6 +27,7 @@ type OllaExtensions struct {
 	MaxContextLength *int64           `json:"max_context_length,omitempty"`
 	Family           string           `json:"family"`
 	Variant          string           `json:"variant"`
+	Type             string           `json:"type,omitempty"`
 	ParameterSize    string           `json:"parameter_size"`
 	Quantization     string           `json:"quantization"`
 	PromptTemplateID string           `json:"prompt_template_id,omitempty"`
@@ -95,6 +96,7 @@ func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModel
 		Olla: &OllaExtensions{
 			Family:           model.Family,
 			Variant:          model.Variant,
+			Type:             ModelKind(model),
 			ParameterSize:    model.ParameterSize,
 			Quantization:     model.Quantization,
 			Aliases:          model.GetAliasStrings(),
@@ -108,7 +110,7 @@ func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModel
 
 // filterModels applies the specified filters to the models
 func filterModels(models []*domain.UnifiedModel, filters ports.ModelFilters) []*domain.UnifiedModel {
-	if filters.Endpoint == "" && filters.Available == nil && filters.Family == "" && filters.Type == "" {
+	if filters.Endpoint == "" && filters.Available == nil && filters.Family == "" && filters.Type == "" && filters.Capability == "" {
 		return models
 	}
 
@@ -137,6 +139,10 @@ func matchesFilters(model *domain.UnifiedModel, filters ports.ModelFilters) bool
 	}
 
 	if !matchesTypeFilter(model, filters.Type) {
+		return false
+	}
+
+	if !matchesCapabilityFilter(model, filters.Capability) {
 		return false
 	}
 
@@ -175,34 +181,26 @@ func matchesFamilyFilter(model *domain.UnifiedModel, family string) bool {
 	return family == "" || model.Family == family
 }
 
+// matchesTypeFilter selects on the same ModelKind the response reports as
+// olla.type, so the filter and the field it filters on cannot disagree. Capability
+// matching on top of that would only contradict the reported kind: an embedder
+// that picks up "chat" from an "instruct" name would still be listed under llm.
 func matchesTypeFilter(model *domain.UnifiedModel, filterType string) bool {
-	if filterType == "" {
-		return true
-	}
-
-	// Use base converter to determine model type
-	base := NewBaseConverter("")
-	modelType := base.DetermineModelType(model, "")
-
-	// If model type matches directly, return true
-	if modelType == filterType {
-		return true
-	}
-
-	// Also check capabilities for backward compatibility
-	return matchesTypeByCapabilities(model.Capabilities, filterType)
+	return filterType == "" || ModelKind(model) == filterType
 }
 
-func matchesTypeByCapabilities(capabilities []string, filterType string) bool {
-	switch filterType {
-	case "llm":
-		return hasCapability(capabilities, "chat") || hasCapability(capabilities, "completion")
-	case "vlm":
-		return hasCapability(capabilities, "vision")
-	case "embeddings":
-		return hasCapability(capabilities, "embedding") || hasCapability(capabilities, "embeddings")
+// matchesCapabilityFilter is deliberately wider than the kind filter: "chat"
+// matches every model that can chat or complete, vision models included.
+func matchesCapabilityFilter(model *domain.UnifiedModel, capability string) bool {
+	switch capability {
+	case "":
+		return true
+	case "chat":
+		// text-generation is what a vision model carries instead of chat
+		return hasCapability(model.Capabilities, "chat") || hasCapability(model.Capabilities, "completion") ||
+			hasCapability(model.Capabilities, "text-generation")
 	default:
-		return false
+		return hasCapability(model.Capabilities, capability)
 	}
 }
 

@@ -3,6 +3,8 @@ package inspector
 import (
 	"context"
 	"net/http"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -14,6 +16,9 @@ type PathInspector struct {
 	profileFactory *profile.Factory
 	logger         logger.StyledLogger
 	pathToProfiles map[string][]string
+	// profilePaths keeps each profile's paths in declaration order, which pathToProfiles
+	// cannot: ResolveTargetPath needs "first declared" to be stable.
+	profilePaths map[string][]string
 }
 
 const (
@@ -37,6 +42,9 @@ var pathCapabilities = []pathCapability{
 	{suffix: "/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
 	{suffix: "/v1/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
 	{suffix: "/v2/rerank", apply: func(c *domain.ModelCapabilities) { c.Rerank = true }},
+	// OpenAI-style embeddings. The body's `input` field is the primary signal, but it is only
+	// readable when the body is; the path keeps embeddings requests off chat-only hosts either way.
+	{suffix: "/v1/embeddings", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
 	{suffix: "/predict", apply: func(c *domain.ModelCapabilities) { c.Classification = true }},
 	{suffix: "/embed", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
 	{suffix: "/embed_all", apply: func(c *domain.ModelCapabilities) { c.Embeddings = true }},
@@ -77,6 +85,7 @@ func NewPathInspector(profileFactory *profile.Factory, logger logger.StyledLogge
 		profileFactory: profileFactory,
 		logger:         logger,
 		pathToProfiles: make(map[string][]string),
+		profilePaths:   make(map[string][]string),
 	}
 
 	inspector.buildPathMap()
@@ -100,6 +109,7 @@ func (pi *PathInspector) buildPathMap() {
 		}
 
 		paths := platformProfile.GetPaths()
+		pi.profilePaths[profileName] = paths
 		for _, path := range paths {
 			if path == "" {
 				continue
@@ -116,6 +126,7 @@ func (pi *PathInspector) buildPathMap() {
 	openaiProfile, err := pi.profileFactory.GetProfile(domain.ProfileOpenAICompatible)
 	if err == nil {
 		paths := openaiProfile.GetPaths()
+		pi.profilePaths[domain.ProfileOpenAICompatible] = paths
 		for _, path := range paths {
 			if path == "" {
 				continue
@@ -150,6 +161,77 @@ func (pi *PathInspector) pathMatchesRules(path string, rules domain.RequestParsi
 		return true
 	}
 	return false
+}
+
+// ResolveTargetPath returns the path a profile serves for a request to target. Translators
+// rewrite requests to one OpenAI path (/v1/chat/completions), but some backends mount that
+// API under their own prefix: Docker Model Runner serves /engines/v1/chat/completions and
+// Lemonade /api/v1/chat/completions. An exact declaration wins; otherwise the first declared
+// path that ends in target on a segment boundary is used, so a profile listing a prefixed
+// variant first (DMR's simplified /engines/v1 ahead of its engine-specific ones) resolves
+// deterministically. A profile name the factory does not know is treated as OpenAI-compatible,
+// as profile.Factory.GetProfile does.
+func (pi *PathInspector) ResolveTargetPath(profileName, target string) (string, bool) {
+	if target == "" {
+		return "", false
+	}
+	paths, ok := pi.profilePaths[profileName]
+	if !ok {
+		paths = pi.profilePaths[domain.ProfileOpenAICompatible]
+	}
+	if slices.Contains(paths, target) {
+		return target, true
+	}
+	// A single-segment target would suffix-match unrelated paths (see pathMatches).
+	if strings.Count(target, "/") < 2 {
+		return "", false
+	}
+	for _, p := range paths {
+		if strings.HasPrefix(p, "/") && strings.HasSuffix(p, target) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// MountPrefixes returns the prefixes under which a profile mounts target: for DMR and
+// /v1/chat/completions that is /engines, /engines/llama.cpp and /engines/vllm. A target served
+// at the root contributes nothing. Unknown profile names are treated as OpenAI-compatible, as
+// in ResolveTargetPath.
+func (pi *PathInspector) MountPrefixes(profileName, target string) []string {
+	paths, ok := pi.profilePaths[profileName]
+	if !ok {
+		paths = pi.profilePaths[domain.ProfileOpenAICompatible]
+	}
+	var out []string
+	for _, p := range paths {
+		if prefix, found := strings.CutSuffix(p, target); found && prefix != "" && strings.HasPrefix(prefix, "/") {
+			out = append(out, prefix)
+		}
+	}
+	return out
+}
+
+// KnowsProfile reports whether name is a profile the inspector holds paths for. Endpoint types
+// outside it (custom or "auto" types) are served as OpenAI-compatible, as ResolveTargetPath does.
+func (pi *PathInspector) KnowsProfile(name string) bool {
+	_, ok := pi.profilePaths[name]
+	return ok
+}
+
+// TranslationProfiles returns the profiles that serve target, directly or under their own
+// prefix (see ResolveTargetPath). Callers that route on a path other than the one the client
+// called (translators rewriting to a backend path) use it to ask who can take the rewritten
+// request.
+func (pi *PathInspector) TranslationProfiles(target string) []string {
+	out := make([]string, 0, len(pi.profilePaths))
+	for name := range pi.profilePaths {
+		if _, ok := pi.ResolveTargetPath(name, target); ok {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (pi *PathInspector) Inspect(_ context.Context, _ *http.Request, profile *domain.RequestProfile) error {

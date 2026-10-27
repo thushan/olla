@@ -28,7 +28,7 @@ Returns all available models across all configured and healthy endpoints.
 | `endpoint` | string | all | Filter to models served by a specific endpoint name (e.g. `local-ollama`) |
 | `family` | string | all | Filter by model family (e.g. `llama`, `qwen`, `mistral`) |
 | `type` | string | all | Filter by model type (`llm`, `vlm`, `embeddings`, `reranker`, `classifier`) |
-| `capability` | string | all | Legacy alias for `type` (`vision`/`multimodal` → `vlm`, `embedding`/`embeddings`/`vector_search` → `embeddings`, `chat`/`text_generation`/`completion` → `llm`) |
+| `capability` | string | all | Legacy filter. `vision`/`multimodal` map to `type=vlm` and `embedding`/`embeddings`/`vector_search` to `type=embeddings`. `chat`/`text_generation`/`completion` is a capability match, not a kind: it returns every model that can chat or generate text, vision models included |
 | `available` | bool | unset | When `true`, return only models reported available right now; when `false`, return only currently unavailable models |
 | `include_unavailable` | bool | `false` | When `true`, include models from endpoints that aren't currently healthy. The response then carries availability metadata per model |
 
@@ -58,7 +58,7 @@ curl -X GET 'http://localhost:40114/olla/models?type=vlm'
 #### Filter by Capability (legacy)
 ```bash
 curl -X GET 'http://localhost:40114/olla/models?capability=vision'   # → type=vlm
-curl -X GET 'http://localhost:40114/olla/models?capability=chat'     # → type=llm
+curl -X GET 'http://localhost:40114/olla/models?capability=chat'     # any model that can chat, vlms included
 ```
 
 #### Include Unhealthy Endpoints
@@ -209,6 +209,12 @@ curl -X GET 'http://localhost:40114/olla/models?include_unavailable=true'
 }
 ```
 
+### Model type
+
+Each model reports its kind: `llm`, `vlm`, `embeddings`, `reranker` or `classifier`. It appears as `olla.type` on each entry of the unified format's `data` array, as `type` in the `/olla/models/{id}` response and as `type` in the LM Studio format, and `?type=` filters on it, so `?type=llm` returns exactly the models that report `olla.type: "llm"`. A model the backend reports as `vlm`, or that carries the `vision` capability, is `vlm`, so `?type=llm` excludes it; use `?capability=chat` to list everything that can chat. A model reports one kind: an embedder whose name says `instruct` is `embeddings`, not `llm`. Olla takes the kind from the backend where it reports one (LM Studio and TEI) and otherwise infers it from the model's capabilities, which for backends such as vLLM come from the model name. A model with no reported kind that can generate text is `llm`. The field is left out of the unified format and the detail response when no kind can be told.
+
+`/internal/status/models` reports `type` only when the backend reported a kind (LM Studio, TEI, or an Ollama embedding-only model); it does not infer one from capabilities or names, so a model that `/olla/models` lists as `llm` can have no `type` there. Provider-typed models (vLLM, SGLang, Lemonade, LMDeploy, llama.cpp, vLLM-MLX and Docker Model Runner) no longer carry the provider name as their type.
+
 ### Response Fields (Unified Format)
 
 | Field | Type | Description |
@@ -239,6 +245,15 @@ Get information about a specific model by its ID or alias.
 ```bash
 curl -X GET http://localhost:40114/olla/models/llama3.2:latest
 ```
+
+Everything after `/olla/models/` is the ID, so IDs that contain slashes, such as Hugging Face style `org/name` IDs, work as they are:
+
+```bash
+curl -X GET http://localhost:40114/olla/models/BAAI/bge-small-en-v1.5
+curl -X GET 'http://localhost:40114/olla/models/BAAI%2Fbge-small-en-v1.5'   # same model, slash percent-encoded
+```
+
+A raw slash and `%2F` (or `%2f`) are equivalent, and the path is decoded once, so `%252F` is looked up as the literal ID `%2F`. Aliases resolve as well, so a slash-free alias such as `qwen3:8b` returns the model whose canonical ID is `Qwen/Qwen3-8B`. An empty ID (`/olla/models/`) or one ending in a slash returns `400`, and an unknown ID returns `404`.
 
 ### Response
 

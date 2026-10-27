@@ -178,11 +178,21 @@ func (bi *BodyInspector) opaqueBody(r *http.Request) bool {
 		bi.logger.Debug("Skipping body inspection for multipart content", "content_type", ct)
 		return true
 	}
-	if enc := r.Header.Get(constants.HeaderContentEncoding); enc != "" {
-		bi.logger.Debug("Skipping body inspection for encoded content", "content_encoding", enc)
-		return true
+	for _, enc := range r.Header.Values(constants.HeaderContentEncoding) {
+		if !isIdentityEncoding(enc) {
+			bi.logger.Debug("Skipping body inspection for encoded content", "content_encoding", enc)
+			return true
+		}
 	}
 	return false
+}
+
+// isIdentityEncoding reports whether a Content-Encoding value means no encoding. "identity" is
+// the registered name for that, and some clients send it explicitly. An empty value is treated
+// the same way. A list such as "gzip, identity" is not identity: it still carries a real coding.
+func isIdentityEncoding(enc string) bool {
+	enc = strings.TrimSpace(enc)
+	return enc == "" || strings.EqualFold(enc, "identity")
 }
 
 // looksLikeJSONObject peeks at the first non-whitespace byte without consuming it. It asks for

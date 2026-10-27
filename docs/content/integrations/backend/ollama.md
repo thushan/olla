@@ -226,7 +226,17 @@ The following endpoints are supported by the Ollama integration profile:
     <td><code>/v1/embeddings</code></td>
     <td>Embeddings (OpenAI format)</td>
   </tr>
+  <tr>
+    <td><code>/api/ps</code></td>
+    <td>Models Currently Loaded (merged across Ollama endpoints)</td>
+  </tr>
+  <tr>
+    <td><code>/api/version</code></td>
+    <td>Ollama Version</td>
+  </tr>
 </table>
+
+Model management (<code>/api/pull</code>, <code>/api/push</code>, <code>/api/create</code>, <code>/api/copy</code>, <code>/api/delete</code> and <code>/api/blobs/{digest}</code>) is not proxied: it changes one instance's model store, so Olla returns 501. Run those against the Ollama instance directly.
 
 ## Usage Examples
 
