@@ -56,13 +56,15 @@ sequenceDiagram
     Note over Olla: 2. Translate to OpenAI format
     Note over Olla: 3. Route to available backend
 
-    Olla->>Backend: POST /v1/chat/completions<br/>(OpenAI format)
+    Olla->>Backend: POST the backend's chat completions path<br/>(OpenAI format)
     Backend->>Olla: Response (OpenAI format)
 
     Note over Olla: 4. Translate to Anthropic format
 
     Olla->>Client: Response (Anthropic format)
 ```
+
+Translated requests go to the chat completions path each backend's profile declares: `/v1/chat/completions` for most backends, `/engines/v1/chat/completions` for Docker Model Runner and `/api/v1/chat/completions` for Lemonade. The path is applied per attempt, so failover between backends that mount the API differently still lands on a path each one serves. Backends with no chat path, such as Text Embeddings Inference, are never selected for translation.
 
 ### Translation Stages
 
