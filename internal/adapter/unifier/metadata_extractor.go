@@ -173,14 +173,19 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 		}
 	}
 
-	for _, cap := range nonGenerativeCapabilities {
-		if capabilities[cap] {
-			delete(capabilities, "text-generation")
-			// "chat" here can only have come from an instruct/chat name pattern
-			// (gte-Qwen2-7B-instruct is still an embedder); an explicit
-			// declaration from the backend is re-applied below
-			delete(capabilities, "chat")
-			break
+	// A backend that reports a generative kind (LM Studio's "llm", a "vlm") has
+	// said what the model is, so the name must not strip it. Only an unreported
+	// kind (vLLM) is left to the name patterns.
+	if modelTypeLower != "llm" && modelTypeLower != "vlm" {
+		for _, cap := range nonGenerativeCapabilities {
+			if capabilities[cap] {
+				delete(capabilities, "text-generation")
+				// chat reaches an unreported-kind model only through an instruct/chat
+				// name pattern (gte-Qwen2-7B-instruct is still an embedder); a
+				// declaration from the backend is re-applied below
+				delete(capabilities, "chat")
+				break
+			}
 		}
 	}
 

@@ -895,6 +895,16 @@ func TestInferCapabilities_ReportedKindAndDeclarationsBeatNamePatterns(t *testin
 		assert.Contains(t, got, "chat")
 		assert.Contains(t, got, "text-generation")
 	})
+	t.Run("reported llm kind wins over a reranker name", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("llm", "Qwen/Qwen3-Reranker-0.6B", 0, nil)
+		assert.Contains(t, got, "text-generation")
+		assert.Contains(t, got, "chat")
+	})
+	t.Run("reported vlm kind wins over an embedder name", func(t *testing.T) {
+		got := inferCapabilitiesFromMetadata("vlm", "acme/vision-embed-7b", 0, nil)
+		assert.Contains(t, got, "text-generation")
+		assert.Contains(t, got, "vision")
+	})
 	t.Run("declared chat survives on a name-tagged embedder", func(t *testing.T) {
 		meta := map[string]interface{}{"capabilities": []interface{}{"chat"}}
 		got := inferCapabilitiesFromMetadata("vllm", "intfloat/e5-mistral-7b-instruct", 0, meta)
