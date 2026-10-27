@@ -48,6 +48,8 @@ api:
 
     # Code completion (llama.cpp-specific)
     - /infill              # 8: code infill/completion (FIM support)
+    # Newer paths: /v1/messages needs build b7187+, /v1/responses b7793+; older builds 404.
+    # /v1/rerank only answers when the server was started with --reranking.
     - /v1/responses # 9: OpenAI Responses API
     - /v1/messages # 10: Anthropic Messages API
     - /v1/messages/count_tokens # 11: Anthropic token count

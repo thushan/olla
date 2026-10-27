@@ -33,6 +33,7 @@ api:
     # Unsure if these are needed in proxy mode, but included for completeness
     - /health/readiness          # 10: readiness probe
     - /health/liveness           # 11: liveness probe
+    # /v1/responses needs LiteLLM 1.63.8+; older releases 404.
     - /v1/responses # 12: OpenAI Responses API
     # Note: Management endpoints (/key/*, /user/*, /team/*, /spend/*) 
     # require database backend and are not available in basic proxy mode

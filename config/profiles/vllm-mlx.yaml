@@ -38,6 +38,7 @@ api:
 
     # Embeddings
     - /v1/embeddings       # 4: embeddings API
+    # Declared per the vllm-mlx docs; older releases without these routes 404.
     - /v1/responses # 5: OpenAI Responses API
     - /v1/messages # 6: Anthropic Messages API
     - /v1/messages/count_tokens # 7: Anthropic token count

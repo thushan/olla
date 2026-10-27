@@ -72,8 +72,8 @@ declared them, evicting backends that serve them without saying so. The shipped 
 now declare `/v1/responses` (vLLM, SGLang, LMDeploy, llama.cpp, LM Studio, vLLM-MLX, LiteLLM,
 Ollama, OpenAI-compatible, Lemonade, Docker Model Runner),
 `/v1/messages` (vLLM, SGLang, LMDeploy, llama.cpp, LM Studio, vLLM-MLX, Ollama),
-`/v1/messages/count_tokens` (vLLM, SGLang, LMDeploy, llama.cpp, vLLM-MLX) and `/v1/rerank`
-(SGLang, llama.cpp, vLLM-MLX). Ollama also declares `/api/ps` and `/api/version`, so a proxy call to
+`/v1/messages/count_tokens` (SGLang, LMDeploy, llama.cpp, vLLM-MLX) and `/v1/rerank`
+(SGLang, llama.cpp, vLLM-MLX). These paths only exist in newer backend releases (for example Ollama 0.14.0 for `/v1/messages`, vLLM 0.11.1, LM Studio 0.4.1), and older ones answer 404; `/v1/rerank` on llama.cpp also needs `--reranking`. Ollama also declares `/api/ps` and `/api/version`, so a proxy call to
 them goes to Ollama hosts only. Lemonade serves `/v1/responses` at `/api/v1/responses` and
 `/v1/responses`, and Docker Model Runner registers it under `/v1` and `/engines/v1`; both are declared
 at the unprefixed path so a standard `/olla/proxy/v1/responses` call keeps them as candidates.

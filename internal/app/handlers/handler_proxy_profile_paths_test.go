@@ -1,16 +1,23 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/adapter/inspector"
+	"github.com/thushan/olla/internal/adapter/registry/profile"
+	"github.com/thushan/olla/internal/adapter/translator/anthropic"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/logger"
 )
 
 // Stage 1 narrows candidates to the profiles that declare the request path, so a
@@ -52,7 +59,7 @@ func TestProxyRouting_DeclaredPaths_NamedModelReachesServingHost(t *testing.T) {
 		paths []string
 	}{
 		{domain.ProfileOpenAICompatible, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
-		{domain.ProfileVLLM, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens"}},
+		{domain.ProfileVLLM, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages"}},
 		{domain.ProfileVLLMMLX, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
 		{domain.ProfileLlamaCpp, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
 		{domain.ProfileSGLang, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
@@ -153,6 +160,76 @@ func TestProxyRouting_DeclaredPaths_CapabilityRefusalOverWiderCandidates(t *test
 				assert.Empty(t, selected, "a refused request never reaches the proxy engine")
 				assert.Equal(t, constants.RoutingReasonCapabilityUnavailable, w.Header().Get(constants.HeaderXOllaRoutingReason))
 				assert.Equal(t, ports.RoutingActionRejected, w.Header().Get(constants.HeaderXOllaRoutingDecision))
+			})
+		}
+	}
+}
+
+// /olla/anthropic/v1/messages is Olla's own route. The path inspector suffix-matches it
+// against profiles that declare /v1/messages, so once more profiles declare it the
+// backends that don't (Lemonade, LiteLLM) were evicted from translation. Naming a model
+// hosted only on such a backend must still select it, under strict routing (which
+// would 503) and under the optimistic fallback (which would send it to Ollama).
+func TestTranslationHandler_DeclaredPaths_DoesNotEvictUndeclaringBackends(t *testing.T) {
+	t.Parallel()
+
+	for _, typ := range []string{"lemonade", "litellm", domain.ProfileVLLM, domain.ProfileLlamaCpp, domain.ProfileLmStudio, domain.ProfileOpenAICompatible} {
+		for _, strict := range []bool{true, false} {
+			name := typ + "/optimistic"
+			if strict {
+				name = typ + "/strict"
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				factory, err := profile.NewFactory("../../../config/profiles")
+				require.NoError(t, err)
+				log := &mockStyledLogger{}
+				pathInspector := inspector.NewPathInspector(factory, log)
+				chain := inspector.NewChain(log)
+				chain.AddInspector(pathInspector)
+				bodyInspector, err := inspector.NewBodyInspector(log)
+				require.NoError(t, err)
+				chain.AddInspector(bodyInspector)
+				trans, err := anthropic.NewTranslator(log, config.AnthropicTranslatorConfig{PassthroughEnabled: false})
+				require.NoError(t, err)
+
+				mk := func(name, typ string) *domain.Endpoint {
+					raw := "http://" + name + ".test:8080"
+					u, _ := url.Parse(raw)
+					return &domain.Endpoint{Name: name, Type: typ, URL: u, URLString: raw, Status: domain.StatusHealthy}
+				}
+				fleet := []*domain.Endpoint{mk("ollama-1", domain.ProfileOllama), mk("target-1", typ)}
+
+				var offered []string
+				app := &Application{
+					Config:         &config.Config{},
+					logger:         log,
+					inspectorChain: chain,
+					profileFactory: factory,
+					profileLookup:  factory,
+					discoveryService: &mockDiscoveryServiceWithFunc{getHealthyEndpointsFunc: func(context.Context) ([]*domain.Endpoint, error) {
+						return fleet, nil
+					}},
+					modelRegistry:  &mockSimpleModelRegistry{strict: strict, endpointsForModel: map[string][]string{"host-only-model": {fleet[1].URLString}}},
+					statsCollector: &mockStatsCollector{},
+					proxyService: &mockProxyService{proxyFunc: func(_ context.Context, w http.ResponseWriter, _ *http.Request, eps []*domain.Endpoint, _ *ports.RequestStats, _ logger.StyledLogger) error {
+						offered = offeredNames(eps)
+						w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+						w.WriteHeader(http.StatusOK)
+						_, _ = w.Write([]byte(`{"id":"x","object":"chat.completion","model":"m","choices":[{"index":0,"message":{"role":"assistant","content":"hi"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1}}`))
+						return nil
+					}},
+				}
+
+				body := `{"model":"host-only-model","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`
+				req := httptest.NewRequest(http.MethodPost, "/olla/anthropic/v1/messages", strings.NewReader(body))
+				req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+				w := httptest.NewRecorder()
+				app.translationHandler(trans).ServeHTTP(w, req)
+
+				require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+				assert.Equal(t, []string{"target-1"}, offered)
 			})
 		}
 	}

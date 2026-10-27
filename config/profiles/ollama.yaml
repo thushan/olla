@@ -39,6 +39,7 @@ api:
     - /api/embed           # 10: generate embeddings (supersedes /api/embeddings)
     - /api/ps              # 11: models currently loaded
     - /api/version         # 12: server version
+    # /v1/responses needs Ollama 0.13.3+, /v1/messages 0.14.0+; older releases 404.
     - /v1/responses        # 13: OpenAI Responses API
     - /v1/messages         # 14: Anthropic Messages API
     # Deliberately absent: /api/pull, /api/push, /api/create, /api/copy,

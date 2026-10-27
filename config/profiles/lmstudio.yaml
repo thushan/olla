@@ -30,6 +30,7 @@ api:
     - /v1/completions     # 2: completions
     - /v1/embeddings      # 3: embeddings
     - /api/v0/models      # 4: legacy models endpoint
+    # /v1/responses needs LM Studio 0.3.29+, /v1/messages 0.4.1+; older releases 404.
     - /v1/responses # 5: OpenAI Responses API
     - /v1/messages # 6: Anthropic Messages API
   model_discovery_path: /api/v0/models
