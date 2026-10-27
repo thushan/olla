@@ -321,9 +321,9 @@ func TestEnhancedModelDiscoveryIntegration(t *testing.T) {
 					t.Fatal("Expected to find TinyLlama model")
 				}
 
-				// Type is set to "llamacpp" by parser
-				if tinyllama.Type != "llamacpp" {
-					t.Errorf("Expected type to be 'llamacpp', got %s", tinyllama.Type)
+				// the provider name is not a model kind, so the parser leaves Type empty
+				if tinyllama.Type != "" {
+					t.Errorf("Expected no type, got %s", tinyllama.Type)
 				}
 
 				// llama.cpp always returns GGUF format

@@ -29,7 +29,6 @@ func (p *sglangParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
-			Type:     "sglang", // Mark as SGLang model for proper handling
 			LastSeen: now,
 		}
 

@@ -237,8 +237,8 @@ func (a *Application) buildModelSummaries(
 // form; on conflict the existing rendering is preserved, and on empty the
 // candidate's rendering is applied.
 func (a *Application) mergeModelSummaryFields(existing *ModelSummary, model *domain.ModelInfo) {
-	if existing.Type == "" && model.Type != "" {
-		existing.Type = model.Type
+	if existing.Type == "" {
+		existing.Type = modelInfoKind(model)
 	}
 	if model.Details != nil {
 		if existing.Family == "" && model.Details.Family != nil {
@@ -392,10 +392,21 @@ func mergeStringSets(a, b []string) []string {
 	return out
 }
 
+// modelInfoKind is the model's kind as reported by the backend: the specific
+// model_type if it gave one, else the top-level type. The same rule the unified
+// listing applies, so /internal/status/models agrees with /olla/models.
+func modelInfoKind(model *domain.ModelInfo) string {
+	metadata := map[string]any{"type": model.Type}
+	if model.Details != nil && model.Details.Type != nil {
+		metadata["model_type"] = *model.Details.Type
+	}
+	return domain.ModelKindFromMetadata(metadata)
+}
+
 func (a *Application) createModelSummary(model *domain.ModelInfo, endpoints []string, endpointIDs []string) *ModelSummary {
 	summary := &ModelSummary{
 		Name:        model.Name,
-		Type:        model.Type,
+		Type:        modelInfoKind(model),
 		Endpoints:   endpoints,
 		EndpointIDs: endpointIDs,
 		LastSeen:    format.TimeAgo(model.LastSeen),

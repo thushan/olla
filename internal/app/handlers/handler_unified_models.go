@@ -11,6 +11,7 @@ import (
 
 	"github.com/thushan/olla/internal/core/constants"
 
+	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -33,6 +34,7 @@ type UnifiedModelSummary struct {
 	ID               string             `json:"id"`                     // Canonical ID
 	Family           string             `json:"family"`
 	Variant          string             `json:"variant"`
+	Type             string             `json:"type,omitempty"` // llm, vlm, embeddings, reranker, classifier
 	ParameterSize    string             `json:"parameter_size"`
 	Quantization     string             `json:"quantization"`
 	Format           string             `json:"format"`
@@ -99,7 +101,7 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Get converter for the requested format
-	converter, err := a.converterFactory.GetConverter(format)
+	modelConverter, err := a.converterFactory.GetConverter(format)
 	if err != nil {
 		var qpErr *ports.QueryParameterError
 		if errors.As(err, &qpErr) {
@@ -124,7 +126,7 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Convert models to the requested format
-	response, err := converter.ConvertToFormat(unifiedModels, filters)
+	response, err := modelConverter.ConvertToFormat(unifiedModels, filters)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -176,7 +178,8 @@ func (a *Application) parseUnifiedModelsQuery(qry url.Values) (ports.ModelFilter
 		case "embedding", "embeddings", "vector_search":
 			filters.Type = "embeddings"
 		case "chat", "text_generation", "completion":
-			filters.Type = modelTypeLLM
+			// a capability, not the llm kind: vision models can chat too
+			filters.Capability = "chat"
 		}
 	}
 
@@ -229,6 +232,7 @@ func (a *Application) buildUnifiedModelSummary(model *domain.UnifiedModel, endpo
 		ID:               model.ID,
 		Family:           model.Family,
 		Variant:          model.Variant,
+		Type:             converter.ModelKind(model),
 		ParameterSize:    model.ParameterSize,
 		ParameterCount:   model.ParameterCount,
 		Quantization:     model.Quantization,

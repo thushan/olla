@@ -32,7 +32,6 @@ func (p *vllmMLXParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
-			Type:     constants.ProviderTypeVLLMMLX,
 			LastSeen: now,
 		}
 

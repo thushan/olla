@@ -62,7 +62,7 @@ func TestVLLMParser_Parse(t *testing.T) {
 		// Verify first model (TinyLlama)
 		tinyllama := models[0]
 		assert.Equal(t, "TinyLlama/TinyLlama-1.1B-Chat-v1.0", tinyllama.Name)
-		assert.Equal(t, "vllm", tinyllama.Type)
+		assert.Empty(t, tinyllama.Type, "provider names are not model kinds")
 		assert.NotNil(t, tinyllama.Details)
 
 		// Check max context length is captured
@@ -76,7 +76,7 @@ func TestVLLMParser_Parse(t *testing.T) {
 		// Verify second model (Llama 3.1)
 		llama := models[1]
 		assert.Equal(t, "meta-llama/Meta-Llama-3.1-8B-Instruct", llama.Name)
-		assert.Equal(t, "vllm", llama.Type)
+		assert.Empty(t, llama.Type, "provider names are not model kinds")
 		assert.NotNil(t, llama.Details)
 
 		// Check larger context length
@@ -140,7 +140,7 @@ func TestVLLMParser_Parse(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "simple-model", model.Name)
-		assert.Equal(t, "vllm", model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 
 		// Details should be nil when no metadata is present
 		assert.Nil(t, model.Details)
@@ -318,7 +318,7 @@ func TestVLLMParser_Parse(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "TinyLlama/TinyLlama-1.1B-Chat-v1.0", model.Name)
-		assert.Equal(t, "vllm", model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 
 		// Verify all expected fields are parsed
 		require.NotNil(t, model.Details)

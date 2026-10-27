@@ -96,7 +96,9 @@ func createOllamaModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 	// nothing in Olla produces a tools tag, so mapping vision/tools would be
 	// partial, flip Ollama vision models to "vlm" in /olla/models, and narrow
 	// model-less vision/tool requests to Ollama endpoints only. Hybrid
-	// embedding+completion models stay untyped and keep text-generation.
+	// embedding+completion models are left untyped here and keep
+	// text-generation; /olla/models still lists them as embeddings, because the
+	// embedding capability is checked before the llm fallback.
 	if isOllamaEmbeddingOnly(ollamaModel.Capabilities) {
 		embeddingsType := "embeddings"
 		details.Type = &embeddingsType

@@ -29,7 +29,6 @@ func (p *vllmParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
-			Type:     "vllm", // Mark as vLLM model for proper handling
 			LastSeen: now,
 		}
 

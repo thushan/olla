@@ -1010,3 +1010,25 @@ func TestInferCapabilities_NonGenerativeKinds(t *testing.T) {
 	assert.Equal(t, []string{"rerank", "classification"}, app.inferCapabilities(kind("reranker")))
 	assert.Equal(t, []string{"classification"}, app.inferCapabilities(kind("classifier")))
 }
+
+func TestModelInfoKind(t *testing.T) {
+	t.Parallel()
+	reranker := "reranker"
+	tests := []struct {
+		name  string
+		model *domain.ModelInfo
+		want  string
+	}{
+		{"top-level type", &domain.ModelInfo{Type: "vlm"}, "vlm"},
+		{"details type wins over the generic one", &domain.ModelInfo{Type: "llm", Details: &domain.ModelDetails{Type: &reranker}}, "reranker"},
+		{"details type alone", &domain.ModelInfo{Details: &domain.ModelDetails{Type: &reranker}}, "reranker"},
+		{"generic model marker is not a kind", &domain.ModelInfo{Type: "model"}, ""},
+		{"nothing reported", &domain.ModelInfo{}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, modelInfoKind(tt.model))
+		})
+	}
+}

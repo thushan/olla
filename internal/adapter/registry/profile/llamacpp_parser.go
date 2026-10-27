@@ -44,7 +44,6 @@ func (p *llamaCppParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
-			Type:     LlamaCpp,
 			LastSeen: now,
 		}
 

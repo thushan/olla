@@ -68,6 +68,19 @@ set `translators.anthropic.passthrough_enabled: false` to translate for every ba
 v0.17.x reject Anthropic `tools`, so its profile declares `no_tool_use` and requests carrying tools are still
 translated, including on v0.18.0 and later.
 
+### Added: model kind in the models API
+
+`/olla/models` now reports each model's kind (`llm`, `vlm`, `embeddings`, `reranker` or `classifier`) as
+`olla.type`, and `/olla/models/{id}` as a top-level `type`. `?type=` matches that kind exactly, so an
+embedder whose name says `instruct` is listed under `embeddings` and no longer also under `llm`, and a
+model that reports `vlm` or carries the `vision` capability is `vlm` only. The legacy `?capability=chat` still returns every model that can chat, vision
+models included. vLLM, SGLang, Lemonade, LMDeploy, llama.cpp, vLLM-MLX and Docker Model Runner models no
+longer carry the provider name as their `type`; `/internal/status/models` now omits it unless the backend
+reported a kind. TEI rerankers and classifiers were already typed in the LM Studio-format listing; what is
+new is that rerankers and classifiers recognised by name on backends that report no kind are typed there
+too instead of falling back to `llm`. That `type` can therefore be a value outside LM Studio's own
+vocabulary (`reranker`, `classifier`).
+
 ### Added: Text Embeddings Inference backend
 
 Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)

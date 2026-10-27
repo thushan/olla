@@ -34,7 +34,7 @@ func TestDockerModelRunnerParser_Parse(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "ai/smollm2", model.Name)
-		assert.Equal(t, constants.ProviderTypeDockerMR, model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 		require.NotNil(t, model.Details)
 		require.NotNil(t, model.Details.ModifiedAt)
 		assert.Equal(t, int64(1734000000), model.Details.ModifiedAt.Unix())
