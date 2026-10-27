@@ -137,6 +137,12 @@ var nonGenerativeModelTypes = map[string]struct{}{
 	"classifier": {},
 }
 
+// nonGenerativeCapabilities mark a model that scores or encodes text. Name
+// patterns can add them to a model whose backend doesn't report a kind (a vLLM
+// reranker, an OpenAI-style BGE embedder), and such a model must not keep the
+// text-generation default any more than a typed one does.
+var nonGenerativeCapabilities = []string{"embeddings", "rerank", "classification"}
+
 // inferCapabilitiesFromMetadata infers model capabilities from various metadata fields
 func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]interface{}) []string {
 	capabilities := make(map[string]bool)
@@ -164,6 +170,17 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 			for _, cap := range pattern.Capabilities {
 				capabilities[cap] = true
 			}
+		}
+	}
+
+	for _, cap := range nonGenerativeCapabilities {
+		if capabilities[cap] {
+			delete(capabilities, "text-generation")
+			// "chat" here can only have come from an instruct/chat name pattern
+			// (gte-Qwen2-7B-instruct is still an embedder); an explicit
+			// declaration from the backend is re-applied below
+			delete(capabilities, "chat")
+			break
 		}
 	}
 

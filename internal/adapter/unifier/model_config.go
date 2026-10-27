@@ -636,6 +636,14 @@ func getDefaultConfig() *ModelUnificationConfig {
 			Pattern:      "(vision|vlm|llava|bakllava)",
 			Capabilities: []string{"vision", "multimodal", "image-understanding"},
 		},
+		{
+			Pattern:      "rerank",
+			Capabilities: []string{"rerank"},
+		},
+		{
+			Pattern:      `(\bembed(ding)?s?(\b|\d)|\bembeddinggemma|\b(all|paraphrase)(-multilingual)?-(minilm|mpnet)|\b(multi-qa|msmarco)-(minilm|mpnet|distilbert)|\bstella_en_|\bstella-(base|large|zh)-|\bbge-(small|base|large|m3|en|zh|multilingual|code|gemma)|\be5-(small|base|large|mistral)|\bgte-(small|base|large|qwen|multilingual-base|modernbert-base))`,
+			Capabilities: []string{"embeddings", "similarity", "vector-search"},
+		},
 	}
 
 	config.Capabilities.ContextThresholds = map[string]int64{

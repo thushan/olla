@@ -43,6 +43,7 @@ const (
 	vllmChatModel       = `{"data":[{"id":"Qwen/Qwen3-32B","object":"model"}]}`
 	teiInfoBGESmall     = `{"model_id":"BAAI/bge-small-en-v1.5","model_type":{"embedding":{"pooling":"cls"}}}`
 	vllmBGE             = `{"data":[{"id":"BAAI/bge-m3","object":"model"}]}`
+	vllmRerankModel     = `{"data":[{"id":"BAAI/bge-reranker-v2-m3","object":"model"}]}`
 	vllmQwenVL          = `{"data":[{"id":"Qwen/Qwen2.5-VL-7B-Instruct","object":"model"}]}`
 	lmStudioNomic       = `{"data":[{"id":"text-embedding-nomic-embed-text-v1.5","object":"model","type":"embeddings","publisher":"nomic-ai","arch":"nomic-bert","compatibility_type":"gguf","quantization":"Q4_K_M","state":"not-loaded","max_context_length":2048}]}`
 	teiInfoReranker     = `{"model_id":"/data/bge-reranker-base","served_model_name":"BAAI/bge-reranker-base","model_type":{"reranker":{}}}`
@@ -85,6 +86,9 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 
 	ollamaEmbed := fleetEndpoint{name: "ollama-1", typ: domain.ProfileOllama, modelsJSON: ollamaTagsEmbedAndVision}
 	vllmEmbed := fleetEndpoint{name: "vllm-1", typ: domain.ProfileVLLM, modelsJSON: vllmBGE}
+	vllmChat := fleetEndpoint{name: "vllm-chat", typ: domain.ProfileVLLM, modelsJSON: vllmChatModel}
+	vllmRerank := fleetEndpoint{name: "vllm-rerank", typ: domain.ProfileVLLM, modelsJSON: vllmRerankModel}
+	vllmBGEHost := fleetEndpoint{name: "vllm-embed", typ: domain.ProfileVLLM, modelsJSON: vllmBGE}
 	vllmVision := fleetEndpoint{name: "vllm-1", typ: domain.ProfileVLLM, modelsJSON: vllmQwenVL}
 	tei := fleetEndpoint{name: "tei-1", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoSnowflake}
 	teiEmbed := fleetEndpoint{name: "tei-embed", typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: teiInfoSnowflake}
@@ -101,7 +105,7 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 		fleet        []fleetEndpoint
 	}{
 		{"ollama-tagged embedding reaches ollama beside vllm", embeddingsPath, embedBody("all-minilm:latest"), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmEmbed}},
-		{"untagged vllm embedding reaches vllm beside tagged ollama", embeddingsPath, embedBody("BAAI/bge-m3"), "vllm-1", []fleetEndpoint{ollamaEmbed, vllmEmbed}},
+		{"named vllm embedding reaches vllm beside tagged ollama", embeddingsPath, embedBody("BAAI/bge-m3"), "vllm-1", []fleetEndpoint{ollamaEmbed, vllmEmbed}},
 		{"ollama-tagged embedding reaches ollama beside tei", embeddingsPath, embedBody("all-minilm:latest"), "ollama-1", []fleetEndpoint{ollamaEmbed, tei}},
 		{"tei model reaches tei beside tagged ollama", embeddingsPath, embedBody("Snowflake/snowflake-arctic-embed-l-v2.0"), "tei-1", []fleetEndpoint{ollamaEmbed, tei}},
 		{"tei model reaches tei beside vllm", embeddingsPath, embedBody("Snowflake/snowflake-arctic-embed-l-v2.0"), "tei-1", []fleetEndpoint{tei, vllmEmbed}},
@@ -130,8 +134,12 @@ func TestProxyRouting_MixedFleetMatrix(t *testing.T) {
 		{"tei provider route predict goes to the classifier", "/olla/tei/predict", inputsBody, "tei-classify", []fleetEndpoint{teiEmbed, teiClassify}},
 		{"named embedding model reaches the embedder among tei kinds", embeddingsPath, embedBody("Snowflake/snowflake-arctic-embed-l-v2.0"), "tei-embed", teiTrio},
 		{"model-less rerank beside vllm still reaches the reranker", "/olla/proxy/rerank", rerankBody, "tei-rerank", []fleetEndpoint{vllmEmbed, teiEmbed, teiRerank}},
-		{"model-less embeddings steered to a real lm studio embedding model beside vllm", embeddingsPath, embedBody(""), "lmstudio-1", []fleetEndpoint{lmStudio, vllmEmbed}},
-		{"model-less embeddings steered to tagged embedding host", embeddingsPath, embedBody(""), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmEmbed}},
+		{"model-less embeddings steered to a real lm studio embedding model beside vllm", embeddingsPath, embedBody(""), "lmstudio-1", []fleetEndpoint{lmStudio, vllmChat}},
+		{"model-less embeddings steered to tagged embedding host", embeddingsPath, embedBody(""), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmChat}},
+		// vLLM reports no model kind, so these hosts are tagged from the model name alone
+		{"model-less embeddings steered to a name-tagged vllm embedder beside vllm chat", embeddingsPath, embedBody(""), "vllm-embed", []fleetEndpoint{vllmChat, vllmBGEHost}},
+		{"model-less embeddings steered to a name-tagged vllm embedder beside an untagged ollama chat host", embeddingsPath, embedBody(""), "vllm-embed", []fleetEndpoint{{name: "ollama-1", typ: domain.ProfileOllama, modelsJSON: `{"models":[{"name":"llama3.1:8b"}]}`}, vllmBGEHost}},
+		{"model-less v1 rerank steered to the vllm reranker beside a vllm embedder", "/olla/proxy/v1/rerank", rerankBody, "vllm-rerank", []fleetEndpoint{vllmBGEHost, vllmRerank}},
 		{"model-less vision steered to vision-tagged host", chatPath, visionBody(""), "ollama-1", []fleetEndpoint{ollamaEmbed, vllmVision}},
 	}
 

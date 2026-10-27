@@ -350,6 +350,24 @@ capabilities:
         - multimodal
         - image-understanding
 
+    # rerankers: BAAI/bge-reranker-v2-m3, jinaai/jina-reranker-v2-base-multilingual,
+    # mixedbread-ai/mxbai-rerank-large-v1, Qwen/Qwen3-Reranker-0.6B. Backends such
+    # as vLLM don't report a model kind, so the name is all there is.
+    - pattern: "rerank"
+      capabilities:
+        - rerank
+
+    # embedders on backends that don't report a kind. Anchored on the family
+    # name plus a size so bge-reranker and gte-multilingual-reranker don't match.
+    # "embed" may carry a version digit (snowflake-arctic-embed2). The
+    # sentence-transformers MiniLM, MPNet and DistilBERT encoders (all-*, paraphrase-*,
+    # multi-qa-*, msmarco-*) are only ever embedders, as are the stella-base/large/zh models.
+    - pattern: '(\bembed(ding)?s?(\b|\d)|\bembeddinggemma|\b(all|paraphrase)(-multilingual)?-(minilm|mpnet)|\b(multi-qa|msmarco)-(minilm|mpnet|distilbert)|\bstella_en_|\bstella-(base|large|zh)-|\bbge-(small|base|large|m3|en|zh|multilingual|code|gemma)|\be5-(small|base|large|mistral)|\bgte-(small|base|large|qwen|multilingual-base|modernbert-base))'
+      capabilities:
+        - embeddings
+        - similarity
+        - vector-search
+
   # Context length categories (in tokens)
   context_thresholds:
     extended_context: 32000
