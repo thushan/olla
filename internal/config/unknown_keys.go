@@ -117,20 +117,21 @@ func walkStruct(n *yaml.Node, t reflect.Type, path string, depth int, w *keyWalk
 		if k.Kind == yaml.AliasNode && k.Alias != nil {
 			k = k.Alias
 		}
-		ft, ok := fields[k.Value]
+		name := keyName(k)
+		ft, ok := fields[name]
 		if !ok {
 			// Top-level "x-" keys are the compose-style extension convention,
 			// used purely to hold anchors. Content merged from them into a real
 			// section is still checked there.
-			if path == "" && strings.HasPrefix(k.Value, "x-") {
+			if path == "" && strings.HasPrefix(name, "x-") {
 				continue
 			}
 			if !freeForm {
-				w.out = append(w.out, UnknownKey{Path: joinKeyPath(path, k.Value), Line: keyLine})
+				w.out = append(w.out, UnknownKey{Path: joinKeyPath(path, name), Line: keyLine})
 			}
 			continue
 		}
-		walkKnownKeys(v, ft, joinKeyPath(path, k.Value), depth+1, w)
+		walkKnownKeys(v, ft, joinKeyPath(path, name), depth+1, w)
 	}
 }
 
@@ -154,8 +155,18 @@ func walkMerged(v *yaml.Node, t reflect.Type, path string, depth int, w *keyWalk
 	}
 }
 
+// keyName decodes a key scalar the way yaml.v3 does, so tagged forms such as
+// !!binary match the field they would populate.
+func keyName(k *yaml.Node) string {
+	var name string
+	if k.Kind == yaml.ScalarNode && k.Decode(&name) == nil {
+		return name
+	}
+	return k.Value
+}
+
 func isMergeKey(k *yaml.Node) bool {
-	return k.Kind == yaml.ScalarNode && k.Tag == "!!merge"
+	return k.Kind == yaml.ScalarNode && k.Tag == "!!merge" && k.Value == "<<"
 }
 
 func joinKeyPath(parent, key string) string {
