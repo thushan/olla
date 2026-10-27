@@ -599,7 +599,7 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 }
 
 func (u *DefaultUnifier) Clear(ctx context.Context) error {
-	u.store = NewCatalogStore(5 * time.Minute)
+	u.store.Reset()
 	u.statsMu.Lock()
 	u.stats = DeduplicationStats{}
 	u.statsMu.Unlock()
