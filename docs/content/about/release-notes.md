@@ -50,6 +50,17 @@ field, are routed to an instance serving a model of the matching kind. A custom 
 doesn't need `reranker` or `classifier` entries under `type_capabilities`: any `type_capabilities`
 or `context_thresholds` key your file omits falls back to the built-in default.
 
+### Added: rerankers and embedders recognised by name on backends that report no kind
+
+vLLM and other OpenAI-style servers don't say what a model is, so a reranker or embedder looked like
+a chat model. Two new `capabilities.name_patterns` entries tag `rerank` for names containing `rerank`
+(`bge-reranker-v2-m3`, `Qwen3-Reranker`) and `embeddings`, `similarity` and `vector-search` for the common
+embedders (`bge-m3`, `e5-large`, `nomic-embed`, `snowflake-arctic-embed2`, `all-MiniLM`, `multi-qa-*`,
+`msmarco-*`, `stella-*`). Those models drop `text-generation`, and `chat` too, so an embedder named
+`gte-Qwen2-7B-instruct` is no longer a chat model. Model-less rerank and embeddings requests are steered to
+them. A kind the backend does report, and capabilities it declares, are never overridden. A custom
+`models.yaml` with its own `name_patterns` list needs the two entries added to benefit.
+
 ### Changed: named-model requests skip capability filtering
 
 When a request names a model, endpoint selection now depends only on which endpoints host that model.
