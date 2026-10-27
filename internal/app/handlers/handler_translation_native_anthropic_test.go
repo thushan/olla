@@ -25,8 +25,9 @@ import (
 // whether the profile took effect, rather than the request being quietly translated.
 
 const (
-	nativeAnthropicPlainBody = `{"model":"native-model","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`
-	nativeAnthropicToolsBody = `{"model":"native-model","max_tokens":16,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"get_weather","description":"w","input_schema":{"type":"object"}}]}`
+	nativeAnthropicPlainBody      = `{"model":"native-model","max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`
+	nativeAnthropicToolChoiceBody = `{"model":"native-model","max_tokens":16,"messages":[{"role":"user","content":"hi"}],"tool_choice":{"type":"none"}}`
+	nativeAnthropicToolsBody      = `{"model":"native-model","max_tokens":16,"messages":[{"role":"user","content":"hi"}],"tools":[{"name":"get_weather","description":"w","input_schema":{"type":"object"}}]}`
 )
 
 // postNativeAnthropic sends body to a fleet of an Ollama host plus one host of
@@ -127,4 +128,14 @@ func TestTranslationHandler_NativeAnthropic_ToolRequests(t *testing.T) {
 		assert.Empty(t, w.Header().Get(constants.HeaderXOllaMode))
 		assert.Equal(t, "/v1/chat/completions", path)
 	})
+}
+
+// LMDeploy before 0.18 rejects tool_choice even when no tools are sent.
+func TestTranslationHandler_NativeAnthropic_LMDeployToolChoiceWithoutTools(t *testing.T) {
+	t.Parallel()
+
+	w, _, path := postNativeAnthropic(t, domain.ProfileLMDeploy, nativeAnthropicToolChoiceBody, true)
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	assert.Empty(t, w.Header().Get(constants.HeaderXOllaMode))
+	assert.Equal(t, "/v1/chat/completions", path)
 }

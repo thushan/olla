@@ -1124,8 +1124,13 @@ func detectRequestFeatures(body []byte) requestFeatures {
 
 	var f requestFeatures
 
-	// Non-empty tools array → tool use is active.
+	// Non-empty tools array → tool use is active. A bare tool_choice counts too:
+	// backends that reject tool fields (LMDeploy before 0.18) reject it even
+	// without tools, e.g. {"type":"none"}.
 	if tools := gjson.GetBytes(body, "tools"); tools.IsArray() && len(tools.Array()) > 0 {
+		f.toolUse = true
+	}
+	if gjson.GetBytes(body, "tool_choice").Exists() {
 		f.toolUse = true
 	}
 
