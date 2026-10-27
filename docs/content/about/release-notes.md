@@ -58,8 +58,8 @@ Claude Code. Translator routes now register through `RegisterTranslatorRoute` an
 routes, and a translator added later is covered without extra wiring. A limited request gets `429` with `Retry-After` and
 Anthropic's `rate_limit_error` body, and an oversized one gets `413` with `request_too_large`, both carrying a `request-id`,
 so Claude Code retries and reports them properly. The size limit already applied to these routes; it now answers in the same
-Anthropic shape. Measured against a real Ollama, one Claude Code session peaked at 3 requests a minute and three parallel
-sessions at 10 a minute with a burst of 4, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
+Anthropic shape. Measured against a real Ollama, one Claude Code session peaked at 2 requests a minute and three parallel
+sessions at 9 a minute, with a burst of 4 when four sessions started together, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
 behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 Reported by @infodancer.
 

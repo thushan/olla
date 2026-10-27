@@ -17,19 +17,19 @@ Measured against Olla with a real Ollama backend (Claude Code 2.1.302, headless,
 
 | Case | Requests | Peak per 1s | Peak per 10s | Peak per 60s |
 |------|----------|-------------|--------------|--------------|
-| One session, a normal coding task | 2 to 3 | 2 | 2 | 3 |
-| Three parallel sessions (stand-ins for parallel subagents) | 11 | 4 | 4 | 10 |
-| Four parallel sessions starting together | 5 | 4 | 5 | 6 |
+| One session, a normal coding task | 2 to 3 | 1 | 1 | 2 |
+| Three parallel sessions (stand-ins for parallel subagents) | 11 | 3 | 3 | 9 |
+| Four parallel sessions starting together | 5 | 4 | 4 | 5 |
 
 - Claude Code sent only `POST /olla/anthropic/v1/messages`. Each model turn, including a retry, is one request.
   The headless runs made no `count_tokens` or `models` calls; allow a few per interactive session.
-- Parallel sessions start together, so the burst matters more than the sustained rate: four requests arrived in the first second.
+- Parallel sessions start together, so the burst matters more than the sustained rate: four requests arrived in the first second of the four-session run.
 - Each turn carries a large prompt, so on local hardware a session issues a request every 10 to 30 seconds.
   A fast backend answers sooner and a session loops faster. Treat these numbers as a floor, and expect a single
   session on fast hardware to approach 30 requests a minute.
 
-The defaults (100 per IP per minute, burst 50, 1000 global) sit about nine times above the measured three-session peak
-per minute and twelve times above its burst, so a single developer or a few parallel agents never notice them.
+The defaults (100 per IP per minute, burst 50, 1000 global) sit about eleven times above the measured three-session peak
+per minute and twelve times above the largest burst, so a single developer or a few parallel agents never notice them.
 
 ## What a 429 means
 
