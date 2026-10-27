@@ -246,6 +246,15 @@ Get information about a specific model by its ID or alias.
 curl -X GET http://localhost:40114/olla/models/llama3.2:latest
 ```
 
+Everything after `/olla/models/` is the ID, so IDs that contain slashes, such as Hugging Face style `org/name` IDs, work as they are:
+
+```bash
+curl -X GET http://localhost:40114/olla/models/BAAI/bge-small-en-v1.5
+curl -X GET 'http://localhost:40114/olla/models/BAAI%2Fbge-small-en-v1.5'   # same model, slash percent-encoded
+```
+
+A raw slash and `%2F` (or `%2f`) are equivalent, and the path is decoded once, so `%252F` is looked up as the literal ID `%2F`. Aliases resolve as well, so a slash-free alias such as `qwen3:8b` returns the model whose canonical ID is `Qwen/Qwen3-8B`. An empty ID (`/olla/models/`) or one ending in a slash returns `400`, and an unknown ID returns `404`.
+
 ### Response
 
 ```json

@@ -98,7 +98,7 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 		OriginalBody:  body,
 		ModelName:     anthropicReq.Model,
 		IsStreaming:   anthropicReq.Stream,
-		TargetPath:    "/v1/chat/completions",
+		TargetPath:    openAIChatCompletionsPath,
 		Metadata: map[string]interface{}{
 			"format": "anthropic",
 		},

@@ -44,6 +44,14 @@ type PathProvider interface {
 	GetAPIPath() string // Returns the API path (e.g., "/olla/anthropic/v1/messages")
 }
 
+// optional interface for translators to declare the backend path their translated
+// request is sent to (e.g. "/v1/chat/completions"). Endpoint selection uses it to
+// ask which backends serve that path, rather than matching the translator's own
+// public route (/olla/anthropic/v1/messages) against backend profile paths.
+type TargetPathProvider interface {
+	TranslationTargetPath() string
+}
+
 // optional interface for custom error formatting per translator (eg anthropic error structure)
 // falls back to generic json if not implemented
 type ErrorWriter interface {

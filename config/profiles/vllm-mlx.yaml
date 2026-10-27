@@ -38,6 +38,11 @@ api:
 
     # Embeddings
     - /v1/embeddings       # 4: embeddings API
+    # Declared per the vllm-mlx docs; older releases without these routes 404.
+    - /v1/responses # 5: OpenAI Responses API
+    - /v1/messages # 6: Anthropic Messages API
+    - /v1/messages/count_tokens # 7: Anthropic token count
+    - /v1/rerank # 8: reranking API
 
   model_discovery_path: /v1/models
   health_check_path: /health   # dedicated endpoint — do not fall back to /v1/models

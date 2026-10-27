@@ -29,6 +29,21 @@ type UnifiedMemoryModelRegistry struct {
 	unifyWG           sync.WaitGroup // tracks in-flight unifyModelsAsync goroutines
 }
 
+// createUnifier runs a factory call and, if it fails, logs and builds the caller's fallback
+// so a constructor that cannot return an error never carries a nil unifier. The fallback is
+// supplied by the caller so it keeps the operator's config and, for the lifecycle registry,
+// its unifier type. The built-in unifier types are always registered, so this is defensive
+// rather than expected.
+func createUnifier(log logger.StyledLogger, create func() (ports.ModelUnifier, error),
+	fallback func() ports.ModelUnifier) ports.ModelUnifier {
+	u, err := create()
+	if err != nil || u == nil {
+		log.Error("Failed to create model unifier, falling back", "error", err)
+		return fallback()
+	}
+	return u
+}
+
 // NewUnifiedMemoryModelRegistry creates a new registry with unification support
 func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig *config.UnificationConfig,
 	routingConfig *config.ModelRoutingStrategy, discovery DiscoveryService) *UnifiedMemoryModelRegistry {
@@ -47,10 +62,14 @@ func NewUnifiedMemoryModelRegistry(logger logger.StyledLogger, unificationConfig
 		if unificationConfig.CleanupInterval > 0 {
 			unifierConfig.CleanupInterval = unificationConfig.CleanupInterval
 		}
-		modelUnifier, _ = unifierFactory.CreateWithConfig(unifier.DefaultUnifierType, unifierConfig)
+		modelUnifier = createUnifier(logger, func() (ports.ModelUnifier, error) {
+			return unifierFactory.CreateWithConfig(unifier.DefaultUnifierType, unifierConfig)
+		}, func() ports.ModelUnifier { return unifier.NewDefaultUnifierWithConfig(unifierConfig) })
 	} else {
 		// Use default config
-		modelUnifier, _ = unifierFactory.Create(unifier.DefaultUnifierType)
+		modelUnifier = createUnifier(logger, func() (ports.ModelUnifier, error) {
+			return unifierFactory.Create(unifier.DefaultUnifierType)
+		}, unifier.NewDefaultUnifier)
 	}
 
 	// create routing strategy

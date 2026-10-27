@@ -503,10 +503,22 @@ discovery:
 |-------|------|---------|-------------|
 | `model_discovery.enabled` | bool | `true` | Enable model discovery |
 | `model_discovery.interval` | duration | `5m` | Discovery interval |
-| `model_discovery.timeout` | duration | `30s` | Discovery timeout |
+| `model_discovery.timeout` | duration | `30s` | Time budget for one endpoint's discovery, retries included |
 | `model_discovery.concurrent_workers` | int | `5` | Parallel workers |
-| `model_discovery.retry_attempts` | int | `3` | Retry attempts |
-| `model_discovery.retry_backoff` | duration | `1s` | Retry backoff |
+| `model_discovery.retry_attempts` | int | `3` | Extra attempts after a failed model fetch from an endpoint (`0` disables retries) |
+| `model_discovery.retry_backoff` | duration | `1s` | Wait before the first retry (must be 0 or more); doubles for each further retry, capped at 30s |
+
+Retries cover transient failures only: connection errors, timeouts, 5xx responses and
+truncated bodies. A 4xx response, an unparseable listing or a listing over the 10MB cap fails
+straight away, since asking again moments later returns the same thing. The first attempt, the
+retries and the waits between them all share one `timeout`, so a discovery cycle (including the
+pass that runs before startup completes) never takes longer than `timeout` per endpoint, however
+many retries are set. A request that itself times out leaves nothing to retry with, and a retry
+whose wait would outlast the remaining time is skipped. A cycle that ends in a retryable failure
+counts as **one** failure towards the endpoint's five-failure cooldown, so a brief outage does not
+pause discovery for minutes. A 4xx response is not retried and pauses the endpoint for the cooldown
+straight away, as before. The discovery client's own failed-request metric counts every attempt, so it can
+exceed the cooldown's count. Stopping Olla mid-retry is not counted as a failure.
 
 Example:
 

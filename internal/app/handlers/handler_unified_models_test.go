@@ -206,6 +206,108 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 	}
 }
 
+// newModelDetailMux registers a fleet through the shipped profile parsers and
+// serves /olla/models/ from a real ServeMux, so path matching and escaping
+// behave as they do in production. The Qwen model is registered twice under
+// different names with one digest: it unifies under its slash-bearing id and
+// carries the slash-free alias qwen3:8b.
+func newModelDetailMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	styled := &mockStyledLogger{}
+	profileFactory, err := profile.NewFactory("../../../config/profiles")
+	require.NoError(t, err)
+
+	reg := registry.NewUnifiedMemoryModelRegistry(styled, nil, nil, nil)
+	ctx := context.Background()
+	var endpoints []*domain.Endpoint
+	wantUnified := 0
+	// newUnified is how many models the registration adds to the unified set; a
+	// model merged into an existing one by digest adds none
+	register := func(name, typ string, newUnified int, models []*domain.ModelInfo) {
+		u, perr := url.Parse("http://" + name + ":8080")
+		require.NoError(t, perr)
+		ep := &domain.Endpoint{Name: name, URL: u, URLString: u.String(), Type: typ, Status: domain.StatusHealthy}
+		endpoints = append(endpoints, ep)
+		reg.RegisterEndpoint(ep)
+		require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, ep, models))
+		// count unified models rather than resolving or reading them: the
+		// unifier mutates models in place while it merges, so touching their
+		// fields from here would race with it
+		wantUnified += newUnified
+		require.Eventually(t, func() bool {
+			unified, gerr := reg.GetUnifiedModels(ctx)
+			return gerr == nil && len(unified) >= wantUnified
+		}, 5*time.Second, 10*time.Millisecond, "async unification of %s did not complete", name)
+	}
+	parsed := func(typ, body string) []*domain.ModelInfo {
+		prof, perr := profileFactory.GetProfile(typ)
+		require.NoError(t, perr)
+		models, perr := prof.ParseModelsResponse([]byte(body))
+		require.NoError(t, perr)
+		return models
+	}
+	digest := "sha256:qwen3-8b"
+	register("vllm-1", domain.ProfileVLLM, 1, []*domain.ModelInfo{{Name: "Qwen/Qwen3-8B", Details: &domain.ModelDetails{Digest: &digest}}})
+	register("ollama-1", domain.ProfileOllama, 2, append(
+		[]*domain.ModelInfo{{Name: "qwen3:8b", Details: &domain.ModelDetails{Digest: &digest}}},
+		parsed(domain.ProfileOllama, `{"models":[{"name":"llama3.1:8b","details":{"family":"llama"}},{"name":"all-minilm:latest","details":{"family":"bert"},"capabilities":["embedding"]}]}`)...))
+	register("tei-1", constants.ProviderTypeTextEmbeddingsInference, 1, parsed(constants.ProviderTypeTextEmbeddingsInference, teiInfoReranker))
+	register("tei-2", constants.ProviderTypeTextEmbeddingsInference, 1, parsed(constants.ProviderTypeTextEmbeddingsInference, teiInfoSnowflake))
+	register("lms-1", constants.ProviderTypeLMStudio, 1, parsed(constants.ProviderTypeLMStudio, `{"data":[{"id":"acme/lookout-7b","object":"model","type":"vlm"}]}`))
+
+	app := &Application{
+		modelRegistry: reg,
+		repository:    &mockRepository{endpoints: endpoints},
+		logger:        styled,
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET "+constants.PathOllaModelsPrefix, app.unifiedModelByAliasHandler)
+	return mux
+}
+
+func TestUnifiedModelByAliasHandler_PathIDs(t *testing.T) {
+	t.Parallel()
+	mux := newModelDetailMux(t)
+
+	tests := []struct {
+		name       string
+		path       string
+		wantStatus int
+		wantID     string
+	}{
+		{"raw slash id", "/olla/models/Qwen/Qwen3-8B", http.StatusOK, "Qwen/Qwen3-8B"},
+		{"percent-encoded slash id", "/olla/models/Qwen%2FQwen3-8B", http.StatusOK, "Qwen/Qwen3-8B"},
+		{"lower-case percent-encoded slash id", "/olla/models/Qwen%2fQwen3-8B", http.StatusOK, "Qwen/Qwen3-8B"},
+		{"hugging face style id with dots", "/olla/models/Snowflake/snowflake-arctic-embed-l-v2.0", http.StatusOK, "Snowflake/snowflake-arctic-embed-l-v2.0"},
+		{"colon id", "/olla/models/llama3.1:8b", http.StatusOK, "llama3.1:8b"},
+		{"percent-encoded colon id", "/olla/models/llama3.1%3A8b", http.StatusOK, "llama3.1:8b"},
+		{"alias resolves to an id containing a slash", "/olla/models/qwen3:8b", http.StatusOK, "Qwen/Qwen3-8B"},
+		{"double-encoded slash decodes once and stays unknown", "/olla/models/Qwen%252FQwen3-8B", http.StatusNotFound, ""},
+		{"ollama latest tag", "/olla/models/all-minilm:latest", http.StatusOK, "all-minilm:latest"},
+		{"bare name resolves to its latest tag", "/olla/models/all-minilm", http.StatusOK, "all-minilm:latest"},
+		{"unknown id", "/olla/models/nobody/home", http.StatusNotFound, ""},
+		{"first segment of a slash id is not a model", "/olla/models/Qwen", http.StatusNotFound, ""},
+		{"empty id", "/olla/models/", http.StatusBadRequest, ""},
+		{"trailing slash after an id", "/olla/models/Qwen/Qwen3-8B/", http.StatusBadRequest, ""},
+		{"trailing encoded slash after an id", "/olla/models/Qwen%2FQwen3-8B%2F", http.StatusBadRequest, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, req)
+
+			require.Equal(t, tt.wantStatus, w.Code, "body: %s", w.Body.String())
+			if tt.wantStatus == http.StatusOK {
+				var summary UnifiedModelSummary
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &summary))
+				assert.Equal(t, tt.wantID, summary.ID)
+			}
+		})
+	}
+}
+
 // newKindFixture registers models through the shipped profile parsers so the
 // kinds under test come from real parsed metadata, not hand-built fixtures.
 func newKindFixture(t *testing.T) (*Application, *http.ServeMux) {

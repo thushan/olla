@@ -1177,6 +1177,11 @@ func TestConfigValidate_ModelDiscoveryEnabled(t *testing.T) {
 			modify:      func(md *ModelDiscoveryConfig) { md.Timeout = 0 },
 			errContains: "timeout",
 		},
+		{
+			name:        "negative retry_backoff",
+			modify:      func(md *ModelDiscoveryConfig) { md.RetryBackoff = -time.Second },
+			errContains: "retry_backoff",
+		},
 	}
 
 	for _, tc := range testCases {

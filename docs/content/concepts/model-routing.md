@@ -120,11 +120,11 @@ Some requests name no model: a vision request sent to the unified route, TEI's n
 | `tools`, `functions`, `tool_choice` or `function_call` in the body | `function_calling` |
 | An `input` field in the body | `embeddings` |
 | Code generation hints in the body | `code` |
-| Path `/embed`, `/embed_all`, `/embed_sparse` or `/similarity` | `embeddings` |
+| Path `/v1/embeddings`, `/embed`, `/embed_all`, `/embed_sparse` or `/similarity` | `embeddings` |
 | Path `/rerank`, `/v1/rerank` or `/v2/rerank` | `rerank` |
 | Path `/predict` | `classification` |
 
-An endpoint stays in the candidate set when it hosts at least one single model carrying every required capability. A vision model on one endpoint and a tools model on another do not combine to satisfy a request needing both. A rerank or classification path takes precedence over the embeddings guess from the body, because no model is both an embedder and a reranker.
+An endpoint stays in the candidate set when it hosts at least one single model carrying every required capability. A vision model on one endpoint and a tools model on another do not combine to satisfy a request needing both. The `/v1/embeddings` path counts even when the body can't be read (not JSON, or compressed), so an embeddings request stays off chat-only hosts. A rerank or classification path takes precedence over the embeddings guess from the body, because no model is both an embedder and a reranker.
 
 Capability tags are heuristic, so the filter only refuses in one case: models with the required capability exist, but every endpoint hosting one is down. A Busy or otherwise unhealthy host counts as down here, matching how Olla already picks endpoints. Olla then answers `503` with `X-Olla-Routing-Reason: capability_unavailable` (see [Routing Reasons](#routing-reasons)) rather than sending the request to hosts of another kind. When no model with the capability has been discovered at all, or a capable host is healthy but outside the candidates, the request falls back to every compatible endpoint as before. Requests that name a model skip this filter.
 
