@@ -191,6 +191,13 @@ func (pi *PathInspector) ResolveTargetPath(profileName, target string) (string, 
 	return "", false
 }
 
+// KnowsProfile reports whether name is a profile the inspector holds paths for. Endpoint types
+// outside it (custom or "auto" types) are served as OpenAI-compatible, as ResolveTargetPath does.
+func (pi *PathInspector) KnowsProfile(name string) bool {
+	_, ok := pi.profilePaths[name]
+	return ok
+}
+
 // TranslationProfiles returns the profiles that serve target, directly or under their own
 // prefix (see ResolveTargetPath). Callers that route on a path other than the one the client
 // called (translators rewriting to a backend path) use it to ask who can take the rewritten

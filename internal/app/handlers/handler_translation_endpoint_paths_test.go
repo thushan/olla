@@ -413,6 +413,36 @@ func TestTranslation_NoChatPathIsSampled404(t *testing.T) {
 					assert.Empty(t, tei.paths(), "nothing may be dispatched to a backend that cannot serve chat")
 					assert.Equal(t, 1, f.log.count("Request rejected"), "repeated refusals are one sampled line")
 					assert.Zero(t, f.log.errorTotal(), "no ERROR per refused request")
+					assert.Zero(t, f.log.count("No compatible endpoints found for path, falling back to all endpoints"),
+						"the unsampled stage-1 widening WARN must not fire per request")
+				})
+			}
+		}
+	}
+}
+
+// An endpoint whose type has no profile is served as OpenAI-compatible. Scoping translation
+// to the known chat profiles must not evict it, even when a model lives only on it.
+func TestTranslation_CustomTypeEndpointStillServed(t *testing.T) {
+	t.Parallel()
+
+	for _, engine := range translationEngines {
+		for _, mode := range translationModes {
+			for _, st := range translationStreaming {
+				t.Run(engine+"/"+mode.name+"/"+st.name, func(t *testing.T) {
+					t.Parallel()
+
+					custom := newPathBackend(t, rootChatPath)
+					vllm := newPathBackend(t, rootChatPath)
+					customEP := liveEndpoint(t, "custom-host", "my-custom-engine", custom.URL, 50)
+					eps := []*domain.Endpoint{customEP, liveEndpoint(t, "vllm-host", "vllm", vllm.URL, 50)}
+					f := newTranslationPathApp(t, engine, mode.strict, false, eps, map[string][]*domain.Endpoint{"custom-only": {customEP}})
+
+					w := f.post(t, "custom-only", st.stream)
+
+					requireTranslatedOK(t, w, st.stream)
+					assert.Equal(t, []string{rootChatPath}, custom.paths())
+					assert.Empty(t, vllm.paths())
 				})
 			}
 		}

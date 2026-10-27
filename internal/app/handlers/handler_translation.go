@@ -234,6 +234,7 @@ func (a *Application) executeTranslationRequest(
 		// A routing rejection like the no-endpoints one in the caller: sampled log line,
 		// quiet error write, and the no-compatible-endpoints reason in the metrics.
 		reason := fmt.Sprintf("no selected endpoint serves %s", r.URL.Path)
+		pr.translatorFallbackReason = string(constants.FallbackReasonNoCompatibleEndpoints)
 		a.setStickyResponseHeadersFromRequest(w, r)
 		a.logRequestStart(pr, 0)
 		a.logRequestRejected(pr, http.StatusNotFound, reason)
@@ -328,9 +329,13 @@ func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, tar
 // translationEndpointPaths drops any of them that serve no chat path, so the union cannot
 // send a translated request somewhere it cannot land.
 //
-// An empty result leaves stage 1 permissive (all endpoints), which is the safe direction:
-// stage 3 and the passthrough subset filter still narrow it.
-func (a *Application) scopeProfileToTranslation(pr *proxyRequest, trans translator.RequestTranslator) {
+// Endpoint types with no profile of their own (custom types) are served as OpenAI-compatible
+// by ResolveTargetPath, so they are added by name; otherwise stage 1 would evict them.
+//
+// An empty result leaves stage 1 permissive (all endpoints). A non-empty one is fail-closed:
+// every endpoint that can serve chat is in it, so when nothing matches (a TEI-only fleet) the
+// caller's sampled no-routable-endpoints 404 answers, not the unsampled widen-to-all WARN.
+func (a *Application) scopeProfileToTranslation(ctx context.Context, pr *proxyRequest, trans translator.RequestTranslator) {
 	if pr.profile == nil {
 		return
 	}
@@ -357,10 +362,21 @@ func (a *Application) scopeProfileToTranslation(pr *proxyRequest, trans translat
 		}
 	}
 
+	if a.pathInspector != nil && a.discoveryService != nil {
+		if endpoints, err := a.discoveryService.GetHealthyEndpoints(ctx); err == nil {
+			for _, ep := range endpoints {
+				if name := NormaliseProviderType(ep.Type); !a.pathInspector.KnowsProfile(name) {
+					supported = append(supported, name)
+				}
+			}
+		}
+	}
+
 	pr.profile.SupportedBy = pr.profile.SupportedBy[:0]
 	for _, name := range supported {
 		pr.profile.AddSupportedProfile(name)
 	}
+	pr.profile.FailClosedOnNoMatch = len(pr.profile.SupportedBy) > 0
 }
 
 // tryPassthrough attempts to serve the request via passthrough mode if the translator
@@ -476,7 +492,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Run through proxy pipeline (inspector, security, routing)
 		a.analyzeRequest(ctx, r, pr)
 
-		a.scopeProfileToTranslation(pr, trans)
+		a.scopeProfileToTranslation(ctx, pr, trans)
 
 		// Inject sticky session key. bodyBytes is already buffered from the model-name
 		// extraction above, so pass it directly to avoid a second read/restore cycle.
