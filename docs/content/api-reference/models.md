@@ -209,6 +209,12 @@ curl -X GET 'http://localhost:40114/olla/models?include_unavailable=true'
 }
 ```
 
+### Model type
+
+Each model reports its kind: `llm`, `vlm`, `embeddings`, `reranker` or `classifier`. It appears as `olla.type` on each entry of the unified format's `data` array, as `type` in the `/olla/models/{id}` response and as `type` in the LM Studio format, and `?type=` filters on it, so `?type=llm` returns exactly the models that report `olla.type: "llm"`. A model reports one kind: an embedder whose name says `instruct` is `embeddings`, not `llm`. Olla takes the kind from the backend where it reports one (LM Studio and TEI) and otherwise infers it from the model's capabilities, which for backends such as vLLM come from the model name. A model with no reported kind that can generate text is `llm`. The field is left out of the unified format and the detail response when no kind can be told.
+
+`/internal/status/models` reports the same value as `type` for each model. Provider-typed models (vLLM, SGLang, Lemonade, LMDeploy, llama.cpp, vLLM-MLX and Docker Model Runner) no longer carry the provider name as their type.
+
 ### Response Fields (Unified Format)
 
 | Field | Type | Description |

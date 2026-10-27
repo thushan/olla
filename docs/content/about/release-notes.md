@@ -27,6 +27,15 @@ counts as a failed discovery or health check. Loopback endpoints were never prox
 to let discovery reach a non-loopback backend are affected: that backend now needs to be reachable directly from the Olla host,
 as chat traffic already required.
 
+### Added: model kind in the models API
+
+`/olla/models` now reports each model's kind (`llm`, `vlm`, `embeddings`, `reranker` or `classifier`) as
+`olla.type`, and `/olla/models/{id}` as a top-level `type`. `?type=` filters on that same value, so an
+embedder whose name says `instruct` is listed under `embeddings` rather than also under `llm`. vLLM,
+SGLang, Lemonade, LMDeploy, llama.cpp, vLLM-MLX and Docker Model Runner models no longer carry the
+provider name as their `type`, which is what `/internal/status/models` showed before; it now shows the
+model's kind, and the LM Studio-format listing types rerankers and classifiers instead of defaulting to `llm`.
+
 ### Added: Text Embeddings Inference backend
 
 Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)
