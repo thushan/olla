@@ -165,17 +165,12 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 	}
 
 	if rl.globalLimiter != nil {
-		reservation := rl.globalLimiter.Reserve()
-		delay := reservation.Delay()
-		if !reservation.OK() || delay > 0 {
-			reservation.Cancel()
+		// Allow charges the bucket only when it admits, so concurrent rejections
+		// cannot leave the shared global bucket in debt (a Reserve/Cancel pair
+		// is not atomic across clients, and global is shared by all of them).
+		if !rl.globalLimiter.Allow() {
 			charge.refund()
-			// A reservation that can never be satisfied (zero burst) reports an
-			// infinite delay, so fall back to the full window.
-			retryAfter := 60
-			if reservation.OK() {
-				retryAfter = int(delay.Seconds()) + 1
-			}
+			retryAfter := rl.globalRetryAfter()
 			return ports.SecurityResult{
 				Allowed:    false,
 				RetryAfter: retryAfter,
@@ -260,6 +255,20 @@ func (rl *RateLimitValidator) checkIPLimit(limiterInfo *ipLimiterInfo, limit int
 		Remaining: remaining,
 		ResetTime: now.Add(time.Minute),
 	}, ipCharge{reservation: reservation, at: reservedAt, info: limiterInfo}
+}
+
+// globalRetryAfter estimates whole seconds until the global bucket holds a token.
+// It falls back to the full window when the bucket can never refill (zero burst).
+func (rl *RateLimitValidator) globalRetryAfter() int {
+	lim := rl.globalLimiter
+	if lim.Burst() < 1 || lim.Limit() <= 0 {
+		return 60
+	}
+	deficit := 1 - lim.Tokens()
+	if deficit < 0 {
+		deficit = 0
+	}
+	return int(deficit/float64(lim.Limit())) + 1
 }
 
 func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, limit int) int {

@@ -652,3 +652,35 @@ func TestRateLimitValidator_Validate_ConcurrentGlobalRejectionKeepsPerIPToken(t 
 		t.Errorf("per-IP bucket has %.2f tokens after only global rejections, want its full burst of 1", tokens)
 	}
 }
+
+// TestRateLimitValidator_Validate_ConcurrentRejectionsKeepGlobalTokens runs many
+// clients against a dry global bucket. Rejections must not push the shared
+// bucket into debt, or global rejection would outlast the traffic that caused it.
+func TestRateLimitValidator_Validate_ConcurrentRejectionsKeepGlobalTokens(t *testing.T) {
+	t.Parallel()
+
+	v := createTestRateLimitValidator(config.ServerRateLimits{
+		GlobalRequestsPerMinute: 60,
+		BurstSize:               1,
+		CleanupInterval:         time.Minute,
+	})
+	defer v.Stop()
+	v.globalLimiter = rate.NewLimiter(rate.Limit(0.001), 1)
+	v.globalLimiter.Allow() // drain
+
+	var wg sync.WaitGroup
+	for i := range 32 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range 300 {
+				_, _ = v.Validate(context.Background(), ports.SecurityRequest{ClientID: fmt.Sprintf("c%d", i)})
+			}
+		}()
+	}
+	wg.Wait()
+
+	if tokens := v.globalLimiter.Tokens(); tokens < -0.01 {
+		t.Errorf("global bucket in debt (%.2f tokens) after only rejections", tokens)
+	}
+}
