@@ -16,6 +16,35 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.0.30
 
+### Upgrading: behaviour changes to check
+
+These v0.0.30 changes alter what existing setups see. Each links to its entry below.
+
+- **SGLang and LMDeploy pass Anthropic requests through.** `/olla/anthropic/v1/messages` now forwards to them natively
+  (SGLang v0.5.9+, LMDeploy v0.13.0+) instead of translating. LMDeploy requests carrying `tools` are still translated.
+  On older builds, copy the profile to `config/profiles/zz-sglang.yaml` or `zz-lmdeploy.yaml` (the `zz-` prefix is needed
+  because profiles load in lexical order and the last one with a given `name` wins) and set `api.anthropic_support.enabled: false`.
+  See [Profile Loading](../concepts/profile-system.md#profile-loading) and [Changed: SGLang and LMDeploy](#changed-sglang-and-lmdeploy-use-native-anthropic-passthrough-by-default).
+- **Profiles declare the paths they serve.** The shipped profiles now list `/v1/responses`, `/v1/messages`, `/v1/rerank` and
+  Ollama's `/api/ps` and `/api/version`, and a request on a declared path only goes to backends whose profile declares it.
+  A custom profile that serves these paths needs the same entries. See [profile paths](#fixed-profile-paths-now-list-what-each-backend-serves).
+- **Anthropic translation uses each backend's own chat path.** Docker Model Runner gets `/engines/v1/chat/completions` and
+  Lemonade `/api/v1/chat/completions`. If no backend in the fleet serves a chat path, the request gets a 404.
+  See [chat path](#fixed-anthropic-translation-sends-each-backend-its-own-chat-path).
+- **Ollama vision and tool models are typed differently.** A model that reports vision is `vlm` with the `vision` capability,
+  and `tools` maps to `function_calling`. `?type=llm` no longer lists vision models; `?capability=chat` still does.
+  Model-less requests with images or tools go to hosts with a model that declares them. See [Ollama vision](#fixed-ollama-vision-models-list-as-vlm-and-tool-support-is-recorded).
+- **`/olla/ollama/api/ps` merges every Ollama host.** Entries carry `olla_endpoint`, a partial answer sets `X-Olla-Partial`, and the route is rate limited.
+  The `/olla/ollama/api/list` stub is gone, so those requests now reach the backend, and `/api/blobs` returns 501.
+  See [`/api/ps`](#fixed-ollaollamaapips-covers-every-ollama-endpoint-apilist-removed).
+- **"Request completed" log lines carry `http_status`, and a backend 5xx logs at WARN** instead of INFO. Check any log-based alerting or
+  level filters. See [the log change](#fixed-a-backend-5xx-no-longer-looks-like-a-normal-completion-in-the-log).
+- **Discovery `retry_attempts` and `retry_backoff` are now honoured.** A fetch that failed once may now be retried, and a negative
+  `retry_backoff` fails startup. See [discovery retries](#fixed-model-discovery-now-retries-failed-fetches).
+- **Name patterns tag rerankers and embedders** on backends that report no kind, so those models drop `text-generation` and `chat`.
+  A custom `models.yaml` with its own `name_patterns` needs the two new entries. See [name patterns](#added-rerankers-and-embedders-recognised-by-name-on-backends-that-report-no-kind).
+- **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
+
 ### Fixed: Anthropic translation sends each backend its own chat path
 
 In translation mode Olla sent every backend `/v1/chat/completions`. Docker Model Runner serves the OpenAI API under

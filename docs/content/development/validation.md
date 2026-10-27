@@ -70,7 +70,7 @@ testable in seconds.
 Nightly runs add a third Olla on 41143
 (`test/validate/config.validate.kinds.yaml`) fronting eight further ollamock
 instances on ports 19438-19445: three TEI instances (one per kind), two Ollamas
-(one whose `/api/tags` reports `capabilities` like Ollama 0.30+, one that omits
+(one whose `/api/tags` reports `capabilities` like newer Ollama releases, one that omits
 them like older releases, each with a different loaded model for `/api/ps`), and
 vLLM, SGLang and LMDeploy hosts. The `tei-routing` area uses it to check
 path-based routing of model-less TEI requests, `/olla/tei/*` isolation,
