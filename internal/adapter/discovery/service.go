@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -238,7 +239,7 @@ func nextRetryBackoff(d time.Duration) time.Duration {
 func (s *ModelDiscoveryService) fetchModelsWithRetry(ctx context.Context, endpoint *domain.Endpoint) ([]*domain.ModelInfo, error) {
 	retries := max(s.config.RetryAttempts, 0)
 	// config validation rejects negatives; clamp anyway for callers that build the config directly
-	backoff := max(s.config.RetryBackoff, 0)
+	backoff := min(max(s.config.RetryBackoff, 0), maxRetryBackoff)
 
 	cycleCtx, cancel := context.WithTimeout(ctx, s.config.Timeout)
 	defer cancel()
@@ -252,6 +253,12 @@ func (s *ModelDiscoveryService) fetchModelsWithRetry(ctx context.Context, endpoi
 		}
 		if time.Until(deadline) <= backoff {
 			return models, err
+		}
+		// Checked here as well as in the wait so a zero backoff still honours Stop.
+		select {
+		case <-s.stopCh:
+			return nil, errDiscoveryStopped
+		default:
 		}
 
 		s.logger.Debug("Model discovery attempt failed, retrying",
@@ -294,7 +301,8 @@ func isRetryableWithinCycle(err error) bool {
 	var unknownAuthority x509.UnknownAuthorityError
 	var certInvalid x509.CertificateInvalidError
 	var hostname x509.HostnameError
-	if errors.As(err, &unknownAuthority) || errors.As(err, &certInvalid) || errors.As(err, &hostname) {
+	var verifyErr *tls.CertificateVerificationError
+	if errors.As(err, &verifyErr) || errors.As(err, &unknownAuthority) || errors.As(err, &certInvalid) || errors.As(err, &hostname) {
 		return false
 	}
 	return IsRecoverable(err)

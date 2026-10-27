@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -83,10 +84,11 @@ func TestDiscoveryRetry_NonRetryableErrorsAreNotRetried(t *testing.T) {
 		"4xx wrap": NewDiscoveryError(ep.URLString, "ollama", "http_status", 401, 0, errors.New("unauthorised")),
 		"profile":  &ProfileNotFoundError{ProfileType: "nope"},
 		// the same oversized body comes back on every attempt
-		"tls unknown authority": &NetworkError{URL: ep.URLString, Err: x509.UnknownAuthorityError{}},
-		"tls invalid cert":      &NetworkError{URL: ep.URLString, Err: x509.CertificateInvalidError{Reason: x509.Expired}},
-		"tls hostname":          &NetworkError{URL: ep.URLString, Err: x509.HostnameError{Host: "backend"}},
-		"oversized":             NewDiscoveryError(ep.URLString, "ollama", "read_response", 200, 0, fmt.Errorf("model response exceeds 10 bytes: %w", ErrResponseTooLarge)),
+		"tls unknown authority":    &NetworkError{URL: ep.URLString, Err: x509.UnknownAuthorityError{}},
+		"tls invalid cert":         &NetworkError{URL: ep.URLString, Err: x509.CertificateInvalidError{Reason: x509.Expired}},
+		"tls verification wrapper": &NetworkError{URL: ep.URLString, Err: &tls.CertificateVerificationError{Err: x509.UnhandledCriticalExtension{}}},
+		"tls hostname":             &NetworkError{URL: ep.URLString, Err: x509.HostnameError{Certificate: &x509.Certificate{}, Host: "backend"}},
+		"oversized":                NewDiscoveryError(ep.URLString, "ollama", "read_response", 200, 0, fmt.Errorf("model response exceeds 10 bytes: %w", ErrResponseTooLarge)),
 	}
 	for name, failure := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -425,4 +427,58 @@ func TestDiscoveryRetry_HTTPBackend(t *testing.T) {
 			t.Fatalf("calls=%d, want 1", calls.Load())
 		}
 	})
+}
+
+// A zero backoff skips the timer wait, so Stop must still be noticed between attempts.
+func TestDiscoveryRetry_StopWithZeroBackoffStopsRetrying(t *testing.T) {
+	ep := createMockEndpoint("http://backend", "backend")
+	var calls atomic.Int32
+	var svc *ModelDiscoveryService
+	client := &discoveryFuncClient{discover: func(context.Context, *domain.Endpoint) ([]*domain.ModelInfo, error) {
+		if calls.Add(1) == 1 {
+			_ = svc.Stop(context.Background())
+		}
+		return nil, &NetworkError{URL: "x", Err: errors.New("down")}
+	}}
+	svc = NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
+		DiscoveryConfig{Interval: time.Hour, Timeout: time.Second, ConcurrentWorkers: 1, RetryAttempts: 3, RetryBackoff: 0}, createTestLogger())
+	if err := svc.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	err := svc.DiscoverEndpoint(context.Background(), ep)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%v, want a cancellation", err)
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("calls=%d, want 1: no attempts after Stop", calls.Load())
+	}
+	if got := svc.getFailureCount(ep.URLString); got != 0 {
+		t.Fatalf("shutdown counted %d failures", got)
+	}
+}
+
+// An oversized retry_backoff is capped before the budget check, so a 45s cycle
+// with a 1h setting still gets its retry after a 30s wait is deemed to fit.
+func TestDiscoveryRetry_InitialBackoffIsCapped(t *testing.T) {
+	ep := createMockEndpoint("http://backend", "backend")
+	var calls atomic.Int32
+	svc := NewModelDiscoveryService(failNTimes(100, &NetworkError{URL: "x", Err: errors.New("down")}, &calls),
+		&mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
+		DiscoveryConfig{Timeout: time.Hour, ConcurrentWorkers: 1, RetryAttempts: 1, RetryBackoff: 24 * time.Hour}, createTestLogger())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- svc.DiscoverEndpoint(ctx, ep) }()
+	for calls.Load() < 1 {
+		time.Sleep(time.Millisecond)
+	}
+	// Reaching the wait (rather than returning at once) proves the retry was not skipped.
+	select {
+	case err := <-done:
+		t.Fatalf("returned %v instead of waiting out a capped backoff", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	cancel()
+	<-done
 }
