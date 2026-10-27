@@ -34,7 +34,7 @@ go run ./test/cmd/ollamock \
 | `--stream-chunks` | `5` | Number of content chunks per streamed response |
 | `--tei-kind` | `embedding` | Kind a TEI instance reports in `GET /info` `model_type` and serves: `embedding`, `reranker` or `classifier`. Routes for another kind answer 424 |
 | `--loaded` | (none) | Comma-separated models `GET /api/ps` reports as resident; empty reports none. Lets a fleet of instances hold different loaded sets |
-| `--tags-capabilities` | `false` | Emit per-model `capabilities` in `GET /api/tags`, as Ollama 0.30+ does: `["embedding"]` for names that look like embedders, otherwise `["completion"]` plus `"vision"` for names such as `qwen3-vl` or `llava` and `"tools"` for names such as `llama3.2` or `qwen3`. Off omits the field, which is what an older Ollama sends |
+| `--tags-capabilities` | `false` | Emit per-model `capabilities` in `GET /api/tags`, as newer Ollama releases do: `["embedding"]` for names that look like embedders, otherwise `["completion"]` plus `"vision"` for names such as `qwen3-vl` or `llava` and `"tools"` for names such as `llama3.2` or `qwen3`. Off omits the field, which is what an older Ollama sends |
 
 ## Protocol Endpoints
 
