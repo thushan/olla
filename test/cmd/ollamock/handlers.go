@@ -303,8 +303,8 @@ func (srv *mockServer) handleOllamaPS(w http.ResponseWriter, _ *http.Request) {
 // check routing.
 func (srv *mockServer) handleOllamaEmbed(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Input json.RawMessage `json:"input"`
 		Model string          `json:"model"`
+		Input json.RawMessage `json:"input"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
