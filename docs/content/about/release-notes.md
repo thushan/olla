@@ -32,7 +32,7 @@ as chat traffic already required.
 `/olla/models` now reports each model's kind (`llm`, `vlm`, `embeddings`, `reranker` or `classifier`) as
 `olla.type`, and `/olla/models/{id}` as a top-level `type`. `?type=` matches that kind exactly, so an
 embedder whose name says `instruct` is listed under `embeddings` and no longer also under `llm`, and a
-vision model is `vlm` only. The legacy `?capability=chat` still returns every model that can chat, vision
+model that reports `vlm` or carries the `vision` capability is `vlm` only. The legacy `?capability=chat` still returns every model that can chat, vision
 models included. vLLM, SGLang, Lemonade, LMDeploy, llama.cpp, vLLM-MLX and Docker Model Runner models no
 longer carry the provider name as their `type`; `/internal/status/models` now omits it unless the backend
 reported a kind. TEI rerankers and classifiers were already typed in the LM Studio-format listing; what is
