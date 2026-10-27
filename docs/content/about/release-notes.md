@@ -45,6 +45,14 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   A custom `models.yaml` with its own `name_patterns` needs the two new entries. See [name patterns](#added-rerankers-and-embedders-recognised-by-name-on-backends-that-report-no-kind).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
 
+### Added: unknown keys in `config.yaml` are reported
+
+A key in the main config that Olla does not read (a typo, or one that was documented but never existed, such as
+`proxy.retry`) used to be dropped silently. Startup now logs one WARN line listing every such key by its full path and line,
+for example `proxy.retry (line 91)`, and `olla --validate-config` lists them under "Ignored keys" without changing the
+result or exit code. Loading still never fails on them, and `models.yaml` and profiles are not checked. Free-form maps such
+as `model_aliases` and endpoint `headers` are never reported. Reported by @infodancer.
+
 ### Fixed: Anthropic translation sends each backend its own chat path
 
 In translation mode Olla sent every backend `/v1/chat/completions`. Docker Model Runner serves the OpenAI API under
