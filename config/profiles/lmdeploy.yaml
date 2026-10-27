@@ -33,6 +33,9 @@ api:
 
     # Sleep state probe (LMDeploy-specific, used for auto-detection)
     - /is_sleeping         # 7: sleep state probe
+    - /v1/messages # 8: Anthropic Messages API
+    - /v1/messages/count_tokens # 9: Anthropic token count
+    - /v1/responses # 10: OpenAI Responses API (create_responses_router)
 
   model_discovery_path: /v1/models
   health_check_path: /health

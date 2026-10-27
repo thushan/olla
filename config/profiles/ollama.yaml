@@ -37,6 +37,15 @@ api:
     - /v1/completions      # 8: OpenAI compat
     - /v1/embeddings       # 9: OpenAI compat
     - /api/embed           # 10: generate embeddings (supersedes /api/embeddings)
+    - /api/ps              # 11: models currently loaded
+    - /api/version         # 12: server version
+    - /v1/responses        # 13: OpenAI Responses API
+    - /v1/messages         # 14: Anthropic Messages API
+    # Deliberately absent: /api/pull, /api/push, /api/create, /api/copy,
+    # and /api/delete mutate one backend's model store, so
+    # Olla answers them with 501 instead of applying them to an arbitrary
+    # instance (see registerProviderPrefixRoutes). /api/me, /api/signout and
+    # /api/user/keys act on an Ollama account, not on inference.
   model_discovery_path: /api/tags
   health_check_path: /
 

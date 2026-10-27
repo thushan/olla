@@ -54,6 +54,9 @@ api:
     
     # Optional/debug endpoints
     - /get_tokenizer_info  # 14: tokenizer configuration info
+    - /v1/responses # 15: OpenAI Responses API
+    - /v1/messages # 16: Anthropic Messages API
+    - /v1/messages/count_tokens # 17: Anthropic token count
     
   model_discovery_path: /v1/models
   health_check_path: /health

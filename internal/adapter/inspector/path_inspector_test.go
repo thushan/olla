@@ -542,3 +542,80 @@ func TestPathInspector_ShippedProfiles_SingleSegmentPathsDoNotCaptureDeeperPaths
 		})
 	}
 }
+
+// knownServers is a curated record of which shipped profiles serve each
+// standard OpenAI/Anthropic path, taken from each project's own docs or source.
+// A profile that serves a path but does not declare it is evicted by stage 1
+// whenever another profile in the fleet does declare it, so the declarations
+// have to agree with reality both ways. Add a row here when verifying a new
+// backend; do not widen a row on a guess.
+//
+// Deliberate absences: lmdeploy returns 400 on /v1/embeddings; Ollama documents
+// /v1/messages/count_tokens as unsupported; dmr and lemonade serve the OpenAI
+// surface under their own prefixes, and dmr's Anthropic path is
+// /anthropic/v1/messages (declared, but not a standard path so absent from this
+// table); TEI only has the bare /rerank and /embed style routes.
+//
+// openai-compatible is the catch-all for servers without a profile (a remote vLLM
+// or SGLang typed "openai"), so it is permissive by design: it is listed for every
+// path another profile declares, including /v1/messages, /v1/messages/count_tokens
+// and /v1/rerank. Left off, stage 1 would drop those hosts from the path whenever
+// any other profile in the fleet declares it. Declaring a path is not passthrough
+// (its anthropic_support stays disabled), and a request naming a model is still
+// routed by that model. lemonade serves /v1/responses at
+// /api/v1/responses and /v1/responses (routes/openai/text/responses.cpp); dmr
+// registers it under /v1 and /engines/v1 (pkg/responses/handler.go).
+var knownServers = map[string][]string{
+	"/v1/chat/completions":      {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/completions":           {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/models":                {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/embeddings":            {"llamacpp", "lm-studio", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "text-embeddings-inference", "vllm", "vllm-mlx"},
+	"/v1/responses":             {"docker-model-runner", "lemonade", "llamacpp", "lm-studio", "litellm", "lmdeploy", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/messages":              {"llamacpp", "lm-studio", "lmdeploy", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/messages/count_tokens": {"llamacpp", "lmdeploy", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/rerank":                {"llamacpp", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+}
+
+func TestShippedProfiles_StandardPathDeclarationsMatchKnownServers(t *testing.T) {
+	_, byProfile := shippedProfilePaths(t)
+
+	for path, want := range knownServers {
+		t.Run(path, func(t *testing.T) {
+			var got []string
+			for name, paths := range byProfile {
+				if slices.Contains(paths, path) {
+					got = append(got, name)
+				}
+			}
+			slices.Sort(got)
+			want := slices.Clone(want)
+			slices.Sort(want)
+			if !slices.Equal(got, want) {
+				t.Errorf("%s declared by %v, known servers are %v", path, got, want)
+			}
+		})
+	}
+}
+
+// A profile that enables Anthropic passthrough on /v1/messages is, by its own
+// declaration, a server of that path; the same goes for token counting.
+func TestShippedProfiles_AnthropicSupportImpliesDeclaredPaths(t *testing.T) {
+	factory, byProfile := shippedProfilePaths(t)
+
+	for name, paths := range byProfile {
+		support := factory.GetAnthropicSupport(name)
+		if support == nil || !support.Enabled {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			// dmr serves Anthropic under /anthropic/v1/messages, outside its /engines routes,
+			// so the declared path follows messages_path rather than being fixed
+			if !slices.Contains(paths, support.MessagesPath) {
+				t.Errorf("%s enables anthropic_support on %s but does not declare the path", name, support.MessagesPath)
+			}
+			if countPath := support.MessagesPath + "/count_tokens"; support.TokenCount && !slices.Contains(paths, countPath) {
+				t.Errorf("%s sets anthropic_support.token_count but does not declare %s", name, countPath)
+			}
+		})
+	}
+}

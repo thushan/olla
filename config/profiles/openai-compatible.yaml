@@ -29,6 +29,16 @@ api:
     - /v1/chat/completions # 1: chat completions
     - /v1/completions     # 2: completions
     - /v1/embeddings      # 3: embeddings
+    # This profile is the catch-all for servers Olla has no profile for (a remote vLLM or
+    # SGLang typed "openai"), so it declares the paths those servers commonly serve beyond
+    # the OpenAI API. Left undeclared, stage 1 would drop these hosts from a path whenever
+    # any other profile declares it. Declaring a path only keeps the host a candidate:
+    # a request that names a model is still routed by that model, and this is not
+    # Anthropic passthrough (anthropic_support stays disabled).
+    - /v1/responses      # 4: OpenAI Responses API
+    - /v1/messages       # 5: Anthropic Messages API
+    - /v1/messages/count_tokens # 6: Anthropic token counting
+    - /v1/rerank         # 7: rerank
   model_discovery_path: /v1/models
   health_check_path: /v1/models
 

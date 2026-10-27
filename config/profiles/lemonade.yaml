@@ -33,6 +33,11 @@ api:
     - /api/v1/unload      # 9: unload models from memory
     - /api/v1/delete      # 10: delete models from disk
 
+    # OpenAI Responses API (routes/openai/text/responses.cpp). Lemonade also serves it
+    # without the /api prefix, which is the form a client calling /v1/responses sends.
+    - /api/v1/responses   # 11: OpenAI Responses API
+    - /v1/responses       # 12: OpenAI Responses API (unprefixed)
+
   model_discovery_path: /api/v1/models
   health_check_path: /api/v1/health
   stats_path: /api/v1/stats
