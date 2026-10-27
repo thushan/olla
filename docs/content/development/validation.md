@@ -31,7 +31,8 @@ The skill pins itself to Sonnet (`model: sonnet` in its frontmatter), so it
 costs the same regardless of which model the session is using. Area agents
 are balanced for token efficiency: mechanical curl-and-assert checklists run
 on Haiku, while anything that mutates mock state or validates protocol
-sequences (resilience, the Anthropic areas) runs on Sonnet.
+sequences (resilience, the Anthropic areas) runs on Sonnet. `tei-routing` is
+read-only, so it runs on Haiku.
 
 Every run starts with `make ready` as a hard gate, then boots the mock fleet
 and two Olla instances, fans out parallel validation agents (one per area
@@ -65,6 +66,20 @@ deliberately so unification and model routing are observable.
 `test/validate/config.validate.limits.yaml` runs a second Olla on 41142 with
 a 256KB body cap and a tight per-IP rate limit so 413/429 behaviour is
 testable in seconds.
+
+Nightly runs add a third Olla on 41143
+(`test/validate/config.validate.kinds.yaml`) fronting eight further ollamock
+instances on ports 19438-19445: three TEI instances (one per kind), two Ollamas
+(one whose `/api/tags` reports `capabilities` like Ollama 0.30+, one that omits
+them like older releases, each with a different loaded model for `/api/ps`), and
+vLLM, SGLang and LMDeploy hosts. The `tei-routing` area uses it to check
+path-based routing of model-less TEI requests, `/olla/tei/*` isolation,
+named-model `/v1/embeddings` and Anthropic passthrough in a mixed fleet. It is
+separate from the main fleet so the main checklists' endpoint counts and
+per-route host sets stay fixed, and `--quick` never boots it. Its Section B
+checks (model `type`, vision and tools capabilities, merged `/api/ps`) need
+work that may not be merged yet; each is probed first and recorded as a skip,
+never a failure, when the feature is absent.
 
 Each endpoint gets its own ollamock instance because Olla keys endpoint
 identity on the URL: two endpoints sharing a URL silently collapse into one.
