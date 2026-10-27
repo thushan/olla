@@ -230,15 +230,11 @@ func (rl *RateLimitValidator) checkIPLimit(limiterInfo *ipLimiterInfo, limit int
 	if delay > 0 {
 		reservation.Cancel()
 
-		limiterInfo.mu.RLock()
-		remaining := rl.calculateRemaining(limiterInfo, limit)
-		limiterInfo.mu.RUnlock()
-
 		return ports.SecurityResult{
 			Allowed:    false,
 			RetryAfter: int(delay.Seconds()) + 1,
 			RateLimit:  limit,
-			Remaining:  remaining,
+			Remaining:  0,
 			ResetTime:  now.Add(time.Minute),
 			Reason:     "Rate limit exceeded",
 		}, ipCharge{}
@@ -379,7 +375,8 @@ func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler
 						"method", r.Method,
 						"path", r.URL.Path,
 						"limit", result.RateLimit,
-						"retry_after", result.RetryAfter)
+						"retry_after", result.RetryAfter,
+						"reason", result.Reason)
 				}
 
 				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)

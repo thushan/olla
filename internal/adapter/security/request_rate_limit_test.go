@@ -684,3 +684,75 @@ func TestRateLimitValidator_Validate_ConcurrentRejectionsKeepGlobalTokens(t *tes
 		t.Errorf("global bucket in debt (%.2f tokens) after only rejections", tokens)
 	}
 }
+
+// TestRateLimitValidator_Middleware_PerIPRejectionReportsZeroRemaining covers the
+// delayed-reservation reject branch, which used to report the unspent allowance.
+func TestRateLimitValidator_Middleware_PerIPRejectionReportsZeroRemaining(t *testing.T) {
+	t.Parallel()
+
+	v := createTestRateLimitValidator(config.ServerRateLimits{
+		PerIPRequestsPerMinute: 60,
+		BurstSize:              3,
+		CleanupInterval:        time.Minute,
+	})
+	defer v.Stop()
+
+	h := v.CreateMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	var rec *httptest.ResponseRecorder
+	for range 4 {
+		rec = httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/olla/proxy/", nil)
+		req.RemoteAddr = "10.0.0.2:1234"
+		h.ServeHTTP(rec, req)
+	}
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if got := rec.Header().Get("X-RateLimit-Remaining"); got != "0" {
+		t.Errorf("X-RateLimit-Remaining = %q on a 429, want 0", got)
+	}
+}
+
+// TestRateLimitValidator_Middleware_LogsRejectionReason checks the WARN says which
+// tier rejected, since the response body is the same for both.
+func TestRateLimitValidator_Middleware_LogsRejectionReason(t *testing.T) {
+	t.Parallel()
+
+	log, records := newCaptureLogger()
+	v := NewRateLimitValidator(config.ServerRateLimits{
+		GlobalRequestsPerMinute: 60,
+		BurstSize:               10,
+	}, nil, log)
+	defer v.Stop()
+	v.globalLimiter = rate.NewLimiter(rate.Limit(0.001), 1)
+	v.globalLimiter.Allow() // drain
+
+	h := v.CreateMiddleware()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/", nil)
+	req.RemoteAddr = "10.0.0.3:1234"
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if body := rec.Body.String(); body != "Too Many Requests\n" {
+		t.Errorf("body = %q, want it unchanged", body)
+	}
+	var found bool
+	for _, r := range records() {
+		if r.msg == "Rate limit exceeded" {
+			found = true
+			if r.attrs["reason"] != reasonGlobalRateLimit {
+				t.Errorf("logged reason = %v, want %q", r.attrs["reason"], reasonGlobalRateLimit)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no \"Rate limit exceeded\" WARN logged")
+	}
+}
