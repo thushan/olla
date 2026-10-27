@@ -43,6 +43,9 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   `retry_backoff` fails startup. See [discovery retries](#fixed-model-discovery-now-retries-failed-fetches).
 - **Name patterns tag rerankers and embedders** on backends that report no kind, so those models drop `text-generation` and `chat`.
   A custom `models.yaml` with its own `name_patterns` needs the two new entries. See [name patterns](#added-rerankers-and-embedders-recognised-by-name-on-backends-that-report-no-kind).
+- **`per_ip_requests_per_minute: 0` no longer turns rate limiting off.** If you set `per_ip_requests_per_minute: 0` to turn rate limiting off,
+  the global limit (default 1000/min, burst 50) now applies; set `global_requests_per_minute: 0` as well to disable both.
+  See [rate limit tiers](#fixed-the-global-rate-limit-applies-when-the-per-ip-limit-is-0).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
 
 ### Fixed: Anthropic translation sends each backend its own chat path
@@ -202,6 +205,10 @@ only a request path of that single segment.
 ### Fixed: one client could flood the log with rejections
 
 Olla wrote a WARN for every request it rejected, so a client hammering a rate limit produced millions of identical lines in minutes and pushed useful history out of the rotated log. Rate limit (`429`), request size (`413`/`431`), dashboard access (`403`) and proxy routing rejections are now sampled: the first in each 10 second window logs in full, and the rest become one summary such as `WARN Rate limit exceeded, repeats suppressed layer=rate_limit client_ip=203.0.113.7 suppressed=19994 window=10s`. The `Model routing rejected request` and `Large request blocked` WARNs are gone, since the sampled `Request rejected` line carries the same detail. Responses, and the rate limit and size limit counters, are unchanged, and a backend's own 4xx and 5xx responses are still logged per request.
+
+### Fixed: the global rate limit applies when the per-IP limit is 0
+
+`per_ip_requests_per_minute: 0` returned early and skipped the global limiter as well, while `global_requests_per_minute: 0` only disabled itself. The two limits are now independent switches, and `0` disables only its own tier. Two further faults went with it. A request already over its per-IP limit still took a global token, so one noisy client could starve everyone else, even on the default config; the per-IP limit is now checked first and a request rejected by either limit is charged to neither. A global rejection also reported the per-IP value in `X-RateLimit-Limit` and a fixed `Retry-After: 60`; it now reports the global limit, the reason `Global rate limit exceeded` and a `Retry-After` from the global bucket's refill. Reported by @infodancer.
 
 ### Fixed: `Content-Encoding: identity` bodies and unreadable `/v1/embeddings` bodies
 
