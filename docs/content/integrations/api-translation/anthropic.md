@@ -539,13 +539,8 @@ These backends natively support the Anthropic Messages API and benefit from pass
 | **oMLX** | v0.4.2+ | No | `api.anthropic_support` in `config/profiles/omlx.yaml` |
 | **SGLang** | v0.5.9+ | Yes | `api.anthropic_support` in `config/profiles/sglang.yaml` |
 | **LMDeploy** | v0.13.0+ | Yes | `api.anthropic_support` in `config/profiles/lmdeploy.yaml` |
-| **SGLang** | v0.5.9+ | Yes | `api.anthropic_support` in `config/profiles/sglang.yaml` |
-| **LMDeploy** | v0.13.0+ | Yes | `api.anthropic_support` in `config/profiles/lmdeploy.yaml` |
 
 When using these backends, Olla automatically detects native Anthropic support and forwards requests directly. You can verify passthrough mode is active by checking the `X-Olla-Mode: passthrough` response header.
-
-!!! warning "SGLang and LMDeploy: passthrough is on by default"
-    Both ship with `anthropic_support.enabled: true`. SGLang older than v0.5.9 and LMDeploy older than v0.13.0 have no `/v1/messages` and answer 404, and Olla does not enforce `min_version`. LMDeploy v0.13.0 to v0.17.x also reject `tools`, so requests carrying tools are translated (the profile declares `no_tool_use`). To translate for an older fleet, copy the profile to `config/profiles/zz-sglang.yaml` or `zz-lmdeploy.yaml` and set `api.anthropic_support.enabled: false` in the copy; the [SGLang](../backend/sglang.md#switching-sglang-or-lmdeploy-back-to-translation) and [LMDeploy](../backend/lmdeploy.md#switching-sglang-or-lmdeploy-back-to-translation) pages give the steps.
 
 !!! warning "SGLang and LMDeploy: passthrough is on by default"
     Both ship with `anthropic_support.enabled: true`. SGLang older than v0.5.9 and LMDeploy older than v0.13.0 have no `/v1/messages` and answer 404, and Olla does not enforce `min_version`. LMDeploy v0.13.0 to v0.17.x also reject `tools`, so requests carrying tools are translated (the profile declares `no_tool_use`). To translate for an older fleet, copy the profile to `config/profiles/zz-sglang.yaml` or `zz-lmdeploy.yaml` and set `api.anthropic_support.enabled: false` in the copy; the [SGLang](../backend/sglang.md#switching-sglang-or-lmdeploy-back-to-translation) and [LMDeploy](../backend/lmdeploy.md#switching-sglang-or-lmdeploy-back-to-translation) pages give the steps.

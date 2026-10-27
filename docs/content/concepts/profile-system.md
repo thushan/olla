@@ -53,7 +53,7 @@ Profiles are loaded during Olla startup in a specific order:
 !!! info "Profile Overrides"
     A custom profile with the same `name` as a built-in will completely replace the built-in profile.
 
-    For example, if you want to extend vLLM, creating a copy of `vllm.yaml` as `vllm-custom.yaml` will override the other profile.
+    Files load in lexical filename order and the last profile with a given `name` wins. A copy named `vllm-custom.yaml` sorts before `vllm.yaml` (`-` sorts before `.`), so the shipped file would win. Name the copy so it sorts after the original, for example `zz-vllm.yaml`, or edit the shipped file in place.
 
 ## Core Concepts
 
@@ -304,7 +304,7 @@ api:
 | `messages_path` | string | Yes | Backend path for the Anthropic Messages API (e.g., `/v1/messages`) |
 | `token_count` | boolean | No | Whether the backend supports the token counting endpoint |
 | `min_version` | string | No | Minimum backend version with Anthropic support |
-| `limitations` | list | No | Known limitations (e.g., `no_token_counting`, `token_counting_404`) |
+| `limitations` | list | No | Known limitations (e.g., `no_token_counting`, `token_counting_404`, `no_tool_use`) |
 
 **Backends with native Anthropic support**:
 
@@ -317,6 +317,8 @@ api:
 | Ollama | v0.14.0+ | No | Popular local inference |
 | oMLX | v0.4.2+ | No | Apple Silicon (MLX) multi-model server; passthrough supported, token counting not yet forwarded |
 | Docker Model Runner | recent | Yes | Containerised local inference |
+| SGLang | v0.5.9+ | Yes | On by default; older releases return 404 on `/v1/messages` |
+| LMDeploy | v0.13.0+ | Yes | On by default; declares `no_tool_use`, so tool requests are translated |
 
 When a client sends a request to `/olla/anthropic/v1/messages` and a backend has `anthropic_support.enabled: true`, Olla will bypass format translation and forward the request directly. This is referred to as **passthrough mode** and has near-zero overhead. See [API Translation](api-translation.md#passthrough-mode) for details.
 

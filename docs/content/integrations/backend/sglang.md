@@ -221,12 +221,12 @@ api:
 - Token counting metadata (`token_count: true`): the backend serves `/v1/messages/count_tokens`; Olla's own `/olla/anthropic/v1/messages/count_tokens` still answers from local estimation
 - Passthrough mode is automatic -- no client-side configuration needed
 - Responses include `X-Olla-Mode: passthrough` header when passthrough is active
-- Falls back to translation mode if passthrough conditions are not met
+- Falls back to translation mode when the profile or a declared limitation rules passthrough out (the backend's version is never checked)
 - Passthrough is **on by default**. SGLang older than v0.5.9 has no `/v1/messages` and answers 404, so Anthropic requests to it fail rather than fall back; `min_version` in the profile is documentation and is not enforced
 
 ### Switching SGLang or LMDeploy back to translation
 
-Passthrough is on by default for these two backends because current releases serve `/v1/messages` themselves. A release older than the minimum below returns 404 for it, and Olla does not check the backend's version, so a fleet with an older SGLang has to opt out. Olla loads every `*.yaml` in `config/profiles/` in filename order, and a profile with the same `name` as an earlier one replaces it completely. Copy the shipped profile to a file that sorts after the original, then turn the block off:
+Passthrough is on by default for these two backends because current releases serve `/v1/messages` themselves. A release older than the minimum above returns 404 (Olla passes the backend's 404 to the client unchanged, with `X-Olla-Mode: passthrough`) for it, and Olla does not check the backend's version, so a fleet with an older SGLang has to opt out. A local profile with the same `name` replaces the shipped one, but only if its filename sorts after it (see [Profile Overrides](../../concepts/profile-system.md)). Copy the shipped profile to a `zz-` file, then turn the block off:
 
 ```bash
 cp config/profiles/sglang.yaml config/profiles/zz-sglang.yaml
@@ -239,7 +239,13 @@ api:
     enabled: false
 ```
 
-Only the `enabled` line changes; leave `name: sglang` and the remaining keys of the copy alone. Restart Olla, then send a request to `/olla/anthropic/v1/messages`: `X-Olla-Mode: passthrough` is absent when the request is translated. Editing `config/profiles/sglang.yaml` in place works too, but a package upgrade can overwrite it. To translate for every backend rather than just SGLang, set `translators.anthropic.passthrough_enabled: false` in `config.yaml` instead.
+Only the `enabled` line changes; leave `name: sglang` and the remaining keys of the copy alone. Restart Olla, then send a request to `/olla/anthropic/v1/messages`: `X-Olla-Mode: passthrough` is absent when the request is translated. In Docker, mount just the override file; mounting the whole config directory replaces the shipped profiles:
+
+```bash
+docker run -v $(pwd)/zz-sglang.yaml:/app/config/profiles/zz-sglang.yaml ...
+```
+
+Editing `config/profiles/sglang.yaml` in place works too, but a package upgrade can overwrite it. To translate for every backend rather than just SGLang, set `translators.anthropic.passthrough_enabled: false` in `config.yaml` instead.
 
 For more information, see [API Translation](../../concepts/api-translation.md#passthrough-mode) and [Anthropic API Reference](../../api-reference/anthropic.md).
 
