@@ -18,7 +18,9 @@ Proxy endpoints for Ollama instances. All Ollama API endpoints are available thr
 | POST | `/olla/ollama/api/copy` | _Not supported in multi-instance proxy_ (returns 501) |
 | DELETE | `/olla/ollama/api/delete` | _Not supported in multi-instance proxy_ (returns 501) |
 | POST | `/olla/ollama/api/create` | _Not supported in multi-instance proxy_ (returns 501) |
-| GET | `/olla/ollama/api/list` | _Not supported in multi-instance proxy_ (returns 501; aggregating running models across instances requires per-instance polling and reconciliation that Olla deliberately does not perform) |
+| POST | `/olla/ollama/api/blobs/{digest}` | _Not supported in multi-instance proxy_ (returns 501) |
+| GET | `/olla/ollama/api/ps` | Models currently loaded, merged across every healthy Ollama endpoint (see [below](#get-ollaollamaapips)) |
+| GET | `/olla/ollama/api/version` | Ollama version (forwarded to one instance) |
 
 ## OpenAI-Compatible Endpoints
 
@@ -285,6 +287,26 @@ curl -X GET http://localhost:40114/olla/ollama/api/tags
 
 > :warning: **Not supported.** Olla returns HTTP 501. Aggregating model details across multiple Ollama instances is non-trivial because modelfiles, parameter values, and revisions can diverge between backends. To inspect a specific model, call the underlying Ollama instance directly.
 
+## GET /olla/ollama/api/ps
+
+Lists the models currently loaded across all healthy Ollama endpoints (what `ollama ps` calls).
+Olla asks each endpoint's `/api/ps` at request time and merges the `models` arrays, because
+loaded state lives on the instance and is not tracked by Olla.
+
+- Entries are kept per endpoint, not de-duplicated: a model resident on two hosts appears twice,
+  since it occupies memory on both.
+- Each entry gains an `olla_endpoint` field with the endpoint's name. Other fields are untouched.
+- Each endpoint is queried with its own configured headers and credentials, and those are never
+  sent to any other endpoint. Environment proxies are not used, and redirects to a different
+  host are not followed.
+- The whole fan-out is bounded to 5 seconds. An endpoint that errors, times out or returns
+  malformed JSON is left out and the response carries `X-Olla-Partial: N of M endpoints failed`.
+  If every endpoint fails the response is `502`. With no healthy Ollama endpoints it is
+  `{"models":[]}`.
+
+Ollama has no `/api/list` endpoint (`ollama list` calls `/api/tags`, `ollama ps` calls `/api/ps`).
+Olla no longer registers one; a request to it is forwarded like any other unlisted path.
+
 ## Model Management
 
 These endpoints are recognised but deliberately **not supported** in Olla's multi-instance proxy. Each returns HTTP 501; perform model management directly against the relevant Ollama backend.
@@ -294,7 +316,9 @@ These endpoints are recognised but deliberately **not supported** in Olla's mult
 - **POST /olla/ollama/api/copy** - Create a copy of a model
 - **DELETE /olla/ollama/api/delete** - Remove a model
 - **POST /olla/ollama/api/create** - Create a model from a Modelfile
-- **GET /olla/ollama/api/list** - List currently loaded models (Olla does not aggregate per-instance running state)
+- **POST /olla/ollama/api/blobs/{digest}** - Upload a blob for `create`
+
+These answer 501 to every HTTP method, not just the one Ollama uses.
 
 ## Request Headers
 
