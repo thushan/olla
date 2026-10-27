@@ -16,6 +16,13 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.0.30
 
+### Fixed: `/olla/models/{id}` for IDs containing slashes
+
+`GET /olla/models/BAAI/bge-small-en-v1.5` returned 404 because only the first path
+segment was read as the ID. The whole remainder of the path is now the ID, so slash IDs
+resolve both raw and percent-encoded (`BAAI%2Fbge-small-en-v1.5`), and aliases still
+resolve to them. An empty ID or one ending in a slash returns 400.
+
 ### Fixed: model discovery no longer sends backend credentials to `HTTP_PROXY` or across hosts
 
 Model discovery still honoured `HTTP_PROXY`/`HTTPS_PROXY`, so with a proxy set in the environment, a plain-HTTP
