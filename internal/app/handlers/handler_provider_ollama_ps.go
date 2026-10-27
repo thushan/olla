@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"net/url"
 	"sync"
 	"time"
 
 	"github.com/thushan/olla/internal/adapter/factory"
+	"github.com/thushan/olla/internal/adapter/proxy/common"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 )
@@ -27,14 +28,17 @@ const (
 	ollamaPSMaxBody = 4 << 20
 
 	// headerOllaPartial marks a merged answer that is missing instances.
-	headerOllaPartial = "X-Olla-Partial"
+	headerOllaPartial = constants.HeaderXOllaPartial
 
 	// ollamaPSEndpointField names the instance a merged entry came from. Ollama's
 	// own clients ignore unknown fields.
 	ollamaPSEndpointField = "olla_endpoint"
 )
 
-var errOllamaPSStatus = errors.New("unexpected status from /api/ps")
+var (
+	errOllamaPSStatus = errors.New("unexpected status from /api/ps")
+	errOllamaPSNoURL  = errors.New("endpoint has no parsed URL")
+)
 
 // ollamaRunningModelsHandler merges /api/ps across every healthy Ollama endpoint.
 // endpoint: GET /olla/ollama/api/ps
@@ -140,7 +144,13 @@ var ollamaPSClient = factory.NewBackendHTTPClient(factory.BackendClientOptions{
 })
 
 func fetchOllamaPS(ctx context.Context, ep *domain.Endpoint) ([]json.RawMessage, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(ep.URLString, "/")+"/api/ps", http.NoBody)
+	// The proxy's own builder, so an endpoint URL with a base path honours
+	// preserve_path exactly as proxied requests do.
+	if ep.URL == nil {
+		return nil, errOllamaPSNoURL
+	}
+	target := common.BuildTargetURL(&http.Request{URL: &url.URL{Path: "/api/ps"}}, ep, "")
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("build request: %w", err)
 	}

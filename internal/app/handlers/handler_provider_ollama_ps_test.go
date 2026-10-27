@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -379,7 +380,7 @@ func TestOllamaPSClient_PooledAndNeverProxied(t *testing.T) {
 	srv.Start()
 	t.Cleanup(srv.Close)
 
-	ep := &domain.Endpoint{Name: "a", URLString: srv.URL}
+	ep := &domain.Endpoint{Name: "a", URL: mustParseURL(t, srv.URL), URLString: srv.URL}
 	for range 3 {
 		_, err := fetchOllamaPS(context.Background(), ep)
 		require.NoError(t, err)
@@ -466,4 +467,30 @@ func TestFetchOllamaPS_BodyCap(t *testing.T) {
 	got, err := fetchOllamaPS(context.Background(), psEndpoint("small", "ollama", small, domain.StatusHealthy))
 	require.NoError(t, err)
 	assert.Len(t, got, 1)
+}
+
+// An endpoint URL with a base path is resolved the way proxied requests are:
+// preserve_path keeps the base, otherwise the request path replaces it.
+func TestFetchOllamaPS_HonoursPreservePath(t *testing.T) {
+	t.Parallel()
+
+	var paths []string
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		_, _ = w.Write([]byte(`{"models":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	for _, preserve := range []bool{true, false} {
+		ep := psEndpoint("p", "ollama", srv, domain.StatusHealthy)
+		ep.URL = mustParseURL(t, srv.URL+"/ollama")
+		ep.URLString = srv.URL + "/ollama"
+		ep.PreservePath = preserve
+		_, err := fetchOllamaPS(context.Background(), ep)
+		require.NoError(t, err)
+	}
+	assert.Equal(t, []string{"/ollama/api/ps", "/api/ps"}, paths)
 }
