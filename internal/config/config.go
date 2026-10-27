@@ -206,6 +206,10 @@ func (c *Config) Validate() error {
 		if md.Timeout <= 0 {
 			return errors.New("discovery.model_discovery.timeout must be > 0 when model discovery is enabled (prevents immediate context expiry)")
 		}
+		// Zero is valid (retry immediately); a negative value would only ever be a typo.
+		if md.RetryBackoff < 0 {
+			return errors.New("discovery.model_discovery.retry_backoff must be >= 0")
+		}
 	}
 
 	// A burst size of zero throttles all traffic immediately — warn rather than

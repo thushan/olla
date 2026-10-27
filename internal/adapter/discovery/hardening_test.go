@@ -179,7 +179,7 @@ func TestHTTPDiscoveryResponseSizeBoundary(t *testing.T) {
 			if extra == 0 && err != nil {
 				t.Fatal(err)
 			}
-			if extra == 1 && (err == nil || !strings.Contains(err.Error(), "exceeds")) {
+			if extra == 1 && !errors.Is(err, ErrResponseTooLarge) {
 				t.Fatalf("oversize response not rejected explicitly: %v", err)
 			}
 		})

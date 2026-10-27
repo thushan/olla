@@ -201,7 +201,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 	}
 
 	if len(body) > MaxResponseSize {
-		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "read_response", resp.StatusCode, duration, fmt.Errorf("model response exceeds %d bytes", MaxResponseSize))
+		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "read_response", resp.StatusCode, duration, fmt.Errorf("model response exceeds %d bytes: %w", MaxResponseSize, ErrResponseTooLarge))
 	}
 
 	models, err := platformProfile.ParseModelsResponse(body)

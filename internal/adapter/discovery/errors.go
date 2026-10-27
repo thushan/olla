@@ -41,6 +41,10 @@ func NewDiscoveryError(endpointURL, profileType, operation string, statusCode in
 	}
 }
 
+// ErrResponseTooLarge marks a model listing that exceeded MaxResponseSize. It is
+// matched with errors.Is so retry logic need not parse the message.
+var ErrResponseTooLarge = errors.New("model response too large")
+
 // ProfileNotFoundError indicates no suitable profile was found for an endpoint
 type ProfileNotFoundError struct {
 	ProfileType string

@@ -34,6 +34,15 @@ segment was read as the ID. The whole remainder of the path is now the ID, so sl
 resolve both raw and percent-encoded (`BAAI%2Fbge-small-en-v1.5`), and aliases still
 resolve to them. An empty ID or one ending in a slash returns 400.
 
+### Fixed: model discovery now retries failed fetches
+
+`discovery.model_discovery.retry_attempts` and `retry_backoff` were accepted but never used, so one dropped
+connection failed discovery for that endpoint until the next interval. Discovery now retries connection errors,
+timeouts and 5xx responses, doubling `retry_backoff` (capped at 30s) between attempts. All attempts share the
+existing `timeout`, so a cycle never runs longer than it did before. Parse errors, 4xx responses and listings over
+the 10MB cap are not retried, and a cycle that still fails on a retryable error counts as one failure towards the five-failure cooldown.
+A negative `retry_backoff` is now rejected at startup.
+
 ### Fixed: model discovery no longer sends backend credentials to `HTTP_PROXY` or across hosts
 
 Model discovery still honoured `HTTP_PROXY`/`HTTPS_PROXY`, so with a proxy set in the environment, a plain-HTTP
