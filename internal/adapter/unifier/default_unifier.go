@@ -455,6 +455,14 @@ func (u *DefaultUnifier) applyModelDetails(model *Model, details *domain.ModelDe
 	if details.Recipe != nil {
 		model.Metadata["recipe"] = *details.Recipe
 	}
+	if len(details.Capabilities) > 0 {
+		// inferCapabilitiesFromMetadata reads declared capabilities as []interface{}
+		declared := make([]interface{}, len(details.Capabilities))
+		for i, c := range details.Capabilities {
+			declared[i] = c
+		}
+		model.Metadata["capabilities"] = declared
+	}
 }
 
 // applyModelInfo transfers top-level ModelInfo fields to Model metadata

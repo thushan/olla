@@ -81,6 +81,16 @@ new is that rerankers and classifiers recognised by name on backends that report
 too instead of falling back to `llm`. That `type` can therefore be a value outside LM Studio's own
 vocabulary (`reranker`, `classifier`).
 
+### Fixed: Ollama vision models list as `vlm` and tool support is recorded
+
+Newer Ollama releases report `capabilities` in `/api/tags`, but only `embedding` was read, so models such as
+`qwen3-vl:8b` listed as `llm` and `?type=vlm` and `?capability=vision` returned nothing. A model that lists
+`vision` is now `vlm` with the `vision` capability (it keeps `text-generation`), and `tools` becomes the
+`function_calling` capability. Model-less requests that carry images or `tools` now prefer hosts with a
+capable model, so hosts whose models carry no such tag are left out of those requests while an Ollama host
+has a match; name the model to reach them. If the capable hosts are all down the request gets a 503
+`capability_unavailable`. Older Ollama versions report no capabilities and are unchanged.
+
 ### Added: Text Embeddings Inference backend
 
 Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)
