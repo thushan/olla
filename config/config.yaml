@@ -39,8 +39,6 @@ server:
     per_ip_requests_per_minute: 100
     health_requests_per_minute: 1000
     burst_size: 50
-    per_endpoint:
-      default_requests_per_minute: 200
     cleanup_interval: 5m
     trust_proxy_headers: false
     trusted_proxy_cidrs: [
@@ -83,35 +81,19 @@ proxy:
     prefix_hash_bytes: 512      # how many leading bytes of the messages field to hash
 
   # DEPRECATED as of v0.0.16 - These fields are no longer used
-  # max_retries: 3        # Replaced by retry.max_attempts
-  # retry_backoff: 500ms  # Now uses intelligent exponential backoff
-  
-  # Connection failure retry settings (applies to both Sherpa and Olla engines)
-  # When enabled, the proxy will automatically retry failed requests on other healthy endpoints
-  retry:
-    enabled: true # Enable automatic retry on connection failures
-    on_connection_failure: true # Retry when connection to backend fails (connection refused, reset, timeout)
-    max_attempts: 0 # Maximum retry attempts (0 = try all available endpoints once)
-    # Connection errors that trigger retry:
-    # - Connection refused (backend is down)
-    # - Connection reset (backend crashed)
-    # - Connection timeout (backend is overloaded)
-    # - Network unreachable (network issues)
-    # Failed endpoints are immediately marked as unhealthy and removed from the retry pool
+  # max_retries: 3        # Not configurable: failover is automatic
+  # retry_backoff: 500ms  # Not configurable: failover is automatic
+
+  # Failover: when a connection to a backend fails (refused, reset, timeout,
+  # network unreachable), Olla marks that endpoint unhealthy and retries the
+  # request on the other healthy endpoints, each tried once. This is automatic
+  # and not configurable; there is no proxy.retry block, and only a
+  # single-endpoint setup avoids it.
 
 discovery:
   type: "static"
   refresh_interval: 30s
-  
-  # Health check and recovery settings
-  health_check:
-    initial_delay: 1s # Delay before first health check
-    # When an endpoint fails during request processing:
-    # - It's immediately marked as unhealthy
-    # - Consecutive failures increment, causing exponential backoff
-    # - Next check time = now + (consecutive_failures * 2) seconds (max 60s)
-    # - Health checker will automatically recover endpoints when they're back online
-  
+
   static:
     endpoints:
       # See docs for details on configuring endpoints:

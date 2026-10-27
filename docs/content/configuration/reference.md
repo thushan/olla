@@ -211,7 +211,7 @@ As of v0.0.16, the retry mechanism is automatic and built-in for connection fail
 3. Continue until a successful connection is made or all endpoints have been tried
 4. Use exponential backoff for unhealthy endpoints to prevent overwhelming them
 
-**Note**: The fields `max_retries` and `retry_backoff` that may still appear in your `proxy:` section are deprecated struct stubs. The `retry:` block (with `enabled`, `on_connection_failure`, `max_attempts`) that appears in the shipped `config.yaml` as a comment template has no corresponding struct in the config schema and is silently ignored if set. Retry behaviour is automatic and built-in; none of these fields have any effect.
+**Note**: Failover is automatic and not configurable. There is no `retry:` block in the config schema: if you set `retry.enabled`, `retry.on_connection_failure` or `retry.max_attempts` (older copies of `config.yaml` shipped them), Olla silently ignores them. The same goes for the deprecated `max_retries` and `retry_backoff` fields. A setup with a single endpoint is the only way to avoid failover.
 
 ### Streaming Settings
 
