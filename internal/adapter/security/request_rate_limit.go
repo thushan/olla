@@ -31,6 +31,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// reasonGlobalRateLimit distinguishes a global-bucket rejection from a per-IP one.
+const reasonGlobalRateLimit = "Global rate limit exceeded"
+
 type RateLimitValidator struct {
 	metrics ports.SecurityMetricsService
 	logger  logger.StyledLogger
@@ -94,9 +97,13 @@ func (rl *RateLimitValidator) Name() string {
 }
 
 // Validate checks if the request should be allowed under current rate limits.
-// It applies global and per-IP rules and returns a detailed SecurityResult.
+// The per-IP and global tiers are independent switches (0 disables only that
+// tier). The per-IP tier is consulted first so a client already over its own
+// limit cannot burn global tokens and starve everyone else. If the per-IP tier
+// admits the request but the global tier rejects it, the per-IP token is handed
+// back so a rejected request is not charged to either bucket.
 // Thread safe.
-func (rl *RateLimitValidator) Validate(ctx context.Context, req ports.SecurityRequest) (ports.SecurityResult, error) {
+func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequest) (ports.SecurityResult, error) {
 	now := time.Now()
 
 	var limit int
@@ -106,38 +113,66 @@ func (rl *RateLimitValidator) Validate(ctx context.Context, req ports.SecurityRe
 		limit = rl.perIPRequestsPerMinute
 	}
 
-	if limit <= 0 {
+	// A zero health limit has always meant "health probes are not limited",
+	// including by the global tier, so keep that.
+	if req.IsHealthCheck && limit <= 0 {
 		return ports.SecurityResult{
 			Allowed:   true,
-			RateLimit: 0,
-			Remaining: 0,
 			ResetTime: now.Add(time.Minute),
 		}, nil
 	}
 
-	if rl.globalLimiter != nil {
-		reservation := rl.globalLimiter.Reserve()
-		if !reservation.OK() || reservation.Delay() > 0 {
-			if reservation.Delay() > 0 {
-				reservation.Cancel()
-			}
-			return ports.SecurityResult{
-				Allowed:    false,
-				RetryAfter: 60,
-				RateLimit:  limit,
-				Remaining:  0,
-				ResetTime:  now.Add(time.Minute),
-				Reason:     "Rate limit exceeded",
-			}, nil
+	result := ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}
+	var rollback func()
+	if limit > 0 {
+		result, rollback = rl.checkIPLimit(req.ClientID, limit, now, req.IsHealthCheck)
+		if !result.Allowed {
+			return result, nil
 		}
 	}
 
-	return rl.checkIPLimit(req.ClientID, limit, now, req.IsHealthCheck), nil
+	if rl.globalLimiter != nil {
+		reservation := rl.globalLimiter.Reserve()
+		delay := reservation.Delay()
+		if !reservation.OK() || delay > 0 {
+			reservation.Cancel()
+			if rollback != nil {
+				rollback()
+			}
+			// A reservation that can never be satisfied (zero burst) reports an
+			// infinite delay, so fall back to the full window.
+			retryAfter := 60
+			if reservation.OK() {
+				retryAfter = int(delay.Seconds()) + 1
+			}
+			return ports.SecurityResult{
+				Allowed:    false,
+				RetryAfter: retryAfter,
+				RateLimit:  rl.globalRequestsPerMinute,
+				Remaining:  0,
+				ResetTime:  now.Add(time.Minute),
+				Reason:     reasonGlobalRateLimit,
+			}, nil
+		}
+		if limit <= 0 {
+			result.RateLimit = rl.globalRequestsPerMinute
+			result.Remaining = int(rl.globalLimiter.Tokens())
+		}
+	}
+
+	return result, nil
 }
 
-// checkIPLimit handles per-IP rate enfrecment, including health check separation.
-// Returns a SecurityResult with rate metadata and retry after guidance.
-func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.Time, isHealthEndpoint bool) ports.SecurityResult {
+// checkIPLimit handles per-IP rate enforcement, including health check separation.
+// Returns a SecurityResult with rate metadata and retry after guidance, plus a
+// rollback that returns the consumed token when the request is later rejected
+// by the global tier (nil unless the request was admitted).
+func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.Time, isHealthEndpoint bool) (ports.SecurityResult, func()) {
+	// Callers gate on limit > 0, but 60/limit below would panic if that ever slipped.
+	if limit <= 0 {
+		return ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}, nil
+	}
+
 	bucketKey := clientIP
 	if isHealthEndpoint {
 		bucketKey = clientIP + ":health"
@@ -155,7 +190,11 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 	limiter := limiterInfo.limiter
 	limiterInfo.mu.Unlock()
 
-	reservation := limiter.Reserve()
+	// Reserve at an explicit instant so the rollback can cancel at the same one:
+	// CancelAt only refunds when the reservation is not already due, and a
+	// zero-delay reservation is due the moment it is made.
+	reservedAt := time.Now()
+	reservation := limiter.ReserveN(reservedAt, 1)
 	if !reservation.OK() {
 		return ports.SecurityResult{
 			Allowed:    false,
@@ -164,7 +203,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 			Remaining:  0,
 			ResetTime:  now.Add(time.Minute),
 			Reason:     "Rate limit exceeded",
-		}
+		}, nil
 	}
 
 	delay := reservation.Delay()
@@ -182,7 +221,7 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 			Remaining:  remaining,
 			ResetTime:  now.Add(time.Minute),
 			Reason:     "Rate limit exceeded",
-		}
+		}, nil
 	}
 
 	limiterInfo.mu.Lock()
@@ -190,12 +229,21 @@ func (rl *RateLimitValidator) checkIPLimit(clientIP string, limit int, now time.
 	remaining := rl.calculateRemaining(limiterInfo, limit)
 	limiterInfo.mu.Unlock()
 
+	rollback := func() {
+		reservation.CancelAt(reservedAt)
+		limiterInfo.mu.Lock()
+		if limiterInfo.tokensUsed > 0 {
+			limiterInfo.tokensUsed--
+		}
+		limiterInfo.mu.Unlock()
+	}
+
 	return ports.SecurityResult{
 		Allowed:   true,
 		RateLimit: limit,
 		Remaining: remaining,
 		ResetTime: now.Add(time.Minute),
-	}
+	}, rollback
 }
 
 func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, limit int) int {
