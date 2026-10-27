@@ -247,7 +247,18 @@ func (c *HTTPHealthChecker) checkEndpoint(ctx context.Context, endpoint *domain.
 	statusChanged := oldStatus != newStatus
 
 	endpointCopy := *endpoint
+	// Preserve runtime drain state across the copy (patch #3): a drained endpoint
+	// records health truthfully but the balancer keeps it non-routable (RoutableNow).
+	drained, drainedAt, drainReason := endpoint.Drained, endpoint.DrainedAt, endpoint.DrainReason
 	endpointCopy.Status = newStatus
+	if drained {
+		endpointCopy.Drained, endpointCopy.DrainedAt, endpointCopy.DrainReason = drained, drainedAt, drainReason
+		if endpointCopy.Status.IsRoutable() {
+			// keep status healthy-looking for /internal/status, but routability is
+			// decided by RoutableNow(); nothing to change here.
+			_ = endpointCopy
+		}
+	}
 	endpointCopy.LastChecked = now
 	endpointCopy.LastLatency = result.Latency
 
