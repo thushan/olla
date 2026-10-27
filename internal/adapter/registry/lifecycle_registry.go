@@ -9,6 +9,7 @@ import (
 
 	"github.com/thushan/olla/internal/adapter/unifier"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
 
@@ -24,7 +25,9 @@ type LifecycleUnifiedRegistry struct {
 
 func NewLifecycleUnifiedRegistry(logger logger.StyledLogger, config unifier.Config) *LifecycleUnifiedRegistry {
 	unifierFactory := unifier.NewFactory(logger)
-	modelUnifier, _ := unifierFactory.CreateWithConfig(unifier.LifecycleUnifierType, config)
+	modelUnifier := createUnifier(logger, func() (ports.ModelUnifier, error) {
+		return unifierFactory.CreateWithConfig(unifier.LifecycleUnifierType, config)
+	})
 
 	// Build through the plain constructor so every field (routing strategy,
 	// endpoint sets) is initialised in one place, then swap in the lifecycle unifier.
