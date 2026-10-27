@@ -3,7 +3,6 @@ package security
 import (
 	"context"
 
-	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -24,13 +23,8 @@ func NewSecurityMetricsAdapter(statsCollector ports.StatsCollector, logger logge
 func (sma *MetricsAdapter) RecordViolation(ctx context.Context, violation ports.SecurityViolation) error {
 	sma.statsCollector.RecordSecurityViolation(violation)
 
-	if violation.ViolationType == constants.ViolationSizeLimit && violation.Size > 50*1024*1024 {
-		sma.logger.Warn("Large request blocked",
-			"client_id", violation.ClientID,
-			"size", violation.Size,
-			"endpoint", violation.Endpoint)
-	}
-
+	// No per-violation log here: the size limiter's sampled "Request rejected" line already
+	// reports every oversized request, and a second unsampled WARN would flood the log.
 	return nil
 }
 

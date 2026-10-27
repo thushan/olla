@@ -24,10 +24,12 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/router"
+	"github.com/thushan/olla/internal/util"
 )
 
 // DashboardRoute is the mux subtree the dashboard owns. Go's http.ServeMux
@@ -59,6 +61,22 @@ const SlashlessDashboardRoute = "/internal/ui"
 // registry has tests that construct handlers without one, and in that case
 // rejections still surface in the response body, just without the Warn line.
 func AccessMiddleware(cfg config.DashboardConfig, log logger.StyledLogger, next http.Handler) http.Handler {
+	return accessMiddleware(cfg, log, next, newAccessWarnThrottle(log, nil, nil))
+}
+
+// newAccessWarnThrottle builds the denial Warn sampler. A blocked client can retry
+// at wire speed, so the Warn is sampled per client IP; the 403 body is unaffected
+// and every rejection still gets it. Nil when there is no logger to write to.
+func newAccessWarnThrottle(log logger.StyledLogger, now func() time.Time, set *logger.ThrottleSet) *logger.Throttle {
+	if log == nil {
+		return nil
+	}
+	return set.Track(logger.NewRejectThrottle(log, "dashboard access denied", "dashboard", "client_ip", now))
+}
+
+// accessMiddleware is AccessMiddleware with the Warn throttle supplied by the
+// caller, so both dashboard routes share one and tests can inject a clock.
+func accessMiddleware(cfg config.DashboardConfig, log logger.StyledLogger, next http.Handler, warnLog *logger.Throttle) http.Handler {
 	allowedHosts := make(map[string]struct{}, len(cfg.AccessPolicy.AllowedHosts))
 	for _, h := range cfg.AccessPolicy.AllowedHosts {
 		allowedHosts[strings.ToLower(normaliseHost(h))] = struct{}{}
@@ -66,16 +84,19 @@ func AccessMiddleware(cfg config.DashboardConfig, log logger.StyledLogger, next 
 	parsed := cfg.ParsedCIDRs()
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clientIP := remoteAddrIP(r.RemoteAddr)
+		// TCP source only (proxy trust off): the rate limiter honours X-Forwarded-For because the
+		// operator opted into trusted proxy CIDRs there, but the dashboard has no such setting and
+		// allowed_cidrs is an access control that a spoofable header must not be able to satisfy.
+		clientIP := util.GetClientIP(r, false, nil)
 
 		if !ipInAnyCIDR(clientIP, parsed) {
-			reject(w, log, "ip not in allowed range", "dashboard.access_policy.allowed_cidrs", clientIP, r.Host)
+			reject(w, log, warnLog, "ip not in allowed range", "dashboard.access_policy.allowed_cidrs", clientIP, r.Host)
 			return
 		}
 
 		host := strings.ToLower(normaliseHost(r.Host))
 		if !hostAccepted(host, allowedHosts) {
-			reject(w, log, "host not accepted", "dashboard.access_policy.allowed_hosts", clientIP, r.Host)
+			reject(w, log, warnLog, "host not accepted", "dashboard.access_policy.allowed_hosts", clientIP, r.Host)
 			return
 		}
 
@@ -101,18 +122,22 @@ func hostAccepted(normalisedHost string, allowedHosts map[string]struct{}) bool 
 // embed.go; it is wrapped by AccessMiddleware before registration so the policy
 // applies uniformly to /internal/ui/ and every sub-path.
 //
+// Both routes share one denial-log throttle, registered in set (nil is allowed) so
+// the caller can flush it at shutdown.
+//
 // Returns true if the dashboard was registered, false otherwise.
-func RegisterRoutes(registry *router.RouteRegistry, cfg config.DashboardConfig, log logger.StyledLogger, handler http.Handler) bool {
+func RegisterRoutes(registry *router.RouteRegistry, cfg config.DashboardConfig, log logger.StyledLogger, handler http.Handler, set *logger.ThrottleSet) bool {
 	if !cfg.Enabled {
 		return false
 	}
-	guarded := AccessMiddleware(cfg, log, handler)
+	warnLog := newAccessWarnThrottle(log, nil, set)
+	guarded := accessMiddleware(cfg, log, handler, warnLog)
 	registry.RegisterWithMethod(DashboardRoute, http.HandlerFunc(guarded.ServeHTTP), "Admin dashboard (read-only)", "GET")
 
 	// Gated separately from DashboardRoute above: same policy, same security
 	// headers, but its own registration so ServeMux never gets the chance to
 	// answer this exact path before AccessMiddleware runs.
-	slashlessGuarded := AccessMiddleware(cfg, log, http.HandlerFunc(redirectToDashboardRoot))
+	slashlessGuarded := accessMiddleware(cfg, log, http.HandlerFunc(redirectToDashboardRoot), warnLog)
 	registry.RegisterWithMethod(SlashlessDashboardRoute, http.HandlerFunc(slashlessGuarded.ServeHTTP), "Admin dashboard (redirect)", "GET")
 	return true
 }
@@ -124,20 +149,6 @@ func RegisterRoutes(registry *router.RouteRegistry, cfg config.DashboardConfig, 
 func redirectToDashboardRoot(w http.ResponseWriter, r *http.Request) {
 	setSecurityHeaders(w)
 	http.Redirect(w, r, DashboardRoute, http.StatusTemporaryRedirect)
-}
-
-// remoteAddrIP extracts the host portion of r.RemoteAddr via net.SplitHostPort,
-// falling back to the raw value if it is not an IP:port pair (IPv6 without
-// brackets, unix sockets, tests passing a bare IP). Proxy headers are
-// deliberately never consulted here, even though internal/util.GetClientIP will
-// honour them under trustProxyHeaders: that path is for the rate limiter, where
-// the operator explicitly opted into trusting a reverse proxy CIDR. The
-// dashboard has no such trust mechanism, so it reads the TCP source only.
-func remoteAddrIP(remoteAddr string) string {
-	if host, _, err := net.SplitHostPort(remoteAddr); err == nil {
-		return host
-	}
-	return remoteAddr
 }
 
 // normaliseHost strips a trailing :port from a host literal AND any IPv6
@@ -182,7 +193,7 @@ func ipInAnyCIDR(ip string, cidrs []*net.IPNet) bool {
 // names both generically) - so the operator doesn't have to guess which of
 // the two policy knobs actually applies. Plain text, no JSON: this is an
 // operational diagnostic, not an API response.
-func reject(w http.ResponseWriter, log logger.StyledLogger, reason, configKey, clientIP, host string) {
+func reject(w http.ResponseWriter, log logger.StyledLogger, warnLog *logger.Throttle, reason, configKey, clientIP, host string) {
 	body := strings.NewReader("403 forbidden: " + reason + " (ip=" + clientIP + ", host=" + host + "). Adjust dashboard.access_policy.allowed_hosts (or allowed_cidrs) in your config.\n")
 	// Hardening headers apply to every dashboard response path, including
 	// this 403: the body is operator-facing text that must not be frameable,
@@ -192,7 +203,7 @@ func reject(w http.ResponseWriter, log logger.StyledLogger, reason, configKey, c
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusForbidden)
 	_, _ = io.Copy(w, body)
-	if log != nil {
+	if log != nil && warnLog.Allow(clientIP) {
 		log.Warn("dashboard access denied",
 			"reason", reason,
 			"config_key", configKey,

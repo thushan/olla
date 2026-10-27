@@ -305,6 +305,35 @@ logging:
   output: "stdout"
 ```
 
+### Rejection Log Sampling
+
+Rejections Olla generates itself are sampled so one abusive client cannot flood the log. For each
+key, the first rejection in a 10 second window is logged in full. The rest are counted and written
+once as `<message>, repeats suppressed`, with a `suppressed=N` field and a `layer` field naming the
+writer. The key depends on the layer:
+
+| Layer | Message | Key |
+|---|---|---|
+| `rate_limit` | `Rate limit exceeded` | client IP |
+| `size_limit` | `Request rejected` | client IP and kind (`body` or `headers`) |
+| `dashboard` | `dashboard access denied` | client IP |
+| `proxy` | `Request rejected` (no routable endpoint, unknown model, provider with no healthy host, chunked body over the size cap) | response status and client IP |
+| `request_log` | `Rejected request` | client IP |
+
+Each layer tracks at most 256 keys; further keys share one summary with the key `other`. Lapsed
+windows are settled by the next rejection in the same layer, and every layer writes what it still
+holds when Olla shuts down. The window is fixed; there is no config key for it.
+
+The request log samples responses with status 401, 403, 413, 429 or 431 that carry no
+`X-Olla-Endpoint` header in the same way. A backend's own 4xx and 5xx responses are never sampled,
+and successful traffic is logged per request as usual. Access log lines for other Olla-generated
+statuses, such as the 404 for an unknown model, are still written per request.
+
+Only rate limit and size limit rejections increment the security counters
+(`olla_security_rate_limit_violations_total`, `olla_security_violations_total`, at
+`/internal/metrics`), and they count every one. Dashboard and routing rejections have no counter, so
+read the `suppressed=` field for their volume.
+
 ### Log Sensitive Data
 
 **Never log**:
@@ -545,7 +574,7 @@ Production deployment checklist:
 
 When detecting abuse:
 
-1. Check logs for source IPs
+1. Check logs for source IPs (one full line per client per 10 seconds, plus a `suppressed=` summary)
 2. Verify legitimate vs malicious traffic
 3. Adjust rate limits if needed
 4. Block malicious IPs at firewall

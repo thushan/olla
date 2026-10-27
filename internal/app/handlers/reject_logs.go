@@ -1,0 +1,35 @@
+package handlers
+
+import (
+	"strconv"
+
+	"github.com/thushan/olla/internal/logger"
+)
+
+// rejectLogs samples the "Request rejected" WARN for requests Olla refuses to route (an
+// unknown model under strict routing, a model or provider with no healthy host). A client
+// can repeat these at wire speed, and each repeat used to write full detail lines.
+//
+// The key is the response status plus the client IP, status first because the throttle truncates
+// long keys and a long forwarded identity must not push the status off the end. The status is a finite cause, so one
+// client's 404s do not hide its 503s, while a client rotating model names still costs one
+// line per window rather than one per name. The throttle caps its tracked keys.
+type rejectLogs struct {
+	request *logger.Throttle
+}
+
+// newRejectLogs registers the throttle in set (nil is allowed) so Application can flush it at shutdown.
+func newRejectLogs(log logger.StyledLogger, set *logger.ThrottleSet) *rejectLogs {
+	return &rejectLogs{
+		request: set.Track(logger.NewRejectThrottle(log, "Request rejected", "proxy", "client_status", nil)),
+	}
+}
+
+// allowRequest is true when this client's rejection should be logged in full. A nil receiver
+// (an Application built without NewApplication, as in tests) logs everything.
+func (r *rejectLogs) allowRequest(clientIP string, status int) bool {
+	return r == nil || r.request.Allow(strconv.Itoa(status)+"|"+clientIP)
+}
+
+// newThrottleSet exists because NewApplication's logger parameter shadows the package.
+func newThrottleSet() *logger.ThrottleSet { return &logger.ThrottleSet{} }

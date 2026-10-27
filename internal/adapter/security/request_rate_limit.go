@@ -38,6 +38,7 @@ type RateLimitValidator struct {
 	globalLimiter           *rate.Limiter
 	cleanupTicker           *time.Ticker
 	stopCleanup             chan struct{}
+	rejectLog               *logger.Throttle
 	ipLimiters              *xsync.Map[string, *ipLimiterInfo]
 	trustedCIDRs            []*net.IPNet
 	globalRequestsPerMinute int
@@ -57,7 +58,7 @@ type ipLimiterInfo struct {
 	mu           sync.RWMutex
 }
 
-func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.SecurityMetricsService, logger logger.StyledLogger) *RateLimitValidator {
+func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.SecurityMetricsService, log logger.StyledLogger) *RateLimitValidator {
 	rl := &RateLimitValidator{
 		globalRequestsPerMinute: limits.GlobalRequestsPerMinute,
 		perIPRequestsPerMinute:  limits.PerIPRequestsPerMinute,
@@ -66,10 +67,14 @@ func NewRateLimitValidator(limits config.ServerRateLimits, metrics ports.Securit
 		trustProxyHeaders:       limits.TrustProxyHeaders,
 		trustedCIDRs:            limits.TrustedProxyCIDRsParsed,
 		metrics:                 metrics,
-		logger:                  logger,
+		logger:                  log,
 		stopCleanup:             make(chan struct{}),
 		ipLimiters:              xsync.NewMap[string, *ipLimiterInfo](),
 	}
+
+	// A client over its limit can be rejected at wire speed, so the WARN is
+	// sampled per client IP. The violation counters still see every rejection.
+	rl.rejectLog = logger.NewRejectThrottle(log, "Rate limit exceeded", "rate_limit", "client_ip", nil)
 
 	if limits.GlobalRequestsPerMinute > 0 {
 		globalRate := rate.Limit(float64(limits.GlobalRequestsPerMinute) / 60.0)
@@ -251,6 +256,7 @@ func (rl *RateLimitValidator) Stop() {
 			rl.cleanupTicker.Stop()
 		}
 		close(rl.stopCleanup)
+		rl.rejectLog.Flush()
 	})
 }
 
@@ -294,12 +300,14 @@ func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler
 					_ = rl.metrics.RecordViolation(r.Context(), violation)
 				}
 
-				rl.logger.Warn("Rate limit exceeded",
-					"client_ip", clientIP,
-					"method", r.Method,
-					"path", r.URL.Path,
-					"limit", result.RateLimit,
-					"retry_after", result.RetryAfter)
+				if rl.rejectLog.Allow(clientIP) {
+					rl.logger.Warn("Rate limit exceeded",
+						"client_ip", clientIP,
+						"method", r.Method,
+						"path", r.URL.Path,
+						"limit", result.RateLimit,
+						"retry_after", result.RetryAfter)
+				}
 
 				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 				return

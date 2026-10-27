@@ -106,7 +106,7 @@ func (a *Application) mountDashboard() {
 	if !a.Config.Dashboard.Enabled {
 		return
 	}
-	dashboard.RegisterRoutes(a.routeRegistry, a.Config.Dashboard, a.logger, dashboardHandlerFactory())
+	dashboard.RegisterRoutes(a.routeRegistry, a.Config.Dashboard, a.logger, dashboardHandlerFactory(), a.throttles)
 }
 
 // registerTranslatorRoutes dynamically registers routes for all translators

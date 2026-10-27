@@ -50,6 +50,9 @@ func (sa *Adapters) Stop() {
 	if sa.RateLimit != nil {
 		sa.RateLimit.Stop()
 	}
+	if sa.SizeValidation != nil {
+		sa.SizeValidation.Flush()
+	}
 }
 
 // CreateChainMiddleware builds the rate-limit -> size-validation chain once,

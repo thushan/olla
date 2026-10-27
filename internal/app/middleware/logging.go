@@ -213,6 +213,59 @@ func GetRequestID(ctx context.Context) string {
 // log is the operator's audit record and must not go quiet on proxy traffic
 // the way the console line deliberately does.
 func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handler) http.Handler {
+	return combinedLoggingMiddleware(styledLogger, nil, nil)
+}
+
+// NewCombinedLoggingMiddleware is CombinedLoggingMiddleware with its rejection
+// throttle registered in set (nil is allowed), so the owner can flush the pending
+// summary at shutdown.
+func NewCombinedLoggingMiddleware(styledLogger logger.StyledLogger, set *logger.ThrottleSet) func(http.Handler) http.Handler {
+	return combinedLoggingMiddleware(styledLogger, nil, set)
+}
+
+// isRejectionStatus is true for the statuses the security and access layers answer with when
+// they refuse a client (auth 401, dashboard policy 403, size limits 413/431, rate limit 429).
+// A client that keeps hitting one can repeat it at wire speed.
+func isRejectionStatus(status int) bool {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusRequestEntityTooLarge,
+		http.StatusTooManyRequests, http.StatusRequestHeaderFieldsTooLarge:
+		return true
+	}
+	return false
+}
+
+// isOllaRejection is true when Olla itself refused the request. A backend can answer 401, 403,
+// 429 and so on too, and those are the only per-request record of what the backend said, so they
+// must never be sampled away. Responses forwarded from a backend carry X-Olla-Endpoint (set by the
+// proxy engine before WriteHeader); Olla's own refusals never do.
+func isOllaRejection(w *responseWriter) bool {
+	return isRejectionStatus(w.status) && w.Header().Get(constants.HeaderXOllaEndpoint) == ""
+}
+
+// rejectionKey is the throttle key for rejected requests: the TCP peer, never a proxy header.
+// This layer has no trusted-proxy configuration, and an X-Forwarded-For it cannot vouch for
+// would let a client mint a fresh key per request and so dodge the sampling. Behind a trusted
+// proxy every client shares the proxy's address, which only makes the sampling coarser; it
+// never makes it unbounded. The rate limiter keys on the trusted-proxy-aware address
+// because it holds that configuration; this layer deliberately does not.
+func rejectionKey(r *http.Request) string {
+	return util.GetClientIP(r, false, nil)
+}
+
+// combinedLoggingMiddleware is CombinedLoggingMiddleware with an injectable clock for the
+// rejection throttle; now is nil in production.
+//
+// Rejections Olla itself produced (status 401, 403, 413, 429 or 431 with no X-Olla-Endpoint
+// header) are sampled per client: the first in each window logs its "Request completed" and
+// "Access log" lines as usual, and the rest are counted into one "Rejected request, repeats
+// suppressed" summary. In practice this is the dashboard access-control 403: the rate limit and
+// size layers sit outside this middleware on proxy routes and answer before it runs, so they
+// never wrote request lines to begin with. A backend's own 4xx/5xx is forwarded with
+// X-Olla-Endpoint and is never sampled, since it is the per-request record of what the backend
+// said. Everything else logs exactly as before, and the security counters see every rejection.
+func combinedLoggingMiddleware(styledLogger logger.StyledLogger, now func() time.Time, set *logger.ThrottleSet) func(http.Handler) http.Handler {
+	rejectLog := set.Track(logger.NewRejectThrottle(styledLogger, "Rejected request", "request_log", "client_ip", now))
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
@@ -260,6 +313,10 @@ func CombinedLoggingMiddleware(styledLogger logger.StyledLogger) func(http.Handl
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
 
 			duration := time.Since(start)
+
+			if isOllaRejection(wrapped) && !rejectLog.Allow(rejectionKey(r)) {
+				return
+			}
 
 			postQuiet := isQuietPollOutcome(r.Method, path, wrapped.status)
 			level, msg = consoleLogParams(postQuiet, "HTTP request completed", "Request completed")

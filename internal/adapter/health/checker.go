@@ -19,7 +19,6 @@ import (
 const (
 	DefaultConcurrentChecks        = 5
 	DefaultHealthCheckInterval     = 30 * time.Second
-	LogThrottleInterval            = 2 * time.Minute
 	DefaultRecoveryCallbackTimeout = 10 * time.Second
 )
 

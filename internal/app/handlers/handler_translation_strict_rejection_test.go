@@ -136,3 +136,45 @@ func TestTranslationHandler_StrictRejection_ModelUnavailableMaps503(t *testing.T
 	require.True(t, ok)
 	assert.Equal(t, "api_error", errObj["type"], "503 falls back to the generic api_error type per the Anthropic taxonomy")
 }
+
+// Repeated strict-routing rejections on the Anthropic route must stay bounded: the sampled
+// "Request rejected" line is the only diagnostic, not an ERROR per request on top of it.
+func TestTranslationHandler_StrictRejectionFloodLogsBounded(t *testing.T) {
+	t.Parallel()
+
+	log := newWarnCounter()
+	chain := inspector.NewChain(log)
+	bodyInspector, err := inspector.NewBodyInspector(log)
+	require.NoError(t, err)
+	chain.AddInspector(bodyInspector)
+
+	trans, err := anthropic.NewTranslator(log, config.AnthropicTranslatorConfig{})
+	require.NoError(t, err)
+
+	app := &Application{
+		Config:           &config.Config{},
+		logger:           log,
+		rejectLog:        newRejectLogs(log, nil),
+		inspectorChain:   chain,
+		discoveryService: &mockDiscoveryServiceForTranslation{},
+		modelRegistry:    &mockSimpleModelRegistry{endpointsForModel: map[string][]string{}, strict: true},
+		statsCollector:   &mockStatsCollector{},
+		proxyService:     &mockProxyService{},
+	}
+	h := app.translationHandler(trans)
+
+	const total = 300
+	for range total {
+		body := `{"model":"claude-not-registered","max_tokens":100,"messages":[{"role":"user","content":"hi"}]}`
+		req := httptest.NewRequest(http.MethodPost, "/olla/anthropic/v1/messages", strings.NewReader(body))
+		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+		req.RemoteAddr = "203.0.113.7:4000"
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		require.Equal(t, http.StatusNotFound, w.Code)
+	}
+
+	assert.Equal(t, 1, log.count("Request rejected"))
+	assert.Zero(t, log.errorTotal(), "no ERROR of any message per rejection")
+	assert.Zero(t, log.count("Model routing rejected request"))
+}

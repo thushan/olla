@@ -137,7 +137,7 @@ func (a *Application) writeNoRoutableEndpoints(w http.ResponseWriter, r *http.Re
 	// 404/503 is never mistaken for a successful proxy in the logs (#191).
 	a.logRequestStart(pr, 0)
 	pr.captureStickyOutcome(r.Context(), r)
-	a.logRequestRejected(pr, status)
+	a.logRequestRejected(pr, status, reason)
 
 	// Headers must be set before http.Error, which calls WriteHeader.
 	a.setStickyResponseHeadersFromRequest(w, r)
@@ -420,13 +420,17 @@ func (a *Application) logRequestStart(pr *proxyRequest, endpointCount int) {
 // endpoint selection produced no routable target. Kept distinct from logRequestResult's
 // "completed"/"failed" outcomes so a fail-fast rejection (e.g. strict model_not_found)
 // is surfaced as a rejection rather than a successful completion (#191).
-func (a *Application) logRequestRejected(pr *proxyRequest, status int) {
+func (a *Application) logRequestRejected(pr *proxyRequest, status int, reason string) {
+	if !a.rejectLog.allowRequest(pr.clientIP, status) {
+		return
+	}
 	duration := time.Since(pr.stats.StartTime)
 
 	logFields := []any{
 		"client_ip", pr.clientIP,
 		"path", pr.path,
 		"status", status,
+		"reason", reason,
 		"duration_ms", duration.Milliseconds(),
 	}
 
@@ -451,6 +455,14 @@ func (a *Application) logRequestRejected(pr *proxyRequest, status int) {
 }
 
 func (a *Application) logRequestResult(pr *proxyRequest, err error) {
+	// A chunked body over the size cap fails mid-read and is answered 413 by handleProxyError.
+	// It is a client rejection, so it takes the sampled path rather than an ERROR per request.
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		a.logRequestRejected(pr, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+
 	duration := time.Since(pr.stats.StartTime)
 
 	if err != nil {
@@ -669,7 +681,9 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 				// endpoints of that type: return the empty set so the caller's
 				// existing no-routable-endpoints path produces a proper 404/503,
 				// instead of silently crossing into another provider type.
-				logger.Warn("No compatible endpoints found for provider-scoped path, failing closed",
+				// Debug, not Warn: a client can repeat this at wire speed. The sampled
+				// "Request rejected" line carries the cause ("No <type> endpoints available").
+				logger.Debug("No compatible endpoints found for provider-scoped path, failing closed",
 					"path", profile.Path,
 					"supported_by", profile.SupportedBy,
 					"total_endpoints", len(endpoints))
@@ -727,11 +741,8 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 		if err != nil {
 			// handle routing errors based on decision
 			if decision != nil && decision.StatusCode > 0 {
-				logger.Warn("Model routing rejected request",
-					"model", profile.ModelName,
-					"strategy", decision.Strategy,
-					"reason", decision.Reason,
-					"status", decision.StatusCode)
+				// no per-request WARN here: the final "Request rejected" line carries the
+				// decision (routing_* fields) and is sampled per client
 				// return empty to trigger appropriate error response
 				return []*domain.Endpoint{}
 			}
@@ -769,7 +780,9 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 		if err != nil {
 			logFields = append(logFields, "error", err)
 		}
-		logger.Warn("Model alias resolved to no endpoints, falling back to standard routing",
+		// Debug: a strict-routing miss is rejected right after this, and the sampled
+		// "Request rejected" line reports it. Warning here would write one line per request.
+		logger.Debug("Model alias resolved to no endpoints, falling back to standard routing",
 			logFields...)
 
 		// fall through to standard routing in case the alias name itself is a known model
@@ -785,7 +798,7 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 	}
 
 	if len(aliasEndpoints) == 0 {
-		logger.Warn("No healthy endpoints found for model alias",
+		logger.Debug("No healthy endpoints found for model alias",
 			"alias", aliasName,
 			"resolved_endpoints", len(endpointToModel))
 

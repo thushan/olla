@@ -117,7 +117,12 @@ func (t *Translator) WriteError(w http.ResponseWriter, err error, statusCode int
 	t.logger.Error("Anthropic request failed",
 		"error", err.Error(),
 		"status", statusCode)
+	t.WriteErrorQuiet(w, err, statusCode)
+}
 
+// WriteErrorQuiet writes the same error response as WriteError without the ERROR log line,
+// for rejections the caller already reports through a sampled log.
+func (t *Translator) WriteErrorQuiet(w http.ResponseWriter, err error, statusCode int) {
 	// Map HTTP status codes to Anthropic error types.
 	// overloaded_error is reserved for Anthropic's own infrastructure being overloaded;
 	// a generic backend 503 is an api_error per litellm and bifrost conventions.
