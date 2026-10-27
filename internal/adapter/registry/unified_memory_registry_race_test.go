@@ -239,3 +239,44 @@ func TestUnifiedRegistry_GetUnifiedStatsDuringRegister(t *testing.T) {
 		}
 	})
 }
+
+// The same digest arriving from two endpoints in alternating order must always list under
+// the same id with the model's own id leading the aliases; the merge used to range over maps.
+func TestUnifiedRegistry_MergedListingIsStableAcrossRefreshOrder(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
+	epA, epB := raceEndpoint("a", "http://a:11434"), raceEndpoint("b", "http://b:11434")
+	modelsA := []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}
+	modelsB := []*domain.ModelInfo{raceModel("llama3-8b-b", "sha-1")}
+
+	register := func(ep *domain.Endpoint, m []*domain.ModelInfo) {
+		require.NoError(t, r.RegisterModelsWithEndpoint(ctx, ep, m))
+		r.WaitForUnification()
+	}
+	register(epA, modelsA)
+	register(epB, modelsB)
+
+	var wantID, wantLead string
+	for i := range 200 {
+		if i%2 == 0 {
+			register(epA, modelsA)
+			register(epB, modelsB)
+		} else {
+			register(epB, modelsB)
+			register(epA, modelsA)
+		}
+		ms, err := r.GetUnifiedModels(ctx)
+		require.NoError(t, err)
+		require.Len(t, ms, 1, "same digest must collapse to one model")
+		m := ms[0]
+		require.Len(t, m.SourceEndpoints, 2)
+		require.NotEmpty(t, m.Aliases)
+		require.Equal(t, m.ID, m.Aliases[0].Name, "listings emit Aliases[0]; it must be the model's own id")
+		if i == 0 {
+			wantID, wantLead = m.ID, m.Aliases[0].Name
+		}
+		require.Equal(t, wantID, m.ID)
+		require.Equal(t, wantLead, m.Aliases[0].Name)
+	}
+}

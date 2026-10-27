@@ -27,7 +27,7 @@ func NewLifecycleUnifiedRegistry(logger logger.StyledLogger, config unifier.Conf
 	unifierFactory := unifier.NewFactory(logger)
 	modelUnifier := createUnifier(logger, func() (ports.ModelUnifier, error) {
 		return unifierFactory.CreateWithConfig(unifier.LifecycleUnifierType, config)
-	})
+	}, func() ports.ModelUnifier { return unifier.NewLifecycleUnifier(config, logger) })
 
 	// Build through the plain constructor so every field (routing strategy,
 	// endpoint sets) is initialised in one place, then swap in the lifecycle unifier.
