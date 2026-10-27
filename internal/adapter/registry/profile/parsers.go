@@ -92,14 +92,24 @@ func (p *ollamaParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 func createOllamaModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 	details := &domain.ModelDetails{}
 
-	// Only embedding-only models are typed. Details.Type is single-valued and
-	// nothing in Olla produces a tools tag, so mapping vision/tools would be
-	// partial, flip Ollama vision models to "vlm" in /olla/models, and narrow
-	// model-less vision/tool requests to Ollama endpoints only. Hybrid
-	// embedding+completion models stay untyped and keep text-generation.
-	if isOllamaEmbeddingOnly(ollamaModel.Capabilities) {
-		embeddingsType := "embeddings"
-		details.Type = &embeddingsType
+	// Newer Ollama releases report what a model can do. The kind is single-valued, so a model
+	// that lists vision is a vlm (it still generates text, so it keeps text-generation)
+	// and an embedding-only model is embeddings. A hybrid embedding+completion model
+	// stays untyped and keeps text-generation unless it also lists vision. Vision and
+	// tools are also declared as capabilities so they do not depend on the
+	// type_capabilities config; tools maps to function_calling, the tag
+	// extractRequiredCapabilities asks for. This replaces the earlier decision to leave
+	// both unmapped: model-less vision and tool requests are now steered to hosts whose
+	// models declare them, as they already were for backends that tag vision by name.
+	// Older Ollama reports nothing and stays untyped.
+	kind := ollamaModelKind(ollamaModel.Capabilities)
+	if kind != "" {
+		details.Type = &kind
+	}
+	// An embedder generates nothing, so a vision or tools entry beside "embedding" is not
+	// something a chat request should be steered by.
+	if kind != "embeddings" {
+		details.Capabilities = ollamaDeclaredCapabilities(ollamaModel.Capabilities)
 	}
 
 	if ollamaModel.Digest != nil {
@@ -135,17 +145,42 @@ func createOllamaModelDetails(ollamaModel OllamaModel) *domain.ModelDetails {
 	return details
 }
 
-func isOllamaEmbeddingOnly(capabilities []string) bool {
-	var embedding, completion bool
+// ollamaModelKind maps Ollama's capabilities onto a model kind, or "" when they
+// say nothing the kind vocabulary can hold.
+func ollamaModelKind(capabilities []string) string {
+	var embedding, completion, vision bool
 	for _, c := range capabilities {
 		switch c {
 		case "embedding":
 			embedding = true
 		case "completion":
 			completion = true
+		case "vision":
+			vision = true
 		}
 	}
-	return embedding && !completion
+	switch {
+	case embedding && !completion:
+		return "embeddings"
+	case vision:
+		return "vlm"
+	}
+	return ""
+}
+
+// ollamaDeclaredCapabilities returns the Ollama capabilities that have an Olla
+// counterpart, in Olla's vocabulary: vision, and tools as function_calling.
+func ollamaDeclaredCapabilities(capabilities []string) []string {
+	var declared []string
+	for _, c := range capabilities {
+		switch c {
+		case "vision":
+			declared = append(declared, "vision")
+		case "tools":
+			declared = append(declared, "function_calling")
+		}
+	}
+	return declared
 }
 
 type lmStudioParser struct{}

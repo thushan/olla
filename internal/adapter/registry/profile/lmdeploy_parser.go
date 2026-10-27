@@ -29,7 +29,6 @@ func (p *lmdeployParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		modelInfo := &domain.ModelInfo{
 			Name:     model.ID,
-			Type:     "lmdeploy",
 			LastSeen: now,
 		}
 

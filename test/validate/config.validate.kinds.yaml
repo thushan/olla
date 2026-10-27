@@ -1,0 +1,169 @@
+# Olla validation harness configuration for model-kind routing (/olla-validate
+# skill, area tei-routing).
+#
+# A third Olla instance (41143) in front of eight further ollamock instances, so
+# the path/capability/model routing stages see a fleet with three TEI kinds, two
+# Ollama versions, and vLLM, SGLang and LMDeploy hosts. It is kept apart from
+# config.validate.yaml on purpose: the main fleet's checklists count endpoints
+# and enumerate eligible hosts per route, and these backends would change both.
+#
+# One instance per endpoint: Olla keys endpoint identity on the URL.
+#
+# Topology (one ollamock process per port, started by the skill):
+#   19438  mock-tei-embed   text-embeddings-inference (embedding)  BAAI/bge-small-en-v1.5
+#   19439  mock-tei-rerank  text-embeddings-inference (reranker)   BAAI/bge-reranker-base
+#   19440  mock-tei-class   text-embeddings-inference (classifier) SamLowe/roberta-go-emotions
+#   19441  mock-ollama-h    ollama, tags carry capabilities        llama3.2:3b, nomic-embed-text:latest, qwen3-vl:8b (loaded: llama3.2:3b)
+#   19442  mock-ollama-i    ollama, tags omit capabilities (old)   qwen3:8b, mxbai-embed-large (loaded: qwen3:8b)
+#   19443  mock-vllm-j      vllm                                   intfloat/e5-base-v2, vllm-chat-model
+#   19444  mock-sglang-k    sglang                                 sglang-chat-model
+#   19445  mock-lmdeploy-l  lmdeploy                               lmdeploy-chat-model
+
+server:
+  host: "127.0.0.1"
+  port: 41143
+  read_timeout: 20s
+  read_header_timeout: 10s
+  write_timeout: 0s
+  shutdown_timeout: 5s
+  request_logging: true
+  request_limits:
+    max_body_size: 5242880
+    max_header_size: 524288
+  rate_limits:
+    global_requests_per_minute: 100000
+    per_ip_requests_per_minute: 50000
+    health_requests_per_minute: 100000
+    burst_size: 1000
+    cleanup_interval: 5m
+    trust_proxy_headers: false
+    trusted_proxy_cidrs: ["127.0.0.0/8"]
+
+proxy:
+  engine: "olla"
+  profile: "auto"
+  load_balancer: "least-connections"
+  connection_timeout: 10s
+  response_timeout: 60s
+  read_timeout: 60s
+  response_header_timeout: 10s
+  retry:
+    enabled: true
+    on_connection_failure: true
+    max_attempts: 0
+
+discovery:
+  type: "static"
+  refresh_interval: 10s
+  health_check:
+    initial_delay: 1s
+  static:
+    endpoints:
+      # ── Text Embeddings Inference: one model, one kind per instance ─────
+      - url: "http://127.0.0.1:19438"
+        name: "mock-tei-embed"
+        type: "text-embeddings-inference"
+        priority: 100
+        model_url: "/info"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+      - url: "http://127.0.0.1:19439"
+        name: "mock-tei-rerank"
+        type: "text-embeddings-inference"
+        priority: 100
+        model_url: "/info"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+      - url: "http://127.0.0.1:19440"
+        name: "mock-tei-class"
+        type: "text-embeddings-inference"
+        priority: 100
+        model_url: "/info"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+
+      # ── two Ollamas: one reports capabilities in /api/tags, one is pre-0.30 ─
+      - url: "http://127.0.0.1:19441"
+        name: "mock-ollama-h"
+        type: "ollama"
+        priority: 100
+        model_url: "/api/tags"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+      - url: "http://127.0.0.1:19442"
+        name: "mock-ollama-i"
+        type: "ollama"
+        priority: 100
+        model_url: "/api/tags"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+
+      # ── non-Ollama hosts that speak Anthropic natively ──────────────────
+      - url: "http://127.0.0.1:19443"
+        name: "mock-vllm-j"
+        type: "vllm"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+      - url: "http://127.0.0.1:19444"
+        name: "mock-sglang-k"
+        type: "sglang"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+      - url: "http://127.0.0.1:19445"
+        name: "mock-lmdeploy-l"
+        type: "lmdeploy"
+        priority: 100
+        model_url: "/v1/models"
+        health_check_url: "/health"
+        check_interval: 2s
+        check_timeout: 1s
+
+  model_discovery:
+    enabled: true
+    interval: 30s
+    timeout: 5s
+    concurrent_workers: 4
+    retry_attempts: 2
+    retry_backoff: 1s
+
+model_registry:
+  type: "memory"
+  enable_unifier: true
+  unification:
+    stale_threshold: 24h
+    cleanup_interval: 10m
+  routing_strategy:
+    # optimistic + all matches the main fleet; the capability stage narrows
+    # model-less requests before this strategy is consulted.
+    type: "optimistic"
+    options:
+      fallback_behavior: "all"
+      discovery_timeout: 2s
+      discovery_refresh_on_miss: false
+
+translators:
+  anthropic:
+    enabled: true
+    passthrough_enabled: true
+    max_message_size: 10485760
+    inspector:
+      enabled: false
+
+logging:
+  level: "info"
+  format: "text"
+  output: "stdout"
+
+engineering:
+  show_nerdstats: false

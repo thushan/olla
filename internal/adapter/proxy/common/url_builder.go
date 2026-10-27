@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/util"
 )
@@ -19,6 +20,13 @@ import (
 // See [OLLA-GH-80] https://github.com/thushan/olla/issues/80
 func BuildTargetURL(r *http.Request, endpoint *domain.Endpoint, proxyPrefix string) *url.URL {
 	targetPath := util.StripPrefix(r.URL.Path, proxyPrefix)
+	// A per-endpoint path is already the backend's own path: it carries no proxy prefix, and
+	// it replaces whatever path the request holds because that path was chosen for the fleet.
+	if paths, ok := r.Context().Value(constants.ContextEndpointPathMapKey).(map[string]string); ok {
+		if p, ok := paths[endpoint.GetURLString()]; ok && p != "" {
+			targetPath = p
+		}
+	}
 	if targetPath == "" {
 		targetPath = "/"
 	}

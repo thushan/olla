@@ -101,6 +101,7 @@ make dev
 | `make fmt` | Format code with gofmt |
 | `make lint` | Run golangci-lint |
 | `make ready` | Run all pre-commit checks (test-short + test-race + fmt + vet + lint + align) |
+| `OLLA_SMOKE_OK=1 make smoke-build-local` | Check `make build-local` from a clean and a pre-populated `build/` (needs goreleaser and bun; deletes `./build`, so use a scratch worktree) |
 
 ### Docker Commands
 

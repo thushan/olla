@@ -33,7 +33,7 @@ func TestLlamaCppParser_Parse(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "llama-3.1-8b-instruct-q4_k_m.gguf", model.Name)
-		assert.Equal(t, "llamacpp", model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 		require.NotNil(t, model.Details)
 
 		// Check timestamp is converted correctly
@@ -336,7 +336,7 @@ func TestLlamaCppParser_Parse(t *testing.T) {
 
 		// Verify type is set correctly for all models
 		for i, model := range models {
-			assert.Equal(t, "llamacpp", model.Type, "Model %d type must be 'llamacpp'", i)
+			assert.Empty(t, model.Type, "Model %d: provider names are not model kinds", i)
 		}
 	})
 
@@ -428,7 +428,7 @@ func TestLlamaCppParser_RealWorldModelNames(t *testing.T) {
 
 				model := models[0]
 				assert.Equal(t, tc.modelName, model.Name)
-				assert.Equal(t, "llamacpp", model.Type)
+				assert.Empty(t, model.Type, "provider names are not model kinds")
 				require.NotNil(t, model.Details)
 				require.NotNil(t, model.Details.Format)
 				assert.Equal(t, constants.RecipeGGUF, *model.Details.Format)
@@ -460,7 +460,7 @@ func TestLlamaCppParser_EdgeCases(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "minimal-model.gguf", model.Name)
-		assert.Equal(t, "llamacpp", model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 		// Details should exist because Format is always set
 		require.NotNil(t, model.Details)
 		require.NotNil(t, model.Details.Format)
@@ -588,7 +588,7 @@ func TestLlamaCppParser_Issue222(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, models, 1)
 	assert.Equal(t, "Qwen3-Coder-30B-A3B", models[0].Name)
-	assert.Equal(t, constants.ProviderTypeLlamaCpp, models[0].Type)
+	assert.Empty(t, models[0].Type, "provider names are not model kinds")
 	require.NotNil(t, models[0].Details)
 	require.NotNil(t, models[0].Details.ModifiedAt)
 	assert.Equal(t, time.Unix(1789077214, 0), *models[0].Details.ModifiedAt)
@@ -623,7 +623,7 @@ func TestLlamaCppParser_MetadataCompatibility(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, models, 1)
 			assert.Equal(t, "model.gguf", models[0].Name)
-			assert.Equal(t, constants.ProviderTypeLlamaCpp, models[0].Type)
+			assert.Empty(t, models[0].Type, "provider names are not model kinds")
 			require.NotNil(t, models[0].Details)
 			require.NotNil(t, models[0].Details.ModifiedAt)
 			assert.Equal(t, time.Unix(1704067200, 0), *models[0].Details.ModifiedAt)

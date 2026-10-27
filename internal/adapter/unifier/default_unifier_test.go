@@ -2,7 +2,9 @@ package unifier
 
 import (
 	"context"
+	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -364,4 +366,73 @@ func TestDefaultUnifier_NilAndEmptyInputs(t *testing.T) {
 	result, err = unifier.UnifyModels(ctx, models, endpoint)
 	require.NoError(t, err)
 	assert.Len(t, result, 2)
+}
+
+// Listings emit Aliases[0] as the model id, so a digest-merged model must come
+// out the same every time. The merge used to range over maps, which flipped it.
+func TestMergeUnifiedModels_OrderIsStableAndLeadsWithOwnID(t *testing.T) {
+	u := NewDefaultUnifier()
+	now := time.Now()
+	a := &domain.UnifiedModel{
+		ID:              "Qwen/Qwen3-8B",
+		Aliases:         []domain.AliasEntry{{Name: "Qwen/Qwen3-8B", Source: "vllm"}},
+		SourceEndpoints: []domain.SourceEndpoint{{EndpointURL: "http://a", LastSeen: now}},
+		Capabilities:    []string{"chat", "text-generation"},
+	}
+	b := &domain.UnifiedModel{
+		ID:              "qwen3:8b",
+		Aliases:         []domain.AliasEntry{{Name: "qwen3:8b", Source: "ollama"}},
+		SourceEndpoints: []domain.SourceEndpoint{{EndpointURL: "http://b", LastSeen: now}},
+		Capabilities:    []string{"completion", "chat"},
+	}
+
+	for _, order := range [][]*domain.UnifiedModel{{b, a}, {a, b}} {
+		for range 200 {
+			merged, err := u.MergeUnifiedModels(context.Background(), order)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if merged.Aliases[0].Name != merged.ID {
+				t.Fatalf("Aliases[0]=%q, want the unified id %q", merged.Aliases[0].Name, merged.ID)
+			}
+			if len(merged.Aliases) != 2 || len(merged.SourceEndpoints) != 2 || len(merged.Capabilities) != 3 {
+				t.Fatalf("unexpected merge shape: %+v", merged)
+			}
+			if merged.SourceEndpoints[0].EndpointURL != order[0].SourceEndpoints[0].EndpointURL {
+				t.Fatal("source endpoint order is not the input order")
+			}
+		}
+	}
+}
+
+// Discovery hands the merge models in whatever order endpoints answered, so shuffled input
+// must still lead with the model's own id and carry exactly the union of aliases and sources.
+func TestMergeUnifiedModels_ShuffledInputKeepsOwnIDFirst(t *testing.T) {
+	u := NewDefaultUnifier()
+	now := time.Now()
+	names := []string{"Qwen/Qwen3-8B", "qwen3:8b", "qwen3-8b-gguf", "qwen3:8b-q4"}
+	build := func() []*domain.UnifiedModel {
+		models := make([]*domain.UnifiedModel, len(names))
+		for i, n := range names {
+			models[i] = &domain.UnifiedModel{
+				ID:              names[0],
+				Aliases:         []domain.AliasEntry{{Name: n, Source: "src"}},
+				SourceEndpoints: []domain.SourceEndpoint{{EndpointURL: "http://" + n, LastSeen: now}},
+				Capabilities:    []string{"chat", n},
+			}
+		}
+		return models
+	}
+
+	rng := rand.New(rand.NewSource(1))
+	for range 500 {
+		models := build()
+		rng.Shuffle(len(models), func(i, j int) { models[i], models[j] = models[j], models[i] })
+		merged, err := u.MergeUnifiedModels(context.Background(), models)
+		require.NoError(t, err)
+		require.Equal(t, merged.ID, merged.Aliases[0].Name)
+		require.Len(t, merged.Aliases, len(names))
+		require.Len(t, merged.SourceEndpoints, len(names))
+		require.Len(t, merged.Capabilities, len(names)+1)
+	}
 }

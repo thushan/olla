@@ -16,6 +16,7 @@ func TestOllamaParser_CapabilitiesTyping(t *testing.T) {
 		name     string
 		body     string
 		wantType string // empty means Type must be nil
+		wantCaps []string
 	}{
 		{
 			name:     "embedding only is typed embeddings",
@@ -23,8 +24,32 @@ func TestOllamaParser_CapabilitiesTyping(t *testing.T) {
 			wantType: "embeddings",
 		},
 		{
-			name: "completion vision tools stays untyped",
-			body: `{"models":[{"name":"qwen3-vl:8b","details":{"family":"qwen3vl"},"capabilities":["completion","vision","tools","thinking"]}]}`,
+			name:     "completion vision tools is a vlm with vision and function calling",
+			body:     `{"models":[{"name":"qwen3-vl:8b","details":{"family":"qwen3vl"},"capabilities":["completion","vision","tools","thinking"]}]}`,
+			wantType: "vlm",
+			wantCaps: []string{"vision", "function_calling"},
+		},
+		{
+			name:     "completion plus vision is a generative vlm",
+			body:     `{"models":[{"name":"llava:13b","capabilities":["completion","vision"]}]}`,
+			wantType: "vlm",
+			wantCaps: []string{"vision"},
+		},
+		{
+			name:     "vision without a completion entry is still a vlm",
+			body:     `{"models":[{"name":"vision-only:latest","capabilities":["vision"]}]}`,
+			wantType: "vlm",
+			wantCaps: []string{"vision"},
+		},
+		{
+			name:     "completion plus tools has the capability but no kind",
+			body:     `{"models":[{"name":"llama3.1:8b","capabilities":["completion","tools"]}]}`,
+			wantCaps: []string{"function_calling"},
+		},
+		{
+			name:     "embedding plus vision stays embedding only",
+			body:     `{"models":[{"name":"odd:latest","capabilities":["embedding","vision"]}]}`,
+			wantType: "embeddings",
 		},
 		{
 			name: "missing capabilities (older Ollama) stays untyped",
@@ -66,11 +91,19 @@ func TestOllamaParser_CapabilitiesTyping(t *testing.T) {
 				if models[0].Details != nil {
 					assert.Nil(t, models[0].Details.Type)
 				}
+			} else {
+				require.NotNil(t, models[0].Details)
+				require.NotNil(t, models[0].Details.Type)
+				assert.Equal(t, tt.wantType, *models[0].Details.Type)
+			}
+			if len(tt.wantCaps) == 0 {
+				if models[0].Details != nil {
+					assert.Empty(t, models[0].Details.Capabilities)
+				}
 				return
 			}
 			require.NotNil(t, models[0].Details)
-			require.NotNil(t, models[0].Details.Type)
-			assert.Equal(t, tt.wantType, *models[0].Details.Type)
+			assert.ElementsMatch(t, tt.wantCaps, models[0].Details.Capabilities)
 		})
 	}
 }

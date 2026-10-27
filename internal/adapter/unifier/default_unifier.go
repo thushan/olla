@@ -455,6 +455,14 @@ func (u *DefaultUnifier) applyModelDetails(model *Model, details *domain.ModelDe
 	if details.Recipe != nil {
 		model.Metadata["recipe"] = *details.Recipe
 	}
+	if len(details.Capabilities) > 0 {
+		// inferCapabilitiesFromMetadata reads declared capabilities as []interface{}
+		declared := make([]interface{}, len(details.Capabilities))
+		for i, c := range details.Capabilities {
+			declared[i] = c
+		}
+		model.Metadata["capabilities"] = declared
+	}
 }
 
 // applyModelInfo transfers top-level ModelInfo fields to Model metadata
@@ -547,28 +555,21 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		Metadata:         make(map[string]interface{}),
 	}
 
-	sourceMap := make(map[string]domain.SourceEndpoint)
-	aliasMap := make(map[string]domain.AliasEntry)
-	capSet := make(map[string]bool)
+	// Ordered slices with index maps, not ranged maps: listings emit the first
+	// alias as the model id, so merge order has to be stable between runs.
+	sourceIdx := make(map[string]int)
+	aliasIdx := make(map[string]int)
+	capSeen := make(map[string]bool)
 
 	for _, model := range models {
-		for _, source := range model.SourceEndpoints {
-			key := source.EndpointURL
-			if existing, exists := sourceMap[key]; exists {
-				if source.LastSeen.After(existing.LastSeen) {
-					sourceMap[key] = source
-				}
-			} else {
-				sourceMap[key] = source
-			}
-		}
-
-		for _, alias := range model.Aliases {
-			aliasMap[alias.Name] = alias
-		}
+		mergeSources(merged, sourceIdx, model.SourceEndpoints)
+		mergeAliases(merged, aliasIdx, model.Aliases)
 
 		for _, cap := range model.Capabilities {
-			capSet[cap] = true
+			if !capSeen[cap] {
+				capSeen[cap] = true
+				merged.Capabilities = append(merged.Capabilities, cap)
+			}
 		}
 
 		if model.LastSeen.After(merged.LastSeen) {
@@ -580,26 +581,47 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		}
 	}
 
-	totalDiskSize := int64(0)
-	for _, source := range sourceMap {
-		merged.SourceEndpoints = append(merged.SourceEndpoints, source)
-		totalDiskSize += source.DiskSize
-	}
-	merged.DiskSize = totalDiskSize
-
-	for _, alias := range aliasMap {
-		merged.Aliases = append(merged.Aliases, alias)
+	for _, source := range merged.SourceEndpoints {
+		merged.DiskSize += source.DiskSize
 	}
 
-	for cap := range capSet {
-		merged.Capabilities = append(merged.Capabilities, cap)
+	// the alias matching the unified id leads, so the id a listing emits is the
+	// model's own rather than whichever platform name merged in
+	if at, ok := aliasIdx[merged.ID]; ok && at > 0 {
+		lead := merged.Aliases[at]
+		copy(merged.Aliases[1:at+1], merged.Aliases[:at])
+		merged.Aliases[0] = lead
 	}
 
 	return merged, nil
 }
 
+func mergeSources(merged *domain.UnifiedModel, idx map[string]int, sources []domain.SourceEndpoint) {
+	for _, source := range sources {
+		if at, exists := idx[source.EndpointURL]; exists {
+			if source.LastSeen.After(merged.SourceEndpoints[at].LastSeen) {
+				merged.SourceEndpoints[at] = source
+			}
+			continue
+		}
+		idx[source.EndpointURL] = len(merged.SourceEndpoints)
+		merged.SourceEndpoints = append(merged.SourceEndpoints, source)
+	}
+}
+
+func mergeAliases(merged *domain.UnifiedModel, idx map[string]int, aliases []domain.AliasEntry) {
+	for _, alias := range aliases {
+		if at, exists := idx[alias.Name]; exists {
+			merged.Aliases[at] = alias
+			continue
+		}
+		idx[alias.Name] = len(merged.Aliases)
+		merged.Aliases = append(merged.Aliases, alias)
+	}
+}
+
 func (u *DefaultUnifier) Clear(ctx context.Context) error {
-	u.store = NewCatalogStore(5 * time.Minute)
+	u.store.Reset()
 	u.statsMu.Lock()
 	u.stats = DeduplicationStats{}
 	u.statsMu.Unlock()

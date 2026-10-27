@@ -7,9 +7,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/adapter/converter"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/core/ports"
 )
 
 // parseProfileModels runs a discovery body through the shipped profile's real
@@ -174,12 +176,37 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 			},
 		},
 		{
-			name:     "Ollama completion model keeps text-generation without embeddings",
+			name:     "Ollama vision model is a vlm that still generates text",
 			models:   parseOllamaModels(t, `{"models":[{"name":"qwen3-vl:8b","details":{"family":"qwen3vl"},"capabilities":["completion","vision","tools"]}]}`),
 			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
 			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
-				assert.Contains(t, model.Capabilities, "text-generation")
+				assert.Equal(t, "vlm", domain.ModelKindFromMetadata(model.Metadata))
+				assert.Contains(t, model.Capabilities, "text-generation", "a vlm is generative, so the kind must not strip it")
+				assert.Contains(t, model.Capabilities, "vision")
+				assert.Contains(t, model.Capabilities, "multimodal")
+				assert.Contains(t, model.Capabilities, "function_calling")
 				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			name:     "Ollama tools model has function calling and keeps text-generation",
+			models:   parseOllamaModels(t, `{"models":[{"name":"gpt-oss:20b","capabilities":["completion","tools"]}]}`),
+			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "text-generation")
+				assert.Contains(t, model.Capabilities, "function_calling")
+				assert.NotContains(t, model.Capabilities, "vision")
+				assert.NotContains(t, model.Capabilities, "embeddings")
+			},
+		},
+		{
+			name:     "Ollama completion-only model has neither vision nor function calling",
+			models:   parseOllamaModels(t, `{"models":[{"name":"llama3:8b","details":{"family":"llama"},"capabilities":["completion"]}]}`),
+			endpoint: createTestEndpoint("http://localhost:11434", "Ollama"),
+			expectedModel: func(t *testing.T, model *domain.UnifiedModel) {
+				assert.Contains(t, model.Capabilities, "text-generation")
+				assert.NotContains(t, model.Capabilities, "vision")
+				assert.NotContains(t, model.Capabilities, "function_calling")
 			},
 		},
 		{
@@ -344,4 +371,34 @@ func ptrTime(t time.Time) *time.Time {
 
 func ptrInt64(i int64) *int64 {
 	return &i
+}
+
+// Provider parsers once put their own name in ModelInfo.Type, which the
+// unifier copies into metadata and the LM Studio listing then reported as the
+// model's type. None of them may do that, and the listing must fall back to
+// "llm" for a model whose kind the backend doesn't say.
+func TestDefaultUnifier_ProviderNameIsNotModelType(t *testing.T) {
+	ctx := context.Background()
+	body := `{"data":[{"id":"acme/chatty-7b","object":"model","owned_by":"acme"}]}`
+
+	for _, prof := range []string{
+		domain.ProfileVLLM, domain.ProfileSGLang, domain.ProfileLemonade, domain.ProfileLMDeploy,
+		domain.ProfileLlamaCpp, domain.ProfileVLLMMLX, domain.ProfileDockerMR, domain.ProfileOpenAICompatible,
+	} {
+		t.Run(prof, func(t *testing.T) {
+			unified, err := NewDefaultUnifier().UnifyModels(ctx, parseProfileModels(t, prof, body), createTestEndpoint("http://localhost:8000", prof))
+			require.NoError(t, err)
+			require.Len(t, unified, 1)
+
+			assert.Empty(t, domain.ModelKindFromMetadata(unified[0].Metadata), "no kind reported by the backend")
+
+			// the LM Studio listing only lists models it has an alias for
+			unified[0].Aliases = append(unified[0].Aliases, domain.AliasEntry{Name: "acme/chatty-7b", Source: "lmstudio"})
+			resp, err := converter.NewLMStudioConverter().ConvertToFormat(unified, ports.ModelFilters{})
+			require.NoError(t, err)
+			data := resp.(converter.LMStudioModelResponse).Data
+			require.Len(t, data, 1)
+			assert.Equal(t, "llm", data[0].Type)
+		})
+	}
 }

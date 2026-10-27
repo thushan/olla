@@ -43,7 +43,7 @@ func TestLemonadeParser_Parse(t *testing.T) {
 		// Verify first model (Qwen CPU)
 		qwen := models[0]
 		assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", qwen.Name)
-		assert.Equal(t, "lemonade", qwen.Type)
+		assert.Empty(t, qwen.Type, "provider names are not model kinds")
 		assert.NotNil(t, qwen.Details)
 
 		// Check creation time is converted
@@ -67,7 +67,7 @@ func TestLemonadeParser_Parse(t *testing.T) {
 		// Verify second model (Llama NPU)
 		llama := models[1]
 		assert.Equal(t, "Llama-3.2-1B-Instruct-NPU", llama.Name)
-		assert.Equal(t, "lemonade", llama.Type)
+		assert.Empty(t, llama.Type, "provider names are not model kinds")
 		assert.NotNil(t, llama.Details)
 
 		// Check publisher extraction
@@ -258,7 +258,7 @@ func TestLemonadeParser_Parse(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "minimal-model", model.Name)
-		assert.Equal(t, "lemonade", model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 
 		// Details should be nil when no metadata is present
 		assert.Nil(t, model.Details)
@@ -377,7 +377,7 @@ func TestLemonadeParser_Parse(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "Qwen2.5-0.5B-Instruct-CPU", model.Name)
-		assert.Equal(t, "lemonade", model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 
 		// Verify all expected fields are parsed
 		require.NotNil(t, model.Details)

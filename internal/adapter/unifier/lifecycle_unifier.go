@@ -240,7 +240,7 @@ func (u *LifecycleUnifier) Clear(ctx context.Context) error {
 		return err
 	}
 
-	u.endpointManager = NewEndpointManager(u.config, u.logger)
+	u.endpointManager.Reset()
 
 	return nil
 }

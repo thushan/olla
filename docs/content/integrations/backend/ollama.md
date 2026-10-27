@@ -226,7 +226,17 @@ The following endpoints are supported by the Ollama integration profile:
     <td><code>/v1/embeddings</code></td>
     <td>Embeddings (OpenAI format)</td>
   </tr>
+  <tr>
+    <td><code>/api/ps</code></td>
+    <td>Models Currently Loaded (merged across Ollama endpoints)</td>
+  </tr>
+  <tr>
+    <td><code>/api/version</code></td>
+    <td>Ollama Version</td>
+  </tr>
 </table>
+
+Model management (<code>/api/pull</code>, <code>/api/push</code>, <code>/api/create</code>, <code>/api/copy</code>, <code>/api/delete</code> and <code>/api/blobs/{digest}</code>) is not proxied: it changes one instance's model store, so Olla returns 501. Run those against the Ollama instance directly.
 
 ## Usage Examples
 
@@ -302,7 +312,7 @@ curl -X POST http://localhost:40114/olla/ollama/api/embeddings \
 
 The newer `/api/embed` endpoint works the same way. Olla checks its `model` field against the models it knows, and a name without a tag is looked up as `name:latest`, so `nomic-embed-text` and `nomic-embed-text:latest` reach the same model.
 
-Newer Ollama releases report each model's `capabilities` in `/api/tags`. Olla types a model that lists `embedding` but not `completion` as `embeddings`, so `/v1/embeddings` requests are routed to it and `?type=embeddings` on `/olla/models` includes it. Older Ollama versions omit the field and their embedding models stay untyped.
+Newer Ollama releases report each model's `capabilities` in `/api/tags`. Olla types a model that lists `embedding` but not `completion` as `embeddings`, so `/v1/embeddings` requests are routed to it and `?type=embeddings` on `/olla/models` includes it. A model that lists `vision` is typed `vlm` (it still generates text) and gets the `vision` capability, so `?type=vlm` and `?capability=vision` list it; `tools` becomes the `function_calling` capability. A request that names no model but carries images or `tools` is steered to hosts with such a model. Older Ollama versions omit the field and their models stay untyped; vision models are then recognised by name only.
 
 ### List Available Models
 

@@ -34,7 +34,7 @@ func TestVLLMMLXParser_Parse(t *testing.T) {
 
 		model := models[0]
 		assert.Equal(t, "mlx-community/Llama-3.2-3B-Instruct-4bit", model.Name)
-		assert.Equal(t, constants.ProviderTypeVLLMMLX, model.Type)
+		assert.Empty(t, model.Type, "provider names are not model kinds")
 		require.NotNil(t, model.Details)
 		require.NotNil(t, model.Details.ModifiedAt)
 		assert.Equal(t, int64(1734000000), model.Details.ModifiedAt.Unix())
