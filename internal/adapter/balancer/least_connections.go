@@ -39,7 +39,7 @@ func (l *LeastConnectionsSelector) Select(ctx context.Context, endpoints []*doma
 
 	routable := make([]*domain.Endpoint, 0, len(endpoints))
 	for _, endpoint := range endpoints {
-		if endpoint.Status.IsRoutable() {
+		if endpoint.RoutableNow() {
 			routable = append(routable, endpoint)
 		}
 	}

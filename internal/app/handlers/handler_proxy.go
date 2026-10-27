@@ -276,6 +276,11 @@ func (a *Application) injectStickyKeyWithBody(ctx context.Context, r *http.Reque
 	outcome := &balancer.StickyOutcome{}
 	ctx = context.WithValue(ctx, constants.ContextStickyKeyKey, stickyKey)
 	ctx = context.WithValue(ctx, constants.ContextStickyKeySourceKey, stickySource)
+	// Client hard-selection: an explicit X-Olla-Endpoint request header pins the
+	// session to that endpoint (see StickySessionWrapper.Select).
+	if ep := r.Header.Get(constants.HeaderXOllaEndpoint); ep != "" {
+		ctx = context.WithValue(ctx, constants.ContextEndpointOverrideKey, ep)
+	}
 	ctx = context.WithValue(ctx, constants.ContextStickyOutcomeKey, outcome)
 	r = r.WithContext(ctx)
 
@@ -471,6 +476,9 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 		// "disabled" carries no signal; omit it to avoid noise in deployments without sticky sessions
 		if pr.stickyOutcome != "" && pr.stickyOutcome != "disabled" {
 			infoFields = append(infoFields, "sticky_outcome", pr.stickyOutcome)
+			if pr.stickySource != "" && pr.stickySource != "none" {
+				infoFields = append(infoFields, "sticky_key_source", pr.stickySource)
+			}
 		}
 
 		// the client-supplied session id, logged alongside the outcome so affinity
