@@ -34,11 +34,11 @@ api:
     # the OpenAI API. Left undeclared, stage 1 would drop these hosts from a path whenever
     # any other profile declares it. Declaring a path only keeps the host a candidate:
     # a request that names a model is still routed by that model, and this is not
-    # Anthropic passthrough (anthropic_support stays disabled).
+    # Anthropic passthrough (anthropic_support stays disabled). Only paths that Ollama and
+    # LM Studio also serve belong here: this profile's paths implicitly admit those two as
+    # candidates, so /v1/messages/count_tokens and /v1/rerank (which they 404) are left out.
     - /v1/responses      # 4: OpenAI Responses API
     - /v1/messages       # 5: Anthropic Messages API
-    - /v1/messages/count_tokens # 6: Anthropic token counting
-    - /v1/rerank         # 7: rerank
   model_discovery_path: /v1/models
   health_check_path: /v1/models
 
