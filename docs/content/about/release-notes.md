@@ -140,6 +140,14 @@ only a request path of that single segment.
 
 Olla wrote a WARN for every request it rejected, so a client hammering a rate limit produced millions of identical lines in minutes and pushed useful history out of the rotated log. Rate limit (`429`), request size (`413`/`431`), dashboard access (`403`) and proxy routing rejections are now sampled: the first in each 10 second window logs in full, and the rest become one summary such as `WARN Rate limit exceeded, repeats suppressed layer=rate_limit client_ip=203.0.113.7 suppressed=19994 window=10s`. The `Model routing rejected request` and `Large request blocked` WARNs are gone, since the sampled `Request rejected` line carries the same detail. Responses, and the rate limit and size limit counters, are unchanged, and a backend's own 4xx and 5xx responses are still logged per request.
 
+### Fixed: `Content-Encoding: identity` bodies and unreadable `/v1/embeddings` bodies
+
+A client that sent `Content-Encoding: identity` had its body skipped, so the model name was never read and the
+request was routed as if it named none. `identity` means no encoding and is now read like any plain body; `gzip`,
+`br` and lists such as `gzip, identity` are still skipped. Separately, `/v1/embeddings` is now an embeddings path
+for capability routing, so a model-less request whose body Olla can't read is still kept off chat-only hosts, and
+is refused with `503` (`capability_unavailable`) when embedders exist but none is healthy. Requests that name a model are unaffected.
+
 ### Fixed: model routing no longer depends on the Content-Type header
 
 A request that named a model but didn't send `Content-Type: application/json` was routed as if it named

@@ -273,6 +273,7 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 		embedBody      = `{"input":"hello"}`
 		visionBody     = `{"messages":[{"role":"user","content":[{"type":"text","text":"what is this"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`
 		plainChatBody  = `{"messages":[{"role":"user","content":"hi"}]}`
+		unreadableBody = "input=hello"
 	)
 	tei := func(name, info string, offline bool) fleetEndpoint {
 		return fleetEndpoint{name: name, typ: constants.ProviderTypeTextEmbeddingsInference, modelsJSON: info, offline: offline}
@@ -316,6 +317,13 @@ func TestProxyRouting_CapabilityUnavailable(t *testing.T) {
 			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
 		{"model-less v1 embeddings on the unified route reaches the ollama embedder", embeddingsPath, embedBody, "", []string{"ollama-1"},
 			[]fleetEndpoint{tei("tei-embed", teiInfoSnowflake, true), tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
+		// the body is unreadable (not JSON), so only the path says this is an embeddings request
+		{"unreadable-body embeddings with the only embedding host down", embeddingsPath, unreadableBody, constants.RoutingReasonCapabilityUnavailable, nil,
+			[]fleetEndpoint{ollama(ollamaTagsEmbedAndVision, true), vllmChat}},
+		{"unreadable-body embeddings stay off chat-only hosts", embeddingsPath, unreadableBody, "", []string{"ollama-1"},
+			[]fleetEndpoint{ollama(ollamaTagsEmbedAndVision, false), vllmChat}},
+		{"unreadable-body embeddings behind a mount prefix stay off chat-only hosts", "/olla/ollama/v1/embeddings", unreadableBody, "", []string{"ollama-1"},
+			[]fleetEndpoint{ollama(ollamaTagsEmbedAndVision, false), vllmChat}},
 		{"model-less embed on the tei provider route whose only embedder is a healthy ollama keeps the fallback", "/olla/tei/embed", inputsBody, "", []string{"tei-classify", "tei-rerank"},
 			[]fleetEndpoint{tei("tei-rerank", teiInfoReranker, false), tei("tei-classify", teiInfoClassify, false), ollama(ollamaTagsEmbedAndVision, false)}},
 		{"model-less embed routes to a second embedder that is up", "/olla/proxy/embed", inputsBody, "", []string{"tei-embed-2"},
