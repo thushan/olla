@@ -56,6 +56,7 @@ const (
 
 	// Standard HTTP Headers
 	HeaderContentType       = "Content-Type"
+	HeaderContentEncoding   = "Content-Encoding"
 	HeaderAccept            = "Accept"
 	HeaderAuthorization     = "Authorization"
 	HeaderUserAgent         = "User-Agent"

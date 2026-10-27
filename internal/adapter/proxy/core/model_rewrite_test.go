@@ -391,3 +391,41 @@ func TestRewriteModelForAlias_BodyReadableAfterRewrite(t *testing.T) {
 		t.Error("first read should return non-empty body")
 	}
 }
+
+func TestResolvedModelName(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &domain.Endpoint{URLString: "http://ollama-1:11434"}
+	withCanonical := context.WithValue(context.Background(), constants.ContextCanonicalModelKey,
+		CanonicalModel{Requested: "all-minilm", Native: "all-minilm:latest"})
+	withAlias := context.WithValue(withCanonical, constants.ContextModelAliasMapKey,
+		map[string]string{endpoint.URLString: "aliased:7b"})
+
+	withTargets := context.WithValue(context.Background(), constants.ContextModelAliasMapKey,
+		map[string]string{endpoint.URLString: "all-minilm"})
+	withTargets = context.WithValue(withTargets, constants.ContextCanonicalModelKey,
+		CanonicalModel{Requested: "embed", Targets: map[string]string{"all-minilm": "all-minilm:latest"}})
+
+	tests := []struct {
+		ctx       context.Context
+		endpoint  *domain.Endpoint
+		name      string
+		requested string
+		want      string
+	}{
+		{withTargets, endpoint, "a bare alias target is labelled with its native name", "embed", "all-minilm:latest"},
+		{context.Background(), endpoint, "nothing in context keeps the request", "all-minilm", "all-minilm"},
+		{withCanonical, endpoint, "bare name is labelled with its native name", "all-minilm", "all-minilm:latest"},
+		{withCanonical, nil, "the label does not need an endpoint", "all-minilm", "all-minilm:latest"},
+		{withCanonical, endpoint, "a different requested name is left alone", "other", "other"},
+		{withAlias, endpoint, "an alias map entry for the endpoint wins", "all-minilm", "aliased:7b"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ResolvedModelName(tt.ctx, tt.endpoint, tt.requested); got != tt.want {
+				t.Errorf("ResolvedModelName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

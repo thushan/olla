@@ -324,6 +324,12 @@ func (b *SourceEndpointBuilder) WithName(name string) *SourceEndpointBuilder {
 	return b
 }
 
+// WithPlatform sets the platform serving the model
+func (b *SourceEndpointBuilder) WithPlatform(platform string) *SourceEndpointBuilder {
+	b.endpoint.Platform = platform
+	return b
+}
+
 // WithNativeName sets the native model name
 func (b *SourceEndpointBuilder) WithNativeName(name string) *SourceEndpointBuilder {
 	b.endpoint.NativeName = name

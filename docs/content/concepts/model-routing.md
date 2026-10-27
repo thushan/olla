@@ -34,6 +34,13 @@ Olla implements intelligent model routing strategies to handle scenarios where r
 
 When a request specifies a model (e.g., `phi3.5:latest`), Olla needs to determine which endpoints can handle that request. Not all endpoints have all models, and endpoints can become unhealthy during operation.
 
+### Ollama model names without a tag
+
+Ollama lists a model pulled without a tag as `name:latest` and accepts `name` for it. Olla does the
+same: when no endpoint serves the exact name you asked for, a name with no tag is looked up as
+`name:latest` on Ollama endpoints. An exact match always wins, only Ollama endpoints answer to the
+untagged name, and the request is forwarded exactly as you wrote it. The lookup only goes one way, `name` to `name:latest`, because Ollama always lists models with a tag.
+
 ## Routing Strategies
 
 ### Strict Mode (Default)

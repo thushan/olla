@@ -100,7 +100,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	// is populated; inject into context before endpoint selection so the sticky
 	// balancer wrapper observes the key during Select(). Mirrors proxyHandler.
 	if a.Config.Proxy.StickySessions.Enabled {
-		ctx, r, _ = a.injectStickyKey(ctx, r, pr.model)
+		ctx, r, _ = a.injectStickyKey(ctx, r, a.canonicalModelName(pr.model))
 	}
 
 	endpoints, err := a.getProviderEndpoints(ctx, providerType, pr)
