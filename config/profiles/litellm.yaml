@@ -35,6 +35,8 @@ api:
     - /health/liveness           # 11: liveness probe
     # /v1/responses needs LiteLLM 1.63.8+; older releases 404.
     - /v1/responses # 12: OpenAI Responses API
+    - /v1/messages # 13: Anthropic Messages API (native proxy endpoint)
+    - /v1/messages/count_tokens # 14: Anthropic token count
     # Note: Management endpoints (/key/*, /user/*, /team/*, /spend/*) 
     # require database backend and are not available in basic proxy mode
     

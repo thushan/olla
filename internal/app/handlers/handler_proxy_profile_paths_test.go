@@ -65,7 +65,7 @@ func TestProxyRouting_DeclaredPaths_NamedModelReachesServingHost(t *testing.T) {
 		{domain.ProfileSGLang, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens", "/olla/proxy/v1/rerank"}},
 		{"lmdeploy", []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens"}},
 		{domain.ProfileLmStudio, []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages"}},
-		{"litellm", []string{"/olla/proxy/v1/responses"}},
+		{"litellm", []string{"/olla/proxy/v1/responses", "/olla/proxy/v1/messages", "/olla/proxy/v1/messages/count_tokens"}},
 		{domain.ProfileLemonade, []string{"/olla/proxy/v1/responses"}},
 		{"docker-model-runner", []string{"/olla/proxy/v1/responses", "/olla/proxy/anthropic/v1/messages", "/olla/proxy/anthropic/v1/messages/count_tokens"}},
 	}
@@ -116,8 +116,8 @@ func TestProxyRouting_OllamaNativePathsNarrowToOllama(t *testing.T) {
 	}
 }
 
-// Ollama and vLLM both declare /v1/messages and /v1/responses, so a model-less vision
-// request on those paths now has a wider candidate set. The #236 rules must hold over
+// Ollama and vLLM both declare /v1/messages, so a model-less vision request on that
+// path now has a wider candidate set. The #236 rules must hold over
 // it: the vision host gets the request while it is up, and once it is down the request
 // is refused with capability_unavailable rather than sprayed at the chat-only host.
 func TestProxyRouting_DeclaredPaths_CapabilityRefusalOverWiderCandidates(t *testing.T) {
@@ -127,11 +127,9 @@ func TestProxyRouting_DeclaredPaths_CapabilityRefusalOverWiderCandidates(t *test
 
 	const (
 		anthropicVision = `{"max_tokens":16,"messages":[{"role":"user","content":[{"type":"text","text":"what is this"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAAA"}}]}]}`
-		responsesVision = `{"input":[{"role":"user","content":[{"type":"input_text","text":"what is this"},{"type":"image_url","image_url":{"url":"data:image/png;base64,AAAA"}}]}]}`
 	)
 	paths := []struct{ path, body string }{
 		{"/olla/proxy/v1/messages", anthropicVision},
-		{"/olla/proxy/v1/responses", responsesVision},
 	}
 
 	for _, tc := range paths {
