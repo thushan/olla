@@ -51,7 +51,7 @@ func (a *Application) registerRoutes() {
 
 	// Unified model views aggregate across all providers
 	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")
-	a.routeRegistry.RegisterWithMethod("/olla/models/", a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
+	a.routeRegistry.RegisterWithMethod(constants.PathOllaModelsPrefix, a.unifiedModelByAliasHandler, "Get unified model by ID or alias", "GET")
 
 	// Legacy proxy paths for backward compatibility
 	a.routeRegistry.RegisterProxyRoute("/olla/proxy/", a.proxyHandler, "Olla API proxy endpoint (sherpa)", "POST")
