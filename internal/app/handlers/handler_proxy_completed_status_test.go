@@ -284,10 +284,9 @@ func TestRequestFailed_CarriesWrittenErrorStatus(t *testing.T) {
 			t.Run(engine+"/"+route.name, func(t *testing.T) {
 				t.Parallel()
 
-				dead := statusBackend(t, http.StatusOK, false)
-				deadURL := dead.URL
-				dead.Close()
-				h := newStatusHarness(t, engine, route, deadURL)
+				// Port 1 is never listening; a closed httptest port can be reissued to a
+				// parallel test's server and answer instead.
+				h := newStatusHarness(t, engine, route, "http://127.0.0.1:1")
 
 				w := h.post(tagBareChat, false)
 
