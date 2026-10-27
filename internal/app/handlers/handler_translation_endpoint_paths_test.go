@@ -449,6 +449,61 @@ func TestTranslation_CustomTypeEndpointStillServed(t *testing.T) {
 	}
 }
 
+// A base path on a preserve_path endpoint is joined onto the request path by the proxy, so the
+// resolved chat path must not repeat it (/api + /api/v1/... would 404).
+func TestTranslation_PreservePathBaseNotDuplicated(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct{ typ, base, chat, wantHit string }{
+		{"lemonade", "/api", lemonadeChatPath, lemonadeChatPath},
+		{"docker-model-runner", "/engines", dmrChatPath, dmrChatPath},
+		{"vllm", "/gw", rootChatPath, "/gw/v1/chat/completions"},
+	}
+	for _, engine := range translationEngines {
+		for _, st := range translationStreaming {
+			for _, c := range cases {
+				t.Run(engine+"/"+st.name+"/"+c.typ, func(t *testing.T) {
+					t.Parallel()
+
+					b := newPathBackend(t, c.wantHit)
+					ep := liveEndpoint(t, "host", c.typ, b.URL+c.base, 50)
+					ep.PreservePath = true
+					eps := []*domain.Endpoint{ep}
+					f := newTranslationPathApp(t, engine, true, false, eps, map[string][]*domain.Endpoint{"shared-model": eps})
+
+					w := f.post(t, "shared-model", st.stream)
+
+					requireTranslatedOK(t, w, st.stream)
+					assert.Equal(t, []string{c.wantHit}, b.paths())
+				})
+			}
+		}
+	}
+}
+
+// Narrowing to chat-capable profiles must not turn a strict model_unavailable 503 (the model
+// exists, but only on a backend that is down) into a 404 when the healthy fleet has no chat path.
+func TestTranslation_StrictModelUnavailableStays503(t *testing.T) {
+	t.Parallel()
+
+	for _, engine := range translationEngines {
+		t.Run(engine, func(t *testing.T) {
+			t.Parallel()
+
+			tei := newPathBackend(t, "/embed")
+			down := liveEndpoint(t, "vllm-down", "vllm", closedBackendURL(t), 50)
+			healthy := []*domain.Endpoint{liveEndpoint(t, "tei-host", "text-embeddings-inference", tei.URL, 100)}
+			f := newTranslationPathApp(t, engine, true, false, healthy, map[string][]*domain.Endpoint{"shared-model": {down}})
+
+			w := f.post(t, "shared-model", false)
+
+			require.Equal(t, http.StatusServiceUnavailable, w.Code, "body: %s", w.Body.String())
+			assert.Equal(t, "model_unavailable", w.Header().Get(constants.HeaderXOllaRoutingReason))
+			assert.Empty(t, tei.paths())
+		})
+	}
+}
+
 // count_tokens never selects a backend, so the chat-path scoping must not touch it.
 func TestTranslation_CountTokensUnaffected(t *testing.T) {
 	t.Parallel()

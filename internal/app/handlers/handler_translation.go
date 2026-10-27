@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -301,6 +302,7 @@ func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, tar
 		if !ok {
 			continue
 		}
+		resolved = trimPreservedBase(ep, resolved)
 		usable = append(usable, ep)
 		paths[ep.GetURLString()] = resolved
 		if resolved != targetPath {
@@ -311,6 +313,20 @@ func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, tar
 		return usable, nil
 	}
 	return usable, paths
+}
+
+// trimPreservedBase drops the endpoint's own base path from a resolved chat path. With
+// preserve_path the proxy joins the base onto the request path, so a Lemonade endpoint
+// configured as http://host/api would otherwise be sent /api/api/v1/chat/completions.
+func trimPreservedBase(ep *domain.Endpoint, resolved string) string {
+	if !ep.PreservePath || ep.URL == nil {
+		return resolved
+	}
+	base := strings.TrimRight(ep.URL.Path, "/")
+	if base != "" && strings.HasPrefix(resolved, base+"/") {
+		return resolved[len(base):]
+	}
+	return resolved
 }
 
 // scopeProfileToTranslation replaces the stage-1 compatibility set that analyzeRequest
@@ -332,9 +348,10 @@ func (a *Application) translationEndpointPaths(endpoints []*domain.Endpoint, tar
 // Endpoint types with no profile of their own (custom types) are served as OpenAI-compatible
 // by ResolveTargetPath, so they are added by name; otherwise stage 1 would evict them.
 //
-// An empty result leaves stage 1 permissive (all endpoints). A non-empty one is fail-closed:
-// every endpoint that can serve chat is in it, so when nothing matches (a TEI-only fleet) the
-// caller's sampled no-routable-endpoints 404 answers, not the unsampled widen-to-all WARN.
+// An empty result leaves stage 1 permissive (all endpoints). When nothing matches (a TEI-only
+// fleet) stage 1 still widens to all, as main does, so model routing keeps its own 503/404
+// decisions; translationEndpointPaths then refuses with the sampled 404. The widening is
+// logged at Debug here because it is the expected path for that fleet.
 func (a *Application) scopeProfileToTranslation(ctx context.Context, pr *proxyRequest, trans translator.RequestTranslator) {
 	if pr.profile == nil {
 		return
@@ -376,7 +393,7 @@ func (a *Application) scopeProfileToTranslation(ctx context.Context, pr *proxyRe
 	for _, name := range supported {
 		pr.profile.AddSupportedProfile(name)
 	}
-	pr.profile.FailClosedOnNoMatch = len(pr.profile.SupportedBy) > 0
+	pr.profile.QuietNoMatchFallback = true
 }
 
 // tryPassthrough attempts to serve the request via passthrough mode if the translator

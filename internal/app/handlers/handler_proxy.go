@@ -690,7 +690,11 @@ func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, pro
 					"total_endpoints", len(endpoints))
 				return nil
 			}
-			logger.Warn("No compatible endpoints found for path, falling back to all endpoints",
+			warnFn := logger.Warn
+			if profile.QuietNoMatchFallback {
+				warnFn = logger.Debug
+			}
+			warnFn("No compatible endpoints found for path, falling back to all endpoints",
 				"path", profile.Path,
 				"supported_by", profile.SupportedBy,
 				"total_endpoints", len(endpoints))
