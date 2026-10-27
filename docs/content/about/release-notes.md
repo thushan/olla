@@ -76,6 +76,14 @@ only a request path of that single segment.
 
 Olla wrote a WARN for every request it rejected, so a client hammering a rate limit produced millions of identical lines in minutes and pushed useful history out of the rotated log. Rate limit (`429`), request size (`413`/`431`), dashboard access (`403`) and proxy routing rejections are now sampled: the first in each 10 second window logs in full, and the rest become one summary such as `WARN Rate limit exceeded, repeats suppressed layer=rate_limit client_ip=203.0.113.7 suppressed=19994 window=10s`. The `Model routing rejected request` and `Large request blocked` WARNs are gone, since the sampled `Request rejected` line carries the same detail. Responses, and the rate limit and size limit counters, are unchanged, and a backend's own 4xx and 5xx responses are still logged per request.
 
+### Fixed: a backend 5xx no longer looks like a normal completion in the log
+
+The per-request `Request completed` line did not say what status the client got, so a backend returning `502` or `503`
+read the same as a success. It now carries `http_status` on every proxy route (`/olla/proxy/`, provider routes and the
+Anthropic route, passthrough and translation, streaming included), and a backend `5xx` is logged at `WARN`. A backend `4xx`
+stays at `INFO`. Olla's own rejections are unchanged and still go through the sampled `Request rejected` line, and a
+rejected request no longer also writes an `INFO` `Request received` line.
+
 ### Fixed: model routing no longer depends on the Content-Type header
 
 A request that named a model but didn't send `Content-Type: application/json` was routed as if it named
