@@ -27,6 +27,20 @@ counts as a failed discovery or health check. Loopback endpoints were never prox
 to let discovery reach a non-loopback backend are affected: that backend now needs to be reachable directly from the Olla host,
 as chat traffic already required.
 
+### Changed: SGLang and LMDeploy use native Anthropic passthrough by default
+
+SGLang (v0.5.9+) and LMDeploy (v0.13.0+) serve the Anthropic Messages API themselves, so their shipped
+profiles now carry `anthropic_support` and `/olla/anthropic/v1/messages` forwards to them as-is
+(`X-Olla-Mode: passthrough`) rather than translating through `/v1/chat/completions`. Older builds answer
+404 for `/v1/messages`, and `min_version` is informational: Olla does not enforce it. If any SGLang or
+LMDeploy in your fleet predates those versions, copy the profile to `config/profiles/zz-sglang.yaml` or
+`zz-lmdeploy.yaml` and set `api.anthropic_support.enabled: false` in the copy (steps on the
+[SGLang](../integrations/backend/sglang.md#switching-sglang-or-lmdeploy-back-to-translation) and
+[LMDeploy](../integrations/backend/lmdeploy.md#switching-sglang-or-lmdeploy-back-to-translation) pages), or
+set `translators.anthropic.passthrough_enabled: false` to translate for every backend. LMDeploy v0.13.0 to
+v0.17.x reject Anthropic `tools`, so its profile declares `no_tool_use` and requests carrying tools are still
+translated, including on v0.18.0 and later.
+
 ### Added: Text Embeddings Inference backend
 
 Olla now routes to Hugging Face [Text Embeddings Inference](https://github.com/huggingface/text-embeddings-inference)

@@ -15,7 +15,7 @@ The Anthropic translator accepts requests in Anthropic Messages API format at `/
 **Key Features**:
 
 - ✅ Full Anthropic Messages API compatibility
-- ✅ **Passthrough mode** for backends with native Anthropic support (vLLM, vLLM-MLX, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner)
+- ✅ **Passthrough mode** for backends with native Anthropic support (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner)
 - ✅ **Translation mode** for OpenAI-compatible backends without native support
 - ✅ Automatic fallback from passthrough to translation when needed
 - ✅ Streaming via Server-Sent Events (SSE)

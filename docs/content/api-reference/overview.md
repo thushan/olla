@@ -133,7 +133,7 @@ Anthropic-compatible API endpoints for Claude clients.
 
 **Features**:
 - Full Anthropic Messages API v1 support
-- **Passthrough mode** for backends with native Anthropic support (vLLM, vLLM-MLX, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner)
+- **Passthrough mode** for backends with native Anthropic support (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner)
 - Automatic fallback to translation mode when needed
 - Streaming with Server-Sent Events
 - Tool use (function calling)
