@@ -20,8 +20,10 @@ are separate from the main fleet.
 | 19444 | mock-sglang-k (sglang) | mock-sglang-k | sglang-chat-model | |
 | 19445 | mock-lmdeploy-l (lmdeploy) | mock-lmdeploy-l | lmdeploy-chat-model | |
 
-Every response carries `X-Olla-Endpoint` (Olla's view) and `X-Ollamock-Instance`
-(the mock's own marker); assert both agree. The mocks enforce TEI's kind rules, so
+Every response carries `X-Olla-Endpoint` (Olla's view). Responses that Olla passes
+through also keep `X-Ollamock-Instance` (the mock's own marker): assert the two
+agree where it is present. Translated replies (the sglang and lmdeploy rows of
+check 6 on main) drop it, so use the `BACKEND:<mock>` text there. The mocks enforce TEI's kind rules, so
 a request routed to the wrong TEI kind fails loudly with 424 `error_type: "Backend"`
 rather than quietly succeeding.
 
@@ -148,7 +150,7 @@ has none of it must finish Section B with skips only.
 | #8 `/api/ps` | `GET /olla/ollama/api/ps` lists both `llama3.2:3b` and `qwen3:8b` with `olla_endpoint` on each entry (on a tree without #8 it answers 200 from a single Ollama and no `olla_endpoint`) | skip B5 (needs #8) |
 | #3 native Anthropic for sglang and lmdeploy | `POST /olla/anthropic/v1/messages` for `sglang-chat-model` carries `X-Olla-Mode: passthrough` | skip B6 (needs #3; main's sglang and lmdeploy profiles have no `anthropic_support`, so they are translated) |
 | #5 slash-id lookup | `GET /olla/models/BAAI/bge-reranker-base` is not 404 | skip B3 (needs #5) |
-| unfiltered-fallback fix | 8 requests for `nomic-embed-text-v2` (check 5 body) return no 424 | skip B7 (needs the unfiltered-fallback fix; known follow-up) |
+| unfiltered-fallback fix | none can be probed reliably (candidate order varies per request); run B7 only when the caller says the fix is merged | skip B7 by default (needs the unfiltered-fallback fix; known follow-up) |
 
 B1. **Types.** `olla.type` values: BAAI/bge-small-en-v1.5, intfloat/e5-base-v2,
     nomic-embed-text:latest, mxbai-embed-large = `embeddings`;
@@ -160,8 +162,9 @@ B1. **Types.** `olla.type` values: BAAI/bge-small-en-v1.5, intfloat/e5-base-v2,
 B2. **`?type=` filters** on `/olla/models`: `type=reranker` → exactly
     [BAAI/bge-reranker-base]; `type=classifier` → exactly
     [SamLowe/roberta-go-emotions]; `type=embeddings` → exactly the four embedders
-    from B1; `type=llm` → exactly the five chat models from B1 (`qwen3-vl:8b` is
-    `vlm`, B4, so it is in neither). The sets are disjoint.
+    from B1; `type=llm` → exactly the five chat models from B1, plus `qwen3-vl:8b`
+    when #4 is absent (with #4 it is `vlm`, B4, and in neither set). The sets are
+    disjoint.
 B3. **Slash ids.** `GET /olla/models/BAAI/bge-reranker-base` → 200, `id` equal to
     the path, `type: "reranker"`, `endpoints` = [mock-tei-rerank]. Same for
     `/olla/models/intfloat/e5-base-v2` (`type: "embeddings"`, `endpoints` =
@@ -180,7 +183,7 @@ B5. **`/olla/ollama/api/ps` merges both Ollamas.** → 200 JSON with a `models`
 B6. **Passthrough reaches non-Ollama hosts (needs #3).** `sglang-chat-model` and
     `lmdeploy-chat-model` Anthropic requests (check 6's body) carry
     `X-Olla-Mode: passthrough`, served by mock-sglang-k and mock-lmdeploy-l.
-B7. **Unknown model never reaches a TEI host.** `nomic-embed-text-v2` ×8 on
+B7. **Unknown model never reaches a TEI host (default skip).** `nomic-embed-text-v2` ×8 on
     `/olla/proxy/v1/embeddings` (check 5 body): every response is 200 or 404 and
     never 424, which would mean the fallback picked a TEI host of the wrong kind.
 
