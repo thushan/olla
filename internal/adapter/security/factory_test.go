@@ -160,10 +160,9 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 		}
 		if !result.Allowed {
 			rateLimited = true
-			// Burst is 1 for both tiers here, so either limiter may be the one
-			// that rejects. The chain only has to surface a rate-limit reason.
-			if result.Reason != constants.ReasonRateLimitExceeded &&
-				result.Reason != constants.ReasonGlobalRateLimitExceeded {
+			// The per-IP tier is checked first and both tiers share burst 1, so
+			// the per-IP limiter is the one that rejects.
+			if result.Reason != constants.ReasonRateLimitExceeded {
 				t.Errorf("Expected rate limit reason, got: %s", result.Reason)
 			}
 			break

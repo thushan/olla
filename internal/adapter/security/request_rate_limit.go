@@ -121,8 +121,7 @@ func (rl *RateLimitValidator) Name() string {
 
 // Validate checks if the request should be allowed under current rate limits.
 // The per-IP and global tiers are independent switches (0 disables only that
-// tier). The per-IP tier is consulted first (a global-first order lets a client
-// that is already over its own limit burn global tokens and starve the rest) so a client already over its own
+// tier). The per-IP tier is consulted first so a client already over its own
 // limit cannot burn global tokens and starve everyone else. If the per-IP tier
 // admits the request but the global tier rejects it, the per-IP token is handed
 // back so a rejected request is not charged to either bucket.

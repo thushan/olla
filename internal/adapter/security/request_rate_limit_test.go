@@ -307,8 +307,7 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 
 	// Burst is 3 at 180/min, and the per-IP allowance of 600/min is far looser,
 	// so a tight loop of 20 across three IPs can only be stopped by the global
-	// limiter. Previously this asserted on a Reason string the code never emits
-	// and downgraded the miss to t.Log, so it passed unconditionally.
+	// limiter. A miss must fail the test; it cannot be downgraded to a log line.
 	if !globalBlocked {
 		t.Error("Global rate limit was never enforced across 20 requests with a burst of 3")
 	}
@@ -617,8 +616,8 @@ func TestRateLimitValidator_Validate_GlobalRejectionRefundsPerIP(t *testing.T) {
 	}
 }
 
-// TestRateLimitValidator_CheckIPLimit_ZeroLimitDoesNotPanic guards the 60/limit
-// divide in the rejection path.
+// TestRateLimitValidator_CheckIPLimit_ZeroLimitDoesNotPanic checks that a zero
+// limit passed to checkIPLimit is treated as "tier off" rather than rejecting.
 func TestRateLimitValidator_CheckIPLimit_ZeroLimitDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
@@ -814,5 +813,34 @@ func TestRateLimitValidator_Middleware_LogsRejectionReason(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("no \"Rate limit exceeded\" WARN logged")
+	}
+}
+
+// TestRateLimitValidator_Middleware_ZeroBurstRetryAfterFloor covers the
+// retryAfterSeconds floor: with no burst every request is refused, and 100/min
+// would round 60/limit down to 0 seconds.
+func TestRateLimitValidator_Middleware_ZeroBurstRetryAfterFloor(t *testing.T) {
+	t.Parallel()
+
+	v := createTestRateLimitValidator(config.ServerRateLimits{
+		PerIPRequestsPerMinute: 100,
+		BurstSize:              0,
+		CleanupInterval:        time.Minute,
+	})
+	defer v.Stop()
+
+	h := v.CreateMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/", nil)
+	req.RemoteAddr = "10.0.0.4:1234"
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if got := rec.Header().Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After = %q, want 1", got)
 	}
 }
