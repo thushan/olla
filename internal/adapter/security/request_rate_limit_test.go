@@ -697,7 +697,7 @@ func TestRateLimitValidator_Middleware_PerIPRejectionReportsZeroRemaining(t *tes
 	})
 	defer v.Stop()
 
-	h := v.CreateMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := v.CreateMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -731,7 +731,7 @@ func TestRateLimitValidator_Middleware_LogsRejectionReason(t *testing.T) {
 	v.globalLimiter = rate.NewLimiter(rate.Limit(0.001), 1)
 	v.globalLimiter.Allow() // drain
 
-	h := v.CreateMiddleware()(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	h := v.CreateMiddleware(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/", nil)
 	req.RemoteAddr = "10.0.0.3:1234"
