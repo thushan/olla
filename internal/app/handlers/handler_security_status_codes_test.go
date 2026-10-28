@@ -217,7 +217,7 @@ func TestRateLimit_EveryProxyRouteIsLimited(t *testing.T) {
 	require.NoError(t, err, "shipped profiles must load")
 
 	// Translator routes (/olla/anthropic/*) are not in this fixture because
-	// translatorRegistry is nil; the Anthropic rate-limit change (U3) adds them.
+	// translatorRegistry is nil, so they are not covered by this loop.
 	tests := []struct {
 		name      string
 		limits    config.ServerRateLimits
