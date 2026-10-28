@@ -64,7 +64,7 @@ so Claude Code retries and reports them properly. The size limit already applied
 Anthropic shape. Measured against a real Ollama, one Claude Code session peaked at 2 requests a minute and three parallel
 sessions at 9 a minute, with a burst of 4 when four sessions started together, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
 behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
-Reported by @infodancer.
+Reported by @matthewjhunter.
 
 ### Fixed: Anthropic translation sends each backend its own chat path
 
@@ -226,7 +226,7 @@ Olla wrote a WARN for every request it rejected, so a client hammering a rate li
 
 ### Fixed: the global rate limit applies when the per-IP limit is 0
 
-`per_ip_requests_per_minute: 0` returned early and skipped the global limiter as well, while `global_requests_per_minute: 0` only disabled itself. The two limits are now independent switches, and `0` disables only its own tier. Two further faults went with it. A request already over its per-IP limit still took a global token, so one noisy client could starve everyone else, even on the default config; the per-IP limit is now checked first and a request rejected by either limit is charged to neither. A global rejection also reported the per-IP value in `X-RateLimit-Limit` and a fixed `Retry-After: 60`; it now reports the global limit in `X-RateLimit-Limit`, logs the reason `Global rate limit exceeded` and sets `Retry-After` from the global bucket's refill. Rejections of either kind also report `X-RateLimit-Remaining: 0`. Reported by @infodancer.
+`per_ip_requests_per_minute: 0` returned early and skipped the global limiter as well, while `global_requests_per_minute: 0` only disabled itself. The two limits are now independent switches, and `0` disables only its own tier. Two further faults went with it. A request already over its per-IP limit still took a global token, so one noisy client could starve everyone else, even on the default config; the per-IP limit is now checked first and a request rejected by either limit is charged to neither. A global rejection also reported the per-IP value in `X-RateLimit-Limit` and a fixed `Retry-After: 60`; it now reports the global limit in `X-RateLimit-Limit`, logs the reason `Global rate limit exceeded` and sets `Retry-After` from the global bucket's refill. Rejections of either kind also report `X-RateLimit-Remaining: 0`. Reported by @matthewjhunter.
 
 ### Fixed: `Content-Encoding: identity` bodies and unreadable `/v1/embeddings` bodies
 
