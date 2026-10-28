@@ -17,9 +17,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/security"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/router"
 )
 
 // buildTightSecurityAdapters returns a *security.Adapters whose rate limiter
@@ -198,5 +202,80 @@ func TestSecurityChainMiddleware_FallbackPath_Returns403(t *testing.T) {
 	}
 	if reached {
 		t.Error("handler should not be reached when abstract chain rejects")
+	}
+}
+
+// TestRateLimit_EveryProxyRouteIsLimited loops the real route table (not a
+// hand-written list) so a new inference route that skips the security chain
+// fails here. Each tier is exercised on its own: a global-only config is the
+// case that used to be silently unlimited, because per-IP 0 bypassed the
+// whole validator.
+func TestRateLimit_EveryProxyRouteIsLimited(t *testing.T) {
+	t.Parallel()
+
+	factory, err := profile.NewFactory("../../../config/profiles")
+	require.NoError(t, err, "shipped profiles must load")
+
+	// Translator routes (/olla/anthropic/*) are not in this fixture because
+	// translatorRegistry is nil; the Anthropic rate-limit change (U3) adds them.
+	tests := []struct {
+		name      string
+		limits    config.ServerRateLimits
+		wantLimit string
+	}{
+		// Burst 0 rejects every request, so no real handler is ever reached.
+		{"global only", config.ServerRateLimits{GlobalRequestsPerMinute: 7, PerIPRequestsPerMinute: 0}, "7"},
+		{"per-IP only", config.ServerRateLimits{GlobalRequestsPerMinute: 0, PerIPRequestsPerMinute: 9}, "9"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &config.Config{Server: config.ServerConfig{RateLimits: tt.limits}}
+			_, adapters := security.NewSecurityServices(cfg, &mockStatsCollector{}, &mockStyledLogger{})
+			t.Cleanup(adapters.Stop)
+
+			reg := router.NewRouteRegistry(&mockStyledLogger{})
+			app := &Application{
+				Config:         cfg,
+				logger:         &mockStyledLogger{},
+				routeRegistry:  reg,
+				profileFactory: factory,
+			}
+			app.registerRoutes()
+
+			// Swap in a recorder so a route that escapes the limiter fails on the
+			// assertion below instead of running a real handler with nil deps.
+			reached := map[string]bool{}
+			for path, info := range reg.GetRoutes() {
+				info.Handler = func(w http.ResponseWriter, _ *http.Request) {
+					reached[path] = true
+					w.WriteHeader(http.StatusOK)
+				}
+				reg.GetRoutes()[path] = info
+			}
+
+			mux := http.NewServeMux()
+			reg.WireUpWithSecurityChain(mux, adapters)
+
+			checked := 0
+			for path, info := range reg.GetRoutes() {
+				if !info.IsProxy {
+					continue
+				}
+				checked++
+
+				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+				req.RemoteAddr = "192.0.2.1:4000"
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+
+				assert.False(t, reached[path], "route %s reached its handler; it must be rate limited", path)
+				assert.Equal(t, http.StatusTooManyRequests, rec.Code, "route %s must be rate limited", path)
+				assert.Equal(t, tt.wantLimit, rec.Header().Get("X-RateLimit-Limit"), "route %s reported the wrong tier", path)
+			}
+			assert.Greater(t, checked, 10, "route table looks truncated; the loop is not covering the providers")
+		})
 	}
 }

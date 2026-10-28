@@ -235,7 +235,7 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 			// Chain should stop at first validator that fails
 			// In this case, rate limiter runs first, so if it fails, we get rate limit error
 			// If rate limiter passes, size validator fails with size error
-			if result.Reason != "Rate limit exceeded" && !contains(result.Reason, "Request body too large") {
+			if result.Reason != constants.ReasonRateLimitExceeded && !contains(result.Reason, "Request body too large") {
 				t.Errorf("Expected either rate limit or size limit error, got: %s", result.Reason)
 			}
 			break
