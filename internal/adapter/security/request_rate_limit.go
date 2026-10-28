@@ -31,9 +31,6 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// reasonGlobalRateLimit distinguishes a global-bucket rejection from a per-IP one.
-const reasonGlobalRateLimit = "Global rate limit exceeded"
-
 type RateLimitValidator struct {
 	metrics ports.SecurityMetricsService
 	logger  logger.StyledLogger
@@ -177,7 +174,7 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 				RateLimit:  rl.globalRequestsPerMinute,
 				Remaining:  0,
 				ResetTime:  now.Add(time.Minute),
-				Reason:     reasonGlobalRateLimit,
+				Reason:     constants.ReasonGlobalRateLimitExceeded,
 			}, nil
 		}
 		if limit <= 0 {
@@ -189,12 +186,24 @@ func (rl *RateLimitValidator) Validate(_ context.Context, req ports.SecurityRequ
 	return result, nil
 }
 
+// retryAfterSeconds converts a per-minute allowance into a Retry-After hint,
+// with a floor of one second. The guard keeps a zero limit from dividing by zero.
+func retryAfterSeconds(limit int) int {
+	if limit <= 0 {
+		return 60
+	}
+	if seconds := 60 / limit; seconds > 0 {
+		return seconds
+	}
+	return 1
+}
+
 // checkIPLimit handles per-IP rate enforcement, including health check separation.
 // Returns a SecurityResult with rate metadata and retry after guidance, plus a
 // charge that can return the consumed token when the request is later rejected
 // by the global tier (zero value unless the request was admitted).
 func (rl *RateLimitValidator) checkIPLimit(limiterInfo *ipLimiterInfo, limit int, now time.Time) (ports.SecurityResult, ipCharge) {
-	// Callers gate on limit > 0, but 60/limit below would panic if that ever slipped.
+	// Callers gate on limit > 0; a zero here means the tier is off, not "reject".
 	if limit <= 0 {
 		return ports.SecurityResult{Allowed: true, ResetTime: now.Add(time.Minute)}, ipCharge{}
 	}
@@ -218,11 +227,11 @@ func (rl *RateLimitValidator) checkIPLimit(limiterInfo *ipLimiterInfo, limit int
 	if !reservation.OK() {
 		return ports.SecurityResult{
 			Allowed:    false,
-			RetryAfter: 60 / limit,
+			RetryAfter: retryAfterSeconds(limit),
 			RateLimit:  limit,
 			Remaining:  0,
 			ResetTime:  now.Add(time.Minute),
-			Reason:     "Rate limit exceeded",
+			Reason:     constants.ReasonRateLimitExceeded,
 		}, ipCharge{}
 	}
 
@@ -236,7 +245,7 @@ func (rl *RateLimitValidator) checkIPLimit(limiterInfo *ipLimiterInfo, limit int
 			RateLimit:  limit,
 			Remaining:  0,
 			ResetTime:  now.Add(time.Minute),
-			Reason:     "Rate limit exceeded",
+			Reason:     constants.ReasonRateLimitExceeded,
 		}, ipCharge{}
 	}
 

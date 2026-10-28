@@ -15,6 +15,7 @@ import (
 	"github.com/thushan/olla/internal/util"
 
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -278,6 +279,7 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 
 	ctx := context.Background()
 	ips := []string{"192.168.1.100", "192.168.1.101", "192.168.1.102"}
+	globalBlocked := false
 
 	// Each IP stays under its own burst, so the only thing that can reject is
 	// the global bucket (burst 3, refill 3/s). Twenty requests inside a few
@@ -295,14 +297,20 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 		}
 
 		if !result.Allowed {
-			if result.Reason != reasonGlobalRateLimit {
-				t.Fatalf("request %d rejected with %q, want %q", i+1, result.Reason, reasonGlobalRateLimit)
+			globalBlocked = true
+			if result.Reason != constants.ReasonGlobalRateLimitExceeded {
+				t.Errorf("Expected the global limiter to reject, got reason: %s", result.Reason)
 			}
-			return
+			break
 		}
 	}
 
-	t.Fatal("global rate limit never triggered across 20 requests")
+	// Burst is 3 at 180/min, and the per-IP allowance of 600/min is far looser,
+	// so a tight loop of 20 across three IPs can only be stopped by the global
+	// limiter. A miss must fail the test; it cannot be downgraded to a log line.
+	if !globalBlocked {
+		t.Error("Global rate limit was never enforced across 20 requests with a burst of 3")
+	}
 }
 
 func TestRateLimitValidator_Validate_ConcurrentAccess(t *testing.T) {
@@ -405,6 +413,57 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 	}
 }
 
+// A zero per-IP limit means "do not limit per client", not "do not limit at all".
+// The global limit is a separate switch with its own zero value, so disabling only
+// the per-IP tier must leave the global limiter in force. Regression guard for
+// Validate() returning early on perIPRequestsPerMinute <= 0, before the global
+// limiter is consulted.
+func TestRateLimitValidator_Validate_PerIPDisabledStillEnforcesGlobal(t *testing.T) {
+	limits := config.ServerRateLimits{
+		GlobalRequestsPerMinute: 60, // 1/sec, so burst is the only real headroom
+		PerIPRequestsPerMinute:  0,  // per-IP tier off, global left on
+		BurstSize:               5,
+		CleanupInterval:         time.Minute,
+	}
+
+	validator := createTestRateLimitValidator(limits)
+	defer validator.Stop()
+
+	if validator.globalLimiter == nil {
+		t.Fatal("Global limiter should be initialised when the global limit is non-zero")
+	}
+
+	req := ports.SecurityRequest{
+		ClientID:      "192.168.1.100",
+		Endpoint:      "/api/test",
+		Method:        "POST",
+		IsHealthCheck: false,
+	}
+
+	const requests = 50
+	allowed := 0
+	for i := range requests {
+		result, err := validator.Validate(context.Background(), req)
+		if err != nil {
+			t.Fatalf("Validate failed on request %d: %v", i+1, err)
+		}
+		if result.Allowed {
+			allowed++
+		}
+	}
+
+	// A tight loop cannot earn meaningful refill at 1/sec, so anything far above
+	// the burst means the global limiter was never asked.
+	if allowed == requests {
+		t.Fatalf("All %d requests were allowed with a global limit of %d/min and burst %d; "+
+			"a zero per-IP limit has disabled global rate limiting entirely",
+			requests, limits.GlobalRequestsPerMinute, limits.BurstSize)
+	}
+	if allowed > limits.BurstSize {
+		t.Errorf("Allowed %d requests, expected no more than the burst size of %d", allowed, limits.BurstSize)
+	}
+}
+
 // sendN fires n requests from one client and returns the results in order.
 func sendN(t *testing.T, v *RateLimitValidator, client string, n int) []ports.SecurityResult {
 	t.Helper()
@@ -439,13 +498,13 @@ func TestRateLimitValidator_Validate_TierSwitches(t *testing.T) {
 	}{
 		{name: "both off", global: 0, perIP: 0, clients: []string{"a"}},
 		{name: "global only", global: 60, perIP: 0, clients: []string{"a"},
-			wantReason: reasonGlobalRateLimit, wantLimit: 60, wantFirstRej: burst + 1},
+			wantReason: constants.ReasonGlobalRateLimitExceeded, wantLimit: 60, wantFirstRej: burst + 1},
 		{name: "per-IP only", global: 0, perIP: 120, clients: []string{"a"},
-			wantReason: "Rate limit exceeded", wantLimit: 120, wantFirstRej: burst + 1},
+			wantReason: constants.ReasonRateLimitExceeded, wantLimit: 120, wantFirstRej: burst + 1},
 		{name: "both, one client trips per-IP first", global: 60, perIP: 120, clients: []string{"a"},
-			wantReason: "Rate limit exceeded", wantLimit: 120, wantFirstRej: burst + 1},
+			wantReason: constants.ReasonRateLimitExceeded, wantLimit: 120, wantFirstRej: burst + 1},
 		{name: "both, many clients trip global", global: 60, perIP: 600, clients: []string{"a", "b", "c"},
-			wantReason: reasonGlobalRateLimit, wantLimit: 60, wantFirstRej: burst + 1},
+			wantReason: constants.ReasonGlobalRateLimitExceeded, wantLimit: 60, wantFirstRej: burst + 1},
 	}
 
 	for _, tt := range tests {
@@ -537,7 +596,7 @@ func TestRateLimitValidator_Validate_GlobalRejectionRefundsPerIP(t *testing.T) {
 		t.Fatal("first request should consume the single global token")
 	}
 	for i, r := range res[1:] {
-		if r.Allowed || r.Reason != reasonGlobalRateLimit {
+		if r.Allowed || r.Reason != constants.ReasonGlobalRateLimitExceeded {
 			t.Fatalf("request %d: allowed=%v reason=%q, want global rejection", i+2, r.Allowed, r.Reason)
 		}
 	}
@@ -557,8 +616,8 @@ func TestRateLimitValidator_Validate_GlobalRejectionRefundsPerIP(t *testing.T) {
 	}
 }
 
-// TestRateLimitValidator_CheckIPLimit_ZeroLimitDoesNotPanic guards the 60/limit
-// divide in the rejection path.
+// TestRateLimitValidator_CheckIPLimit_ZeroLimitDoesNotPanic checks that a zero
+// limit passed to checkIPLimit is treated as "tier off" rather than rejecting.
 func TestRateLimitValidator_CheckIPLimit_ZeroLimitDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
@@ -747,12 +806,41 @@ func TestRateLimitValidator_Middleware_LogsRejectionReason(t *testing.T) {
 	for _, r := range records() {
 		if r.msg == "Rate limit exceeded" {
 			found = true
-			if r.attrs["reason"] != reasonGlobalRateLimit {
-				t.Errorf("logged reason = %v, want %q", r.attrs["reason"], reasonGlobalRateLimit)
+			if r.attrs["reason"] != constants.ReasonGlobalRateLimitExceeded {
+				t.Errorf("logged reason = %v, want %q", r.attrs["reason"], constants.ReasonGlobalRateLimitExceeded)
 			}
 		}
 	}
 	if !found {
 		t.Fatal("no \"Rate limit exceeded\" WARN logged")
+	}
+}
+
+// TestRateLimitValidator_Middleware_ZeroBurstRetryAfterFloor covers the
+// retryAfterSeconds floor: with no burst every request is refused, and 100/min
+// would round 60/limit down to 0 seconds.
+func TestRateLimitValidator_Middleware_ZeroBurstRetryAfterFloor(t *testing.T) {
+	t.Parallel()
+
+	v := createTestRateLimitValidator(config.ServerRateLimits{
+		PerIPRequestsPerMinute: 100,
+		BurstSize:              0,
+		CleanupInterval:        time.Minute,
+	})
+	defer v.Stop()
+
+	h := v.CreateMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/", nil)
+	req.RemoteAddr = "10.0.0.4:1234"
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	if got := rec.Header().Get("Retry-After"); got != "1" {
+		t.Errorf("Retry-After = %q, want 1", got)
 	}
 }
