@@ -14,7 +14,7 @@ type InferenceProfile interface {
 	GetTimeout() time.Duration
 
 	// Documents how many concurrent requests a platform copes with (LM Studio
-	// is effectively single-threaded, vLLM handles hundreds). This is profile
+	// runs 4 in parallel by default since 0.4, vLLM handles hundreds). This is profile
 	// metadata only: nothing on the request path enforces it yet, so the
 	// backend's own concurrency settings are what limit parallelism today.
 	GetMaxConcurrentRequests() int
