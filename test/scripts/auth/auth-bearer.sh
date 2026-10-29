@@ -72,13 +72,9 @@ proxy:
   connection_timeout: 5s
   response_timeout: 10s
   read_timeout: 10s
-  retry:
-    enabled: false
 discovery:
   type: "static"
   refresh_interval: 10s
-  health_check:
-    initial_delay: 1s
   static:
     endpoints:
       - url: "${BACKEND_URL}"
@@ -97,8 +93,6 @@ discovery:
 model_registry:
   type: "memory"
   enable_unifier: false
-  unification:
-    enabled: false
   routing_strategy:
     type: "optimistic"
     options:

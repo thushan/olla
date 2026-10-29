@@ -328,7 +328,7 @@ The vLLM profile includes GPU-optimised settings:
 ```yaml
 characteristics:
   timeout: 2m
-  max_concurrent_requests: 100  # High concurrency support
+  max_concurrent_requests: 100  # High concurrency support - not enforced
   streaming_support: true
 
 resources:
@@ -340,6 +340,8 @@ resources:
 ### Memory Requirements
 
 vLLM requires more memory for KV cache:
+
+The Max Concurrent column is a guide for sizing your vLLM server, not a limit Olla applies.
 
 | Model Size | GPU Memory Required | Recommended | Max Concurrent |
 |------------|-------------------|-------------|----------------|
@@ -409,9 +411,9 @@ routing:
 characteristics:
   timeout: 5m     # Increase for 70B models
   
-# Modify concurrency limits
+# Modify concurrency limits (profile metadata, Olla does not enforce these)
 resources:
-  concurrency_limits:
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 100
       max_concurrent: 5    # Reduce for very large models
     - min_memory_gb: 50

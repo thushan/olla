@@ -107,11 +107,20 @@ server:
 |-------|------|---------|-------------|
 | `rate_limits.global_requests_per_minute` | int | `1000` | Limit across all clients combined (0 disables the global limit only) |
 | `rate_limits.per_ip_requests_per_minute` | int | `100` | Limit for each client IP (0 disables the per-IP limit only) |
-| `rate_limits.health_requests_per_minute` | int | `1000` | Health endpoint limit |
+| `rate_limits.health_requests_per_minute` | int | `1000` | Not applied: health endpoints are not rate limited |
 | `rate_limits.burst_size` | int | `50` | Token bucket burst size |
 | `rate_limits.cleanup_interval` | duration | `5m` | Rate limiter cleanup |
 | `rate_limits.trust_proxy_headers` | bool | `false` | Trust X-Forwarded-For |
 | `rate_limits.trusted_proxy_cidrs` | []string | `["127.0.0.0/8","10.0.0.0/8","172.16.0.0/12","192.168.0.0/16"]` | Trusted proxy CIDRs |
+
+Rate limits apply to proxied requests only:
+
+| Rate limited | Not rate limited |
+|--------------|------------------|
+| `/olla/proxy/` | `/internal/*` (health, status, stats, process, metrics) and `/version` |
+| Requests forwarded to a backend through the provider prefixes, such as `/olla/ollama/`, `/olla/vllm/` and `/olla/openai/` | `/olla/models` and `/olla/models/{id}` |
+| Ollama `GET /olla/ollama/api/ps` | Model listings Olla builds itself, such as `/olla/proxy/v1/models` and the provider `/v1/models` routes |
+| | `/olla/ollama/api/show` and the unsupported Ollama model-management stubs (`pull`, `push`, `create`, `copy`, `delete`) |
 
 The global and per-IP limits are independent. Setting one to `0` turns off only that limit; the other keeps applying, so to disable rate limiting entirely set both to `0`. A request is checked against its client's per-IP limit first, and only a request that passes it counts against the global limit, so one client over its own limit cannot use up the global allowance and starve the others. A request rejected by the global limit returns `429` with `X-RateLimit-Limit` set to the global value and a `Retry-After` based on when the global bucket refills.
 
@@ -211,14 +220,14 @@ proxy:
 
 ### Retry Behaviour
 
-As of v0.0.16, the retry mechanism is automatic and built-in for connection failures. When a connection error occurs (e.g., connection refused, network unreachable, timeout), Olla will automatically:
+As of v0.0.16, the retry mechanism is automatic and built-in for connection failures. When a connection error occurs (e.g., connection refused, connection reset, network unreachable), Olla will automatically:
 
 1. Mark the failed endpoint as unhealthy
 2. Try the next available healthy endpoint 
 3. Continue until a successful connection is made or all endpoints have been tried
 4. Use exponential backoff for unhealthy endpoints to prevent overwhelming them
 
-**Note**: The fields `max_retries` and `retry_backoff` that may still appear in your `proxy:` section are deprecated struct stubs. The `retry:` block (with `enabled`, `on_connection_failure`, `max_attempts`) that appears in the shipped `config.yaml` as a comment template has no corresponding struct in the config schema and is silently ignored if set. Retry behaviour is automatic and built-in; none of these fields have any effect.
+**Note**: Failover is automatic and not configurable. There is no `retry:` block in the config schema: if you set `retry.enabled`, `retry.on_connection_failure` or `retry.max_attempts` (older copies of `config.yaml` shipped them), Olla silently ignores them. The same goes for the deprecated `max_retries` and `retry_backoff` fields. Failover only has somewhere to go when more than one healthy endpoint is eligible for the request, so a setup with a single eligible endpoint never fails over.
 
 ### Streaming Settings
 

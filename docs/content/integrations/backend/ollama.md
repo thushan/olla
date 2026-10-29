@@ -613,7 +613,6 @@ curl -X POST http://localhost:40114/olla/ollama/api/generate \
      model_sizes:
        - patterns: ["7b"]
          min_memory_gb: 8
-         max_concurrent: 1
    ```
 
 ### Connection Refused
@@ -646,8 +645,6 @@ With multiple Ollama instances, enable unification:
 ```yaml
 model_registry:
   enable_unifier: true
-  unification:
-    enabled: true
 ```
 
 This provides a single model catalogue across all instances.

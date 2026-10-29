@@ -241,12 +241,12 @@ Olla reads each model's `type` (`llm`, `vlm` or `embeddings`) from LM Studio's `
 
 ### Resource Configuration
 
-The LM Studio profile includes optimised resource settings:
+The LM Studio profile includes optimised resource settings. Olla reads `max_concurrent_requests` as metadata only and does not enforce it; LM Studio's own concurrency settings are what limit parallelism today:
 
 ```yaml
 characteristics:
   timeout: 3m
-  max_concurrent_requests: 1  # LM Studio handles one at a time
+  max_concurrent_requests: 1  # LM Studio handles one at a time - not enforced
   streaming_support: true
 ```
 
@@ -286,7 +286,7 @@ characteristics:
   
 # Modify resource limits
 resources:
-  concurrency_limits:
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 0
       max_concurrent: 1  # Always single-threaded
 ```
@@ -329,25 +329,25 @@ characteristics:
 
 **Issue**: Concurrent requests fail
 
-**Solution**: LM Studio processes one request at a time. Use priority load balancing to route overflow to other endpoints:
+**Solution**: Olla does not apply the profile's `max_concurrent_requests` (it is metadata and is not enforced), so requests that arrive together are forwarded to LM Studio up to the proxy's own per-host connection cap. Limit parallelism with LM Studio's own concurrency settings. To spread load, run more than one endpoint serving the model and use `least-connections` or `round-robin`:
 
 ```yaml
 proxy:
-  load_balancer: "priority"
-  
+  load_balancer: "least-connections"
+
 discovery:
   static:
     endpoints:
       - url: "http://localhost:1234"
-        name: "lm-studio"
+        name: "lm-studio-1"
         type: "lm-studio"
-        priority: 100
-        
-      - url: "http://localhost:11434"
-        name: "ollama-backup"
-        type: "ollama"
-        priority: 50  # Fallback for concurrent requests
+
+      - url: "http://other-host:1234"
+        name: "lm-studio-2"
+        type: "lm-studio"
 ```
+
+`priority` balancing with unequal priorities does not help here: it sends every request to the highest-priority healthy endpoints and only moves to a lower tier when those are unhealthy, not when they are busy.
 
 ## Best Practices
 

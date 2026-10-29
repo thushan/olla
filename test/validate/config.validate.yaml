@@ -55,10 +55,6 @@ proxy:
   response_timeout: 60s
   read_timeout: 60s
   response_header_timeout: 10s
-  retry:
-    enabled: true
-    on_connection_failure: true
-    max_attempts: 0
   sticky_sessions:
     enabled: true
     idle_ttl_seconds: 600
@@ -69,8 +65,6 @@ proxy:
 discovery:
   type: "static"
   refresh_interval: 10s
-  health_check:
-    initial_delay: 1s
   static:
     endpoints:
       # ── openai-compatible pair: failover + balancing target ─────────────

@@ -631,7 +631,7 @@ routing:
 # Adjust for larger models and CPU inference
 characteristics:
   timeout: 10m                  # Increase for large models
-  max_concurrent_requests: 2    # Reduce for limited hardware
+  max_concurrent_requests: 2  # Reduce for limited hardware - not enforced
 
 # Model capability detection
 models:
@@ -660,8 +660,9 @@ resources:
     max_slots: 16
     slot_monitoring: true
 
-  # Adjust concurrency for hardware
-  concurrency_limits:
+  # Adjust concurrency for hardware (metadata only, not enforced;
+  # llama-server's --parallel is what limits slots)
+  concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 20       # Large models
       max_concurrent: 1
     - min_memory_gb: 8        # Medium models
