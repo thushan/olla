@@ -66,6 +66,13 @@ sessions at 9 a minute, with a burst of 4 when four sessions started together, s
 behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 Reported by @matthewjhunter.
 
+### Fixed: chunked bodies on Anthropic routes are capped at the translator limit
+
+A chunked request (no `Content-Length`) to `/olla/anthropic/v1/*` was read into memory up to `server.request_limits.max_body_size`
+(100MB by default) before the translator's own `max_message_size` (10MB) rejected it, so a few concurrent oversized chunked
+requests could hold gigabytes. The read now stops at the smaller of the two limits and answers the same `413` with `request_too_large`.
+Requests with a `Content-Length`, and all proxy routes, behave as before.
+
 ### Added: unknown keys in `config.yaml` are reported
 
 A key in the main config that Olla does not read (a typo, or one that was documented but never existed) used to be dropped silently. Startup now logs one WARN line listing every such key by its full path and line,

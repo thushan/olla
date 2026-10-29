@@ -56,10 +56,11 @@ func (s *SecurityAdapters) CreateChainMiddleware(reject security.RejectFunc) fun
 
 // CreateTranslatorChainMiddleware is CreateChainMiddleware for translator routes, which buffer
 // their bodies and so take the buffering size variant. Rejections are written through reject
-// in the translator's own error format; nil keeps the plain-text responses.
-func (s *SecurityAdapters) CreateTranslatorChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler {
+// in the translator's own error format; nil keeps the plain-text responses. bodyLimit is the
+// translator's request cap, which bounds how much of a chunked body is buffered.
+func (s *SecurityAdapters) CreateTranslatorChainMiddleware(reject security.RejectFunc, bodyLimit int64) func(http.Handler) http.Handler {
 	return s.chain(reject, func(a *security.Adapters) func(http.Handler) http.Handler {
-		return a.CreateTranslatorChainMiddleware(reject)
+		return a.CreateTranslatorChainMiddleware(reject, bodyLimit)
 	})
 }
 

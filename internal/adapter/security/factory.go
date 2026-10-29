@@ -70,9 +70,11 @@ func (sa *Adapters) CreateChainMiddleware(reject RejectFunc) func(http.Handler) 
 // CreateTranslatorChainMiddleware is the chain for translator routes: the same rate limit,
 // with the buffering size variant because the translator handler reads the whole body anyway.
 // That keeps an oversized chunked body a counted 413 rather than a failed read in the handler.
-func (sa *Adapters) CreateTranslatorChainMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
+// bodyLimit is the translator's own request cap: a chunked body is rejected once it crosses
+// min(max_body_size, bodyLimit) instead of being buffered up to max_body_size first.
+func (sa *Adapters) CreateTranslatorChainMiddleware(reject RejectFunc, bodyLimit int64) func(http.Handler) http.Handler {
 	return sa.chain(reject, func(sv *SizeValidator) func(http.Handler) http.Handler {
-		return sv.CreateNonProxyMiddleware(reject)
+		return sv.CreateCappedNonProxyMiddleware(reject, bodyLimit)
 	})
 }
 

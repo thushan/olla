@@ -730,7 +730,8 @@ Anthropic SDKs retry:
 {"type":"error","error":{"type":"rate_limit_error","message":"Too Many Requests"}}
 ```
 
-A body over `server.request_limits.max_body_size` gets `413` with `request_too_large` in the same shape.
+A body over `translators.anthropic.max_message_size` (10MB by default) or `server.request_limits.max_body_size`, whichever is smaller,
+gets `413` with `request_too_large` in the same shape. A chunked body (no `Content-Length`) is cut off at that same limit as it is read.
 Claude Code at its usual pace stays well inside the defaults; for many parallel sessions behind one IP see
 [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 
