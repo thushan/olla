@@ -9,6 +9,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/stats"
 
 	"github.com/thushan/olla/internal/config"
+	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/ports"
 	"github.com/thushan/olla/internal/logger"
 )
@@ -159,7 +160,9 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 		}
 		if !result.Allowed {
 			rateLimited = true
-			if result.Reason != "Rate limit exceeded" {
+			// The per-IP tier is checked first and both tiers share burst 1, so
+			// the per-IP limiter is the one that rejects.
+			if result.Reason != constants.ReasonRateLimitExceeded {
 				t.Errorf("Expected rate limit reason, got: %s", result.Reason)
 			}
 			break
@@ -231,7 +234,7 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 			// Chain should stop at first validator that fails
 			// In this case, rate limiter runs first, so if it fails, we get rate limit error
 			// If rate limiter passes, size validator fails with size error
-			if result.Reason != "Rate limit exceeded" && !contains(result.Reason, "Request body too large") {
+			if result.Reason != constants.ReasonRateLimitExceeded && !contains(result.Reason, "Request body too large") {
 				t.Errorf("Expected either rate limit or size limit error, got: %s", result.Reason)
 			}
 			break
