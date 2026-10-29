@@ -69,7 +69,7 @@ Reported by @matthewjhunter.
 
 ### Fixed: `X-RateLimit-*` headers are omitted when rate limiting is off
 
-Every response through a rate-limited route carried `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, even with both limits at `0`, so a `413` or a plain `200` showed `X-RateLimit-Limit: 0, X-RateLimit-Remaining: 0`, which a client reads as fully throttled. The headers are now sent only while a limit applies. With the per-IP limit off and the global limit on they report the global limit, as the `429` path already does.
+Every response through a rate-limited route carried `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, even with both limits at `0`, so a `413` or a plain `200` showed `X-RateLimit-Limit: 0, X-RateLimit-Remaining: 0`, which a client reads as fully throttled. The headers are now sent only while a limit applies.
 
 ### Added: unknown keys in `config.yaml` are reported
 
