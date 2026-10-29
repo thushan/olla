@@ -14,10 +14,12 @@ import (
 // so the formatting/exit-code logic can be tested without touching the real
 // filesystem or config packages.
 type validationItem struct {
-	Err      error    // the source is entirely unusable
-	Name     string   // e.g. "config.yaml"
-	Detail   string   // human-readable summary, shown when there's no fatal Err
-	Warnings []string // non-fatal issues - the source is usable, typically via fallback
+	Err       error    // the source is entirely unusable
+	Name      string   // e.g. "config.yaml"
+	Detail    string   // human-readable summary, shown when there's no fatal Err
+	Warnings  []string // non-fatal issues - the source is usable, typically via fallback
+	IgnoredIn string   // file the ignored keys came from, for the section heading
+	Ignored   []string // keys the file sets that nothing reads; reported but never affect the verdict
 }
 
 // buildValidationReport formats a human-readable --validate-config summary
@@ -50,6 +52,19 @@ func buildValidationReport(items []validationItem) (report string, exitCode int)
 		}
 	}
 
+	// Ignored keys are an advisory only: Olla loads such files fine, so they
+	// stay out of the WARN/FAIL path and cannot change the exit code (CI that
+	// validates shipped-derived configs must not start failing because of them).
+	for _, item := range items {
+		if len(item.Ignored) == 0 {
+			continue
+		}
+		fmt.Fprintf(&buf, "\nIgnored keys in %s (%d) - not read by Olla, no effect on the result:\n", item.IgnoredIn, len(item.Ignored))
+		for _, k := range item.Ignored {
+			fmt.Fprintf(&buf, "         - %s\n", k)
+		}
+	}
+
 	buf.WriteString("\n")
 	if clean {
 		buf.WriteString("Result: PASS - all configuration files are valid\n")
@@ -78,7 +93,7 @@ func runValidateConfig(configFile string) (string, int) {
 		} else {
 			source = "loaded from " + source
 		}
-		items = append(items, validationItem{Name: "config.yaml", Detail: source})
+		items = append(items, validationItem{Name: "config.yaml", Detail: source, IgnoredIn: cfg.Filename, Ignored: unknownKeyStrings(cfg.UnknownKeys)})
 	}
 
 	_, modelErr := unifier.LoadModelConfig()
@@ -108,4 +123,23 @@ func runValidateConfig(configFile string) (string, int) {
 	}
 
 	return buildValidationReport(items)
+}
+
+func unknownKeyStrings(keys []config.UnknownKey) []string {
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, k.String())
+	}
+	return out
+}
+
+// warnUnknownKeys emits a single startup WARN listing every ignored key, so a
+// config with many typos is one log line rather than a flood. Silent when the
+// config is clean.
+func warnUnknownKeys(warn func(msg string, args ...any), keys []config.UnknownKey) {
+	if len(keys) == 0 {
+		return
+	}
+	warn("Ignoring unknown keys in config (not read by Olla, check for typos)",
+		"count", len(keys), "keys", strings.Join(unknownKeyStrings(keys), ", "))
 }

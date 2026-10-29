@@ -66,6 +66,13 @@ sessions at 9 a minute, with a burst of 4 when four sessions started together, s
 behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 Reported by @matthewjhunter.
 
+### Added: unknown keys in `config.yaml` are reported
+
+A key in the main config that Olla does not read (a typo, or one that was documented but never existed) used to be dropped silently. Startup now logs one WARN line listing every such key by its full path and line,
+for example `proxy.engnie (line 12)`, and `olla --validate-config` lists them under "Ignored keys" without changing the
+result or exit code. Loading still never fails on them, and `models.yaml` and profiles are not checked. Free-form maps such
+as `model_aliases` and endpoint `headers` are never reported. Reported by @matthewjhunter.
+
 ### Fixed: Anthropic translation sends each backend its own chat path
 
 In translation mode Olla sent every backend `/v1/chat/completions`. Docker Model Runner serves the OpenAI API under

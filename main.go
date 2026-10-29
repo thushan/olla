@@ -180,6 +180,8 @@ func main() {
 		}
 	}
 
+	warnUnknownKeys(styledLogger.Warn, cfg.UnknownKeys)
+
 	// Create and start service manager
 	serviceManager, err := app.CreateAndStartServiceManager(ctx, cfg, styledLogger)
 	if err != nil {

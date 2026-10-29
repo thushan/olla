@@ -29,6 +29,7 @@ type Config struct {
 	ModelAliases  map[string][]string `yaml:"model_aliases,omitempty"`
 	Logging       LoggingConfig       `yaml:"logging"`
 	Filename      string              `yaml:"-"`
+	UnknownKeys   []UnknownKey        `yaml:"-"` // keys in the file that nothing reads
 	Dashboard     DashboardConfig     `yaml:"dashboard"`
 	Translators   TranslatorsConfig   `yaml:"translators"`
 	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
