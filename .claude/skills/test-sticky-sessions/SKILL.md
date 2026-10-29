@@ -186,7 +186,9 @@ for i in $(seq 1 30); do
     fi
 done
 if [ "$bad_code" = "429" ]; then
-    echo "ABORT: rate limited (429) on ${LABEL} turn 3"; exit 1
+    # A flag, not exit: exiting would skip the summary and Phase 6 teardown.
+    ABORTED=1
+    echo "ABORT: rate limited (429) on ${LABEL} turn 3 - raise server.rate_limits in the test config or wait a minute and rerun"
 elif [ -n "$bad_code" ]; then
     echo "FAIL: ${LABEL} turn 3 returned ${bad_code} (stopped at request ${i})"
 elif ! $seen_other; then
@@ -194,16 +196,19 @@ elif ! $seen_other; then
 fi
 ```
 
-A `429` here aborts the run, see below.
+A `429` here sets `ABORTED=1` and the route returns, see below.
 
 ### Abort on 429
 
 A `429` on any turn means the rate limiter is throttling the test, not that the
-route is broken, and every later route would fail the same way. Stop testing
-routes immediately, print `ABORT: rate limited (429) on LABEL turn N - raise
-server.rate_limits in the test config or wait a minute and rerun`, and report the
-routes not yet tested as `SKIP: not run, rate limited` rather than `FAIL`. Do not
-count them as route failures in the summary.
+route is broken, and every later route would fail the same way. Do not `exit`: set
+`ABORTED=1` and return from the route function so the run can still clean up. Print
+`ABORT: rate limited (429) on LABEL turn N - raise server.rate_limits in the test
+config or wait a minute and rerun`. The route loop checks `ABORTED` before each
+route and, once set, prints `SKIP: not run, rate limited` for every remaining
+route instead of testing it, so they count as skips, not failures. After the loop,
+skip Phases 4 and 5 (their results would be meaningless) and go straight to Phase 6
+teardown, then Phase 7 with the abort noted in the verdict.
 
 ### Route list
 
