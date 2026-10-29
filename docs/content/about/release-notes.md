@@ -70,8 +70,10 @@ Reported by @matthewjhunter.
 
 A chunked request (no `Content-Length`) to `/olla/anthropic/v1/*` was read into memory up to `server.request_limits.max_body_size`
 (100MB by default) before the translator's own `max_message_size` (10MB) rejected it, so a few concurrent oversized chunked
-requests could hold gigabytes. The read now stops at the smaller of the two limits and answers the same `413` with `request_too_large`.
-The rejection now happens before the handler reads the body, so it is counted as a size-limit violation rather than in the translator metrics, and the message text is "Request body too large".
+requests could hold gigabytes. The read now stops at the smaller of the two limits and answers `413` with `request_too_large`.
+For `/messages` that is the same status as before; the rejection now happens before the handler reads the body, so it is counted
+as a size-limit violation rather than in the translator metrics, and the message text is "Request body too large". A chunked body
+between the two limits on `/messages/count_tokens` (previously a `400`) or `/models` (previously served) now also gets the `413`.
 Requests with a `Content-Length`, and all proxy routes, behave as before.
 
 ### Added: unknown keys in `config.yaml` are reported
