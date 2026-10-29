@@ -128,7 +128,7 @@ server:
     per_ip_requests_per_minute: 100
     
     # Monitoring endpoints
-    health_requests_per_minute: 5000
+    health_requests_per_minute: 5000  # Not applied: health endpoints are not rate limited
     
     # Burst allowance
     burst_size: 50
@@ -138,7 +138,7 @@ Sizing guidelines:
 
 - Set global limit to 80% of tested capacity
 - Per-IP limits prevent single client abuse
-- Health endpoints need higher limits for monitoring
+- Health endpoints are not rate limited, so monitoring is never throttled
 - Burst size handles temporary spikes
 
 ### Request Size Limits

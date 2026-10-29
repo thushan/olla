@@ -130,9 +130,12 @@ discovery:
 
 ### Production Setup: Multiple Instances
 
-Load balance across multiple Lemonade SDK instances:
+Load balance across multiple Lemonade SDK instances. Priorities only take effect with the `priority` load balancer:
 
 ```yaml
+proxy:
+  load_balancer: "priority"
+
 discovery:
   static:
     endpoints:
@@ -141,27 +144,18 @@ discovery:
         name: "lemonade-npu"
         type: "lemonade"
         priority: 100
-        tags:
-          hardware: npu
-          location: office
 
       # Secondary GPU-optimised instance
       - url: "http://gpu-server:8000"
         name: "lemonade-gpu"
         type: "lemonade"
         priority: 90
-        tags:
-          hardware: igpu
-          location: office
 
       # Fallback CPU instance
       - url: "http://cpu-server:8000"
         name: "lemonade-cpu"
         type: "lemonade"
         priority: 75
-        tags:
-          hardware: cpu
-          location: backup
 ```
 
 Olla will:
@@ -481,7 +475,7 @@ version: "1.0"
 # Override default timeouts
 characteristics:
   timeout: 5m  # Increase for large models
-  max_concurrent_requests: 50
+  max_concurrent_requests: 50  # metadata only, Olla does not enforce it
 
 # Add custom routing prefixes
 routing:
@@ -719,8 +713,6 @@ Enable unified model catalogue:
 ```yaml
 model_registry:
   enable_unifier: true
-  unification:
-    enabled: true
 ```
 
 Benefits:
@@ -745,26 +737,25 @@ discovery:
         check_interval: 10s # Check frequency
 ```
 
-### 3. Tag Backends by Hardware
+### 3. Rank Backends by Hardware
 
-Use tags for hardware-specific routing:
+Use `priority` to prefer faster hardware, with the others as failover. Priorities only take effect with the `priority` load balancer:
 
 ```yaml
+proxy:
+  load_balancer: "priority"
+
 discovery:
   static:
     endpoints:
       - url: "http://npu-server:8000"
         name: "lemonade-npu"
         type: "lemonade"
-        tags:
-          hardware: npu
-          recipe: oga-npu
+        priority: 100
       - url: "http://cpu-server:8000"
         name: "lemonade-cpu"
         type: "lemonade"
-        tags:
-          hardware: cpu
-          recipe: oga-cpu
+        priority: 50
 ```
 
 ### 4. Monitor Health Actively

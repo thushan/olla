@@ -467,7 +467,7 @@ func (e *ProxyError) Error() string {
 
 - **Graceful Degradation**: Continue serving from healthy endpoints
 - **Circuit Breakers**: Automatically isolate failing endpoints
-- **Retry Logic**: Configurable retry strategies with backoff
+- **Retry Logic**: Automatic failover to another healthy endpoint on connection failure (not configurable)
 - **Error Propagation**: Structured error responses to clients
 
 ## Configuration Architecture

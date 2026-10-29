@@ -299,7 +299,6 @@ model_registry:
   type: "memory"
   enable_unifier: true
   unification:
-    enabled: true
     stale_threshold: 24h      # Cache models for 24h
     cleanup_interval: 30m     # Infrequent cleanup
 ```
