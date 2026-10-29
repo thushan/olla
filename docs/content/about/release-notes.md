@@ -46,7 +46,25 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
 - **`per_ip_requests_per_minute: 0` no longer turns rate limiting off.** If you set `per_ip_requests_per_minute: 0` (or `OLLA_SERVER_PER_IP_RATE_LIMIT=0`) to turn rate limiting off,
   the global limit (default 1000/min, burst 50) now applies; set `global_requests_per_minute: 0` as well to disable both.
   See [rate limit tiers](#fixed-the-global-rate-limit-applies-when-the-per-ip-limit-is-0).
+- **Anthropic and Claude Code traffic is now rate limited.** `/olla/anthropic/v1/messages`, `/messages/count_tokens` and
+  `/models` take the same limits as the proxy routes (default 100 requests per minute per IP, burst 50, 1000 globally),
+  and share each client's per-IP bucket with them. Claude Code stays well inside these, including a few parallel sessions,
+  but many sessions behind one IP (a team behind NAT, CI runners, parallel agents) may now see 429s: raise
+  `server.rate_limits.per_ip_requests_per_minute` and `burst_size`. See [Anthropic rate limits](#fixed-anthropic-routes-are-now-rate-limited).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
+
+### Fixed: Anthropic routes are now rate limited
+
+`/olla/anthropic/v1/messages`, `/messages/count_tokens` and `/models` were registered as plain routes, so the rate limit
+never reached them, although the API reference said the standard limits applied. They are the main entry point for
+Claude Code. Translator routes now register through `RegisterTranslatorRoute` and sit behind the same rate limit as the proxy
+routes, and a translator added later is covered without extra wiring. A limited request gets `429` with `Retry-After` and
+Anthropic's `rate_limit_error` body, and an oversized one gets `413` with `request_too_large`, both carrying a `request-id`,
+so Claude Code retries and reports them properly. The size limit already applied to these routes; it now answers in the same
+Anthropic shape. Measured against a real Ollama, one Claude Code session peaked at 2 requests a minute and three parallel
+sessions at 9 a minute, with a burst of 4 when four sessions started together, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
+behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
+Reported by @matthewjhunter.
 
 ### Fixed: Anthropic translation sends each backend its own chat path
 

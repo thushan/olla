@@ -124,6 +124,11 @@ Rate limits apply to proxied requests only:
 
 The global and per-IP limits are independent. Setting one to `0` turns off only that limit; the other keeps applying, so to disable rate limiting entirely set both to `0`. A request is checked against its client's per-IP limit first, and only a request that passes it counts against the global limit, so one client over its own limit cannot use up the global allowance and starve the others. A request rejected by the global limit returns `429` with `X-RateLimit-Limit` set to the global value and a `Retry-After` based on when the global bucket refills.
 
+Rate limits and the request size limits apply to the proxy routes and to the translator routes
+(`/olla/anthropic/v1/messages`, `/olla/anthropic/v1/messages/count_tokens` and `/olla/anthropic/v1/models`);
+a translator registered later is covered the same way. Translator routes answer a rejection in the translator's own
+error format. See [Rate Limit Best Practices](practices/rate-limits.md) for sizing.
+
 Example:
 
 ```yaml

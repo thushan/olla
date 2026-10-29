@@ -107,7 +107,7 @@ func TestSecurityChainMiddleware_RateLimit_Returns429(t *testing.T) {
 	}
 
 	reached := false
-	chain := sa.CreateChainMiddleware()(okHandler(&reached))
+	chain := sa.CreateChainMiddleware(nil)(okHandler(&reached))
 
 	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/v1/chat/completions",
 		strings.NewReader(`{"model":"llama3"}`))
@@ -152,7 +152,7 @@ func TestSecurityChainMiddleware_OversizedBody_Returns413(t *testing.T) {
 	}
 
 	reached := false
-	chain := sa.CreateChainMiddleware()(okHandler(&reached))
+	chain := sa.CreateChainMiddleware(nil)(okHandler(&reached))
 
 	// Body is 50 bytes, well above the 10-byte cap.
 	body := strings.Repeat("x", 50)
@@ -191,7 +191,7 @@ func TestSecurityChainMiddleware_FallbackPath_Returns403(t *testing.T) {
 	}
 
 	reached := false
-	chain := sa.CreateChainMiddleware()(okHandler(&reached))
+	chain := sa.CreateChainMiddleware(nil)(okHandler(&reached))
 
 	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/", strings.NewReader("hi"))
 	w := httptest.NewRecorder()
@@ -217,7 +217,7 @@ func TestRateLimit_EveryProxyRouteIsLimited(t *testing.T) {
 	require.NoError(t, err, "shipped profiles must load")
 
 	// Translator routes (/olla/anthropic/*) are not in this fixture because
-	// translatorRegistry is nil, so they are not covered by this loop.
+	// translatorRegistry is nil; handler_translator_ratelimit_test.go covers them.
 	tests := []struct {
 		name      string
 		limits    config.ServerRateLimits

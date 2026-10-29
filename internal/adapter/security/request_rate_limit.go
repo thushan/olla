@@ -338,7 +338,9 @@ func (rl *RateLimitValidator) Stop() {
 	})
 }
 
-func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler {
+// CreateMiddleware builds the rate-limit middleware. reject writes the 429 for routes whose
+// clients expect a specific error format (see RejectFunc); nil keeps the plain-text 429.
+func (rl *RateLimitValidator) CreateMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			clientIP := util.GetClientIP(r, rl.trustProxyHeaders, rl.trustedCIDRs)
@@ -388,7 +390,7 @@ func (rl *RateLimitValidator) CreateMiddleware() func(http.Handler) http.Handler
 						"reason", result.Reason)
 				}
 
-				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				writeReject(w, reject, http.StatusTooManyRequests, "Too Many Requests")
 				return
 			}
 
