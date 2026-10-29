@@ -47,10 +47,10 @@ const (
 // eligible endpoint once, replaying any method after a connection failure);
 // a Configuration built without a policy therefore never silently loses failover.
 type RetryPolicy struct {
-	// Disabled makes every request a single attempt with no failover.
-	Disabled bool
 	// MaxAttempts caps attempts per request; 0 means every eligible endpoint once.
 	MaxAttempts int
+	// Disabled makes every request a single attempt with no failover.
+	Disabled bool
 	// NoNonIdempotent stops POST, PATCH and DELETE failing over after a connection
 	// failure. GET, HEAD and OPTIONS still do.
 	NoNonIdempotent bool

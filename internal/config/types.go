@@ -34,8 +34,8 @@ type Config struct {
 	Translators   TranslatorsConfig   `yaml:"translators"`
 	ModelRegistry ModelRegistryConfig `yaml:"model_registry"`
 	Discovery     DiscoveryConfig     `yaml:"discovery"`
-	Proxy         ProxyConfig         `yaml:"proxy"`
 	Server        ServerConfig        `yaml:"server"`
+	Proxy         ProxyConfig         `yaml:"proxy"`
 	Engineering   EngineeringConfig   `yaml:"engineering"`
 }
 
@@ -260,8 +260,8 @@ type ProxyConfig struct {
 // RetryConfig controls failover between endpoints for a single request. Only
 // connection failures fail over; timeouts and HTTP error statuses do not.
 type RetryConfig struct {
-	Enabled       bool `yaml:"enabled"`        // false = one attempt, no failover
 	MaxAttempts   int  `yaml:"max_attempts"`   // 0 = every eligible endpoint once
+	Enabled       bool `yaml:"enabled"`        // false = one attempt, no failover
 	NonIdempotent bool `yaml:"non_idempotent"` // allow POST/PATCH/DELETE to fail over after a connection failure
 }
 
