@@ -105,8 +105,8 @@ server:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `rate_limits.global_requests_per_minute` | int | `1000` | Global rate limit (0=disabled) |
-| `rate_limits.per_ip_requests_per_minute` | int | `100` | Per-IP rate limit (0=disabled) |
+| `rate_limits.global_requests_per_minute` | int | `1000` | Limit across all clients combined (0 disables the global limit only) |
+| `rate_limits.per_ip_requests_per_minute` | int | `100` | Limit for each client IP (0 disables the per-IP limit only) |
 | `rate_limits.health_requests_per_minute` | int | `1000` | Not applied: health endpoints are not rate limited |
 | `rate_limits.burst_size` | int | `50` | Token bucket burst size |
 | `rate_limits.cleanup_interval` | duration | `5m` | Rate limiter cleanup |
@@ -121,6 +121,13 @@ Rate limits apply to proxied requests only:
 | Requests forwarded to a backend through the provider prefixes, such as `/olla/ollama/`, `/olla/vllm/` and `/olla/openai/` | `/olla/models` and `/olla/models/{id}` |
 | Ollama `GET /olla/ollama/api/ps` | Model listings Olla builds itself, such as `/olla/proxy/v1/models` and the provider `/v1/models` routes |
 | | `/olla/ollama/api/show` and the unsupported Ollama model-management stubs (`pull`, `push`, `create`, `copy`, `delete`) |
+
+The global and per-IP limits are independent. Setting one to `0` turns off only that limit; the other keeps applying, so to disable rate limiting entirely set both to `0`. A request is checked against its client's per-IP limit first, and only a request that passes it counts against the global limit, so one client over its own limit cannot use up the global allowance and starve the others. A request rejected by the global limit returns `429` with `X-RateLimit-Limit` set to the global value and a `Retry-After` based on when the global bucket refills.
+
+Rate limits and the request size limits apply to the proxy routes and to the translator routes
+(`/olla/anthropic/v1/messages`, `/olla/anthropic/v1/messages/count_tokens` and `/olla/anthropic/v1/models`);
+a translator registered later is covered the same way. Translator routes answer a rejection in the translator's own
+error format. See [Rate Limit Best Practices](practices/rate-limits.md) for sizing.
 
 Example:
 

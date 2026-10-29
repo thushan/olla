@@ -517,7 +517,7 @@ func TestCreateNonProxyMiddleware_ChunkedOversizedBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := validator.CreateNonProxyMiddleware()(next)
+	handler := validator.CreateNonProxyMiddleware(nil)(next)
 
 	body := strings.Repeat("x", cap+1)
 	req := httptest.NewRequest(http.MethodPost, "/internal/status", strings.NewReader(body))
@@ -551,7 +551,7 @@ func TestCreateNonProxyMiddleware_ChunkedOversizedBody_RecordsViolation(t *testi
 		MaxHeaderSize: 0,
 	}, metricsAdapter, log)
 
-	handler := validator.CreateNonProxyMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := validator.CreateNonProxyMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -589,7 +589,7 @@ func TestCreateNonProxyMiddleware_ChunkedSmallBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := validator.CreateNonProxyMiddleware()(next)
+	handler := validator.CreateNonProxyMiddleware(nil)(next)
 
 	body := "hello"
 	req := httptest.NewRequest(http.MethodPost, "/internal/status", strings.NewReader(body))
@@ -624,7 +624,7 @@ func TestCreateNonProxyMiddleware_KnownLengthOversized(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := validator.CreateNonProxyMiddleware()(next)
+	handler := validator.CreateNonProxyMiddleware(nil)(next)
 
 	body := strings.Repeat("x", cap+1)
 	req := httptest.NewRequest(http.MethodPost, "/internal/status", strings.NewReader(body))

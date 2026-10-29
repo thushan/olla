@@ -22,7 +22,7 @@ func BenchmarkCreateChainMiddleware_ServeHTTP(b *testing.B) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler := adapters.CreateChainMiddleware()(next)
+	handler := adapters.CreateChainMiddleware(nil)(next)
 
 	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/test", nil)
 	req.RemoteAddr = "10.0.0.1:54321"

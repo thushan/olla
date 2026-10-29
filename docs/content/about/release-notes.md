@@ -43,7 +43,28 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   `retry_backoff` fails startup. See [discovery retries](#fixed-model-discovery-now-retries-failed-fetches).
 - **Name patterns tag rerankers and embedders** on backends that report no kind, so those models drop `text-generation` and `chat`.
   A custom `models.yaml` with its own `name_patterns` needs the two new entries. See [name patterns](#added-rerankers-and-embedders-recognised-by-name-on-backends-that-report-no-kind).
+- **`per_ip_requests_per_minute: 0` no longer turns rate limiting off.** If you set `per_ip_requests_per_minute: 0` (or `OLLA_SERVER_PER_IP_RATE_LIMIT=0`) to turn rate limiting off,
+  the global limit (default 1000/min, burst 50) now applies; set `global_requests_per_minute: 0` as well to disable both.
+  See [rate limit tiers](#fixed-the-global-rate-limit-applies-when-the-per-ip-limit-is-0).
+- **Anthropic and Claude Code traffic is now rate limited.** `/olla/anthropic/v1/messages`, `/messages/count_tokens` and
+  `/models` take the same limits as the proxy routes (default 100 requests per minute per IP, burst 50, 1000 globally),
+  and share each client's per-IP bucket with them. Claude Code stays well inside these, including a few parallel sessions,
+  but many sessions behind one IP (a team behind NAT, CI runners, parallel agents) may now see 429s: raise
+  `server.rate_limits.per_ip_requests_per_minute` and `burst_size`. See [Anthropic rate limits](#fixed-anthropic-routes-are-now-rate-limited).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
+
+### Fixed: Anthropic routes are now rate limited
+
+`/olla/anthropic/v1/messages`, `/messages/count_tokens` and `/models` were registered as plain routes, so the rate limit
+never reached them, although the API reference said the standard limits applied. They are the main entry point for
+Claude Code. Translator routes now register through `RegisterTranslatorRoute` and sit behind the same rate limit as the proxy
+routes, and a translator added later is covered without extra wiring. A limited request gets `429` with `Retry-After` and
+Anthropic's `rate_limit_error` body, and an oversized one gets `413` with `request_too_large`, both carrying a `request-id`,
+so Claude Code retries and reports them properly. The size limit already applied to these routes; it now answers in the same
+Anthropic shape. Measured against a real Ollama, one Claude Code session peaked at 2 requests a minute and three parallel
+sessions at 9 a minute, with a burst of 4 when four sessions started together, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
+behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
+Reported by @matthewjhunter.
 
 ### Added: unknown keys in `config.yaml` are reported
 
@@ -209,6 +230,10 @@ only a request path of that single segment.
 ### Fixed: one client could flood the log with rejections
 
 Olla wrote a WARN for every request it rejected, so a client hammering a rate limit produced millions of identical lines in minutes and pushed useful history out of the rotated log. Rate limit (`429`), request size (`413`/`431`), dashboard access (`403`) and proxy routing rejections are now sampled: the first in each 10 second window logs in full, and the rest become one summary such as `WARN Rate limit exceeded, repeats suppressed layer=rate_limit client_ip=203.0.113.7 suppressed=19994 window=10s`. The `Model routing rejected request` and `Large request blocked` WARNs are gone, since the sampled `Request rejected` line carries the same detail. Responses, and the rate limit and size limit counters, are unchanged, and a backend's own 4xx and 5xx responses are still logged per request.
+
+### Fixed: the global rate limit applies when the per-IP limit is 0
+
+`per_ip_requests_per_minute: 0` returned early and skipped the global limiter as well, while `global_requests_per_minute: 0` only disabled itself. The two limits are now independent switches, and `0` disables only its own tier. Two further faults went with it. A request already over its per-IP limit still took a global token, so one noisy client could starve everyone else, even on the default config; the per-IP limit is now checked first and a request rejected by either limit is charged to neither. A global rejection also reported the per-IP value in `X-RateLimit-Limit` and a fixed `Retry-After: 60`; it now reports the global limit in `X-RateLimit-Limit`, logs the reason `Global rate limit exceeded` and sets `Retry-After` from the global bucket's refill. Rejections of either kind also report `X-RateLimit-Remaining: 0`. Reported by @matthewjhunter.
 
 ### Fixed: `Content-Encoding: identity` bodies and unreadable `/v1/embeddings` bodies
 

@@ -1,16 +1,19 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 
+	"github.com/thushan/olla/internal/adapter/security"
 	"github.com/thushan/olla/internal/adapter/translator"
 	"github.com/thushan/olla/internal/app/handlers/dashboard"
 	"github.com/thushan/olla/internal/app/middleware"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/util"
 )
 
 // staticRoute captures the minimal routing info needed when profile loading is unavailable
@@ -110,6 +113,29 @@ func (a *Application) mountDashboard() {
 	dashboard.RegisterRoutes(a.routeRegistry, a.Config.Dashboard, a.logger, dashboardHandlerFactory(), a.throttles)
 }
 
+// translatorRejectWriter returns the writer that formats a security rejection in the
+// translator's own error schema, or nil (plain text) when it has none. The quiet variant
+// is preferred: the rate limiter already reports the rejection through its sampled log.
+func translatorRejectWriter(trans translator.RequestTranslator) security.RejectFunc {
+	var write func(w http.ResponseWriter, err error, statusCode int)
+	switch ew := trans.(type) {
+	case translator.QuietErrorWriter:
+		write = ew.WriteErrorQuiet
+	case translator.ErrorWriter:
+		write = ew.WriteError
+	default:
+		return nil
+	}
+	return func(w http.ResponseWriter, status int, message string) {
+		// The access-log middleware that assigns the request ID sits behind the security
+		// chain, so a rejection has none yet; SDKs read request-id for correlation.
+		if w.Header().Get(constants.HeaderXOllaRequestID) == "" {
+			w.Header().Set(constants.HeaderXOllaRequestID, util.GenerateRequestID())
+		}
+		write(w, errors.New(message), status)
+	}
+}
+
 // registerTranslatorRoutes dynamically registers routes for all translators
 // Translators that implement PathProvider interface provide their own API paths
 // This enables adding new translators without modifying the routing code
@@ -128,12 +154,17 @@ func (a *Application) registerTranslatorRoutes() {
 		if pathProvider, ok := trans.(translator.PathProvider); ok {
 			path := pathProvider.GetAPIPath()
 			handler := a.translationHandler(trans)
+			reject := translatorRejectWriter(trans)
 
-			a.routeRegistry.RegisterWithMethod(
+			// Translator routes are inference entry points (Claude Code's main path), so
+			// they register through RegisterTranslatorRoute to sit behind the rate and
+			// size limits like proxy routes. A translator added later is covered too.
+			a.routeRegistry.RegisterTranslatorRoute(
 				path,
 				handler,
 				name+" Messages API",
 				"POST",
+				reject,
 			)
 
 			// Register models endpoint for translators
@@ -141,11 +172,12 @@ func (a *Application) registerTranslatorRoutes() {
 			modelsPath := extractBasePath(path) + "/models"
 			modelsHandler := a.translatorModelsHandler(trans)
 
-			a.routeRegistry.RegisterWithMethod(
+			a.routeRegistry.RegisterTranslatorRoute(
 				modelsPath,
 				modelsHandler,
 				name+" Models API",
 				"GET",
+				reject,
 			)
 
 			// Register token counting endpoint for translators that support it
@@ -154,11 +186,12 @@ func (a *Application) registerTranslatorRoutes() {
 				tokenCountPath := path + "/count_tokens"
 				tokenCountHandler := a.tokenCountHandler(trans)
 
-				a.routeRegistry.RegisterWithMethod(
+				a.routeRegistry.RegisterTranslatorRoute(
 					tokenCountPath,
 					tokenCountHandler,
 					name+" Token Count API",
 					"POST",
+					reject,
 				)
 
 				a.logger.Debug("Registered translator routes",
