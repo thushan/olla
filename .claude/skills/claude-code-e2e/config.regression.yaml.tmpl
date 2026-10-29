@@ -42,10 +42,6 @@ proxy:
   response_timeout: 300s       # long generations through a local model
   read_timeout: 300s
   response_header_timeout: 30s
-  retry:
-    enabled: true
-    on_connection_failure: true
-    max_attempts: 0
   sticky_sessions:
     # Off on purpose: Claude Code resends full history each turn, so pinning
     # adds a variable without adding coverage for this gate.
@@ -54,8 +50,6 @@ proxy:
 discovery:
   type: "static"
   refresh_interval: 10s
-  health_check:
-    initial_delay: 1s
   static:
     endpoints:
       - url: "__OLLAMA_URL__"
@@ -81,7 +75,6 @@ model_registry:
   type: "memory"
   enable_unifier: true
   unification:
-    enabled: true
     stale_threshold: 24h
     cleanup_interval: 10m
   routing_strategy:

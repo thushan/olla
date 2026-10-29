@@ -117,7 +117,7 @@ Prevent system overload:
 server:
   rate_limits:
     global_requests_per_minute: 5000  # Total system capacity
-    health_requests_per_minute: 1000  # Monitoring endpoints
+    health_requests_per_minute: 1000  # Not applied: health endpoints are not rate limited
 ```
 
 ### Per-Client Rate Limits

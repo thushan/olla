@@ -287,6 +287,12 @@ Ollama's own 404.
 
 When the same model (matched by digest) was registered from more than one backend, the merged alias list was rebuilt in random order, and `/olla/models` and the provider listings emit the first alias as the model id. The id could change between refreshes. Merging now keeps a stable order and leads with the model's own id.
 
+### Fixed: config and docs no longer promise settings Olla ignores
+
+The shipped `config.yaml`, the examples and the docs carried keys the config schema has no field for, which Olla silently drops: `server.rate_limits.per_endpoint`, the whole `proxy.retry` block, `discovery.health_check`, `unification.enabled` and endpoint `tags`. They are gone from the shipped configs and doc snippets. Failover to another healthy endpoint on a connection failure is automatic and not configurable, and the deprecation comment that pointed at a non-existent `retry.max_attempts` now says so. Unification is controlled by `model_registry.enable_unifier`.
+
+`characteristics.max_concurrent_requests` and `resources.concurrency_limits` in a profile are read as metadata only and do not limit concurrency. The profile and backend docs now say so, and that the backend's own concurrency settings are what limit parallelism. The rate-limit docs also stop claiming health and system endpoints have their own limits: the reference now lists which routes are rate limited and which aren't. A test now decodes the shipped configs against the full schema so a dead key fails the build. Behaviour is unchanged. Reported by @matthewjhunter.
+
 ## v0.0.29
 
 ### Breaking: userinfo URLs now fail startup

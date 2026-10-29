@@ -139,7 +139,7 @@ server:
 !!! info "Rate Limiting Behaviour"
     - Global limits apply across all clients
     - Per-IP limits use token bucket algorithm with burst capacity
-    - Health endpoints have separate limits to prevent monitoring disruption
+    - Only proxied requests are rate limited. Health, status and model-listing endpoints (`/internal/*`, `/olla/models`) are not, so monitoring is never throttled
     - When behind a proxy, configure `trust_proxy_headers` and `trusted_proxy_cidrs` for accurate client IP detection
 
 See [Rate Limiting Reference](reference.md#rate-limiting) for complete details.
@@ -306,7 +306,6 @@ model_registry:
       discovery_timeout: 2s
       discovery_refresh_on_miss: false
   unification:
-    enabled: true
     stale_threshold: 24h   # Model retention time
     cleanup_interval: 10m  # Cleanup frequency
 ```

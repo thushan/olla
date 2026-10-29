@@ -350,9 +350,10 @@ discovery:
 
 OpenAI rate limits are enforced by the backend service. Olla adds its own configurable limits:
 
-- Default: 200 requests per minute per endpoint
-- Configurable per-endpoint limits
+- Global limit (default 1000 requests per minute) and per-IP limit (default 100)
 - Burst handling for traffic spikes
+
+See [Rate Limits](../configuration/reference.md#rate-limiting) for the settings.
 
 ## Error Handling
 
