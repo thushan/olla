@@ -304,7 +304,8 @@ Print a summary:
 Results: N passed  N failed  N skipped  (N total assertions)
 ```
 
-Exit 0 on zero failures, exit 1 otherwise.
+Exit 0 on zero failures and no abort, exit 1 otherwise. A run with `ABORTED=1` is incomplete
+and exits 1 even when no assertion failed.
 
 ---
 
