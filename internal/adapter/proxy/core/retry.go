@@ -207,7 +207,9 @@ func (h *RetryHandler) ExecuteWithRetry(
 
 	var lastErr error
 	maxRetries := h.maxAttempts(len(endpoints))
-	attemptCount := 0
+	// attemptCount is the retry budget: only attempts that reached a backend count.
+	// iteration counts every pass, so the body is re-armed after any earlier one.
+	attemptCount, iteration := 0, 0
 	// Tracked separately from lastErr because lastErr only ever reflects the
 	// final attempt: if earlier endpoints failed with real connection errors
 	// and the final one was CB-open, lastErr alone would mislabel the whole
@@ -219,7 +221,8 @@ func (h *RetryHandler) ExecuteWithRetry(
 			return err
 		}
 
-		h.resetRequestBodyForRetry(r, bodyBytes, attemptCount)
+		h.resetRequestBodyForRetry(r, bodyBytes, iteration)
+		iteration++
 
 		endpoint, err := selector.Select(ctx, availableEndpoints)
 		if err != nil {
@@ -242,6 +245,11 @@ func (h *RetryHandler) ExecuteWithRetry(
 		// connection-error/handleConnectionFailure path below.
 		if errors.Is(lastErr, ErrCircuitBreakerOpen) {
 			cbOpenCount++
+			// The endpoint was never contacted, so the rejection does not spend
+			// the attempt budget: with retry disabled or a small max_attempts a
+			// healthy peer must still be reachable. The loop still terminates
+			// because the endpoint leaves the candidate list below.
+			attemptCount--
 			// Once the response has started we cannot safely retry even on
 			// CB-open: the same partial-response hazard applies. The guard runs
 			// identically on every failover path.
@@ -279,9 +287,12 @@ func (h *RetryHandler) ExecuteWithRetry(
 		// the request may already have been read and acted on by that backend.
 		// With non_idempotent off, a POST/PATCH/DELETE is not replayed elsewhere.
 		if h.policy.NoNonIdempotent && !isIdempotent(r.Method) {
-			h.logger.Debug("skipping retry: non-idempotent method and proxy.retry.non_idempotent is off",
-				"method", r.Method,
-				"endpoint", endpoint.Name)
+			h.logger.Warn("Connection failed to endpoint, marking as unhealthy",
+				"endpoint", endpoint.Name,
+				"error", lastErr,
+				"attempt", attemptCount,
+				"retry", "skipped: non-idempotent method and proxy.retry.non_idempotent is off",
+				"method", r.Method)
 			h.markEndpointUnhealthy(ctx, endpoint)
 			return lastErr
 		}

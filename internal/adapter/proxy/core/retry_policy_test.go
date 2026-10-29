@@ -86,9 +86,46 @@ func TestExecuteWithRetry_Policy(t *testing.T) {
 	}
 }
 
-// With retry disabled a circuit-breaker rejection has nowhere to go and must
-// not demote the endpoint (the breaker, not health, owns that state).
-func TestExecuteWithRetry_PolicyDisabled_CBOpenNoDemotion(t *testing.T) {
+// A circuit-breaker rejection never contacted the endpoint, so it must not spend
+// the attempt budget: with retry disabled or a small max_attempts, an open
+// breaker on one endpoint must not fail the request while a healthy peer exists.
+func TestExecuteWithRetry_CBOpenDoesNotSpendBudget(t *testing.T) {
+	t.Parallel()
+
+	for name, policy := range map[string]proxyconfig.RetryPolicy{
+		"disabled":       {Disabled: true},
+		"max_attempts 1": {MaxAttempts: 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ds := &testDiscoveryService{}
+			h := newPolicyRetryHandler(t, ds, policy)
+
+			var served []string
+			proxyFunc := func(_ context.Context, w http.ResponseWriter, _ *http.Request, ep *domain.Endpoint, _ *ports.RequestStats) error {
+				if ep.Name == "a" {
+					return cbOpenErr(ep.Name)
+				}
+				served = append(served, ep.Name)
+				w.WriteHeader(http.StatusOK)
+				return nil
+			}
+
+			req := httptest.NewRequest(http.MethodPost, "/v1/chat", nil)
+			err := h.ExecuteWithRetry(context.Background(), httptest.NewRecorder(), req,
+				[]*domain.Endpoint{namedEndpoint("a"), namedEndpoint("b")}, &roundRobinSelector{}, &ports.RequestStats{}, proxyFunc)
+
+			require.NoError(t, err)
+			assert.Equal(t, []string{"b"}, served)
+			assert.Nil(t, ds.updatedEndpoint, "CB-open must not demote health")
+		})
+	}
+}
+
+// When every endpoint is breaker-open the loop must still end, with the
+// circuit-breaker exhaustion error and no demotion.
+func TestExecuteWithRetry_AllCBOpen_TerminatesWithPolicyDisabled(t *testing.T) {
 	t.Parallel()
 
 	ds := &testDiscoveryService{}
@@ -100,13 +137,13 @@ func TestExecuteWithRetry_PolicyDisabled_CBOpenNoDemotion(t *testing.T) {
 		return cbOpenErr(ep.Name)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/v1/chat", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
 	err := h.ExecuteWithRetry(context.Background(), httptest.NewRecorder(), req,
 		[]*domain.Endpoint{namedEndpoint("a"), namedEndpoint("b")}, &roundRobinSelector{}, &ports.RequestStats{}, proxyFunc)
 
-	require.Error(t, err)
-	assert.Equal(t, 1, attempts)
-	assert.Nil(t, ds.updatedEndpoint, "CB-open must not demote health")
+	require.ErrorIs(t, err, ErrCircuitBreakerOpen)
+	assert.Equal(t, 2, attempts)
+	assert.Nil(t, ds.updatedEndpoint)
 }
 
 // A CB-open rejection never reached the backend, so non_idempotent=false must

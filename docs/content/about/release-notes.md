@@ -64,11 +64,9 @@ block (`enabled`, `max_attempts`, `non_idempotent`) makes this configurable, wit
 defaults are today's behaviour, so nothing changes unless you set it: `non_idempotent: false` stops POST, PATCH and DELETE failing over after
 a connection failure (GET still does), `max_attempts: N` caps attempts, `enabled: false` makes every request a single attempt. A failed
 connection still marks the endpoint unhealthy in every case, a negative `max_attempts` fails startup, and both engines and the Anthropic routes follow the policy.
-Timeouts and HTTP error statuses do not fail over, and still don't; that is now stated in the docs. The deprecated `proxy.max_retries` and
+Timeouts and HTTP error statuses do not fail over. The deprecated `proxy.max_retries` and
 `proxy.retry_backoff` stay accepted, do nothing, and log one warning at startup when set. They are not mapped onto the new block.
-The same release fixes a replay bug: a GET that failed after part of the response had been sent was retried on the next backend, so the
-client received `partial` output followed by a complete second response. Any request is now left to fail once the response has started.
-See [Retry Behaviour](../configuration/reference.md#retry-behaviour). Reported by @matthewjhunter.
+A request that fails after part of its response was sent is no longer retried (see the Upgrading note above). See [Retry Behaviour](../configuration/reference.md#retry-behaviour). Reported by @matthewjhunter.
 
 ### Fixed: Anthropic routes are now rate limited
 

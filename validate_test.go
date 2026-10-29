@@ -279,3 +279,21 @@ func TestRunValidateConfig_NegativeRetryAttemptsFail(t *testing.T) {
 		t.Errorf("negative max_attempts must fail validation (code %d):\n%s", code, report)
 	}
 }
+
+func TestRunValidateConfig_DeprecatedRetryKeysListedWithoutFailing(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "olla.yaml")
+	if err := os.WriteFile(path, []byte("proxy:\n  max_retries: 3\n  retry_backoff: 1s\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, code := runValidateConfig(path)
+	if code != 0 {
+		t.Errorf("deprecated keys must not fail validation (code %d):\n%s", code, report)
+	}
+	for _, want := range []string{"Ignored keys in", "proxy.max_retries", "proxy.retry_backoff"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report missing %q:\n%s", want, report)
+		}
+	}
+}
