@@ -57,7 +57,7 @@ func TestTranslatorChain_ChunkedBodyCappedAtTranslatorLimit(t *testing.T) {
 	}
 	handler := newTranslatorChain(t, reject, translatorCap, next)
 
-	req, body := chunkedRequest("/olla/anthropic/v1/messages", translatorCap+1)
+	req, _ := chunkedRequest("/olla/anthropic/v1/messages", translatorCap+1)
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
@@ -70,7 +70,7 @@ func TestTranslatorChain_ChunkedBodyCappedAtTranslatorLimit(t *testing.T) {
 
 	// A body far larger than the server cap must still stop near the translator cap. The
 	// slack covers io.ReadAll's final chunk, not a second buffer's worth.
-	req, body = chunkedRequest("/olla/anthropic/v1/messages", translatorServerCap-1)
+	req, body := chunkedRequest("/olla/anthropic/v1/messages", translatorServerCap-1)
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 	if got := body.n.Load(); got > translatorCap+4096 {
 		t.Errorf("read %d bytes of a chunked body; want it bounded near the translator cap %d", got, translatorCap)
@@ -168,5 +168,26 @@ func TestProxyChain_ChunkedBodyStillStreamed(t *testing.T) {
 
 	if rr.Code != http.StatusOK || seen != translatorCap*4 {
 		t.Errorf("proxy route above the translator cap: code %d, handler saw %d bytes", rr.Code, seen)
+	}
+}
+
+// The boundary is exact: N bytes pass, N+1 do not. The handler's own read is maxBodySize+1,
+// so an off-by-one here would reject a body the translator accepts.
+func TestTranslatorChain_ChunkedBoundaryIsExact(t *testing.T) {
+	t.Parallel()
+
+	for size, want := range map[int]int{translatorCap: http.StatusOK, translatorCap + 1: http.StatusRequestEntityTooLarge} {
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n, _ := io.Copy(io.Discard, r.Body)
+			if n != int64(size) {
+				t.Errorf("handler got %d bytes, want %d", n, size)
+			}
+		})
+		rr := httptest.NewRecorder()
+		req, _ := chunkedRequest("/olla/anthropic/v1/messages", size)
+		newTranslatorChain(t, nil, translatorCap, next).ServeHTTP(rr, req)
+		if rr.Code != want {
+			t.Errorf("%d bytes: got %d, want %d", size, rr.Code, want)
+		}
 	}
 }
