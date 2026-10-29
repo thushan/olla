@@ -51,6 +51,7 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   and share each client's per-IP bucket with them. Claude Code stays well inside these, including a few parallel sessions,
   but many sessions behind one IP (a team behind NAT, CI runners, parallel agents) may now see 429s: raise
   `server.rate_limits.per_ip_requests_per_minute` and `burst_size`. See [Anthropic rate limits](#fixed-anthropic-routes-are-now-rate-limited).
+- **`X-RateLimit-*` headers are omitted when no rate limit applies.** With both limits at `0` (and for an unlimited health probe) responses used to carry `X-RateLimit-Limit: 0` and `X-RateLimit-Remaining: 0`; they now carry none. See [rate limit headers](#fixed-x-ratelimit-headers-are-omitted-when-rate-limiting-is-off).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
 
 ### Fixed: Anthropic routes are now rate limited
@@ -65,6 +66,10 @@ Anthropic shape. Measured against a real Ollama, one Claude Code session peaked 
 sessions at 9 a minute, with a burst of 4 when four sessions started together, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
 behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 Reported by @matthewjhunter.
+
+### Fixed: `X-RateLimit-*` headers are omitted when rate limiting is off
+
+Every response through a rate-limited route carried `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, even with both limits at `0`, so a `413` or a plain `200` showed `X-RateLimit-Limit: 0, X-RateLimit-Remaining: 0`, which a client reads as fully throttled. The headers are now sent only while a limit applies. With the per-IP limit off and the global limit on they report the global limit, as the `429` path already does.
 
 ### Added: unknown keys in `config.yaml` are reported
 
