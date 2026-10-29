@@ -60,8 +60,12 @@ func buildValidationReport(items []validationItem) (report string, exitCode int)
 			continue
 		}
 		fmt.Fprintf(&buf, "\nIgnored keys in %s (%d) - not read by Olla, no effect on the result:\n", item.IgnoredIn, len(item.Ignored))
-		for _, k := range item.Ignored {
+		shown, more := capUnknownKeys(item.Ignored)
+		for _, k := range shown {
 			fmt.Fprintf(&buf, "         - %s\n", k)
+		}
+		if more > 0 {
+			fmt.Fprintf(&buf, "         - and %d more\n", more)
 		}
 	}
 
@@ -133,13 +137,30 @@ func unknownKeyStrings(keys []config.UnknownKey) []string {
 	return out
 }
 
-// warnUnknownKeys emits a single startup WARN listing every ignored key, so a
-// config with many typos is one log line rather than a flood. Silent when the
-// config is clean.
+// maxUnknownKeysShown bounds how many ignored keys are printed. The count still
+// reports the true total; a pathological config should not produce a huge log line.
+const maxUnknownKeysShown = 100
+
+// capUnknownKeys splits keys into the ones to print and the number left out.
+func capUnknownKeys(keys []string) (shown []string, more int) {
+	if len(keys) <= maxUnknownKeysShown {
+		return keys, 0
+	}
+	return keys[:maxUnknownKeysShown], len(keys) - maxUnknownKeysShown
+}
+
+// warnUnknownKeys emits a single startup WARN listing the ignored keys (capped
+// at maxUnknownKeysShown), so a config with many typos is one log line rather
+// than a flood. Silent when the config is clean.
 func warnUnknownKeys(warn func(msg string, args ...any), keys []config.UnknownKey) {
 	if len(keys) == 0 {
 		return
 	}
+	shown, more := capUnknownKeys(unknownKeyStrings(keys))
+	list := strings.Join(shown, ", ")
+	if more > 0 {
+		list += fmt.Sprintf(", and %d more", more)
+	}
 	warn("Ignoring unknown keys in config (not read by Olla, check for typos)",
-		"count", len(keys), "keys", strings.Join(unknownKeyStrings(keys), ", "))
+		"count", len(keys), "keys", list)
 }

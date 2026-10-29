@@ -228,3 +228,58 @@ func TestWarnUnknownKeys_SingleLineListingAll(t *testing.T) {
 		}
 	}
 }
+
+func manyUnknownKeys(n int) []config.UnknownKey {
+	keys := make([]config.UnknownKey, n)
+	for i := range keys {
+		keys[i] = config.UnknownKey{Path: fmt.Sprintf("proxy.typo%d", i), Line: i + 1}
+	}
+	return keys
+}
+
+func TestWarnUnknownKeys_CapsListAndKeepsTrueCount(t *testing.T) {
+	t.Parallel()
+
+	var calls []string
+	warn := func(msg string, args ...any) {
+		calls = append(calls, fmt.Sprint(append([]any{msg}, args...)...))
+	}
+	warnUnknownKeys(warn, manyUnknownKeys(150))
+	if len(calls) != 1 {
+		t.Fatalf("expected one WARN, got %d", len(calls))
+	}
+	for _, want := range []string{"150", "and 50 more", fmt.Sprintf("proxy.typo%d (line", maxUnknownKeysShown-1)} {
+		if !strings.Contains(calls[0], want) {
+			t.Errorf("WARN missing %q", want)
+		}
+	}
+	if strings.Contains(calls[0], fmt.Sprintf("proxy.typo%d (line", maxUnknownKeysShown)) {
+		t.Error("WARN listed a key past the cap")
+	}
+
+	// At exactly the cap nothing is dropped, so no "more" suffix.
+	calls = nil
+	warnUnknownKeys(warn, manyUnknownKeys(maxUnknownKeysShown))
+	if strings.Contains(calls[0], "more") {
+		t.Errorf("WARN at the cap must not say 'more': %s", calls[0])
+	}
+}
+
+func TestBuildValidationReport_CapsIgnoredKeys(t *testing.T) {
+	t.Parallel()
+
+	report, code := buildValidationReport([]validationItem{
+		{Name: "config.yaml", Detail: "loaded", IgnoredIn: "c.yaml", Ignored: unknownKeyStrings(manyUnknownKeys(125))},
+	})
+	if code != 0 {
+		t.Fatalf("ignored keys must not change the exit code, got %d", code)
+	}
+	for _, want := range []string{"Ignored keys in c.yaml (125)", "and 25 more"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report missing %q", want)
+		}
+	}
+	if got := strings.Count(report, "proxy.typo"); got != maxUnknownKeysShown {
+		t.Errorf("report lists %d keys, want %d", got, maxUnknownKeysShown)
+	}
+}

@@ -1062,7 +1062,7 @@ Ignored keys in config/config.yaml (2) - not read by Olla, no effect on the resu
          - server.rate_limit (line 20)
 ```
 
-The same keys are logged as a single WARN line when the server starts. Only the main config is checked, not `models.yaml` or profiles. Top-level keys starting with `x-` are skipped, so they can hold YAML anchors.
+Each key is listed once, and at most 100 are shown, followed by `and N more` when there are others. The same keys are logged as a single WARN line when the server starts, capped the same way. Only the main config is checked, not `models.yaml` or profiles. Top-level keys starting with `x-` are skipped, so they can hold YAML anchors.
 
 ## Next Steps
 
