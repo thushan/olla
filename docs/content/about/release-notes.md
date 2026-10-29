@@ -65,7 +65,7 @@ defaults are today's behaviour, so nothing changes unless you set it: `non_idemp
 a connection failure (GET still does), `max_attempts: N` caps attempts, `enabled: false` makes every request a single attempt. A failed
 connection still marks the endpoint unhealthy in every case, a negative `max_attempts` fails startup, and both engines and the Anthropic routes follow the policy.
 Timeouts and HTTP error statuses do not fail over. The deprecated `proxy.max_retries` and
-`proxy.retry_backoff` stay accepted, do nothing, and log one warning at startup when set. They are not mapped onto the new block.
+`proxy.retry_backoff` stay accepted, do nothing, and log one warning at startup when set to a non-zero value. They are not mapped onto the new block.
 A request that fails after part of its response was sent is no longer retried (see the Upgrading note above). See [Retry Behaviour](../configuration/reference.md#retry-behaviour). Reported by @matthewjhunter.
 
 ### Fixed: Anthropic routes are now rate limited

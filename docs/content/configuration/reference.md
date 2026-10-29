@@ -245,9 +245,9 @@ What does and does not fail over:
 
 A POST that the backend read before the connection dropped (for example a backend that crashes after accepting a long prompt) is replayed on the next endpoint by default, so the prompt may run twice. Set `non_idempotent: false` if that matters more than availability.
 
-With sticky sessions on, a failover moves the session's pin to the endpoint that served the request; with `enabled: false` there is no failover and so no re-pin within the request.
+With sticky sessions on, a failover moves the session's pin to the endpoint that served the request; with `enabled: false` there is no failover and so no re-pin within the request, except that an open circuit breaker on the pinned endpoint can still move the pin to another endpoint.
 
-**Deprecated:** `proxy.max_retries` and `proxy.retry_backoff` are still parsed but do nothing, and Olla logs a warning at startup when either is set. They are not mapped onto `proxy.retry`; set that block instead. They will be removed in v0.1.0.
+**Deprecated:** `proxy.max_retries` and `proxy.retry_backoff` are still parsed but do nothing, and Olla logs a warning at startup when either is set to a non-zero value (an explicit `0` cannot be told from unset). They are not mapped onto `proxy.retry`; set that block instead. They will be removed in v0.1.0.
 
 ### Streaming Settings
 
