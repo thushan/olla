@@ -139,7 +139,7 @@ server:
 !!! info "Rate Limiting Behaviour"
     - Global limits apply across all clients
     - Per-IP limits use token bucket algorithm with burst capacity
-    - Only proxied requests are rate limited. Health, status and model-listing endpoints (`/internal/*`, `/olla/models`) are not, so monitoring is never throttled
+    - Proxied requests and the Anthropic translator routes (`/olla/anthropic/v1/*`) are rate limited. Health, status and model-listing endpoints (`/internal/*`, `/olla/models`) are not, so monitoring is never throttled
     - When behind a proxy, configure `trust_proxy_headers` and `trusted_proxy_cidrs` for accurate client IP detection
 
 See [Rate Limiting Reference](reference.md#rate-limiting) for complete details.
