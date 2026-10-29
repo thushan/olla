@@ -125,6 +125,32 @@ func runValidateConfig(configFile string) (string, int) {
 	return buildValidationReport(items)
 }
 
+// deprecatedProxyRetryFields names the legacy proxy.max_retries / retry_backoff
+// keys when the operator set them, or returns "". Both defaults are zero, so a
+// non-zero value can only have come from the file. They were never read, and are
+// deliberately not mapped onto proxy.retry: the old default of 3 would silently
+// cap failover for anyone who copied it from an example.
+func deprecatedProxyRetryFields(cfg *config.Config) string {
+	var set []string
+	if cfg.Proxy.MaxRetries != 0 {
+		set = append(set, "proxy.max_retries")
+	}
+	if cfg.Proxy.RetryBackoff != 0 {
+		set = append(set, "proxy.retry_backoff")
+	}
+	if len(set) == 0 {
+		return ""
+	}
+	return strings.Join(set, " and ") + " do nothing and will be removed; failover is controlled by proxy.retry (enabled, max_attempts, non_idempotent)"
+}
+
+// warnDeprecatedProxyRetry emits one startup WARN when the legacy keys are set.
+func warnDeprecatedProxyRetry(warn func(msg string, args ...any), cfg *config.Config) {
+	if msg := deprecatedProxyRetryFields(cfg); msg != "" {
+		warn("Deprecated config keys have no effect: " + msg)
+	}
+}
+
 func unknownKeyStrings(keys []config.UnknownKey) []string {
 	out := make([]string, 0, len(keys))
 	for _, k := range keys {

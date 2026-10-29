@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -22,13 +23,39 @@ import (
 type RetryHandler struct {
 	logger           logger.StyledLogger
 	discoveryService ports.DiscoveryService
+	policy           proxyconfig.RetryPolicy
+}
+
+// RetryOption customises a RetryHandler at construction.
+type RetryOption func(*RetryHandler)
+
+// WithRetryPolicy sets the failover policy. Without it the handler fails over
+// to every eligible endpoint once and replays any method after a connection failure.
+func WithRetryPolicy(p proxyconfig.RetryPolicy) RetryOption {
+	return func(h *RetryHandler) { h.policy = p }
 }
 
 // NewRetryHandler creates a new retry handler
-func NewRetryHandler(discoveryService ports.DiscoveryService, logger logger.StyledLogger) *RetryHandler {
-	return &RetryHandler{
+func NewRetryHandler(discoveryService ports.DiscoveryService, logger logger.StyledLogger, opts ...RetryOption) *RetryHandler {
+	h := &RetryHandler{
 		discoveryService: discoveryService,
 		logger:           logger,
+	}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
+
+// maxAttempts is the per-request attempt budget for the given candidate count.
+func (h *RetryHandler) maxAttempts(candidates int) int {
+	switch {
+	case h.policy.Disabled:
+		return 1
+	case h.policy.MaxAttempts > 0:
+		return min(candidates, h.policy.MaxAttempts)
+	default:
+		return candidates
 	}
 }
 
@@ -134,10 +161,10 @@ func (rw *ResponseStartedWriter) Flush() {
 	_ = rw.FlushError()
 }
 
-// isIdempotent reports whether the HTTP method is safe to retry after a partial
-// response. GET, HEAD and OPTIONS are defined as idempotent by RFC 9110; POST,
-// PATCH and DELETE are not. Retrying them risks double-billing or duplicate side
-// effects if the upstream already processed the first attempt.
+// isIdempotent reports whether the HTTP method is safe to replay on another endpoint
+// after a connection failure. GET, HEAD and OPTIONS are defined as idempotent by
+// RFC 9110; POST, PATCH and DELETE are not. Replaying them risks double-billing or
+// duplicate side effects if the first backend already read and acted on the request.
 func isIdempotent(method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -148,9 +175,10 @@ func isIdempotent(method string) bool {
 }
 
 // ExecuteWithRetry attempts request delivery with automatic failover on connection errors.
-// For non-idempotent methods (POST, PATCH, DELETE), retry is suppressed once the
-// response has started. Resending to a different endpoint risks duplicate content
-// reaching the client or double-charging a metered API.
+// Retry is always suppressed once any part of the response has reached the client,
+// whatever the method: a second endpoint's reply would be appended to the first's
+// partial output. The attempt budget and whether non-idempotent methods may be
+// replayed after a connection failure come from the handler's RetryPolicy.
 func (h *RetryHandler) ExecuteWithRetry(
 	ctx context.Context,
 	w http.ResponseWriter,
@@ -178,7 +206,7 @@ func (h *RetryHandler) ExecuteWithRetry(
 	tracker := NewResponseStartedWriter(w)
 
 	var lastErr error
-	maxRetries := len(endpoints)
+	maxRetries := h.maxAttempts(len(endpoints))
 	attemptCount := 0
 	// Tracked separately from lastErr because lastErr only ever reflects the
 	// final attempt: if earlier endpoints failed with real connection errors
@@ -214,11 +242,11 @@ func (h *RetryHandler) ExecuteWithRetry(
 		// connection-error/handleConnectionFailure path below.
 		if errors.Is(lastErr, ErrCircuitBreakerOpen) {
 			cbOpenCount++
-			// For non-idempotent methods, once the response has started we
-			// cannot safely retry even on CB-open: the same partial-response
-			// hazard applies. The guard runs identically on every failover path.
-			if tracker.started && !isIdempotent(r.Method) {
-				h.logger.Debug("skipping retry: response already started for non-idempotent method",
+			// Once the response has started we cannot safely retry even on
+			// CB-open: the same partial-response hazard applies. The guard runs
+			// identically on every failover path.
+			if tracker.started {
+				h.logger.Debug("skipping retry: response already started",
 					"method", r.Method,
 					"endpoint", endpoint.Name)
 				return lastErr
@@ -236,14 +264,25 @@ func (h *RetryHandler) ExecuteWithRetry(
 		}
 		connErrCount++
 
-		// For non-idempotent methods, once the response has started we cannot
-		// safely retry. The client would receive a partial response from this
+		// Once the response has started we cannot safely retry, whatever the
+		// method. The client would receive a partial response from this
 		// endpoint followed by a fresh one from the next, causing corruption or
 		// double-billing. Return the error and let the caller decide.
-		if tracker.started && !isIdempotent(r.Method) {
-			h.logger.Debug("skipping retry: response already started for non-idempotent method",
+		if tracker.started {
+			h.logger.Debug("skipping retry: response already started",
 				"method", r.Method,
 				"endpoint", endpoint.Name)
+			return lastErr
+		}
+
+		// The connection genuinely failed, so the endpoint is still demoted, but
+		// the request may already have been read and acted on by that backend.
+		// With non_idempotent off, a POST/PATCH/DELETE is not replayed elsewhere.
+		if h.policy.NoNonIdempotent && !isIdempotent(r.Method) {
+			h.logger.Debug("skipping retry: non-idempotent method and proxy.retry.non_idempotent is off",
+				"method", r.Method,
+				"endpoint", endpoint.Name)
+			h.markEndpointUnhealthy(ctx, endpoint)
 			return lastErr
 		}
 

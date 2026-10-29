@@ -42,6 +42,20 @@ const (
 	DefaultTLSHandshakeTimeout = 10 * time.Second
 )
 
+// RetryPolicy controls failover between endpoints for a single request. Fields
+// are phrased so the zero value is today's behaviour (fail over to every
+// eligible endpoint once, replaying any method after a connection failure);
+// a Configuration built without a policy therefore never silently loses failover.
+type RetryPolicy struct {
+	// Disabled makes every request a single attempt with no failover.
+	Disabled bool
+	// MaxAttempts caps attempts per request; 0 means every eligible endpoint once.
+	MaxAttempts int
+	// NoNonIdempotent stops POST, PATCH and DELETE failing over after a connection
+	// failure. GET, HEAD and OPTIONS still do.
+	NoNonIdempotent bool
+}
+
 // ProxyConfig defines the interface for all proxy configurations
 type ProxyConfig interface {
 	// Core configuration getters
@@ -67,7 +81,13 @@ type BaseProxyConfig struct {
 	ReadTimeout           time.Duration
 	ResponseHeaderTimeout time.Duration
 	TLSHandshakeTimeout   time.Duration
+	Retry                 RetryPolicy
 	StreamBufferSize      int
+}
+
+// GetRetryPolicy returns the failover policy applied to each proxied request.
+func (c *BaseProxyConfig) GetRetryPolicy() RetryPolicy {
+	return c.Retry
 }
 
 // GetResponseHeaderTimeout returns the maximum time the transport waits for a
