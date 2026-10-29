@@ -39,7 +39,7 @@ api:
 # Platform characteristics
 characteristics:
   timeout: 3m
-  max_concurrent_requests: 1  # LM Studio typically handles one at a time
+  max_concurrent_requests: 1  # Metadata only, not enforced by Olla
   default_priority: 90
   streaming_support: true
 

@@ -246,7 +246,7 @@ The LM Studio profile includes optimised resource settings. Olla reads `max_conc
 ```yaml
 characteristics:
   timeout: 3m
-  max_concurrent_requests: 1  # LM Studio handles one at a time - not enforced
+  max_concurrent_requests: 1  # Metadata only, not enforced by Olla
   streaming_support: true
 ```
 
@@ -288,7 +288,7 @@ characteristics:
 resources:
   concurrency_limits:  # metadata only, not enforced
     - min_memory_gb: 0
-      max_concurrent: 1  # Always single-threaded
+      max_concurrent: 1  # Metadata only, not enforced
 ```
 
 See [Profile Configuration](../../concepts/profile-system.md) for complete customisation options.
