@@ -150,7 +150,7 @@ func (chainOnlyAdapters) CreateChainMiddleware(security.RejectFunc) func(http.Ha
 // rejectAdapters adds the optional translator chain, which writes through the route's Reject.
 type rejectAdapters struct{ chainOnlyAdapters }
 
-func (rejectAdapters) CreateTranslatorChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler {
+func (rejectAdapters) CreateTranslatorChainMiddleware(reject security.RejectFunc, _ int64) func(http.Handler) http.Handler {
 	return func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			reject(w, http.StatusTooManyRequests, "slow down")
@@ -187,7 +187,7 @@ func TestWireUpWithSecurityChain_TranslatorRouteTakesProxyChain(t *testing.T) {
 			t.Parallel()
 
 			reg := NewRouteRegistry(&mockRouteLogger{})
-			reg.RegisterTranslatorRoute("/olla/x/v1/messages", handler, "x", http.MethodPost, reject)
+			reg.RegisterTranslatorRoute("/olla/x/v1/messages", handler, "x", http.MethodPost, reject, 0)
 			reg.Register("/internal/status", statusHandler, "status")
 
 			mux := http.NewServeMux()
@@ -209,5 +209,31 @@ func TestWireUpWithSecurityChain_TranslatorRouteTakesProxyChain(t *testing.T) {
 				t.Error("non-proxy route was rate limited")
 			}
 		})
+	}
+}
+
+// limitRecordingAdapters captures the body limit the registry hands the translator chain.
+type limitRecordingAdapters struct {
+	chainOnlyAdapters
+	got *int64
+}
+
+func (a limitRecordingAdapters) CreateTranslatorChainMiddleware(_ security.RejectFunc, bodyLimit int64) func(http.Handler) http.Handler {
+	*a.got = bodyLimit
+	return func(next http.Handler) http.Handler { return next }
+}
+
+// The translator's own cap travels with the route to the size middleware, so a chunked body
+// is bounded by it at wiring time rather than by the server-wide max_body_size.
+func TestWireUpWithSecurityChain_TranslatorRoutePassesBodyLimit(t *testing.T) {
+	t.Parallel()
+
+	var got int64
+	reg := NewRouteRegistry(&mockRouteLogger{})
+	reg.RegisterTranslatorRoute("/olla/x/v1/messages", func(http.ResponseWriter, *http.Request) {}, "x", http.MethodPost, nil, 12345)
+
+	reg.WireUpWithSecurityChain(http.NewServeMux(), &limitRecordingAdapters{got: &got})
+	if got != 12345 {
+		t.Errorf("translator chain got body limit %d, want 12345", got)
 	}
 }
