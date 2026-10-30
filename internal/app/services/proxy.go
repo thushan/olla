@@ -9,6 +9,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/metrics"
 	"github.com/thushan/olla/internal/adapter/proxy"
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
@@ -207,6 +208,11 @@ func (s *ProxyServiceWrapper) createProxyConfiguration() *proxy.Configuration {
 		ResponseHeaderTimeout: s.config.ResponseHeaderTimeout,
 		TLSHandshakeTimeout:   s.config.TLSHandshakeTimeout,
 		StreamBufferSize:      s.config.StreamBufferSize,
+		Retry: proxyconfig.RetryPolicy{
+			Disabled:        !s.config.Retry.Enabled,
+			MaxAttempts:     s.config.Retry.MaxAttempts,
+			NoNonIdempotent: !s.config.Retry.NonIdempotent,
+		},
 	}
 }
 

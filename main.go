@@ -181,6 +181,7 @@ func main() {
 	}
 
 	warnUnknownKeys(styledLogger.Warn, cfg.UnknownKeys)
+	warnDeprecatedProxyRetry(styledLogger.Warn, cfg)
 
 	// Create and start service manager
 	serviceManager, err := app.CreateAndStartServiceManager(ctx, cfg, styledLogger)

@@ -254,9 +254,10 @@ func TestRetry_POSTBeforeBytesWritten_DoesRetry(t *testing.T) {
 	assert.Equal(t, 2, attemptsHit, "POST should retry when no bytes have been written yet")
 }
 
-// TestRetry_GETMidStreamRST_DoesRetry confirms that GET is always retried on
-// connection errors, even after bytes have been written, because GET is idempotent.
-func TestRetry_GETMidStreamRST_DoesRetry(t *testing.T) {
+// TestRetry_GETMidStreamRST_NoRetry pins the replay fix: once bytes have reached
+// the client a GET must not be replayed either, or the client receives the first
+// backend's partial output followed by the second backend's full response.
+func TestRetry_GETMidStreamRST_NoRetry(t *testing.T) {
 	t.Parallel()
 
 	attemptsHit := 0
@@ -271,22 +272,17 @@ func TestRetry_GETMidStreamRST_DoesRetry(t *testing.T) {
 
 	proxyFunc := func(ctx context.Context, w http.ResponseWriter, r *http.Request, ep *domain.Endpoint, s *ports.RequestStats) error {
 		attemptsHit++
-		if attemptsHit == 1 {
-			// First attempt: write bytes then RST, simulates mid-stream failure.
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte("partial"))
-			return &connectionResetError{}
-		}
-		// Second attempt: success.
 		w.WriteHeader(http.StatusOK)
-		return nil
+		_, _ = w.Write([]byte("partial"))
+		return &connectionResetError{}
 	}
 
 	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
-	require.NoError(t, err)
-	assert.Equal(t, 2, attemptsHit, "GET should always retry on connection errors")
+	require.Error(t, err)
+	assert.Equal(t, 1, attemptsHit, "GET must not be replayed once response bytes were written")
+	assert.Equal(t, "partial", w.Body.String(), "client must see only the first attempt's bytes")
 }
 
 // TestRetry_ConnectionErrorThenCBOpen_ReportsMixedFailure covers the CB-open

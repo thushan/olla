@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/adapter/proxy/olla"
 	"github.com/thushan/olla/internal/adapter/proxy/sherpa"
 	"github.com/thushan/olla/internal/core/domain"
@@ -55,6 +56,11 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 		if tls, ok := config.(interface{ GetTLSHandshakeTimeout() time.Duration }); ok {
 			sherpaConfig.TLSHandshakeTimeout = tls.GetTLSHandshakeTimeout()
 		}
+		if rp, ok := config.(interface {
+			GetRetryPolicy() proxyconfig.RetryPolicy
+		}); ok {
+			sherpaConfig.Retry = rp.GetRetryPolicy()
+		}
 		return sherpa.NewService(discovery, selector, sherpaConfig, collector, metricsExtractor, logger)
 	})
 
@@ -95,6 +101,11 @@ func NewFactory(statsCollector ports.StatsCollector, metricsExtractor ports.Metr
 			ollaConfig.TLSHandshakeTimeout = tls.GetTLSHandshakeTimeout()
 		}
 
+		if rp, ok := config.(interface {
+			GetRetryPolicy() proxyconfig.RetryPolicy
+		}); ok {
+			ollaConfig.Retry = rp.GetRetryPolicy()
+		}
 		return olla.NewService(discovery, selector, ollaConfig, collector, metricsExtractor, logger)
 	})
 

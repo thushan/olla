@@ -37,8 +37,9 @@ proxy:
   read_timeout: 300s
   load_balancer: "priority" # Available: round-robin, least-connections, priority
   # stream_buffer_size: 8192 # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB)
-  # Note: retry is automatic and tuned internally; there is no max_retries /
-  # retry_backoff to set here.
+  # Note: failover on connection errors is automatic; tune it with the
+  # proxy.retry block (enabled, max_attempts, non_idempotent). max_retries /
+  # retry_backoff do nothing.
 
 discovery:
   type: "static"

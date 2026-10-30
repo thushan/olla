@@ -335,6 +335,8 @@ proxy:
   profile: streaming      # Low-latency streaming
 ```
 
+Failover on a connection error follows the [`proxy.retry`](../../configuration/reference.md#retry-behaviour) policy, in passthrough and translation alike. A translated `POST` is replayed on the next backend by default; set `proxy.retry.non_idempotent: false` to stop that. Timeouts do not fail over.
+
 ## Quick Start
 
 ### 1. Configure Endpoints

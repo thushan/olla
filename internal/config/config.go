@@ -86,8 +86,10 @@ func DefaultConfig() *Config {
 			ConnectionTimeout: 60 * time.Second,
 			ResponseTimeout:   15 * time.Minute,
 			ReadTimeout:       10 * time.Minute,
-			MaxRetries:        3,
-			RetryBackoff:      500 * time.Millisecond,
+			// Zero, not the old 3 and 500ms: both are deprecated and unused, and a
+			// non-zero default would make "operator set it" undetectable for the
+			// startup warning.
+			Retry: RetryConfig{Enabled: true, NonIdempotent: true},
 			StickySessions: StickySessionConfig{
 				Enabled:         false,
 				IdleTTLSeconds:  600,
@@ -190,6 +192,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Proxy.LoadBalancer == "" {
 		return errors.New("proxy.load_balancer must not be empty (e.g. \"priority\")")
+	}
+	if c.Proxy.Retry.MaxAttempts < 0 {
+		return fmt.Errorf("proxy.retry.max_attempts must be >= 0 (0 = every eligible endpoint once), got %d", c.Proxy.Retry.MaxAttempts)
 	}
 	if c.Server.Port <= 0 || c.Server.Port > 65535 {
 		return fmt.Errorf("server.port must be between 1 and 65535, got %d", c.Server.Port)
@@ -421,6 +426,21 @@ func applyEnvOverrides(config *Config) {
 	if val := os.Getenv("OLLA_PROXY_STICKY_SESSIONS_ENABLED"); val != "" {
 		if enabled, err := strconv.ParseBool(val); err == nil {
 			config.Proxy.StickySessions.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_RETRY_ENABLED"); val != "" {
+		if enabled, err := strconv.ParseBool(val); err == nil {
+			config.Proxy.Retry.Enabled = enabled
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_RETRY_MAX_ATTEMPTS"); val != "" {
+		if n, err := strconv.Atoi(val); err == nil {
+			config.Proxy.Retry.MaxAttempts = n
+		}
+	}
+	if val := os.Getenv("OLLA_PROXY_RETRY_NON_IDEMPOTENT"); val != "" {
+		if allowed, err := strconv.ParseBool(val); err == nil {
+			config.Proxy.Retry.NonIdempotent = allowed
 		}
 	}
 	if val := os.Getenv("OLLA_LOGGING_LEVEL"); val != "" {

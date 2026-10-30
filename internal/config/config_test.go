@@ -46,8 +46,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Proxy.LoadBalancer != DefaultLoadBalancer {
 		t.Errorf("Expected load balancer '%s', got %s", DefaultLoadBalancer, cfg.Proxy.LoadBalancer)
 	}
-	if cfg.Proxy.MaxRetries != 3 {
-		t.Errorf("Expected max retries 3, got %d", cfg.Proxy.MaxRetries)
+	if want := (RetryConfig{Enabled: true, NonIdempotent: true}); cfg.Proxy.Retry != want {
+		t.Errorf("Expected default retry policy %+v, got %+v", want, cfg.Proxy.Retry)
 	}
 
 	// Test engineering defaults

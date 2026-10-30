@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/thushan/olla/internal/config"
 )
@@ -225,6 +226,74 @@ func TestWarnUnknownKeys_SingleLineListingAll(t *testing.T) {
 	for _, want := range []string{"proxy.retry (line 91)", "discovery.health_check (line 107)", "a.b (line 3)"} {
 		if !strings.Contains(calls[0], want) {
 			t.Errorf("WARN missing %q: %s", want, calls[0])
+		}
+	}
+}
+
+func TestWarnDeprecatedProxyRetry(t *testing.T) {
+	t.Parallel()
+
+	var calls []string
+	warn := func(msg string, args ...any) {
+		calls = append(calls, fmt.Sprint(append([]any{msg}, args...)...))
+	}
+
+	cfg := config.DefaultConfig()
+	warnDeprecatedProxyRetry(warn, cfg)
+	if len(calls) != 0 {
+		t.Fatalf("defaults must not warn, got %v", calls)
+	}
+
+	cfg.Proxy.MaxRetries = 3
+	cfg.Proxy.RetryBackoff = time.Second
+	warnDeprecatedProxyRetry(warn, cfg)
+	if len(calls) != 1 {
+		t.Fatalf("expected exactly one WARN, got %d: %v", len(calls), calls)
+	}
+	for _, want := range []string{"proxy.max_retries", "proxy.retry_backoff", "proxy.retry"} {
+		if !strings.Contains(calls[0], want) {
+			t.Errorf("WARN missing %q: %s", want, calls[0])
+		}
+	}
+
+	only := config.DefaultConfig()
+	only.Proxy.RetryBackoff = time.Second
+	if msg := deprecatedProxyRetryFields(only); strings.Contains(msg, "max_retries") || !strings.Contains(msg, "retry_backoff") {
+		t.Errorf("only the set key should be named, got %q", msg)
+	}
+}
+
+func TestRunValidateConfig_NegativeRetryAttemptsFail(t *testing.T) {
+	t.Parallel()
+
+	write := func(body string) string {
+		path := filepath.Join(t.TempDir(), "olla.yaml")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+
+	report, code := runValidateConfig(write("proxy:\n  retry:\n    max_attempts: -1\n"))
+	if code == 0 || !strings.Contains(report, "proxy.retry.max_attempts") {
+		t.Errorf("negative max_attempts must fail validation (code %d):\n%s", code, report)
+	}
+}
+
+func TestRunValidateConfig_DeprecatedRetryKeysListedWithoutFailing(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "olla.yaml")
+	if err := os.WriteFile(path, []byte("proxy:\n  max_retries: 3\n  retry_backoff: 1s\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	report, code := runValidateConfig(path)
+	if code != 0 {
+		t.Errorf("deprecated keys must not fail validation (code %d):\n%s", code, report)
+	}
+	for _, want := range []string{"Ignored keys in", "proxy.max_retries", "proxy.retry_backoff"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report missing %q:\n%s", want, report)
 		}
 	}
 }
