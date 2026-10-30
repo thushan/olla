@@ -3,6 +3,7 @@ package proxy
 import (
 	"time"
 
+	proxyconfig "github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/core/ports"
@@ -35,6 +36,7 @@ type Configuration struct {
 	ReadTimeout           time.Duration
 	ResponseHeaderTimeout time.Duration
 	TLSHandshakeTimeout   time.Duration
+	Retry                 proxyconfig.RetryPolicy
 	StreamBufferSize      int
 
 	// Olla-specific fields for advanced connection pooling
@@ -95,6 +97,11 @@ func (c *Configuration) GetResponseHeaderTimeout() time.Duration {
 // The Olla engine applies DefaultTLSHandshakeTimeout for a zero value.
 func (c *Configuration) GetTLSHandshakeTimeout() time.Duration {
 	return c.TLSHandshakeTimeout
+}
+
+// GetRetryPolicy returns the failover policy; the zero value is today's behaviour.
+func (c *Configuration) GetRetryPolicy() proxyconfig.RetryPolicy {
+	return c.Retry
 }
 
 func (c *Configuration) GetStreamBufferSize() int {

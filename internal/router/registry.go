@@ -22,6 +22,9 @@ type RouteInfo struct {
 	// IsTranslator marks an inference route served by an API translator. It gets
 	// the same rate and size limits as proxy routes, with rejections written by Reject.
 	IsTranslator bool
+	// BodyLimit is the translator's own request cap, used to bound how much of a chunked
+	// body the size middleware buffers. Zero means no cap beyond the server-wide one.
+	BodyLimit int64
 }
 
 type RouteRegistry struct {
@@ -57,12 +60,14 @@ func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFun
 // RegisterTranslatorRoute registers a route served by an API translator (for example
 // /olla/anthropic/v1/messages). These are inference entry points, so they sit behind
 // the same rate and size limits as proxy routes. reject lets the translator answer a
-// rejection in its own error schema; nil falls back to plain text.
-func (r *RouteRegistry) RegisterTranslatorRoute(route string, handler http.HandlerFunc, description, method string, reject security.RejectFunc) {
+// rejection in its own error schema; nil falls back to plain text. bodyLimit is the
+// translator's request cap (0 for none).
+func (r *RouteRegistry) RegisterTranslatorRoute(route string, handler http.HandlerFunc, description, method string, reject security.RejectFunc, bodyLimit int64) {
 	r.registerWithMethod(route, handler, description, method, false)
 	info := r.routes[route]
 	info.IsTranslator = true
 	info.Reject = reject
+	info.BodyLimit = bodyLimit
 	r.routes[route] = info
 }
 
@@ -140,7 +145,7 @@ func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdap
 	// Optional: the chain for translator routes (buffering size variant), with rejections
 	// written in the translator's own error format.
 	type translatorChainProvider interface {
-		CreateTranslatorChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler
+		CreateTranslatorChainMiddleware(reject security.RejectFunc, bodyLimit int64) func(http.Handler) http.Handler
 	}
 
 	// Optional: size validation for non-proxy routes. The full security chain
@@ -169,7 +174,7 @@ func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdap
 		if info.IsProxy || info.IsTranslator {
 			chain := adapters.CreateChainMiddleware(info.Reject)
 			if tc, ok := securityAdapters.(translatorChainProvider); ok && info.IsTranslator {
-				chain = tc.CreateTranslatorChainMiddleware(info.Reject)
+				chain = tc.CreateTranslatorChainMiddleware(info.Reject, info.BodyLimit)
 			}
 			handler = chain(handler)
 			mux.Handle(route, handler)

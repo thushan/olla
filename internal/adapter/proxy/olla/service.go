@@ -154,7 +154,7 @@ func NewService(
 		BaseProxyComponents: base,
 		bufferPool:          bufferPool,
 		transport:           transport,
-		retryHandler:        core.NewRetryHandler(discoveryService, logger),
+		retryHandler:        core.NewRetryHandler(discoveryService, logger, core.WithRetryPolicy(configuration.GetRetryPolicy())),
 		circuitBreakers:     *xsync.NewMap[string, *circuitBreaker](),
 		endpointPools:       *xsync.NewMap[string, *connectionPool](),
 		cleanupTicker:       time.NewTicker(5 * time.Minute),

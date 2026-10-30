@@ -155,6 +155,7 @@ func (a *Application) registerTranslatorRoutes() {
 			path := pathProvider.GetAPIPath()
 			handler := a.translationHandler(trans)
 			reject := translatorRejectWriter(trans)
+			bodyLimit := translatorBodyLimit(trans)
 
 			// Translator routes are inference entry points (Claude Code's main path), so
 			// they register through RegisterTranslatorRoute to sit behind the rate and
@@ -165,6 +166,7 @@ func (a *Application) registerTranslatorRoutes() {
 				name+" Messages API",
 				"POST",
 				reject,
+				bodyLimit,
 			)
 
 			// Register models endpoint for translators
@@ -178,6 +180,7 @@ func (a *Application) registerTranslatorRoutes() {
 				name+" Models API",
 				"GET",
 				reject,
+				bodyLimit,
 			)
 
 			// Register token counting endpoint for translators that support it
@@ -192,6 +195,7 @@ func (a *Application) registerTranslatorRoutes() {
 					name+" Token Count API",
 					"POST",
 					reject,
+					bodyLimit,
 				)
 
 				a.logger.Debug("Registered translator routes",
