@@ -235,3 +235,32 @@ func TestFindUnknownKeys_ReportsAreBounded(t *testing.T) {
 		t.Errorf("reports exceeded the visit budget: %d", got)
 	}
 }
+
+func TestFindUnknownKeys_MergeBombReportsEachKeyOnce(t *testing.T) {
+	t.Parallel()
+	doc := "x-bomb: &bomb\n  <<: [*bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb, *bomb]\n  bogus: 1\nx-root: &root {proxy: *bomb}\n<<: *root\nproxy: {}\n"
+	got := FindUnknownKeys([]byte(doc))
+	if len(got) != 1 {
+		t.Fatalf("got %d entries, want 1: %v", len(got), got)
+	}
+	if got[0].Path != "proxy.bogus" {
+		t.Errorf("Path = %q, want proxy.bogus", got[0].Path)
+	}
+}
+
+func TestFindUnknownKeys_DistinctKeysAreKeptInOrder(t *testing.T) {
+	t.Parallel()
+	// The same typo on two lines is two reports; an anchor merged into two
+	// sections reports once per section because the path differs.
+	doc := "x-shared: &shared\n  oops: 1\nproxy:\n  <<: *shared\n  engnie: a\nserver:\n  <<: *shared\n"
+	got := FindUnknownKeys([]byte(doc))
+	want := []string{"proxy.oops (line 2)", "proxy.engnie (line 5)", "server.oops (line 2)"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i].String() != want[i] {
+			t.Errorf("entry %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

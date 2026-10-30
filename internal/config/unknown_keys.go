@@ -18,8 +18,19 @@ const maxKeyWalkDepth = 64
 const maxKeyWalkVisits = 100_000
 
 type keyWalk struct {
+	seen   map[UnknownKey]struct{}
 	out    []UnknownKey
 	budget int
+}
+
+// report records k once. Merge keys and aliases revisit the same mapping node,
+// so without this a merge bomb lists one typo thousands of times.
+func (w *keyWalk) report(k UnknownKey) {
+	if _, dup := w.seen[k]; dup {
+		return
+	}
+	w.seen[k] = struct{}{}
+	w.out = append(w.out, k)
 }
 
 // step spends one visit and reports whether the walk may continue.
@@ -50,7 +61,7 @@ func FindUnknownKeys(data []byte) []UnknownKey {
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return nil
 	}
-	w := &keyWalk{budget: maxKeyWalkVisits}
+	w := &keyWalk{budget: maxKeyWalkVisits, seen: make(map[UnknownKey]struct{})}
 	walkKnownKeys(&doc, reflect.TypeOf(Config{}), "", 0, w)
 	return w.out
 }
@@ -127,7 +138,7 @@ func walkStruct(n *yaml.Node, t reflect.Type, path string, depth int, w *keyWalk
 				continue
 			}
 			if !freeForm {
-				w.out = append(w.out, UnknownKey{Path: joinKeyPath(path, name), Line: keyLine})
+				w.report(UnknownKey{Path: joinKeyPath(path, name), Line: keyLine})
 			}
 			continue
 		}
