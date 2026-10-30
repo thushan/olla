@@ -189,15 +189,16 @@ Key timeout and retry settings:
 | **stream_buffer_size** | Buffer size for SSE streaming | `8192` |
 
 > **ℹ️ Automatic Retry Behaviour**
-> 
-> As of v0.0.16, Olla automatically retries requests on connection failures. When a connection 
-> error occurs (e.g., refused connection, network unreachable), the proxy will automatically 
-> try the next available healthy endpoint. This continues until either a successful connection 
-> is made or all endpoints have been tried. The retry logic uses intelligent exponential backoff 
-> for marking failed endpoints as unhealthy.
 >
-> The deprecated fields `proxy.max_retries` and `proxy.retry_backoff` are no longer used and 
-> can be removed from your configuration.
+> When a connection to a backend fails (refused, reset, network unreachable), Olla marks
+> that endpoint unhealthy and retries the request on the next eligible endpoint, trying each
+> at most once. Timeouts and HTTP error statuses (5xx, 429) do not fail over, and a request
+> is never retried once any of the response has reached the client.
+>
+> The `proxy.retry` block turns this off (`enabled: false`), caps attempts (`max_attempts`)
+> or stops POST, PATCH and DELETE being replayed (`non_idempotent: false`). See
+> [Retry Behaviour](reference.md#retry-behaviour). The deprecated fields `proxy.max_retries`
+> and `proxy.retry_backoff` do nothing; Olla warns at startup if they are set.
 
 ### Proxy Engines
 

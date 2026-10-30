@@ -174,6 +174,13 @@ func TestSecurityChainMiddleware_OversizedBody_Returns413(t *testing.T) {
 	if reached {
 		t.Error("handler was reached; oversized request should have been rejected")
 	}
+	// Both rate-limit tiers are off here, so no X-RateLimit-* header should
+	// claim the client is throttled.
+	for _, h := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"} {
+		if got := w.Header().Get(h); got != "" {
+			t.Errorf("%s = %q on a 413 with rate limits off, want it absent", h, got)
+		}
+	}
 }
 
 // TestSecurityChainMiddleware_FallbackPath_Returns403 verifies that the abstract

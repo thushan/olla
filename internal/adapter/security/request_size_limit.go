@@ -182,6 +182,23 @@ func (sv *SizeValidator) CreateMiddleware(reject RejectFunc) func(http.Handler) 
 // Translator routes do use it: their handler buffers the whole body anyway, and this
 // keeps an oversized chunked body a counted 413 instead of a failed read later on.
 func (sv *SizeValidator) CreateNonProxyMiddleware(reject RejectFunc) func(http.Handler) http.Handler {
+	return sv.nonProxyMiddleware(reject, 0)
+}
+
+// CreateCappedNonProxyMiddleware is CreateNonProxyMiddleware with a tighter drain cap for
+// chunked bodies: min(max_body_size, drainCap). A route whose handler enforces a smaller limit
+// of its own (translators) would otherwise buffer up to max_body_size per chunked request
+// before that limit rejects it. Content-Length requests are still checked against
+// max_body_size only, as before; drainCap <= 0 means no extra cap.
+func (sv *SizeValidator) CreateCappedNonProxyMiddleware(reject RejectFunc, drainCap int64) func(http.Handler) http.Handler {
+	return sv.nonProxyMiddleware(reject, drainCap)
+}
+
+func (sv *SizeValidator) nonProxyMiddleware(reject RejectFunc, drainCap int64) func(http.Handler) http.Handler {
+	chunkedLimit := sv.maxBodySize
+	if drainCap > 0 && (chunkedLimit <= 0 || drainCap < chunkedLimit) {
+		chunkedLimit = drainCap
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			req := ports.SecurityRequest{
@@ -213,8 +230,8 @@ func (sv *SizeValidator) CreateNonProxyMiddleware(reject RejectFunc) func(http.H
 			// cap now. Handlers on non-proxy routes never read the body themselves, so
 			// MaxBytesReader installed on r.Body would silently never trigger; we must
 			// enforce the limit here before passing control to the handler.
-			if sv.maxBodySize > 0 && r.ContentLength < 0 && r.Body != nil {
-				limited := http.MaxBytesReader(w, r.Body, sv.maxBodySize)
+			if chunkedLimit > 0 && r.ContentLength < 0 && r.Body != nil {
+				limited := http.MaxBytesReader(w, r.Body, chunkedLimit)
 				buf, readErr := io.ReadAll(limited)
 				if readErr != nil {
 					// Treat chunked overflow identically to known-Content-Length overflow so
@@ -223,13 +240,13 @@ func (sv *SizeValidator) CreateNonProxyMiddleware(reject RejectFunc) func(http.H
 					overflowReq := ports.SecurityRequest{
 						Endpoint:   r.URL.Path,
 						Method:     r.Method,
-						BodySize:   sv.maxBodySize + 1,
+						BodySize:   chunkedLimit + 1,
 						HeaderSize: req.HeaderSize,
 						Headers:    r.Header,
 					}
 					overflowResult := ports.SecurityResult{
 						Allowed: false,
-						Reason:  fmt.Sprintf("Request body too large: chunked body exceeds limit %d", sv.maxBodySize),
+						Reason:  fmt.Sprintf("Request body too large: chunked body exceeds limit %d", chunkedLimit),
 					}
 					sv.recordViolation(r, overflowReq, overflowResult)
 					writeReject(w, reject, http.StatusRequestEntityTooLarge, "Request body too large")

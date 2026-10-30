@@ -217,14 +217,37 @@ proxy:
 
 ### Retry Behaviour
 
-As of v0.0.16, the retry mechanism is automatic and built-in for connection failures. When a connection error occurs (e.g., connection refused, connection reset, network unreachable), Olla will automatically:
+When a connection to a backend fails (refused, reset, network unreachable, DNS), Olla marks that endpoint unhealthy and retries the request on the next eligible endpoint. This is the same for both engines and for the Anthropic routes. The `proxy.retry` block controls it:
 
-1. Mark the failed endpoint as unhealthy
-2. Try the next available healthy endpoint 
-3. Continue until a successful connection is made or all endpoints have been tried
-4. Use exponential backoff for unhealthy endpoints to prevent overwhelming them
+```yaml
+proxy:
+  retry:
+    enabled: true
+    max_attempts: 0
+    non_idempotent: true
+```
 
-**Note**: Failover is automatic and not configurable. There is no `retry:` block in the config schema: if you set `retry.enabled`, `retry.on_connection_failure` or `retry.max_attempts` (older copies of `config.yaml` shipped them), Olla silently ignores them. The same goes for the deprecated `max_retries` and `retry_backoff` fields. Failover only has somewhere to go when more than one healthy endpoint is eligible for the request, so a setup with a single eligible endpoint never fails over.
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `retry.enabled` | boolean | `true` | `false` makes every request a single attempt with no failover |
+| `retry.max_attempts` | integer | `0` | Attempts per request, counting the first. `0` tries every eligible endpoint once; `N` caps it at `N` (never more than the eligible endpoints). Negative values are rejected at startup and by `--validate-config` |
+| `retry.non_idempotent` | boolean | `true` | When `false`, a POST, PATCH or DELETE is not replayed on another endpoint after a connection failure; GET, HEAD and OPTIONS still are |
+
+The defaults are Olla's behaviour with no `retry:` block. Each field also has an environment variable: `OLLA_PROXY_RETRY_ENABLED`, `OLLA_PROXY_RETRY_MAX_ATTEMPTS` and `OLLA_PROXY_RETRY_NON_IDEMPOTENT`.
+
+What does and does not fail over:
+
+- **Fails over:** a connection error before any response was received. The failed endpoint is marked unhealthy even when the policy stops the request failing over, because the connection genuinely failed.
+- **Also skipped past:** an endpoint whose circuit breaker is open (Olla engine). It was never contacted, so `non_idempotent: false` does not stop this and it does not use up an attempt, even with `enabled: false`.
+- **Never retried:** a request once any part of the response has reached the client, whatever the method. The client would otherwise receive one backend's partial output followed by another's.
+- **Does not fail over:** timeouts (dial, TLS handshake, response header or read) and HTTP error statuses such as 5xx and 429. The client receives the failure as is.
+- A setup with a single eligible endpoint never fails over.
+
+A POST that the backend read before the connection dropped (for example a backend that crashes after accepting a long prompt) is replayed on the next endpoint by default, so the prompt may run twice. Set `non_idempotent: false` if that matters more than availability.
+
+With sticky sessions on, a failover moves the session's pin to the endpoint that served the request; with `enabled: false` there is no failover and so no re-pin within the request, except that an open circuit breaker on the pinned endpoint can still move the pin to another endpoint.
+
+**Deprecated:** `proxy.max_retries` and `proxy.retry_backoff` are still parsed but do nothing, and Olla logs a warning at startup when either is set to a non-zero value (an explicit `0` cannot be told from unset). They are not mapped onto `proxy.retry`; set that block instead. They will be removed in v0.1.0.
 
 ### Streaming Settings
 
@@ -874,6 +897,9 @@ These control startup behaviour and are read before the YAML config is loaded.
 | `OLLA_PROXY_RESPONSE_HEADER_TIMEOUT` | `proxy.response_header_timeout` | Go duration string. Max wait for a backend's first response header. |
 | `OLLA_PROXY_TLS_HANDSHAKE_TIMEOUT` | `proxy.tls_handshake_timeout` | Go duration string. Max time for a TLS handshake with a backend. |
 | `OLLA_PROXY_CONNECTION_KEEP_ALIVE` | `proxy.connection_keep_alive` | Go duration string. TCP keep-alive interval for backend connections. |
+| `OLLA_PROXY_RETRY_ENABLED` | `proxy.retry.enabled` | `true` (default) or `false`. |
+| `OLLA_PROXY_RETRY_MAX_ATTEMPTS` | `proxy.retry.max_attempts` | Integer. `0` tries every eligible endpoint once. |
+| `OLLA_PROXY_RETRY_NON_IDEMPOTENT` | `proxy.retry.non_idempotent` | `true` (default) or `false`. |
 | `OLLA_PROXY_STICKY_SESSIONS_ENABLED` | `proxy.sticky_sessions.enabled` | Only the master switch is exposed. Other sticky-session fields are YAML-only. |
 
 ### Logging and Diagnostics
@@ -969,9 +995,11 @@ proxy:
   response_header_timeout: 30s
   connection_keep_alive: 30s
   tls_handshake_timeout: 10s
-  # DEPRECATED as of v0.0.16 - retry is now automatic
-  # max_retries: 3
-  # retry_backoff: 1s
+  # retry:
+  #   enabled: true
+  #   max_attempts: 0         # 0 = every eligible endpoint once
+  #   non_idempotent: true    # false = POST/PATCH/DELETE not replayed after a connection failure
+  # DEPRECATED - max_retries and retry_backoff do nothing; use retry above
   # stream_buffer_size: 8192  # Unset: the engine default applies (Olla 64KiB, Sherpa 8KiB)
 
 discovery:

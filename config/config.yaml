@@ -80,17 +80,19 @@ proxy:
       # - "ip"                  # client IP (opt-in; unreliable behind NAT/Docker)
     prefix_hash_bytes: 512      # how many leading bytes of the messages field to hash
 
-  # DEPRECATED as of v0.0.16 - These fields are no longer used
-  # max_retries: 3        # Not configurable: failover is automatic
-  # retry_backoff: 500ms  # Not configurable: failover is automatic
+  # Failover: when a connection to a backend fails (refused, reset, network
+  # unreachable), Olla marks that endpoint unhealthy and retries the request on
+  # the other healthy endpoints. Timeouts and HTTP error statuses (5xx, 429) do
+  # not fail over. Once any part of the response has reached the client the
+  # request is never retried. The defaults below are the behaviour with no block.
+  # retry:
+  #   enabled: true           # false = one attempt, no failover
+  #   max_attempts: 0         # 0 = every eligible endpoint once; N caps attempts
+  #   non_idempotent: true    # false = POST/PATCH/DELETE are not replayed after a connection failure
 
-  # Failover: when a connection to a backend fails (refused, reset,
-  # network unreachable), Olla marks that endpoint unhealthy and retries the
-  # request on the other healthy endpoints, each tried once (a non-idempotent request
-  # such as an inference POST is not retried once the response has started, so a
-  # reset mid-generation is not retried). This is automatic
-  # and not configurable; there is no proxy.retry block. A request with only
-  # one eligible endpoint has nowhere to fail over to.
+  # DEPRECATED as of v0.0.16 - these do nothing; set proxy.retry above instead.
+  # max_retries: 3
+  # retry_backoff: 500ms
 
 discovery:
   type: "static"

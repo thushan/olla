@@ -51,7 +51,23 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   and share each client's per-IP bucket with them. Claude Code stays well inside these, including a few parallel sessions,
   but many sessions behind one IP (a team behind NAT, CI runners, parallel agents) may now see 429s: raise
   `server.rate_limits.per_ip_requests_per_minute` and `burst_size`. See [Anthropic rate limits](#fixed-anthropic-routes-are-now-rate-limited).
+- **A request is never retried once part of the response has reached the client.** A GET that failed mid-stream used to be replayed on the next
+  backend, so the client got the first backend's partial output followed by the second's full response. It now ends with the error. POST, PATCH and DELETE
+  were already protected. See [retry policy](#added-proxyretry-controls-failover).
+- **`X-RateLimit-*` headers are omitted when no rate limit applies.** With both limits at `0` (and for an unlimited health probe) responses used to carry `X-RateLimit-Limit: 0` and `X-RateLimit-Remaining: 0`; they now carry none. See [rate limit headers](#fixed-x-ratelimit-headers-are-omitted-when-rate-limiting-is-off).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
+
+### Added: `proxy.retry` controls failover
+
+Failover on a connection failure was hardcoded: every eligible endpoint once, and any method replayed. A POST whose backend read the
+body and then dropped the connection was therefore sent again to the next endpoint, so a prompt could run twice. The new `proxy.retry`
+block (`enabled`, `max_attempts`, `non_idempotent`) makes this configurable, with `OLLA_PROXY_RETRY_*` environment overrides. The
+defaults are today's behaviour, so nothing changes unless you set it: `non_idempotent: false` stops POST, PATCH and DELETE failing over after
+a connection failure (GET still does), `max_attempts: N` caps attempts, `enabled: false` makes every request a single attempt. A failed
+connection still marks the endpoint unhealthy in every case, a negative `max_attempts` fails startup, and both engines and the Anthropic routes follow the policy.
+Timeouts and HTTP error statuses do not fail over. The deprecated `proxy.max_retries` and
+`proxy.retry_backoff` stay accepted, do nothing, and log one warning at startup when set to a non-zero value. They are not mapped onto the new block.
+A request that fails after part of its response was sent is no longer retried (see the Upgrading note above). See [Retry Behaviour](../configuration/reference.md#retry-behaviour). Reported by @matthewjhunter.
 
 ### Fixed: Anthropic routes are now rate limited
 
@@ -65,6 +81,20 @@ Anthropic shape. Measured against a real Ollama, one Claude Code session peaked 
 sessions at 9 a minute, with a burst of 4 when four sessions started together, so the existing defaults (100 per minute per IP, burst 50) need no change; many sessions
 behind one IP should raise `per_ip_requests_per_minute`. See [Rate Limit Best Practices](../configuration/practices/rate-limits.md).
 Reported by @matthewjhunter.
+
+### Fixed: chunked bodies on Anthropic routes are capped at the translator limit
+
+A chunked request (no `Content-Length`) to `/olla/anthropic/v1/*` was read into memory up to `server.request_limits.max_body_size`
+(100MB by default) before the translator's own `max_message_size` (10MB) rejected it, so a few concurrent oversized chunked
+requests could hold gigabytes. The read now stops at the smaller of the two limits and answers `413` with `request_too_large`.
+For `/messages` that is the same status as before; the rejection now happens before the handler reads the body, so it is counted
+as a size-limit violation rather than in the translator metrics, and the message text is "Request body too large". A chunked body
+between the two limits on `/messages/count_tokens` (previously a `400`) or `/models` (previously served) now also gets the `413`.
+Requests with a `Content-Length`, and all proxy routes, behave as before.
+
+### Fixed: `X-RateLimit-*` headers are omitted when rate limiting is off
+
+Every response through a rate-limited route carried `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, even with both limits at `0`, so a `413` or a plain `200` showed `X-RateLimit-Limit: 0, X-RateLimit-Remaining: 0`, which a client reads as fully throttled. The headers are now sent only while a limit applies.
 
 ### Added: unknown keys in `config.yaml` are reported
 
@@ -314,7 +344,7 @@ When the same model (matched by digest) was registered from more than one backen
 
 ### Fixed: config and docs no longer promise settings Olla ignores
 
-The shipped `config.yaml`, the examples and the docs carried keys the config schema has no field for, which Olla silently drops: `server.rate_limits.per_endpoint`, the whole `proxy.retry` block, `discovery.health_check`, `unification.enabled` and endpoint `tags`. They are gone from the shipped configs and doc snippets. Failover to another healthy endpoint on a connection failure is automatic and not configurable, and the deprecation comment that pointed at a non-existent `retry.max_attempts` now says so. Unification is controlled by `model_registry.enable_unifier`.
+The shipped `config.yaml`, the examples and the docs carried keys the config schema has no field for, which Olla silently drops: `server.rate_limits.per_endpoint`, the whole `proxy.retry` block, `discovery.health_check`, `unification.enabled` and endpoint `tags`. They are gone from the shipped configs and doc snippets. Failover to another healthy endpoint on a connection failure is automatic, and the deprecation comment that pointed at a non-existent `retry.max_attempts` now says so (`proxy.retry` has since become a real block, see [above](#added-proxyretry-controls-failover)). Unification is controlled by `model_registry.enable_unifier`.
 
 `characteristics.max_concurrent_requests` and `resources.concurrency_limits` in a profile are read as metadata only and do not limit concurrency. The profile and backend docs now say so, and that the backend's own concurrency settings are what limit parallelism. The rate-limit docs also stop claiming health and system endpoints have their own limits: the reference now lists which routes are rate limited and which aren't. A test now decodes the shipped configs against the full schema so a dead key fails the build. Behaviour is unchanged. Reported by @matthewjhunter.
 

@@ -471,15 +471,21 @@ func (a *Application) resolveTranslationFallback(trans translator.RequestTransla
 	return constants.FallbackReasonTranslatorDoesNotSupportPassthrough
 }
 
+// translatorBodyLimit is the request body cap for a translator. Translators that implement
+// BodySizeLimiter declare their own max; others get a safe default. The size middleware uses
+// the same value to bound chunked reads, so the two can't drift apart.
+func translatorBodyLimit(trans translator.RequestTranslator) int64 {
+	var limit int64 = 10 << 20 // 10 MiB default
+	if limiter, ok := trans.(translator.BodySizeLimiter); ok {
+		limit = limiter.MaxBodySize()
+	}
+	return limit
+}
+
 // generic handler for any translator (eg anthropic to openai and back)
 func (a *Application) translationHandler(trans translator.RequestTranslator) http.HandlerFunc {
 	// Resolve body size limit once at registration time, not per-request.
-	// Translators that implement BodySizeLimiter declare their own max;
-	// others get a safe default.
-	var maxBodySize int64 = 10 << 20 // 10 MiB default
-	if limiter, ok := trans.(translator.BodySizeLimiter); ok {
-		maxBodySize = limiter.MaxBodySize()
-	}
+	maxBodySize := translatorBodyLimit(trans)
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := a.initializeProxyRequest(r)

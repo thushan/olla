@@ -676,6 +676,80 @@ func TestRateLimitValidator_Middleware_GlobalRejectionHeaders(t *testing.T) {
 	}
 }
 
+// TestRateLimitValidator_Middleware_RateLimitHeaders checks the X-RateLimit-* headers
+// describe the limit that actually applies, and are absent when none does.
+func TestRateLimitValidator_Middleware_RateLimitHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		limits    config.ServerRateLimits
+		path      string
+		wantLimit string // empty means no X-RateLimit-* header at all
+	}{
+		{
+			name:   "both limits off",
+			limits: config.ServerRateLimits{CleanupInterval: time.Minute},
+			path:   "/olla/proxy/",
+		},
+		{
+			name: "per-IP on",
+			limits: config.ServerRateLimits{
+				PerIPRequestsPerMinute: 100, BurstSize: 10, CleanupInterval: time.Minute,
+			},
+			path:      "/olla/proxy/",
+			wantLimit: "100",
+		},
+		{
+			name: "per-IP off, global on reports the global limit",
+			limits: config.ServerRateLimits{
+				GlobalRequestsPerMinute: 600, BurstSize: 10, CleanupInterval: time.Minute,
+			},
+			path:      "/olla/proxy/",
+			wantLimit: "600",
+		},
+		{
+			name: "unlimited health probe omits headers",
+			limits: config.ServerRateLimits{
+				PerIPRequestsPerMinute: 100, BurstSize: 10, CleanupInterval: time.Minute,
+			},
+			path: constants.DefaultHealthCheckEndpoint,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			v := createTestRateLimitValidator(tt.limits)
+			defer v.Stop()
+
+			h := v.CreateMiddleware(nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusOK)
+			}))
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, tt.path, nil)
+			req.RemoteAddr = "10.0.0.1:1234"
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status = %d, want 200", rec.Code)
+			}
+			for _, name := range []string{"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"} {
+				got := rec.Header().Get(name)
+				if tt.wantLimit == "" && got != "" {
+					t.Errorf("%s = %q, want it absent", name, got)
+				}
+				if tt.wantLimit != "" && got == "" {
+					t.Errorf("%s missing", name)
+				}
+			}
+			if got := rec.Header().Get("X-RateLimit-Limit"); got != tt.wantLimit {
+				t.Errorf("X-RateLimit-Limit = %q, want %q", got, tt.wantLimit)
+			}
+		})
+	}
+}
+
 // TestRateLimitValidator_Validate_ConcurrentGlobalRejectionKeepsPerIPToken hammers
 // one client while the global tier rejects everything. Every per-IP token taken
 // must be handed back, even when the client's requests interleave.

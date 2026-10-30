@@ -36,13 +36,13 @@ func TestFindUnknownKeys(t *testing.T) {
 		},
 		{
 			name: "several unknowns at once, document order",
-			yaml: "top_level: 1\nserver:\n  rate_limits:\n    per_endpoint:\n      x: 1\nproxy:\n  retry:\n    enabled: true\n  bogus: 2\n",
-			want: []string{"top_level (line 1)", "server.rate_limits.per_endpoint (line 4)", "proxy.retry (line 7)", "proxy.bogus (line 9)"},
+			yaml: "top_level: 1\nserver:\n  rate_limits:\n    per_endpoint:\n      x: 1\nproxy:\n  failover:\n    enabled: true\n  bogus: 2\n",
+			want: []string{"top_level (line 1)", "server.rate_limits.per_endpoint (line 4)", "proxy.failover (line 7)", "proxy.bogus (line 9)"},
 		},
 		{
 			name: "children of an unknown key are not reported separately",
-			yaml: "proxy:\n  retry:\n    nested:\n      deeper: 1\n",
-			want: []string{"proxy.retry (line 2)"},
+			yaml: "proxy:\n  failover:\n    nested:\n      deeper: 1\n",
+			want: []string{"proxy.failover (line 2)"},
 		},
 		{
 			name: "free-form map keys are not unknown",

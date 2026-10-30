@@ -234,6 +234,59 @@ func TestTranslatorRoutes_SizeLimitApplies(t *testing.T) {
 	}
 }
 
+// The translator's own max_message_size (10MB here) must reach the size middleware through
+// route registration: with the server cap well above it, a chunked body between the two is
+// refused as it is read, as a counted violation. Zeroing the limit at any registration site
+// would let the body through to the handler, so every translator route is checked.
+func TestTranslatorRoutes_ChunkedBodyCappedAtTranslatorLimit(t *testing.T) {
+	t.Parallel()
+
+	const translatorCap = 10 << 20
+	paths := map[string]string{
+		"/olla/anthropic/v1/messages":              http.MethodPost,
+		"/olla/anthropic/v1/messages/count_tokens": http.MethodPost,
+		"/olla/anthropic/v1/models":                http.MethodGet,
+	}
+
+	for _, engine := range translationEngines {
+		for path, method := range paths {
+			t.Run(engine+path, func(t *testing.T) {
+				t.Parallel()
+
+				adapters, collector := translatorSecurity(t, 100, 64<<20)
+				_, mux := wireTranslatorRoutes(t, engine, adapters)
+
+				body := &countingReadCloser{r: bytes.NewReader(bytes.Repeat([]byte("x"), translatorCap+1))}
+				req := translatorRequest(method, path, "")
+				req.ContentLength = -1
+				req.Body = body
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+
+				require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code, rec.Body.String())
+				var resp map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), rec.Body.String())
+				assert.Equal(t, "request_too_large", resp["error"].(map[string]any)["type"])
+				assert.Equal(t, int64(1), collector.GetSecurityStats().SizeLimitViolations, "the rejection must be counted")
+				assert.LessOrEqual(t, body.n, int64(translatorCap+1), "the read must stop at the translator cap")
+			})
+		}
+	}
+}
+
+type countingReadCloser struct {
+	r io.Reader
+	n int64
+}
+
+func (c *countingReadCloser) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+func (*countingReadCloser) Close() error { return nil }
+
 type readCloser struct{ *bytes.Reader }
 
 func (readCloser) Close() error { return nil }

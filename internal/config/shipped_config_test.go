@@ -257,7 +257,7 @@ func TestShippedConfig_DashboardKnownFields(t *testing.T) {
 
 // TestShippedYAML_NoUnknownConfigKeys decodes every config the repo ships or
 // uses as a template onto the full Config with KnownFields(true). Load itself
-// is lenient, so a key the schema lacks (per_endpoint, proxy.retry and
+// is lenient, so a key the schema lacks (per_endpoint, the old proxy.retry block and
 // discovery.health_check were all copied around this way) is silently dropped
 // and the file promises behaviour Olla does not have. Profiles and
 // config/models.yaml are separate schemas and are not covered here.

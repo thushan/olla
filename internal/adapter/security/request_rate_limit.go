@@ -361,10 +361,13 @@ func (rl *RateLimitValidator) CreateMiddleware(reject RejectFunc) func(http.Hand
 				return
 			}
 
-			// we need to make sure we _always_ send these headers
-			w.Header().Set("X-RateLimit-Limit", strconv.Itoa(result.RateLimit))
-			w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
-			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetTime.Unix(), 10))
+			// RateLimit is 0 when no tier applies (both limits off, or an unlimited health
+			// probe). Advertising "Limit: 0, Remaining: 0" there reads as fully throttled.
+			if result.RateLimit > 0 {
+				w.Header().Set("X-RateLimit-Limit", strconv.Itoa(result.RateLimit))
+				w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(result.Remaining))
+				w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(result.ResetTime.Unix(), 10))
+			}
 
 			if !result.Allowed {
 				w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfter))
