@@ -135,7 +135,13 @@ http_code=$(curl -s -w "%{http_code}" -o "$BODY_FILE" -D "$HDR_FILE" \
     -d "$BODY" "${OLLA_URL}${URL_PATH}" 2>/dev/null)
 ```
 
-Assert HTTP 2xx, then:
+Check the status before anything else. Any non-2xx ends this route: record
+`FAIL: LABEL turn 1 returned <code>`, skip turns 2 and 3 and move to the next
+route. On `429` do not continue at all, see "Abort on 429" below. A failed
+turn 1 has no endpoint or marker, so the remaining assertions would only add
+noise.
+
+When the status is 2xx, assert:
 
 - `X-Olla-Sticky-Session: miss`
 - `X-Olla-Sticky-Key-Source: session_header`
@@ -147,31 +153,62 @@ Assert HTTP 2xx, then:
 
 Re-use the same `X-Olla-Session-ID` value.
 
-- HTTP 2xx
+- HTTP 2xx. On any other status record `FAIL: LABEL turn 2 returned <code>`,
+  skip turn 3 and move to the next route (`429` aborts the run).
 - `X-Olla-Sticky-Session: hit`
 - `X-Olla-Endpoint` equals `ep1`
 - Backend marker in body equals `marker1`
 
 **Turn 3 - load balancing diversity (unless skip_turn3_reason is set):**
 
-Issue 30 requests with distinct session IDs. Assert that at least one response
-has `X-Olla-Endpoint` different from `ep1`.
+Issue up to 30 requests with distinct session IDs. Assert that at least one
+response has `X-Olla-Endpoint` different from `ep1`. Stop the loop on the first
+non-2xx: a 404 or 503 carries no `X-Olla-Endpoint`, so looping on would burn the
+rate limit and produce false failures on later routes.
 
 ```bash
 seen_other=false
+bad_code=""
 for i in $(seq 1 30); do
     new_session="sess-div-${LABEL}-${TS}-${i}"
-    ep_div=$(curl -s -D - -o /dev/null --max-time $CURL_TIMEOUT \
+    resp=$(curl -s -D - -o /dev/null -w "HTTPCODE:%{http_code}" --max-time $CURL_TIMEOUT \
         -X POST -H "Content-Type: application/json" \
         -H "X-Olla-Session-ID: ${new_session}" \
-        -d "$BODY" "${OLLA_URL}${URL_PATH}" 2>/dev/null \
-        | grep -i "^X-Olla-Endpoint:" | cut -d' ' -f2- | tr -d '\r\n')
+        -d "$BODY" "${OLLA_URL}${URL_PATH}" 2>/dev/null)
+    code=$(echo "$resp" | grep -o 'HTTPCODE:[0-9]*' | cut -d: -f2)
+    case "$code" in
+        2??) ;;
+        *) bad_code=${code:-000}; break ;;
+    esac
+    ep_div=$(echo "$resp" | grep -i "^X-Olla-Endpoint:" | cut -d' ' -f2- | tr -d '\r\n')
     if [ -n "$ep_div" ] && [ "$ep_div" != "$ep1" ]; then
         seen_other=true; break
     fi
 done
-$seen_other || echo "FAIL: Turn 3 all 30 attempts hit ${ep1} only"
+if [ "$bad_code" = "429" ]; then
+    # A flag, not exit: exiting would skip the summary and Phase 6 teardown.
+    ABORTED=1
+    echo "ABORT: rate limited (429) on ${LABEL} turn 3 - raise server.rate_limits in the test config or wait a minute and rerun"
+elif [ -n "$bad_code" ]; then
+    echo "FAIL: ${LABEL} turn 3 returned ${bad_code} (stopped at request ${i})"
+elif ! $seen_other; then
+    echo "FAIL: Turn 3 all 30 attempts hit ${ep1} only"
+fi
 ```
+
+A `429` here sets `ABORTED=1` and the route returns, see below.
+
+### Abort on 429
+
+A `429` on any turn means the rate limiter is throttling the test, not that the
+route is broken, and every later route would fail the same way. Do not `exit`: set
+`ABORTED=1` and return from the route function so the run can still clean up. Print
+`ABORT: rate limited (429) on LABEL turn N - raise server.rate_limits in the test
+config or wait a minute and rerun`. The route loop checks `ABORTED` before each
+route and, once set, prints `SKIP: not run, rate limited` for every remaining
+route instead of testing it, so they count as skips, not failures. After the loop,
+skip Phases 4 and 5 (their results would be meaningless) and go straight to Phase 6
+teardown, then Phase 7 with the abort noted in the verdict.
 
 ### Route list
 
@@ -267,7 +304,8 @@ Print a summary:
 Results: N passed  N failed  N skipped  (N total assertions)
 ```
 
-Exit 0 on zero failures, exit 1 otherwise.
+Exit 0 on zero failures and no abort, exit 1 otherwise. A run with `ABORTED=1` is incomplete
+and exits 1 even when no assertion failed.
 
 ---
 
