@@ -76,4 +76,5 @@ server:
   The Prometheus metric is `olla_security_rate_limit_violations_total`.
 - The log carries a `Rate limit exceeded` warning with `client_ip`, `path`, `limit` and `retry_after`. It is sampled per
   client, so a flood produces a summary rather than a line per request.
-- The `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `Retry-After` response headers show the limit a client was held to.
+- The `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `Retry-After` response headers show the limit a client was held to. The `X-RateLimit-*` headers are only sent while a limit applies, so
+  they are absent when rate limiting is off.

@@ -54,6 +54,7 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
 - **A request is never retried once part of the response has reached the client.** A GET that failed mid-stream used to be replayed on the next
   backend, so the client got the first backend's partial output followed by the second's full response. It now ends with the error. POST, PATCH and DELETE
   were already protected. See [retry policy](#added-proxyretry-controls-failover).
+- **`X-RateLimit-*` headers are omitted when no rate limit applies.** With both limits at `0` (and for an unlimited health probe) responses used to carry `X-RateLimit-Limit: 0` and `X-RateLimit-Remaining: 0`; they now carry none. See [rate limit headers](#fixed-x-ratelimit-headers-are-omitted-when-rate-limiting-is-off).
 - **Additive:** `olla.type` in `/olla/models` and a top-level `type` on `/olla/models/{id}`. See [model kind](#added-model-kind-in-the-models-api).
 
 ### Added: `proxy.retry` controls failover
@@ -90,6 +91,10 @@ For `/messages` that is the same status as before; the rejection now happens bef
 as a size-limit violation rather than in the translator metrics, and the message text is "Request body too large". A chunked body
 between the two limits on `/messages/count_tokens` (previously a `400`) or `/models` (previously served) now also gets the `413`.
 Requests with a `Content-Length`, and all proxy routes, behave as before.
+
+### Fixed: `X-RateLimit-*` headers are omitted when rate limiting is off
+
+Every response through a rate-limited route carried `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, even with both limits at `0`, so a `413` or a plain `200` showed `X-RateLimit-Limit: 0, X-RateLimit-Remaining: 0`, which a client reads as fully throttled. The headers are now sent only while a limit applies.
 
 ### Added: unknown keys in `config.yaml` are reported
 
