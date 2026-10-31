@@ -170,6 +170,11 @@
 
   const latest = $derived(view.length > 0 ? view[view.length - 1] : null);
   const warming = $derived(view.length < 2);
+  // Every sample is a healthy zero: an axis topped at 1.0 over a flat line
+  // reads as a chart that has something to say. Say there is nothing yet.
+  const idle = $derived(
+    !warming && view.every((s) => !s.error && s.reqPerSec === 0 && s.activeConnections === 0),
+  );
 
   // The SVG itself is hidden from AT (aria-hidden below); the chart container's
   // aria-label is the only accessible description. Describing just the latest
@@ -238,7 +243,7 @@
         {/each}
       {/if}
     </svg>
-    {#if !warming}
+    {#if !warming && !idle}
       <span class="spark-axis spark-axis-top">{maxReqLabel}</span>
       <span class="spark-axis spark-axis-bottom">0</span>
     {/if}
@@ -254,6 +259,8 @@
     {/if}
     {#if warming}
       <span class="spark-hint">gathering data</span>
+    {:else if idle}
+      <span class="spark-hint">no traffic yet</span>
     {/if}
   </div>
   <!-- Rendered unconditionally (never behind {#if latest}) so the first

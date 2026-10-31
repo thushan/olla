@@ -141,6 +141,18 @@ describe('SparkStrip', () => {
     expect(bottomLabel.textContent).toBe('0');
   });
 
+  it('shows "no traffic yet" instead of an empty axis when every sample is idle', () => {
+    render({ samples: [makeSample(), makeSample(), makeSample()] });
+    expect(document.querySelector('.spark-hint')?.textContent).toBe('no traffic yet');
+    expect(document.querySelector('.spark-axis-top')).toBeNull();
+  });
+
+  it('keeps the axis once any sample has traffic', () => {
+    render({ samples: [makeSample(), makeSample({ reqPerSec: 2 })] });
+    expect(document.querySelector('.spark-hint')).toBeNull();
+    expect(document.querySelector('.spark-axis-top')).toBeTruthy();
+  });
+
   it('rounds the ceiling label to an integer when maxReq >= 10', () => {
     render({
       samples: [makeSample({ reqPerSec: 5 }), makeSample({ reqPerSec: 42 })],
