@@ -132,7 +132,7 @@
       sortable: true,
       num: true,
       align: 'right',
-      title: 'Counts any streamed response, regardless of HTTP status',
+      title: 'Backend 5xx responses count as failures; 4xx do not',
     },
     { key: 'avg_latency_ms', label: 'Avg latency', sortable: true, num: true, align: 'right' },
   ];
@@ -308,7 +308,7 @@
           {/snippet}
           {#snippet subSnippet()}
             {#if hasTraffic}
-              <span title="Counts any streamed response, regardless of HTTP status"
+              <span title="Backend 5xx responses count as failures; 4xx do not"
                 >{fmtInt(sys.total_failures)} failures logged</span
               >
             {:else}
