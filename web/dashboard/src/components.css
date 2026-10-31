@@ -1100,7 +1100,6 @@ button.status-tag.has-issues {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
-  pointer-events: none;
 }
 .status-tip.open {
   visibility: visible;

@@ -29,46 +29,96 @@
 
   const tipId = $props.id();
   let open = $state(false);
-  let pos = $state({ top: 0, left: 0 });
+  let pos = $state({ top: 0, left: 0, width: 240 });
   let btn: HTMLButtonElement | undefined = $state();
+  let tip: HTMLSpanElement | undefined = $state();
 
   const TIP_W = 240;
-  function show(): void {
-    if (btn) {
-      const r = btn.getBoundingClientRect();
-      // Clamp so the tip never runs off the right edge on a 390px screen.
-      const left = Math.max(8, Math.min(r.left, window.innerWidth - TIP_W - 8));
-      pos = { top: r.bottom + 4, left };
+  const MARGIN = 8;
+  // Long enough to cross the gap between pill and tip without it flickering
+  // shut, short enough not to feel sticky.
+  const CLOSE_DELAY_MS = 120;
+
+  // Measured at open time (the tip is laid out even while visibility:hidden):
+  // below the pill when it fits, above when it doesn't, and clamped inside
+  // the viewport horizontally.
+  function place(): void {
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(TIP_W, vw - 2 * MARGIN);
+    const h = tip?.offsetHeight ?? 0;
+    const left = Math.max(MARGIN, Math.min(r.left, vw - width - MARGIN));
+    let top = r.bottom + 4;
+    if (top + h > vh - MARGIN) {
+      top = r.top - 4 - h >= MARGIN ? r.top - 4 - h : Math.max(MARGIN, vh - h - MARGIN);
     }
-    open = true;
+    pos = { top, left, width };
   }
-  function hide(): void {
+
+  // Open while the pill or the tip is hovered or focused; closing waits a
+  // beat so moving the pointer from one to the other keeps it open.
+  let hovered = false;
+  let focused = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  function cancelTimer(): void {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+  }
+  function sync(): void {
+    cancelTimer();
+    if (hovered || focused) {
+      if (!open) {
+        place();
+        open = true;
+      }
+    } else if (open) {
+      timer = setTimeout(close, CLOSE_DELAY_MS);
+    }
+  }
+  function close(): void {
+    cancelTimer();
     open = false;
   }
+  function setHover(v: boolean): void {
+    hovered = v;
+    sync();
+  }
+  function setFocus(v: boolean): void {
+    focused = v;
+    sync();
+  }
+
   // Pointer state before focus fires, so a click on a hover-opened tip closes
   // it and a first tap on touch (no hover) opens it.
   let wasOpen = false;
   function onClick(): void {
-    if (wasOpen) hide();
-    else show();
+    if (wasOpen) close();
+    else if (!open) {
+      place();
+      open = true;
+    }
     wasOpen = false;
   }
 
-  // The tip is position:fixed at the pill's position when opened; close it if
-  // the page moves under it instead of leaving it adrift.
+  // The tip is position:fixed where it was placed; close it if the page moves
+  // under it instead of leaving it adrift.
   $effect(() => {
     if (!open) return;
-    window.addEventListener('scroll', hide, true);
-    window.addEventListener('resize', hide);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
     return () => {
-      window.removeEventListener('scroll', hide, true);
-      window.removeEventListener('resize', hide);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
     };
   });
 
+  $effect(() => () => cancelTimer());
+
   function onKey(e: KeyboardEvent): void {
     if (e.key === 'Escape' && open) {
-      open = false;
+      close();
       e.stopPropagation();
     }
   }
@@ -80,12 +130,12 @@
     type="button"
     class="status-tag st-{meta.cls} has-issues"
     aria-describedby={tipId}
-    onmouseenter={show}
-    onmouseleave={hide}
+    onmouseenter={() => setHover(true)}
+    onmouseleave={() => setHover(false)}
     onpointerdown={() => (wasOpen = open)}
     onclick={onClick}
-    onfocus={show}
-    onblur={hide}
+    onfocus={() => setFocus(true)}
+    onblur={() => setFocus(false)}
     onkeydown={onKey}
   >
     <span class="glyph g-{meta.cls}" aria-hidden="true">{meta.glyph}</span>{meta.label}
@@ -93,11 +143,14 @@
   <!-- Always in the DOM so aria-describedby resolves for screen readers;
        visibility is toggled rather than the node. -->
   <span
+    bind:this={tip}
     id={tipId}
     role="tooltip"
     class="status-tip"
     class:open
-    style="top:{pos.top}px;left:{pos.left}px;width:{TIP_W}px"
+    style="top:{pos.top}px;left:{pos.left}px;width:{pos.width}px"
+    onmouseenter={() => setHover(true)}
+    onmouseleave={() => setHover(false)}
   >
     <strong>Issues</strong>
     <ul>
