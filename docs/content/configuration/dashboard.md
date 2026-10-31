@@ -48,6 +48,11 @@ listed in `allowed_hosts` is rejected, even if it resolves to an allowed IP.
 ![Models panel - discovered model inventory grouped by family, with hosting endpoints](../assets/images/dashboard/models-light.png#only-light)
 ![Models panel - discovered model inventory grouped by family, with hosting endpoints](../assets/images/dashboard/models-dark.png#only-dark)
 
+The Overview herd table always shows Endpoint, Status, Resp. rate and Latency. In flight, Requests, Type and Models are on by default, and the
+**Columns** menu adds Priority, Probe latency (the last health-check probe, not proxied requests), Traffic and Failures. Failures is an estimate from
+requests and response rate. The choice is stored in the browser's `localStorage`. Hover or focus a status pill to see the endpoint's issues, last probe
+and next check. The search box (name or type) and the All/Unhealthy toggle filter this table and the Endpoints panel. Below 600px wide only the four always-on columns show.
+
 Clicking a model's host jumps to that endpoint's row in the Endpoints panel. The active
 panel and any selected endpoint live in the URL hash, so refreshes and shared links
 restore the same view. The theme follows the browser's light/dark preference, with a

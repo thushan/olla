@@ -15,6 +15,9 @@
     align?: 'right';
     sticky?: boolean;
     title?: string;
+    // Hidden below 600px by CSS (.hide-narrow) so a wide table can keep its
+    // core columns on a phone without a JS resize listener.
+    hideNarrow?: boolean;
   }
 </script>
 
@@ -183,11 +186,13 @@
   function cellClass(key: string): string {
     const c = columns.find((col) => col.key === key);
     if (!c) return '';
-    return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : ''].filter(Boolean).join(' ');
+    return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : '', c.hideNarrow ? 'hide-narrow' : '']
+      .filter(Boolean)
+      .join(' ');
   }
 
   function headerClass(c: Column): string {
-    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : '']
+    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : '', c.hideNarrow ? 'hide-narrow' : '']
       .filter(Boolean)
       .join(' ');
   }

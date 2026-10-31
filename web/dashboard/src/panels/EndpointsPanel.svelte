@@ -6,6 +6,8 @@
   import StatusTag from '../components/StatusTag.svelte';
   import RangeBar from '../components/RangeBar.svelte';
   import PctBar from '../components/PctBar.svelte';
+  import HerdFilter from '../components/HerdFilter.svelte';
+  import { filterEndpoints, isFiltering, issueList, type StatusFilter } from '../lib/herd';
   import { fmtAgo, fmtUntil } from '../lib/format';
   import { stableId } from '../lib/dom-id';
   import { getNow as liveNow } from '../lib/clock.svelte';
@@ -39,6 +41,10 @@
 
   const globalLatencyMax = $derived(data.reduce((m, e) => Math.max(m, e.max_latency_ms ?? 0), 0));
 
+  let query = $state('');
+  let statusFilter: StatusFilter = $state('all');
+  const filtering = $derived(isFiltering(query, statusFilter));
+
   // success_rate arrives pre-formatted ("98.5%") so we expose a numeric
   // variant for sort/scaling. avg_latency_ms is the API's own numeric field
   // (average PROXY request latency) - it must NOT be derived from
@@ -46,13 +52,14 @@
   // unrelated metric. It may be absent (older backend) or null (no traffic
   // yet), in which case RangeBar shows the no-data placeholder rather than a
   // misleading 0.
-  const rows: EndpointRow[] = $derived(
+  const allRows: EndpointRow[] = $derived(
     data.map((e) => ({
       ...e,
       success_rate_num: parseFloat(e.success_rate) || 0,
       avg_latency_ms: typeof e.avg_latency_ms === 'number' ? e.avg_latency_ms : null,
     }))
   );
+  const rows = $derived(filterEndpoints(allRows, query, statusFilter));
 
   // Re-evaluated each second so the relative "Xs ago" labels stay live
   // without per-row setInterval. Reading liveNow() inside $derived wires
@@ -103,14 +110,6 @@
   function rowDomId(row: EndpointRow): string {
     return `ep-${stableId(row.id ?? row.url ?? row.name)}`;
   }
-
-  function issueList(issues?: string): string[] {
-    if (!issues) return [];
-    return String(issues)
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
 </script>
 
 <div
@@ -135,6 +134,7 @@
       {#each Array(6) as _, i}<div class="skeleton row-skel" style="margin:6px 10px"></div>{/each}
     </div>
   {:else}
+    <div class="herd-controls"><HerdFilter bind:query bind:status={statusFilter} /></div>
     <SortableTable
       {columns}
       {rows}
@@ -182,6 +182,9 @@
         </td>
       {/snippet}
     </SortableTable>
+    {#if filtering && rows.length === 0}
+      <p class="herd-empty" role="status">No endpoints match your filter.</p>
+    {/if}
   {/if}
   </div>
 </div>

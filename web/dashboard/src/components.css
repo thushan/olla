@@ -852,20 +852,36 @@ footer a {
    tighten so all four columns fit without a sideways scroll. */
 table.glance {
   table-layout: fixed;
+  /* Up to eight optional columns can join the four core ones, so the table
+     needs more room than the 860px default before it scrolls in its wrapper. */
+  min-width: 980px;
 }
+/* The four core columns take set shares; optional columns split the rest
+   evenly (fixed layout gives unsized columns an equal slice). */
 table.glance th:nth-child(1) {
-  width: 32%;
+  width: 20%;
 }
 table.glance th:nth-child(2) {
-  width: 18%;
+  width: 12%;
 }
 table.glance th:nth-child(3) {
-  width: 28%;
+  width: 17%;
 }
 table.glance th:nth-child(4) {
-  width: 22%;
+  width: 10%;
+}
+@media (max-width: 1000px) {
+  .table-scroll:has(table.glance) .scroll-hint {
+    display: block;
+  }
 }
 @media (max-width: 600px) {
+  /* Optional columns are dropped on phones whatever the picker says; the
+     picker explains this. Core columns keep their positions 1-4 so the
+     nth-child shares below still apply. */
+  table.glance .hide-narrow {
+    display: none;
+  }
   table.glance {
     min-width: 0;
   }
@@ -906,4 +922,161 @@ table.glance th:nth-child(4) {
   table.glance th[aria-sort='none'] .sort-ind {
     display: none;
   }
+}
+
+/* HERD FILTER, COLUMN PICKER, ISSUES TOOLTIP */
+.herd-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.herd-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 auto;
+}
+.filter-input {
+  flex: 1 1 180px;
+  max-width: 280px;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+}
+.filter-input::placeholder {
+  color: var(--text-faint);
+}
+.chip-group {
+  display: inline-flex;
+}
+.chip,
+.picker-btn,
+.picker-reset {
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.chip:first-child {
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.chip:last-child {
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-left: -1px;
+}
+.picker-btn,
+.picker-reset {
+  border-radius: var(--radius-sm);
+}
+.chip.on {
+  color: var(--text);
+  background: var(--bg-inset);
+}
+.chip:hover,
+.picker-btn:hover,
+.picker-reset:hover {
+  color: var(--text);
+}
+.filter-input:focus-visible,
+.chip:focus-visible,
+.picker-btn:focus-visible,
+.picker-reset:focus-visible,
+.status-tag.has-issues:focus-visible,
+.picker-row input:focus-visible {
+  outline: 2px solid var(--text-dim);
+  outline-offset: 2px;
+}
+.column-picker {
+  position: relative;
+}
+.picker-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  width: 230px;
+  max-width: calc(100vw - 2 * var(--space-4));
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+}
+.picker-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.picker-note {
+  display: none;
+  margin: var(--space-2) 0 0;
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+@media (max-width: 600px) {
+  .picker-note.only-narrow {
+    display: block;
+  }
+}
+.picker-reset {
+  margin-top: var(--space-2);
+  align-self: flex-start;
+}
+.herd-empty {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-top: none;
+}
+button.status-tag.has-issues {
+  font-family: inherit;
+  cursor: help;
+  /* A button, so drop the default UA chrome; the colour classes still apply. */
+  appearance: none;
+}
+.status-tip {
+  position: fixed;
+  z-index: 30;
+  visibility: hidden;
+  padding: var(--space-2) var(--space-3);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.25);
+  pointer-events: none;
+}
+.status-tip.open {
+  visibility: visible;
+}
+.status-tip ul {
+  margin: 2px 0 4px;
+  padding-left: 1.1em;
+}
+.status-tip .tip-line {
+  display: block;
+  color: var(--text-dim);
 }

@@ -7,9 +7,22 @@
   import PctBar from '../components/PctBar.svelte';
   import SortableTable from '../components/SortableTable.svelte';
   import type { Column, SortState } from '../components/SortableTable.svelte';
-  import { fmtBytes, fmtInt, fmtUptime, fmtMs, shortCommit } from '../lib/format';
+  import { fmtBytes, fmtInt, fmtUptime, fmtMs, fmtUntil, shortCommit, parseTrafficBytes } from '../lib/format';
   import { stableId } from '../lib/dom-id';
+  import HerdFilter from '../components/HerdFilter.svelte';
+  import ColumnPicker from '../components/ColumnPicker.svelte';
   import { jumpToEndpoint } from '../lib/jump-to-endpoint';
+  import {
+    loadColumns,
+    saveColumns,
+    filterEndpoints,
+    isFiltering,
+    estimateFailures,
+    parseProbeMs,
+    issueList,
+    type HerdColumnKey,
+    type StatusFilter,
+  } from '../lib/herd';
   import { getNow as liveNow } from '../lib/clock.svelte';
   import type { EndpointSummary } from '../lib/types';
 
@@ -100,11 +113,16 @@
     status_rank: number;
     success_rate_num: number;
     avg_latency_ms: number | null;
+    probe_ms: number | null;
+    // Joined from /internal/status by endpoint id; null when that poll has not
+    // landed yet or carries no matching row.
+    traffic_bytes: number | null;
+    failures: number | null;
   };
 
-  // Glance table columns, wired through the shared SortableTable so the
-  // interaction and aria-sort semantics match the Endpoints panel exactly.
-  const glanceColumns: Column[] = [
+  // Core columns are always on. Their order matters: the mobile CSS in
+  // components.css sizes the first four by position.
+  const coreColumns: Column[] = [
     { key: 'name', label: 'Endpoint', sortable: true, sticky: true },
     { key: 'status_rank', label: 'Status', sortable: true },
     {
@@ -117,6 +135,52 @@
     },
     { key: 'avg_latency_ms', label: 'Avg latency', sortable: true, num: true, align: 'right' },
   ];
+
+  // Optional columns keyed by the picker's keys. Sort keys are the numeric
+  // view-model fields, never the formatted strings.
+  const optionalColumns: Record<HerdColumnKey, Column> = {
+    active_connections: { key: 'active_connections', label: 'In flight', sortable: true, num: true, align: 'right', hideNarrow: true },
+    request_count: { key: 'request_count', label: 'Requests', sortable: true, num: true, align: 'right', hideNarrow: true },
+    type: { key: 'type', label: 'Type', sortable: true, hideNarrow: true },
+    model_count: { key: 'model_count', label: 'Models', sortable: true, num: true, align: 'right', hideNarrow: true },
+    priority: { key: 'priority', label: 'Priority', sortable: true, num: true, align: 'right', hideNarrow: true },
+    probe_ms: {
+      key: 'probe_ms',
+      label: 'Probe',
+      sortable: true,
+      num: true,
+      align: 'right',
+      hideNarrow: true,
+      title: 'Latency of the last health-check probe, not of proxied requests',
+    },
+    traffic_bytes: { key: 'traffic_bytes', label: 'Traffic', sortable: true, num: true, align: 'right', hideNarrow: true, title: 'Bytes served since Olla started' },
+    failures: {
+      key: 'failures',
+      label: 'Failures',
+      sortable: true,
+      num: true,
+      align: 'right',
+      hideNarrow: true,
+      title: 'Estimated from requests and response rate, so approximate',
+    },
+  };
+
+  let chosen: HerdColumnKey[] = $state(loadColumns());
+  const visible = $derived(new Set<HerdColumnKey>(chosen));
+  const glanceColumns: Column[] = $derived([
+    ...coreColumns,
+    ...(Object.keys(optionalColumns) as HerdColumnKey[])
+      .filter((k) => visible.has(k))
+      .map((k) => optionalColumns[k]),
+  ]);
+
+  function setColumns(keys: HerdColumnKey[]): void {
+    chosen = keys;
+    saveColumns(keys);
+  }
+
+  let query = $state('');
+  let statusFilter: StatusFilter = $state('all');
 
   const glanceInitialSort: SortState = { key: 'status_rank', dir: 'asc' };
 
@@ -133,35 +197,50 @@
   // derive it from response_time (last HEALTH-CHECK probe latency, a
   // different metric, and a formatted string like "1.5s" that parseInt
   // would silently mangle to 1).
-  const glanceRows: GlanceRow[] = $derived(
-    endpointList.map((e) => ({
-      ...e,
-      status_rank: statusRank(e.status),
-      success_rate_num: parseFloat(e.success_rate) || 0,
-      avg_latency_ms: typeof e.avg_latency_ms === 'number' ? e.avg_latency_ms : null,
-    }))
+  // /internal/status carries the per-endpoint traffic string; the ids come
+  // from the same buildEndpointIDs call in both handlers, so id is a reliable
+  // join key.
+  const trafficById = $derived(
+    new Map((overview.data?.endpoints ?? []).map((e) => [e.id, parseTrafficBytes(e.traffic)]))
   );
+
+  const allGlanceRows: GlanceRow[] = $derived(
+    endpointList.map((e) => {
+      const rate = parseFloat(e.success_rate) || 0;
+      return {
+        ...e,
+        status_rank: statusRank(e.status),
+        success_rate_num: rate,
+        avg_latency_ms: typeof e.avg_latency_ms === 'number' ? e.avg_latency_ms : null,
+        probe_ms: parseProbeMs(e.response_time),
+        traffic_bytes: trafficById.get(e.id) ?? null,
+        failures: estimateFailures(e.request_count, rate),
+      };
+    })
+  );
+  const glanceRows = $derived(filterEndpoints(allGlanceRows, query, statusFilter));
+  const filtering = $derived(isFiltering(query, statusFilter));
 
   // uptime is now derived client-side from start_time so the ETag stays
   // stable; the live clock re-renders this each second.
   const now = $derived(liveNow());
   const uptimeText = $derived(sys?.start_time ? fmtUptime(sys.start_time, now) : '—');
 
+  // Extra context for the status pill's tooltip, so the operator sees why a
+  // row is amber/red without opening the Endpoints panel.
+  function tipLines(e: GlanceRow): string[] {
+    const out: string[] = [];
+    if (e.probe_ms !== null) out.push(`Last probe: ${fmtMs(e.probe_ms)}`);
+    const next = fmtUntil(e.next_check_at, now);
+    if (next) out.push(`Next check: ${next}`);
+    return out;
+  }
+
   function statusGlyph(s: string): string {
     return s === 'healthy' ? '●' : s === 'degraded' || s === 'unhealthy' ? '◐' : '○';
   }
   function statusCls(s: string): string {
     return s === 'healthy' ? 'green' : s === 'degraded' || s === 'unhealthy' ? 'amber' : 'red';
-  }
-
-  // total_traffic arrives formatted as e.g. "172.02 GB". Re-parse to bytes so
-  // fmtBytes (our single formatting authority) renders it consistently.
-  function parseTrafficBytes(s: string | undefined): number | null {
-    if (!s) return null;
-    const m = String(s).match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
-    if (!m) return null;
-    const units: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4, PB: 1024 ** 5 };
-    return parseFloat(m[1]) * units[m[2]];
   }
 
   // Identity resolution lives here (the panel knows the row's id/url/name
@@ -308,6 +387,10 @@
         <h3>Herd at a glance</h3>
         <span class="section-note">click a name to jump to its endpoint detail · sorted unhealthy first by default</span>
       </div>
+      <div class="herd-controls">
+        <HerdFilter bind:query bind:status={statusFilter} />
+        <ColumnPicker selected={chosen} onchange={setColumns} />
+      </div>
       <SortableTable
         columns={glanceColumns}
         rows={glanceRows}
@@ -329,13 +412,36 @@
               <span class="txt">{e.name}</span>
             </button>
           </td>
-          <td><StatusTag status={e.status} /></td>
+          <td><StatusTag status={e.status} issues={issueList(e.issues)} lines={tipLines(e)} /></td>
           <td class={cellClass('success_rate_num')}><PctBar pct={e.success_rate_num} hasData={e.request_count > 0} status={e.status} /></td>
           <td class={cellClass('avg_latency_ms')}>
             {#if typeof e.avg_latency_ms === 'number' && e.request_count > 0}{fmtMs(e.avg_latency_ms)}{:else}<span class="dash">—</span>{/if}
           </td>
+          {#if visible.has('active_connections')}
+            <td class={cellClass('active_connections')}>{#if e.active_connections > 0}{fmtInt(e.active_connections)}{:else}<span class="dash">0</span>{/if}</td>
+          {/if}
+          {#if visible.has('request_count')}
+            <td class={cellClass('request_count')}>{#if e.request_count > 0}{fmtInt(e.request_count)}{:else}<span class="dash">0</span>{/if}</td>
+          {/if}
+          {#if visible.has('type')}<td class="hide-narrow">{e.type || '—'}</td>{/if}
+          {#if visible.has('model_count')}
+            <td class={cellClass('model_count')}>{#if e.model_count === 0}<span class="dash">0</span>{:else}{fmtInt(e.model_count)}{/if}</td>
+          {/if}
+          {#if visible.has('priority')}<td class={cellClass('priority')}>{e.priority}</td>{/if}
+          {#if visible.has('probe_ms')}
+            <td class={cellClass('probe_ms')}>{#if e.probe_ms !== null}{fmtMs(e.probe_ms)}{:else}<span class="dash">—</span>{/if}</td>
+          {/if}
+          {#if visible.has('traffic_bytes')}
+            <td class={cellClass('traffic_bytes')}>{#if e.traffic_bytes !== null}{fmtBytes(e.traffic_bytes)}{:else}<span class="dash">—</span>{/if}</td>
+          {/if}
+          {#if visible.has('failures')}
+            <td class={cellClass('failures')}>{#if e.failures !== null}{fmtInt(e.failures)}{:else}<span class="dash">—</span>{/if}</td>
+          {/if}
         {/snippet}
       </SortableTable>
+      {#if filtering && glanceRows.length === 0}
+        <p class="herd-empty" role="status">No endpoints match your filter.</p>
+      {/if}
     </div>
   {/if}
   </div>

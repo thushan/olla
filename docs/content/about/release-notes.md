@@ -96,6 +96,13 @@ Requests with a `Content-Length`, and all proxy routes, behave as before.
 
 Every response through a rate-limited route carried `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, even with both limits at `0`, so a `413` or a plain `200` showed `X-RateLimit-Limit: 0, X-RateLimit-Remaining: 0`, which a client reads as fully throttled. The headers are now sent only while a limit applies.
 
+### Added: dashboard herd columns, column picker, issues tooltip and filter
+
+The Overview herd table now shows In flight, Requests, Type and Models next to the status, response rate and latency columns. A Columns menu adds Priority,
+Probe latency (the last health-check probe, not proxied requests), Traffic and Failures (estimated from requests and response rate); the choice is saved in the
+browser. Hover or focus a status pill to see why an endpoint is amber or red. A search box and an All/Unhealthy toggle filter the herd table and the Endpoints panel.
+Under 600px wide only Endpoint, Status, Resp. rate and Latency show. Frontend only; no API or config change. See [Admin Dashboard](../configuration/dashboard.md).
+
 ### Added: unknown keys in `config.yaml` are reported
 
 A key in the main config that Olla does not read (a typo, or one that was documented but never existed) used to be dropped silently. Startup now logs one WARN line listing every such key by its full path and line,
