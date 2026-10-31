@@ -13,6 +13,7 @@ import { tick } from 'svelte';
 import { stableId } from './dom-id';
 import { navigation } from './stores/navigation.svelte';
 import { endpoints } from './stores/endpoints.svelte';
+import { endpointFilter } from './stores/endpoint-filter.svelte';
 import { pushRoute } from './router';
 
 const EP_PREFIX = 'ep-';
@@ -65,6 +66,9 @@ export async function jumpToEndpointKey(endpointKey: string): Promise<void> {
 // (with a hard ceiling) and only then enter the DOM-poll fast path that
 // covers the mount-to-render window.
 async function revealRow(domId: string): Promise<void> {
+  // A filter that excludes the target would leave nothing to reveal (Back,
+  // shared link, Models pill), so a navigation always shows the full list.
+  endpointFilter.clear();
   await tick();
   if (!endpoints.hasData) {
     const coldStart = Date.now();

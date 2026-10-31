@@ -22,9 +22,14 @@ function applyModeToDom(mode: ThemeMode): void {
 }
 
 function readStored(): ThemeMode {
-  if (typeof localStorage === 'undefined') return 'auto';
-  const v = localStorage.getItem(STORAGE_KEY);
-  return MODES.includes(v as ThemeMode) ? (v as ThemeMode) : 'auto';
+  // Storage throws in private windows and when site data is blocked.
+  try {
+    if (typeof localStorage === 'undefined') return 'auto';
+    const v = localStorage.getItem(STORAGE_KEY);
+    return MODES.includes(v as ThemeMode) ? (v as ThemeMode) : 'auto';
+  } catch {
+    return 'auto';
+  }
 }
 
 type MediaQueryListLike = {
@@ -94,9 +99,13 @@ class ThemeStore {
   set(mode: ThemeMode): void {
     if (!MODES.includes(mode)) return;
     this.#mode = mode;
-    if (typeof localStorage !== 'undefined') {
-      if (mode === 'auto') localStorage.removeItem(STORAGE_KEY);
-      else localStorage.setItem(STORAGE_KEY, mode);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        if (mode === 'auto') localStorage.removeItem(STORAGE_KEY);
+        else localStorage.setItem(STORAGE_KEY, mode);
+      }
+    } catch {
+      // Unpersisted choice still applies for this session.
     }
     applyModeToDom(mode);
   }

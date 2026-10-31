@@ -149,3 +149,27 @@ describe('theme cycle', () => {
     expect(localStorage.getItem('olla-theme')).toBeNull();
   });
 });
+
+// Storage throws in private windows and with blocked site data; the theme
+// must still load and switch for the session.
+describe('theme with unavailable storage', () => {
+  it('falls back to auto on read and still applies a chosen mode when writes throw', async () => {
+    mockMatchMedia(false);
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('blocked');
+    });
+    try {
+      const { theme } = await import('./theme.svelte');
+      expect(theme.mode).toBe('auto');
+      expect(() => theme.set('dark')).not.toThrow();
+      expect(theme.mode).toBe('dark');
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    } finally {
+      spy.mockRestore();
+      setSpy.mockRestore();
+    }
+  });
+});

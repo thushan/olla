@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  shortCommit,
   fmtBytes,
   fmtPct,
   fmtMs,
@@ -144,5 +145,15 @@ describe('fmtUptime', () => {
 
   it('returns empty when start_time missing', () => {
     expect(fmtUptime(null)).toBe('');
+  });
+});
+
+describe('shortCommit', () => {
+  it('truncates a full hash to 8 characters', () => {
+    expect(shortCommit('0123456789abcdef0123456789abcdef01234567')).toBe('01234567');
+  });
+  it('leaves short or missing values alone', () => {
+    expect(shortCommit('unknown')).toBe('unknown');
+    expect(shortCommit(null)).toBe('');
   });
 });

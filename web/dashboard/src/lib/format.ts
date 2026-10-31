@@ -157,3 +157,28 @@ function parseIso(iso: string | null | undefined): number | null {
   if (Number.isNaN(t)) return null;
   return t;
 }
+
+/** Git commit shortened to 8 characters for tight spaces; the full hash belongs in a title. */
+export function shortCommit(commit: string | null | undefined): string {
+  return (commit ?? '').slice(0, 8);
+}
+
+const TRAFFIC_UNITS: Record<string, number> = {
+  B: 1,
+  KB: 1024,
+  MB: 1024 ** 2,
+  GB: 1024 ** 3,
+  TB: 1024 ** 4,
+  PB: 1024 ** 5,
+};
+
+/**
+ * Inverse of fmtBytes for the pre-formatted traffic strings the API sends
+ * ("172.02 GB"). Returns null when absent or unrecognised.
+ */
+export function parseTrafficBytes(s: string | undefined | null): number | null {
+  if (!s) return null;
+  const m = String(s).match(/^([\d.]+)\s*(B|KB|MB|GB|TB|PB)$/);
+  if (!m) return null;
+  return parseFloat(m[1]) * TRAFFIC_UNITS[m[2]];
+}

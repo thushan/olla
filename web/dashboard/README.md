@@ -84,6 +84,7 @@ src/
       overview.svelte.ts
       endpoints.svelte.ts
       models.svelte.ts
+      runtime.svelte.ts            sticky/translators/process pollers (15s) for the Overview RuntimeCards
       history.svelte.ts            ring buffer of overview samples feeding SparkStrip
       theme.svelte.ts              auto/light/dark, persisted
       navigation.svelte.ts         current panel (consumed only by NavTabs)
@@ -101,6 +102,10 @@ Every store exposes four visibly-distinct states:
 | ok      | most recent poll succeeded (200 or 304)               | normal render                                             |
 | error   | most recent poll failed, but last success < 3*interval | red inline banner, prior data greyed but still visible  |
 | stale   | last success older than 3*interval (two failures)     | amber banner with stronger copy, data greyed, dots stale  |
+
+The runtime stores (`runtime.svelte.ts`) are the exception: `RuntimeCards.svelte` has no loading skeleton and no error banner. A card
+is simply absent until its endpoint has answered, and stays hidden when sticky sessions are off, no translator has handled a request, or the
+endpoint returns an error on first load. Once a card has data, a failed poll greys it and adds a muted note instead.
 
 The server side backs this with `ETag`/`If-None-Match` conditional requests and gzip
 compression on the status JSON endpoints, so a healthy poll cycle is a cheap `304` most of

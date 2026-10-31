@@ -15,6 +15,11 @@
     align?: 'right';
     sticky?: boolean;
     title?: string;
+    // Hidden below 600px by CSS (.hide-narrow) so a wide table can keep its
+    // core columns on a phone without a JS resize listener.
+    hideNarrow?: boolean;
+    // Extra class on the header and every cell of this column.
+    cls?: string;
   }
 </script>
 
@@ -74,6 +79,8 @@
         >
       | null;
     showScrollHint?: boolean;
+    // Extra class on the <table> for per-table layout rules (e.g. `glance`).
+    tableClass?: string;
   }
 
   let {
@@ -85,11 +92,34 @@
     rowSnippet = null,
     groupSnippet = null,
     showScrollHint = true,
+    tableClass = '',
   }: Props = $props();
 
   // Initial sort seeds local state once; later prop changes are deliberately
   // ignored: the user owns sort state after mount.
   let sort: SortState | null = $state(untrack(() => initialSort));
+
+  // Mirrors the `max-width: 600px` rule in components.css that hides
+  // `hideNarrow` columns. Guarded because jsdom and SSR have no matchMedia.
+  let narrow = $state(false);
+  $effect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 600px)');
+    narrow = mq.matches;
+    const onChange = (e: MediaQueryListEvent) => (narrow = e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  });
+
+  // The sorted column can disappear: a picker removes it, or the viewport
+  // narrows and CSS hides it. Either way fall back to the initial sort rather
+  // than ordering rows by a key no header shows. We reset instead of pinning
+  // the column visible so the narrow layout stays the four core columns.
+  $effect(() => {
+    if (!sort) return;
+    const c = columns.find((col) => col.key === sort!.key);
+    if (!c || (narrow && c.hideNarrow)) sort = untrack(() => initialSort);
+  });
 
   function toggle(key: string): void {
     if (!sort || sort.key !== key) {
@@ -180,11 +210,13 @@
   function cellClass(key: string): string {
     const c = columns.find((col) => col.key === key);
     if (!c) return '';
-    return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : ''].filter(Boolean).join(' ');
+    return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : '', c.hideNarrow ? 'hide-narrow' : '', c.cls ?? '']
+      .filter(Boolean)
+      .join(' ');
   }
 
   function headerClass(c: Column): string {
-    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : '']
+    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : '', c.hideNarrow ? 'hide-narrow' : '', c.cls ?? '']
       .filter(Boolean)
       .join(' ');
   }
@@ -192,7 +224,7 @@
 
 <div class="table-scroll">
   {#if showScrollHint}<div class="scroll-hint">→ scroll for more columns</div>{/if}
-  <table>
+  <table class={tableClass || undefined}>
     <thead>
       <tr>
         {#each columns as c}

@@ -96,6 +96,15 @@ Requests with a `Content-Length`, and all proxy routes, behave as before.
 
 Every response through a rate-limited route carried `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`, even with both limits at `0`, so a `413` or a plain `200` showed `X-RateLimit-Limit: 0, X-RateLimit-Remaining: 0`, which a client reads as fully throttled. The headers are now sent only while a limit applies.
 
+### Added: dashboard herd columns, column picker, issues tooltip and filter
+
+The Overview herd table now shows In flight, Requests, Type and Models next to the status, response rate and latency columns. A Columns menu adds Priority,
+Probe latency (the last health-check probe, not proxied requests), Traffic and Failures (estimated from requests and response rate); the choice is saved in the
+browser. Hover or focus a status pill to see why an endpoint is amber or red. A search box and an All/Unhealthy toggle filter the herd table and the Endpoints panel.
+Under 600px wide only Endpoint, Status, Resp. rate and Latency show. Frontend only; no API or config change. See [Admin Dashboard](../configuration/dashboard.md).
+
+The Overview also gets Sticky sessions (active, hit rate, evictions, cap), Translator (passthrough share, streaming, fallbacks, latency) and Process (heap, memory pressure, goroutines, GC pause) cards, polled every 15s. Sticky hides while sticky sessions are off; Translator appears once the first request has gone through a translator.
+
 ### Added: unknown keys in `config.yaml` are reported
 
 A key in the main config that Olla does not read (a typo, or one that was documented but never existed) used to be dropped silently. Startup now logs one WARN line listing every such key by its full path and line,
@@ -453,6 +462,11 @@ requests-per-second sparkline), Endpoints (per-endpoint health, priority, latenc
 model count), and Models (inventory grouped by family, with hosting endpoints). It
 polls the existing `/internal/status*` JSON every 5-15 seconds with `ETag`/`304`
 caching - no WebSocket, no push, and nothing in it changes state.
+
+The Overview herd table stays readable at phone width (the status column and figures
+fit without sideways scrolling), response rate and latency show a single dash where an
+endpoint has no traffic, the sparkline says "no recent traffic" instead of drawing an empty
+axis, and the commit hash is shortened to 8 characters with the full hash on hover.
 
 There is no authentication. Access is controlled entirely by the new `dashboard.access_policy`
 config block (`allowed_cidrs` + `allowed_hosts`), which defaults to loopback-only. The

@@ -39,6 +39,7 @@ listed in `allowed_hosts` is rejected, even if it resolves to an allowed IP.
 | Panel | What it shows | Backed by | Poll interval |
 |-------|----------------|-----------|----------------|
 | Overview | Fleet status, success rate, average latency, traffic, connections, requests, failures, security violations, uptime, engine/balancer in use, and a live requests-per-second sparkline | `GET /internal/status` | 5s |
+| Overview (runtime cards) | Sticky sessions, translator and process stats; the sticky card hides when sticky sessions are off, and the translator card appears after the first translated or passthrough request | `GET /internal/stats/sticky`, `/internal/stats/translators`, `/internal/process` | 15s |
 | Endpoints | Per-endpoint name, type, status, priority, success rate, latency (avg/min/max), request count, connections, model count, health check timing, sanitised URL | `GET /internal/status/endpoints` | 5s |
 | Models | Model inventory grouped by family: name, aliases, parameter size, quantisation, size on disk, hosting endpoints, last seen | `GET /internal/status/models` | 15s |
 
@@ -47,6 +48,11 @@ listed in `allowed_hosts` is rejected, even if it resolves to an allowed IP.
 
 ![Models panel - discovered model inventory grouped by family, with hosting endpoints](../assets/images/dashboard/models-light.png#only-light)
 ![Models panel - discovered model inventory grouped by family, with hosting endpoints](../assets/images/dashboard/models-dark.png#only-dark)
+
+The Overview herd table always shows Endpoint, Status, Resp. rate and Latency. In flight, Requests, Type and Models are on by default, and the
+**Columns** menu adds Priority, Probe latency (the last health-check probe, not proxied requests), Traffic and Failures. Failures is an estimate from
+requests and response rate. The choice is stored in the browser's `localStorage`. Hover or focus a status pill to see the endpoint's issues, last probe
+and next check. The search box (name or type) and the All/Unhealthy toggle filter this table and the Endpoints panel. Below 600px wide only the four always-on columns show.
 
 Clicking a model's host jumps to that endpoint's row in the Endpoints panel. The active
 panel and any selected endpoint live in the URL hash, so refreshes and shared links
