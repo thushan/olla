@@ -185,6 +185,13 @@ body {
   filter: grayscale(0.35);
 }
 
+/* A degraded wrapper already greys everything inside it; a nested card must
+   not grey again or opacity compounds to near-invisible. */
+[data-state] [data-state] {
+  opacity: 1;
+  filter: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
