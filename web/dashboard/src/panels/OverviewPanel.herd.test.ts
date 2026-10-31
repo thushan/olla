@@ -203,6 +203,17 @@ describe('picker and sort', () => {
     expect(document.activeElement).toBe(btn);
   });
 
+  it('closes when focus lands directly on an element outside the picker', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    document.querySelector<HTMLButtonElement>('.picker-btn')!.click();
+    flushSync();
+    document.querySelector<HTMLInputElement>('.filter-input')!.focus();
+    flushSync();
+    expect(document.querySelector('.picker-pop')).toBeNull();
+  });
+
   it('does not cancel mousedown on the Reset button or a checkbox, only on label text', async () => {
     await load();
     component = mount(OverviewPanel, { target: document.body });

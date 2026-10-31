@@ -45,8 +45,19 @@
       open = false;
       root?.querySelector<HTMLButtonElement>('.picker-btn')?.focus();
     };
+    // Focus can jump past the root without a focusout there (Safari, from the
+    // panel straight to the filter input), so also watch focusin. A press
+    // inside the menu may legitimately land focus on the panel; ignore that.
+    const onDocFocusIn = (e: FocusEvent) => {
+      if (pressInside || !root || root.contains(e.target as Node)) return;
+      open = false;
+    };
     document.addEventListener('keydown', onDocKey);
-    return () => document.removeEventListener('keydown', onDocKey);
+    document.addEventListener('focusin', onDocFocusIn);
+    return () => {
+      document.removeEventListener('keydown', onDocKey);
+      document.removeEventListener('focusin', onDocFocusIn);
+    };
   });
 </script>
 
