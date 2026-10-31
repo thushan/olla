@@ -137,7 +137,7 @@ discovery:
         type: "docker-model-runner"
 ```
 
-If Anthropic passthrough is enabled, keep Docker Model Runner endpoints in a passthrough fleet with the same native Messages API path. In v0.0.28, Olla chooses one passthrough target path before proxy endpoint selection, so do not mix DMR's `/anthropic/v1/messages` with another capable backend's `/v1/messages` unless the fleets are partitioned or passthrough is disabled for one side.
+If Anthropic passthrough is enabled, keep Docker Model Runner endpoints in a passthrough fleet with the same native Messages API path. As of v0.0.30, Olla chooses one passthrough target path before proxy endpoint selection, so do not mix DMR's `/anthropic/v1/messages` with another capable backend's `/v1/messages` unless the fleets are partitioned or passthrough is disabled for one side.
 
 ### Issue 4: API Gateway Path Routing
 
