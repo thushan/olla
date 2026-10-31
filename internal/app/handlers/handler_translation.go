@@ -99,6 +99,7 @@ func (a *Application) executePassthroughRequest(
 		}
 	}
 	pr.upstreamStatus = tracker.Status()
+	pr.markUpstreamServerError()
 	pr.captureStickyOutcome(ctx, r)
 	a.logRequestResult(pr, err)
 
@@ -281,6 +282,7 @@ func (a *Application) executeTranslationRequest(
 		}
 	}
 	pr.upstreamStatus = tracker.Status()
+	pr.markUpstreamServerError()
 	pr.captureStickyOutcome(ctx, r)
 	a.logRequestResult(pr, proxyErr)
 

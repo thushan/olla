@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -194,5 +195,96 @@ func TestAllProxies_ModelledRequestCountedOnce(t *testing.T) {
 				t.Errorf("model stats: want 1 request/%d bytes, got %+v", len(body), ms)
 			}
 		})
+	}
+}
+
+// TestAllProxies_Upstream5xxCountedAsFailure is the regression test for 5xx
+// responses being counted as successes because the transport round trip
+// worked. The client must still get the backend's status untouched and Olla
+// must not fail over: only the counters change. 4xx (429 included) is the
+// caller's problem and stays a success, matching the WARN rule on the
+// "Request completed" line.
+func TestAllProxies_Upstream5xxCountedAsFailure(t *testing.T) {
+	cases := []struct {
+		name        string
+		status      int
+		stream      bool
+		wantFailure bool
+	}{
+		{"503 non-streaming", http.StatusServiceUnavailable, false, true},
+		{"503 streaming", http.StatusServiceUnavailable, true, true},
+		{"500 non-streaming", http.StatusInternalServerError, false, true},
+		{"429 stays a success", http.StatusTooManyRequests, false, false},
+		{"404 stays a success", http.StatusNotFound, false, false},
+		{"200", http.StatusOK, false, false},
+	}
+
+	for _, suite := range []ProxyTestSuite{SherpaTestSuite{}, OllaTestSuite{}} {
+		for _, tc := range cases {
+			t.Run(suite.Name()+"/"+tc.name, func(t *testing.T) {
+				var badHits, goodHits atomic.Int64
+				bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					badHits.Add(1)
+					if tc.stream {
+						w.Header().Set(constants.HeaderContentType, "text/event-stream")
+						w.WriteHeader(tc.status)
+						for _, chunk := range []string{"data: {\"error\":\"overloaded\"}\n\n", "data: [DONE]\n\n"} {
+							_, _ = w.Write([]byte(chunk))
+							w.(http.Flusher).Flush()
+						}
+						return
+					}
+					w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+					w.WriteHeader(tc.status)
+					_, _ = w.Write([]byte(`{"error":"backend says no"}`))
+				}))
+				defer bad.Close()
+				good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					goodHits.Add(1)
+					w.WriteHeader(http.StatusOK)
+				}))
+				defer good.Close()
+
+				badEp := createTestEndpoint("bad", bad.URL, domain.StatusHealthy)
+				goodEp := createTestEndpoint("good", good.URL, domain.StatusHealthy)
+				endpoints := []*domain.Endpoint{badEp, goodEp}
+				proxy, _, collector := createTestProxyComponents(suite, endpoints)
+
+				req, stats, rlog := createTestRequestWithBody("POST", "/v1/chat/completions", `{"model":"llama3.2"}`)
+				stats.Model = "llama3.2"
+				w := httptest.NewRecorder()
+				err := proxy.ProxyRequestToEndpoints(req.Context(), w, req, endpoints, stats, rlog)
+
+				if err != nil {
+					t.Fatalf("a relayed backend status is not a proxy error, got %v", err)
+				}
+				if w.Code != tc.status {
+					t.Errorf("client must get the backend status %d unchanged, got %d", tc.status, w.Code)
+				}
+				if badHits.Load() != 1 || goodHits.Load() != 0 {
+					t.Errorf("no failover on a backend status: want bad=1 good=0, got bad=%d good=%d", badHits.Load(), goodHits.Load())
+				}
+
+				wantFailed, wantOK := int64(0), int64(1)
+				if tc.wantFailure {
+					wantFailed, wantOK = 1, 0
+				}
+				ps := collector.GetProxyStats()
+				if ps.TotalRequests != 1 || ps.FailedRequests != wantFailed || ps.SuccessfulRequests != wantOK {
+					t.Errorf("proxy stats: want 1 total/%d success/%d failed, got %+v", wantOK, wantFailed, ps)
+				}
+				es := collector.GetEndpointStats()[badEp.URLString]
+				if es.TotalRequests != 1 || es.FailedRequests != wantFailed || es.SuccessfulRequests != wantOK {
+					t.Errorf("endpoint stats: want 1 total/%d success/%d failed, got %+v", wantOK, wantFailed, es)
+				}
+				if es.TotalBytes != int64(w.Body.Len()) {
+					t.Errorf("endpoint bytes: want %d (bytes relayed), got %d", w.Body.Len(), es.TotalBytes)
+				}
+				ms := collector.GetModelStats()["llama3.2"]
+				if ms.TotalRequests != 1 || ms.FailedRequests != wantFailed {
+					t.Errorf("model stats: want 1 total/%d failed, got %+v", wantFailed, ms)
+				}
+			})
+		}
 	}
 }
