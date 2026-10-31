@@ -147,6 +147,27 @@ describe('picker and sort', () => {
   });
 });
 
+describe('narrow viewport', () => {
+  it('resets the sort when its column is hidden by the narrow layout', async () => {
+    let listener: ((e: { matches: boolean }) => void) | undefined;
+    window.matchMedia = vi.fn(() => ({
+      matches: false,
+      addEventListener: (_: string, cb: (e: { matches: boolean }) => void) => (listener = cb),
+      removeEventListener: () => {},
+    })) as unknown as typeof window.matchMedia;
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(['request_count']));
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    [...document.querySelectorAll<HTMLButtonElement>('table.glance .sort-btn')].find((b) => b.textContent?.includes('Requests'))!.click();
+    flushSync();
+    expect(document.querySelector('th[aria-sort="descending"]')?.textContent).toContain('Requests');
+    listener!({ matches: true });
+    flushSync();
+    expect(document.querySelector('th[aria-sort="ascending"]')?.textContent).toContain('Status');
+  });
+});
+
 describe('issues tooltip', () => {
   it('is a focusable button described by a tooltip carrying the issue', async () => {
     await load();

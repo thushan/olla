@@ -99,10 +99,26 @@
   // ignored: the user owns sort state after mount.
   let sort: SortState | null = $state(untrack(() => initialSort));
 
-  // A column picker can hide the sorted column; fall back to the initial sort
-  // rather than ordering rows by a key no header shows.
+  // Mirrors the `max-width: 600px` rule in components.css that hides
+  // `hideNarrow` columns. Guarded because jsdom and SSR have no matchMedia.
+  let narrow = $state(false);
   $effect(() => {
-    if (sort && !columns.some((c) => c.key === sort!.key)) sort = untrack(() => initialSort);
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mq = window.matchMedia('(max-width: 600px)');
+    narrow = mq.matches;
+    const onChange = (e: MediaQueryListEvent) => (narrow = e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  });
+
+  // The sorted column can disappear: a picker removes it, or the viewport
+  // narrows and CSS hides it. Either way fall back to the initial sort rather
+  // than ordering rows by a key no header shows. We reset instead of pinning
+  // the column visible so the narrow layout stays the four core columns.
+  $effect(() => {
+    if (!sort) return;
+    const c = columns.find((col) => col.key === sort!.key);
+    if (!c || (narrow && c.hideNarrow)) sort = untrack(() => initialSort);
   });
 
   function toggle(key: string): void {
