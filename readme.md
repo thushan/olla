@@ -17,6 +17,7 @@
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a>
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/LemonadeSDK-native-lightgreen.svg" alt="LemonadeSDK: Native Support"></a>
     <a href="https://github.com/jundot/omlx"><img src="https://img.shields.io/badge/oMLX-native-lightgreen.svg" alt="oMLX: Native Support"></a>
+    <a href="https://github.com/huggingface/text-embeddings-inference"><img src="https://img.shields.io/badge/TEI-native-lightgreen.svg" alt="Text Embeddings Inference: Native Support"></a>
   </P>
   <p>
     <div align="center">
@@ -49,10 +50,11 @@ For large GPU deployments, enterprise and data centre use, see [TensorFoundry Fo
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
 - **🎯 Advanced Filtering**: [Profile and model filtering](https://thushan.github.io/olla/configuration/filters/) with glob patterns for precise control
 - **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers and automatic recovery
-- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover
+- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover, tunable with [`proxy.retry`](https://thushan.github.io/olla/configuration/reference/#retry-behaviour)
 - **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
 - **⚡🔄 Anthropic Messages API**: [Passthrough for backends with native support; automatic translation for others](https://thushan.github.io/olla/integrations/api-translation/anthropic/)
+- **🧬 Embeddings and Rerank**: [Text Embeddings Inference](https://thushan.github.io/olla/integrations/backend/text-embeddings-inference/) support, with model-less embedding and rerank requests routed to a host serving that kind
 - **🔐 Backend Authentication**: [Outbound auth](https://thushan.github.io/olla/configuration/endpoint-auth/) for local backends requiring API keys, bearer tokens, or basic auth
 - **🛡️ Production Ready**: Rate limiting, request size limits, optional CORS for browser clients, configurable proxy/server timeouts, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
