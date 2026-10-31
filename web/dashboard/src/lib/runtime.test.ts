@@ -7,6 +7,9 @@ import {
   translatorList,
   processUsable,
   translatorHasTraffic,
+  parseSticky,
+  parseTranslators,
+  parseProcess,
   fallbackTotal,
   fallbackBreakdown,
 } from './runtime';
@@ -72,5 +75,25 @@ describe('translatorHasTraffic', () => {
   it('is false at zero requests and true once any request has been counted', () => {
     expect(translatorHasTraffic(entry())).toBe(false);
     expect(translatorHasTraffic(entry({ total_requests: 1 }))).toBe(true);
+  });
+});
+
+describe('payload parsers', () => {
+  it('rejects bodies missing what the card needs', () => {
+    expect(parseSticky({})).toBeNull();
+    expect(parseTranslators({})).toBeNull();
+    expect(parseProcess({})).toBeNull();
+  });
+  it('drops invalid translator rows and tolerates extra fields', () => {
+    const r = parseTranslators({ extra: 1, translators: [null, 3, { translator_name: '' }, { translator_name: 'a', total_requests: 2, x: 1 }] });
+    expect(r?.translators.map((t) => t.translator_name)).toEqual(['a']);
+  });
+  it('rejects a non-empty translator list with no usable rows, but accepts an empty one', () => {
+    expect(parseTranslators({ translators: [null] })).toBeNull();
+    expect(parseTranslators({ translators: [] })?.translators).toEqual([]);
+  });
+  it('coerces non-string process fields so formatting cannot throw', () => {
+    const p = parseProcess({ memory: { memory_pressure: 7 }, garbage_collection: {}, goroutines: {}, runtime: {} });
+    expect(p?.memory.memory_pressure).toBe('');
   });
 });

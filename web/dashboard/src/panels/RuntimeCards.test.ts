@@ -61,6 +61,18 @@ async function settle() {
   });
   flushSync();
 }
+async function settle2() {
+  sticky.refresh();
+  translators.refresh();
+  processStats.refresh();
+  await new Promise((r) => setTimeout(r, 50));
+  await vi.waitFor(() => {
+    flushSync();
+    expect(document.body.textContent).toBeTruthy();
+  });
+  await new Promise((r) => setTimeout(r, 50));
+  flushSync();
+}
 const txt = () => document.body.textContent ?? '';
 
 describe('RuntimeCards', () => {
@@ -162,7 +174,7 @@ describe('RuntimeCards', () => {
     expect(card).not.toContain('undefined');
   });
 
-  it('renders one card per translator', async () => {
+  it('renders a card per translator that has handled requests, and none for idle ones', async () => {
     routes = {
       '/internal/stats/sticky': () => ok({ enabled: false }),
       '/internal/stats/translators': () => ok(translatorBody([anth, { ...anth, translator_name: 'other', total_requests: 0 }])),
@@ -172,9 +184,9 @@ describe('RuntimeCards', () => {
     component = mount(RuntimeCards, { target: document.body });
     await settle();
     const cards = document.querySelectorAll('[data-testid="card-translator"]');
-    expect(cards.length).toBe(2);
+    expect(cards.length).toBe(1);
     expect(cards[0].textContent).toContain('50%');
-    expect(cards[1].textContent).toContain('no traffic yet');
+    expect(txt()).not.toContain('other');
   });
 
   it('shows <0.1% of capacity for a tiny non-zero fill', async () => {
@@ -188,5 +200,37 @@ describe('RuntimeCards', () => {
     await settle();
     expect(txt()).toContain('<0.1% of capacity');
     expect(txt()).not.toContain('0.0%');
+  });
+
+  it('keeps the last good cards through a malformed payload, then takes the next valid one', async () => {
+    let tBody: unknown = translatorBody([anth]);
+    let pBody: unknown = procBody;
+    let sBody: unknown = { enabled: true, active_sessions: 2, hits: 1, misses: 1, max_sessions: 10 };
+    routes = {
+      '/internal/stats/sticky': () => ok(sBody),
+      '/internal/stats/translators': () => ok(tBody),
+      '/internal/process': () => ok(pBody),
+    };
+    install();
+    component = mount(RuntimeCards, { target: document.body });
+    await settle();
+    expect(document.querySelectorAll('[data-testid^="card-"]').length).toBe(3);
+
+    tBody = { translators: [null] };
+    pBody = { ...procBody, memory: { ...procBody.memory, memory_pressure: 7 } };
+    sBody = {};
+    await settle2();
+    // Malformed bodies are rejected: the snapshots survive and the poll shows as failed.
+    expect(document.querySelectorAll('[data-testid^="card-"]').length).toBe(3);
+    expect(translators.status).toBe('error');
+    expect(txt()).toContain('4.67 MB');
+
+    tBody = translatorBody([null, { ...anth, translator_name: 'second' }]);
+    pBody = procBody;
+    sBody = { enabled: true, active_sessions: 9, max_sessions: 10 };
+    await settle2();
+    expect(translators.status).toBe('ok');
+    expect(txt()).toContain('second');
+    expect(txt()).not.toContain('Translator: anthropic');
   });
 });

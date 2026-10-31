@@ -96,13 +96,13 @@
     <div class="section-head">
       <h3>Process</h3>
       <span class="section-note">
-        up {proc.runtime.uptime} · {proc.runtime.go_version} · {fmtInt(proc.runtime.num_cpu)} CPUs{#if degraded(processStats.status)} · {note(processStats.status)}{/if}
+        {#if proc.runtime.uptime}up {proc.runtime.uptime} · {/if}{proc.runtime.go_version || 'Go'} · {fmtInt(proc.runtime.num_cpu)} CPUs{#if degraded(processStats.status)} · {note(processStats.status)}{/if}
       </span>
     </div>
     <div class="tile-grid" data-state={degraded(processStats.status)}>
-      <StatTile label="Heap" value={proc.memory.heap_alloc ?? '—'} sub="{proc.memory.heap_sys ?? '—'} reserved" />
-      <StatTile label="Memory pressure" value={(proc.memory.memory_pressure ?? '').toLowerCase() || '—'} sub="heap in use {proc.memory.heap_inuse ?? '—'}" />
-      <StatTile label="Goroutines" value={fmtInt(proc.goroutines.count)} sub={(proc.goroutines.health_status ?? '').toLowerCase()} />
+      <StatTile label="Heap" value={proc.memory.heap_alloc || '—'} sub="{proc.memory.heap_sys || '—'} reserved" />
+      <StatTile label="Memory pressure" value={proc.memory.memory_pressure.toLowerCase() || '—'} sub="heap in use {proc.memory.heap_inuse || '—'}" />
+      <StatTile label="Goroutines" value={fmtInt(proc.goroutines.count)} sub={proc.goroutines.health_status.toLowerCase()} />
       <StatTile label="Avg GC pause">
         {#snippet children()}
           {#if proc.garbage_collection.avg_gc_pause}{proc.garbage_collection.avg_gc_pause}{:else}<span class="dash">—</span>{/if}

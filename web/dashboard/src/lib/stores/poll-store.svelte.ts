@@ -21,6 +21,10 @@ export interface PollStoreOptions<T> {
    *  the history ring buffer, including failed ticks so the chart can render
    *  outage markers. */
   onTick?: (data: T | null, ok: boolean) => void;
+  /** Optional shape check on a 200 body. Return the (normalised) value, or
+   *  null to reject it: a rejected body counts as a failed poll, so the last
+   *  good snapshot is kept rather than replaced by something malformed. */
+  parse?: (raw: unknown) => T | null;
 }
 
 export interface PollStore<T> {
@@ -40,7 +44,7 @@ export interface PollStore<T> {
 }
 
 export function createPollStore<T>(opts: PollStoreOptions<T>): PollStore<T> {
-  const { name, url, intervalMs, onTick } = opts;
+  const { name, url, intervalMs, onTick, parse } = opts;
 
   let data: T | null = $state(null);
   let status: PollStatus = $state('loading');
@@ -79,7 +83,17 @@ export function createPollStore<T>(opts: PollStoreOptions<T>): PollStore<T> {
 
     let body: T;
     try {
-      body = (await resp.json()) as T;
+      const raw: unknown = await resp.json();
+      if (parse) {
+        const parsed = parse(raw);
+        if (parsed === null) {
+          onFailure(new Error('unexpected payload shape'));
+          return;
+        }
+        body = parsed;
+      } else {
+        body = raw as T;
+      }
     } catch {
       onFailure(new Error('invalid JSON from status API'));
       return;
