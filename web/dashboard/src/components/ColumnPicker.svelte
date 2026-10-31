@@ -19,13 +19,6 @@
     onchange?.(next);
   }
 
-  function onKey(e: KeyboardEvent): void {
-    if (e.key === 'Escape' && open) {
-      open = false;
-      root?.querySelector<HTMLButtonElement>('.picker-btn')?.focus();
-    }
-  }
-
   // Close when a pointer or keyboard focus lands outside, so it behaves like a menu.
   function onWindowPointer(e: Event): void {
     if (open && root && !root.contains(e.target as Node)) open = false;
@@ -41,11 +34,25 @@
     if (next === null || !root.contains(next)) open = false;
   }
   let pressInside = false;
+
+  // Escape must work wherever focus has gone (Safari leaves it on the panel
+  // after a checkbox click), so listen on the document while open. The effect
+  // cleanup removes it on close and on destroy.
+  $effect(() => {
+    if (!open) return;
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      open = false;
+      root?.querySelector<HTMLButtonElement>('.picker-btn')?.focus();
+    };
+    document.addEventListener('keydown', onDocKey);
+    return () => document.removeEventListener('keydown', onDocKey);
+  });
 </script>
 
 <svelte:window onpointerdown={onWindowPointer} onpointerup={() => (pressInside = false)} onpointercancel={() => (pressInside = false)} />
 
-<div class="column-picker" bind:this={root} onkeydown={onKey} onfocusout={onFocusOut} onpointerdown={() => (pressInside = true)} role="presentation">
+<div class="column-picker" bind:this={root} onfocusout={onFocusOut} onpointerdown={() => (pressInside = true)} role="presentation">
   <button
     type="button"
     class="picker-btn"
@@ -63,7 +70,8 @@
       role="group"
       aria-label="Optional columns"
       onmousedown={(e) => {
-        if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+        // Only label text and row padding; real controls must take focus.
+        if (!(e.target as HTMLElement).closest('input, button, select, textarea, a[href]')) e.preventDefault();
       }}
     >
       {#each OPTIONAL_COLUMNS as c (c.key)}

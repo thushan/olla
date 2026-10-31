@@ -189,6 +189,36 @@ describe('picker and sort', () => {
     expect(document.querySelector('.picker-pop')).toBeNull();
   });
 
+  it('Escape closes the picker and refocuses its button while focus is outside it', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    const btn = document.querySelector<HTMLButtonElement>('.picker-btn')!;
+    btn.click();
+    flushSync();
+    document.getElementById('panel-overview')!.focus();
+    document.getElementById('panel-overview')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flushSync();
+    expect(document.querySelector('.picker-pop')).toBeNull();
+    expect(document.activeElement).toBe(btn);
+  });
+
+  it('does not cancel mousedown on the Reset button or a checkbox, only on label text', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    document.querySelector<HTMLButtonElement>('.picker-btn')!.click();
+    flushSync();
+    const down = (el: Element) => {
+      const e = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+      el.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    expect(down(document.querySelector('.picker-reset')!)).toBe(false);
+    expect(down(document.querySelector('.picker-row input')!)).toBe(false);
+    expect(down(document.querySelector('.picker-row span')!)).toBe(true);
+  });
+
   it('falls back to the default sort when the sorted column is hidden', async () => {
     localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(['request_count']));
     await load();
