@@ -11,6 +11,7 @@
   import { stableId } from '../lib/dom-id';
   import RuntimeCards from './RuntimeCards.svelte';
   import HerdFilter from '../components/HerdFilter.svelte';
+  import { endpointFilter } from '../lib/stores/endpoint-filter.svelte';
   import ColumnPicker from '../components/ColumnPicker.svelte';
   import { jumpToEndpoint } from '../lib/jump-to-endpoint';
   import {
@@ -22,7 +23,6 @@
     parseProbeMs,
     issueList,
     type HerdColumnKey,
-    type StatusFilter,
   } from '../lib/herd';
   import { getNow as liveNow } from '../lib/clock.svelte';
   import type { EndpointSummary } from '../lib/types';
@@ -181,8 +181,6 @@
     saveColumns(keys);
   }
 
-  let query = $state('');
-  let statusFilter: StatusFilter = $state('all');
 
   const glanceInitialSort: SortState = { key: 'status_rank', dir: 'asc' };
 
@@ -220,8 +218,8 @@
       };
     })
   );
-  const glanceRows = $derived(filterEndpoints(allGlanceRows, query, statusFilter));
-  const filtering = $derived(isFiltering(query, statusFilter));
+  const glanceRows = $derived(filterEndpoints(allGlanceRows, endpointFilter.query, endpointFilter.status));
+  const filtering = $derived(isFiltering(endpointFilter.query, endpointFilter.status));
 
   // uptime is now derived client-side from start_time so the ETag stays
   // stable; the live clock re-renders this each second.
@@ -390,7 +388,7 @@
         <span class="section-note">click a name to jump to its endpoint detail · sorted unhealthy first by default</span>
       </div>
       <div class="herd-controls">
-        <HerdFilter bind:query bind:status={statusFilter} />
+        <HerdFilter bind:query={endpointFilter.query} bind:status={endpointFilter.status} />
         <ColumnPicker selected={chosen} onchange={setColumns} />
       </div>
       <SortableTable

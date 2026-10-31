@@ -4,6 +4,7 @@ import { overview } from '../lib/stores/overview.svelte';
 import { endpoints } from '../lib/stores/endpoints.svelte';
 import OverviewPanel from './OverviewPanel.svelte';
 import { COLUMNS_STORAGE_KEY } from '../lib/herd';
+import { endpointFilter } from '../lib/stores/endpoint-filter.svelte';
 
 // U2: optional herd columns, column picker, issues tooltip and filter.
 
@@ -11,6 +12,7 @@ let component: ReturnType<typeof mount> | undefined;
 beforeEach(() => localStorage.clear());
 afterEach(() => {
   if (component) unmount(component);
+  endpointFilter.clear();
   document.body.innerHTML = '';
 });
 
