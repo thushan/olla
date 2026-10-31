@@ -134,7 +134,7 @@ export const parseTranslators = guarded((raw: unknown): TranslatorStatsResponse 
   // Rows were sent but none were usable: that is a broken payload, not an empty
   // fleet, so reject it and keep the last good snapshot.
   if (raw.translators.length > 0 && translators.length === 0) return null;
-  return { timestamp: str(raw.timestamp), translators, summary: {} as TranslatorStatsResponse['summary'] };
+  return { timestamp: str(raw.timestamp), translators };
 });
 
 export const parseProcess = guarded((raw: unknown): ProcessStatsResponse | null => {

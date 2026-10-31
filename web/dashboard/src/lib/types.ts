@@ -195,7 +195,8 @@ export interface TranslatorStatsEntry {
 export interface TranslatorStatsResponse {
   timestamp: string;
   translators: TranslatorStatsEntry[];
-  summary: {
+  // The dashboard derives its own totals, so the parser does not populate this.
+  summary?: {
     overall_success_rate: string;
     overall_passthrough_rate: string;
     total_translators: number;
