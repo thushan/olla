@@ -64,12 +64,12 @@ For large GPU deployments, enterprise and data centre use, see [TensorFoundry Fo
 
 ## Herd Dashboard
 
-Olla ships with an embedded (v0.0.29+), read-only dashboard at `/internal/ui/` - fleet health, per-endpoint latency and the discovered model inventory, served straight from the binary. No extra port, no separate web server, on by default and loopback-only.
+Olla ships with an embedded (v0.0.29+), read-only dashboard at `/internal/ui/` - fleet health, a filterable herd table with selectable columns, sticky session, translator and process cards, and the discovered model inventory, served straight from the binary. No extra port, no separate web server, on by default and loopback-only.
 
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/content/assets/images/dashboard/overview-dark.png">
-    <img src="docs/content/assets/images/dashboard/overview-light.png" alt="Olla admin dashboard - fleet overview with live request sparkline, per-endpoint health and latency" width="820">
+    <img src="docs/content/assets/images/dashboard/overview-light.png" alt="Olla admin dashboard - fleet overview with live request sparkline, filterable herd table and sticky session, translator and process cards" width="820">
   </picture>
   <br/>
   <small>Read-only &middot; light &amp; dark &middot; nothing leaves your network &middot; <a href="https://thushan.github.io/olla/configuration/dashboard/">dashboard docs</a></small>
