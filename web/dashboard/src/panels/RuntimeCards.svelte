@@ -96,7 +96,7 @@
     <div class="section-head">
       <h3>Process</h3>
       <span class="section-note">
-        {#if proc.runtime.uptime}up {proc.runtime.uptime} · {/if}{proc.runtime.go_version || 'Go'} · {fmtInt(proc.runtime.num_cpu)} CPUs{#if degraded(processStats.status)} · {note(processStats.status)}{/if}
+        {#if proc.runtime.uptime}up {proc.runtime.uptime}{' · '}{/if}{proc.runtime.go_version || 'Go'} · {fmtInt(proc.runtime.num_cpu)} CPUs{#if degraded(processStats.status)} · {note(processStats.status)}{/if}
       </span>
     </div>
     <div class="tile-grid" data-state={degraded(processStats.status)}>
