@@ -1,6 +1,7 @@
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import StatusTag from './StatusTag.svelte';
+import { tagProps } from './StatusTag.testprops.svelte';
 
 let component: ReturnType<typeof mount> | undefined;
 beforeEach(() => vi.useFakeTimers());
@@ -73,6 +74,34 @@ describe('StatusTag tooltip hover', () => {
     flushSync();
     btn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     flushSync();
+    expect(tip.classList.contains('open')).toBe(false);
+  });
+});
+
+describe('StatusTag portal and reset', () => {
+  it('parents the tooltip on body, still described by the pill', () => {
+    const { btn, tip } = setup();
+    expect(tip.parentElement).toBe(document.body);
+    expect(document.getElementById(btn.getAttribute('aria-describedby')!)).toBe(tip);
+  });
+
+  it('does not reopen after issues clear and return', () => {
+    tagProps.issues = ['unavailable'];
+    component = mount(StatusTag, { target: document.body, props: tagProps });
+    flushSync();
+    let btn = document.querySelector<HTMLButtonElement>('button.status-tag')!;
+    let tip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+    btn.getBoundingClientRect = () => ({ top: 0, bottom: 10, left: 0, right: 10, width: 10, height: 10, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    btn.dispatchEvent(new MouseEvent('mouseenter'));
+    btn.dispatchEvent(new FocusEvent('focus'));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(true);
+    tagProps.issues = [];
+    flushSync();
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    tagProps.issues = ['unavailable'];
+    flushSync();
+    tip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
     expect(tip.classList.contains('open')).toBe(false);
   });
 });

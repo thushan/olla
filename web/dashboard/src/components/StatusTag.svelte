@@ -27,6 +27,15 @@
 
   const meta: Meta = $derived(STATUS[status] ?? { glyph: '○', cls: 'neutral', label: status || 'unknown' });
 
+  // A stale-data wrapper applies CSS `filter` to an ancestor, which makes it
+  // the containing block for position:fixed and throws viewport-coordinate
+  // placement off. Parenting the tip on <body> sidesteps every such ancestor;
+  // the theme tokens live on :root so they still apply there.
+  function portal(node: HTMLElement): { destroy(): void } {
+    document.body.appendChild(node);
+    return { destroy: () => node.remove() };
+  }
+
   const tipId = $props.id();
   let open = $state(false);
   let pos = $state({ top: 0, left: 0, width: 240 });
@@ -116,6 +125,18 @@
 
   $effect(() => () => cancelTimer());
 
+  // The pill and tip are destroyed when issues clear, without a mouseleave or
+  // blur, so reset everything or the tip would reopen the moment issues return.
+  $effect(() => {
+    if (issues.length === 0) {
+      cancelTimer();
+      hovered = false;
+      focused = false;
+      wasOpen = false;
+      open = false;
+    }
+  });
+
   function onKey(e: KeyboardEvent): void {
     if (e.key === 'Escape' && open) {
       close();
@@ -144,6 +165,7 @@
        visibility is toggled rather than the node. -->
   <span
     bind:this={tip}
+    use:portal
     id={tipId}
     role="tooltip"
     class="status-tip"
