@@ -107,7 +107,7 @@ describe('EndpointsPanel success bar is gated on endpoint status', () => {
     expect(fill.getAttribute('style')).not.toContain('green');
     // No history at all: a single muted dash, not the words "no data".
     expect(pctCell().textContent?.trim()).toBe('—');
-    expect(pctCell().querySelector('[role="img"]')?.getAttribute('aria-label')).toBe('no data');
+    expect(pctCell().getAttribute('aria-label')).toBe('no data');
   });
 
   it('renders the success bar for a healthy endpoint with traffic', async () => {

@@ -32,8 +32,10 @@
   );
 </script>
 
-<span class="pct-cell">
-  <span class="pct-bar" role="img" aria-label={label}>
+<!-- The label lives on the cell, not the bar: the bar is hidden on narrow
+     screens, and the figure (or dash) must keep its accessible name there. -->
+<span class="pct-cell" role="img" aria-label={label}>
+  <span class="pct-bar" aria-hidden="true">
     <span class="fill" style="width:{hasData ? pct : 0}%;background:var(--{bucket})"></span>
   </span>
   {#if !hasData}
