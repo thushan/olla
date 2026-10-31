@@ -1,0 +1,163 @@
+import { flushSync, mount, unmount } from 'svelte';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { overview } from '../lib/stores/overview.svelte';
+import { endpoints } from '../lib/stores/endpoints.svelte';
+import OverviewPanel from './OverviewPanel.svelte';
+import { COLUMNS_STORAGE_KEY } from '../lib/herd';
+
+// U2: optional herd columns, column picker, issues tooltip and filter.
+
+let component: ReturnType<typeof mount> | undefined;
+beforeEach(() => localStorage.clear());
+afterEach(() => {
+  if (component) unmount(component);
+  document.body.innerHTML = '';
+});
+
+const ok = (body: unknown) => ({ status: 200, ok: true, headers: { get: () => null }, json: async () => body });
+
+const eps = [
+  {
+    name: 'gpu-box', type: 'ollama', status: 'healthy', health_check: 'ok', response_time: '12ms',
+    success_rate: '98.0%', url: 'http://a', id: 'id-a', priority: 100, model_count: 3,
+    request_count: 1000, min_latency_ms: 0, max_latency_ms: 0, active_connections: 2, avg_latency_ms: 40,
+  },
+  {
+    name: 'mac-mini', type: 'vllm', status: 'offline', health_check: 'fail', success_rate: 'N/A',
+    issues: 'unavailable', url: 'http://b', id: 'id-b', priority: 50, model_count: 0,
+    request_count: 0, min_latency_ms: 0, max_latency_ms: 0, active_connections: 0,
+  },
+];
+
+async function load() {
+  global.fetch = vi.fn(async (url: RequestInfo | URL) => {
+    if (String(url).includes('/internal/status/endpoints')) {
+      return ok({ endpoints: eps, total_count: 2, healthy_count: 1, routable_count: 1 });
+    }
+    return ok({
+      system: {
+        status: 'healthy', endpoints_up: '1/2', success_rate: '98.0%', avg_latency: '40ms',
+        total_traffic: '21.09 KB', active_connections: 2, total_requests: 1000, total_failures: 20,
+        security_violations: 0, version: 'v', commit: 'c', start_time: new Date().toISOString(),
+      },
+      proxy: { engine: 'olla', balancer: 'priority' },
+      endpoints: [
+        { id: 'id-a', name: 'gpu-box', traffic: '21.09 KB' },
+        { id: 'id-b', name: 'mac-mini', traffic: '0 B' },
+      ],
+    });
+  });
+  overview.refresh();
+  endpoints.refresh();
+  await vi.waitFor(() => {
+    expect(overview.data?.system?.status).toBe('healthy');
+    expect(endpoints.data?.endpoints?.length).toBe(2);
+  });
+  flushSync();
+}
+
+const headers = () => [...document.querySelectorAll('table.glance thead th')].map((th) => th.textContent?.replace(/[↕▲▼]/g, '').trim());
+
+describe('herd columns', () => {
+  it('shows the four core and four default optional columns', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    expect(headers()).toEqual(['Endpoint', 'Status', 'Resp. rate', 'Avg latency', 'In flight', 'Requests', 'Type', 'Models']);
+  });
+
+  it('honours a stored selection and ignores stale keys', async () => {
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(['traffic_bytes', 'bogus', 'failures']));
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    expect(headers().slice(4)).toEqual(['Traffic', 'Failures']);
+    const row = document.querySelector('table.glance tbody tr')!;
+    // Unhealthy sorts first: mac-mini has 0 B traffic and no failures figure.
+    expect(row.textContent).toContain('0 B');
+    expect(document.body.textContent).toContain('21.09 KB');
+    expect(document.body.textContent).toContain('20'); // 1000 * (1 - 0.98)
+  });
+
+  it('toggling the picker updates the table and persists', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    document.querySelector<HTMLButtonElement>('.picker-btn')!.click();
+    flushSync();
+    const boxes = [...document.querySelectorAll<HTMLInputElement>('.picker-row input')];
+    const priority = boxes.find((b) => b.parentElement?.textContent?.includes('Priority'))!;
+    priority.click();
+    flushSync();
+    expect(headers()).toContain('Priority');
+    expect(JSON.parse(localStorage.getItem(COLUMNS_STORAGE_KEY)!)).toContain('priority');
+  });
+
+  it('marks optional columns hide-narrow and not the core four', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    const ths = [...document.querySelectorAll('table.glance thead th')];
+    expect(ths.slice(0, 4).some((t) => t.classList.contains('hide-narrow'))).toBe(false);
+    expect(ths.slice(4).every((t) => t.classList.contains('hide-narrow'))).toBe(true);
+  });
+});
+
+describe('issues tooltip', () => {
+  it('is a focusable button described by a tooltip carrying the issue', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    const btn = document.querySelector<HTMLButtonElement>('button.status-tag.has-issues')!;
+    expect(btn).not.toBeNull();
+    const tip = document.getElementById(btn.getAttribute('aria-describedby')!)!;
+    expect(tip.getAttribute('role')).toBe('tooltip');
+    expect(tip.textContent).toContain('unavailable');
+    expect(tip.classList.contains('open')).toBe(false);
+    btn.focus();
+    btn.dispatchEvent(new FocusEvent('focus'));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(true);
+    btn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(false);
+  });
+
+  it('healthy rows get a plain pill with no button', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    expect(document.querySelectorAll('button.status-tag.has-issues')).toHaveLength(1);
+  });
+});
+
+describe('herd filter', () => {
+  it('filters by text, by unhealthy chip, and shows an empty state', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    const rows = () => document.querySelectorAll('table.glance tbody tr').length;
+    expect(rows()).toBe(2);
+
+    const input = document.querySelector<HTMLInputElement>('.filter-input')!;
+    input.value = 'gpu';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(rows()).toBe(1);
+
+    input.value = 'nope';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(rows()).toBe(0);
+    expect(document.querySelector('.herd-empty')).not.toBeNull();
+
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    const unhealthy = [...document.querySelectorAll<HTMLButtonElement>('.chip')].find((c) => c.textContent === 'Unhealthy')!;
+    unhealthy.click();
+    flushSync();
+    expect(rows()).toBe(1);
+    expect(document.querySelector('table.glance tbody')!.textContent).toContain('mac-mini');
+    expect(unhealthy.getAttribute('aria-pressed')).toBe('true');
+  });
+});
