@@ -33,15 +33,18 @@
 
   function onFocusOut(e: FocusEvent): void {
     const next = e.relatedTarget as Node | null;
-    // A null target means focus left the document or went to a non-focusable
-    // element; the pointerdown handler covers the click case.
-    if (open && next && root && !root.contains(next)) open = false;
+    if (!open || !root) return;
+    // Safari does not focus a checkbox on click, so a press inside the menu
+    // also reports a null target; that must not close it.
+    if (next === null && pressInside) return;
+    if (next === null || !root.contains(next)) open = false;
   }
+  let pressInside = false;
 </script>
 
-<svelte:window onpointerdown={onWindowPointer} />
+<svelte:window onpointerdown={onWindowPointer} onpointerup={() => (pressInside = false)} onpointercancel={() => (pressInside = false)} />
 
-<div class="column-picker" bind:this={root} onkeydown={onKey} onfocusout={onFocusOut} role="presentation">
+<div class="column-picker" bind:this={root} onkeydown={onKey} onfocusout={onFocusOut} onpointerdown={() => (pressInside = true)} role="presentation">
   <button
     type="button"
     class="picker-btn"

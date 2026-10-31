@@ -128,6 +128,28 @@ describe('picker and sort', () => {
     expect(document.querySelector('.picker-pop')).toBeNull();
   });
 
+  it('closes the picker when focus leaves to nothing, but not during a press inside it', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    const open = () => {
+      document.querySelector<HTMLButtonElement>('.picker-btn')!.click();
+      flushSync();
+    };
+    open();
+    const box = document.querySelector<HTMLInputElement>('.picker-row input')!;
+    box.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    flushSync();
+    expect(document.querySelector('.picker-pop')).toBeNull();
+
+    open();
+    const pop = document.querySelector<HTMLElement>('.column-picker')!;
+    pop.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    document.querySelector('.picker-row input')!.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+    flushSync();
+    expect(document.querySelector('.picker-pop')).not.toBeNull();
+  });
+
   it('falls back to the default sort when the sorted column is hidden', async () => {
     localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(['request_count']));
     await load();
