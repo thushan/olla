@@ -2,11 +2,15 @@ import { flushSync, mount, unmount } from 'svelte';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { endpoints } from '../lib/stores/endpoints.svelte';
 import EndpointsPanel from './EndpointsPanel.svelte';
+import { endpointFilter } from '../lib/stores/endpoint-filter.svelte';
+import { jumpToEndpointKey } from '../lib/jump-to-endpoint';
+import { stableId } from '../lib/dom-id';
 
 // The shared filter is wired into the Endpoints panel as well as Overview.
 
 let component: ReturnType<typeof mount> | undefined;
 afterEach(() => {
+  endpointFilter.clear();
   if (component) unmount(component);
   document.body.innerHTML = '';
 });
@@ -43,5 +47,24 @@ describe('EndpointsPanel filter', () => {
     [...document.querySelectorAll<HTMLButtonElement>('.chip')].find((c) => c.textContent === 'Unhealthy')!.click();
     flushSync();
     expect(rows()).toBe(1);
+  });
+
+  it('a jump to a filtered-out endpoint clears the filter and reveals the row', async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    global.fetch = vi.fn(async () => ({
+      status: 200, ok: true, headers: { get: () => null },
+      json: async () => ({ endpoints: eps, total_count: 2, healthy_count: 1, routable_count: 1 }),
+    })) as unknown as typeof fetch;
+    endpoints.refresh();
+    await vi.waitFor(() => expect(endpoints.data?.endpoints?.length).toBe(2));
+    component = mount(EndpointsPanel, { target: document.body });
+    flushSync();
+    endpointFilter.query = 'mac';
+    flushSync();
+    expect(document.getElementById('ep-' + stableId('a'))).toBeNull();
+    await jumpToEndpointKey(stableId('a'));
+    flushSync();
+    expect(endpointFilter.query).toBe('');
+    expect(document.getElementById('ep-' + stableId('a'))).not.toBeNull();
   });
 });
