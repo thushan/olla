@@ -260,7 +260,7 @@
     {#if warming}
       <span class="spark-hint">gathering data</span>
     {:else if idle}
-      <span class="spark-hint">no traffic yet</span>
+      <span class="spark-hint">no recent traffic</span>
     {/if}
   </div>
   <!-- Rendered unconditionally (never behind {#if latest}) so the first

@@ -456,7 +456,7 @@ caching - no WebSocket, no push, and nothing in it changes state.
 
 The Overview herd table stays readable at phone width (the status column and figures
 fit without sideways scrolling), response rate and latency show a single dash where an
-endpoint has no traffic, the sparkline says "no traffic yet" instead of drawing an empty
+endpoint has no traffic, the sparkline says "no recent traffic" instead of drawing an empty
 axis, and the commit hash is shortened to 8 characters with the full hash on hover.
 
 There is no authentication. Access is controlled entirely by the new `dashboard.access_policy`

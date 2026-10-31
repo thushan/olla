@@ -141,9 +141,9 @@ describe('SparkStrip', () => {
     expect(bottomLabel.textContent).toBe('0');
   });
 
-  it('shows "no traffic yet" instead of an empty axis when every sample is idle', () => {
+  it('shows "no recent traffic" instead of an empty axis when every sample is idle', () => {
     render({ samples: [makeSample(), makeSample(), makeSample()] });
-    expect(document.querySelector('.spark-hint')?.textContent).toBe('no traffic yet');
+    expect(document.querySelector('.spark-hint')?.textContent).toBe('no recent traffic');
     expect(document.querySelector('.spark-axis-top')).toBeNull();
   });
 
