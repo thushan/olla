@@ -1,4 +1,4 @@
-// Shared factory for the three poll stores. Each store wraps a single endpoint
+// Shared factory for the poll stores. Each store wraps a single endpoint
 // and exposes the same getter shape (data/status/lastUpdated/error) so the
 // panels can render states uniformly. The status state machine lives here:
 // loading -> ok on first success; error/stale on failure, with the last
