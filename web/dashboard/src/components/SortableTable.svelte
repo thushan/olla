@@ -18,6 +18,8 @@
     // Hidden below 600px by CSS (.hide-narrow) so a wide table can keep its
     // core columns on a phone without a JS resize listener.
     hideNarrow?: boolean;
+    // Extra class on the header and every cell of this column.
+    cls?: string;
   }
 </script>
 
@@ -96,6 +98,12 @@
   // Initial sort seeds local state once; later prop changes are deliberately
   // ignored: the user owns sort state after mount.
   let sort: SortState | null = $state(untrack(() => initialSort));
+
+  // A column picker can hide the sorted column; fall back to the initial sort
+  // rather than ordering rows by a key no header shows.
+  $effect(() => {
+    if (sort && !columns.some((c) => c.key === sort!.key)) sort = untrack(() => initialSort);
+  });
 
   function toggle(key: string): void {
     if (!sort || sort.key !== key) {
@@ -186,13 +194,13 @@
   function cellClass(key: string): string {
     const c = columns.find((col) => col.key === key);
     if (!c) return '';
-    return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : '', c.hideNarrow ? 'hide-narrow' : '']
+    return [c.num ? 'num' : '', c.align === 'right' ? 'align-right' : '', c.hideNarrow ? 'hide-narrow' : '', c.cls ?? '']
       .filter(Boolean)
       .join(' ');
   }
 
   function headerClass(c: Column): string {
-    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : '', c.hideNarrow ? 'hide-narrow' : '']
+    return [c.align === 'right' ? 'align-right' : '', c.sticky ? 'col-sticky' : '', c.hideNarrow ? 'hide-narrow' : '', c.cls ?? '']
       .filter(Boolean)
       .join(' ');
   }

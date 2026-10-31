@@ -45,6 +45,27 @@
   function hide(): void {
     open = false;
   }
+  // Pointer state before focus fires, so a click on a hover-opened tip closes
+  // it and a first tap on touch (no hover) opens it.
+  let wasOpen = false;
+  function onClick(): void {
+    if (wasOpen) hide();
+    else show();
+    wasOpen = false;
+  }
+
+  // The tip is position:fixed at the pill's position when opened; close it if
+  // the page moves under it instead of leaving it adrift.
+  $effect(() => {
+    if (!open) return;
+    window.addEventListener('scroll', hide, true);
+    window.addEventListener('resize', hide);
+    return () => {
+      window.removeEventListener('scroll', hide, true);
+      window.removeEventListener('resize', hide);
+    };
+  });
+
   function onKey(e: KeyboardEvent): void {
     if (e.key === 'Escape' && open) {
       open = false;
@@ -61,6 +82,8 @@
     aria-describedby={tipId}
     onmouseenter={show}
     onmouseleave={hide}
+    onpointerdown={() => (wasOpen = open)}
+    onclick={onClick}
     onfocus={show}
     onblur={hide}
     onkeydown={onKey}

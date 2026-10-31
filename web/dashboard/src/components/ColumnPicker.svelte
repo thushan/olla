@@ -26,15 +26,22 @@
     }
   }
 
-  // Close when focus or a click lands outside, so it behaves like a menu.
+  // Close when a pointer or keyboard focus lands outside, so it behaves like a menu.
   function onWindowPointer(e: Event): void {
     if (open && root && !root.contains(e.target as Node)) open = false;
+  }
+
+  function onFocusOut(e: FocusEvent): void {
+    const next = e.relatedTarget as Node | null;
+    // A null target means focus left the document or went to a non-focusable
+    // element; the pointerdown handler covers the click case.
+    if (open && next && root && !root.contains(next)) open = false;
   }
 </script>
 
 <svelte:window onpointerdown={onWindowPointer} />
 
-<div class="column-picker" bind:this={root} onkeydown={onKey} role="presentation">
+<div class="column-picker" bind:this={root} onkeydown={onKey} onfocusout={onFocusOut} role="presentation">
   <button
     type="button"
     class="picker-btn"
