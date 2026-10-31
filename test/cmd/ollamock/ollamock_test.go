@@ -1117,3 +1117,26 @@ func TestOllamaEmbed(t *testing.T) {
 		})
 	}
 }
+
+func TestLMStudioModelsReportsFamily(t *testing.T) {
+	t.Parallel()
+	ts := testServer(t, "qwen/qwen4-flash-next", "phi4")
+
+	var body struct {
+		Data []struct {
+			ID   string `json:"id"`
+			Arch string `json:"arch"`
+		} `json:"data"`
+	}
+	decodeJSON(t, getURL(t, ts.URL+"/api/v0/models"), &body)
+
+	want := map[string]string{"qwen/qwen4-flash-next": "qwen", "phi4": "phi"}
+	if len(body.Data) != len(want) {
+		t.Fatalf("want %d models, got %d", len(want), len(body.Data))
+	}
+	for _, m := range body.Data {
+		if m.Arch != want[m.ID] {
+			t.Errorf("model %s: want arch %q, got %q", m.ID, want[m.ID], m.Arch)
+		}
+	}
+}
