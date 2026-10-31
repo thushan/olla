@@ -454,6 +454,11 @@ model count), and Models (inventory grouped by family, with hosting endpoints). 
 polls the existing `/internal/status*` JSON every 5-15 seconds with `ETag`/`304`
 caching - no WebSocket, no push, and nothing in it changes state.
 
+The Overview herd table stays readable at phone width (the status column and figures
+fit without sideways scrolling), response rate and latency show a single dash where an
+endpoint has no traffic, the sparkline says "no traffic yet" instead of drawing an empty
+axis, and the commit hash is shortened to 8 characters with the full hash on hover.
+
 There is no authentication. Access is controlled entirely by the new `dashboard.access_policy`
 config block (`allowed_cidrs` + `allowed_hosts`), which defaults to loopback-only. The
 published Docker image ships with `allowed_cidrs` pre-widened to the RFC1918 ranges and

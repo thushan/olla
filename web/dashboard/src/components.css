@@ -52,14 +52,16 @@
   line-height: 1;
 }
 .brand h1 {
-  font-size: 2.1rem;
+  /* Scales with the viewport (about 30px at 1440, 22px at 390) so there is
+     no breakpoint cliff; sits between the tile values and the logo height. */
+  font-size: clamp(1.4rem, 1rem + 1.6vw, 1.9rem);
   letter-spacing: 0.04em;
   margin: 0;
 }
 .brand .tag {
   color: var(--text-faint);
-  font-size: 0.85rem;
-  margin-top: 2px;
+  font-size: 0.72rem;
+  margin-top: 3px;
 }
 .clock {
   color: var(--text-faint);
@@ -499,6 +501,10 @@ tbody tr.ep-flash td {
   z-index: 1;
   border-right: 1px solid var(--border);
 }
+thead th.col-sticky {
+  background: var(--bg-inset);
+  z-index: 3;
+}
 tbody tr:hover .col-sticky {
   background: var(--bg-inset);
 }
@@ -597,8 +603,14 @@ tbody tr:hover .col-sticky {
   bottom: 0;
 }
 .pct-cell {
-  display: flex;
+  display: inline-flex;
   align-items: center;
+}
+/* Fixed width and right-aligned so "100%", "99.5%" and the no-data dash
+   line up down the column. */
+.pct-text {
+  min-width: 5ch;
+  text-align: right;
 }
 
 .issues-list {
@@ -814,14 +826,6 @@ footer a {
   body {
     font-size: 12.5px;
   }
-  /* The enlarged wordmark wraps the header below ~480px, so shrink the
-     brand block back to keep the header to a single compact row. */
-  .brand h1 {
-    font-size: 1.15rem;
-  }
-  .brand .tag {
-    font-size: 0.68rem;
-  }
   .brand-logo {
     height: 42px;
   }
@@ -837,5 +841,46 @@ footer a {
   }
   footer {
     flex-direction: column;
+  }
+}
+
+/* HERD GLANCE LAYOUT
+   Fixed layout with explicit shares stops the Endpoint column taking all the
+   spare width on wide screens. Below 600px the 860px min-width would leave
+   only the sticky Endpoint column on screen, so drop it: the status glyph is
+   already in the name cell, the bar goes (the figure stays), and the cells
+   tighten so all four columns fit without a sideways scroll. */
+table.glance {
+  table-layout: fixed;
+}
+table.glance th:nth-child(1) {
+  width: 32%;
+}
+table.glance th:nth-child(2) {
+  width: 18%;
+}
+table.glance th:nth-child(3) {
+  width: 28%;
+}
+table.glance th:nth-child(4) {
+  width: 22%;
+}
+@media (max-width: 600px) {
+  table.glance {
+    min-width: 0;
+  }
+  table.glance .pct-bar {
+    display: none;
+  }
+  table.glance .sort-btn {
+    padding: 7px 6px;
+    white-space: normal;
+    text-align: inherit;
+  }
+  table.glance tbody td {
+    padding: 6px;
+  }
+  table.glance th[aria-sort='none'] .sort-ind {
+    display: none;
   }
 }

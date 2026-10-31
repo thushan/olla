@@ -157,3 +157,8 @@ function parseIso(iso: string | null | undefined): number | null {
   if (Number.isNaN(t)) return null;
   return t;
 }
+
+/** Git commit shortened to 8 characters for tight spaces; the full hash belongs in a title. */
+export function shortCommit(commit: string | null | undefined): string {
+  return (commit ?? '').slice(0, 8);
+}

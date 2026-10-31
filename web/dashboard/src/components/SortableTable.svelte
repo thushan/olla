@@ -74,6 +74,8 @@
         >
       | null;
     showScrollHint?: boolean;
+    // Extra class on the <table> for per-table layout rules (e.g. `glance`).
+    tableClass?: string;
   }
 
   let {
@@ -85,6 +87,7 @@
     rowSnippet = null,
     groupSnippet = null,
     showScrollHint = true,
+    tableClass = '',
   }: Props = $props();
 
   // Initial sort seeds local state once; later prop changes are deliberately
@@ -192,7 +195,7 @@
 
 <div class="table-scroll">
   {#if showScrollHint}<div class="scroll-hint">→ scroll for more columns</div>{/if}
-  <table>
+  <table class={tableClass || undefined}>
     <thead>
       <tr>
         {#each columns as c}

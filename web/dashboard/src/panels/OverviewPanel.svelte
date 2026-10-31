@@ -7,7 +7,7 @@
   import PctBar from '../components/PctBar.svelte';
   import SortableTable from '../components/SortableTable.svelte';
   import type { Column, SortState } from '../components/SortableTable.svelte';
-  import { fmtBytes, fmtInt, fmtUptime, fmtMs } from '../lib/format';
+  import { fmtBytes, fmtInt, fmtUptime, fmtMs, shortCommit } from '../lib/format';
   import { stableId } from '../lib/dom-id';
   import { jumpToEndpoint } from '../lib/jump-to-endpoint';
   import { getNow as liveNow } from '../lib/clock.svelte';
@@ -255,8 +255,11 @@
         <StatTile
           label="Total requests"
           value={fmtInt(sys.total_requests)}
-          sub="{sys.version} · {sys.commit}"
-        />
+        >
+          {#snippet subSnippet()}
+            {sys.version} · <span title={sys.commit}>{shortCommit(sys.commit)}</span>
+          {/snippet}
+        </StatTile>
         <StatTile
           label="Total failures"
           value={fmtInt(sys.total_failures)}
@@ -309,6 +312,8 @@
         columns={glanceColumns}
         rows={glanceRows}
         initialSort={glanceInitialSort}
+        tableClass="glance"
+        showScrollHint={false}
         rowId={(row) => row.id ?? row.url ?? row.name}
         rowDomId={(row) => `glance-${stableId(row.id ?? row.url ?? row.name)}`}
       >

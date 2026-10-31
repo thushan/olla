@@ -37,10 +37,10 @@
     <span class="fill" style="width:{hasData ? pct : 0}%;background:var(--{bucket})"></span>
   </span>
   {#if !hasData}
-    <span class="dash">no data</span>
+    <span class="pct-text dash">—</span>
   {:else if historical}
-    <span class="historical" title="Historical - endpoint currently offline">{fmtPct(pct)}</span>
+    <span class="pct-text historical" title="Historical - endpoint currently offline">{fmtPct(pct)}</span>
   {:else}
-    {fmtPct(pct)}
+    <span class="pct-text">{fmtPct(pct)}</span>
   {/if}
 </span>
