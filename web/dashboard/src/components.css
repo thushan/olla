@@ -59,7 +59,7 @@
 .brand h1 {
   /* Proportional to the logo (54px desktop, 42px mobile) so the wordmark
      scales with it and never needs its own breakpoint. */
-  font-size: calc(var(--logo-h) * 0.72);
+  font-size: calc(var(--logo-h) * 0.783);
   line-height: 0.8;
   letter-spacing: 0.04em;
   margin: 0;
@@ -68,7 +68,7 @@
   color: var(--text-faint);
   /* Mono face: 11 characters of tagline against 4 of wordmark, so this ratio
      squares the two lines off to the same visible width. */
-  font-size: calc(var(--logo-h) * 0.275);
+  font-size: calc(var(--logo-h) * 0.299);
   line-height: 1;
   white-space: nowrap;
 }
