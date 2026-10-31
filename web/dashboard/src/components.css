@@ -880,6 +880,29 @@ table.glance th:nth-child(4) {
   table.glance tbody td {
     padding: 6px;
   }
+  table.glance th:nth-child(1) {
+    width: 28%;
+  }
+  table.glance th:nth-child(2) {
+    width: 27%;
+  }
+  table.glance th:nth-child(3) {
+    width: 21%;
+  }
+  table.glance th:nth-child(4) {
+    width: 24%;
+  }
+  /* The status column is narrow here; a compact pill keeps "unhealthy" from
+     spilling into the response-rate figure. */
+  table.glance .status-tag {
+    font-size: 0.66rem;
+    gap: 3px;
+    padding: 1px 4px 1px 3px;
+  }
+  /* The table fits without scrolling at this width, so the hint is noise. */
+  .table-scroll:has(table.glance) .scroll-hint {
+    display: none;
+  }
   table.glance th[aria-sort='none'] .sort-ind {
     display: none;
   }

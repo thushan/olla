@@ -313,7 +313,6 @@
         rows={glanceRows}
         initialSort={glanceInitialSort}
         tableClass="glance"
-        showScrollHint={false}
         rowId={(row) => row.id ?? row.url ?? row.name}
         rowDomId={(row) => `glance-${stableId(row.id ?? row.url ?? row.name)}`}
       >
