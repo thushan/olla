@@ -64,11 +64,11 @@ export function processUsable(p: ProcessStatsResponse | null | undefined): p is 
 // as a failed poll and the last good snapshot survives. Extra fields are
 // ignored; fields the cards format are coerced to a safe default.
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-// A missing (or null) field takes its default; a field that is present with the
+// An absent field takes its default; a field that is present with the
 // wrong type throws, and each parser turns that into a rejected payload so the
 // previous snapshot is kept rather than silently zeroed.
 class BadPayload extends Error {}
-const missing = (v: unknown): boolean => v === undefined || v === null;
+const missing = (v: unknown): boolean => v === undefined;
 const str = (v: unknown): string => {
   if (missing(v)) return '';
   if (typeof v !== 'string') throw new BadPayload();
@@ -109,7 +109,10 @@ export const parseTranslators = guarded((raw: unknown): TranslatorStatsResponse 
   if (!isObj(raw) || !Array.isArray(raw.translators)) return null;
   const translators: TranslatorStatsEntry[] = [];
   for (const r of raw.translators) {
-    if (!isObj(r) || typeof r.translator_name !== 'string' || r.translator_name === '') continue;
+    if (!isObj(r)) continue;
+    // A name of the wrong type means the payload is broken, not that the row is optional.
+    if (!missing(r.translator_name) && typeof r.translator_name !== 'string') throw new BadPayload();
+    if (r.translator_name === undefined || r.translator_name === '') continue;
     translators.push({
       translator_name: r.translator_name,
       success_rate: str(r.success_rate),

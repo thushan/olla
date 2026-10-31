@@ -219,6 +219,8 @@ describe('RuntimeCards', () => {
     for (const [t, p] of [
       [{ translators: [null] }, { ...procBody, memory: { ...procBody.memory, memory_pressure: 7 } }],
       [translatorBody([{ ...anth, total_requests: '10' }]), procBody],
+      [translatorBody([{ ...anth, total_requests: null }]), procBody],
+      [translatorBody([anth, { translator_name: 7, total_requests: 2 }]), procBody],
     ] as const) {
       tBody = t;
       pBody = p;

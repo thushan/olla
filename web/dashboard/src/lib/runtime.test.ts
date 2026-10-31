@@ -88,6 +88,11 @@ describe('payload parsers', () => {
     const r = parseTranslators({ extra: 1, translators: [null, 3, { translator_name: '' }, { translator_name: 'a', total_requests: 2, x: 1 }] });
     expect(r?.translators.map((t) => t.translator_name)).toEqual(['a']);
   });
+  it('rejects explicit nulls and a mistyped translator name', () => {
+    expect(parseTranslators({ translators: [{ translator_name: 'a', total_requests: null }] })).toBeNull();
+    expect(parseSticky({ enabled: true, hits: null })).toBeNull();
+    expect(parseTranslators({ translators: [{ translator_name: 'a' }, { translator_name: 7, total_requests: 2 }] })).toBeNull();
+  });
   it('rejects a non-empty translator list with no usable rows, but accepts an empty one', () => {
     expect(parseTranslators({ translators: [null] })).toBeNull();
     expect(parseTranslators({ translators: [] })?.translators).toEqual([]);
