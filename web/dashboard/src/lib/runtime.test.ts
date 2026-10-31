@@ -6,6 +6,7 @@ import {
   stickyFill,
   translatorList,
   processUsable,
+  translatorHasTraffic,
   fallbackTotal,
   fallbackBreakdown,
 } from './runtime';
@@ -64,5 +65,12 @@ describe('processUsable', () => {
   it('rejects payloads missing a group the card reads', () => {
     expect(processUsable(null)).toBe(false);
     expect(processUsable({ system: {} } as never)).toBe(false);
+  });
+});
+
+describe('translatorHasTraffic', () => {
+  it('is false at zero requests and true once any request has been counted', () => {
+    expect(translatorHasTraffic(entry())).toBe(false);
+    expect(translatorHasTraffic(entry({ total_requests: 1 }))).toBe(true);
   });
 });

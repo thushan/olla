@@ -53,7 +53,7 @@
     </div>
     <div class="tile-grid" data-state={degraded(sticky.status)}>
       <StatTile label="Active sessions" value={fmtInt(stickyData.active_sessions)}
-        sub={fill === null ? 'no session cap' : `${fill.toFixed(fill < 10 && fill > 0 ? 1 : 0)}% of capacity`} />
+        sub={fill === null ? 'no session cap' : fill > 0 && fill < 0.1 ? '<0.1% of capacity' : `${fill.toFixed(fill < 10 && fill > 0 ? 1 : 0)}% of capacity`} />
       <StatTile label="Hit rate" value={stickyHitRateText(stickyData)}
         sub="{fmtInt(stickyData.hits)} hits / {fmtInt(stickyData.misses)} misses" />
       <StatTile label="Evictions" value={fmtInt(stickyData.evictions)}
@@ -100,9 +100,9 @@
       </span>
     </div>
     <div class="tile-grid" data-state={degraded(processStats.status)}>
-      <StatTile label="Heap" value={proc.memory.heap_alloc} sub="{proc.memory.heap_sys} reserved" />
-      <StatTile label="Memory pressure" value={proc.memory.memory_pressure.toLowerCase()} sub="heap in use {proc.memory.heap_inuse}" />
-      <StatTile label="Goroutines" value={fmtInt(proc.goroutines.count)} sub={proc.goroutines.health_status.toLowerCase()} />
+      <StatTile label="Heap" value={proc.memory.heap_alloc ?? '—'} sub="{proc.memory.heap_sys ?? '—'} reserved" />
+      <StatTile label="Memory pressure" value={(proc.memory.memory_pressure ?? '').toLowerCase() || '—'} sub="heap in use {proc.memory.heap_inuse ?? '—'}" />
+      <StatTile label="Goroutines" value={fmtInt(proc.goroutines.count)} sub={(proc.goroutines.health_status ?? '').toLowerCase()} />
       <StatTile label="Avg GC pause">
         {#snippet children()}
           {#if proc.garbage_collection.avg_gc_pause}{proc.garbage_collection.avg_gc_pause}{:else}<span class="dash">—</span>{/if}

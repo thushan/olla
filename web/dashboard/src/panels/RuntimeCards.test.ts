@@ -146,4 +146,47 @@ describe('RuntimeCards', () => {
     });
     expect(txt()).not.toContain('retrying');
   });
+
+  it('renders a process payload with missing optional fields without throwing', async () => {
+    routes = {
+      '/internal/stats/sticky': () => ok({ enabled: false }),
+      '/internal/stats/translators': () => ok(translatorBody([])),
+      '/internal/process': () =>
+        ok({ memory: {}, garbage_collection: {}, goroutines: { count: 5 }, runtime: { uptime: '1s' } }),
+    };
+    install();
+    component = mount(RuntimeCards, { target: document.body });
+    await settle();
+    const card = document.querySelector('[data-testid="card-process"]')?.textContent ?? '';
+    expect(card).toContain('Goroutines');
+    expect(card).not.toContain('undefined');
+  });
+
+  it('renders one card per translator', async () => {
+    routes = {
+      '/internal/stats/sticky': () => ok({ enabled: false }),
+      '/internal/stats/translators': () => ok(translatorBody([anth, { ...anth, translator_name: 'other', total_requests: 0 }])),
+      '/internal/process': () => ok(procBody),
+    };
+    install();
+    component = mount(RuntimeCards, { target: document.body });
+    await settle();
+    const cards = document.querySelectorAll('[data-testid="card-translator"]');
+    expect(cards.length).toBe(2);
+    expect(cards[0].textContent).toContain('50%');
+    expect(cards[1].textContent).toContain('no traffic yet');
+  });
+
+  it('shows <0.1% of capacity for a tiny non-zero fill', async () => {
+    routes = {
+      '/internal/stats/sticky': () => ok({ enabled: true, active_sessions: 1, max_sessions: 100000, hits: 0, misses: 0 }),
+      '/internal/stats/translators': () => ok(translatorBody([])),
+      '/internal/process': () => ok(procBody),
+    };
+    install();
+    component = mount(RuntimeCards, { target: document.body });
+    await settle();
+    expect(txt()).toContain('<0.1% of capacity');
+    expect(txt()).not.toContain('0.0%');
+  });
 });
