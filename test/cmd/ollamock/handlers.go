@@ -508,12 +508,13 @@ func (srv *mockServer) handleLMStudioModels(w http.ResponseWriter, _ *http.Reque
 
 	models := make([]model, len(srv.cfg.models))
 	for i, m := range srv.cfg.models {
+		family, _, _, _ := modelMetadata(m)
 		models[i] = model{
 			ID:               m,
 			Object:           "model",
 			Type:             "llm",
 			Publisher:        "ollamock",
-			Arch:             "llama",
+			Arch:             family,
 			State:            "loaded",
 			MaxContextLength: 4096,
 		}

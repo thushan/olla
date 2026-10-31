@@ -4,7 +4,6 @@
     <a href="https://github.com/thushan/olla/blob/master/LICENSE"><img src="https://img.shields.io/github/license/thushan/olla" alt="License"></a>
     <a href="https://golang.org/"><img src="https://img.shields.io/github/go-mod/go-version/thushan/olla" alt="Go"></a>
     <a href="https://github.com/thushan/olla/actions/workflows/ci.yml"><img src="https://github.com/thushan/olla/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-    <a href="https://goreportcard.com/report/github.com/thushan/olla"><img src="https://goreportcard.com/badge/github.com/thushan/olla" alt="Go Report Card"></a>
     <a href="https://github.com/thushan/olla/releases/latest"><img src="https://img.shields.io/github/release/thushan/olla" alt="Latest Release"></a> <br />
     <a href="https://github.com/ggerganov/llama.cpp"><img src="https://img.shields.io/badge/llama.cpp-native-lightgreen.svg" alt="llama.cpp: Native Support"></a>
     <a href="https://github.com/vllm-project/vllm"><img src="https://img.shields.io/badge/vLLM-native-lightgreen.svg" alt="vLLM: Native Support"></a>
@@ -17,6 +16,7 @@
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a>
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/LemonadeSDK-native-lightgreen.svg" alt="LemonadeSDK: Native Support"></a>
     <a href="https://github.com/jundot/omlx"><img src="https://img.shields.io/badge/oMLX-native-lightgreen.svg" alt="oMLX: Native Support"></a>
+    <a href="https://github.com/huggingface/text-embeddings-inference"><img src="https://img.shields.io/badge/TEI-native-lightgreen.svg" alt="Text Embeddings Inference: Native Support"></a>
   </P>
   <p>
     <div align="center">
@@ -49,10 +49,11 @@ For large GPU deployments, enterprise and data centre use, see [TensorFoundry Fo
 - **⚡ Dual Proxy Engines**: [Sherpa (simple) and Olla (high-performance)](https://thushan.github.io/olla/concepts/proxy-engines/)
 - **🎯 Advanced Filtering**: [Profile and model filtering](https://thushan.github.io/olla/configuration/filters/) with glob patterns for precise control
 - **💊 Health Monitoring**: [Continuous endpoint health checks](https://thushan.github.io/olla/concepts/health-checking/) with circuit breakers and automatic recovery
-- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover
+- **🔁 Intelligent Retry**: Automatic retry on connection failures with immediate transparent endpoint failover, tunable with [`proxy.retry`](https://thushan.github.io/olla/configuration/reference/#retry-behaviour)
 - **🔧 Self-Healing**: Automatic model discovery refresh when endpoints recover
 - **📊 Request Tracking**: Detailed response headers and [statistics](https://thushan.github.io/olla/api-reference/overview/#response-headers)
 - **⚡🔄 Anthropic Messages API**: [Passthrough for backends with native support; automatic translation for others](https://thushan.github.io/olla/integrations/api-translation/anthropic/)
+- **🧬 Embeddings and Rerank**: [Text Embeddings Inference](https://thushan.github.io/olla/integrations/backend/text-embeddings-inference/) support, with model-less embedding and rerank requests routed to a host serving that kind
 - **🔐 Backend Authentication**: [Outbound auth](https://thushan.github.io/olla/configuration/endpoint-auth/) for local backends requiring API keys, bearer tokens, or basic auth
 - **🛡️ Production Ready**: Rate limiting, request size limits, optional CORS for browser clients, configurable proxy/server timeouts, graceful shutdown
 - **⚡ High Performance**: Sub-millisecond endpoint selection with lock-free atomic stats
@@ -62,12 +63,12 @@ For large GPU deployments, enterprise and data centre use, see [TensorFoundry Fo
 
 ## Herd Dashboard
 
-Olla ships with an embedded (v0.0.29+), read-only dashboard at `/internal/ui/` - fleet health, per-endpoint latency and the discovered model inventory, served straight from the binary. No extra port, no separate web server, on by default and loopback-only.
+Olla ships with an embedded (v0.0.29+), read-only dashboard at `/internal/ui/` - fleet health, a filterable herd table with selectable columns, sticky session, translator and process cards, and the discovered model inventory, served straight from the binary. No extra port, no separate web server, on by default and loopback-only.
 
 <div align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/content/assets/images/dashboard/overview-dark.png">
-    <img src="docs/content/assets/images/dashboard/overview-light.png" alt="Olla admin dashboard - fleet overview with live request sparkline, per-endpoint health and latency" width="820">
+    <img src="docs/content/assets/images/dashboard/overview-light.png" alt="Olla admin dashboard - fleet overview with live request sparkline, filterable herd table and sticky session, translator and process cards" width="820">
   </picture>
   <br/>
   <small>Read-only &middot; light &amp; dark &middot; nothing leaves your network &middot; <a href="https://thushan.github.io/olla/configuration/dashboard/">dashboard docs</a></small>

@@ -347,6 +347,14 @@ routes, which answer 501 to every method. `/olla/ollama/api/list` returned 501 b
 an Ollama endpoint, so the route is gone: requests to it now reach the backend and get
 Ollama's own 404.
 
+### Fixed: model discovery tolerates bad responses
+
+A failed discovery on one endpoint no longer cancels discovery for the others. After five consecutive failures an endpoint's discovery pauses for at least five minutes (or the discovery interval, if longer), and 4xx responses pause it immediately. Olla retries on the first periodic scan after the pause and resumes by itself once the backend recovers, with no restart. The pause does not affect health checks. Discovery responses over the size cap are rejected with a clear error. llama.cpp metadata Olla doesn't use, such as a boolean `meta.vocab_type` or a string `meta.ftype`, no longer fails the listing and leaves it empty (issue 222). See [Model Discovery](../configuration/overview.md#model-discovery) and [llama.cpp troubleshooting](../integrations/backend/llamacpp.md#empty-model-listings).
+
+### Fixed: services stop in reverse order when startup fails
+
+If a service failed to start, the ones already running were rolled back in start order, so a service could be stopped after something it depends on. They now unwind last-started first, and rollback still runs if the startup context was cancelled. Thanks to **@SDTBU-FXL** for the contribution.
+
 ### Fixed: a model hosted on several backends no longer flips its listed id
 
 When the same model (matched by digest) was registered from more than one backend, the merged alias list was rebuilt in random order, and `/olla/models` and the provider listings emit the first alias as the model id. The id could change between refreshes. Merging now keeps a stable order and leads with the model's own id.
