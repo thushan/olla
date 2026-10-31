@@ -32,6 +32,9 @@
   /* One source for the lockup height: the text block is sized from it, so
      wordmark + tagline span the logo top to bottom at every breakpoint. */
   --logo-h: 54px;
+  /* Text block as a fraction of the logo height; nudge this one number to
+     resize the whole lockup. */
+  --lockup-scale: 0.8;
   display: flex;
   align-items: flex-end;
   gap: var(--space-2);
@@ -53,13 +56,14 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  height: var(--logo-h);
+  align-self: center;
+  height: calc(var(--logo-h) * var(--lockup-scale));
   line-height: 1;
 }
 .brand h1 {
   /* Proportional to the logo (54px desktop, 42px mobile) so the wordmark
      scales with it and never needs its own breakpoint. */
-  font-size: calc(var(--logo-h) * 0.783);
+  font-size: calc(var(--logo-h) * var(--lockup-scale) * 0.783);
   line-height: 0.8;
   letter-spacing: 0.04em;
   margin: 0;
@@ -68,7 +72,7 @@
   color: var(--text-faint);
   /* Mono face: 11 characters of tagline against 4 of wordmark, so this ratio
      squares the two lines off to the same visible width. */
-  font-size: calc(var(--logo-h) * 0.299);
+  font-size: calc(var(--logo-h) * var(--lockup-scale) * 0.299);
   line-height: 1;
   white-space: nowrap;
 }
