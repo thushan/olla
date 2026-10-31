@@ -859,16 +859,25 @@ table.glance {
 /* The four core columns take set shares; optional columns split the rest
    evenly (fixed layout gives unsized columns an equal slice). */
 table.glance th:nth-child(1) {
-  width: 16%;
-}
-table.glance th:nth-child(2) {
-  width: 11%;
-}
-table.glance th:nth-child(3) {
   width: 14%;
 }
+table.glance th:nth-child(2) {
+  width: 10%;
+}
+table.glance th:nth-child(3) {
+  width: 12%;
+}
 table.glance th:nth-child(4) {
+  width: 10%;
+}
+/* Wide enough for "openai-compatible" and "text-embeddings-inference" clips. */
+table.glance th.col-type {
   width: 11%;
+}
+/* "Probe latency" must read in full without hovering, so it wraps to two lines. */
+table.glance th.col-wrap .sort-btn {
+  white-space: normal;
+  line-height: 1.2;
 }
 /* Keep "5.76 KB" on one line; header buttons are tightened so eight optional
    columns still fit at 1440px. */

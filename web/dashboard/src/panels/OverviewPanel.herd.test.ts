@@ -76,7 +76,9 @@ describe('herd columns', () => {
     // Unhealthy sorts first: mac-mini has 0 B traffic and no failures figure.
     expect(row.textContent).toContain('0 B');
     expect(document.body.textContent).toContain('21.09 KB');
-    expect(document.body.textContent).toContain('20'); // 1000 * (1 - 0.98)
+    // 1000 * (1 - 0.98), marked as an estimate; mac-mini has no traffic to estimate from.
+    const cells = [...document.querySelectorAll('table.glance tbody tr')].map((r) => [...r.querySelectorAll('td')].at(-1)?.textContent?.trim());
+    expect(cells).toEqual(['—', '~20']);
   });
 
   it('toggling the picker updates the table and persists', async () => {
@@ -100,6 +102,48 @@ describe('herd columns', () => {
     const ths = [...document.querySelectorAll('table.glance thead th')];
     expect(ths.slice(0, 4).some((t) => t.classList.contains('hide-narrow'))).toBe(false);
     expect(ths.slice(4).every((t) => t.classList.contains('hide-narrow'))).toBe(true);
+  });
+});
+
+describe('picker and sort', () => {
+  it('labels the probe column in full and shows the failures estimate with a tilde', async () => {
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(['probe_ms']));
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    expect(headers()).toContain('Probe latency');
+  });
+
+  it('closes the picker when focus moves outside it', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    document.querySelector<HTMLButtonElement>('.picker-btn')!.click();
+    flushSync();
+    expect(document.querySelector('.picker-pop')).not.toBeNull();
+    const box = document.querySelector<HTMLInputElement>('.picker-row input')!;
+    const outside = document.querySelector<HTMLInputElement>('.filter-input')!;
+    box.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: outside }));
+    flushSync();
+    expect(document.querySelector('.picker-pop')).toBeNull();
+  });
+
+  it('falls back to the default sort when the sorted column is hidden', async () => {
+    localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(['request_count']));
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    const sortBtn = [...document.querySelectorAll<HTMLButtonElement>('table.glance .sort-btn')].find((b) => b.textContent?.includes('Requests'))!;
+    sortBtn.click();
+    flushSync();
+    expect(document.querySelector('th[aria-sort="descending"]')?.textContent).toContain('Requests');
+    // Untick Requests via the picker.
+    document.querySelector<HTMLButtonElement>('.picker-btn')!.click();
+    flushSync();
+    const box = [...document.querySelectorAll<HTMLInputElement>('.picker-row input')].find((b) => b.parentElement?.textContent?.includes('Requests'))!;
+    box.click();
+    flushSync();
+    expect(document.querySelector('th[aria-sort="ascending"]')?.textContent).toContain('Status');
   });
 });
 

@@ -141,12 +141,13 @@
   const optionalColumns: Record<HerdColumnKey, Column> = {
     active_connections: { key: 'active_connections', label: 'In flight', sortable: true, num: true, align: 'right', hideNarrow: true },
     request_count: { key: 'request_count', label: 'Requests', sortable: true, num: true, align: 'right', hideNarrow: true },
-    type: { key: 'type', label: 'Type', sortable: true, hideNarrow: true },
+    type: { key: 'type', label: 'Type', sortable: true, hideNarrow: true, cls: 'col-type' },
     model_count: { key: 'model_count', label: 'Models', sortable: true, num: true, align: 'right', hideNarrow: true },
     priority: { key: 'priority', label: 'Priority', sortable: true, num: true, align: 'right', hideNarrow: true },
     probe_ms: {
       key: 'probe_ms',
-      label: 'Probe',
+      label: 'Probe latency',
+      cls: 'col-wrap',
       sortable: true,
       num: true,
       align: 'right',
@@ -423,7 +424,7 @@
           {#if visible.has('request_count')}
             <td class={cellClass('request_count')}>{#if e.request_count > 0}{fmtInt(e.request_count)}{:else}<span class="dash">0</span>{/if}</td>
           {/if}
-          {#if visible.has('type')}<td class="hide-narrow cell-clip" title={e.type}>{e.type || '—'}</td>{/if}
+          {#if visible.has('type')}<td class="{cellClass('type')} cell-clip" title={e.type}>{e.type || '—'}</td>{/if}
           {#if visible.has('model_count')}
             <td class={cellClass('model_count')}>{#if e.model_count === 0}<span class="dash">0</span>{:else}{fmtInt(e.model_count)}{/if}</td>
           {/if}
@@ -435,7 +436,7 @@
             <td class={cellClass('traffic_bytes')}>{#if e.traffic_bytes !== null}{fmtBytes(e.traffic_bytes)}{:else}<span class="dash">—</span>{/if}</td>
           {/if}
           {#if visible.has('failures')}
-            <td class={cellClass('failures')}>{#if e.failures !== null}{fmtInt(e.failures)}{:else}<span class="dash">—</span>{/if}</td>
+            <td class={cellClass('failures')}>{#if e.failures !== null}~{fmtInt(e.failures)}{:else}<span class="dash">—</span>{/if}</td>
           {/if}
         {/snippet}
       </SortableTable>
