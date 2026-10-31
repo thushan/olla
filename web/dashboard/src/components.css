@@ -29,6 +29,9 @@
    border instead of floating mid-line; height-only sizing keeps the aspect
    ratio whatever the source asset. */
 .brand-link {
+  /* One source for the lockup height: the text block is sized from it, so
+     wordmark + tagline span the logo top to bottom at every breakpoint. */
+  --logo-h: 54px;
   display: flex;
   align-items: flex-end;
   gap: var(--space-2);
@@ -40,7 +43,7 @@
 }
 .brand-logo {
   display: block;
-  height: 54px;
+  height: var(--logo-h);
   width: auto;
   flex-shrink: 0;
 }
@@ -49,19 +52,22 @@
 .brand-text {
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
+  height: var(--logo-h);
   line-height: 1;
 }
 .brand h1 {
-  /* Scales with the viewport (about 30px at 1440, 22px at 390) so there is
-     no breakpoint cliff; sits between the tile values and the logo height. */
-  font-size: clamp(1.4rem, 1rem + 1.6vw, 1.9rem);
+  /* Proportional to the logo (54px desktop, 42px mobile) so the wordmark
+     scales with it and never needs its own breakpoint. */
+  font-size: calc(var(--logo-h) * 0.66);
+  line-height: 0.8;
   letter-spacing: 0.04em;
   margin: 0;
 }
 .brand .tag {
   color: var(--text-faint);
-  font-size: 0.72rem;
-  margin-top: 3px;
+  font-size: calc(var(--logo-h) * 0.22);
+  line-height: 1;
 }
 .clock {
   color: var(--text-faint);
@@ -826,9 +832,6 @@ footer a {
   body {
     font-size: 12.5px;
   }
-  .brand-logo {
-    height: 42px;
-  }
   .status-strip {
     grid-template-columns: repeat(2, 1fr);
     font-size: 0.68rem;
@@ -1111,4 +1114,10 @@ button.status-tag.has-issues {
 .status-tip .tip-line {
   display: block;
   color: var(--text-dim);
+}
+
+@media (max-width: 600px) {
+  .brand-link {
+    --logo-h: 42px;
+  }
 }
