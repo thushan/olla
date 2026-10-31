@@ -148,3 +148,51 @@ func TestAllProxies_NoModelNameSkipsModelStats(t *testing.T) {
 		})
 	}
 }
+
+// TestAllProxies_ModelledRequestCountedOnce is the regression test for the
+// v0.0.29 double count: RecordSuccess fed both RecordRequest and
+// RecordModelRequest, and the collector's RecordModelRequest called
+// RecordRequest again, so every request naming a model doubled the proxy
+// and per-endpoint totals and bytes.
+func TestAllProxies_ModelledRequestCountedOnce(t *testing.T) {
+	const body = `{"status": "ok"}`
+
+	for _, suite := range []ProxyTestSuite{SherpaTestSuite{}, OllaTestSuite{}} {
+		t.Run(suite.Name(), func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(body))
+			}))
+			defer upstream.Close()
+
+			endpoint := createTestEndpoint("test", upstream.URL, domain.StatusHealthy)
+			proxy, selector, collector := createTestProxyComponents(suite, []*domain.Endpoint{endpoint})
+			selector.endpoint = endpoint
+
+			req, stats, rlog := createTestRequestWithBody("POST", "/api/chat", `{"model":"llama3.2"}`)
+			stats.Model = "llama3.2"
+
+			w, err := executeProxyRequest(proxy, req, stats, rlog)
+			assertProxySuccess(t, w, err, stats, http.StatusOK, body)
+
+			ps := collector.GetProxyStats()
+			if ps.TotalRequests != 1 || ps.SuccessfulRequests != 1 || ps.FailedRequests != 0 {
+				t.Errorf("proxy stats: want 1 total/1 success/0 failed, got %+v", ps)
+			}
+			es, ok := collector.GetEndpointStats()[endpoint.URLString]
+			if !ok {
+				t.Fatalf("no endpoint stats for %s", endpoint.URLString)
+			}
+			if es.TotalRequests != 1 || es.SuccessfulRequests != 1 {
+				t.Errorf("endpoint stats: want 1 total/1 success, got %+v", es)
+			}
+			if es.TotalBytes != int64(len(body)) {
+				t.Errorf("endpoint bytes: want %d (bytes sent), got %d", len(body), es.TotalBytes)
+			}
+			if ms := collector.GetModelStats()["llama3.2"]; ms.TotalRequests != 1 || ms.TotalBytes != int64(len(body)) {
+				t.Errorf("model stats: want 1 request/%d bytes, got %+v", len(body), ms)
+			}
+		})
+	}
+}
