@@ -67,6 +67,20 @@ describe('StatusTag tooltip hover', () => {
     expect(tip.classList.contains('open')).toBe(false);
   });
 
+  it('Escape closes it while another control has focus', () => {
+    const { btn, tip } = setup();
+    const other = document.createElement('input');
+    document.body.appendChild(other);
+    other.focus();
+    geometry(btn, tip, { top: 10, bottom: 30, left: 10 });
+    btn.dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(true);
+    other.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(false);
+  });
+
   it('Escape closes it immediately', () => {
     const { btn, tip } = setup();
     geometry(btn, tip, { top: 10, bottom: 30, left: 10 });
@@ -80,7 +94,15 @@ describe('StatusTag tooltip hover', () => {
 
 describe('StatusTag portal and reset', () => {
   it('parents the tooltip on body, still described by the pill', () => {
-    const { btn, tip } = setup();
+    // Nested mount: without use:portal the tip would stay inside the wrapper.
+    const wrap = document.createElement('div');
+    wrap.id = 'wrap';
+    document.body.appendChild(wrap);
+    component = mount(StatusTag, { target: wrap, props: { status: 'offline', issues: ['unavailable'] } });
+    flushSync();
+    const btn = wrap.querySelector<HTMLButtonElement>('button.status-tag')!;
+    const tip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+    expect(btn.parentElement).toBe(wrap);
     expect(tip.parentElement).toBe(document.body);
     expect(document.getElementById(btn.getAttribute('aria-describedby')!)).toBe(tip);
   });

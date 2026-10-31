@@ -117,7 +117,14 @@
     if (!open) return;
     window.addEventListener('scroll', close, true);
     window.addEventListener('resize', close);
+    // Escape must work wherever focus is (a hover-opened tip leaves focus on
+    // another control); the effect cleanup removes this on close and destroy.
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('keydown', onDocKey);
     return () => {
+      document.removeEventListener('keydown', onDocKey);
       window.removeEventListener('scroll', close, true);
       window.removeEventListener('resize', close);
     };
