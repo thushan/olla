@@ -92,8 +92,11 @@ describe('payload parsers', () => {
     expect(parseTranslators({ translators: [null] })).toBeNull();
     expect(parseTranslators({ translators: [] })?.translators).toEqual([]);
   });
-  it('coerces non-string process fields so formatting cannot throw', () => {
-    const p = parseProcess({ memory: { memory_pressure: 7 }, garbage_collection: {}, goroutines: {}, runtime: {} });
-    expect(p?.memory.memory_pressure).toBe('');
+  it('rejects a present field of the wrong type, but accepts missing fields and an empty avg_gc_pause', () => {
+    expect(parseProcess({ memory: { memory_pressure: 7 }, garbage_collection: {}, goroutines: {}, runtime: {} })).toBeNull();
+    expect(parseTranslators({ translators: [{ translator_name: 'a', total_requests: '10' }] })).toBeNull();
+    expect(parseSticky({ enabled: true, hits: '3' })).toBeNull();
+    const ok = parseProcess({ memory: {}, garbage_collection: { avg_gc_pause: '' }, goroutines: {}, runtime: {} });
+    expect(ok?.garbage_collection.avg_gc_pause).toBe('');
   });
 });

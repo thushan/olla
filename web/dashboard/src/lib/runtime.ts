@@ -64,11 +64,34 @@ export function processUsable(p: ProcessStatsResponse | null | undefined): p is 
 // as a failed poll and the last good snapshot survives. Extra fields are
 // ignored; fields the cards format are coerced to a safe default.
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
-const str = (v: unknown): string => (typeof v === 'string' ? v : '');
-const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
-const optNum = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+// A missing (or null) field takes its default; a field that is present with the
+// wrong type throws, and each parser turns that into a rejected payload so the
+// previous snapshot is kept rather than silently zeroed.
+class BadPayload extends Error {}
+const missing = (v: unknown): boolean => v === undefined || v === null;
+const str = (v: unknown): string => {
+  if (missing(v)) return '';
+  if (typeof v !== 'string') throw new BadPayload();
+  return v;
+};
+const num = (v: unknown): number => {
+  if (missing(v)) return 0;
+  if (typeof v !== 'number' || !Number.isFinite(v)) throw new BadPayload();
+  return v;
+};
+const optNum = (v: unknown): number | undefined => (missing(v) ? undefined : num(v));
+const guarded =
+  <T,>(fn: (raw: unknown) => T | null) =>
+  (raw: unknown): T | null => {
+    try {
+      return fn(raw);
+    } catch (e) {
+      if (e instanceof BadPayload) return null;
+      throw e;
+    }
+  };
 
-export function parseSticky(raw: unknown): StickyStatsResponse | null {
+export const parseSticky = guarded((raw: unknown): StickyStatsResponse | null => {
   if (!isObj(raw) || typeof raw.enabled !== 'boolean') return null;
   return {
     enabled: raw.enabled,
@@ -80,9 +103,9 @@ export function parseSticky(raw: unknown): StickyStatsResponse | null {
     max_sessions: optNum(raw.max_sessions),
     idle_ttl_seconds: optNum(raw.idle_ttl_seconds),
   };
-}
+});
 
-export function parseTranslators(raw: unknown): TranslatorStatsResponse | null {
+export const parseTranslators = guarded((raw: unknown): TranslatorStatsResponse | null => {
   if (!isObj(raw) || !Array.isArray(raw.translators)) return null;
   const translators: TranslatorStatsEntry[] = [];
   for (const r of raw.translators) {
@@ -108,9 +131,9 @@ export function parseTranslators(raw: unknown): TranslatorStatsResponse | null {
   // fleet, so reject it and keep the last good snapshot.
   if (raw.translators.length > 0 && translators.length === 0) return null;
   return { timestamp: str(raw.timestamp), translators, summary: {} as TranslatorStatsResponse['summary'] };
-}
+});
 
-export function parseProcess(raw: unknown): ProcessStatsResponse | null {
+export const parseProcess = guarded((raw: unknown): ProcessStatsResponse | null => {
   if (!isObj(raw) || !isObj(raw.memory) || !isObj(raw.garbage_collection) || !isObj(raw.goroutines) || !isObj(raw.runtime)) {
     return null;
   }
@@ -127,4 +150,4 @@ export function parseProcess(raw: unknown): ProcessStatsResponse | null {
     goroutines: { health_status: str(r.health_status), count: num(r.count) },
     runtime: { uptime: str(rt.uptime), go_version: str(rt.go_version), num_cpu: num(rt.num_cpu) },
   };
-}
+});

@@ -216,14 +216,23 @@ describe('RuntimeCards', () => {
     await settle();
     expect(document.querySelectorAll('[data-testid^="card-"]').length).toBe(3);
 
-    tBody = { translators: [null] };
-    pBody = { ...procBody, memory: { ...procBody.memory, memory_pressure: 7 } };
-    sBody = {};
-    await settle2();
-    // Malformed bodies are rejected: the snapshots survive and the poll shows as failed.
-    expect(document.querySelectorAll('[data-testid^="card-"]').length).toBe(3);
-    expect(translators.status).toBe('error');
-    expect(txt()).toContain('4.67 MB');
+    for (const [t, p] of [
+      [{ translators: [null] }, { ...procBody, memory: { ...procBody.memory, memory_pressure: 7 } }],
+      [translatorBody([{ ...anth, total_requests: '10' }]), procBody],
+    ] as const) {
+      tBody = t;
+      pBody = p;
+      sBody = {};
+      await settle2();
+      // Malformed bodies are rejected: the snapshots are unchanged and every poll shows as failed.
+      expect(document.querySelectorAll('[data-testid^="card-"]').length).toBe(3);
+      expect(translators.status).toBe('error');
+      expect(sticky.status).toBe('error');
+      expect(txt()).toContain('4.67 MB');
+      expect(txt()).toContain('medium');
+      expect(txt()).toContain('Translator: anthropic');
+      expect(txt().replace(/refresh failed, retrying|·/g, '')).toContain('4 requests');
+    }
 
     tBody = translatorBody([null, { ...anth, translator_name: 'second' }]);
     pBody = procBody;
