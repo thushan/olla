@@ -70,6 +70,9 @@
   // beat so moving the pointer from one to the other keeps it open.
   let hovered = false;
   let focused = false;
+  // Set by Escape or click-to-close so the still-hovered or still-focused pill
+  // does not reopen the tip; cleared by a fresh hover, focus or activation.
+  let dismissed = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   function cancelTimer(): void {
     if (timer !== null) clearTimeout(timer);
@@ -78,7 +81,7 @@
   function sync(): void {
     cancelTimer();
     if (hovered || focused) {
-      if (!open) {
+      if (!open && !dismissed) {
         place();
         open = true;
       }
@@ -90,11 +93,17 @@
     cancelTimer();
     open = false;
   }
+  function dismiss(): void {
+    dismissed = true;
+    close();
+  }
   function setHover(v: boolean): void {
+    if (v) dismissed = false;
     hovered = v;
     sync();
   }
   function setFocus(v: boolean): void {
+    if (v) dismissed = false;
     focused = v;
     sync();
   }
@@ -103,8 +112,9 @@
   // it and a first tap on touch (no hover) opens it.
   let wasOpen = false;
   function onClick(): void {
-    if (wasOpen) close();
+    if (wasOpen) dismiss();
     else if (!open) {
+      dismissed = false;
       place();
       open = true;
     }
@@ -120,7 +130,7 @@
     // Escape must work wherever focus is (a hover-opened tip leaves focus on
     // another control); the effect cleanup removes this on close and destroy.
     const onDocKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape') dismiss();
     };
     document.addEventListener('keydown', onDocKey);
     return () => {
@@ -146,7 +156,7 @@
 
   function onKey(e: KeyboardEvent): void {
     if (e.key === 'Escape' && open) {
-      close();
+      dismiss();
       e.stopPropagation();
     }
   }

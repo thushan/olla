@@ -81,6 +81,38 @@ describe('StatusTag tooltip hover', () => {
     expect(tip.classList.contains('open')).toBe(false);
   });
 
+  it('stays closed after Escape when the pointer leaves a focused pill, and reopens on re-hover', () => {
+    const { btn, tip } = setup();
+    geometry(btn, tip, { top: 10, bottom: 30, left: 10 });
+    btn.dispatchEvent(new FocusEvent('focus'));
+    btn.dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(true);
+    btn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    btn.dispatchEvent(new MouseEvent('mouseleave'));
+    vi.advanceTimersByTime(500);
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(false);
+    btn.dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(true);
+  });
+
+  it('stays closed after a click-dismiss when the pointer leaves a focused pill', () => {
+    const { btn, tip } = setup();
+    geometry(btn, tip, { top: 10, bottom: 30, left: 10 });
+    btn.dispatchEvent(new MouseEvent('mouseenter'));
+    btn.dispatchEvent(new Event('pointerdown'));
+    btn.dispatchEvent(new FocusEvent('focus'));
+    btn.dispatchEvent(new MouseEvent('click'));
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(false);
+    btn.dispatchEvent(new MouseEvent('mouseleave'));
+    vi.advanceTimersByTime(500);
+    flushSync();
+    expect(tip.classList.contains('open')).toBe(false);
+  });
+
   it('Escape closes it immediately', () => {
     const { btn, tip } = setup();
     geometry(btn, tip, { top: 10, bottom: 30, left: 10 });
