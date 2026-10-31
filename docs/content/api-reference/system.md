@@ -203,7 +203,7 @@ curl -X GET http://localhost:40114/internal/status
 | `url` | string | Sanitised endpoint URL. Userinfo, query string, and fragment are stripped before this is surfaced, so credentials configured via `auth:` never appear here |
 | `status` | string | Endpoint health: `healthy`, `unhealthy`, `offline` |
 | `priority` | integer | Configured priority (higher is preferred) |
-| `success_rate` | string | Human-readable success percentage, or `"N/A"` when the endpoint has handled no traffic |
+| `success_rate` | string | Human-readable success percentage, or `"N/A"` when the endpoint has handled no traffic. A backend `5xx` counts as a failure; a `4xx` (including `429`) does not |
 | `avg_latency` | string | Human-readable average latency |
 | `avg_latency_ms` | integer \| omitted | Average proxy latency in milliseconds. Omitted when the endpoint has no traffic |
 | `min_latency_ms` | integer | Minimum proxy latency in milliseconds. `0` when the endpoint has no traffic |
@@ -227,7 +227,7 @@ The `last_check`, `next_check`, and relative strings on every status payload ren
 |-------|------|-------------|
 | `status` | string | Aggregate status: `healthy`, `degraded`, `critical`. With no proxy traffic, derived purely from endpoint health so a healthy fresh boot no longer reports `critical` |
 | `endpoints_up` | string | Healthy / total endpoint count, human-readable |
-| `success_rate` | string | Aggregate proxy success percentage, or `"N/A"` when `has_traffic` is false |
+| `success_rate` | string | Aggregate proxy success percentage, or `"N/A"` when `has_traffic` is false. A backend `5xx` counts as a failure; a `4xx` (including `429`) does not |
 | `avg_latency` | string | Human-readable average proxy latency |
 | `total_traffic` | string | Human-readable total bytes proxied |
 | `uptime` | string | Human-readable process uptime (relative, excluded from the ETag hash) |
@@ -237,7 +237,7 @@ The `last_check`, `next_check`, and relative strings on every status payload ren
 | `active_connections` | integer | Total active connections across all endpoints |
 | `security_violations` | integer | Total rate-limit + size-limit violations |
 | `total_requests` | integer | Total proxy requests since startup |
-| `total_failures` | integer | Total failed proxy requests since startup |
+| `total_failures` | integer | Total failed proxy requests since startup: connection, timeout and streaming errors, plus responses where the backend returned a `5xx` |
 | `has_traffic` | boolean | Always present. `false` on a fresh boot or when `total_requests` is zero; lets clients branch on the no-traffic state without parsing `success_rate` |
 
 ### Conditional requests and compression
@@ -466,7 +466,7 @@ olla_model_requests_total{model="llama3.2"} 1200
 | `olla_uptime_seconds` | gauge | Process uptime |
 | `olla_active_connections` | gauge | Active connections |
 | `olla_requests_total` | counter | Total proxy requests |
-| `olla_failures_total` | counter | Total failed requests |
+| `olla_failures_total` | counter | Total failed requests, backend `5xx` responses included |
 | `olla_security_*` | gauge/counter | Security posture and violations |
 | `olla_endpoint_up` | gauge | Endpoint health (`endpoint`, `status` labels; value `1`=up) |
 | `olla_endpoint_*` | gauge/counter | Per-endpoint stats (`endpoint` label only) |
@@ -647,7 +647,7 @@ curl -X GET http://localhost:40114/internal/stats/translators
 | `translator_name` | string | Translator identifier (e.g., "anthropic") |
 | `total_requests` | integer | Total requests processed by this translator |
 | `successful_requests` | integer | Requests that completed successfully |
-| `failed_requests` | integer | Requests that failed |
+| `failed_requests` | integer | Requests that failed, including those where the backend returned a `5xx` |
 | `success_rate` | string | Human-readable success percentage |
 | `passthrough_rate` | string | Human-readable passthrough percentage |
 | `passthrough_requests` | integer | Requests forwarded directly in native format |
