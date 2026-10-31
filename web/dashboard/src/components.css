@@ -56,7 +56,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  align-self: center;
+  align-self: flex-end;
   height: calc(var(--logo-h) * var(--lockup-scale));
   line-height: 1;
 }
