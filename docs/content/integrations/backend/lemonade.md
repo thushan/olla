@@ -121,7 +121,7 @@ discovery:
 > request for it, which can take longer than the proxy's default 30s
 > `response_header_timeout` and surface as a `502` cold-start failure. If you see
 > this, raise the timeout in the `proxy` block (see
-> [Configuration Reference](../../configuration/reference/)):
+> [Configuration Reference](../../configuration/reference.md)):
 >
 > ```yaml
 > proxy:
