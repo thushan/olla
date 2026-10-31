@@ -446,7 +446,11 @@
       {/if}
     </div>
 
-    <RuntimeCards />
   {/if}
   </div>
+
+  <!-- Outside the status wrapper on purpose: these cards poll their own
+       endpoints, so a /internal/status outage must neither stop them starting
+       nor grey them. -->
+  <RuntimeCards />
 </div>

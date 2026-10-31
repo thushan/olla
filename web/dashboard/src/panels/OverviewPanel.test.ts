@@ -584,3 +584,37 @@ describe('OverviewPanel no-traffic tile states', () => {
     expect(failTile!.querySelector('.sub')?.textContent?.trim()).toBe('5.0% of traffic');
   });
 });
+
+describe('Overview runtime cards independence', () => {
+  it('renders ungreyed runtime cards when /internal/status fails', async () => {
+    global.fetch = vi.fn(async (url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.includes('/internal/stats/sticky')) return jsonResponse({ enabled: true, active_sessions: 1, hits: 1, misses: 0, max_sessions: 10 });
+      if (u.includes('/internal/stats/translators')) return jsonResponse({ translators: [] });
+      if (u.includes('/internal/process'))
+        return jsonResponse({
+          memory: { heap_alloc: '1 MB', heap_sys: '2 MB', heap_inuse: '1 MB', memory_pressure: 'LOW' },
+          garbage_collection: { avg_gc_pause: '1ms', num_gc_cycles: 1 },
+          goroutines: { health_status: 'HEALTHY', count: 3 },
+          runtime: { uptime: '1s', go_version: 'go1', num_cpu: 1 },
+        });
+      return { status: 500, ok: false, headers: { get: () => null }, json: async () => ({}) };
+    }) as never;
+    component = mount(OverviewPanel, { target: document.body });
+    const stores = await import('../lib/stores/runtime.svelte');
+    overview.refresh();
+    stores.sticky.refresh();
+    stores.translators.refresh();
+    stores.processStats.refresh();
+    await vi.waitFor(() => {
+      flushSync();
+      expect(document.querySelector('[data-testid="card-process"]')).not.toBeNull();
+      expect(overview.status).toBe('error');
+    });
+    for (const id of ['card-sticky', 'card-process']) {
+      const el = document.querySelector(`[data-testid="${id}"]`)!;
+      expect(el.closest('[data-state]')).toBeNull();
+      expect(el.querySelector('[data-state]')).toBeNull();
+    }
+  });
+});
