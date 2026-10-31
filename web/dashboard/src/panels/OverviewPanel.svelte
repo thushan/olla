@@ -9,6 +9,7 @@
   import type { Column, SortState } from '../components/SortableTable.svelte';
   import { fmtBytes, fmtInt, fmtUptime, fmtMs, fmtUntil, shortCommit, parseTrafficBytes } from '../lib/format';
   import { stableId } from '../lib/dom-id';
+  import RuntimeCards from './RuntimeCards.svelte';
   import HerdFilter from '../components/HerdFilter.svelte';
   import ColumnPicker from '../components/ColumnPicker.svelte';
   import { jumpToEndpoint } from '../lib/jump-to-endpoint';
@@ -444,6 +445,8 @@
         <p class="herd-empty" role="status">No endpoints match your filter.</p>
       {/if}
     </div>
+
+    <RuntimeCards />
   {/if}
   </div>
 </div>
