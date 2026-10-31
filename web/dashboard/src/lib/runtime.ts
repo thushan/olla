@@ -111,8 +111,9 @@ export const parseTranslators = guarded((raw: unknown): TranslatorStatsResponse 
   for (const r of raw.translators) {
     if (!isObj(r)) continue;
     // A name of the wrong type means the payload is broken, not that the row is optional.
-    if (!missing(r.translator_name) && typeof r.translator_name !== 'string') throw new BadPayload();
-    if (r.translator_name === undefined || r.translator_name === '') continue;
+    if (missing(r.translator_name)) continue;
+    if (typeof r.translator_name !== 'string') throw new BadPayload();
+    if (r.translator_name === '') continue;
     translators.push({
       translator_name: r.translator_name,
       success_rate: str(r.success_rate),
