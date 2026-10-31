@@ -150,6 +150,45 @@ describe('picker and sort', () => {
     expect(document.querySelector('.picker-pop')).not.toBeNull();
   });
 
+  it('toggles from the label text and the row, stays open, and keeps focus put on press', async () => {
+    await load();
+    component = mount(OverviewPanel, { target: document.body });
+    flushSync();
+    document.querySelector<HTMLButtonElement>('.picker-btn')!.click();
+    flushSync();
+    const rows = () => [...document.querySelectorAll<HTMLElement>('.picker-row')];
+    const priority = () => rows().find((r) => r.textContent?.includes('Priority'))!;
+
+    // Real browsers move focus to the focusable panel on mousedown over label text.
+    const text = priority().querySelector('span')!;
+    const md = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    text.dispatchEvent(md);
+    expect(md.defaultPrevented).toBe(true);
+    const root = document.querySelector('.column-picker')!;
+    root.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    document.querySelector('.picker-btn')!.dispatchEvent(
+      new FocusEvent('focusout', { bubbles: true, relatedTarget: document.getElementById('panel-overview') })
+    );
+    text.click();
+    flushSync();
+    window.dispatchEvent(new Event('pointerup'));
+    expect(document.querySelector('.picker-pop')).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem(COLUMNS_STORAGE_KEY)!)).toContain('priority');
+
+    // Clicking the row itself (padding) also toggles it back off.
+    priority().click();
+    flushSync();
+    expect(document.querySelector('.picker-pop')).not.toBeNull();
+    expect(JSON.parse(localStorage.getItem(COLUMNS_STORAGE_KEY)!)).not.toContain('priority');
+
+    // With no press in flight, focus landing outside still closes it.
+    document.querySelector('.picker-btn')!.dispatchEvent(
+      new FocusEvent('focusout', { bubbles: true, relatedTarget: document.getElementById('panel-overview') })
+    );
+    flushSync();
+    expect(document.querySelector('.picker-pop')).toBeNull();
+  });
+
   it('falls back to the default sort when the sorted column is hidden', async () => {
     localStorage.setItem(COLUMNS_STORAGE_KEY, JSON.stringify(['request_count']));
     await load();

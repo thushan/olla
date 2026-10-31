@@ -34,9 +34,10 @@
   function onFocusOut(e: FocusEvent): void {
     const next = e.relatedTarget as Node | null;
     if (!open || !root) return;
-    // Safari does not focus a checkbox on click, so a press inside the menu
-    // also reports a null target; that must not close it.
-    if (next === null && pressInside) return;
+    // A press inside the menu can move focus anywhere: nowhere in Safari (it
+    // does not focus checkboxes), or to the nearest focusable ancestor such as
+    // the tabindex=0 panel in Chromium. Neither is the user leaving the menu.
+    if (pressInside) return;
     if (next === null || !root.contains(next)) open = false;
   }
   let pressInside = false;
@@ -53,7 +54,18 @@
     onclick={() => (open = !open)}
   >Columns<span aria-hidden="true"> ▾</span></button>
   {#if open}
-    <div class="picker-pop" id="herd-column-picker" role="group" aria-label="Optional columns">
+    <!-- Mousedown on label text or padding would otherwise shift focus to the
+         focusable panel behind the menu, which reads as focus leaving it. Keep
+         focus where it is; the click still toggles the row. -->
+    <div
+      class="picker-pop"
+      id="herd-column-picker"
+      role="group"
+      aria-label="Optional columns"
+      onmousedown={(e) => {
+        if (!(e.target instanceof HTMLInputElement)) e.preventDefault();
+      }}
+    >
       {#each OPTIONAL_COLUMNS as c (c.key)}
         <label class="picker-row" title={c.hint}>
           <input
