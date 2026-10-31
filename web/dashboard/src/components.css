@@ -859,16 +859,27 @@ table.glance {
 /* The four core columns take set shares; optional columns split the rest
    evenly (fixed layout gives unsized columns an equal slice). */
 table.glance th:nth-child(1) {
-  width: 20%;
+  width: 16%;
 }
 table.glance th:nth-child(2) {
-  width: 12%;
+  width: 11%;
 }
 table.glance th:nth-child(3) {
-  width: 17%;
+  width: 14%;
 }
 table.glance th:nth-child(4) {
-  width: 10%;
+  width: 11%;
+}
+/* Keep "5.76 KB" on one line; header buttons are tightened so eight optional
+   columns still fit at 1440px. */
+@media (min-width: 601px) {
+  table.glance tbody td {
+    white-space: nowrap;
+  }
+}
+table.glance .sort-btn {
+  padding-left: 8px;
+  padding-right: 8px;
 }
 @media (max-width: 1000px) {
   .table-scroll:has(table.glance) .scroll-hint {
@@ -922,6 +933,13 @@ table.glance th:nth-child(4) {
   table.glance th[aria-sort='none'] .sort-ind {
     display: none;
   }
+}
+
+/* Long backend types ("openai-compatible") clip rather than wrap and double the row height. */
+table.glance td.cell-clip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* HERD FILTER, COLUMN PICKER, ISSUES TOOLTIP */
@@ -1034,6 +1052,12 @@ table.glance th:nth-child(4) {
 @media (max-width: 600px) {
   .picker-note.only-narrow {
     display: block;
+  }
+  /* The button wraps to the left edge on a phone, so anchor the menu there
+     rather than letting it run off the screen. */
+  .picker-pop {
+    right: auto;
+    left: 0;
   }
 }
 .picker-reset {

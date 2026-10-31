@@ -423,7 +423,7 @@
           {#if visible.has('request_count')}
             <td class={cellClass('request_count')}>{#if e.request_count > 0}{fmtInt(e.request_count)}{:else}<span class="dash">0</span>{/if}</td>
           {/if}
-          {#if visible.has('type')}<td class="hide-narrow">{e.type || '—'}</td>{/if}
+          {#if visible.has('type')}<td class="hide-narrow cell-clip" title={e.type}>{e.type || '—'}</td>{/if}
           {#if visible.has('model_count')}
             <td class={cellClass('model_count')}>{#if e.model_count === 0}<span class="dash">0</span>{:else}{fmtInt(e.model_count)}{/if}</td>
           {/if}
