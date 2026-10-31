@@ -103,7 +103,7 @@ Probe latency (the last health-check probe, not proxied requests), Traffic and F
 browser. Hover or focus a status pill to see why an endpoint is amber or red. A search box and an All/Unhealthy toggle filter the herd table and the Endpoints panel.
 Under 600px wide only Endpoint, Status, Resp. rate and Latency show. Frontend only; no API or config change. See [Admin Dashboard](../configuration/dashboard.md).
 
-The Overview also gets Sticky sessions (active, hit rate, evictions, cap), Translator (passthrough share, streaming, fallbacks, latency) and Process (heap, memory pressure, goroutines, GC pause) cards, polled every 15s. Sticky and Translator hide when sticky sessions are off or no translator has registered.
+The Overview also gets Sticky sessions (active, hit rate, evictions, cap), Translator (passthrough share, streaming, fallbacks, latency) and Process (heap, memory pressure, goroutines, GC pause) cards, polled every 15s. Sticky hides while sticky sessions are off; Translator appears once the first request has gone through a translator.
 
 ### Added: unknown keys in `config.yaml` are reported
 

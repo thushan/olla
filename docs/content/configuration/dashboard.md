@@ -39,7 +39,7 @@ listed in `allowed_hosts` is rejected, even if it resolves to an allowed IP.
 | Panel | What it shows | Backed by | Poll interval |
 |-------|----------------|-----------|----------------|
 | Overview | Fleet status, success rate, average latency, traffic, connections, requests, failures, security violations, uptime, engine/balancer in use, and a live requests-per-second sparkline | `GET /internal/status` | 5s |
-| Overview (runtime cards) | Sticky sessions, translator and process stats; the sticky and translator cards hide when the feature is off | `GET /internal/stats/sticky`, `/internal/stats/translators`, `/internal/process` | 15s |
+| Overview (runtime cards) | Sticky sessions, translator and process stats; the sticky card hides when sticky sessions are off, and the translator card appears after the first translated or passthrough request | `GET /internal/stats/sticky`, `/internal/stats/translators`, `/internal/process` | 15s |
 | Endpoints | Per-endpoint name, type, status, priority, success rate, latency (avg/min/max), request count, connections, model count, health check timing, sanitised URL | `GET /internal/status/endpoints` | 5s |
 | Models | Model inventory grouped by family: name, aliases, parameter size, quantisation, size on disk, hosting endpoints, last seen | `GET /internal/status/models` | 15s |
 
