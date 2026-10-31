@@ -102,9 +102,9 @@ describe('StatusTag tooltip hover', () => {
     const { btn, tip } = setup();
     geometry(btn, tip, { top: 10, bottom: 30, left: 10 });
     btn.dispatchEvent(new MouseEvent('mouseenter'));
-    btn.dispatchEvent(new Event('pointerdown'));
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     btn.dispatchEvent(new FocusEvent('focus'));
-    btn.dispatchEvent(new MouseEvent('click'));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     flushSync();
     expect(tip.classList.contains('open')).toBe(false);
     btn.dispatchEvent(new MouseEvent('mouseleave'));
