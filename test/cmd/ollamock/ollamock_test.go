@@ -1128,7 +1128,11 @@ func TestLMStudioModelsReportsFamily(t *testing.T) {
 			Arch string `json:"arch"`
 		} `json:"data"`
 	}
-	decodeJSON(t, getURL(t, ts.URL+"/api/v0/models"), &body)
+	resp := getURL(t, ts.URL+"/api/v0/models")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("want 200, got %d", resp.StatusCode)
+	}
+	decodeJSON(t, resp, &body)
 
 	want := map[string]string{"qwen/qwen4-flash-next": "qwen", "phi4": "phi"}
 	if len(body.Data) != len(want) {
