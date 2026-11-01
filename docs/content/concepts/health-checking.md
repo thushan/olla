@@ -250,6 +250,8 @@ When a request fails due to connection issues, Olla automatically:
 
 This happens transparently without dropping the user request. The retry behaviour is automatic and built-in as of v0.0.16.
 
+Retry only applies before the client has received any of the response. If a backend dies part-way through a streamed response, Olla cannot move the request to another endpoint: it sends the client a provider-format error event (OpenAI `data: {"error":...}`, Anthropic `event: error`, Ollama `{"error":"..."}`) and drops the connection, so the truncated reply is never mistaken for a complete one. See [Retry Behaviour](../configuration/reference.md#retry-behaviour).
+
 Connection errors that trigger automatic retry:
 - **Connection Refused**: Backend service is down
 - **Connection Reset**: Backend crashed or restarted

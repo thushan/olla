@@ -240,6 +240,7 @@ What does and does not fail over:
 - **Fails over:** a connection error before any response was received. The failed endpoint is marked unhealthy even when the policy stops the request failing over, because the connection genuinely failed.
 - **Also skipped past:** an endpoint whose circuit breaker is open (Olla engine). It was never contacted, so `non_idempotent: false` does not stop this and it does not use up an attempt, even with `enabled: false`.
 - **Never retried:** a request once any part of the response has reached the client, whatever the method. The client would otherwise receive one backend's partial output followed by another's.
+- **Mid-stream failure:** if the backend dies after part of the response reached the client, Olla ends the response with an error event in the format the client is already reading, then drops the connection, so the client's read fails instead of finishing cleanly. OpenAI-style streams get a final `data: {"error":{...}}` event, Anthropic routes an `event: error` event, and Ollama NDJSON streams a `{"error":"..."}` line. Plain JSON bodies get no extra bytes, only the dropped connection. No `[DONE]` or `message_stop` follows. A client that disconnects itself is not treated as a failure.
 - **Does not fail over:** timeouts (dial, TLS handshake, response header or read) and HTTP error statuses such as 5xx and 429. The client receives the failure as is.
 - A setup with a single eligible endpoint never fails over.
 

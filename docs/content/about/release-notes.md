@@ -14,6 +14,19 @@ Breaking changes are tagged **Breaking**. Additions and fixes are tagged **Added
 **Fixed**. Behaviour changes that need no migration are tagged **Changed**. Quoted field
 names and config keys are the literal wire or YAML identifiers.
 
+## v0.1.1
+
+### Fixed: a backend dying mid-stream no longer looks like a complete response
+
+When a backend failed after response bytes had reached the client, Olla returned normally and net/http finished the chunked body cleanly, so the client saw `200` and a clean end of stream. On `/olla/anthropic/v1/messages` with translation it was worse: the translator wrote `message_delta` and `message_stop` for the truncated reply. Now the response ends with an error event in the stream's own format, then the connection is dropped so the client's read fails:
+
+- OpenAI-style SSE (`/olla/proxy/`, provider prefixes): a final `data: {"error":{"message":...,"type":"api_error","code":"upstream_stream_interrupted"}}` event, no `[DONE]`.
+- Anthropic routes (passthrough and translation): `event: error` with `{"type":"error","error":{"type":"api_error",...}}`, no `message_stop`.
+- Ollama NDJSON: a `{"error":"..."}` line.
+- Plain JSON bodies, chunked or with `Content-Length`: no extra bytes, only the dropped connection.
+
+Errors before the first byte still return a JSON `502`/`503` and still fail over. A client that disconnects is not treated as a backend failure. The request's "Request completed" and access-log lines are still written, carrying `aborted=true`, and a failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
+
 ## v0.1.0
 
 This was going to be v0.0.30. It's v0.1.0 because it's a big release: TEI embeddings and rerank support, the reworked herd dashboard, rate-limit and concurrency hardening, retry controls and corrected request stats. Some of these change what existing setups see, so it gets a minor version bump. Check the changes below before you upgrade. Fixes from here ship as v0.1.x.
