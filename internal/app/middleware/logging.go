@@ -310,73 +310,94 @@ func combinedLoggingMiddleware(styledLogger logger.StyledLogger, now func() time
 				)
 			}
 
-			logCompletion := func(aborted bool) {
-				// The status is what the client was sent before the connection was dropped
-				// (usually 200), so the abort is flagged separately to keep the record honest.
-				var abortAttr []any
-				if aborted {
-					abortAttr = []any{"aborted", true}
-				}
-				duration := time.Since(start)
-
-				if isOllaRejection(wrapped) && !rejectLog.Allow(rejectionKey(r)) {
-					return
-				}
-
-				postQuiet := isQuietPollOutcome(r.Method, path, wrapped.status)
-				level, msg = consoleLogParams(postQuiet, "HTTP request completed", "Request completed")
-				if baseLogger.Enabled(ctx, level) {
-					baseLogger.Log(ctx, level, msg, append([]any{
-						"method", r.Method,
-						"path", path,
-						"status", wrapped.status,
-						"duration_ms", duration.Milliseconds(),
-						"duration_formatted", duration.String(),
-						"request_bytes", requestSize,
-						"response_bytes", wrapped.size,
-						"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
-					}, abortAttr...)...)
-				}
-
-				// Access log uses a plain (non-.With'd) logger since request_id is
-				// already an explicit field below - attaching it via .With() as well
-				// would double it up in the emitted record.
-				accessLogger := styledLogger.GetUnderlying()
-				detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
-				accessLevel := accessLogLevel(r.Method, path, wrapped.status)
-				if aborted && accessLevel < slog.LevelWarn {
-					accessLevel = slog.LevelWarn
-				}
-				if accessLogger.Enabled(detailedCtx, accessLevel) {
-					accessLogger.Log(detailedCtx, accessLevel, "Access log", append([]any{
-						"timestamp", start.Format(time.RFC3339),
-						"request_id", requestID,
-						"remote_addr", r.RemoteAddr,
-						"method", r.Method,
-						"path", path,
-						"query", redactQuery(r.URL.RawQuery),
-						"status", wrapped.status,
-						"request_bytes", requestSize,
-						"response_bytes", wrapped.size,
-						"duration_ms", duration.Milliseconds(),
-						"user_agent", r.UserAgent(),
-						"referer", r.Referer(),
-						"content_type", r.Header.Get(constants.HeaderContentType),
-						"accept", r.Header.Get(constants.HeaderAccept),
-					}, abortAttr...)...)
-				}
-			}
+			completion := completedRequest{baseLogger: baseLogger, styled: styledLogger, rejectLog: rejectLog, wrapped: wrapped, r: r,
+				start: start, path: path, requestID: requestID, requestSize: requestSize}
 			// Logged from a defer so a handler that ends in panic(http.ErrAbortHandler)
 			// (a backend dying mid-stream) still leaves its completion and access lines.
 			// No recover here: the panic carries on to net/http untouched, which is what
 			// drops the connection.
 			completed := false
 			defer func() {
-				logCompletion(!completed)
+				logCompletion(ctx, completion, !completed)
 			}()
 			next.ServeHTTP(wrapped, r.WithContext(ctx))
 			completed = true
 		})
+	}
+}
+
+// completedRequest is what logCompletion needs from a finished (or aborted) request.
+type completedRequest struct {
+	baseLogger  *slog.Logger
+	styled      logger.StyledLogger
+	rejectLog   *logger.Throttle
+	wrapped     *responseWriter
+	r           *http.Request
+	start       time.Time
+	path        string
+	requestID   string
+	requestSize int64
+}
+
+// logCompletion writes the console completion line and the access log. aborted marks a
+// handler that ended in panic(http.ErrAbortHandler), so the record is not mistaken for a
+// clean finish.
+func logCompletion(ctx context.Context, c completedRequest, aborted bool) {
+	baseLogger, styledLogger, rejectLog, wrapped, r := c.baseLogger, c.styled, c.rejectLog, c.wrapped, c.r
+	start, path, requestID, requestSize := c.start, c.path, c.requestID, c.requestSize
+	// The status is what the client was sent before the connection was dropped
+	// (usually 200), so the abort is flagged separately to keep the record honest.
+	var abortAttr []any
+	if aborted {
+		abortAttr = []any{"aborted", true}
+	}
+	duration := time.Since(start)
+
+	if isOllaRejection(wrapped) && !rejectLog.Allow(rejectionKey(r)) {
+		return
+	}
+
+	postQuiet := isQuietPollOutcome(r.Method, path, wrapped.status)
+	level, msg := consoleLogParams(postQuiet, "HTTP request completed", "Request completed")
+	if baseLogger.Enabled(ctx, level) {
+		baseLogger.Log(ctx, level, msg, append([]any{
+			"method", r.Method,
+			"path", path,
+			"status", wrapped.status,
+			"duration_ms", duration.Milliseconds(),
+			"duration_formatted", duration.String(),
+			"request_bytes", requestSize,
+			"response_bytes", wrapped.size,
+			"size_flow", fmt.Sprintf("%s -> %s", formatBytes(requestSize), formatBytes(wrapped.size)),
+		}, abortAttr...)...)
+	}
+
+	// Access log uses a plain (non-.With'd) logger since request_id is
+	// already an explicit field below - attaching it via .With() as well
+	// would double it up in the emitted record.
+	accessLogger := styledLogger.GetUnderlying()
+	detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
+	accessLevel := accessLogLevel(r.Method, path, wrapped.status)
+	if aborted && accessLevel < slog.LevelWarn {
+		accessLevel = slog.LevelWarn
+	}
+	if accessLogger.Enabled(detailedCtx, accessLevel) {
+		accessLogger.Log(detailedCtx, accessLevel, "Access log", append([]any{
+			"timestamp", start.Format(time.RFC3339),
+			"request_id", requestID,
+			"remote_addr", r.RemoteAddr,
+			"method", r.Method,
+			"path", path,
+			"query", redactQuery(r.URL.RawQuery),
+			"status", wrapped.status,
+			"request_bytes", requestSize,
+			"response_bytes", wrapped.size,
+			"duration_ms", duration.Milliseconds(),
+			"user_agent", r.UserAgent(),
+			"referer", r.Referer(),
+			"content_type", r.Header.Get(constants.HeaderContentType),
+			"accept", r.Header.Get(constants.HeaderAccept),
+		}, abortAttr...)...)
 	}
 }
 
