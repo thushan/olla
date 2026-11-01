@@ -253,3 +253,29 @@ func tail(s string, n int) string {
 	}
 	return s[len(s)-n:]
 }
+
+// A mid-stream failure on the Anthropic routes must count as a failed translator
+// request, not a success.
+func TestMidStreamBackendDeath_CountsAsFailedTranslatorRequest(t *testing.T) {
+	t.Parallel()
+	for _, rt := range statusRoutes() {
+		if rt.handler != "anthropic" {
+			continue
+		}
+		t.Run(rt.name, func(t *testing.T) {
+			t.Parallel()
+			backend := dyingBackend(t, "text/event-stream", 0, sseParts(3))
+			h := newStatusHarness(t, "olla", rt, backend.URL)
+			front := newFront(t, h)
+
+			res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
+			require.Error(t, res.readErr)
+
+			// Metrics are recorded just before the abort, so the client can win the race.
+			require.Eventually(t, func() bool {
+				s := h.fleet.app.statsCollector.GetTranslatorStats()["anthropic"]
+				return s.TotalRequests == 1 && s.FailedRequests == 1 && s.SuccessfulRequests == 0
+			}, 5*time.Second, 20*time.Millisecond, "stats: %+v", h.fleet.app.statsCollector.GetTranslatorStats())
+		})
+	}
+}
