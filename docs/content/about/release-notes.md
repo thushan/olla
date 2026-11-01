@@ -41,7 +41,7 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   level filters. See [the log change](#fixed-a-backend-5xx-no-longer-looks-like-a-normal-completion-in-the-log).
 - **Request counts can halve, and a backend 5xx now counts as a failure.** v0.0.29 counted every request that named a model
   twice, and every release before this counted a backend `5xx` as a success. `total_requests`, per-endpoint `requests`, traffic,
-  `success_rate`, `total_failures` and the matching `olla_*` metrics now count each request once and a `5xx` as failed, so the
+  `success_rate`, `total_failures` and the matching `olla_*` metrics now count each request once per backend attempt and a `5xx` as failed, so the
   status verdict, the `low success rate` issue and any alert on these may change. See [stats counting](#fixed-request-counts-and-success-rates-reflect-what-the-backend-returned).
 - **Discovery `retry_attempts` and `retry_backoff` are now honoured.** A fetch that failed once may now be retried, and a negative
   `retry_backoff` fails startup. See [discovery retries](#fixed-model-discovery-now-retries-failed-fetches).
@@ -303,7 +303,8 @@ connection itself worked, so a backend answering `503` to everything could still
 as a failure in `success_rate`, `total_failures`, `olla_failures_total`, the per-endpoint and per-model stats and
 `/internal/stats/translators` (passthrough and translation). A backend `4xx`, `429` included, still counts as a success,
 the same line the `WARN` log level draws. Only the counters change: the client still gets the backend's response as-is,
-a `5xx` does not fail over to another backend and the circuit breaker treats it as before. The dashboard's
+a `5xx` does not fail over to another backend and the circuit breaker treats it as before. Counting is per backend attempt: a transport
+failure on endpoint A then a success on B records one failure and one success. The dashboard's
 response-rate hover text now says this instead of "regardless of HTTP status".
 
 ### Fixed: model routing no longer depends on the Content-Type header
