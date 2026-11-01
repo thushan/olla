@@ -436,7 +436,7 @@ internal/
 7. Response returned to client as-is
 
 !!! important "Mixed passthrough paths"
-    Olla can use passthrough against the capable subset of a mixed deployment, so endpoints without native Anthropic support can still coexist and use translation. As of v0.0.30, however, Olla chooses one backend target path before proxy endpoint selection. Do not mix passthrough-capable backend types with different `anthropic_support.messages_path` values in the same fleet, such as Docker Model Runner (`/anthropic/v1/messages`) and vLLM (`/v1/messages`), unless you partition the fleet or disable passthrough for one side.
+    Olla can use passthrough against the capable subset of a mixed deployment, so endpoints without native Anthropic support can still coexist and use translation. As of v0.1.0, however, Olla chooses one backend target path before proxy endpoint selection. Do not mix passthrough-capable backend types with different `anthropic_support.messages_path` values in the same fleet, such as Docker Model Runner (`/anthropic/v1/messages`) and vLLM (`/v1/messages`), unless you partition the fleet or disable passthrough for one side.
 
 ### Memory Optimisation
 
