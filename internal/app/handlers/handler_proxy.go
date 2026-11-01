@@ -46,6 +46,9 @@ type proxyRequest struct {
 	upstreamStatus int
 	hadError       bool
 	isStreaming    bool
+	// abortStream is set when a backend failed after response bytes were committed;
+	// the handler then drops the connection instead of finishing the body cleanly.
+	abortStream bool
 }
 
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -101,11 +104,23 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 	// The error response is written first so the logged status is what the client actually
 	// received (a 502 for a connection failure), not 0.
 	if err != nil {
-		a.handleProxyError(tracker, err)
+		if tracker.Started() {
+			pr.abortStream = a.failMidStream(tracker, r, pr, err, false)
+		} else {
+			a.handleProxyError(tracker, err)
+		}
 	}
 	pr.upstreamStatus = tracker.Status()
 	pr.captureStickyOutcome(ctx, r)
 	a.logRequestResult(pr, err)
+
+	if pr.abortStream {
+		// Committed bytes cannot be retracted and returning normally would let
+		// net/http end the chunked body cleanly, so the client would see a
+		// truncated response as complete. ErrAbortHandler is net/http's contract
+		// for dropping the connection without a terminator or a stack trace.
+		panic(http.ErrAbortHandler)
+	}
 }
 
 // writeNoRoutableEndpoints short-circuits a request when endpoint selection produced

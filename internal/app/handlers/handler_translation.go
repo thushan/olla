@@ -93,9 +93,10 @@ func (a *Application) executePassthroughRequest(
 
 	// Error response first, through the tracker, so the logged status is what the client got.
 	if err != nil {
-		// only write error if response hasn't started
-		if w.Header().Get(constants.HeaderContentType) == "" {
+		if !tracker.Started() {
 			a.writeTranslatorError(tracker, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
+		} else {
+			pr.abortStream = a.failMidStream(tracker, r, pr, err, true)
 		}
 	}
 	pr.upstreamStatus = tracker.Status()
@@ -276,9 +277,13 @@ func (a *Application) executeTranslationRequest(
 	}
 
 	if proxyErr != nil {
-		// only write error if response hasn't started
-		if w.Header().Get(constants.HeaderContentType) == "" {
+		switch {
+		case !tracker.Started():
 			a.writeTranslatorError(w, trans, pr, fmt.Errorf("proxy error: %w", proxyErr), http.StatusBadGateway)
+		case transformedReq.IsStreaming:
+			// Bytes are already with the client; the abort is raised by translationHandler
+			// after metrics are recorded.
+			pr.abortStream = a.failMidStream(w, r, pr, proxyErr, true)
 		}
 	}
 	pr.upstreamStatus = tracker.Status()
@@ -491,6 +496,15 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := a.initializeProxyRequest(r)
+		// Raised last so logging and translator metrics still record the failure.
+		// http.ErrAbortHandler is net/http's contract for dropping the connection
+		// without a clean body terminator or a stack trace; it is deliberately the
+		// only panic in this path and is never raised inside a goroutine.
+		defer func() {
+			if pr.abortStream {
+				panic(http.ErrAbortHandler)
+			}
+		}()
 		ctx, r := a.setupRequestContext(r, pr.stats)
 
 		// Buffer body once -- both passthrough and translation paths need it.
@@ -928,7 +942,14 @@ func (a *Application) startProxyGoroutine(
 		// headersReady is never closed and the main goroutine blocks forever.
 		// Ensure it is always signalled before closing the pipe.
 		streamRecorder.ensureHeadersReady()
-		pipeWriter.Close() // Signal end of stream
+		// A failure must reach the translator as a read error. A clean Close would
+		// look like end-of-stream and make it synthesise message_stop for a
+		// truncated response.
+		if err != nil {
+			pipeWriter.CloseWithError(err)
+		} else {
+			pipeWriter.Close()
+		}
 		proxyErrChan <- err
 	}()
 	return proxyErrChan
@@ -971,7 +992,7 @@ func (a *Application) handleStreamingPanic(
 		// error event is the only way to signal the failure without corrupting
 		// the stream with raw JSON.
 		if cw != nil && cw.committed.Load() {
-			a.writeSSEErrorEvent(w, "internal error during stream transformation")
+			a.writeStreamError(w, streamFormatAnthropicSSE, "internal error during stream transformation")
 			return
 		}
 
@@ -982,27 +1003,6 @@ func (a *Application) handleStreamingPanic(
 		} else {
 			http.Error(w, "internal error during stream transformation", http.StatusBadGateway)
 		}
-	}
-}
-
-// writeSSEErrorEvent emits a spec-valid Anthropic SSE error event into an
-// already-committed text/event-stream response. This is the only safe way to
-// report a mid-stream failure; a WriteHeader call would be silently ignored by
-// net/http once the response is committed.
-func (a *Application) writeSSEErrorEvent(w http.ResponseWriter, message string) {
-	if w == nil {
-		return
-	}
-	payload := fmt.Sprintf(`{"type":"error","error":{"type":"api_error","message":%q}}`, message)
-	// Prefix with \n\n to guarantee a clean event boundary in case the panic
-	// occurred mid-write of a previous event. SSE parsers treat blank lines as
-	// field separators, so extra blank lines are harmless when already at a boundary.
-	sseEvent := fmt.Sprintf("\n\nevent: error\ndata: %s\n\n", payload)
-	_, _ = fmt.Fprint(w, sseEvent)
-	// Flush if the underlying writer supports it, so the client receives
-	// the event immediately rather than waiting for a buffer drain.
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
 	}
 }
 
@@ -1088,6 +1088,11 @@ func (a *Application) transformStreamAndWaitForProxy(
 ) error {
 	// transform stream (blocks until done)
 	transformErr := trans.TransformStreamingResponse(ctx, pipeReader, w, r)
+
+	// Unblock a proxy goroutine stuck writing to a reader nobody is draining.
+	if transformErr != nil {
+		pipeReader.CloseWithError(transformErr)
+	}
 
 	// Wait for proxy to complete
 	proxyErr := <-proxyErrChan
