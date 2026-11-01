@@ -478,9 +478,10 @@ func (c *Collector) cleanup(now int64) {
 
 // Model-specific tracking methods
 
+// RecordModelRequest records model-level stats only. Callers record the request
+// itself through RecordRequest; doing it here as well counted every modelled
+// request twice in the proxy and per-endpoint totals.
 func (c *Collector) RecordModelRequest(model string, endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
-	// Record in both regular stats and model-specific stats
-	c.RecordRequest(endpoint, status, latency, bytes)
 	c.modelCollector.RecordModelRequest(model, endpoint, status, latency, bytes)
 }
 

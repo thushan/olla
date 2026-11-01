@@ -164,21 +164,26 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", s.configuration.GetResponseTimeout())
 	}
 
-	// We've successfully written the response
+	// The response is relayed whatever its status, but a backend 5xx is still a
+	// failed request as far as the stats are concerned.
 	duration := time.Since(stats.StartTime)
-	s.RecordSuccess(endpoint, resolvedModel, duration.Milliseconds(), int64(bytesWritten))
+	if resp.StatusCode >= http.StatusInternalServerError {
+		s.RecordUpstreamError(ctx, endpoint, resolvedModel, resp.StatusCode, duration, int64(bytesWritten))
+	} else {
+		s.RecordSuccess(endpoint, resolvedModel, duration.Milliseconds(), int64(bytesWritten))
 
-	s.PublishEvent(core.ProxyEvent{
-		Type:      core.EventTypeProxySuccess,
-		RequestID: stats.RequestID,
-		Endpoint:  endpoint.Name,
-		Duration:  duration,
-		Metadata: core.ProxyEventMetadata{
-			BytesSent:  int64(bytesWritten),
-			StatusCode: resp.StatusCode,
-			Model:      stats.Model,
-		},
-	})
+		s.PublishEvent(core.ProxyEvent{
+			Type:      core.EventTypeProxySuccess,
+			RequestID: stats.RequestID,
+			Endpoint:  endpoint.Name,
+			Duration:  duration,
+			Metadata: core.ProxyEventMetadata{
+				BytesSent:  int64(bytesWritten),
+				StatusCode: resp.StatusCode,
+				Model:      stats.Model,
+			},
+		})
+	}
 
 	// Stats update
 	stats.EndTime = time.Now()

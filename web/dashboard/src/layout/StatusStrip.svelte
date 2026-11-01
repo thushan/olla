@@ -83,7 +83,7 @@
   </div>
   <div class="status-cell">
     <dt>Resp. rate</dt>
-    <dd title="Counts any streamed response, regardless of HTTP status">{#if sys}{#if hasTraffic}{sys.success_rate}{:else}<span class="dash">—</span>{/if}{:else}—{/if}</dd>
+    <dd title="Backend 5xx responses count as failures; 4xx do not">{#if sys}{#if hasTraffic}{sys.success_rate}{:else}<span class="dash">—</span>{/if}{:else}—{/if}</dd>
   </div>
   <div class="status-cell">
     <dt>Avg latency</dt>

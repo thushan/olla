@@ -39,6 +39,10 @@ These v0.0.30 changes alter what existing setups see. Each links to its entry be
   See [`/api/ps`](#fixed-ollaollamaapips-covers-every-ollama-endpoint-apilist-removed).
 - **"Request completed" log lines carry `http_status`, and a backend 5xx logs at WARN** instead of INFO. Check any log-based alerting or
   level filters. See [the log change](#fixed-a-backend-5xx-no-longer-looks-like-a-normal-completion-in-the-log).
+- **Request counts can halve, and a backend 5xx now counts as a failure.** v0.0.29 counted every request that named a model
+  twice, and every release before this counted a backend `5xx` as a success. `total_requests`, per-endpoint `requests`, traffic,
+  `success_rate`, `total_failures` and the matching `olla_*` metrics now count each request once per backend attempt and a `5xx` as failed, so the
+  status verdict, the `low success rate` issue and any alert on these may change. See [stats counting](#fixed-request-counts-and-success-rates-reflect-what-the-backend-returned).
 - **Discovery `retry_attempts` and `retry_backoff` are now honoured.** A fetch that failed once may now be retried, and a negative
   `retry_backoff` fails startup. See [discovery retries](#fixed-model-discovery-now-retries-failed-fetches).
 - **Name patterns tag rerankers and embedders** on backends that report no kind, so those models drop `text-generation` and `chat`.
@@ -289,6 +293,19 @@ read the same as a success. It now carries `http_status` on every proxy route (`
 Anthropic route, passthrough and translation, streaming included), and a backend `5xx` is logged at `WARN`. A backend `4xx`
 stays at `INFO`. Olla's own rejections are unchanged and still go through the sampled `Request rejected` line, and a
 rejected request no longer also writes an `INFO` `Request received` line.
+
+### Fixed: request counts and success rates reflect what the backend returned
+
+Two counting bugs made the status figures read better than the fleet was doing. A request that named a model was
+counted twice (since v0.0.29), doubling `total_requests`, per-endpoint `requests` and traffic in `/internal/status`,
+`/internal/status/endpoints` and `/internal/metrics`. And a backend `5xx` was counted as a success whenever the
+connection itself worked, so a backend answering `503` to everything could still show 100%. A backend `5xx` now counts
+as a failure in `success_rate`, `total_failures`, `olla_failures_total`, the per-endpoint and per-model stats and
+`/internal/stats/translators` (passthrough and translation). A backend `4xx`, `429` included, still counts as a success,
+the same line the `WARN` log level draws. Only the counters change: the client still gets the backend's response as-is,
+a `5xx` does not fail over to another backend and the circuit breaker treats it as before. Counting is per backend attempt: a transport
+failure on endpoint A then a success on B records one failure and one success. The dashboard's
+response-rate hover text now says this instead of "regardless of HTTP status".
 
 ### Fixed: model routing no longer depends on the Content-Type header
 

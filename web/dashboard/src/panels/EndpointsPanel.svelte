@@ -75,7 +75,7 @@
       sortable: true,
       num: true,
       align: 'right',
-      title: 'Counts any streamed response, regardless of HTTP status',
+      title: 'Backend 5xx responses count as failures; 4xx do not',
     },
     { key: 'avg_latency_ms', label: 'Latency', sortable: true, num: true, align: 'right' },
     { key: 'model_count', label: 'Models', sortable: true, num: true, align: 'right' },

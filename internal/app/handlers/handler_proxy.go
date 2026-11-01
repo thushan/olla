@@ -274,6 +274,16 @@ func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *p
 	pr.stats.PathResolutionMs = time.Since(pathResolutionStart).Milliseconds()
 }
 
+// markUpstreamServerError flags a request whose client got a 5xx, so translator stats
+// count it as failed. The proxy engines relay a backend 5xx without returning an error,
+// so nothing else sets hadError on that path; 4xx stays a success, matching the WARN
+// rule on "Request completed".
+func (pr *proxyRequest) markUpstreamServerError() {
+	if pr.upstreamStatus >= http.StatusInternalServerError {
+		pr.hadError = true
+	}
+}
+
 // captureStickyOutcome copies the sticky session result and the client-supplied session id
 // into pr so logRequestResult surfaces them. Every handler that logs a completed request
 // must call this after endpoint selection; without it, provider routes silently drop the

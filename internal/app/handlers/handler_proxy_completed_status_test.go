@@ -300,3 +300,64 @@ func TestRequestFailed_CarriesWrittenErrorStatus(t *testing.T) {
 		}
 	}
 }
+
+// The counters behind /internal/status, /internal/status/endpoints, Prometheus and
+// /internal/stats/translators must agree with the WARN rule above: a backend 5xx is a
+// failure, a 4xx (429 included) is not, and one client request is counted once.
+func TestStatsCounting_FollowsBackendStatus(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		status      int
+		stream      bool
+		wantFailure bool
+	}{
+		{"200 json", http.StatusOK, false, false},
+		{"200 streaming", http.StatusOK, true, false},
+		{"backend 429", http.StatusTooManyRequests, false, false},
+		{"backend 503", http.StatusServiceUnavailable, false, true},
+		{"backend 503 streaming", http.StatusServiceUnavailable, true, true},
+	}
+
+	for _, engine := range []string{"sherpa", "olla"} {
+		for _, route := range statusRoutes() {
+			for _, tc := range cases {
+				t.Run(engine+"/"+route.name+"/"+tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					backend := statusBackend(t, tc.status, tc.stream)
+					h := newStatusHarness(t, engine, route, backend.URL)
+
+					w := h.post(tagBareChat, tc.stream)
+					require.Equal(t, tc.status, w.Code, "the client gets the backend status: %s", w.Body.String())
+
+					wantFailed, wantOK := int64(0), int64(1)
+					if tc.wantFailure {
+						wantFailed, wantOK = 1, 0
+					}
+					collector := h.fleet.app.statsCollector
+
+					ps := collector.GetProxyStats()
+					assert.Equal(t, int64(1), ps.TotalRequests, "proxy total")
+					assert.Equal(t, wantOK, ps.SuccessfulRequests, "proxy successes")
+					assert.Equal(t, wantFailed, ps.FailedRequests, "proxy failures")
+
+					es, ok := collector.GetEndpointStats()[backend.URL]
+					require.True(t, ok, "endpoint stats for %s", backend.URL)
+					assert.Equal(t, int64(1), es.TotalRequests, "endpoint total")
+					assert.Equal(t, wantFailed, es.FailedRequests, "endpoint failures")
+
+					ts := collector.GetTranslatorStats()[h.fleet.trans.Name()]
+					if route.handler != "anthropic" {
+						assert.Zero(t, ts.TotalRequests, "non-translator routes leave translator stats alone")
+						return
+					}
+					assert.Equal(t, int64(1), ts.TotalRequests, "translator total")
+					assert.Equal(t, wantOK, ts.SuccessfulRequests, "translator successes")
+					assert.Equal(t, wantFailed, ts.FailedRequests, "translator failures")
+				})
+			}
+		}
+	}
+}

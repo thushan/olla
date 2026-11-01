@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -101,12 +102,27 @@ func (b *BaseProxyComponents) RecordSuccess(endpoint *domain.Endpoint, modelName
 // RecordFailure records a failed request. See RecordSuccess for the
 // modelName contract.
 func (b *BaseProxyComponents) RecordFailure(ctx context.Context, endpoint *domain.Endpoint, modelName string, duration time.Duration, err error) {
+	b.recordFailure(ctx, endpoint, modelName, duration, 0, err)
+}
+
+// RecordUpstreamError records a response the backend answered with a 5xx.
+// The round trip worked and the body was relayed to the client unchanged, but
+// the backend failed the request, so it counts as a failure rather than a
+// success. Only 5xx: a 4xx (429 included) is the caller's problem, the same
+// line the WARN on "Request completed" draws. bytes still counts towards
+// traffic because it was sent to the client. Counting only - retry, failover
+// and the circuit breaker do not look at this.
+func (b *BaseProxyComponents) RecordUpstreamError(ctx context.Context, endpoint *domain.Endpoint, modelName string, statusCode int, duration time.Duration, bytes int64) {
+	b.recordFailure(ctx, endpoint, modelName, duration, bytes, fmt.Errorf("%w: HTTP %d", ErrUpstreamServerError, statusCode))
+}
+
+func (b *BaseProxyComponents) recordFailure(ctx context.Context, endpoint *domain.Endpoint, modelName string, duration time.Duration, bytes int64, err error) {
 	b.Stats.RecordFailure()
 
 	if b.StatsCollector != nil && endpoint != nil {
-		b.StatsCollector.RecordRequest(endpoint, "error", duration, 0)
+		b.StatsCollector.RecordRequest(endpoint, "error", duration, bytes)
 		if modelName != "" {
-			b.StatsCollector.RecordModelRequest(modelName, endpoint, "error", duration, 0)
+			b.StatsCollector.RecordModelRequest(modelName, endpoint, "error", duration, bytes)
 		}
 	}
 

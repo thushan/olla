@@ -13,7 +13,8 @@ type StatsCollector interface {
 	RecordSecurityViolation(violation SecurityViolation)
 	RecordDiscovery(endpoint *domain.Endpoint, success bool, latency time.Duration)
 
-	// Model-specific tracking
+	// Model-specific tracking. RecordModelRequest feeds model-level stats only;
+	// the request itself is counted once, by RecordRequest.
 	RecordModelRequest(model string, endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64)
 	RecordModelError(model string, endpoint *domain.Endpoint, errorType string)
 	GetModelStats() map[string]ModelStats
