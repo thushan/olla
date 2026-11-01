@@ -13,7 +13,7 @@ keywords: TEI, Text Embeddings Inference, Olla proxy, embeddings, reranking, sen
     </tr>
     <tr>
         <th>Since</th>
-        <td>Olla <code>v0.0.30</code></td>
+        <td>Olla <code>v0.1.0</code></td>
     </tr>
     <tr>
         <th>Type</th>

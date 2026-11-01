@@ -97,7 +97,7 @@ Olla supports two modes for handling Anthropic API requests, selected automatica
 6. Response includes `X-Olla-Mode: passthrough` header
 
 !!! important "Keep native message paths consistent"
-    Mixed deployments are supported: endpoints without native Anthropic support can be left in the fleet and Olla will use translation for them when passthrough is not available. For passthrough-capable endpoints, as of v0.0.30 Olla chooses one `anthropic_support.messages_path` before proxy endpoint selection. Keep capable backend types with different native message paths, such as Docker Model Runner (`/anthropic/v1/messages`) and vLLM (`/v1/messages`), in separate fleets or disable passthrough for one side.
+    Mixed deployments are supported: endpoints without native Anthropic support can be left in the fleet and Olla will use translation for them when passthrough is not available. For passthrough-capable endpoints, as of v0.1.0 Olla chooses one `anthropic_support.messages_path` before proxy endpoint selection. Keep capable backend types with different native message paths, such as Docker Model Runner (`/anthropic/v1/messages`) and vLLM (`/v1/messages`), in separate fleets or disable passthrough for one side.
 
 ### Translation Mode (Fallback)
 
@@ -964,7 +964,7 @@ Translation quality depends on backend capabilities:
 4. **Check that at least one compatible endpoint supports passthrough**:
    Mixed deployments are supported. Olla filters to healthy endpoints whose profiles declare `anthropic_support.enabled: true` and can passthrough to that capable subset. If no compatible endpoint remains, it falls back to translation.
 
-   The capable subset should use the same native `anthropic_support.messages_path`. As of v0.0.30, Olla sets one backend target path before proxy endpoint selection, so a single passthrough fleet should not combine different native message paths such as Docker Model Runner's `/anthropic/v1/messages` and vLLM's `/v1/messages`.
+   The capable subset should use the same native `anthropic_support.messages_path`. As of v0.1.0, Olla sets one backend target path before proxy endpoint selection, so a single passthrough fleet should not combine different native message paths such as Docker Model Runner's `/anthropic/v1/messages` and vLLM's `/v1/messages`.
 
 5. **Enable debug logging** to see mode selection:
    ```yaml

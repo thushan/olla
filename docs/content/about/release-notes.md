@@ -14,11 +14,13 @@ Breaking changes are tagged **Breaking**. Additions and fixes are tagged **Added
 **Fixed**. Behaviour changes that need no migration are tagged **Changed**. Quoted field
 names and config keys are the literal wire or YAML identifiers.
 
-## v0.0.30
+## v0.1.0
+
+This was going to be v0.0.30. It's v0.1.0 because it's a big release: TEI embeddings and rerank support, the reworked herd dashboard, rate-limit and concurrency hardening, retry controls and corrected request stats. Some of these change what existing setups see, so it gets a minor version bump. Check the changes below before you upgrade. Fixes from here ship as v0.1.x.
 
 ### Upgrading: behaviour changes to check
 
-These v0.0.30 changes alter what existing setups see. Each links to its entry below.
+These v0.1.0 changes alter what existing setups see. Each links to its entry below.
 
 - **SGLang and LMDeploy pass Anthropic requests through.** `/olla/anthropic/v1/messages` now forwards to them natively
   (SGLang v0.5.9+, LMDeploy v0.13.0+) instead of translating. LMDeploy requests carrying `tools` are still translated.
