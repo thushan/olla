@@ -64,6 +64,12 @@ type QuietErrorWriter interface {
 	WriteErrorQuiet(w http.ResponseWriter, err error, statusCode int)
 }
 
+// optional interface for translators that write their own in-band error event when a
+// stream fails; lets the handler avoid emitting a second one before it aborts the connection
+type StreamErrorReporter interface {
+	StreamErrorEmitted(err error) bool
+}
+
 // optional interface for translators that support token counting
 // enables api compatibility with token estimation endpoints
 type TokenCounter interface {

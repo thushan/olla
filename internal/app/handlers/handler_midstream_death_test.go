@@ -178,50 +178,53 @@ func TestMidStreamBackendDeath_ClientCanDetectTruncation(t *testing.T) {
 	}
 }
 
-// A client that goes away is not a backend failure: no error event, no abort and
-// no mid-stream failure log.
+// A client that goes away is not a backend failure: no error event, no abort, no
+// mid-stream failure log and no ERROR line (the cancel is logged at debug).
 func TestMidStreamClientCancel_NoEventNoAbort(t *testing.T) {
 	t.Parallel()
-	for _, rt := range statusRoutes() {
-		t.Run(rt.name, func(t *testing.T) {
-			t.Parallel()
-			release := make(chan struct{})
-			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				_, _ = io.Copy(io.Discard, r.Body)
-				w.Header().Set("Content-Type", "text/event-stream")
-				w.WriteHeader(http.StatusOK)
-				_, _ = io.WriteString(w, sseParts(1)[0])
-				w.(http.Flusher).Flush()
-				select {
-				case <-release:
-				case <-r.Context().Done():
-				}
-			}))
-			t.Cleanup(backend.Close)
-			defer close(release)
+	for _, engine := range []string{"olla", "sherpa"} {
+		for _, rt := range statusRoutes() {
+			t.Run(engine+"/"+rt.name, func(t *testing.T) {
+				t.Parallel()
+				release := make(chan struct{})
+				backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					_, _ = io.WriteString(w, sseParts(1)[0])
+					w.(http.Flusher).Flush()
+					select {
+					case <-release:
+					case <-r.Context().Done():
+					}
+				}))
+				t.Cleanup(backend.Close)
+				defer close(release)
 
-			h := newStatusHarness(t, "olla", rt, backend.URL)
-			front := newFront(t, h)
+				h := newStatusHarness(t, engine, rt, backend.URL)
+				front := newFront(t, h)
 
-			ctx, cancel := context.WithCancel(context.Background())
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, front.URL+rt.path, strings.NewReader(streamReqBody))
-			require.NoError(t, err)
-			req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
-			resp, err := http.DefaultClient.Do(req)
-			require.NoError(t, err)
-			buf := make([]byte, 1)
-			_, err = resp.Body.Read(buf)
-			require.NoError(t, err)
-			cancel()
-			resp.Body.Close()
+				ctx, cancel := context.WithCancel(context.Background())
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, front.URL+rt.path, strings.NewReader(streamReqBody))
+				require.NoError(t, err)
+				req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				buf := make([]byte, 1)
+				_, err = resp.Body.Read(buf)
+				require.NoError(t, err)
+				cancel()
+				resp.Body.Close()
 
-			// The handler finishes once the cancelled request unwinds.
-			require.Eventually(t, func() bool {
-				return len(h.logs.lines(t, "Request failed")) > 0 || len(h.logs.lines(t, "Request completed")) > 0
-			}, 5*time.Second, 20*time.Millisecond)
-			assert.False(t, front.aborted.Load(), "client cancel must not abort")
-			assert.Empty(t, h.logs.lines(t, midStreamFailLog), "client cancel is not a backend failure")
-		})
+				// The handler finishes once the cancelled request unwinds.
+				require.Eventually(t, func() bool {
+					return len(h.logs.lines(t, "Request cancelled by client")) > 0 || len(h.logs.lines(t, "Request completed")) > 0
+				}, 5*time.Second, 20*time.Millisecond)
+				assert.False(t, front.aborted.Load(), "client cancel must not abort")
+				assert.Empty(t, h.logs.lines(t, midStreamFailLog), "client cancel is not a backend failure")
+				assert.Empty(t, h.logs.lines(t, "Request failed"), "client cancel must not log at ERROR")
+			})
+		}
 	}
 }
 
@@ -277,6 +280,151 @@ func TestMidStreamBackendDeath_CountsAsFailedTranslatorRequest(t *testing.T) {
 				s := h.fleet.app.statsCollector.GetTranslatorStats()["anthropic"]
 				return s.TotalRequests == 1 && s.FailedRequests == 1 && s.SuccessfulRequests == 0
 			}, 5*time.Second, 20*time.Millisecond, "stats: %+v", h.fleet.app.statsCollector.GetTranslatorStats())
+		})
+	}
+}
+
+// A stream that finishes cleanly must be left alone: no abort, no error event.
+func TestStreamSuccess_NotAborted(t *testing.T) {
+	t.Parallel()
+	routes := statusRoutes()
+	ollamaNative := statusRoute{name: "ollama-native", handler: "provider", path: "/olla/ollama/api/chat"}
+	type scenario struct {
+		route       statusRoute
+		contentType string
+		parts       []string
+	}
+	var scenarios []scenario
+	for _, rt := range routes {
+		scenarios = append(scenarios, scenario{rt, "text/event-stream", append(sseParts(3), "data: [DONE]\n\n")})
+	}
+	nd := []string{`{"model":"m","message":{"content":"a"},"done":false}` + "\n", `{"model":"m","message":{"content":""},"done":true}` + "\n"}
+	scenarios = append(scenarios, scenario{ollamaNative, "application/x-ndjson", nd}, scenario{routes[0], "application/x-ndjson", nd})
+
+	for _, engine := range []string{"olla", "sherpa"} {
+		for _, sc := range scenarios {
+			t.Run(engine+"/"+sc.contentType+"/"+sc.route.name, func(t *testing.T) {
+				t.Parallel()
+				backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", sc.contentType)
+					w.WriteHeader(http.StatusOK)
+					for _, p := range sc.parts {
+						_, _ = io.WriteString(w, p)
+						w.(http.Flusher).Flush()
+					}
+				}))
+				t.Cleanup(backend.Close)
+				h := newStatusHarness(t, engine, sc.route, backend.URL)
+				front := newFront(t, h)
+
+				res := doStreamRequest(t, front.URL+sc.route.path, streamReqBody)
+
+				require.NoError(t, res.readErr)
+				assert.Equal(t, http.StatusOK, res.status)
+				assert.NotContains(t, res.body, "upstream connection lost")
+				assert.NotContains(t, res.body, "event: error")
+				assert.False(t, front.aborted.Load())
+				assert.Empty(t, h.logs.lines(t, midStreamFailLog))
+			})
+		}
+	}
+}
+
+// A backend that stalls past the read timeout mid-stream is a backend failure like
+// any other: error event, then abort.
+func TestMidStreamReadTimeout_AbortsWithErrorEvent(t *testing.T) {
+	t.Parallel()
+	for _, engine := range []string{"olla", "sherpa"} {
+		for _, rt := range statusRoutes() {
+			t.Run(engine+"/"+rt.name, func(t *testing.T) {
+				t.Parallel()
+				stall := make(chan struct{})
+				backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					_, _ = io.WriteString(w, sseParts(1)[0])
+					w.(http.Flusher).Flush()
+					// Stall past the read timeout, then send one more chunk. Sherpa times out
+					// during the stall; Olla only polls its deadline between reads, so it
+					// notices on the next chunk. Either way the failure lands mid-stream.
+					select {
+					case <-time.After(800 * time.Millisecond):
+					case <-stall:
+						return
+					case <-r.Context().Done():
+						return
+					}
+					_, _ = io.WriteString(w, sseParts(1)[0])
+					w.(http.Flusher).Flush()
+					select {
+					case <-stall:
+					case <-r.Context().Done():
+					case <-time.After(5 * time.Second):
+					}
+				}))
+				t.Cleanup(backend.Close)
+				defer close(stall)
+
+				h := newStatusHarness(t, engine, rt, backend.URL, 300*time.Millisecond)
+				front := newFront(t, h)
+				res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
+				t.Logf("readErr=%v tail=%q", res.readErr, tail(res.body, 160))
+
+				require.Error(t, res.readErr)
+				if rt.handler == "anthropic" {
+					assert.Contains(t, res.body, "event: error")
+					assert.NotContains(t, res.body, "message_stop")
+				} else {
+					assert.Contains(t, res.body, `"code":"upstream_stream_interrupted"`)
+					assert.NotContains(t, res.body, "[DONE]")
+				}
+				assert.True(t, front.aborted.Load())
+			})
+		}
+	}
+}
+
+// The translator writes its own error event for interleaved tool arguments; the
+// handler must abort without adding a second one.
+func TestMidStreamTranslatorErrorEvent_NotDuplicated(t *testing.T) {
+	t.Parallel()
+	chunk := func(delta string) string {
+		return fmt.Sprintf("data: {\"id\":\"c\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":%s}]}\n\n", delta)
+	}
+	tool := func(idx int, id, name, args string) string {
+		return chunk(fmt.Sprintf(`{"tool_calls":[{"index":%d,"id":%q,"type":"function","function":{"name":%q,"arguments":%q}}]}`, idx, id, name, args))
+	}
+	args := func(idx int, a string) string {
+		return chunk(fmt.Sprintf(`{"tool_calls":[{"index":%d,"function":{"arguments":%q}}]}`, idx, a))
+	}
+	parts := []string{tool(0, "call_a", "f1", ""), args(0, `{"a":1}`), tool(1, "call_b", "f2", ""), args(0, `{"late":true}`), args(1, `{"b":2}`), "data: [DONE]\n\n"}
+
+	for _, engine := range []string{"olla", "sherpa"} {
+		t.Run(engine, func(t *testing.T) {
+			t.Parallel()
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				for _, p := range parts {
+					_, _ = io.WriteString(w, p)
+					w.(http.Flusher).Flush()
+				}
+			}))
+			t.Cleanup(backend.Close)
+			rt := statusRoutes()[3] // anthropic-translation
+			h := newStatusHarness(t, engine, rt, backend.URL)
+			front := newFront(t, h)
+
+			res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
+			t.Logf("readErr=%v tail=%q", res.readErr, tail(res.body, 200))
+
+			require.Error(t, res.readErr)
+			assert.Equal(t, 1, strings.Count(res.body, "event: error"), "exactly one error event")
+			assert.NotContains(t, res.body, "message_stop")
+			assert.True(t, front.aborted.Load())
 		})
 	}
 }

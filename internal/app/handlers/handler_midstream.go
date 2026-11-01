@@ -72,9 +72,12 @@ func (a *Application) writeStreamError(w http.ResponseWriter, format streamError
 // metrics are done. Aborting is what stops net/http finishing the chunked body
 // cleanly, which would present a truncated stream to the client as complete.
 //
+// eventWritten means a translator already put its own error event on the wire, so a
+// second one is skipped and only the abort remains.
+//
 // A cancelled request context means the client left, so there is nobody to tell
 // and nothing to abort.
-func (a *Application) failMidStream(w http.ResponseWriter, r *http.Request, pr *proxyRequest, err error, anthropic bool) bool {
+func (a *Application) failMidStream(w http.ResponseWriter, r *http.Request, pr *proxyRequest, err error, anthropic, eventWritten bool) bool {
 	if err == nil || errors.Is(err, context.Canceled) || r.Context().Err() != nil {
 		return false
 	}
@@ -82,6 +85,8 @@ func (a *Application) failMidStream(w http.ResponseWriter, r *http.Request, pr *
 	format := streamFormatForContentType(w.Header().Get("Content-Type"), anthropic)
 	pr.requestLogger.Warn("Backend failed after response started, aborting client connection",
 		"error", err, "format", int(format))
-	a.writeStreamError(w, format, midStreamErrorMessage)
+	if !eventWritten {
+		a.writeStreamError(w, format, midStreamErrorMessage)
+	}
 	return true
 }

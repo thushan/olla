@@ -495,6 +495,12 @@ func (t *Translator) initializeToolBlock(id, name string, toolIndex int, state *
 	return nil
 }
 
+// StreamErrorEmitted reports whether err is a stream failure for which the translator has
+// already written an SSE error event to the client.
+func (t *Translator) StreamErrorEmitted(err error) bool {
+	return errors.Is(err, errInterleavedToolArguments)
+}
+
 // sendToolArgumentsDelta buffers and emits a partial_json delta for the given tool index.
 //
 // Three cases:

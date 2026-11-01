@@ -96,12 +96,13 @@ func (a *Application) executePassthroughRequest(
 		if !tracker.Started() {
 			a.writeTranslatorError(tracker, trans, pr, fmt.Errorf("proxy error: %w", err), http.StatusBadGateway)
 		} else {
-			pr.abortStream = a.failMidStream(tracker, r, pr, err, true)
+			pr.abortStream = a.failMidStream(tracker, r, pr, err, true, false)
 		}
 	}
 	pr.upstreamStatus = tracker.Status()
 	pr.markUpstreamServerError()
 	pr.captureStickyOutcome(ctx, r)
+	pr.clientGone = r.Context().Err() != nil
 	a.logRequestResult(pr, err)
 
 	pr.stats.EndTime = time.Now()
@@ -283,12 +284,15 @@ func (a *Application) executeTranslationRequest(
 		case transformedReq.IsStreaming:
 			// Bytes are already with the client; the abort is raised by translationHandler
 			// after metrics are recorded.
-			pr.abortStream = a.failMidStream(w, r, pr, proxyErr, true)
+			reporter, _ := trans.(translator.StreamErrorReporter)
+			written := reporter != nil && reporter.StreamErrorEmitted(proxyErr)
+			pr.abortStream = a.failMidStream(w, r, pr, proxyErr, true, written)
 		}
 	}
 	pr.upstreamStatus = tracker.Status()
 	pr.markUpstreamServerError()
 	pr.captureStickyOutcome(ctx, r)
+	pr.clientGone = r.Context().Err() != nil
 	a.logRequestResult(pr, proxyErr)
 
 	pr.stats.EndTime = time.Now()
@@ -496,7 +500,9 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		pr := a.initializeProxyRequest(r)
-		// Raised last so logging and translator metrics still record the failure.
+		// This defer must stay the first one registered in this handler: defers run
+		// last-in first-out, so being first makes it run last, after logging and
+		// translator metrics have recorded the failure.
 		// http.ErrAbortHandler is net/http's contract for dropping the connection
 		// without a clean body terminator or a stack trace; it is deliberately the
 		// only panic in this path and is never raised inside a goroutine.
