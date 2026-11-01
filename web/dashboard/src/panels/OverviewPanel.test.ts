@@ -226,13 +226,9 @@ describe('OverviewPanel glance table latency', () => {
 });
 
 describe('OverviewPanel response-rate tile is honest about what it counts (D2)', () => {
-  // The underlying metric (proxy/core/base.go) counts any completed streamed
-  // response as success regardless of HTTP status, so an all-500 fleet can
-  // read 100%. Fixing that metric is deferred to a later change; this only
-  // asserts the dashboard's own job - the tile must not present an
-  // unqualified percentage. A title attribute is not enough (mouse-only,
-  // invisible to a scanning operator), so this checks the rendered text
-  // content, not an attribute.
+  // The underlying metric counts a backend 5xx as a failure but a 4xx as a
+  // success (the caller's problem), so the percentage needs that rule spelled
+  // out next to it rather than read as "every response was fine".
   it('does not label the tile "Success rate" and renders a visible caveat', async () => {
     component = mount(OverviewPanel, { target: document.body });
     flushSync();
@@ -256,8 +252,8 @@ describe('OverviewPanel response-rate tile is honest about what it counts (D2)',
     // deliberately shortened to keep the tile quiet), so the honesty
     // guarantee is the attribute, not rendered text - still no {@html} sink.
     const caveat = rateTile.querySelector('.sub span[title]')?.getAttribute('title');
-    expect(caveat).toMatch(/HTTP status/i);
-    expect(caveat).toMatch(/regardless/i);
+    expect(caveat).toMatch(/5xx/);
+    expect(caveat).toMatch(/4xx/);
   });
 });
 
