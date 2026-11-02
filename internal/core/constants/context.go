@@ -22,6 +22,10 @@ const (
 	ContextStickyKeySourceKey = contextKey("sticky-key-source") // which source produced the key
 	ContextStickyOutcomeKey   = contextKey("sticky-outcome")    // *StickyOutcome written by the wrapper
 
+	// ContextEndpointOverrideKey carries a client-supplied X-Olla-Endpoint value;
+	// the sticky wrapper honours it as a hard selection and re-pins the session to it.
+	ContextEndpointOverrideKey = contextKey("endpoint-override")
+
 	// ContextModelAliasMapKey stores a map[string]string of endpoint URL → actual model name
 	// when a model alias is resolved, allowing the proxy to rewrite the model name in the
 	// request body to match what the selected backend expects

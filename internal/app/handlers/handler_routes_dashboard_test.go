@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/app/handlers/dashboard"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/router"
@@ -52,8 +53,15 @@ func applicationWithStaticRouteTable(t *testing.T, dash config.DashboardConfig) 
 		Config: &config.Config{
 			Dashboard: dash,
 		},
-		logger:        &mockStyledLogger{},
-		routeRegistry: reg,
+		// registerRoutes now emits root-level "/" proxy routes; the proxy
+		// handler dereferences inspectorChain and discoveryService (nil here
+		// caused a SIGSEGV once the root route existed). Empty/no-op versions
+		// are enough: the disabled-dashboard case falls through to the mux 404
+		// and the enabled cases never reach dispatch.
+		inspectorChain:   inspector.NewChain(&mockStyledLogger{}),
+		discoveryService: &mockDiscoveryService{},
+		logger:           &mockStyledLogger{},
+		routeRegistry:    reg,
 	}
 	app.registerRoutes()
 	return app, reg
