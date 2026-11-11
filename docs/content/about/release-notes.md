@@ -14,6 +14,12 @@ Breaking changes are tagged **Breaking**. Additions and fixes are tagged **Added
 **Fixed**. Behaviour changes that need no migration are tagged **Changed**. Quoted field
 names and config keys are the literal wire or YAML identifiers.
 
+## v0.1.1
+
+### Fixed: client cancels no longer open the circuit breaker
+
+A client that cancelled or timed out before the first response byte was recorded as a backend failure ([#269](https://github.com/thushan/olla/issues/269)). Five such cancels opened the Olla engine's circuit breaker and a healthy backend returned 502 for 30 seconds, and a cancelled half-open probe re-opened it. A client cancel or client deadline is now ignored by the breaker, and a cancelled half-open probe releases its slot so the next request probes straight away. Both engines also stop counting these cancels as failed requests in the stats and error events. Backend timeouts, such as the response-header timeout, and connection errors still count.
+
 ## v0.1.0
 
 This was going to be v0.0.30. It's v0.1.0 because it's a big release: TEI embeddings and rerank support, the reworked herd dashboard, rate-limit and concurrency hardening, retry controls and corrected request stats. Some of these change what existing setups see, so it gets a minor version bump. Check the changes below before you upgrade. Fixes from here ship as v0.1.x.
