@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"strings"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
@@ -12,8 +13,9 @@ import (
 // into the concrete model names that backends recognise.
 type AliasResolver struct {
 	// aliases maps a virtual model name to a list of actual model names
-	aliases map[string][]string
-	logger  logger.StyledLogger
+	aliases   map[string][]string
+	nameIndex map[string]string
+	logger    logger.StyledLogger
 }
 
 // NewAliasResolver creates a new AliasResolver from the configured alias map.
@@ -29,16 +31,61 @@ func NewAliasResolver(aliases map[string][]string, logger logger.StyledLogger) *
 	}
 }
 
-// IsAlias returns true if the given model name is a configured alias
+// NewAliasResolverWithUnification also matches alias names without regard to case
+// when model unification is enabled. Exact names retain their configured targets.
+func NewAliasResolverWithUnification(aliases map[string][]string, logger logger.StyledLogger, enabled bool) *AliasResolver {
+	r := NewAliasResolver(aliases, logger)
+	if r == nil || !enabled {
+		return r
+	}
+	r.nameIndex = make(map[string]string, len(aliases))
+	for name := range aliases {
+		key := strings.ToLower(name)
+		if _, exists := r.nameIndex[key]; exists {
+			// A non-exact spelling must not choose between different aliases.
+			r.nameIndex[key] = ""
+		} else {
+			r.nameIndex[key] = name
+		}
+	}
+	return r
+}
+
+// PreserveModelNameCase keeps the inspector from collapsing distinct configured
+// aliases before lookup. Ambiguous spellings must reach lookup unchanged too.
+func (r *AliasResolver) PreserveModelNameCase(name string) bool {
+	_, exists := r.nameIndex[strings.ToLower(name)]
+	return exists
+}
+
+// CanonicalAliasName returns the configured spelling of an unambiguous alias.
+func (r *AliasResolver) CanonicalAliasName(name string) (string, bool) {
+	if _, exists := r.aliases[name]; exists {
+		return name, true
+	}
+	original := r.nameIndex[strings.ToLower(name)]
+	return original, original != ""
+}
+
+func (r *AliasResolver) aliasModels(name string) ([]string, bool) {
+	original, ok := r.CanonicalAliasName(name)
+	if !ok {
+		return nil, false
+	}
+	return r.aliases[original], true
+}
+
+// IsAlias returns true if the given model name resolves to a configured alias.
 func (r *AliasResolver) IsAlias(modelName string) bool {
-	_, ok := r.aliases[modelName]
+	_, ok := r.aliasModels(modelName)
 	return ok
 }
 
 // GetActualModels returns the list of actual model names for an alias.
 // Returns nil if the model name is not an alias.
 func (r *AliasResolver) GetActualModels(aliasName string) []string {
-	return r.aliases[aliasName]
+	models, _ := r.aliasModels(aliasName)
+	return models
 }
 
 // EndpointModelMapping maps an endpoint URL to the actual model name it should receive
@@ -55,7 +102,7 @@ func (r *AliasResolver) ResolveEndpoints(
 	aliasName string,
 	registry domain.ModelRegistry,
 ) (map[string]string, error) {
-	actualModels := r.aliases[aliasName]
+	actualModels := r.GetActualModels(aliasName)
 	if len(actualModels) == 0 {
 		return nil, nil
 	}

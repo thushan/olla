@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -172,5 +175,67 @@ func TestAliasResolver_AliasNameSameAsActualModel(t *testing.T) {
 	// lmstudio should get gpt-oss-120b (its native model name)
 	if model := endpointToModel["http://lmstudio:1234"]; model != "gpt-oss-120b" {
 		t.Errorf("expected lmstudio to get gpt-oss-120b, got %q", model)
+	}
+}
+
+func TestAliasResolver_UnifiedNames(t *testing.T) {
+	targets := []string{"Native-Model", "Other-Model"}
+	for _, enabled := range []bool{false, true} {
+		for _, empty := range []map[string][]string{nil, {}} {
+			require.Nil(t, NewAliasResolverWithUnification(empty, createTestLogger(), enabled))
+		}
+	}
+	for _, tc := range []struct {
+		name      string
+		aliases   map[string][]string
+		requested string
+		enabled   bool
+		want      []string
+		preserve  bool
+	}{
+		{"enabled lower", map[string][]string{"My-Model": targets}, "my-model", true, targets, true},
+		{"enabled upper", map[string][]string{"My-Model": targets}, "MY-MODEL", true, targets, true},
+		{"enabled exact", map[string][]string{"My-Model": targets}, "My-Model", true, targets, true},
+		{"disabled exact", map[string][]string{"My-Model": targets}, "My-Model", false, targets, false},
+		{"disabled mismatch", map[string][]string{"My-Model": targets}, "my-model", false, nil, false},
+		{"unicode", map[string][]string{"MÖDEL": targets}, "mödel", true, targets, true},
+		{"no trim", map[string][]string{"My-Model": targets}, " My-Model ", true, nil, false},
+		{"no tag fallback", map[string][]string{"My-Model:latest": targets}, "my-model", true, nil, false},
+		{"self reference", map[string][]string{"Native-Model": targets}, "NATIVE-MODEL", true, targets, true},
+		{"collision first exact", map[string][]string{"GPU": {"Native-Model"}, "gpu": {"Other-Model"}}, "GPU", true, []string{"Native-Model"}, true},
+		{"collision second exact", map[string][]string{"GPU": {"Native-Model"}, "gpu": {"Other-Model"}}, "gpu", true, []string{"Other-Model"}, true},
+		{"collision ambiguous", map[string][]string{"GPU": {"Native-Model"}, "gpu": {"Other-Model"}}, "gPu", true, nil, true},
+		{"unknown", map[string][]string{"My-Model": targets}, "unknown", true, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := NewAliasResolverWithUnification(tc.aliases, createTestLogger(), tc.enabled)
+			assert.Equal(t, tc.want != nil, resolver.IsAlias(tc.requested))
+			assert.Equal(t, tc.want, resolver.GetActualModels(tc.requested))
+			assert.Equal(t, tc.preserve, resolver.PreserveModelNameCase(tc.requested))
+			reg := NewMemoryModelRegistry(createTestLogger())
+			require.NoError(t, reg.RegisterModel(t.Context(), "http://backend:8000", &domain.ModelInfo{Name: "Native-Model"}))
+			require.NoError(t, reg.RegisterModel(t.Context(), "http://backend:8000", &domain.ModelInfo{Name: "Other-Model"}))
+			endpoints, err := resolver.ResolveEndpoints(t.Context(), tc.requested, reg)
+			require.NoError(t, err)
+			if tc.want == nil {
+				assert.Empty(t, endpoints)
+			} else {
+				assert.Equal(t, map[string]string{"http://backend:8000": tc.want[0]}, endpoints, "target spelling and priority must survive alias lookup")
+			}
+		})
+	}
+}
+
+func BenchmarkAliasResolverLookup(b *testing.B) {
+	aliases := map[string][]string{"My-Model": {"Native-Model"}}
+	for _, requested := range []string{"My-Model", "my-model", "unknown"} {
+		b.Run(requested, func(b *testing.B) {
+			resolver := NewAliasResolverWithUnification(aliases, createTestLogger(), true)
+			b.ReportAllocs()
+			b.ResetTimer()
+			for range b.N {
+				resolver.IsAlias(requested)
+			}
+		})
 	}
 }
