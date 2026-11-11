@@ -52,7 +52,7 @@ func TestClientCancelBeforeFirstByte_DoesNotTripBreaker(t *testing.T) {
 	}
 
 	const cancelled = 6 // breaker threshold is 5
-	for i := 0; i < cancelled; i++ {
+	for range cancelled {
 		// WithCancel, not WithTimeout: a client hanging up surfaces as
 		// context.Canceled, which is what curl -m produces server-side.
 		ctx, cancel := context.WithCancel(context.Background())
@@ -89,7 +89,7 @@ func TestClientCancelOnHalfOpenProbe_DoesNotReopenBreaker(t *testing.T) {
 
 	// Trip on genuine failures, then backdate so the next call is the half-open probe.
 	cb := svc.GetCircuitBreaker(ep.Name)
-	for i := 0; i < circuitBreakerThreshold; i++ {
+	for range circuitBreakerThreshold {
 		cb.RecordFailure(0)
 	}
 	require.True(t, cb.Tripped())

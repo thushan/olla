@@ -57,7 +57,7 @@ func TestBackendRoundTripFailures_StillOpenBreaker(t *testing.T) {
 	dead.Close() // connection refused from here on
 
 	svc := newCancelTestService(t, nil)
-	for i := 0; i < circuitBreakerThreshold; i++ {
+	for range circuitBreakerThreshold {
 		require.Error(t, proxyOnce(context.Background(), svc, ep))
 	}
 
@@ -75,7 +75,7 @@ func TestResponseHeaderTimeout_StillCountsAgainstBreaker(t *testing.T) {
 	svc := newCancelTestService(t, func(c *Configuration) {
 		c.ResponseHeaderTimeout = 50 * time.Millisecond
 	})
-	for i := 0; i < circuitBreakerThreshold; i++ {
+	for range circuitBreakerThreshold {
 		require.Error(t, proxyOnce(context.Background(), svc, ep))
 	}
 
@@ -106,7 +106,7 @@ func TestClientCancelOnHalfOpenProbe_ReleasesProbeSlot(t *testing.T) {
 	svc := newCancelTestService(t, nil)
 
 	cb := svc.GetCircuitBreaker(ep.Name)
-	for i := 0; i < circuitBreakerThreshold; i++ {
+	for range circuitBreakerThreshold {
 		cb.RecordFailure(0)
 	}
 	cb.SetLastFailureNanos(time.Now().Add(-time.Minute).UnixNano())
