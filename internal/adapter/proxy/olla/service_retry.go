@@ -129,6 +129,15 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	stats.BackendResponseMs = time.Since(backendStart).Milliseconds()
 
 	if err != nil {
+		// A client cancel says nothing about the backend: no breaker failure
+		// and no error stats. Classify before MakeUserFriendlyError wraps err.
+		if core.IsClientAbort(ctx, err) {
+			if cb != nil {
+				cb.Abandon(attempt)
+			}
+			rlog.Debug("client aborted before first byte", "error", err)
+			return common.MakeUserFriendlyError(err, time.Since(stats.StartTime), "backend", cfg.GetResponseTimeout())
+		}
 		if cb != nil {
 			cb.RecordFailure(attempt)
 		}
@@ -184,6 +193,10 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	stats.TotalBytes = bytesWritten
 
 	if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
+		if core.IsClientAbort(ctx, streamErr) {
+			rlog.Debug("client aborted during streaming", "error", streamErr)
+			return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", cfg.GetResponseTimeout())
+		}
 		rlog.Error("streaming failed", "error", streamErr)
 		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), streamErr)
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", cfg.GetResponseTimeout())
