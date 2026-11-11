@@ -435,19 +435,14 @@ func (h *RetryHandler) buildFinalError(availableEndpoints []*domain.Endpoint, ma
 // IsClientAbort reports whether err is the client walking away (cancel or its
 // own deadline) rather than anything the backend did. The request context is
 // the source of truth: once it is done, whatever error the transport surfaced
-// is a consequence of the hang-up. A context.Canceled in the chain also counts
-// for the case where the cancel arrives via a derived context. Backend
-// timeouts (response-header, dial) are transport net.Errors with a live
-// request context and so still return false: they are the backend's fault and
-// must keep counting against it.
+// is a consequence of the hang-up. A context.Canceled in err alone is NOT
+// enough: a cancel on an Olla-internal derived context (e.g. sherpa's
+// combinedCtx) leaves the request context live and must not be silenced.
+// Backend timeouts (response-header, dial) are transport net.Errors with a
+// live request context and so still return false: they are the backend's fault
+// and must keep counting against it.
 func IsClientAbort(ctx context.Context, err error) bool {
-	if err == nil {
-		return false
-	}
-	if ctx != nil && ctx.Err() != nil {
-		return true
-	}
-	return errors.Is(err, context.Canceled)
+	return err != nil && ctx != nil && ctx.Err() != nil
 }
 
 // IsConnectionError identifies transient network errors suitable for retry.

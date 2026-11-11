@@ -594,7 +594,8 @@ func TestIsClientAbort(t *testing.T) {
 		{"live ctx, backend timeout", context.Background(), &net.DNSError{IsTimeout: true}, false},
 		{"cancelled ctx", cancelled, errors.New("anything the transport said"), true},
 		{"client deadline", expired, context.DeadlineExceeded, true},
-		{"wrapped canceled, live ctx", context.Background(), fmt.Errorf("round trip: %w", context.Canceled), true},
+		{"wrapped canceled, live ctx (internal cancel)", context.Background(), fmt.Errorf("round trip: %w", context.Canceled), false},
+		{"wrapped canceled, cancelled ctx", cancelled, fmt.Errorf("round trip: %w", context.Canceled), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
