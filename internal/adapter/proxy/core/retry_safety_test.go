@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -573,3 +574,34 @@ type noFlushWriter struct{ rec *httptest.ResponseRecorder }
 func (n noFlushWriter) Header() http.Header         { return n.rec.Header() }
 func (n noFlushWriter) Write(b []byte) (int, error) { return n.rec.Write(b) }
 func (n noFlushWriter) WriteHeader(c int)           { n.rec.WriteHeader(c) }
+
+func TestIsClientAbort(t *testing.T) {
+	t.Parallel()
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	expired, cancelExpired := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelExpired()
+
+	tests := []struct {
+		name string
+		ctx  context.Context
+		err  error
+		want bool
+	}{
+		{"nil error", cancelled, nil, false},
+		{"live ctx, transport error", context.Background(), errors.New("connection refused"), false},
+		{"live ctx, backend timeout", context.Background(), &net.DNSError{IsTimeout: true}, false},
+		{"cancelled ctx", cancelled, errors.New("anything the transport said"), true},
+		{"client deadline", expired, context.DeadlineExceeded, true},
+		{"wrapped canceled, live ctx", context.Background(), fmt.Errorf("round trip: %w", context.Canceled), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := IsClientAbort(tt.ctx, tt.err); got != tt.want {
+				t.Fatalf("IsClientAbort() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
