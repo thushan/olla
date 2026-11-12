@@ -15,7 +15,7 @@ The Anthropic translator accepts requests in Anthropic Messages API format at `/
 **Key Features**:
 
 - ✅ Full Anthropic Messages API compatibility
-- ✅ **Passthrough mode** for backends with native Anthropic support (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner)
+- ✅ **Passthrough mode** for backends with native Anthropic support (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, LM Studio, Ollama, oMLX, Rapid-MLX, Docker Model Runner)
 - ✅ **Translation mode** for OpenAI-compatible backends without native support
 - ✅ Automatic fallback from passthrough to translation when needed
 - ✅ Streaming via Server-Sent Events (SSE)
@@ -58,7 +58,7 @@ sequenceDiagram
     Olla->>Client: Response (Anthropic format - unchanged)
 ```
 
-**Compatible backends**: vLLM (v0.11.1+), vLLM-MLX (recent), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), Docker Model Runner (recent)
+**Compatible backends**: vLLM (v0.11.1+), vLLM-MLX (recent), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), Rapid-MLX, Docker Model Runner (recent)
 
 **Observability**: Responses include `X-Olla-Mode: passthrough` header.
 
@@ -858,6 +858,7 @@ When `passthrough_enabled` is `true` (the default), Olla forwards requests direc
 | LM Studio | `config/profiles/lmstudio.yaml` | v0.4.1+ | No token counting |
 | Ollama | `config/profiles/ollama.yaml` | v0.14.0+ | No token counting |
 | oMLX | `config/profiles/omlx.yaml` | v0.4.2+ | No token counting (native endpoint exists but Olla uses local estimator) |
+| Rapid-MLX | `config/profiles/rapid-mlx.yaml` | Not specified | Olla uses its local token estimator |
 | Docker Model Runner | `config/profiles/dmr.yaml` | recent | Supports token counting |
 
 To disable passthrough for a specific backend, set `anthropic_support.enabled: false` in the profile:

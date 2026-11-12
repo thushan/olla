@@ -228,3 +228,38 @@ func TestOpenAIParser_Parse(t *testing.T) {
 		}
 	})
 }
+
+func TestOpenAIParser_ContextWindow(t *testing.T) {
+	t.Parallel()
+
+	// Values are fixtures, not claims about any model's context limit.
+	for _, tc := range []struct {
+		name   string
+		fields string
+		want   int64
+	}{
+		{"Rapid-MLX context_window", `"context_window": 8192`, 8192},
+		{"max_model_len takes precedence", `"context_window": 8192, "max_model_len": 4096`, 4096},
+		{"zero max_model_len falls back", `"context_window": 8192, "max_model_len": 0`, 8192},
+		{"zero context_window ignored", `"context_window": 0`, 0},
+		{"negative context_window ignored", `"context_window": -1`, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			parser := &openAIParser{}
+			models, err := parser.Parse([]byte(`{"data":[{"id":"mlx-community/Qwen3.5-4B-MLX-4bit","object":"model",` + tc.fields + `}]}`))
+			require.NoError(t, err)
+			require.Len(t, models, 1)
+			assert.Equal(t, "mlx-community/Qwen3.5-4B-MLX-4bit", models[0].Name)
+			if tc.want == 0 {
+				if models[0].Details != nil {
+					assert.Nil(t, models[0].Details.MaxContextLength)
+				}
+				return
+			}
+			require.NotNil(t, models[0].Details)
+			require.NotNil(t, models[0].Details.MaxContextLength)
+			assert.Equal(t, tc.want, *models[0].Details.MaxContextLength)
+		})
+	}
+}

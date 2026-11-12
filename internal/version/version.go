@@ -40,6 +40,7 @@ var (
 		"lmdeploy",
 		"lm_studio",
 		"omlx",
+		"rapid-mlx",
 		"sglang",
 		"vllm",
 		"vllm-mlx",

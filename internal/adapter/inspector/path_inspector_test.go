@@ -569,12 +569,12 @@ func TestPathInspector_ShippedProfiles_SingleSegmentPathsDoNotCaptureDeeperPaths
 // /api/v1/responses and /v1/responses (routes/openai/text/responses.cpp); dmr
 // registers it under /v1 and /engines/v1 (pkg/responses/handler.go).
 var knownServers = map[string][]string{
-	"/v1/chat/completions":      {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/chat/completions":      {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "rapid-mlx", "sglang", "vllm", "vllm-mlx"},
 	"/v1/completions":           {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
-	"/v1/models":                {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
-	"/v1/embeddings":            {"llamacpp", "lm-studio", "litellm", "ollama", "omlx", "openai-compatible", "sglang", "text-embeddings-inference", "vllm", "vllm-mlx"},
-	"/v1/responses":             {"docker-model-runner", "lemonade", "llamacpp", "lm-studio", "litellm", "lmdeploy", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
-	"/v1/messages":              {"lemonade", "llamacpp", "litellm", "lm-studio", "lmdeploy", "ollama", "omlx", "openai-compatible", "sglang", "vllm", "vllm-mlx"},
+	"/v1/models":                {"llamacpp", "lm-studio", "lmdeploy", "litellm", "ollama", "omlx", "openai-compatible", "rapid-mlx", "sglang", "vllm", "vllm-mlx"},
+	"/v1/embeddings":            {"llamacpp", "lm-studio", "litellm", "ollama", "omlx", "openai-compatible", "rapid-mlx", "sglang", "text-embeddings-inference", "vllm", "vllm-mlx"},
+	"/v1/responses":             {"docker-model-runner", "lemonade", "llamacpp", "lm-studio", "litellm", "lmdeploy", "ollama", "omlx", "openai-compatible", "rapid-mlx", "sglang", "vllm", "vllm-mlx"},
+	"/v1/messages":              {"lemonade", "llamacpp", "litellm", "lm-studio", "lmdeploy", "ollama", "omlx", "openai-compatible", "rapid-mlx", "sglang", "vllm", "vllm-mlx"},
 	"/v1/messages/count_tokens": {"llamacpp", "litellm", "lmdeploy", "omlx", "sglang", "vllm", "vllm-mlx"},
 	"/v1/rerank":                {"llamacpp", "omlx", "sglang", "vllm", "vllm-mlx"},
 }
