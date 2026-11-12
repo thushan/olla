@@ -58,7 +58,7 @@ sequenceDiagram
     Olla->>Client: Response (Anthropic format - unchanged)
 ```
 
-**Compatible backends**: vLLM (v0.11.1+), vLLM-MLX (recent), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), Rapid-MLX, Docker Model Runner (recent)
+**Compatible backends**: vLLM (v0.11.1+), vLLM-MLX (recent), SGLang (v0.5.9+), LMDeploy (v0.13.0+), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), Rapid-MLX, Docker Model Runner (recent)
 
 **Observability**: Responses include `X-Olla-Mode: passthrough` header.
 
