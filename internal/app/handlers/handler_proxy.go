@@ -48,6 +48,8 @@ type proxyRequest struct {
 	isStreaming    bool
 }
 
+// proxyHandler applies request inspection and session affinity before choosing
+// endpoints across all configured providers.
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	pr := a.initializeProxyRequest(r)
 

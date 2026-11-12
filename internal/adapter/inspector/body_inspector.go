@@ -425,6 +425,8 @@ func skipValueTokens(dec *json.Decoder) error {
 	return nil
 }
 
+// normalizeModelName preserves recognised alias spellings so routing can distinguish
+// case-only aliases; native model names retain their usual normalisation.
 func (bi *BodyInspector) normalizeModelName(model string) string {
 	model = strings.TrimSpace(model)
 	if bi.preserveModelNameCase != nil && bi.preserveModelNameCase(model) {

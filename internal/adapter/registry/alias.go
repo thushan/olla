@@ -67,6 +67,7 @@ func (r *AliasResolver) CanonicalAliasName(name string) (string, bool) {
 	return original, original != ""
 }
 
+// aliasModels uses the canonical alias so lookup and endpoint resolution agree.
 func (r *AliasResolver) aliasModels(name string) ([]string, bool) {
 	original, ok := r.CanonicalAliasName(name)
 	if !ok {
