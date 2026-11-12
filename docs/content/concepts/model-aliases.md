@@ -136,6 +136,8 @@ Alias resolution runs **before** the standard model routing pipeline (strict, op
 
 Aliases are separate from model unification. Unification merges model catalogues within a single provider type (e.g. multiple Ollama instances). Aliases map across provider types (e.g. Ollama ↔ LM Studio ↔ llamacpp).
 
+When `model_registry.enable_unifier` is `true`, configured alias names also match without regard to case. For example, `My-Model` accepts requests for `my-model` or `MY-MODEL`; the configured target names and their order are unchanged. Case variants of the same alias share a sticky-session key; model statistics still use the native target name. An exact alias spelling takes priority. If aliases differ only in case (such as `GPU` and `gpu`), use one of those exact spellings: an ambiguous spelling such as `gPu` does not select either alias and falls back to normal model routing. Disabling unification retains the existing case-sensitive alias lookup after request model names are lowercased by the body inspector; use lowercase alias names in that mode.
+
 ### Proxy Engines
 
 Both the Olla and Sherpa proxy engines support model alias rewriting. The rewrite happens transparently before the request is forwarded to the backend.

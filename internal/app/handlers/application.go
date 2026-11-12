@@ -185,10 +185,19 @@ func NewApplication(
 	// Add path inspector
 	pathInspector := inspectorFactory.CreatePathInspector()
 	inspectorChain.AddInspector(pathInspector)
+	// Create alias resolver for model name aliasing (nil if no aliases configured)
+	aliasResolver := registry.NewAliasResolverWithUnification(cfg.ModelAliases, logger, cfg.ModelRegistry.EnableUnifier)
+	if aliasResolver != nil {
+		logger.Info("Model aliases configured", "alias_count", len(cfg.ModelAliases))
+	}
+
 	// Add body inspector for model extraction
 	bodyInspector, err := inspectorFactory.CreateBodyInspector()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create body inspector: %w", err)
+	}
+	if aliasResolver != nil && cfg.ModelRegistry.EnableUnifier {
+		bodyInspector.SetModelNameCasePreserver(aliasResolver.PreserveModelNameCase)
 	}
 	inspectorChain.AddInspector(bodyInspector)
 
@@ -232,12 +241,6 @@ func NewApplication(
 			"max_message_size", cfg.Translators.Anthropic.MaxMessageSize)
 	} else {
 		logger.Info("Anthropic translator disabled via configuration")
-	}
-
-	// Create alias resolver for model name aliasing (nil if no aliases configured)
-	aliasResolver := registry.NewAliasResolver(cfg.ModelAliases, logger)
-	if aliasResolver != nil {
-		logger.Info("Model aliases configured", "alias_count", len(cfg.ModelAliases))
 	}
 
 	// Use profile factory directly as it implements the ProfileLookup interface

@@ -45,9 +45,10 @@ type modelRequest struct {
 
 // BodyInspector extracts model names from request bodies
 type BodyInspector struct {
-	logger      logger.StyledLogger
-	bufferPool  *pool.Pool[*bytes.Buffer]
-	maxBodySize int64
+	logger                logger.StyledLogger
+	preserveModelNameCase func(string) bool
+	bufferPool            *pool.Pool[*bytes.Buffer]
+	maxBodySize           int64
 }
 
 func NewBodyInspector(logger logger.StyledLogger) (*BodyInspector, error) {
@@ -63,6 +64,12 @@ func NewBodyInspector(logger logger.StyledLogger) (*BodyInspector, error) {
 		maxBodySize: MaxBodySize,
 		bufferPool:  bufPool,
 	}, nil
+}
+
+// SetModelNameCasePreserver configures names whose case must reach routing unchanged.
+// Call only during construction, before the inspector handles requests.
+func (bi *BodyInspector) SetModelNameCasePreserver(preserve func(string) bool) {
+	bi.preserveModelNameCase = preserve
 }
 
 func (bi *BodyInspector) Name() string {
@@ -418,8 +425,13 @@ func skipValueTokens(dec *json.Decoder) error {
 	return nil
 }
 
+// normalizeModelName preserves recognised alias spellings so routing can distinguish
+// case-only aliases; native model names retain their usual normalisation.
 func (bi *BodyInspector) normalizeModelName(model string) string {
 	model = strings.TrimSpace(model)
+	if bi.preserveModelNameCase != nil && bi.preserveModelNameCase(model) {
+		return model
+	}
 	model = strings.ToLower(model)
 	// Only whitespace and case are normalised here. Tags are left alone on purpose:
 	// the registry applies Ollama's default tag (a bare "foo" is "foo:latest"), and only
