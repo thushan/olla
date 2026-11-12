@@ -1,7 +1,7 @@
 ---
 title: Olla - High-Performance LLM Proxy and Load Balancer
-description: Olla is a high-performance proxy, model unifier and load balancer for Ollama, LM Studio, vLLM, SGLang, Lemonade SDK, oMLX and OpenAI-compatible LLM backends. Unified model catalogues, intelligent routing, and automatic failover.
-keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, sglang, lemonade sdk, omlx, oMLX, model unification, load balancer, ai infrastructure
+description: Olla is a high-performance proxy, model unifier and load balancer for Ollama, LM Studio, vLLM, SGLang, Lemonade SDK, oMLX, Rapid-MLX and OpenAI-compatible LLM backends. Unified model catalogues, intelligent routing, and automatic failover.
+keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, sglang, lemonade sdk, omlx, oMLX, Rapid-MLX, model unification, load balancer, ai infrastructure
 ---
 
 <div align="center">
@@ -19,6 +19,7 @@ keywords: llm proxy, ollama proxy, lm studio proxy, vllm proxy, sglang, lemonade
     <a href="https://github.com/waybarrios/vllm-mlx/"><img src="https://img.shields.io/badge/vLLM--MLX-native-lightgreen.svg" alt="vLLM-MLX: Native Support"></a>
     <a href="https://docs.docker.com/ai/model-runner/"><img src="https://img.shields.io/badge/Docker Model Runner-native-lightgreen.svg" alt="Docker Model Runner: Native Support"></a>
     <a href="https://github.com/jundot/omlx"><img src="https://img.shields.io/badge/oMLX-native-lightgreen.svg" alt="oMLX: Native Support"></a><br/>
+    <a href="https://github.com/raullenchai/Rapid-MLX">Rapid-MLX: Native Support</a>
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-native-lightgreen.svg" alt="Ollama: Native Support"></a>
     <a href="https://lmstudio.ai/"><img src="https://img.shields.io/badge/LM Studio-native-lightgreen.svg" alt="LM Studio: Native Support"></a>
     <a href="https://github.com/lemonade-sdk/lemonade"><img src="https://img.shields.io/badge/LemonadeSDK-native-lightgreen.svg" alt="LemonadeSDK: Native Support"></a>      
@@ -107,7 +108,7 @@ Olla provides detailed response headers for observability:
 |--------|-------------|
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used for the request |
-| `X-Olla-Backend-Type` | Backend type (ollama/openai/openai-compatible/lm-studio/llamacpp/vllm/vllm-mlx/sglang/lemonade/lmdeploy/docker-model-runner/omlx/text-embeddings-inference) |
+| `X-Olla-Backend-Type` | Backend type (ollama/openai/openai-compatible/lm-studio/llamacpp/vllm/vllm-mlx/sglang/lemonade/lmdeploy/docker-model-runner/omlx/rapid-mlx/text-embeddings-inference) |
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Response-Time` | Total processing time |
 

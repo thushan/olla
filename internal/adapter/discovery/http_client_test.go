@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -267,6 +268,66 @@ func TestDiscoverModels(t *testing.T) {
 
 			if tt.validateModels != nil {
 				tt.validateModels(t, models)
+			}
+		})
+	}
+}
+
+func TestAutoDetectionOpenAIModelIdentity(t *testing.T) {
+	const modelsPath = "/v1/models"
+	tests := []struct {
+		name         string
+		endpointType string
+		owner        string
+		metadata     string
+		wantProbes   int
+		wantContext  int64
+		wantGGUF     bool
+	}{
+		{name: "llama.cpp", endpointType: domain.ProfileAuto, owner: "llamacpp", wantProbes: 1, wantGGUF: true},
+		{name: "vLLM", endpointType: domain.ProfileAuto, owner: "vllm", metadata: `,"max_model_len":32768`, wantProbes: 2, wantContext: 32768},
+		{name: "Rapid-MLX context window", endpointType: domain.ProfileAuto, owner: "rapid-mlx", metadata: `,"context_window":8192`, wantProbes: 3, wantContext: 8192},
+		{name: "Rapid-MLX current response", owner: "rapid-mlx", metadata: `,"context_window":262144,"max_model_len":262144`, wantProbes: 3, wantContext: 262144},
+		{name: "oMLX", endpointType: domain.ProfileAuto, owner: "omlx", metadata: `,"max_model_len":16384`, wantProbes: 4, wantContext: 16384},
+		{name: "generic OpenAI", endpointType: domain.ProfileAuto, owner: "other", wantProbes: 5},
+		{name: "OpenAI without owner", endpointType: domain.ProfileAuto, wantProbes: 5},
+		{name: "explicit llama.cpp keeps permissive parser", endpointType: domain.ProfileLlamaCpp, owner: "publisher", wantProbes: 1, wantGGUF: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var probes atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != modelsPath {
+					http.NotFound(w, r)
+					return
+				}
+				probes.Add(1)
+				fmt.Fprintf(w, `{"object":"list","data":[{"id":"test-model","owned_by":%q%s}]}`, tt.owner, tt.metadata)
+			}))
+			defer server.Close()
+			factory, err := profile.NewFactory("../../../config/profiles")
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := NewHTTPModelDiscoveryClientWithDefaults(factory, createTestLogger())
+			defer client.Close()
+			models, err := client.DiscoverModels(context.Background(), createTestEndpoint(server.URL, tt.endpointType))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := int(probes.Load()); got != tt.wantProbes {
+				t.Errorf("model probes = %d, want %d", got, tt.wantProbes)
+			}
+			if len(models) != 1 || models[0].Name != "test-model" {
+				t.Fatalf("unexpected models: %+v", models)
+			}
+			details := models[0].Details
+			if tt.wantContext > 0 && (details == nil || details.MaxContextLength == nil || *details.MaxContextLength != tt.wantContext) {
+				t.Errorf("context window not preserved: %+v", details)
+			}
+			gotGGUF := details != nil && details.Format != nil && *details.Format == "gguf"
+			if gotGGUF != tt.wantGGUF {
+				t.Errorf("GGUF = %v, want %v", gotGGUF, tt.wantGGUF)
 			}
 		})
 	}

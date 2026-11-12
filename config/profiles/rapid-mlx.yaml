@@ -1,0 +1,79 @@
+# Rapid-MLX uses the standard OpenAI parser and native Anthropic passthrough.
+name: rapid-mlx
+home: "https://github.com/raullenchai/Rapid-MLX"
+version: "1.0"
+display_name: "Rapid-MLX"
+description: "Local LLM inference server for Apple Silicon, built on MLX"
+
+routing:
+  prefixes:
+    - rapid-mlx
+
+api:
+  openai_compatible: true
+  anthropic_support:
+    enabled: true
+    messages_path: /v1/messages
+    token_count: false
+  paths:
+    - /v1/models             # 0: discovery and health
+    - /v1/chat/completions   # 1: chat completions
+    - /v1/embeddings         # 2: when an embedding model is served
+    - /v1/messages          # 3: native Anthropic Messages
+    - /v1/responses         # 4: OpenAI Responses
+  model_discovery_path: /v1/models
+  health_check_path: /v1/models
+
+# Olla profile defaults, not Rapid-MLX server limits.
+characteristics:
+  timeout: 3m
+  default_priority: 75
+  streaming_support: true
+
+detection:
+  path_indicators:
+    - "/v1/models"
+  default_ports:
+    - 8000
+
+request:
+  model_field_paths:
+    - "model"
+  response_format: "openai"
+  parsing_rules:
+    chat_completions_path: "/v1/chat/completions"
+    model_field_name: "model"
+    supports_streaming: true
+
+path_indices:
+  health: 0
+  models: 0
+  chat_completions: 1
+  completions: -1
+  embeddings: 2
+
+models:
+  name_format: "{{.Name}}"
+  capability_patterns:
+    chat:
+      - "*-Instruct*"
+      - "*-instruct*"
+      - "*-Chat*"
+      - "*-chat*"
+    embeddings:
+      - "*embedding*"
+      - "*-embed-*"
+
+metrics:
+  extraction:
+    enabled: true
+    source: response_body
+    format: json
+    paths:
+      model: "$.model"
+      finish_reason: "$.choices[0].finish_reason"
+      input_tokens: "$.usage.prompt_tokens"
+      output_tokens: "$.usage.completion_tokens"
+      total_tokens: "$.usage.total_tokens"
+    calculations:
+      is_complete: 'len(finish_reason) > 0'

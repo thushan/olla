@@ -183,6 +183,7 @@ nav:
             - llama.cpp: integrations/backend/llamacpp.md
             - Docker Model Runner: integrations/backend/docker-model-runner.md
             - oMLX: integrations/backend/omlx.md
+            - Rapid-MLX: integrations/backend/rapid-mlx.md
             - Text Embeddings Inference: integrations/backend/text-embeddings-inference.md
         - Frontends:
             - OpenWebUI + Ollama: integrations/frontend/openwebui.md
@@ -222,6 +223,7 @@ nav:
           - llama.cpp: api-reference/llamacpp.md
           - Docker Model Runner: api-reference/docker-model-runner.md
           - oMLX: api-reference/omlx.md
+          - Rapid-MLX: api-reference/rapid-mlx.md
           - OpenAI: api-reference/openai.md
           - Text Embeddings Inference: api-reference/text-embeddings-inference.md
       - Translated APIs:

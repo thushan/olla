@@ -118,6 +118,12 @@ Proxy endpoints for Hugging Face Text Embeddings Inference (TEI) servers.
 - `/olla/tei/*` and `/olla/text-embeddings-inference/*` - TEI API endpoints
 - Embedding, reranker and classifier models, with `/v1/embeddings` in OpenAI format
 
+### [Rapid-MLX API](rapid-mlx.md)
+Proxy endpoints for Rapid-MLX, a local MLX inference server for Apple Silicon.
+
+- `/olla/rapid-mlx/*` - Rapid-MLX API endpoints
+- OpenAI-compatible endpoints and native Anthropic Messages passthrough
+
 ## Translated APIs
 
 APIs that translate between different formats in real-time.
@@ -184,7 +190,7 @@ All responses include:
 | `X-Olla-Request-ID` | Unique request identifier |
 | `X-Olla-Endpoint` | Backend endpoint name |
 | `X-Olla-Model` | Model used (if applicable) |
-| `X-Olla-Backend-Type` | Provider type, examples: <br> `ollama/lm-studio/llamacpp/litellm/openai/openai-compatible/vllm/vllm-mlx/sglang/lemonade/lmdeploy/omlx/docker-model-runner/text-embeddings-inference` |
+| `X-Olla-Backend-Type` | Provider type, examples: <br> `ollama/lm-studio/llamacpp/litellm/openai/openai-compatible/vllm/vllm-mlx/sglang/lemonade/lmdeploy/omlx/rapid-mlx/docker-model-runner/text-embeddings-inference` |
 | `X-Olla-Response-Time` | Total processing time |
 | `X-Olla-Routing-Strategy` | Routing strategy used (when model routing is active) |
 | `X-Olla-Routing-Decision` | Routing decision made (routed/fallback/rejected) |

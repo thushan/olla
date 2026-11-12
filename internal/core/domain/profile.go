@@ -16,6 +16,7 @@ const (
 	ProfileOpenAICompatible = "openai-compatible"
 	ProfileDockerMR         = "docker-model-runner"
 	ProfileOMLX             = "omlx"
+	ProfileRapidMLX         = "rapid-mlx"
 	ProfileAuto             = "auto"
 )
 
