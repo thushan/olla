@@ -90,10 +90,24 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 	config.ReadTimeout = time.Second
 	config.StreamBufferSize = 8192
 
-	// Create test endpoints - first will fail with connection error, second will succeed
+	// Create a backend that closes the connection before sending response headers.
+	failingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("test server does not support connection hijacking")
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Fatalf("hijack backend connection: %v", err)
+		}
+		conn.Close()
+	}))
+	defer failingServer.Close()
+
+	failingURL, _ := url.Parse(failingServer.URL)
 	failingEndpoint := &domain.Endpoint{
 		Name:   "failing",
-		URL:    &url.URL{Scheme: "http", Host: "localhost:9999"}, // Non-existent port
+		URL:    failingURL,
 		Status: domain.StatusHealthy,
 	}
 
@@ -118,9 +132,10 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 	// Create test selector that returns endpoints in order
 	selector := &testSelector{}
 
-	// Create service (not used in this test, but verifies it can be created)
-	_, err := NewService(discoveryService, selector, config, nil, nil, mockLogger)
+	// Create the service so the test exercises the production proxy path.
+	service, err := NewService(discoveryService, selector, config, nil, nil, mockLogger)
 	assert.NoError(t, err)
+	defer service.Cleanup()
 
 	// Create test request
 	reqBody := bytes.NewBufferString("test body")
@@ -131,30 +146,14 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 		StartTime: time.Now(),
 	}
 
-	// Create retry handler
-	retryHandler := core.NewRetryHandler(discoveryService, mockLogger)
-
-	// Define proxy function
-	proxyFunc := func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error {
-		if endpoint.Name == "failing" {
-			// Simulate a backend stopping while RoundTrip is reading.
-			return io.EOF
-		}
-		// Success case
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
-		return nil
-	}
-
-	// Execute with retry
-	err = retryHandler.ExecuteWithRetry(
+	// Execute through the production proxy path.
+	err = service.ProxyRequestToEndpointsWithRetry(
 		context.Background(),
 		w,
 		req,
 		[]*domain.Endpoint{failingEndpoint, successEndpoint},
-		selector,
 		stats,
-		proxyFunc,
+		mockLogger,
 	)
 
 	// Verify
