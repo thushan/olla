@@ -137,8 +137,8 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 	// Define proxy function
 	proxyFunc := func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error {
 		if endpoint.Name == "failing" {
-			// Simulate connection error
-			return errors.New("dial tcp 127.0.0.1:9999: connect: connection refused")
+			// Simulate a backend stopping while RoundTrip is reading.
+			return io.EOF
 		}
 		// Success case
 		w.WriteHeader(http.StatusOK)
@@ -205,7 +205,7 @@ func TestIsConnectionError(t *testing.T) {
 		{
 			name:     "EOF error",
 			err:      io.EOF,
-			expected: false,
+			expected: true,
 		},
 	}
 
