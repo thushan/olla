@@ -115,6 +115,24 @@ func TestMakeUserFriendlyError(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("EOF preserves cause", func(t *testing.T) {
+		result := MakeUserFriendlyError(io.EOF, 10*time.Second, "backend", timeout)
+		if !errors.Is(result, io.EOF) {
+			t.Fatalf("expected user-friendly error to preserve io.EOF, got: %v", result)
+		}
+	})
+
+	t.Run("short streaming EOF preserves cause", func(t *testing.T) {
+		cause := fmt.Errorf("stream read failed: %w", io.EOF)
+		result := MakeUserFriendlyError(cause, 4*time.Second, "streaming", timeout)
+		if !errors.Is(result, cause) {
+			t.Fatalf("expected user-friendly error to preserve wrapped cause, got: %v", result)
+		}
+		if !strings.Contains(result.Error(), "response ended prematurely") {
+			t.Fatalf("expected short streaming message, got: %v", result)
+		}
+	})
 }
 
 // TestProxyErrorCreation tests domain.NewProxyError functionality

@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -78,6 +80,19 @@ func createRetryTestLogger() logger.StyledLogger {
 	return logger.NewPlainStyledLogger(log)
 }
 
+type eofTrackingConn struct {
+	net.Conn
+	sawEOF *atomic.Bool
+}
+
+func (c *eofTrackingConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if errors.Is(err, io.EOF) {
+		c.sawEOF.Store(true)
+	}
+	return n, err
+}
+
 func TestRetryOnConnectionFailure(t *testing.T) {
 	mockLogger := createRetryTestLogger()
 
@@ -90,10 +105,29 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 	config.ReadTimeout = time.Second
 	config.StreamBufferSize = 8192
 
-	// Create test endpoints - first will fail with connection error, second will succeed
+	// Create a backend that closes the connection before sending response headers.
+	failingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Drain the request to avoid a connection reset masking the EOF path.
+		if _, err := io.Copy(io.Discard, r.Body); err != nil {
+			t.Errorf("read backend request body: %v", err)
+			return
+		}
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("test server does not support connection hijacking")
+		}
+		conn, _, err := hijacker.Hijack()
+		if err != nil {
+			t.Fatalf("hijack backend connection: %v", err)
+		}
+		conn.Close()
+	}))
+	defer failingServer.Close()
+
+	failingURL, _ := url.Parse(failingServer.URL)
 	failingEndpoint := &domain.Endpoint{
 		Name:   "failing",
-		URL:    &url.URL{Scheme: "http", Host: "localhost:9999"}, // Non-existent port
+		URL:    failingURL,
 		Status: domain.StatusHealthy,
 	}
 
@@ -118,9 +152,19 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 	// Create test selector that returns endpoints in order
 	selector := &testSelector{}
 
-	// Create service (not used in this test, but verifies it can be created)
-	_, err := NewService(discoveryService, selector, config, nil, nil, mockLogger)
+	// Create the service so the test exercises the production proxy path.
+	service, err := NewService(discoveryService, selector, config, nil, nil, mockLogger)
 	assert.NoError(t, err)
+	defer service.Cleanup()
+	var sawEOF atomic.Bool
+	dialContext := service.transport.DialContext
+	service.transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := dialContext(ctx, network, address)
+		if err != nil || address != failingURL.Host {
+			return conn, err
+		}
+		return &eofTrackingConn{Conn: conn, sawEOF: &sawEOF}, nil
+	}
 
 	// Create test request
 	reqBody := bytes.NewBufferString("test body")
@@ -131,36 +175,21 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 		StartTime: time.Now(),
 	}
 
-	// Create retry handler
-	retryHandler := core.NewRetryHandler(discoveryService, mockLogger)
-
-	// Define proxy function
-	proxyFunc := func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *domain.Endpoint, stats *ports.RequestStats) error {
-		if endpoint.Name == "failing" {
-			// Simulate connection error
-			return errors.New("dial tcp 127.0.0.1:9999: connect: connection refused")
-		}
-		// Success case
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
-		return nil
-	}
-
-	// Execute with retry
-	err = retryHandler.ExecuteWithRetry(
+	// Execute through the production proxy path.
+	err = service.ProxyRequestToEndpointsWithRetry(
 		context.Background(),
 		w,
 		req,
 		[]*domain.Endpoint{failingEndpoint, successEndpoint},
-		selector,
 		stats,
-		proxyFunc,
+		mockLogger,
 	)
 
 	// Verify
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.Equal(t, "success", w.Body.String())
+	assert.True(t, sawEOF.Load(), "failing backend must produce EOF")
 
 	// Verify that UpdateEndpointStatus was called for the failing endpoint
 	assert.Contains(t, discoveryService.updateStatusCalls, "failing")
@@ -205,7 +234,7 @@ func TestIsConnectionError(t *testing.T) {
 		{
 			name:     "EOF error",
 			err:      io.EOF,
-			expected: false,
+			expected: true,
 		},
 	}
 

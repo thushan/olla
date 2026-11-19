@@ -448,6 +448,13 @@ func IsConnectionError(err error) bool {
 		return false
 	}
 
+	// A backend that closes the connection while RoundTrip is reading the
+	// response is reported as io.EOF, often wrapped in a *url.Error. Treat it
+	// as a transport failure so the request can fail over to another endpoint.
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+
 	var netErr net.Error
 	if errors.As(err, &netErr) {
 		return true
