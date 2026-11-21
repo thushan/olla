@@ -1352,3 +1352,51 @@ func TestTransformStreamingResponse_SynthesisedOutputTokensThinkingContent(t *te
 	assert.LessOrEqual(t, outputTokens, maxExpected,
 		"synthesised output_tokens must not far exceed (thinking+text chars)/4")
 }
+
+// errAfterReader serves its payload and then fails, like a backend socket dying
+// mid-stream (io.Pipe's CloseWithError surfaces the same way).
+type errAfterReader struct {
+	r   io.Reader
+	err error
+}
+
+func (e *errAfterReader) Read(p []byte) (int, error) {
+	n, err := e.r.Read(p)
+	if err == io.EOF {
+		return n, e.err
+	}
+	return n, err
+}
+
+// A read error means the response is truncated: the translator must surface it
+// and must not finalise with message_delta/message_stop, which would make the
+// partial reply look complete to the client.
+func TestTransformStreamingResponse_ReadErrorDoesNotFinalise(t *testing.T) {
+	translator := newTestTranslator()
+	cause := fmt.Errorf("backend reset: %w", io.ErrUnexpectedEOF)
+	stream := &errAfterReader{
+		r: mockOpenAIStream([]string{
+			textChunk("chatcmpl-1", "m", "Hello"),
+			textChunk("chatcmpl-1", "", " wor"),
+		}),
+		err: cause,
+	}
+
+	recorder, err := executeTransformWithContext(t, translator, context.Background(), stream)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
+	body := recorder.Body.String()
+	assert.Contains(t, body, "Hello", "content before the failure is still delivered")
+	assert.NotContains(t, body, "event: message_stop")
+	assert.NotContains(t, body, "event: message_delta")
+}
+
+func TestTransformStreamingResponse_ReadErrorBeforeAnyChunk(t *testing.T) {
+	translator := newTestTranslator()
+	recorder, err := executeTransformWithContext(t, translator, context.Background(),
+		&errAfterReader{r: strings.NewReader(""), err: io.ErrClosedPipe})
+
+	require.ErrorIs(t, err, io.ErrClosedPipe)
+	assert.NotContains(t, recorder.Body.String(), "message_stop")
+}

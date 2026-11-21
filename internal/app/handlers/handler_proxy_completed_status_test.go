@@ -88,8 +88,12 @@ type statusHarness struct {
 	route statusRoute
 }
 
-func newStatusHarness(t *testing.T, engine string, route statusRoute, backendURL string) *statusHarness {
+func newStatusHarness(t *testing.T, engine string, route statusRoute, backendURL string, readTimeout ...time.Duration) *statusHarness {
 	t.Helper()
+	rt := 5 * time.Second
+	if len(readTimeout) > 0 {
+		rt = readTimeout[0]
+	}
 
 	fleet := newTagFleet(t, tagStrategies[0].cfg, map[string]string{"ollama-1": backendURL}, false, route.passthrough)
 
@@ -107,13 +111,13 @@ func newStatusHarness(t *testing.T, engine string, route statusRoute, backendURL
 	switch engine {
 	case "sherpa":
 		cfg := &sherpa.Configuration{}
-		cfg.ResponseTimeout, cfg.ReadTimeout, cfg.StreamBufferSize = 5*time.Second, 5*time.Second, 8192
+		cfg.ResponseTimeout, cfg.ReadTimeout, cfg.StreamBufferSize = 5*time.Second, rt, 8192
 		svc, serr := sherpa.NewService(fleet.app.discoveryService, selector, cfg, collector, nil, log)
 		require.NoError(t, serr)
 		fleet.app.proxyService = svc
 	default:
 		cfg := &olla.Configuration{}
-		cfg.ResponseTimeout, cfg.ReadTimeout, cfg.StreamBufferSize = 5*time.Second, 5*time.Second, 8192
+		cfg.ResponseTimeout, cfg.ReadTimeout, cfg.StreamBufferSize = 5*time.Second, rt, 8192
 		svc, serr := olla.NewService(fleet.app.discoveryService, selector, cfg, collector, nil, log)
 		require.NoError(t, serr)
 		t.Cleanup(svc.Cleanup)
