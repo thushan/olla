@@ -236,6 +236,14 @@ func (h *RetryHandler) ExecuteWithRetry(
 			return nil
 		}
 
+		// The client walking away can surface as a connection error (a cancel
+		// racing a transport EOF keeps the EOF in the chain). That says nothing
+		// about the backend, so neither demote it nor fail over for a client
+		// that has gone.
+		if IsClientAbort(ctx, lastErr) {
+			return lastErr
+		}
+
 		// A CB-open rejection is failover-eligible, but unlike a connection
 		// error it must NOT demote the endpoint's persisted health: the breaker
 		// already reflects accumulated failure state, and the proxy engine
