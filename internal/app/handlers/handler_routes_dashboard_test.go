@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/app/handlers/dashboard"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/router"
@@ -52,8 +53,15 @@ func applicationWithStaticRouteTable(t *testing.T, dash config.DashboardConfig) 
 		Config: &config.Config{
 			Dashboard: dash,
 		},
-		logger:        &mockStyledLogger{},
-		routeRegistry: reg,
+		// registerRoutes now emits root-level "/" proxy routes; the proxy
+		// handler dereferences inspectorChain and discoveryService (nil here
+		// caused a SIGSEGV once the root route existed). Empty/no-op versions
+		// are enough: the disabled-dashboard case falls through to the mux 404
+		// and the enabled cases never reach dispatch.
+		inspectorChain:   inspector.NewChain(&mockStyledLogger{}),
+		discoveryService: &mockDiscoveryService{},
+		logger:           &mockStyledLogger{},
+		routeRegistry:    reg,
 	}
 	app.registerRoutes()
 	return app, reg
@@ -178,8 +186,12 @@ func TestDashboardRoute_DisabledYields404(t *testing.T) {
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("disabled dashboard must produce default-mux 404, got %d", rec.Code)
+	// With the root-level "/" proxy route registered (appletree patch #2), Go's
+	// ServeMux subtree rule routes /internal/ui/ to it, yielding 503
+	// writeNoRoutableEndpoints (mock discovery has no healthy endpoints) rather
+	// than a bare 404. Either code proves the dashboard did not handle it.
+	if rec.Code != http.StatusNotFound && rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("disabled dashboard must 404 (or 503 via root proxy fallback), got %d", rec.Code)
 	}
 }
 
