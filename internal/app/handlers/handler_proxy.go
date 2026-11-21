@@ -46,6 +46,12 @@ type proxyRequest struct {
 	upstreamStatus int
 	hadError       bool
 	isStreaming    bool
+	// abortStream is set when a backend failed after response bytes were committed;
+	// the handler then drops the connection instead of finishing the body cleanly.
+	abortStream bool
+	// clientGone is set when the request context ended before the handler finished, so a
+	// resulting proxy error is the client leaving rather than a backend failure.
+	clientGone bool
 }
 
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
@@ -101,11 +107,24 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 	// The error response is written first so the logged status is what the client actually
 	// received (a 502 for a connection failure), not 0.
 	if err != nil {
-		a.handleProxyError(tracker, err)
+		if tracker.Started() {
+			pr.abortStream = a.failMidStream(tracker, r, pr, err, false, false)
+		} else {
+			a.handleProxyError(tracker, err)
+		}
 	}
 	pr.upstreamStatus = tracker.Status()
 	pr.captureStickyOutcome(ctx, r)
+	pr.clientGone = r.Context().Err() != nil
 	a.logRequestResult(pr, err)
+
+	if pr.abortStream {
+		// Committed bytes cannot be retracted and returning normally would let
+		// net/http end the chunked body cleanly, so the client would see a
+		// truncated response as complete. ErrAbortHandler is net/http's contract
+		// for dropping the connection without a terminator or a stack trace.
+		panic(http.ErrAbortHandler)
+	}
 }
 
 // writeNoRoutableEndpoints short-circuits a request when endpoint selection produced
@@ -494,6 +513,11 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 		// What the client actually got, so a truncated 200 reads differently from a 502.
 		if pr.upstreamStatus > 0 {
 			logFields = append(logFields, "http_status", pr.upstreamStatus)
+		}
+		if pr.clientGone || errors.Is(err, context.Canceled) {
+			// Not an operator-actionable failure; keep it findable at debug.
+			pr.requestLogger.Debug("Request cancelled by client", append([]any{"error", err}, logFields...)...)
+			return
 		}
 		pr.requestLogger.Error("Request failed", append([]any{"error", err}, logFields...)...)
 	} else {

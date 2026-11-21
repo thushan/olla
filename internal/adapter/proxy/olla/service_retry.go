@@ -129,18 +129,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	stats.BackendResponseMs = time.Since(backendStart).Milliseconds()
 
 	if err != nil {
-		if cb != nil {
-			cb.RecordFailure(attempt)
-		}
-		// Don't log as error if it's a connection failure - the retry handler will handle it
-		if core.IsConnectionError(err) {
-			rlog.Debug("round-trip connection failed", "error", err)
-		} else {
-			rlog.Error("round-trip failed", "error", err)
-		}
-		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), err)
-		duration := time.Since(stats.StartTime)
-		return common.MakeUserFriendlyError(err, duration, "backend", cfg.GetResponseTimeout())
+		return s.handleRoundTripError(ctx, cb, attempt, endpoint, resolvedModel, stats, cfg, rlog, err)
 	}
 	defer resp.Body.Close()
 
@@ -184,6 +173,10 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	stats.TotalBytes = bytesWritten
 
 	if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
+		if core.IsClientAbort(ctx, streamErr) {
+			rlog.Debug("client aborted during streaming", "error", streamErr)
+			return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", cfg.GetResponseTimeout())
+		}
 		rlog.Error("streaming failed", "error", streamErr)
 		s.RecordFailure(ctx, endpoint, resolvedModel, time.Since(stats.StartTime), streamErr)
 		return common.MakeUserFriendlyError(streamErr, time.Since(stats.StartTime), "streaming", cfg.GetResponseTimeout())
@@ -253,4 +246,30 @@ func (s *Service) ProxyRequestWithRetry(ctx context.Context, w http.ResponseWrit
 		return err
 	}
 	return s.ProxyRequestToEndpointsWithRetry(ctx, w, r, endpoints, stats, rlog)
+}
+
+// handleRoundTripError settles the breaker and stats for a failed round trip
+// and returns the user-facing error. A client cancel says nothing about the
+// backend: it releases any half-open probe slot and records no failure.
+// Classification happens before MakeUserFriendlyError wraps err.
+func (s *Service) handleRoundTripError(ctx context.Context, cb *circuitBreaker, attempt int64, endpoint *domain.Endpoint, resolvedModel string, stats *ports.RequestStats, cfg *Configuration, rlog logger.StyledLogger, err error) error {
+	if core.IsClientAbort(ctx, err) {
+		if cb != nil {
+			cb.Abandon(attempt)
+		}
+		rlog.Debug("client aborted before first byte", "error", err)
+		return common.MakeUserFriendlyError(err, time.Since(stats.StartTime), "backend", cfg.GetResponseTimeout())
+	}
+	if cb != nil {
+		cb.RecordFailure(attempt)
+	}
+	// Don't log as error if it's a connection failure - the retry handler will handle it
+	if core.IsConnectionError(err) {
+		rlog.Debug("round-trip connection failed", "error", err)
+	} else {
+		rlog.Error("round-trip failed", "error", err)
+	}
+	duration := time.Since(stats.StartTime)
+	s.RecordFailure(ctx, endpoint, resolvedModel, duration, err)
+	return common.MakeUserFriendlyError(err, duration, "backend", cfg.GetResponseTimeout())
 }

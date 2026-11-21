@@ -14,6 +14,27 @@ Breaking changes are tagged **Breaking**. Additions and fixes are tagged **Added
 **Fixed**. Behaviour changes that need no migration are tagged **Changed**. Quoted field
 names and config keys are the literal wire or YAML identifiers.
 
+## v0.1.1
+
+### Fixed: client cancels no longer open the circuit breaker
+
+A client that cancelled or timed out before the first response byte was recorded as a backend failure ([#269](https://github.com/thushan/olla/issues/269)). Five such cancels opened the Olla engine's circuit breaker and a healthy backend returned 502 for 30 seconds, and a cancelled half-open probe re-opened it. A client cancel or client deadline is now ignored by the breaker, and a cancelled half-open probe releases its slot so the next request probes straight away. Both engines also stop counting these cancels as failed requests in the stats and error events. Backend timeouts, such as the response-header timeout, and connection errors still count.
+
+### Fixed: a backend dying mid-stream no longer looks like a complete response
+
+When a backend failed after response bytes had reached the client, Olla returned normally and net/http finished the chunked body cleanly, so the client saw `200` and a clean end of stream. On `/olla/anthropic/v1/messages` with translation it was worse: the translator wrote `message_delta` and `message_stop` for the truncated reply. Now the response ends with an error event in the stream's own format, then the connection is dropped so the client's read fails:
+
+- OpenAI-style SSE (`/olla/proxy/`, provider prefixes): a final `data: {"error":{"message":...,"type":"api_error","code":"upstream_stream_interrupted"}}` event, no `[DONE]`.
+- Anthropic routes (passthrough and translation): `event: error` with `{"type":"error","error":{"type":"api_error",...}}`, no `message_stop`.
+- Ollama NDJSON: a `{"error":"..."}` line.
+- Plain JSON bodies, chunked or with `Content-Length`: no extra bytes, only the dropped connection.
+
+Non-streaming errors and HTTP error statuses before the first byte are unchanged and still fail over. A client that disconnects is not treated as a backend failure. The access log line is still written at Info with `aborted=true` (the proxy console completion line needs Debug), and a failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
+
+### Changed: a pre-commit failure on streaming Anthropic translation returns 502
+
+When every backend failed before sending a byte on a streaming `/olla/anthropic/v1/messages` request that is translated, Olla used to answer `200` with an empty stream. It now returns a `502` with an Anthropic-format JSON error, matching the other routes.
+
 ## v0.1.0
 
 This was going to be v0.0.30. It's v0.1.0 because it's a big release: TEI embeddings and rerank support, the reworked herd dashboard, rate-limit and concurrency hardening, retry controls and corrected request stats. Some of these change what existing setups see, so it gets a minor version bump. Check the changes below before you upgrade. Fixes from here ship as v0.1.x.
