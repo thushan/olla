@@ -109,6 +109,7 @@ The circuit breaker tracks these failure conditions:
 - Connection timeouts
 - Request timeouts
 - Connection refused errors
+- Connection closed before a response (EOF) on a fresh connection; an EOF on a reused keep-alive connection is the backend's idle timeout racing the request and is not counted
 - DNS resolution failures
 - Other transport-layer errors
 

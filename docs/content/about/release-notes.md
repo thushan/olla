@@ -16,6 +16,22 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Added: Rapid-MLX backend
+
+Rapid-MLX, the MLX inference server for Apple Silicon, is a supported backend ([#271](https://github.com/thushan/olla/pull/271), thanks to [@raullenchai](https://github.com/raullenchai)). It has a `rapid-mlx` profile (`config/profiles/rapid-mlx.yaml`), the `/olla/rapid-mlx/` route prefix and native Anthropic Messages passthrough. Auto-discovery now tells it apart from other OpenAI-compatible servers. See [Rapid-MLX Integration](../integrations/backend/rapid-mlx.md).
+
+### Fixed: model aliases match consistently with unification
+
+With `model_registry.enable_unifier: true`, alias names now match without regard to case ([#270](https://github.com/thushan/olla/pull/270), fixes [#181](https://github.com/thushan/olla/issues/181), thanks to [@wsj040303](https://github.com/wsj040303)). `My-Model` accepts requests for `my-model` or `MY-MODEL`, and case variants share a sticky-session key. An exact spelling wins; if two aliases differ only in case, an ambiguous spelling selects neither and falls back to normal model routing. With unification off, lookup stays case-sensitive. See [Model Aliases](../concepts/model-aliases.md).
+
+### Fixed: a backend that drops the connection before replying now fails over
+
+When a backend closed the connection before sending any response (an `EOF` from the transport), Olla returned an error instead of trying the next endpoint ([#273](https://github.com/thushan/olla/pull/273), fixes [#272](https://github.com/thushan/olla/issues/272), thanks to [@mikemikimike](https://github.com/mikemikimike)). `EOF` now counts as a connection failure: the request fails over and the endpoint is marked unhealthy. With the default `proxy.retry.non_idempotent: true`, a POST that hits this can now run on a second backend, so a prompt the first backend had already read may run twice. Set `non_idempotent: false` if that matters more than availability.
+
+### Fixed: an idle keep-alive close no longer marks a healthy backend offline
+
+A backend such as vLLM or SGLang (uvicorn, 5 second keep-alive) can close an idle pooled connection just as Olla sends a POST on it. Go's transport never retries a POST it has written, so the request failed with `EOF`, and the #273 change then marked the healthy endpoint offline. With one endpoint that was an outage until the next health check. Both engines now notice when the `EOF` came from a reused connection: the request still fails over to another endpoint, but the endpoint is not demoted and the Olla engine's circuit breaker does not count it. An `EOF` on a fresh connection still demotes, since there the backend really went away. The outbound request also carries a replayable body, so Go retries on its own when it fails before writing anything. Connection refused and reset behave as before.
+
 ### Fixed: client cancels no longer open the circuit breaker
 
 A client that cancelled or timed out before the first response byte was recorded as a backend failure ([#269](https://github.com/thushan/olla/issues/269)). Five such cancels opened the Olla engine's circuit breaker and a healthy backend returned 502 for 30 seconds, and a cancelled half-open probe re-opened it. A client cancel or client deadline is now ignored by the breaker, and a cancelled half-open probe releases its slot so the next request probes straight away. Both engines also stop counting these cancels as failed requests in the stats and error events. Backend timeouts, such as the response-header timeout, and connection errors still count.

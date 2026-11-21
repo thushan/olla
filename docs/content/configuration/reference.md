@@ -217,7 +217,7 @@ proxy:
 
 ### Retry Behaviour
 
-When a connection to a backend fails (refused, reset, network unreachable, DNS), Olla marks that endpoint unhealthy and retries the request on the next eligible endpoint. This is the same for both engines and for the Anthropic routes. The `proxy.retry` block controls it:
+When a connection to a backend fails (refused, reset, closed before replying, network unreachable, DNS), Olla marks that endpoint unhealthy and retries the request on the next eligible endpoint. This is the same for both engines and for the Anthropic routes. The `proxy.retry` block controls it:
 
 ```yaml
 proxy:
@@ -237,7 +237,7 @@ The defaults are Olla's behaviour with no `retry:` block. Each field also has an
 
 What does and does not fail over:
 
-- **Fails over:** a connection error before any response was received. The failed endpoint is marked unhealthy even when the policy stops the request failing over, because the connection genuinely failed.
+- **Fails over:** a connection error before any response was received. The failed endpoint is marked unhealthy even when the policy stops the request failing over, because the connection genuinely failed.  The exception is an EOF on a reused keep-alive connection (a backend closing an idle pooled connection as the request is sent): it fails over but the endpoint is not marked unhealthy.
 - **Also skipped past:** an endpoint whose circuit breaker is open (Olla engine). It was never contacted, so `non_idempotent: false` does not stop this and it does not use up an attempt, even with `enabled: false`.
 - **Never retried:** a request once any part of the response has reached the client, whatever the method. The client would otherwise receive one backend's partial output followed by another's.
 - **Mid-stream failure:** if the backend dies after part of the response reached the client, Olla ends the response with an error event in the format the client is already reading, then drops the connection, so the client's read fails instead of finishing cleanly. OpenAI-style streams get a final `data: {"error":{...}}` event, Anthropic routes an `event: error` event, and Ollama NDJSON streams a `{"error":"..."}` line. Plain JSON bodies get no extra bytes, only the dropped connection, and a response that declares a `Content-Length` with too few bytes left for the event gets no event either. No `[DONE]` or `message_stop` follows. A client that disconnects itself is not treated as a failure.
