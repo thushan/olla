@@ -42,6 +42,42 @@ func TestOMLXProviderConstants(t *testing.T) {
 	})
 }
 
+func TestRapidMLXProviderConstants(t *testing.T) {
+	t.Parallel()
+
+	t.Run("provider type constant", func(t *testing.T) {
+		t.Parallel()
+		expected := "rapid-mlx"
+		if constants.ProviderTypeRapidMLX != expected {
+			t.Errorf("ProviderTypeRapidMLX: expected %q, got %q", expected, constants.ProviderTypeRapidMLX)
+		}
+	})
+
+	t.Run("display name constant", func(t *testing.T) {
+		t.Parallel()
+		expected := "Rapid-MLX"
+		if constants.ProviderDisplayRapidMLX != expected {
+			t.Errorf("ProviderDisplayRapidMLX: expected %q, got %q", expected, constants.ProviderDisplayRapidMLX)
+		}
+	})
+
+	t.Run("routing prefix", func(t *testing.T) {
+		t.Parallel()
+		expected := "rapid-mlx"
+		if constants.ProviderPrefixRapidMLX != expected {
+			t.Errorf("ProviderPrefixRapidMLX: expected %q, got %q", expected, constants.ProviderPrefixRapidMLX)
+		}
+	})
+
+	t.Run("type and prefix match", func(t *testing.T) {
+		t.Parallel()
+		// Rapid-MLX uses a single prefix that matches the type directly: no alias variations needed
+		if constants.ProviderTypeRapidMLX != constants.ProviderPrefixRapidMLX {
+			t.Errorf("ProviderTypeRapidMLX %q should equal ProviderPrefixRapidMLX %q", constants.ProviderTypeRapidMLX, constants.ProviderPrefixRapidMLX)
+		}
+	})
+}
+
 func TestLlamaCppProviderConstants(t *testing.T) {
 	t.Run("provider type constant", func(t *testing.T) {
 		expected := "llamacpp"

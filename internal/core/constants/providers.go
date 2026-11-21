@@ -13,6 +13,7 @@ const (
 	ProviderTypeVLLMMLX      = "vllm-mlx"
 	ProviderTypeDockerMR     = "docker-model-runner"
 	ProviderTypeOMLX         = "omlx"
+	ProviderTypeRapidMLX     = "rapid-mlx"
 
 	// Text Embeddings Inference (Hugging Face TEI) serves embedding, classifier
 	// and reranker models, one per instance, and discovers its model from /info
@@ -31,6 +32,7 @@ const (
 	ProviderDisplayVLLMMLX                 = "vLLM-MLX"
 	ProviderDisplayDockerMR                = "Docker Model Runner"
 	ProviderDisplayOMLX                    = "oMLX"
+	ProviderDisplayRapidMLX                = "Rapid-MLX"
 	ProviderDisplayTextEmbeddingsInference = "Text Embeddings Inference"
 
 	// Common provider prefixes
@@ -48,6 +50,8 @@ const (
 	ProviderPrefixDockerMR = "dmr"
 	// oMLX provider prefix
 	ProviderPrefixOMLX = "omlx"
+	// Rapid-MLX provider prefix
+	ProviderPrefixRapidMLX = "rapid-mlx"
 	// Text Embeddings Inference provider prefixes
 	ProviderPrefixTextEmbeddingsInference1 = "text-embeddings-inference"
 	ProviderPrefixTextEmbeddingsInference2 = "tei"

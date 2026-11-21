@@ -289,9 +289,15 @@ func (p *openAIParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 
 		// openai is stingy with metadata, but some compatible backends (e.g. oMLX)
 		// include max_model_len which is worth surfacing
+		// Rapid-MLX reports context_window; keep max_model_len precedence for
+		// servers that provide both fields.
+		contextLength := model.MaxModelLen
+		if contextLength == nil || *contextLength <= 0 {
+			contextLength = model.ContextWindow
+		}
 		hasDetails := (model.Created != nil && *model.Created > 0) ||
 			model.OwnedBy != nil ||
-			(model.MaxModelLen != nil && *model.MaxModelLen > 0)
+			(contextLength != nil && *contextLength > 0)
 
 		if hasDetails {
 			details := &domain.ModelDetails{}
@@ -301,8 +307,8 @@ func (p *openAIParser) Parse(data []byte) ([]*domain.ModelInfo, error) {
 				details.ModifiedAt = &createdTime
 			}
 
-			if model.MaxModelLen != nil && *model.MaxModelLen > 0 {
-				details.MaxContextLength = model.MaxModelLen
+			if contextLength != nil && *contextLength > 0 {
+				details.MaxContextLength = contextLength
 			}
 
 			if model.OwnedBy != nil && *model.OwnedBy != "" {

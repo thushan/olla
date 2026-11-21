@@ -316,6 +316,7 @@ api:
 | LM Studio | v0.4.1+ | No | Desktop inference |
 | Ollama | v0.14.0+ | No | Popular local inference |
 | oMLX | v0.4.2+ | No | Apple Silicon (MLX) multi-model server; passthrough supported, token counting not yet forwarded |
+| Rapid-MLX | Not specified | No | Apple Silicon (MLX); native Anthropic Messages passthrough |
 | Docker Model Runner | recent | Yes | Containerised local inference |
 | SGLang | v0.5.9+ | Yes | On by default; older releases return 404 on `/v1/messages` |
 | LMDeploy | v0.13.0+ | Yes | On by default; declares `no_tool_use`, so tool requests are translated |
@@ -682,6 +683,7 @@ Don't update versions in natively supported profiles however.
 | vllm-mlx | `vllm-mlx` | `vllm-mlx` | None |
 | sglang | `sglang` | `sglang` | None |
 | omlx | `omlx` | `omlx` | None |
+| rapid-mlx | `rapid-mlx` | `rapid-mlx` | None |
 | litellm | `litellm` | `litellm` | None |
 | lmdeploy | `lmdeploy` | `lmdeploy` | None |
 | dmr | `docker-model-runner` | `dmr` | None |

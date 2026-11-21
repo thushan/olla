@@ -84,6 +84,7 @@ var staticSupportedProviders = []string{
 	constants.ProviderTypeSGLang,
 	constants.ProviderTypeVLLM,
 	constants.ProviderTypeOMLX,
+	constants.ProviderTypeRapidMLX,
 	constants.ProviderTypeDockerMR,
 	constants.ProviderTypeTextEmbeddingsInference,
 }

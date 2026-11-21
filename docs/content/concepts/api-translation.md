@@ -249,7 +249,7 @@ The translator performs semantic mapping for tool choice parameters:
 
 ### What is Passthrough?
 
-Passthrough mode is an optimisation that bypasses the translation pipeline entirely when a backend natively supports the incoming request format. For example, vLLM (v0.11.1+), vLLM-MLX, SGLang (v0.5.9+), LMDeploy (v0.13.0+), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), and Docker Model Runner all natively support the Anthropic Messages API. When Olla detects a compatible backend, it forwards the request directly without any Anthropic-to-OpenAI-and-back conversion.
+Passthrough mode is an optimisation that bypasses the translation pipeline entirely when a backend natively supports the incoming request format. For example, vLLM (v0.11.1+), vLLM-MLX, SGLang (v0.5.9+), LMDeploy (v0.13.0+), llama.cpp (b4847+), LM Studio (v0.4.1+), Ollama (v0.14.0+), oMLX (v0.4.2+), Rapid-MLX, and Docker Model Runner all natively support the Anthropic Messages API. When Olla detects a compatible backend, it forwards the request directly without any Anthropic-to-OpenAI-and-back conversion.
 
 **Key Benefit**: Zero translation overhead -- requests are forwarded as-is, preserving the original wire format.
 
@@ -302,6 +302,7 @@ Backends that support passthrough (native Anthropic Messages API):
 | LM Studio | v0.4.1+ | No | `config/profiles/lmstudio.yaml` |
 | Ollama | v0.14.0+ | No | `config/profiles/ollama.yaml` |
 | oMLX | v0.4.2+ | No (not yet forwarded) | `config/profiles/omlx.yaml` |
+| Rapid-MLX | Not specified | No | `config/profiles/rapid-mlx.yaml` |
 | Docker Model Runner | recent | Yes | `config/profiles/dmr.yaml` |
 | SGLang | v0.5.9+ | Yes | `config/profiles/sglang.yaml` |
 | LMDeploy | v0.13.0+ | Yes | `config/profiles/lmdeploy.yaml` |
@@ -510,7 +511,7 @@ Easy to add new translations:
 - Proportional to content size for vision models
 - Buffer pool reduces allocation overhead
 
-**Recommendation**: Use passthrough mode when backends support native Anthropic format (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, LM Studio, Ollama, oMLX, Docker Model Runner) for zero translation overhead. Use native endpoints when translation isn't needed for maximum performance.
+**Recommendation**: Use passthrough mode when backends support native Anthropic format (vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, LM Studio, Ollama, oMLX, Rapid-MLX, Docker Model Runner) for zero translation overhead. Use native endpoints when translation isn't needed for maximum performance.
 
 ### Feature Parity
 

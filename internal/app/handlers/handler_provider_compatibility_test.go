@@ -157,6 +157,25 @@ func TestProviderCompatibility(t *testing.T) {
 			providerType: "omlx",
 			compatible:   false,
 		},
+		// Rapid-MLX provider should only accept rapid-mlx endpoints
+		{
+			name:         "rapid-mlx provider accepts rapid-mlx",
+			endpointType: "rapid-mlx",
+			providerType: "rapid-mlx",
+			compatible:   true,
+		},
+		{
+			name:         "rapid-mlx provider rejects ollama",
+			endpointType: "ollama",
+			providerType: "rapid-mlx",
+			compatible:   false,
+		},
+		{
+			name:         "rapid-mlx provider rejects vllm",
+			endpointType: "vllm",
+			providerType: "rapid-mlx",
+			compatible:   false,
+		},
 		// Unknown provider should reject everything
 		{
 			name:         "unknown provider rejects ollama",
@@ -252,6 +271,26 @@ func TestProviderCompatibility_RealFactory(t *testing.T) {
 		{
 			name:         "omlx provider rejects ollama-typed endpoint",
 			providerType: "omlx",
+			endpointType: "ollama",
+			wantCompat:   false,
+		},
+		// Rapid-MLX is OpenAI-compatible, so openai provider must include it
+		{
+			name:         "openai provider accepts rapid-mlx-typed endpoint",
+			providerType: "openai",
+			endpointType: "rapid-mlx",
+			wantCompat:   true,
+		},
+		// Rapid-MLX provider stays scoped to its own endpoints
+		{
+			name:         "rapid-mlx provider accepts rapid-mlx-typed endpoint",
+			providerType: "rapid-mlx",
+			endpointType: "rapid-mlx",
+			wantCompat:   true,
+		},
+		{
+			name:         "rapid-mlx provider rejects ollama-typed endpoint",
+			providerType: "rapid-mlx",
 			endpointType: "ollama",
 			wantCompat:   false,
 		},

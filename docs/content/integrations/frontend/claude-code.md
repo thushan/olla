@@ -1,7 +1,7 @@
 ---
 title: Claude Code + Olla (Anthropic API) Integration
 description: Configure Claude Code to use local LLM models via Olla's Anthropic Messages API translator. Load-balancing, failover, streaming, and model unification for Ollama, LM Studio, vLLM, and other OpenAI-compatible backends.
-keywords: Claude Code, Olla, Anthropic API, Messages API, local LLM, Ollama, vLLM, LM Studio, oMLX, load balancing, API translation
+keywords: Claude Code, Olla, Anthropic API, Messages API, local LLM, Ollama, vLLM, LM Studio, oMLX, Rapid-MLX, load balancing, API translation
 ---
 
 # Claude Code Integration with Anthropic API
@@ -129,7 +129,7 @@ Before starting, ensure you have:
 
 3. **At Least One Backend**
    
-      * Ollama, LM Studio, vLLM, SGLang, llama.cpp, oMLX or any OpenAI-compatible endpoint
+      * Ollama, LM Studio, vLLM, SGLang, llama.cpp, oMLX, Rapid-MLX or any OpenAI-compatible endpoint
       * With at least one model loaded/available
 
 4. **Docker & Docker Compose** (for examples)

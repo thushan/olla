@@ -61,6 +61,7 @@ Olla's Anthropic API Translation enables Claude-compatible clients (Claude Code,
                 <li>llama.cpp (passthrough, b4847+)</li>
                 <li>Docker Model Runner (passthrough)</li>
                 <li>oMLX (passthrough, v0.4.2+)</li>
+                <li>Rapid-MLX (passthrough)</li>
                 <li>Lemonade SDK (translation)</li>
                 <li>LiteLLM (translation)</li>
                 <li>Any OpenAI-compatible endpoint (translation)</li>
@@ -539,6 +540,7 @@ These backends natively support the Anthropic Messages API and benefit from pass
 | **Ollama** | v0.14.0+ | No | `api.anthropic_support` in `config/profiles/ollama.yaml` |
 | **Docker Model Runner** | -- | Yes | `api.anthropic_support` in `config/profiles/dmr.yaml` |
 | **oMLX** | v0.4.2+ | No | `api.anthropic_support` in `config/profiles/omlx.yaml` |
+| **Rapid-MLX** | Not specified | No | `api.anthropic_support` in `config/profiles/rapid-mlx.yaml` |
 | **SGLang** | v0.5.9+ | Yes | `api.anthropic_support` in `config/profiles/sglang.yaml` |
 | **LMDeploy** | v0.13.0+ | Yes | `api.anthropic_support` in `config/profiles/lmdeploy.yaml` |
 

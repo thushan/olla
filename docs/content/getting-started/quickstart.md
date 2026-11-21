@@ -284,7 +284,7 @@ server:
 
 ### Next Steps
 
-- [Backend Integrations](../integrations/overview.md) - Connect Ollama, LM Studio, llama.cpp, vLLM, SGLang, Lemonade SDK, LiteLLM, oMLX
+- [Backend Integrations](../integrations/overview.md) - Connect Ollama, LM Studio, llama.cpp, vLLM, SGLang, Lemonade SDK, LiteLLM, oMLX, Rapid-MLX
 - [Architecture Overview](../development/architecture.md) - Deep dive into Olla's design
 - [Development Guide](../development/contributing.md) - Contribute to Olla
 

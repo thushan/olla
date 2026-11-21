@@ -461,6 +461,13 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 				{path: "", handler: a.providerProxyHandler, description: "oMLX proxy", isProxy: true},
 			},
 		},
+		constants.ProviderTypeRapidMLX: {
+			prefixes: []string{constants.ProviderPrefixRapidMLX},
+			routes: []staticRoute{
+				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeRapidMLX, constants.ProviderTypeOpenAI), description: "Rapid-MLX models (OpenAI format)", method: "GET"},
+				{path: "", handler: a.providerProxyHandler, description: "Rapid-MLX proxy", isProxy: true},
+			},
+		},
 		constants.ProviderTypeDockerMR: {
 			prefixes: []string{constants.ProviderPrefixDockerMR},
 			routes: []staticRoute{

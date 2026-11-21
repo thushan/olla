@@ -25,6 +25,7 @@ Olla natively supports the following backends:
 | [LiteLLM](./backend/litellm.md) | `litellm` | Native support for [LiteLLM](https://github.com/BerriAI/litellm), providing unified gateway to 100+ LLM providers |
 | [Docker Model Runner](./backend/docker-model-runner.md) | `docker-model-runner` | Native support for [Docker Model Runner](https://docs.docker.com/ai/model-runner/), Docker Desktop's built-in LLM inference server with multi-engine support (llama.cpp and vLLM), OCI model distribution, and native Anthropic Messages API |
 | [oMLX](./backend/omlx.md) | `omlx` | Native support for [oMLX](https://github.com/jundot/omlx), a multi-model Apple Silicon (MLX) inference server managed from the macOS menu bar, with native Anthropic Messages API passthrough |
+| [Rapid-MLX](./backend/rapid-mlx.md) | `rapid-mlx` | Native support for [Rapid-MLX](https://github.com/raullenchai/Rapid-MLX), a local LLM inference server for Apple Silicon built on MLX, with native Anthropic Messages passthrough |
 | [Text Embeddings Inference](./backend/text-embeddings-inference.md) | `text-embeddings-inference` | Native support for [Text Embeddings Inference (TEI)](https://github.com/huggingface/text-embeddings-inference), Hugging Face's high-performance embedding inference server with OpenAI-compatible and native endpoints |
 | [OpenAI Compatible](https://platform.openai.com/docs/overview) | `openai` | Generic support for any OpenAI-compatible API |
 
@@ -50,7 +51,7 @@ Coding assistants and agent harnesses, connected over whichever API format they 
 | [Crush CLI](./frontend/crush-cli.md) | Modern terminal AI assistant by Charmbracelet | Dual OpenAI/Anthropic support |
 | [Hermes Agent](./frontend/hermes-agent.md) | Nous Research's agent harness | OpenAI-compatible custom provider, plus a sticky-session recipe |
 
-Clients using the Anthropic Messages API reach any supported backend through Olla's translation layer. Backends with native Anthropic support (Ollama, LM Studio, vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, Docker Model Runner, oMLX) use zero-overhead passthrough; the rest (Lemonade, LiteLLM, generic OpenAI-compatible) are served via translation.
+Clients using the Anthropic Messages API reach any supported backend through Olla's translation layer. Backends with native Anthropic support (Ollama, LM Studio, vLLM, vLLM-MLX, SGLang, LMDeploy, llama.cpp, Docker Model Runner, oMLX, Rapid-MLX) use zero-overhead passthrough; the rest (Lemonade, LiteLLM, generic OpenAI-compatible) are served via translation.
 
 Multi-turn agent sessions benefit from [sticky sessions](../concepts/sticky-sessions.md), which pin a conversation to one backend so its KV-cache stays warm across turns.
 

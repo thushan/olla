@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/thushan/olla/internal/core/constants"
 
 	"github.com/thushan/olla/internal/version"
@@ -105,6 +107,7 @@ func (c *HTTPModelDiscoveryClient) discoverWithAutoDetection(ctx context.Context
 		domain.ProfileLlamaCpp,
 		domain.ProfileLmStudio,
 		domain.ProfileVLLM,
+		domain.ProfileRapidMLX,
 		domain.ProfileOMLX,             // Apple Silicon only; tried after other common servers
 		domain.ProfileOpenAICompatible, /* last ditch effort */
 	}
@@ -204,6 +207,17 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "read_response", resp.StatusCode, duration, fmt.Errorf("model response exceeds %d bytes: %w", MaxResponseSize, ErrResponseTooLarge))
 	}
 
+	// These parsers accept the same OpenAI envelope. During auto-detection,
+	// require server identity before applying backend-specific metadata rules.
+	if endpoint.Type == "" || endpoint.Type == domain.ProfileAuto {
+		switch platformProfile.GetName() {
+		case domain.ProfileLlamaCpp, domain.ProfileVLLM, domain.ProfileRapidMLX, domain.ProfileOMLX:
+			if !hasModelOwner(body, platformProfile.GetName()) {
+				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response does not identify %s", platformProfile.GetName()))
+			}
+		}
+	}
+
 	models, err := platformProfile.ParseModelsResponse(body)
 	if err != nil {
 		// Include the actual discovery URL in the error for debugging
@@ -225,6 +239,15 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 	})
 
 	return models, nil
+}
+
+func hasModelOwner(body []byte, owner string) bool {
+	for _, model := range gjson.GetBytes(body, "data").Array() {
+		if model.Get("id").String() != "" && model.Get("owned_by").String() == owner {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *HTTPModelDiscoveryClient) HealthCheck(ctx context.Context, endpoint *domain.Endpoint) error {
