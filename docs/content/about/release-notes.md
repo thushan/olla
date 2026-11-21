@@ -16,6 +16,10 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Changed: auto-detection needs the server to identify itself
+
+With `type` empty or `auto`, an endpoint is only detected as llama.cpp, vLLM, oMLX or Rapid-MLX when its `/v1/models` response carries a matching `owned_by` (`llamacpp`, `vllm`, `omlx`, `rapid-mlx`); [#271](https://github.com/thushan/olla/pull/271) added this check because those backends share the OpenAI response shape and were being misdetected as each other. A server that does not report one of those values is now treated as `openai-compatible`. Endpoints with an explicit `type` are unaffected; if a backend behind a proxy or fork lost its detected type, set `type` explicitly. See [Configuration Overview](../configuration/overview.md#endpoint-configuration). The llama.cpp API reference now shows its real `owned_by` value (`llamacpp`).
+
 ### Fixed: a translator panic mid-stream now drops the connection
 
 If the Anthropic translator panicked after part of a streamed reply had reached the client, the response ended with an `event: error` and a clean end of stream, which a client could mistake for a finished reply. It now behaves like a backend dying mid-stream: the error event is sent, the request is counted as failed in the translator stats, and the connection is dropped so the client's read fails. A panic before anything was written still returns a `502` JSON error.

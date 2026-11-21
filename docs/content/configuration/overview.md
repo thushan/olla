@@ -263,6 +263,9 @@ Each endpoint requires `url`, `name`, and `type`. The `priority` field is option
 
 Current list of supported types can be found in [integrations](../integrations/overview.md#backend-endpoints).
 
+!!! note "Type auto-detection"
+    With `type` left empty or set to `auto`, Olla probes the endpoint and identifies llama.cpp, vLLM, oMLX and Rapid-MLX from the `owned_by` field in its `/v1/models` response (`llamacpp`, `vllm`, `omlx`, `rapid-mlx`). Any other OpenAI-compatible server is treated as `openai-compatible`. If your backend reports a different `owned_by` (a fork or a proxy in front of it), set an explicit `type`. An explicit type is never second-guessed.
+
 Optional fields:
 
 | Field | Description | Default |
