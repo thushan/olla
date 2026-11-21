@@ -256,7 +256,7 @@ Each endpoint requires `url`, `name`, and `type`. The `priority` field is option
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| **url** | Base URL of the endpoint | `http://localhost:11434` |
+| **url** | Base URL of the endpoint. Must be unique per endpoint: Olla keys endpoints by URL, so a repeat replaces the earlier entry (and logs a warning) | `http://localhost:11434` |
 | **name** | Unique identifier | `local-ollama` |
 | **type** | Platform type | `llamacpp`, `vllm`, `openai` (See [integrations](../integrations/overview.md#backend-endpoints)) |
 | **priority** | Selection priority (higher = preferred, default: `100`) | `100` |

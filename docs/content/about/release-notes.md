@@ -16,6 +16,10 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Changed: duplicate endpoint URLs now log a warning
+
+Olla keys static endpoints by URL, so when two endpoints in `discovery.static.endpoints` share a URL the later one silently replaced the earlier one and only one registered. Config loading still accepts this so existing files keep working, but it now logs a `WARN` naming both endpoints and the URL, and `--validate-config` lists the same collision. If you declared several endpoints on one URL (to vary `type`, say), give each its own URL. See [Configuration Overview](../configuration/overview.md#endpoint-configuration).
+
 ### Changed: auto-detection needs the server to identify itself
 
 With `type` empty or `auto`, an endpoint is only detected as llama.cpp, vLLM, oMLX or Rapid-MLX when its `/v1/models` response carries a matching `owned_by` (`llamacpp`, `vllm`, `omlx`, `rapid-mlx`); [#271](https://github.com/thushan/olla/pull/271) added this check because those backends share the OpenAI response shape and were being misdetected as each other. A server that does not report one of those values is now treated as `openai-compatible`. Endpoints with an explicit `type` are unaffected; if a backend behind a proxy or fork lost its detected type, set `type` explicitly. See [Configuration Overview](../configuration/overview.md#endpoint-configuration). The llama.cpp API reference now shows its real `owned_by` value (`llamacpp`).
