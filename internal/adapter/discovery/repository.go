@@ -184,14 +184,6 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			return fmt.Errorf("invalid model URL %q: %w", modelURLString, err)
 		}
 
-		// An auto-detected endpoint has no profile to supply a discovery path yet, so the
-		// universal /v1/models above is a guess, not a user choice. Leaving ModelURLString
-		// empty lets each candidate profile in auto-detection probe its own path (Ollama's
-		// /api/tags, for one); only an explicit model_url overrides them (issue #86).
-		if (cfg.Type == "" || cfg.Type == domain.ProfileAuto) && cfg.ModelURL == "" {
-			modelURLString = ""
-		}
-
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
 			URL:                   endpointURL,
@@ -206,7 +198,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			URLString:             urlString,
 			HealthCheckPathString: healthCheckPath,
 			HealthCheckURLString:  healthCheckURLString,
-			ModelURLString:        modelURLString,
+			ModelURLString:        userModelURL(cfg, modelURLString),
 			BackoffMultiplier:     1,
 			NextCheckTime:         now,
 			PreservePath:          cfg.PreservePath,
@@ -236,6 +228,17 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 	r.mu.Unlock()
 
 	return nil
+}
+
+// userModelURL returns the resolved model URL only when discovery should treat it as a user
+// choice. An auto-detected endpoint has no profile to supply a path yet, so the universal
+// /v1/models default is a guess; leaving it empty lets each candidate probe its own path
+// (Ollama's /api/tags, for one). An explicit model_url still overrides them (issue #86).
+func userModelURL(cfg config.EndpointConfig, resolved string) string {
+	if (cfg.Type == "" || cfg.Type == domain.ProfileAuto) && cfg.ModelURL == "" {
+		return ""
+	}
+	return resolved
 }
 
 // resolveURLDefaults determines health check and model paths using fallback hierarchy:

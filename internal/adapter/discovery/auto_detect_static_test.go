@@ -19,6 +19,8 @@ import (
 // lived in how the repository resolved ModelURLString for auto endpoints. Hand-built
 // endpoints (as in http_client_test.go) bypassed it.
 
+const openAIModelsPath = "/v1/models"
+
 const ollamaTagsBody = `{"models":[{"name":"llama3:8b","model":"llama3:8b","size":1},{"name":"qwen:7b","model":"qwen:7b","size":2}]}`
 
 func openAIBody(owner string) string {
@@ -89,7 +91,7 @@ func TestStaticAutoDetect_WinningProfileAndModels(t *testing.T) {
 				switch r.URL.Path {
 				case "/api/tags":
 					fmt.Fprint(w, `{"status":"ok"}`)
-				case "/v1/models":
+				case openAIModelsPath:
 					fmt.Fprint(w, openAIBody("organization-owner"))
 				default:
 					http.NotFound(w, r)
@@ -123,7 +125,7 @@ func TestStaticAutoDetect_WinningProfileAndModels(t *testing.T) {
 
 func openAIHandler(owner string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/models" {
+		if r.URL.Path != openAIModelsPath {
 			http.NotFound(w, r)
 			return
 		}
@@ -170,7 +172,7 @@ func TestStaticExplicitType_Unchanged(t *testing.T) {
 		body string
 	}{
 		{"ollama", "/api/tags", ollamaTagsBody},
-		{"llamacpp", "/v1/models", openAIBody("llamacpp")},
+		{"llamacpp", openAIModelsPath, openAIBody("llamacpp")},
 		{"lm-studio", "/api/v0/models", openAIBody("lmstudio")},
 	}
 	for _, tt := range tests {

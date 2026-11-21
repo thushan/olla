@@ -207,24 +207,9 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "read_response", resp.StatusCode, duration, fmt.Errorf("model response exceeds %d bytes: %w", MaxResponseSize, ErrResponseTooLarge))
 	}
 
-	// These parsers accept the same OpenAI envelope. During auto-detection,
-	// require server identity before applying backend-specific metadata rules.
 	if endpoint.Type == "" || endpoint.Type == domain.ProfileAuto {
-		switch platformProfile.GetName() {
-		case domain.ProfileOllama:
-			// The parsers tolerate any JSON, so an unrelated envelope would otherwise win
-			// as an Ollama with no models. Require Ollama's top-level models array.
-			if !gjson.GetBytes(body, "models").IsArray() {
-				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response is not in %s format", platformProfile.GetName()))
-			}
-		case domain.ProfileLmStudio:
-			if !gjson.GetBytes(body, "data").IsArray() {
-				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response is not in %s format", platformProfile.GetName()))
-			}
-		case domain.ProfileLlamaCpp, domain.ProfileVLLM, domain.ProfileRapidMLX, domain.ProfileOMLX:
-			if !hasModelOwner(body, platformProfile.GetName()) {
-				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response does not identify %s", platformProfile.GetName()))
-			}
+		if aerr := checkAutoDetectShape(body, platformProfile.GetName()); aerr != nil {
+			return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, aerr)
 		}
 	}
 
@@ -249,6 +234,28 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 	})
 
 	return models, nil
+}
+
+// checkAutoDetectShape stops a candidate winning auto-detection on a response that is not
+// really its own. The parsers tolerate any JSON, so without this an unrelated envelope would
+// be accepted as an empty model list. Ollama and LM Studio must have their own envelope; the
+// OpenAI look-alikes share one shape, so they must also identify themselves via owned_by.
+func checkAutoDetectShape(body []byte, profileName string) error {
+	switch profileName {
+	case domain.ProfileOllama:
+		if !gjson.GetBytes(body, "models").IsArray() {
+			return fmt.Errorf("model response is not in %s format", profileName)
+		}
+	case domain.ProfileLmStudio:
+		if !gjson.GetBytes(body, "data").IsArray() {
+			return fmt.Errorf("model response is not in %s format", profileName)
+		}
+	case domain.ProfileLlamaCpp, domain.ProfileVLLM, domain.ProfileRapidMLX, domain.ProfileOMLX:
+		if !hasModelOwner(body, profileName) {
+			return fmt.Errorf("model response does not identify %s", profileName)
+		}
+	}
+	return nil
 }
 
 func hasModelOwner(body []byte, owner string) bool {
