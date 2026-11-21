@@ -184,6 +184,14 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			return fmt.Errorf("invalid model URL %q: %w", modelURLString, err)
 		}
 
+		// An auto-detected endpoint has no profile to supply a discovery path yet, so the
+		// universal /v1/models above is a guess, not a user choice. Leaving ModelURLString
+		// empty lets each candidate profile in auto-detection probe its own path (Ollama's
+		// /api/tags, for one); only an explicit model_url overrides them (issue #86).
+		if (cfg.Type == "" || cfg.Type == domain.ProfileAuto) && cfg.ModelURL == "" {
+			modelURLString = ""
+		}
+
 		newEndpoint := &domain.Endpoint{
 			Name:                  cfg.Name,
 			URL:                   endpointURL,

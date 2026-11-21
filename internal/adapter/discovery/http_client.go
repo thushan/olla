@@ -211,6 +211,16 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 	// require server identity before applying backend-specific metadata rules.
 	if endpoint.Type == "" || endpoint.Type == domain.ProfileAuto {
 		switch platformProfile.GetName() {
+		case domain.ProfileOllama:
+			// The parsers tolerate any JSON, so an unrelated envelope would otherwise win
+			// as an Ollama with no models. Require Ollama's top-level models array.
+			if !gjson.GetBytes(body, "models").IsArray() {
+				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response is not in %s format", platformProfile.GetName()))
+			}
+		case domain.ProfileLmStudio:
+			if !gjson.GetBytes(body, "data").IsArray() {
+				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response is not in %s format", platformProfile.GetName()))
+			}
 		case domain.ProfileLlamaCpp, domain.ProfileVLLM, domain.ProfileRapidMLX, domain.ProfileOMLX:
 			if !hasModelOwner(body, platformProfile.GetName()) {
 				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response does not identify %s", platformProfile.GetName()))
