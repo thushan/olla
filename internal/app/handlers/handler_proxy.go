@@ -54,6 +54,8 @@ type proxyRequest struct {
 	clientGone bool
 }
 
+// proxyHandler applies request inspection and session affinity before choosing
+// endpoints across all configured providers.
 func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	pr := a.initializeProxyRequest(r)
 
@@ -65,7 +67,7 @@ func (a *Application) proxyHandler(w http.ResponseWriter, r *http.Request) {
 	// name is available; inject into context before endpoint selection.
 	// The outcome pointer is stored in context; the proxy engine reads it before WriteHeader.
 	if a.Config.Proxy.StickySessions.Enabled {
-		ctx, r, _ = a.injectStickyKey(ctx, r, a.canonicalModelName(pr.model))
+		ctx, r, _ = a.injectStickyKey(ctx, r, a.stickyModelName(pr.model))
 	}
 
 	endpoints, err := a.getCompatibleEndpoints(ctx, pr)
@@ -244,6 +246,17 @@ func (a *Application) canonicalModelName(name string) string {
 		return name
 	}
 	return canon.CanonicalModelName(name)
+}
+
+// stickyModelName keeps case variants of one alias on the same endpoint without
+// changing the native model names used for backend requests or statistics.
+func (a *Application) stickyModelName(name string) string {
+	if a.aliasResolver != nil {
+		if alias, ok := a.aliasResolver.CanonicalAliasName(name); ok {
+			return alias
+		}
+	}
+	return a.canonicalModelName(name)
 }
 
 // withCanonicalAliasTargets records the native name of any alias target that is a bare

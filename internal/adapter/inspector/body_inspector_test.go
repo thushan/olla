@@ -1015,3 +1015,33 @@ func TestBodyInspector_RepeatedContentEncodingHeaders(t *testing.T) {
 		})
 	}
 }
+
+func TestBodyInspector_PreserveAliasCase(t *testing.T) {
+	bi, err := NewBodyInspector(&mockStyledLogger{})
+	require.NoError(t, err)
+	bi.SetModelNameCasePreserver(func(name string) bool { return strings.EqualFold(name, "My-Alias") })
+	for _, size := range []int{32, MaxBodySize + 1000} {
+		for _, tc := range []struct{ name, want string }{
+			{"My-Alias", "My-Alias"},
+			{"MY-ALIAS", "MY-ALIAS"},
+			{" My-Alias ", "My-Alias"},
+			{"Native-Model:Latest", "native-model:latest"},
+		} {
+			t.Run(fmt.Sprintf("%d/%s", size, tc.name), func(t *testing.T) {
+				body := fmt.Sprintf(`{"model":%q,"prompt":%q}`, tc.name, strings.Repeat("x", size))
+				for range 2 {
+					request, err := http.NewRequest(http.MethodPost, "/v1/completions", strings.NewReader(body))
+					require.NoError(t, err)
+					request.Header.Set("Content-Type", "application/json")
+					profile := domain.NewRequestProfile("/v1/completions")
+					require.NoError(t, bi.Inspect(t.Context(), request, profile))
+					assert.Equal(t, tc.want, profile.ModelName)
+					restored, err := io.ReadAll(request.Body)
+					require.NoError(t, err)
+					require.NoError(t, request.Body.Close())
+					assert.Equal(t, body, string(restored))
+				}
+			})
+		}
+	}
+}
