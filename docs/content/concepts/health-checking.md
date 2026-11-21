@@ -286,7 +286,7 @@ There are two independent circuit breakers. The health-checker circuit breaker g
 2. **Open Duration**: Circuit stays open for 30 seconds
 3. **Half-Open Test**: Allows one test request through
 4. **Recovery**: First successful request closes the circuit
-5. **What counts as a failure differs by breaker**: the Olla proxy circuit breaker counts only transport-level errors (connection refused, reset, timeout) and ignores backend HTTP 5xx responses; the health-checker circuit breaker counts an unhealthy health-probe response (including a 5xx health check) as a failure in addition to transport errors. Neither counts 401/403 (ConfigError) or 429 (RateLimited).
+5. **What counts as a failure differs by breaker**: the Olla proxy circuit breaker counts only transport-level errors (connection refused, reset, timeout) and ignores backend HTTP 5xx responses; the health-checker circuit breaker counts an unhealthy health-probe response (including a 5xx health check) as a failure in addition to transport errors. Neither counts 401/403 (ConfigError) or 429 (RateLimited). The Olla proxy circuit breaker also ignores client cancels and client deadlines: a request the client abandons says nothing about the backend, and a cancelled half-open probe frees its slot for the next request without closing or re-opening the circuit. Backend timeouts (such as the response-header timeout) still count.
 
 ## Monitoring Health Status
 

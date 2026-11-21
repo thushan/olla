@@ -186,6 +186,19 @@ func (b *Breaker) RecordFailure(attempt int64) {
 	// on IsOpen).
 }
 
+// Abandon releases a half-open probe that ended without learning anything
+// about the backend (the client cancelled before a result). It neither counts
+// as a success nor a failure: the failure count and state are untouched and
+// the single-flight slot is freed so the next caller can probe straight away.
+// Like RecordSuccess/RecordFailure it is a no-op for a superseded attempt, and
+// for attempt 0 (the closed-circuit path holds no slot).
+func (b *Breaker) Abandon(attempt int64) {
+	if attempt == 0 {
+		return
+	}
+	b.lastAttempt.CompareAndSwap(attempt, 0)
+}
+
 // Tripped reports whether the breaker is anything other than closed (open or
 // half-open), without evaluating the half-open gate or admitting a probe.
 // Used by adapters for state inspection outside the request path (e.g.

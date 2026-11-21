@@ -326,3 +326,43 @@ func TestBreaker_Concurrent_MixedTrafficNoRace(t *testing.T) {
 	// No panic and the breaker is still in a legal state (open or closed).
 	_ = b.Tripped()
 }
+
+// An abandoned half-open probe (client cancelled) is neither a success nor a
+// failure: state and failure count stay put and the slot is freed.
+func TestBreaker_Abandon_ReleasesProbeSlotWithoutRecording(t *testing.T) {
+	b := NewTripped(testConfig(1), testOpenDuration+time.Second)
+
+	open, attempt := b.IsOpen(testProbeStaleness)
+	if open || attempt == 0 {
+		t.Fatalf("expected the first caller to be admitted as the probe, open=%v attempt=%d", open, attempt)
+	}
+	if open2, _ := b.IsOpen(testProbeStaleness); !open2 {
+		t.Fatal("second caller should be rejected while the probe is in flight")
+	}
+
+	failures := b.Failures()
+	b.Abandon(attempt)
+
+	if b.Failures() != failures || !b.Tripped() {
+		t.Fatalf("abandon changed breaker state: failures %d -> %d, tripped=%v", failures, b.Failures(), b.Tripped())
+	}
+	if b.LastAttemptNanos() != 0 {
+		t.Fatal("abandon did not free the half-open slot")
+	}
+	if open3, a3 := b.IsOpen(testProbeStaleness); open3 || a3 == 0 {
+		t.Fatalf("next caller should be admitted as a fresh probe, open=%v attempt=%d", open3, a3)
+	}
+}
+
+// A superseded probe's late abandon must not free the replacement's slot, and
+// attempt 0 (closed circuit, no slot held) is a no-op.
+func TestBreaker_Abandon_IgnoresStaleAndZeroAttempts(t *testing.T) {
+	b := NewTripped(testConfig(1), testOpenDuration+time.Second)
+	_, attempt := b.IsOpen(testProbeStaleness)
+
+	b.Abandon(0)
+	b.Abandon(attempt + 1)
+	if b.LastAttemptNanos() != attempt {
+		t.Fatal("abandon with the wrong token released the live probe's slot")
+	}
+}

@@ -16,6 +16,10 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Fixed: client cancels no longer open the circuit breaker
+
+A client that cancelled or timed out before the first response byte was recorded as a backend failure ([#269](https://github.com/thushan/olla/issues/269)). Five such cancels opened the Olla engine's circuit breaker and a healthy backend returned 502 for 30 seconds, and a cancelled half-open probe re-opened it. A client cancel or client deadline is now ignored by the breaker, and a cancelled half-open probe releases its slot so the next request probes straight away. Both engines also stop counting these cancels as failed requests in the stats and error events. Backend timeouts, such as the response-header timeout, and connection errors still count.
+
 ### Fixed: a backend dying mid-stream no longer looks like a complete response
 
 When a backend failed after response bytes had reached the client, Olla returned normally and net/http finished the chunked body cleanly, so the client saw `200` and a clean end of stream. On `/olla/anthropic/v1/messages` with translation it was worse: the translator wrote `message_delta` and `message_stop` for the truncated reply. Now the response ends with an error event in the stream's own format, then the connection is dropped so the client's read fails:
