@@ -231,11 +231,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		// Endpoints are keyed by URL, so a repeat silently replaces the earlier entry. Existing
 		// configs must keep loading, so warn rather than reject.
-		if first, dup := firstNameByURL[urlString]; dup && r.logger != nil {
-			r.logger.Warn("Duplicate endpoint URL: the later endpoint replaces the earlier one",
-				"url", urlString, "replaced", first, "replacedBy", cfg.Name)
-		}
-		firstNameByURL[urlString] = cfg.Name
+		r.noteURL(firstNameByURL, urlString, cfg.Name)
 		newEndpoints[urlString] = newEndpoint
 	}
 
@@ -244,6 +240,15 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 	r.mu.Unlock()
 
 	return nil
+}
+
+// noteURL records which endpoint first claimed a URL and warns when a later one repeats it.
+func (r *StaticEndpointRepository) noteURL(firstNameByURL map[string]string, urlString, name string) {
+	if first, dup := firstNameByURL[urlString]; dup && r.logger != nil {
+		r.logger.Warn("Duplicate endpoint URL: the later endpoint replaces the earlier one",
+			"url", urlString, "replaced", first, "replacedBy", name)
+	}
+	firstNameByURL[urlString] = name
 }
 
 // userModelURL returns the resolved model URL only when discovery should treat it as a user
