@@ -1,0 +1,455 @@
+package handlers
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/thushan/olla/internal/core/constants"
+)
+
+// A backend that dies after the response has started must be detectable by the
+// client: the body read errors (connection aborted) and, where the body has an
+// in-band error channel, a provider-format error event precedes the abort. A clean
+// EOF is indistinguishable from a complete response, which is the defect under test.
+
+const midStreamFailLog = "Backend failed after response started, aborting client connection"
+
+// dyingBackend writes the given pre-death payload (flushing after each part) and
+// then drops the connection without the chunked terminator.
+func dyingBackend(t *testing.T, contentType string, contentLength int, parts []string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.Header().Set("Content-Type", contentType)
+		if contentLength > 0 {
+			w.Header().Set("Content-Length", fmt.Sprint(contentLength))
+		}
+		w.WriteHeader(http.StatusOK)
+		for _, p := range parts {
+			_, _ = io.WriteString(w, p)
+			w.(http.Flusher).Flush()
+		}
+		if conn, _, err := w.(http.Hijacker).Hijack(); err == nil {
+			_ = conn.Close()
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func sseParts(n int) []string {
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = fmt.Sprintf("data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"tok%d \"}}]}\n\n", i)
+	}
+	return parts
+}
+
+// frontServer serves the route's handler and records whether it ended in the
+// net/http abort panic, re-panicking so the connection is really dropped.
+type frontServer struct {
+	*httptest.Server
+	aborted atomic.Bool
+	// done is closed each time the handler returns, panicking or not.
+	done     chan struct{}
+	doneOnce sync.Once
+}
+
+func newFront(t *testing.T, h *statusHarness) *frontServer {
+	t.Helper()
+	f := &frontServer{done: make(chan struct{})}
+	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer f.doneOnce.Do(func() { close(f.done) })
+		defer func() {
+			if rec := recover(); rec != nil {
+				if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
+					f.aborted.Store(true)
+				}
+				panic(rec)
+			}
+		}()
+		switch h.route.handler {
+		case "anthropic":
+			h.fleet.app.translationHandler(h.fleet.trans).ServeHTTP(w, r)
+		case "proxy":
+			h.fleet.app.proxyHandler(w, r.WithContext(context.WithValue(r.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/")))
+		default:
+			h.fleet.app.providerProxyHandler(w, r)
+		}
+	}))
+	t.Cleanup(f.Close)
+	return f
+}
+
+type clientResult struct {
+	status  int
+	body    string
+	readErr error
+}
+
+func doStreamRequest(t *testing.T, url, body string) clientResult {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	got, readErr := io.ReadAll(resp.Body)
+	return clientResult{status: resp.StatusCode, body: string(got), readErr: readErr}
+}
+
+const streamReqBody = `{"model":"mistral-small3.2","stream":true,"max_tokens":16,"messages":[{"role":"user","content":"hi"}]}`
+
+func TestMidStreamBackendDeath_ClientCanDetectTruncation(t *testing.T) {
+	t.Parallel()
+	type scenario struct {
+		name        string
+		route       statusRoute
+		contentType string
+		length      int
+		parts       []string
+		// wantData is backend output that must reach the client before the abort.
+		wantData string
+		// wantEvent must appear in the body; wantAbsent must not.
+		wantEvent  []string
+		wantAbsent []string
+	}
+	openaiErr := []string{`data: {"error":{"message":"upstream connection lost`, `"code":"upstream_stream_interrupted"`}
+	anthropicErr := []string{"event: error\n", `"type":"error"`, `"type":"api_error"`}
+	routes := statusRoutes()
+	proxyRoute, providerRoute := routes[0], routes[1]
+	ollamaNative := statusRoute{name: "ollama-native", handler: "provider", path: "/olla/ollama/api/chat"}
+	jsonRoute := statusRoute{name: "provider-json", handler: "provider", path: "/olla/ollama/v1/chat/completions"}
+
+	var scenarios []scenario
+	for _, rt := range routes {
+		s := scenario{name: "sse/" + rt.name, route: rt, contentType: "text/event-stream", parts: sseParts(5), wantData: "tok0", wantAbsent: []string{"[DONE]", "message_stop", "message_delta"}}
+		if rt.handler == "anthropic" {
+			s.wantEvent = anthropicErr
+		} else {
+			s.wantEvent = openaiErr
+		}
+		scenarios = append(scenarios, s)
+	}
+	scenarios = append(scenarios,
+		scenario{name: "ndjson/ollama-native", route: ollamaNative, contentType: "application/x-ndjson", wantData: `"content":"a"`,
+			parts:     []string{`{"model":"m","message":{"content":"a"},"done":false}` + "\n", `{"model":"m","message":{"content":"b"},"done":false}` + "\n"},
+			wantEvent: []string{`{"error":"upstream connection lost during streaming response"}`}, wantAbsent: []string{`"done":true`}},
+		scenario{name: "ndjson/proxy", route: proxyRoute, contentType: "application/x-ndjson", wantData: `"response":"a"`,
+			parts:     []string{`{"response":"a","done":false}` + "\n"},
+			wantEvent: []string{`{"error":"upstream connection lost during streaming response"}`}},
+		// Plain JSON has no in-band error channel: the abort alone must signal it.
+		scenario{name: "json-chunked/provider", route: jsonRoute, contentType: "application/json", wantData: `{"choices":[{"message":{"content":"par`,
+			parts: []string{`{"choices":[{"message":{"content":"par`, `tial`}, wantAbsent: []string{"upstream connection lost", "[DONE]"}},
+		scenario{name: "json-content-length/provider", route: jsonRoute, contentType: "application/json", length: 200, wantData: `{"choices":[{"message":{"content":"par`,
+			parts: []string{`{"choices":[{"message":{"content":"par`}, wantAbsent: []string{"upstream connection lost", "[DONE]"}},
+		scenario{name: "json-chunked/proxy", route: proxyRoute, contentType: "application/json", wantData: `{"partial":`,
+			parts: []string{`{"partial":`}, wantAbsent: []string{"upstream connection lost"}},
+	)
+	_ = providerRoute
+
+	for _, engine := range []string{"olla", "sherpa"} {
+		for _, sc := range scenarios {
+			t.Run(engine+"/"+sc.name, func(t *testing.T) {
+				t.Parallel()
+				backend := dyingBackend(t, sc.contentType, sc.length, sc.parts)
+				h := newStatusHarness(t, engine, sc.route, backend.URL)
+				front := newFront(t, h)
+
+				res := doStreamRequest(t, front.URL+sc.route.path, streamReqBody)
+				t.Logf("status=%d readErr=%v tail=%q", res.status, res.readErr, tail(res.body, 160))
+
+				require.Error(t, res.readErr, "client saw a clean EOF after the backend died mid-stream")
+				assert.Contains(t, res.body, sc.wantData, "backend output sent before the failure must still reach the client")
+				for _, want := range sc.wantEvent {
+					assert.Contains(t, res.body, want)
+				}
+				for _, bad := range sc.wantAbsent {
+					assert.NotContains(t, res.body, bad)
+				}
+				assert.True(t, front.aborted.Load(), "handler must end with http.ErrAbortHandler")
+				assert.NotEmpty(t, h.logs.lines(t, midStreamFailLog), "failure must be logged once the abort is raised")
+			})
+		}
+	}
+}
+
+// A client that goes away is not a backend failure: no error event, no abort, no
+// mid-stream failure log and no ERROR line (the cancel is logged at debug).
+func TestMidStreamClientCancel_NoEventNoAbort(t *testing.T) {
+	t.Parallel()
+	for _, engine := range []string{"olla", "sherpa"} {
+		for _, rt := range statusRoutes() {
+			t.Run(engine+"/"+rt.name, func(t *testing.T) {
+				t.Parallel()
+				release := make(chan struct{})
+				backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					_, _ = io.WriteString(w, sseParts(1)[0])
+					w.(http.Flusher).Flush()
+					select {
+					case <-release:
+					case <-r.Context().Done():
+					}
+				}))
+				t.Cleanup(backend.Close)
+				defer close(release)
+
+				h := newStatusHarness(t, engine, rt, backend.URL)
+				front := newFront(t, h)
+
+				ctx, cancel := context.WithCancel(context.Background())
+				req, err := http.NewRequestWithContext(ctx, http.MethodPost, front.URL+rt.path, strings.NewReader(streamReqBody))
+				require.NoError(t, err)
+				req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				buf := make([]byte, 1)
+				_, err = resp.Body.Read(buf)
+				require.NoError(t, err)
+				cancel()
+				resp.Body.Close()
+
+				// The handler finishes once the cancelled request unwinds.
+				require.Eventually(t, func() bool {
+					return len(h.logs.lines(t, "Request cancelled by client")) > 0 || len(h.logs.lines(t, "Request completed")) > 0
+				}, 5*time.Second, 20*time.Millisecond)
+				// The abort, if any, lands after the log line, so wait for the handler to return.
+				select {
+				case <-front.done:
+				case <-time.After(5 * time.Second):
+					t.Fatal("front handler did not return after the client cancelled")
+				}
+				assert.False(t, front.aborted.Load(), "client cancel must not abort")
+				assert.Empty(t, h.logs.lines(t, midStreamFailLog), "client cancel is not a backend failure")
+				assert.Empty(t, h.logs.lines(t, "Request failed"), "client cancel must not log at ERROR")
+			})
+		}
+	}
+}
+
+// Before any byte is committed the old behaviour stands: a JSON 502, no abort.
+func TestPreCommitBackendFailure_Still502(t *testing.T) {
+	t.Parallel()
+	for _, rt := range statusRoutes() {
+		t.Run(rt.name, func(t *testing.T) {
+			t.Parallel()
+			dead := httptest.NewServer(http.NotFoundHandler())
+			url := dead.URL
+			dead.Close() // connection refused
+
+			h := newStatusHarness(t, "olla", rt, url)
+			front := newFront(t, h)
+			res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
+
+			assert.Equal(t, http.StatusBadGateway, res.status)
+			assert.NoError(t, res.readErr)
+			assert.Contains(t, res.body, "error")
+			assert.False(t, front.aborted.Load(), "nothing was committed, so nothing to abort")
+			assert.Empty(t, h.logs.lines(t, midStreamFailLog))
+		})
+	}
+}
+
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}
+
+// A mid-stream failure on the Anthropic routes must count as a failed translator
+// request, not a success.
+func TestMidStreamBackendDeath_CountsAsFailedTranslatorRequest(t *testing.T) {
+	t.Parallel()
+	for _, rt := range statusRoutes() {
+		if rt.handler != "anthropic" {
+			continue
+		}
+		t.Run(rt.name, func(t *testing.T) {
+			t.Parallel()
+			backend := dyingBackend(t, "text/event-stream", 0, sseParts(3))
+			h := newStatusHarness(t, "olla", rt, backend.URL)
+			front := newFront(t, h)
+
+			res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
+			require.Error(t, res.readErr)
+
+			// Metrics are recorded just before the abort, so the client can win the race.
+			require.Eventually(t, func() bool {
+				s := h.fleet.app.statsCollector.GetTranslatorStats()["anthropic"]
+				return s.TotalRequests == 1 && s.FailedRequests == 1 && s.SuccessfulRequests == 0
+			}, 5*time.Second, 20*time.Millisecond, "stats: %+v", h.fleet.app.statsCollector.GetTranslatorStats())
+		})
+	}
+}
+
+// A stream that finishes cleanly must be left alone: no abort, no error event.
+func TestStreamSuccess_NotAborted(t *testing.T) {
+	t.Parallel()
+	routes := statusRoutes()
+	ollamaNative := statusRoute{name: "ollama-native", handler: "provider", path: "/olla/ollama/api/chat"}
+	type scenario struct {
+		route       statusRoute
+		contentType string
+		parts       []string
+		wantEnd     string
+	}
+	var scenarios []scenario
+	for _, rt := range routes {
+		end := "[DONE]"
+		if rt.handler == "anthropic" && !rt.passthrough {
+			end = "message_stop" // translation rebuilds the stream, so it ends in its own marker
+		}
+		scenarios = append(scenarios, scenario{rt, "text/event-stream", append(sseParts(3), "data: [DONE]\n\n"), end})
+	}
+	nd := []string{`{"model":"m","message":{"content":"a"},"done":false}` + "\n", `{"model":"m","message":{"content":""},"done":true}` + "\n"}
+	scenarios = append(scenarios, scenario{ollamaNative, "application/x-ndjson", nd, `"done":true`}, scenario{routes[0], "application/x-ndjson", nd, `"done":true`})
+
+	for _, engine := range []string{"olla", "sherpa"} {
+		for _, sc := range scenarios {
+			t.Run(engine+"/"+sc.contentType+"/"+sc.route.name, func(t *testing.T) {
+				t.Parallel()
+				backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", sc.contentType)
+					w.WriteHeader(http.StatusOK)
+					for _, p := range sc.parts {
+						_, _ = io.WriteString(w, p)
+						w.(http.Flusher).Flush()
+					}
+				}))
+				t.Cleanup(backend.Close)
+				h := newStatusHarness(t, engine, sc.route, backend.URL)
+				front := newFront(t, h)
+
+				res := doStreamRequest(t, front.URL+sc.route.path, streamReqBody)
+
+				require.NoError(t, res.readErr)
+				assert.Equal(t, http.StatusOK, res.status)
+				assert.Contains(t, res.body, sc.wantEnd, "stream must arrive complete, with its end marker")
+				if sc.contentType == "text/event-stream" {
+					assert.Contains(t, res.body, "tok0", "backend payload must reach the client")
+				} else {
+					assert.Contains(t, res.body, `"content":"a"`, "backend payload must reach the client")
+				}
+				assert.NotContains(t, res.body, "upstream connection lost")
+				assert.NotContains(t, res.body, "event: error")
+				assert.False(t, front.aborted.Load())
+				assert.Empty(t, h.logs.lines(t, midStreamFailLog))
+			})
+		}
+	}
+}
+
+// A backend that stalls past the read timeout mid-stream is a backend failure like
+// any other: error event, then abort.
+func TestMidStreamReadTimeout_AbortsWithErrorEvent(t *testing.T) {
+	t.Parallel()
+	for _, engine := range []string{"olla", "sherpa"} {
+		for _, rt := range statusRoutes() {
+			t.Run(engine+"/"+rt.name, func(t *testing.T) {
+				t.Parallel()
+				stall := make(chan struct{})
+				backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = io.Copy(io.Discard, r.Body)
+					w.Header().Set("Content-Type", "text/event-stream")
+					w.WriteHeader(http.StatusOK)
+					_, _ = io.WriteString(w, sseParts(1)[0])
+					w.(http.Flusher).Flush()
+					// Stall past the read timeout, then send one more chunk. Sherpa times out
+					// during the stall; Olla only polls its deadline between reads, so it
+					// notices on the next chunk. Either way the failure lands mid-stream.
+					select {
+					case <-time.After(800 * time.Millisecond):
+					case <-stall:
+						return
+					case <-r.Context().Done():
+						return
+					}
+					_, _ = io.WriteString(w, sseParts(1)[0])
+					w.(http.Flusher).Flush()
+					select {
+					case <-stall:
+					case <-r.Context().Done():
+					case <-time.After(5 * time.Second):
+					}
+				}))
+				t.Cleanup(backend.Close)
+				defer close(stall)
+
+				h := newStatusHarness(t, engine, rt, backend.URL, 300*time.Millisecond)
+				front := newFront(t, h)
+				res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
+				t.Logf("readErr=%v tail=%q", res.readErr, tail(res.body, 160))
+
+				require.Error(t, res.readErr)
+				if rt.handler == "anthropic" {
+					assert.Contains(t, res.body, "event: error")
+					assert.NotContains(t, res.body, "message_stop")
+				} else {
+					assert.Contains(t, res.body, `"code":"upstream_stream_interrupted"`)
+					assert.NotContains(t, res.body, "[DONE]")
+				}
+				assert.True(t, front.aborted.Load())
+			})
+		}
+	}
+}
+
+// The translator writes its own error event for interleaved tool arguments; the
+// handler must abort without adding a second one.
+func TestMidStreamTranslatorErrorEvent_NotDuplicated(t *testing.T) {
+	t.Parallel()
+	chunk := func(delta string) string {
+		return fmt.Sprintf("data: {\"id\":\"c\",\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":%s}]}\n\n", delta)
+	}
+	tool := func(idx int, id, name, args string) string {
+		return chunk(fmt.Sprintf(`{"tool_calls":[{"index":%d,"id":%q,"type":"function","function":{"name":%q,"arguments":%q}}]}`, idx, id, name, args))
+	}
+	args := func(idx int, a string) string {
+		return chunk(fmt.Sprintf(`{"tool_calls":[{"index":%d,"function":{"arguments":%q}}]}`, idx, a))
+	}
+	parts := []string{tool(0, "call_a", "f1", ""), args(0, `{"a":1}`), tool(1, "call_b", "f2", ""), args(0, `{"late":true}`), args(1, `{"b":2}`), "data: [DONE]\n\n"}
+
+	for _, engine := range []string{"olla", "sherpa"} {
+		t.Run(engine, func(t *testing.T) {
+			t.Parallel()
+			backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = io.Copy(io.Discard, r.Body)
+				w.Header().Set("Content-Type", "text/event-stream")
+				w.WriteHeader(http.StatusOK)
+				for _, p := range parts {
+					_, _ = io.WriteString(w, p)
+					w.(http.Flusher).Flush()
+				}
+			}))
+			t.Cleanup(backend.Close)
+			rt := statusRoutes()[3] // anthropic-translation
+			h := newStatusHarness(t, engine, rt, backend.URL)
+			front := newFront(t, h)
+
+			res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
+			t.Logf("readErr=%v tail=%q", res.readErr, tail(res.body, 200))
+
+			require.Error(t, res.readErr)
+			assert.Equal(t, 1, strings.Count(res.body, "event: error"), "exactly one error event")
+			assert.NotContains(t, res.body, "message_stop")
+			assert.True(t, front.aborted.Load())
+		})
+	}
+}
