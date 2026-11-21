@@ -312,7 +312,7 @@ and exits 1 even when no assertion failed.
 ## Notes
 
 - `test/manual/config.sticky.yaml` registers three endpoints per provider type
-  (all pointing at AIMock on 9300/9301/9302) so affinity checks are meaningful.
+  (all reaching AIMock on 9300/9301/9302 via distinct loopback hosts 127.0.0.2-9, as Olla keys endpoints by URL) so affinity checks are meaningful.
   The default `engine: "sherpa"` covers the Sherpa path; change it to `"olla"`
   to exercise the high-performance engine.
 - The `openai-compatible` profile declares `anthropic_support.enabled: true`,
