@@ -91,9 +91,9 @@ requests get the default `404`, so the mount point is not discoverable when disa
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `dashboard.enabled` | bool | `true` | Whether `/internal/ui/*` routes are registered |
-| `dashboard.access_policy.allowed_cidrs` | []string | `["127.0.0.0/8", "::1/128"]` | CIDR allowlist matched against the TCP source address. Must be non-empty when enabled |
+| `dashboard.access_policy.allowed_cidrs` | []string | `["127.0.0.0/8", "::1/128"]` | CIDR allowlist matched against the TCP source address. Must be non-empty whenever the dashboard or gate_internal_api is enabled |
 | `dashboard.access_policy.allowed_hosts` | []string | `["localhost"]` | Hostname allowlist matched against the `Host` header (port stripped, case-insensitive). May be empty: IP-literal Hosts are always accepted |
-| `dashboard.gate_internal_api` | bool | `false` | Reserved for a future release that extends `access_policy` to the rest of `/internal/*`. Inert today: setting it `true` logs a startup warning and changes nothing |
+| `dashboard.gate_internal_api` | bool | `false` | Extends `access_policy` to the rest of `/internal/*` and `/version`, so the JSON the dashboard reads sits behind the same check as the dashboard. Off by default: turning it on also gates Prometheus scrapes and health checks from hosts outside `allowed_cidrs` |
 
 Startup fails if `allowed_cidrs` is empty or a CIDR does not parse.
 
@@ -195,10 +195,13 @@ A failed check returns a body naming what failed and what Olla saw, with a match
 
 ### Scope and limits
 
-- **The gate covers `/internal/ui/` only.** The JSON endpoints the dashboard reads
-  (`/internal/status*`, `/internal/health`, `/internal/metrics`, `/version`) stay as
-  reachable as they already were; gating the UI does not gate the data it renders.
-  `gate_internal_api` is reserved to close that gap in a future release.
+- **The gate covers `/internal/ui/` by default, and the rest of `/internal/*` with
+  `gate_internal_api: true`.** The JSON endpoints the dashboard reads
+  (`/internal/status*`, `/internal/stats/*`, `/internal/process`, `/internal/health`,
+  `/internal/metrics`, `/version`) stay as reachable as they already were until the flag
+  is set; gating the UI alone does not gate the data it renders. With the flag on, every
+  one of them answers a client outside `allowed_cidrs` with the same 403 and the same
+  `Warn` line as `/internal/ui/`, so add each monitoring host before flipping it.
 - **Anyone inside `allowed_cidrs` with an accepted Host can read the dashboard.**
   Widening the CIDR is a deliberate trade of exposure for convenience.
 - **The container image ships that trade already made.** Its `allowed_cidrs` covers
@@ -217,8 +220,9 @@ A failed check returns a body naming what failed and what Olla saw, with a match
 
     With `allowed_origins: ["*"]`, any website a visitor's browser is on can `fetch()`
     the `/internal/*` JSON cross-origin. The dashboard's own gate still applies to
-    `/internal/ui/`, but the data behind it is readable regardless. Do not pair
-    permissive CORS with an ungated `/internal/*`.
+    `/internal/ui/`, but the data behind it is readable regardless unless
+    `gate_internal_api: true` puts the same policy in front of those endpoints.
+    Do not pair permissive CORS with an ungated `/internal/*`.
 
 ## Troubleshooting
 

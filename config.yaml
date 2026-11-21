@@ -211,10 +211,10 @@ dashboard:
       - "::1/128"
     allowed_hosts:
       - "localhost"
-  # gate_internal_api is reserved for a future release and is inert today:
-  # setting it true has no effect (Olla logs a warning at startup if set).
-  # Once wired, it will extend the same access_policy to the rest of
-  # /internal/* and /version.
+  # gate_internal_api extends the same access_policy to the rest of
+  # /internal/* and /version, so the JSON the dashboard reads is not more
+  # reachable than the dashboard itself. Off by default: turning it on also
+  # gates Prometheus scrapes and health checks from hosts outside allowed_cidrs.
   gate_internal_api: false
 
 # Model aliases allow mapping a single virtual model name to multiple actual model names

@@ -41,17 +41,25 @@ var dashboardHandlerFactory = dashboard.Handler
 // registerRoutes sets up the complete HTTP routing table
 func (a *Application) registerRoutes() {
 	// Internal health and monitoring endpoints come first - they're critical
-	// for operations and shouldn't depend on any provider configuration
-	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, a.healthHandler, "Health check endpoint", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/status", middleware.GzipFunc(a.statusHandler), "Endpoint status", "GET")
-	a.routeRegistry.RegisterWithMethod(constants.DefaultMetricsEndpoint, a.metricsHandler, "Prometheus metrics", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/status/endpoints", middleware.GzipFunc(a.endpointsStatusHandler), "Endpoints status", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/status/models", middleware.GzipFunc(a.modelsStatusHandler), "Models status", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/stats/models", a.modelStatsHandler, "Model statistics", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/stats/translators", a.translatorStatsHandler, "Translator statistics", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/stats/sticky", a.stickyStatsHandler, "Sticky session statistics", "GET")
-	a.routeRegistry.RegisterWithMethod("/internal/process", a.processStatsHandler, "Process status", "GET")
-	a.routeRegistry.RegisterWithMethod("/version", a.versionHandler, "Olla version information", "GET")
+	// for operations and shouldn't depend on any provider configuration.
+	//
+	// internalGate is the identity function unless dashboard.gate_internal_api
+	// is set, in which case every route below passes the dashboard's access
+	// policy first: these responses are exactly what the dashboard renders, so
+	// gating /internal/ui/ while leaving the data open protects nothing. It is
+	// applied as the outermost wrapper so a denied request never reaches Gzip or
+	// a handler that would touch the cluster state.
+	internalGate := dashboard.InternalAPIMiddleware(a.Config.Dashboard, a.logger, a.throttles)
+	a.routeRegistry.RegisterWithMethod(constants.DefaultHealthCheckEndpoint, internalGate(http.HandlerFunc(a.healthHandler)).ServeHTTP, "Health check endpoint", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/status", internalGate(middleware.GzipFunc(a.statusHandler)).ServeHTTP, "Endpoint status", "GET")
+	a.routeRegistry.RegisterWithMethod(constants.DefaultMetricsEndpoint, internalGate(http.HandlerFunc(a.metricsHandler)).ServeHTTP, "Prometheus metrics", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/status/endpoints", internalGate(middleware.GzipFunc(a.endpointsStatusHandler)).ServeHTTP, "Endpoints status", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/status/models", internalGate(middleware.GzipFunc(a.modelsStatusHandler)).ServeHTTP, "Models status", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/stats/models", internalGate(http.HandlerFunc(a.modelStatsHandler)).ServeHTTP, "Model statistics", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/stats/translators", internalGate(http.HandlerFunc(a.translatorStatsHandler)).ServeHTTP, "Translator statistics", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/stats/sticky", internalGate(http.HandlerFunc(a.stickyStatsHandler)).ServeHTTP, "Sticky session statistics", "GET")
+	a.routeRegistry.RegisterWithMethod("/internal/process", internalGate(http.HandlerFunc(a.processStatsHandler)).ServeHTTP, "Process status", "GET")
+	a.routeRegistry.RegisterWithMethod("/version", internalGate(http.HandlerFunc(a.versionHandler)).ServeHTTP, "Olla version information", "GET")
 
 	// Unified model views aggregate across all providers
 	a.routeRegistry.RegisterWithMethod("/olla/models", a.unifiedModelsHandler, "Unified models listing with filtering", "GET")

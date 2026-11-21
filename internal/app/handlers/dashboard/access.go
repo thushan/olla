@@ -64,6 +64,31 @@ func AccessMiddleware(cfg config.DashboardConfig, log logger.StyledLogger, next 
 	return accessMiddleware(cfg, log, next, newAccessWarnThrottle(log, nil, nil))
 }
 
+// InternalAPIMiddleware returns the middleware that applies the same access
+// policy to the rest of /internal/* (and /version) when cfg.GateInternalAPI is
+// set, so the JSON the dashboard renders sits behind the same control as the
+// HTML that renders it.
+//
+// One middleware is built per startup and shared by every gated route: the
+// denial Warn is sampled per client IP across the whole internal API, not once
+// per route, so a blocked client hammering four endpoints still produces one
+// line per sampling window. Callers wrap each route's handler with the returned
+// function rather than registering a subtree, because the internal API is a set
+// of sibling literal paths rather than one prefix.
+//
+// When the flag is off - the shipped default - the returned middleware is the
+// identity function. Existing deployments that scrape /internal/metrics or poll
+// /internal/health from hosts outside allowed_cidrs keep working unchanged.
+func InternalAPIMiddleware(cfg config.DashboardConfig, log logger.StyledLogger, set *logger.ThrottleSet) func(http.Handler) http.Handler {
+	if !cfg.GateInternalAPI {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	warnLog := newAccessWarnThrottle(log, nil, set)
+	return func(next http.Handler) http.Handler {
+		return accessMiddleware(cfg, log, next, warnLog)
+	}
+}
+
 // newAccessWarnThrottle builds the denial Warn sampler. A blocked client can retry
 // at wire speed, so the Warn is sampled per client IP; the 403 body is unaffected
 // and every rejection still gets it. Nil when there is no logger to write to.
