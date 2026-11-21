@@ -344,12 +344,15 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 		silence.Reset(readTimeout)
 		err := s.processStreamData(resp, buffer, state, w, isStreaming, rc, func() { silence.Stop() }, rlog)
 
-		if stalled.Load() {
-			return state.totalBytes, state.lastChunk, fmt.Errorf("AI backend stopped responding - no data received for %.1fs (backend may be overloaded)", readTimeout.Seconds())
-		}
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return state.totalBytes, state.lastChunk, nil
+			}
+			// Report a stall only when the read failed. A chunk that arrived as the
+			// timer fired is real data and was already written; the body is closed
+			// now, so the next read fails here and is reported then.
+			if stalled.Load() {
+				return state.totalBytes, state.lastChunk, fmt.Errorf("AI backend stopped responding - no data received for %.1fs (backend may be overloaded)", readTimeout.Seconds())
 			}
 			rlog.Debug("read error during streaming", "error", err, "bytes_read", state.totalBytes)
 			return state.totalBytes, state.lastChunk, err

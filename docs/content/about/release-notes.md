@@ -26,7 +26,7 @@ If the Anthropic translator panicked after part of a streamed reply had reached 
 
 ### Fixed: the Olla engine now enforces `proxy.read_timeout` on a silent backend
 
-A backend that sent response headers (or some chunks) and then went silent with the connection open blocked the Olla engine's request forever, because the read timeout was only checked between reads. The engine now ends the stream after `proxy.read_timeout` with no data (`AI backend stopped responding - no data received for Xs`), counts it as a failed request, and handles it like a dead backend: the client gets the provider-format error event and a dropped connection, or a `502` if nothing had been written yet. The timeout measures silence from the backend only, so a slow but steady stream is not cut, and a slow client does not trigger it. Sherpa already behaved this way. If you run long silent gaps (a model that thinks for minutes before the first token), raise `proxy.read_timeout`.
+A backend that sent response headers (or some chunks) and then went silent with the connection open blocked the Olla engine's request forever, because the read timeout was only checked between reads. The engine now ends the stream after `proxy.read_timeout` with no data (`AI backend stopped responding - no data received for Xs`), counts it as a failed request, and handles it like a dead backend: the client gets the provider-format error event and a dropped connection. That holds even when the stall comes before the first chunk, because the response headers are already with the client; the one exception is `/olla/anthropic/v1/messages` with translation, where nothing is written until the first chunk, so a stall before it returns a `502` Anthropic-format JSON error. The timeout measures silence from the backend only, so a slow but steady stream is not cut, and a slow client does not trigger it. Sherpa already behaved this way. If you run long silent gaps (a model that thinks for minutes before the first token), raise `proxy.read_timeout`.
 
 ### Added: Rapid-MLX backend
 
@@ -57,7 +57,7 @@ When a backend failed after response bytes had reached the client, Olla returned
 - Ollama NDJSON: a `{"error":"..."}` line.
 - Plain JSON bodies, chunked or with `Content-Length`: no extra bytes, only the dropped connection.
 
-Non-streaming errors and HTTP error statuses before the first byte are unchanged and still fail over. A client that disconnects is not treated as a backend failure. The access log line is still written at Info with `aborted=true` (the proxy console completion line needs Debug), and a failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
+Non-streaming errors and HTTP error statuses before the first byte are unchanged and still fail over. A client that disconnects is not treated as a backend failure. The access log line is written at Warn with `aborted=true` (the proxy console completion line needs Debug), and a failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
 
 ### Changed: a pre-commit failure on streaming Anthropic translation returns 502
 
