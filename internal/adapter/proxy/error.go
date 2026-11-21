@@ -57,11 +57,11 @@ func makeUserFriendlyError(err error, duration time.Duration, errorContext strin
 	case errors.Is(err, io.EOF):
 		if errorContext == "streaming" {
 			if duration < 5*time.Second {
-				return fmt.Errorf("AI backend closed connection after %.1fs - response ended prematurely", duration.Seconds())
+				return fmt.Errorf("AI backend closed connection after %.1fs - response ended prematurely: %w", duration.Seconds(), err)
 			}
-			return fmt.Errorf("AI backend closed connection after %.1fs - response stream ended unexpectedly", duration.Seconds())
+			return fmt.Errorf("AI backend closed connection after %.1fs - response stream ended unexpectedly: %w", duration.Seconds(), err)
 		}
-		return fmt.Errorf("connection closed after %.1fs - AI backend ended communication unexpectedly", duration.Seconds())
+		return fmt.Errorf("connection closed after %.1fs - AI backend ended communication unexpectedly: %w", duration.Seconds(), err)
 	}
 
 	// Network connection errors

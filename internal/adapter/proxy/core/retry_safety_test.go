@@ -103,6 +103,11 @@ func TestIsConnectionError(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "backend closed connection with EOF",
+			err:  fmt.Errorf("round trip failed: %w", io.EOF),
+			want: true,
+		},
+		{
 			name: "generic non-network error",
 			err:  errors.New("something went wrong"),
 			want: false,
