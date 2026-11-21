@@ -288,6 +288,9 @@ func (s *Service) prepareProxyRequest(ctx context.Context, r *http.Request, targ
 	if err != nil {
 		return nil, err
 	}
+	// NewRequest only sets GetBody for stdlib reader types; without it the
+	// transport cannot replay a POST it failed to write on a stale connection.
+	proxyReq.GetBody = r.GetBody
 
 	// Copy headers
 	headerStart := time.Now()
