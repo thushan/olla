@@ -25,7 +25,7 @@ When a backend failed after response bytes had reached the client, Olla returned
 - Ollama NDJSON: a `{"error":"..."}` line.
 - Plain JSON bodies, chunked or with `Content-Length`: no extra bytes, only the dropped connection.
 
-Non-streaming errors and HTTP error statuses before the first byte are unchanged and still fail over. A client that disconnects is not treated as a backend failure. The request's "Request completed" and access-log lines are still written, carrying `aborted=true`, and a failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
+Non-streaming errors and HTTP error statuses before the first byte are unchanged and still fail over. A client that disconnects is not treated as a backend failure. The access log line is still written at Info with `aborted=true` (the proxy console completion line needs Debug), and a failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
 
 ### Changed: a pre-commit failure on streaming Anthropic translation returns 502
 

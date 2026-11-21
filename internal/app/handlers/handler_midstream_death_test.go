@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -60,12 +61,16 @@ func sseParts(n int) []string {
 type frontServer struct {
 	*httptest.Server
 	aborted atomic.Bool
+	// done is closed each time the handler returns, panicking or not.
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 func newFront(t *testing.T, h *statusHarness) *frontServer {
 	t.Helper()
-	f := &frontServer{}
+	f := &frontServer{done: make(chan struct{})}
 	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer f.doneOnce.Do(func() { close(f.done) })
 		defer func() {
 			if rec := recover(); rec != nil {
 				if err, ok := rec.(error); ok && errors.Is(err, http.ErrAbortHandler) {
@@ -115,6 +120,8 @@ func TestMidStreamBackendDeath_ClientCanDetectTruncation(t *testing.T) {
 		contentType string
 		length      int
 		parts       []string
+		// wantData is backend output that must reach the client before the abort.
+		wantData string
 		// wantEvent must appear in the body; wantAbsent must not.
 		wantEvent  []string
 		wantAbsent []string
@@ -128,7 +135,7 @@ func TestMidStreamBackendDeath_ClientCanDetectTruncation(t *testing.T) {
 
 	var scenarios []scenario
 	for _, rt := range routes {
-		s := scenario{name: "sse/" + rt.name, route: rt, contentType: "text/event-stream", parts: sseParts(5), wantAbsent: []string{"[DONE]", "message_stop", "message_delta"}}
+		s := scenario{name: "sse/" + rt.name, route: rt, contentType: "text/event-stream", parts: sseParts(5), wantData: "tok0", wantAbsent: []string{"[DONE]", "message_stop", "message_delta"}}
 		if rt.handler == "anthropic" {
 			s.wantEvent = anthropicErr
 		} else {
@@ -137,18 +144,18 @@ func TestMidStreamBackendDeath_ClientCanDetectTruncation(t *testing.T) {
 		scenarios = append(scenarios, s)
 	}
 	scenarios = append(scenarios,
-		scenario{name: "ndjson/ollama-native", route: ollamaNative, contentType: "application/x-ndjson",
+		scenario{name: "ndjson/ollama-native", route: ollamaNative, contentType: "application/x-ndjson", wantData: `"content":"a"`,
 			parts:     []string{`{"model":"m","message":{"content":"a"},"done":false}` + "\n", `{"model":"m","message":{"content":"b"},"done":false}` + "\n"},
 			wantEvent: []string{`{"error":"upstream connection lost during streaming response"}`}, wantAbsent: []string{`"done":true`}},
-		scenario{name: "ndjson/proxy", route: proxyRoute, contentType: "application/x-ndjson",
+		scenario{name: "ndjson/proxy", route: proxyRoute, contentType: "application/x-ndjson", wantData: `"response":"a"`,
 			parts:     []string{`{"response":"a","done":false}` + "\n"},
 			wantEvent: []string{`{"error":"upstream connection lost during streaming response"}`}},
 		// Plain JSON has no in-band error channel: the abort alone must signal it.
-		scenario{name: "json-chunked/provider", route: jsonRoute, contentType: "application/json",
+		scenario{name: "json-chunked/provider", route: jsonRoute, contentType: "application/json", wantData: `{"choices":[{"message":{"content":"par`,
 			parts: []string{`{"choices":[{"message":{"content":"par`, `tial`}, wantAbsent: []string{"upstream connection lost", "[DONE]"}},
-		scenario{name: "json-content-length/provider", route: jsonRoute, contentType: "application/json", length: 200,
+		scenario{name: "json-content-length/provider", route: jsonRoute, contentType: "application/json", length: 200, wantData: `{"choices":[{"message":{"content":"par`,
 			parts: []string{`{"choices":[{"message":{"content":"par`}, wantAbsent: []string{"upstream connection lost", "[DONE]"}},
-		scenario{name: "json-chunked/proxy", route: proxyRoute, contentType: "application/json",
+		scenario{name: "json-chunked/proxy", route: proxyRoute, contentType: "application/json", wantData: `{"partial":`,
 			parts: []string{`{"partial":`}, wantAbsent: []string{"upstream connection lost"}},
 	)
 	_ = providerRoute
@@ -165,6 +172,7 @@ func TestMidStreamBackendDeath_ClientCanDetectTruncation(t *testing.T) {
 				t.Logf("status=%d readErr=%v tail=%q", res.status, res.readErr, tail(res.body, 160))
 
 				require.Error(t, res.readErr, "client saw a clean EOF after the backend died mid-stream")
+				assert.Contains(t, res.body, sc.wantData, "backend output sent before the failure must still reach the client")
 				for _, want := range sc.wantEvent {
 					assert.Contains(t, res.body, want)
 				}
@@ -220,6 +228,12 @@ func TestMidStreamClientCancel_NoEventNoAbort(t *testing.T) {
 				require.Eventually(t, func() bool {
 					return len(h.logs.lines(t, "Request cancelled by client")) > 0 || len(h.logs.lines(t, "Request completed")) > 0
 				}, 5*time.Second, 20*time.Millisecond)
+				// The abort, if any, lands after the log line, so wait for the handler to return.
+				select {
+				case <-front.done:
+				case <-time.After(5 * time.Second):
+					t.Fatal("front handler did not return after the client cancelled")
+				}
 				assert.False(t, front.aborted.Load(), "client cancel must not abort")
 				assert.Empty(t, h.logs.lines(t, midStreamFailLog), "client cancel is not a backend failure")
 				assert.Empty(t, h.logs.lines(t, "Request failed"), "client cancel must not log at ERROR")
@@ -293,13 +307,18 @@ func TestStreamSuccess_NotAborted(t *testing.T) {
 		route       statusRoute
 		contentType string
 		parts       []string
+		wantEnd     string
 	}
 	var scenarios []scenario
 	for _, rt := range routes {
-		scenarios = append(scenarios, scenario{rt, "text/event-stream", append(sseParts(3), "data: [DONE]\n\n")})
+		end := "[DONE]"
+		if rt.handler == "anthropic" && !rt.passthrough {
+			end = "message_stop" // translation rebuilds the stream, so it ends in its own marker
+		}
+		scenarios = append(scenarios, scenario{rt, "text/event-stream", append(sseParts(3), "data: [DONE]\n\n"), end})
 	}
 	nd := []string{`{"model":"m","message":{"content":"a"},"done":false}` + "\n", `{"model":"m","message":{"content":""},"done":true}` + "\n"}
-	scenarios = append(scenarios, scenario{ollamaNative, "application/x-ndjson", nd}, scenario{routes[0], "application/x-ndjson", nd})
+	scenarios = append(scenarios, scenario{ollamaNative, "application/x-ndjson", nd, `"done":true`}, scenario{routes[0], "application/x-ndjson", nd, `"done":true`})
 
 	for _, engine := range []string{"olla", "sherpa"} {
 		for _, sc := range scenarios {
@@ -322,6 +341,12 @@ func TestStreamSuccess_NotAborted(t *testing.T) {
 
 				require.NoError(t, res.readErr)
 				assert.Equal(t, http.StatusOK, res.status)
+				assert.Contains(t, res.body, sc.wantEnd, "stream must arrive complete, with its end marker")
+				if sc.contentType == "text/event-stream" {
+					assert.Contains(t, res.body, "tok0", "backend payload must reach the client")
+				} else {
+					assert.Contains(t, res.body, `"content":"a"`, "backend payload must reach the client")
+				}
 				assert.NotContains(t, res.body, "upstream connection lost")
 				assert.NotContains(t, res.body, "event: error")
 				assert.False(t, front.aborted.Load())
