@@ -16,6 +16,10 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Fixed: a translator panic mid-stream now drops the connection
+
+If the Anthropic translator panicked after part of a streamed reply had reached the client, the response ended with an `event: error` and a clean end of stream, which a client could mistake for a finished reply. It now behaves like a backend dying mid-stream: the error event is sent, the request is counted as failed in the translator stats, and the connection is dropped so the client's read fails. A panic before anything was written still returns a `502` JSON error.
+
 ### Fixed: the Olla engine now enforces `proxy.read_timeout` on a silent backend
 
 A backend that sent response headers (or some chunks) and then went silent with the connection open blocked the Olla engine's request forever, because the read timeout was only checked between reads. The engine now ends the stream after `proxy.read_timeout` with no data (`AI backend stopped responding - no data received for Xs`), counts it as a failed request, and handles it like a dead backend: the client gets the provider-format error event and a dropped connection, or a `502` if nothing had been written yet. The timeout measures silence from the backend only, so a slow but steady stream is not cut, and a slow client does not trigger it. Sherpa already behaved this way. If you run long silent gaps (a model that thinks for minutes before the first token), raise `proxy.read_timeout`.
