@@ -16,6 +16,10 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Fixed: the Olla engine now enforces `proxy.read_timeout` on a silent backend
+
+A backend that sent response headers (or some chunks) and then went silent with the connection open blocked the Olla engine's request forever, because the read timeout was only checked between reads. The engine now ends the stream after `proxy.read_timeout` with no data (`AI backend stopped responding - no data received for Xs`), counts it as a failed request, and handles it like a dead backend: the client gets the provider-format error event and a dropped connection, or a `502` if nothing had been written yet. The timeout measures silence from the backend only, so a slow but steady stream is not cut, and a slow client does not trigger it. Sherpa already behaved this way. If you run long silent gaps (a model that thinks for minutes before the first token), raise `proxy.read_timeout`.
+
 ### Added: Rapid-MLX backend
 
 Rapid-MLX, the MLX inference server for Apple Silicon, is a supported backend ([#271](https://github.com/thushan/olla/pull/271), thanks to [@raullenchai](https://github.com/raullenchai)). It has a `rapid-mlx` profile (`config/profiles/rapid-mlx.yaml`), the `/olla/rapid-mlx/` route prefix and native Anthropic Messages passthrough. Auto-discovery now tells it apart from other OpenAI-compatible servers. See [Rapid-MLX Integration](../integrations/backend/rapid-mlx.md).

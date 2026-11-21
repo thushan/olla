@@ -3,7 +3,6 @@ package olla
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -64,10 +63,9 @@ func shouldStopAfterDisconnect(bytesAfterDisconnect int, disconnectTime time.Tim
 		time.Since(disconnectTime) > ClientDisconnectionTimeThreshold
 }
 
-// checkContexts checks for context cancellation and timeout.
-// readTimeout is passed in (snapshotted from config at stream start) so this
-// method has no dependency on s.configuration and stays off the atomic path.
-func (s *Service) checkContexts(clientCtx, upstreamCtx context.Context, readDeadline *time.Timer, readTimeout time.Duration, state *streamState, rlog logger.StyledLogger) error {
+// checkContexts checks for context cancellation. The read timeout is enforced
+// by the silence timer in streamResponse, which a blocked Read cannot miss.
+func (s *Service) checkContexts(clientCtx, upstreamCtx context.Context, state *streamState, rlog logger.StyledLogger) error {
 	select {
 	case <-clientCtx.Done():
 		s.handleClientDisconnect(state, rlog)
@@ -75,16 +73,15 @@ func (s *Service) checkContexts(clientCtx, upstreamCtx context.Context, readDead
 		return nil
 	case <-upstreamCtx.Done():
 		return upstreamCtx.Err()
-	case <-readDeadline.C:
-		return fmt.Errorf("read timeout after %v", readTimeout)
 	default:
 		return nil
 	}
 }
 
 // processStreamData reads from upstream and writes to client
-func (s *Service) processStreamData(resp *http.Response, buffer []byte, state *streamState, w http.ResponseWriter, isStreaming bool, rc *http.ResponseController, rlog logger.StyledLogger) error {
+func (s *Service) processStreamData(resp *http.Response, buffer []byte, state *streamState, w http.ResponseWriter, isStreaming bool, rc *http.ResponseController, readDone func(), rlog logger.StyledLogger) error {
 	n, err := resp.Body.Read(buffer)
+	readDone() // the silence timer covers the backend wait only, not the client write
 	if n > 0 {
 		// Only keep last chunk when we hit EOF (for metrics extraction)
 		// OLLA-221: large allocations per s tream adds GC Pressure over time

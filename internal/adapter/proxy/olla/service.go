@@ -322,30 +322,32 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 	rc := http.NewResponseController(w)
 	isStreaming := core.AutoDetectStreamingMode(clientCtx, resp, cfg.GetProxyProfile())
 
-	// Pre-allocate timer to avoid allocations in hot path
-	readDeadline := time.NewTimer(readTimeout)
-	defer readDeadline.Stop()
+	// A blocked resp.Body.Read cannot observe a timer channel, so the silence
+	// timer closes the body instead: the Read then returns and the stall is
+	// reported below. One timer for the whole stream, re-armed around each read,
+	// so the hot path spawns no goroutines. Closing the body (not cancelling
+	// the request context) keeps IsClientAbort false: this is the backend's fault.
+	var stalled atomic.Bool
+	silence := time.AfterFunc(readTimeout, func() {
+		stalled.Store(true)
+		_ = resp.Body.Close()
+	})
+	defer silence.Stop()
 
 	for {
 		// Check for context cancellation
-		if err := s.checkContexts(clientCtx, upstreamCtx, readDeadline, readTimeout, state, rlog); err != nil {
+		if err := s.checkContexts(clientCtx, upstreamCtx, state, rlog); err != nil {
 			return state.totalBytes, state.lastChunk, err
 		}
 
-		// Reset timer for next read (drain if already fired to prevent race)
-		// this only applies to Olla as Sherpa has a different streaming model
-		// which creates a new timer, instead of resetting the existing one
-		if !readDeadline.Stop() {
-			// Timer already expired, drain the channel
-			select {
-			case <-readDeadline.C:
-			default:
-			}
-		}
-		readDeadline.Reset(readTimeout)
+		// Only time the wait for the backend: a slow client write is not silence.
+		silence.Reset(readTimeout)
+		err := s.processStreamData(resp, buffer, state, w, isStreaming, rc, func() { silence.Stop() }, rlog)
 
-		// Read and process data
-		if err := s.processStreamData(resp, buffer, state, w, isStreaming, rc, rlog); err != nil {
+		if stalled.Load() {
+			return state.totalBytes, state.lastChunk, fmt.Errorf("AI backend stopped responding - no data received for %.1fs (backend may be overloaded)", readTimeout.Seconds())
+		}
+		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return state.totalBytes, state.lastChunk, nil
 			}
