@@ -348,9 +348,10 @@ func (s *Service) streamResponse(clientCtx, upstreamCtx context.Context, w http.
 			if errors.Is(err, io.EOF) {
 				return state.totalBytes, state.lastChunk, nil
 			}
-			// Report a stall only when the read failed. A chunk that arrived as the
-			// timer fired is real data and was already written; the body is closed
-			// now, so the next read fails here and is reported then.
+			// The timer closes the body, so a read that fails after it fired is
+			// reported as a stall. A chunk that lands as the timer fires is still
+			// written; the next read then hits the closed body and reports it. Only
+			// an EOF at that boundary (a genuine end of stream) stays a clean end.
 			if stalled.Load() {
 				return state.totalBytes, state.lastChunk, fmt.Errorf("AI backend stopped responding - no data received for %.1fs (backend may be overloaded)", readTimeout.Seconds())
 			}
