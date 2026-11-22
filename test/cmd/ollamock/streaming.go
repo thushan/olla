@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 )
@@ -16,14 +15,6 @@ const roleAssistant = "assistant"
 type inferenceRequest struct {
 	Stream *bool  `json:"stream"`
 	Model  string `json:"model"`
-}
-
-func parseInferenceRequest(r *http.Request) (inferenceRequest, error) {
-	var req inferenceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		return inferenceRequest{}, err
-	}
-	return req, nil
 }
 
 // streamBool is true if stream==nil (use given default) or stream==value.

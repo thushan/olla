@@ -18,11 +18,10 @@ type PercentileTracker interface {
 // It maintains a fixed-size sample of values, providing good statistical accuracy
 // with bounded memory usage (typically 100-200 samples vs 1000)
 type ReservoirSampler struct {
-	samples     []int64
-	sampleSize  int
-	count       int64
-	mu          sync.Mutex
-	initialized bool
+	samples    []int64
+	sampleSize int
+	count      int64
+	mu         sync.Mutex
 }
 
 // NewReservoirSampler creates a new reservoir sampler with the specified sample size

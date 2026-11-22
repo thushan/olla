@@ -701,20 +701,6 @@ func (p *panicHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	panic("simulated panic in health check")
 }
 
-type statusCodeHTTPClient struct {
-	statusCodes []int
-	callCount   int
-}
-
-func (s *statusCodeHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	statusCode := s.statusCodes[s.callCount%len(s.statusCodes)]
-	s.callCount++
-	return &http.Response{
-		StatusCode: statusCode,
-		Body:       http.NoBody,
-	}, nil
-}
-
 // TestStopChecking_DoubleInvoke verifies concurrent double-stops do not panic.
 // Previously, two callers that both passed the isRunning.Load() guard could
 // race to close(stopCh), causing a "close of closed channel" panic.

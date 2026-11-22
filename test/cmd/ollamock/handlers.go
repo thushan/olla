@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1333,10 +1332,4 @@ func (srv *mockServer) handleTEIMetrics(w http.ResponseWriter, _ *http.Request) 
 	fmt.Fprint(w, "# HELP tei_mock_requests_total Mock request counter\n"+
 		"# TYPE tei_mock_requests_total counter\n"+
 		"tei_mock_requests_total 0\n")
-}
-
-// contextDone returns a closed channel when ctx is already done, otherwise the
-// ctx.Done() channel. Used in select statements that must compile on Go 1.24.
-func contextDone(ctx context.Context) <-chan struct{} {
-	return ctx.Done()
 }

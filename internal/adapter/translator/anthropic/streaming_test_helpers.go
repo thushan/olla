@@ -130,12 +130,6 @@ func reasoningContentChunk(messageID, model, reasoning string) string {
 		messageID, reasoning)
 }
 
-// modelChunk creates the first chunk with model information.
-// Use this as the first chunk in a stream when you need to specify the model.
-func modelChunk(messageID, model, content string) string {
-	return textChunk(messageID, model, content)
-}
-
 // Transform Execution Helpers
 // ---------------------------
 
@@ -322,24 +316,6 @@ func assertSSEFormat(t *testing.T, body string) {
 // Field Extraction Helpers
 // ------------------------
 
-// extractField safely extracts a nested field from an event map.
-// Example: extractField(event, "message", "usage", "input_tokens")
-func extractField(event map[string]interface{}, path ...string) (interface{}, bool) {
-	current := event
-	for i, key := range path {
-		if i == len(path)-1 {
-			val, ok := current[key]
-			return val, ok
-		}
-		next, ok := current[key].(map[string]interface{})
-		if !ok {
-			return nil, false
-		}
-		current = next
-	}
-	return nil, false
-}
-
 // getUsageTokens extracts token counts from a message_delta event.
 func getUsageTokens(event map[string]interface{}) (inputTokens, outputTokens float64, ok bool) {
 	usage, found := event["usage"].(map[string]interface{})
@@ -407,20 +383,6 @@ func assertStopReason(t *testing.T, events []map[string]interface{}, expectedRea
 	reason, ok := getStopReason(messageDelta)
 	require.True(t, ok, "message_delta should have stop_reason")
 	assert.Equal(t, expectedReason, reason, "stop_reason should match expected")
-}
-
-// assertModelInMessageStart validates that the model appears in message_start event.
-func assertModelInMessageStart(t *testing.T, events []map[string]interface{}, expectedModel string) {
-	t.Helper()
-	messageStart := getEventByType(events, "message_start")
-	require.NotNil(t, messageStart, "message_start event should exist")
-
-	message, ok := messageStart["message"].(map[string]interface{})
-	require.True(t, ok, "message_start should have message field")
-
-	model, ok := message["model"].(string)
-	require.True(t, ok, "message should have model field")
-	assert.Equal(t, expectedModel, model, "model should match expected")
 }
 
 // assertUsageTokens validates token usage in message_delta event.

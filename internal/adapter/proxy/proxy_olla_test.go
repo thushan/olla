@@ -36,17 +36,6 @@ func createTestOllaProxy(endpoints []*domain.Endpoint) (*olla.Service, *mockEndp
 	return proxy, selector, collector
 }
 
-func createTestOllaProxyWithConfig(endpoints []*domain.Endpoint, config *olla.Configuration) (*olla.Service, *mockEndpointSelector, ports.StatsCollector) {
-	collector := createTestStatsCollector()
-	discovery := &mockDiscoveryService{endpoints: endpoints}
-	selector := newMockEndpointSelector(collector)
-	proxy, err := olla.NewService(discovery, selector, config, collector, nil, createTestLogger())
-	if err != nil {
-		panic(fmt.Sprintf("failed to create Olla proxy: %v", err))
-	}
-	return proxy, selector, collector
-}
-
 // TestOllaProxyService_CircuitBreaker tests the circuit breaker functionality
 func TestOllaProxyService_CircuitBreaker(t *testing.T) {
 	config := &olla.Configuration{}

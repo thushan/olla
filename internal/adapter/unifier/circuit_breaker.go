@@ -1,7 +1,6 @@
 package unifier
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -19,7 +18,6 @@ const (
 type CircuitBreaker struct {
 	config           CircuitBreakerConfig
 	lastFailureTime  atomic.Int64
-	mu               sync.RWMutex
 	state            atomic.Int32
 	failures         atomic.Int32
 	successes        atomic.Int32

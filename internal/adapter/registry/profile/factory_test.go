@@ -184,23 +184,3 @@ func TestGetAvailableProfiles(t *testing.T) {
 		t.Error("Should have at least some available profiles")
 	}
 }
-
-type mockProfile struct {
-	name string
-}
-
-func (m *mockProfile) GetName() string                            { return m.name }
-func (m *mockProfile) GetVersion() string                         { return "1.0" }
-func (m *mockProfile) GetModelDiscoveryURL(baseURL string) string { return baseURL + "/mock" }
-func (m *mockProfile) GetHealthCheckPath() string                 { return "/health" }
-func (m *mockProfile) IsOpenAPICompatible() bool                  { return true }
-func (m *mockProfile) GetRequestParsingRules() domain.RequestParsingRules {
-	return domain.RequestParsingRules{}
-}
-func (m *mockProfile) GetModelResponseFormat() domain.ModelResponseFormat {
-	return domain.ModelResponseFormat{}
-}
-func (m *mockProfile) GetDetectionHints() domain.DetectionHints { return domain.DetectionHints{} }
-func (m *mockProfile) ParseModelsResponse(data []byte) ([]*domain.ModelInfo, error) {
-	return nil, nil
-}

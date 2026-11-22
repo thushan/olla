@@ -49,7 +49,6 @@ func (t *testDiscoveryService) UpdateEndpointStatus(ctx context.Context, endpoin
 type testSelector struct {
 	selectCount int
 	selectIndex int
-	endpoints   []*domain.Endpoint
 }
 
 func (t *testSelector) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
