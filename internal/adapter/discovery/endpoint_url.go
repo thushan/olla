@@ -35,7 +35,7 @@ func validateURLField(name, field, v string, isOverride bool) error {
 	// One blunt rule instead of parsing userinfo: '@' (or its escaped form) has
 	// no place in these URLs, and this also catches credentials written before
 	// the scheme or parsed as the host, which url.Parse does not report as User.
-	if strings.Contains(v, "@") || strings.Contains(strings.ToLower(v), "%40") {
+	if strings.Contains(v, "@") || strings.Contains(v, "%40") {
 		return fmt.Errorf("endpoint %q: %s must not contain '@' or credentials; put them in the endpoint's auth block", name, field)
 	}
 
@@ -45,7 +45,7 @@ func validateURLField(name, field, v string, isOverride bool) error {
 
 	want := "an absolute http:// or https:// URL, e.g. http://localhost:11434"
 	if isOverride {
-		want = "a path starting with '/' or an absolute http:// or https:// URL"
+		want = "a path starting with exactly one '/' or an absolute http:// or https:// URL"
 	}
 	if !strings.Contains(v, "://") {
 		return fmt.Errorf("endpoint %q: %s must be %s", name, field, want)
@@ -55,7 +55,7 @@ func validateURLField(name, field, v string, isOverride bool) error {
 	if err != nil {
 		return fmt.Errorf("endpoint %q: %s is not a valid URL (check the host and port; IPv6 needs brackets, e.g. http://[::1]:11434)", name, field)
 	}
-	if s := strings.ToLower(u.Scheme); (s != "http" && s != "https") || u.Opaque != "" || u.Hostname() == "" {
+	if u.Scheme != "http" && u.Scheme != "https" || u.Opaque != "" || u.Hostname() == "" {
 		return fmt.Errorf("endpoint %q: %s must be %s with a host", name, field, want)
 	}
 	return nil

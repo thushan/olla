@@ -26,7 +26,7 @@ Go 1.27 no longer targets macOS 12 and earlier, so the `darwin` archives will no
 
 ### Breaking: unbracketed IPv6 endpoint URLs are rejected
 
-Go 1.26 made `net/url` strict about colons in the host, so an endpoint such as `http://::1:11434` no longer parses and Olla fails at startup with `invalid endpoint URL`. Wrap the address in brackets: `http://[::1]:11434`. Hostnames, IPv4 addresses and already-bracketed IPv6 addresses are unaffected. `--validate-config` reports it too.
+Go 1.26 made `net/url` strict about colons in the host, so an endpoint such as `http://::1:11434` no longer parses and Olla fails at startup. Wrap the address in brackets: `http://[::1]:11434`. Hostnames, IPv4 addresses and already-bracketed IPv6 addresses are unaffected. `--validate-config` reports it too.
 
 ### Breaking: endpoint URLs are validated strictly
 

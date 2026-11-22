@@ -13,12 +13,12 @@ for authenticating **Olla to the backend**. It has no bearing on how clients aut
     `url`, `health_check_url` and `model_url` must not contain an `@` (or its escaped form
     `%40`), so `http://user:pass@host:8080` fails config load and `--validate-config`. Move
     credentials into an `auth:` block (see below). Without this check the credentials would
-    flow unchanged into every status/dashboard JSON surface that echoes the URL.
+    reach the startup log and table; the status handlers only strip userinfo that parses as such.
 
     The error names the endpoint and field but never echoes the configured value.
 
-    See [Release Notes: userinfo URLs](../about/release-notes.md#breaking-userinfo-urls-now-fail-startup)
-    for the full rationale.
+    See [Release Notes: endpoint URLs are validated strictly](../about/release-notes.md#breaking-endpoint-urls-are-validated-strictly)
+    for the rules, and [the v0.0.29 entry](../about/release-notes.md#breaking-userinfo-urls-now-fail-startup) for the original rationale.
 
 ## When to Use It
 

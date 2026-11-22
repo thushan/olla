@@ -353,17 +353,37 @@ func TestBuildValidationReport_CapsIgnoredKeys(t *testing.T) {
 	}
 }
 
-func TestEndpointURLErrors(t *testing.T) {
+func TestRunValidateConfig_InvalidEndpointURLsFail(t *testing.T) {
 	t.Parallel()
 
-	good := config.EndpointConfig{Name: "ok", URL: "http://localhost:11434"}
-	bad := config.EndpointConfig{Name: "leaky", URL: "wombat:q7x9kz@http://host:11434"}
-
-	if err := endpointURLErrors([]config.EndpointConfig{good}); err != nil {
-		t.Fatalf("valid endpoint reported: %v", err)
+	body := `discovery:
+  static:
+    endpoints:
+      - name: "leaky"
+        url: "wombat:q7x9kz@http://host:11434"
+        type: "ollama"
+      - name: "badpath"
+        url: "http://localhost:11434"
+        type: "ollama"
+        model_url: "api/tags"
+`
+	path := filepath.Join(t.TempDir(), "olla.yaml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
 	}
-	err := endpointURLErrors([]config.EndpointConfig{good, bad})
-	if err == nil || !strings.Contains(err.Error(), `"leaky"`) || strings.Contains(err.Error(), "q7x9kz") {
-		t.Fatalf("want an error naming leaky and not its value, got: %v", err)
+
+	report, code := runValidateConfig(path)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1:\n%s", code, report)
+	}
+	for _, want := range []string{`"leaky"`, "url", `"badpath"`, "model_url"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report should contain %q:\n%s", want, report)
+		}
+	}
+	for _, leak := range []string{"q7x", "7x9", "x9k", "9kz", "wombat"} {
+		if strings.Contains(report, leak) {
+			t.Errorf("report leaks %q:\n%s", leak, report)
+		}
 	}
 }

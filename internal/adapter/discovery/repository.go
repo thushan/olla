@@ -151,7 +151,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 	for _, cfg := range configs {
 		applyEndpointDefaults(&cfg)
 		if err := r.validateEndpointConfig(cfg); err != nil {
-			return fmt.Errorf("invalid endpoint config for %q: %w", cfg.Name, err)
+			return err
 		}
 
 		var resolved resolvedAuth
@@ -327,11 +327,19 @@ func applyEndpointDefaults(cfg *config.EndpointConfig) {
 	}
 }
 
+// validateEndpointConfig returns URL errors as-is (they already name the endpoint and
+// field) and wraps the rest with the endpoint name.
 func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointConfig) error {
 	if err := ValidateEndpointURLs(cfg); err != nil {
 		return err
 	}
+	if err := r.validateEndpointSettings(cfg); err != nil {
+		return fmt.Errorf("invalid endpoint config for %q: %w", cfg.Name, err)
+	}
+	return nil
+}
 
+func (r *StaticEndpointRepository) validateEndpointSettings(cfg config.EndpointConfig) error {
 	// Allow empty health check and model URLs - they will get defaults from profile or fallback values
 	// in LoadFromConfig. This enables simpler configuration when using known profile types.
 

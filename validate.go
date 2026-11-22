@@ -202,11 +202,15 @@ func warnUnknownKeys(warn func(msg string, args ...any), keys []config.UnknownKe
 // endpointURLErrors reports every configured endpoint whose URLs fail the same
 // rules the loader enforces, so --validate-config agrees with startup.
 func endpointURLErrors(endpoints []config.EndpointConfig) error {
-	var errs []error
+	var msgs []string
 	for _, ep := range endpoints {
 		if err := discovery.ValidateEndpointURLs(ep); err != nil {
-			errs = append(errs, err)
+			msgs = append(msgs, err.Error())
 		}
 	}
-	return errors.Join(errs...)
+	if len(msgs) == 0 {
+		return nil
+	}
+	// Continuation lines align under the first, past the "[FAIL] <name> " prefix.
+	return errors.New(strings.Join(msgs, "\n"+strings.Repeat(" ", 20)))
 }
