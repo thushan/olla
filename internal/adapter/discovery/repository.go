@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -169,7 +170,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		endpointURL, err := url.Parse(cfg.URL)
 		if err != nil {
-			return fmt.Errorf("invalid endpoint URL %q: %w", cfg.URL, err)
+			return malformedEndpointURLError(cfg.URL, err)
 		}
 
 		urlString := endpointURL.String()
@@ -406,6 +407,40 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 	}
 
 	return nil
+}
+
+// malformedEndpointURLError reports a URL that failed to parse without echoing
+// its userinfo. validateEndpointConfig can only redact credentials from URLs
+// that parse, so a malformed one (bad port, unbracketed IPv6) would otherwise
+// carry the username and password into the startup error and its log line.
+// The url.Error is unwrapped because its message embeds the raw URL.
+func malformedEndpointURLError(raw string, err error) error {
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		err = urlErr.Err
+	}
+	return fmt.Errorf("invalid endpoint URL %q: %w", redactURLUserinfo(raw), err)
+}
+
+// redactURLUserinfo replaces anything between the scheme and the last '@' before
+// the query or fragment with a placeholder. It works on the raw string because
+// the input is, by definition, unparseable. Cutting at the last '@' also covers
+// a password holding an unescaped '@' or '/'; the cost is that an '@' inside the
+// path swallows the path prefix, which is acceptable in an error message.
+func redactURLUserinfo(raw string) string {
+	prefix, rest := "", raw
+	if i := strings.Index(raw, "://"); i >= 0 {
+		prefix, rest = raw[:i+3], raw[i+3:]
+	}
+	boundary := len(rest)
+	if i := strings.IndexAny(rest, "?#"); i >= 0 {
+		boundary = i
+	}
+	at := strings.LastIndex(rest[:boundary], "@")
+	if at < 0 {
+		return raw
+	}
+	return prefix + "<redacted>" + rest[at:]
 }
 
 // DuplicateEndpointURLWarnings describes each endpoint whose URL an earlier endpoint already
