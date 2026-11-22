@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,6 +29,8 @@ func TestConnReuseTrace_Classify(t *testing.T) {
 		{"EOF on fresh connection", false, wrapped, false},
 		{"non-EOF on reused connection", true, io.ErrUnexpectedEOF, false},
 		{"nil error", true, nil, false},
+		{"server closed idle on reused connection", true, fmt.Errorf("Post: %w", errors.New("http: server closed idle connection")), true},
+		{"server closed idle on fresh connection", false, errors.New("http: server closed idle connection"), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -37,7 +40,7 @@ func TestConnReuseTrace_Classify(t *testing.T) {
 			got := trace.Classify(tt.err)
 			assert.Equal(t, tt.wantStale, IsStaleConnError(got))
 			if tt.err != nil && tt.wantStale {
-				assert.ErrorIs(t, got, io.EOF, "must stay a connection error so failover still happens")
+				assert.ErrorIs(t, got, tt.err, "classification must not hide the original error")
 				assert.True(t, IsConnectionError(got))
 			}
 		})

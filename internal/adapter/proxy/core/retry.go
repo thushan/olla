@@ -502,6 +502,12 @@ func IsConnectionError(err error) bool {
 		return false
 	}
 
+	// A stale-connection error must still fail over (without demotion, which
+	// the retry handler decides separately); its text may not be an EOF.
+	if IsStaleConnError(err) {
+		return true
+	}
+
 	// A backend that closes the connection while RoundTrip is reading the
 	// response is reported as io.EOF, often wrapped in a *url.Error. Treat it
 	// as a transport failure so the request can fail over to another endpoint.

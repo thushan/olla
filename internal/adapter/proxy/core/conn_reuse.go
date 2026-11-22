@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptrace"
+	"strings"
 	"sync/atomic"
 )
 
@@ -47,10 +48,23 @@ func TraceConnReuse(req *http.Request) (*http.Request, *ConnReuseTrace) {
 	return req.WithContext(httptrace.WithClientTrace(req.Context(), trace)), t
 }
 
-// Classify tags a round-trip error as a StaleConnError when it is an EOF on a
-// reused connection. Any other error is returned untouched.
+// serverClosedIdleText is net/http's errServerClosedIdle. It is unexported and
+// carries no sentinel, so the text is the only handle. Go raises it when the
+// backend's idle close lands after the pooled connection was taken but before
+// the request was written: the same keep-alive race as a reused-connection EOF.
+const serverClosedIdleText = "http: server closed idle connection"
+
+// isStaleReuseSignal reports whether err is one of the two shapes the idle
+// race takes on a reused connection.
+func isStaleReuseSignal(err error) bool {
+	return errors.Is(err, io.EOF) || strings.Contains(err.Error(), serverClosedIdleText)
+}
+
+// Classify tags a round-trip error as a StaleConnError when it is an EOF (or
+// net/http's "server closed idle connection") on a reused connection. Any
+// other error is returned untouched.
 func (t *ConnReuseTrace) Classify(err error) error {
-	if err == nil || !t.reused.Load() || !errors.Is(err, io.EOF) || IsStaleConnError(err) {
+	if err == nil || !t.reused.Load() || IsStaleConnError(err) || !isStaleReuseSignal(err) {
 		return err
 	}
 	return &StaleConnError{Err: err}
