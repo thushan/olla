@@ -7,10 +7,12 @@ RUN apk --no-cache add ca-certificates tzdata wget && \
 
 WORKDIR /app
 
-# Copy each runtime file by name rather than COPY . . - this Dockerfile is built
-# from two different contexts (the repo root via make docker-build-local, and
-# goreleaser's synthesised extra_files context), and naming them keeps the two
-# images identical instead of relying on .dockerignore to filter one of them.
+# Local builds only (make docker-build-local, from the repo root). Release
+# images use Dockerfile.goreleaser, which differs solely in where it copies the
+# binary from; keep the two in step.
+#
+# Copy each runtime file by name rather than COPY . . so the image holds exactly
+# what is listed here, not whatever the repo root contains.
 COPY olla /usr/local/bin/olla
 # config/config.yaml, not the root config.yaml: the loader searches
 # config/config.yaml first (internal/config/config.go), so in a repo-root context
