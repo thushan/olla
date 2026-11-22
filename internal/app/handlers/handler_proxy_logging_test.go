@@ -229,3 +229,47 @@ func TestResolveAliasEndpoints_LogsActualModels(t *testing.T) {
 	assert.True(t, cl.hasKey("actual_models"),
 		"INFO log must contain actual_models field; fields: %v", cl.infoFields)
 }
+
+// abortLogger records Error calls so the abort path can be told apart from a clean completion.
+type abortLogger struct {
+	capturingLogger
+	errorMsg string
+}
+
+func (c *abortLogger) Error(msg string, _ ...any) { c.errorMsg = msg }
+
+func (c *abortLogger) WithRequestID(_ string) logger.StyledLogger { return c }
+
+// A translator panic after the first byte returns nil to the handler but flags
+// abortStream; the request log must say it failed, not "Request completed".
+func TestLogRequestResult_AbortedStreamIsNotLoggedAsCompleted(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		abort     bool
+		wantError bool
+	}{
+		{"aborted stream logs failure", true, true},
+		{"clean request logs completion", false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cl := &abortLogger{}
+			pr := makeTestPR(&cl.capturingLogger)
+			pr.requestLogger = cl
+			pr.abortStream = tt.abort
+
+			(&Application{logger: cl}).logRequestResult(pr, nil)
+
+			if tt.wantError {
+				assert.Equal(t, "Request failed", cl.errorMsg)
+				assert.Empty(t, cl.infoMsg, "must not log completion at INFO")
+			} else {
+				assert.Empty(t, cl.errorMsg)
+				assert.Equal(t, "Request completed", cl.infoMsg)
+			}
+		})
+	}
+}
