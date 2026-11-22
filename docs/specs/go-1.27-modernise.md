@@ -1,6 +1,6 @@
 # Go 1.27 modernisation (refactor spec)
 
-Branch: `chore/go-1.27-modernise`, cut from main at 9238e1f4. Measurements below were taken at that commit.
+Integration branch: `feature/go1.27-modernisation` (renamed from `chore/go-1.27-modernise`), cut from main at 9238e1f4. Measurements below were taken at that commit.
 
 ## 1. Purpose and scope
 
@@ -47,7 +47,12 @@ Per analyzer from the modernize command (total / non-test): `any` 1,212/273; `ne
 - **D6 (settled):** implementation by Sonnet agents; the user merges via GitHub; reviews are Fable (or Opus) plus Codex, never Sonnet.
 - **D7 (scope decision): atomic types only where the linter flags them.** PR 4 covers the stats collector and the model collector's per-endpoint data, including the fields in those same structs that `go fix -atomictypes` leaves for hand work (`minLatency`, `lastUsed`, `lastCleanup`). Proxy core, round-robin, discovery metrics, the per-model `lastRequested` and the `ModelCollector`'s own `lastCleanup` are deferred (out of scope above).
 
-- **D8 (user decision, not a default): one integration branch, one PR.** All work packages land as reviewed commit groups on the integration branch `chore/go-1.27-modernise`, in the dependency order of section 8, and each is reviewed before the next starts. One PR to main at the end. "PR body" in this spec means the work package's commit messages and the single final PR body. Verification is concentrated: cheap targeted checks per work package, and the whole-series benchmarks and the full gate once, in WP-7 on the final commit H.
+- **D8 (user decision, not a default): integration branch, work-package branches, one PR.** The integration branch is `feature/go1.27-modernisation`. Each work package is done by Sonnet agents on its own branch `modernise/wp-<id>-<slug>`, cut from the integration head. After its reviews pass (D9) it is merged into the integration branch with `git merge --no-ff`, in the dependency order of section 8. One PR to main at the very end. Nothing is pushed until the user says so. "PR body" in this spec means the work package's commit messages and the single final PR body. Verification is concentrated: cheap targeted checks per work package, and the whole-series measurements and the full gate once, in WP-7 on the integration head H.
+- **D9 (user decision): review gates per work package**, before it merges into the integration branch. Never Sonnet as a reviewer.
+  - (a) A Claude Opus review through the `claude-tf-primary` account, run headless and bounded, in a detached worktree at the work package's head: `systemd-run --user --scope -q -p RuntimeMaxSec=3660 -- timeout -k 30 3600 env CLAUDE_CONFIG_DIR=$HOME/.claude-tf-primary claude --dangerously-skip-permissions --model opus -p < <brief> >| <out>`. The brief is cold (claims to check, scope; no author rationale) and tells the reviewer not to modify files.
+  - (b) Then a Codex review, model Sol at xhigh reasoning, in its own detached worktree: `systemd-run --user --scope -q -p RuntimeMaxSec=3660 -- timeout -k 30 3600 codex exec -s workspace-write -m gpt-6.2-sol -c model_reasoning_effort=xhigh -C <worktree> -o <final.md> - < <brief>`.
+  - (c) Every finding is grounded against the cited code before it is acted on. Grounded P1 and P2 findings are fixed by a Sonnet agent on the work-package branch, and the reviewer that raised each one re-checks it, with at most two fix rounds. Anything still open after that is recorded in the handover report, not silently merged.
+- **D10 (user decision): final whole-branch review, outside the fresh implementation session.** After the handover report, Fable plus Codex (Sol, xhigh) review the entire integration branch against main, using the handover report, via the user's main session with `/cross-review`, before the PR is opened.
 
 (D4, the Go 1.27 runtime behaviour verification item, is removed and deferred.)
 
@@ -86,6 +91,7 @@ Per analyzer from the modernize command (total / non-test): `any` 1,212/273; `ne
   - **Missing rows.** The rows that did not exist (a populated percentile-read benchmark, a large handler sort, XFF parsing with multiple addresses, retry classification that reaches the changed classifier, a tied-priority balancer fixture) are added by the WP-0 benchmark-only commit, which is B.
   - **Threshold.** B is run twice in the WP-7 session (two `-count=6` sets, P1 then P2) and H once. P1 is the reference for every percentage. The noise floor is the absolute benchstat change from P1 to P2. A regression is a benchstat-significant slowdown (p < 0.05) of H against P1 larger than max(5%, that noise floor).
   - **On regression.** Benchmark the work-package boundary commits to find the culprit, then fix or revert that work package's offending change. For the priority sort, FR-9 decides: revert to `sort.Slice`.
+  - **Runtime profile.** Alongside the benchmarks, WP-0 and WP-7 capture a runtime profile, B and H in the same WP-7 session, from binaries built at B and H and run against the `/olla-validate` quick fleet (the seven ollamock instances and the main Olla config). Load is generated with `hey` (installed) at a fixed concurrency and duration per route, identical for B and H, recorded in the baseline file: non-stream chat on `/olla/proxy`; streaming chat; Anthropic passthrough messages; `/olla/models`. Captured: throughput, latency p50/p95/p99 and error counts per route; process RSS and peak RSS (`VmRSS` and `VmHWM` from `/proc/<pid>/status`); samples from `/internal/process` (heap alloc, inuse and sys, goroutines, GC count, average pause, GC CPU fraction) at idle, under load and after a settle; binary size; start-to-ready time. Optional: pprof heap and alloc profiles, if the profiler is enabled in the config. The profile uses the same fleet ports as `/olla-validate`, so it never runs concurrently with a validation run. The runtime table (B, H, delta, %) is reported with commentary on any notable delta; the spec sets no pass or fail threshold for it (A12), but an unexplained regression in error counts or peak RSS is an open item in the handover report.
 - **NFR-2.** Struct layout changes pass `make align-check` (not `make align`, which applies fixes) with no suppression added.
 - **NFR-3.** Work packages touching concurrency (3a, 4) pass `go test -race` on the touched packages; the full `make test-race` runs once, in WP-7.
 - **NFR-4.** Heavy commands run in the capped slice, one heavy suite at a time across all agents.
@@ -104,7 +110,10 @@ This spec adds no new component. It uses existing tools and extends existing con
 | Pointer helpers | nine declarations and two closures (FR-7) | Removed. `new(expr)` is a language feature. |
 | Atomic counters | stats collector and model collector per-endpoint data | Extended to atomic types (FR-10). Proxy core, round-robin and discovery metrics are untouched (D7). |
 | End-to-end proof | `/olla-validate --nightly` (chaos, soak, Sherpa pass, forced-translation pass) | Used unchanged, once, in WP-7 on H. |
-| Results files | the gitignored `test/results/` directory the validation harness already writes to | WP-0 and WP-7 write their reports there; nothing new to create. |
+| Runtime load | `hey` (installed on the box; never installed by this work), the `/olla-validate` quick fleet (ollamock instances and the main Olla config, same fleet ports) | Used unchanged to drive fixed load at B and H. Because the ports are shared, the profile never runs beside a validation run. |
+| Runtime metrics | the `/internal/process` endpoint (heap alloc, inuse and sys, goroutines, GC count, average pause, GC CPU fraction) and `/proc/<pid>/status` | Read only. No endpoint or field changes. |
+| Review tooling | headless Claude (`claude-tf-primary` account, Opus) and Codex (Sol, xhigh) | Used per work package (D9) and, outside this session, for the final review (D10). |
+| Results files | the gitignored `test/results/` directory the validation harness already writes to | WP-0, WP-7 and the handover report write there; nothing new to create. |
 | Test suites that cover the seams | `make ready`; package suites for stats, proxy core, balancer, registry, handlers, middleware, router, logger, config, unifier | Assertions pass unchanged; setup and field access change only per FR-17. |
 
 ## 6. Data and interfaces
@@ -152,7 +161,8 @@ Accessors take and return `context.Context` and the value type, so call sites st
 | Proxy core `ProxyStats`, round-robin counter, discovery metrics, per-model `lastRequested` and the `ModelCollector`'s `lastCleanup`: atomic-function code left in place | D7 | Deferred: not a modernize finding; the existing atomic-function code is correct. |
 | docs/content/development/{setup,contributing}.md Go version text | none | Already correct; no row action. |
 | makefile bench targets | NFR-1 | None: package-scoped `go test -bench` is used. |
-| `test/results/modernise-baseline-<sha>.md` and `test/results/modernise-results-<sha>.md` | WP-0, WP-7 | New, gitignored (the directory is ignored); their summaries are quoted in the final PR body. No tracked file changes. |
+| `test/results/modernise-baseline-<sha>.md`, `test/results/modernise-results-<sha>.md` and `test/results/modernise-handover-<sha>.md` | WP-0, WP-7 | New, gitignored (the directory is ignored); the baseline and results summaries are quoted in the final PR body, and the handover report feeds the final review (D10). No tracked file changes. |
+| Branch name in the spec's own text and handoff | branch rename to `feature/go1.27-modernisation` | Updated in this spec; no other tracked file names the old branch. |
 | CI workflow lint step | FR-12 | None: same linter version; `verify: false` there is why invalid disable names pass CI silently, so WP-5 checks `config verify` locally. |
 | `.claude/skills/olla-validate` | none | None: used unchanged. |
 | Anything calling the removed pointer helpers, retyped counters or retyped keys | FR-7, FR-10, FR-13 | Handled inside PR 3c, PR 4 and PR 6 (compile errors force it; `pkg/` has no hits). |
@@ -161,7 +171,7 @@ Searches run: `modernize`, `usetesting`, `SA1029` across the lint config, makefi
 
 ## 8. Acceptance criteria and work packages
 
-**These are work packages on the integration branch `chore/go-1.27-modernise`, not separate PRs (D8).** The "PR n" labels are work-package names only. Each work package lands as a reviewed commit group and is reviewed before the next starts; one PR to main is opened at the end. Per-work-package checks are the cheap ones only: targeted package tests per commit, that package's analyzer count at zero (or its named exceptions), the reproducibility check, `go test -race` on touched packages (3a, 4), and the characterisation tests (4, 6). Benchmarks, `/olla-validate` and `make ready` run once, in WP-7.
+**These are work packages, not separate PRs (D8).** The "PR n" labels are work-package names only. Each work package is done on its own branch `modernise/wp-<id>-<slug>` cut from the integration head `feature/go1.27-modernisation`, passes the review gates of D9 (Opus, then Codex, with grounded P1 and P2 findings fixed and re-checked, at most two fix rounds), and is then merged into the integration branch with `git merge --no-ff`, before the next work package is cut. One PR to main is opened at the end, after the final review (D10), and only when the user says so; nothing is pushed before that. A fix or revert that WP-7 demands follows the same branch and gates. Per-work-package checks are the cheap ones only: targeted package tests per commit, that package's analyzer count at zero (or its named exceptions), the reproducibility check, `go test -race` on touched packages (3a, 4), and the characterisation tests (4, 6). Benchmarks, `/olla-validate` and `make ready` run once, in WP-7.
 
 "Reproducible" means: check out the work package's parent commit, run the stated command, and the result matches the commit, allowing the formatter delta (FR-18) and reviewed edits listed in the commit message (FR-17, FR-19).
 
@@ -169,13 +179,14 @@ Order: WP-0, WP-1, WP-2, then WP-3a, 3c, 3d, 3b and WP-4 in any order, then WP-5
 
 ### WP-0. Pre-work: analysis and baseline
 
-Mode: not applicable (test code and measurement only). Specialist: test-architect. Depends on: nothing. Runs on the integration branch before any modernisation commit.
-- (a) One benchmark-only commit adds the rows NFR-1 names: a populated percentile read exercising `GetPercentiles`; retry classification in proxy core that reaches the changed classifier; XFF parsing with multiple addresses in proxy core common; a large handler sort with large summary structs; and a tied-priority balancer fixture with more than 12 mixed-tier endpoints (labelled, with tied priorities that the current unstable sort demonstrably reorders; this is also the FR-9 (b) fixture). This commit is test code only and is the baseline commit B.
+Mode: not applicable (test code and measurement only). Specialist: test-architect. Depends on: nothing. Done on branch `modernise/wp-0-baseline` from main, reviewed per D9, and merged first, before any modernisation commit.
+- (a) One benchmark-only commit adds the rows NFR-1 names: a populated percentile read exercising `GetPercentiles`; retry classification in proxy core that reaches the changed classifier; XFF parsing with multiple addresses in proxy core common; a large handler sort with large summary structs; and a tied-priority balancer fixture with more than 12 mixed-tier endpoints (labelled, with tied priorities that the current unstable sort demonstrably reorders; this is also the FR-9 (b) fixture). This commit is test code only, its production code equals main, and it is the baseline commit B.
 - (b) At B, record: the uncapped modernize counts per analyzer (the three literal flags); the `go fix -diff ./...` hunk and file totals; the usetesting count with the context settings; the SA1029 count with the staticcheck test exclusion lifted; and the benchmark rows as two `-count=6 -benchmem -run '^$'` sets, P1 and P2, giving the noise floor.
-- (c) Write the results file `test/results/modernise-baseline-<sha>.md` (gitignored), with raw outputs beside it, and quote its summary in the final PR body.
-- AC-1: B differs from its parent only in `_test.go` files, and `go build ./...` and the touched packages' tests pass at B.
+- (c) Runtime profile at B (NFR-1): build a binary at B, boot the `/olla-validate` quick fleet, drive `hey` load per route at the fixed concurrency and duration chosen here and recorded, and capture throughput, latency p50/p95/p99 and errors per route, RSS and peak RSS, `/internal/process` samples at idle, under load and after a settle, binary size and start-to-ready time (pprof heap and alloc profiles if the profiler is enabled in the config). Every parameter is recorded so WP-7 repeats the run exactly.
+- (d) Write the results file `test/results/modernise-baseline-<sha>.md` (gitignored), with raw outputs beside it, and quote its summary in the final PR body.
+- AC-1: B differs from main only in `_test.go` files, and `go build ./...` and the touched packages' tests pass at B.
 - AC-2: each named row has 6 results in each of P1 and P2 (seam: CLI, `go test -bench`).
-- AC-3: the baseline file contains every figure listed in (b), each labelled with its command.
+- AC-3: the baseline file contains every figure listed in (b) and (c), each labelled with its command, plus the recorded `hey` parameters, ports and binary build command.
 
 ### WP-1. PR 1: `any` only
 
@@ -258,15 +269,17 @@ Mode: `refactor`, with a characterisation commit first inside the PR. Specialist
 
 ### WP-7. Post-work: integration gate
 
-Mode: not applicable (verification, plus fixes or reverts the gate demands). Specialist: Go for any fix or revert, test-architect for the measurement. Depends on: WP-0 to WP-6. Runs on the final integration commit H. Heavy suites run one at a time (NFR-4).
+Mode: not applicable (verification, plus fixes or reverts the gate demands). Specialist: Go for any fix or revert, test-architect for the measurement. Depends on: WP-0 to WP-6, all merged into the integration branch. Runs on the integration head H. Heavy suites run one at a time (NFR-4). **The fresh implementation session stops after WP-7: it does not open the PR and does not run the whole-branch review (D10).**
 - (a) Re-run every WP-0 measurement at H. Expected: modernize findings only on the disable list or the named recorded exceptions; the usetesting count at zero if WP-3b landed; the SA1029 count at zero.
-- (b) Benchmarks, in one session: check out B in a worktree and H side by side. Run B twice (P1 and P2) and H once, all `-count=6 -benchmem -run '^$'`, and compare with `benchstat` per NFR-1, using P1 as the reference. On a regression, benchmark the work-package boundary commits to find the culprit, then fix or revert that work package's offending change; for the priority sort, FR-9 decides and the site reverts to `sort.Slice`. Any fix or revert is a new commit, after which (a) to (c) are re-run on the new H.
-- (c) The full gate at H, one heavy suite at a time: `make ready`, then an empty `git status --porcelain`; `make test-race`; `make test` (the full suite); then `/olla-validate --nightly`.
-- (d) A results report at `test/results/modernise-results-<sha>.md` (gitignored): before and after counts, the benchstat table (ns/op and allocs) with the noise floor, the gate results, recorded exceptions and any reverts. Its summary goes in the final PR body.
+- (b) Benchmarks, in one session: check out B in a worktree and H side by side. Run B twice (P1 and P2) and H once, all `-count=6 -benchmem -run '^$'`, and compare with `benchstat` per NFR-1, using P1 as the reference. On a regression, benchmark the work-package boundary commits to find the culprit, then fix or revert that work package's offending change (on a `modernise/` branch, through the D9 gates); for the priority sort, FR-9 decides and the site reverts to `sort.Slice`. Any fix or revert makes a new H, after which (a) to (d) are re-run.
+- (c) Runtime profile, in the same session as (b): repeat the WP-0 runtime profile at H with binaries for B and H built and run one after the other, with the recorded parameters and ports. Report a table with B, H, delta and % for every captured metric, with commentary on any notable delta.
+- (d) The full gate at H, one heavy suite at a time, and never beside the runtime profile or another validation run (shared fleet ports): `make ready`, then an empty `git status --porcelain`; `make test-race`; `make test` (the full suite); then `/olla-validate --nightly`.
+- (e) Reports. A results report at `test/results/modernise-results-<sha>.md` (gitignored): before and after counts, the benchstat table (ns/op and allocs) with the noise floor, the runtime table, the gate results, recorded exceptions and any reverts. A handover report at `test/results/modernise-handover-<sha>.md` (gitignored), the input to the final whole-branch review, containing: the integration head SHA and base; the work-package merge commits; each work package's review outcomes (Opus and Codex verdicts, findings fixed, findings deferred with reasons); recorded exceptions; the before and after measurement tables with commentary on any notable delta; the gate results; and open questions. The results summary goes in the final PR body.
 - AC-1: every figure in (a) is at its expected value or is a listed exception naming its residual in both tools (FR-19).
 - AC-2: the benchstat table covers every named row with 6 results per side, and no row is a regression under NFR-1 (or the regression is reverted and the table re-run).
-- AC-3: `make ready` exits 0 with an empty `git status --porcelain`; `make test-race` and `make test` exit 0; `/olla-validate --nightly` reports no failure attributable to the series.
-- AC-4: the results report exists and the final PR body quotes the WP-0 and WP-7 summaries.
+- AC-3: the runtime table has B and H for every metric listed in NFR-1, taken with identical parameters in one session, and error counts per route are reported.
+- AC-4: `make ready` exits 0 with an empty `git status --porcelain`; `make test-race` and `make test` exit 0; `/olla-validate --nightly` reports no failure attributable to the series.
+- AC-5: the results and handover reports exist; the handover report names every work-package merge commit and every open finding; no PR has been opened and nothing has been pushed.
 
 ## 9. Risks implementers must be briefed on
 
@@ -283,6 +296,8 @@ copylocks with atomic types; struct layout and betteralign (`make align-check`);
 - **A7.** The CLAUDE.md "modernize linter enforced" line is added in PR 5 (the brief calls it optional).
 - **A8.** Stale docs snippets are deferred (section 7), not fixed in the series. A cheaper per-PR docs line is acceptable if the implementer finds one, but is not required.
 - **A9.** CLAUDE.md already states Go 1.27 (confirmed), so no version edit is needed.
+- **A12.** The runtime profile has no numeric pass or fail threshold, because the user specified none; it is reported with commentary and unexplained regressions become open items. Inventing a threshold was rejected. The `hey` concurrency and duration are chosen once in WP-0 (fixed, recorded, reused at H).
+- **A13.** WP-0 and any WP-7 fix or revert also go through the D9 gates, so every merge into the integration branch is reviewed. The review gates apply to a test-only work package as to any other.
 - **A10.** `benchstat` is on PATH on the box. If the WP-7 session lacks it, the benchmark gate cannot be claimed and the report says so; nothing is installed.
 
 ## 11. Open questions
@@ -294,6 +309,8 @@ copylocks with atomic types; struct layout and betteralign (`make align-check`);
 
 This spec is implemented by running `/orchestrate docs/specs/go-1.27-modernise.md` in a fresh session. That session is the orchestrator, not an implementer: it decomposes this spec into the work packages above, dispatches each to the matching specialist subagent, reviews their reports against the acceptance criteria, and iterates fixes back to the same agent. It never implements, explores or debugs in its own context beyond trivial glue; anything that needs reading or writing code is delegated so the orchestrator's context stays lean and its judgement stays fresh for review. Bug-shaped packages go through bug-investigator before a specialist touches code.
 
-Delivery model (D8): everything lands on the one integration branch `chore/go-1.27-modernise`, which the spec is already on, and ends in one PR to main. Run WP-0 first (the benchmark-only baseline commit B and its results file) and WP-7 last (the integration gate on the final commit H); each work package is reviewed before the next starts. Per-work-package checks are the cheap ones only; the benchmarks, `make ready`, `make test-race`, `make test` and `/olla-validate --nightly` run once, in WP-7.
+Delivery model (D8 to D10): the integration branch is `feature/go1.27-modernisation`, which the spec is already on. Each work package is done by Sonnet agents on its own branch `modernise/wp-<id>-<slug>` cut from the integration head, passes the Opus then Codex review gates (D9, never Sonnet as reviewer), and is merged with `git merge --no-ff` in dependency order. Run WP-0 first (the benchmark-only baseline commit B, the runtime profile and the baseline file) and WP-7 last (the integration gate on head H, including the runtime comparison, the full gate and the handover report). Per-work-package checks are the cheap ones only; the benchmarks, runtime profile, `make ready`, `make test-race`, `make test` and `/olla-validate --nightly` run once, in WP-7. Nothing is pushed.
+
+**The fresh session stops after WP-7.** It does not open the PR and does not run the whole-branch review. The step after handover (D10) is the user's main session running `/cross-review` (Fable plus Codex, Sol at xhigh) over the whole integration branch against main, using `test/results/modernise-handover-<sha>.md`; the PR is opened only after that, and only when the user says so.
 
 Anything found wrong along the way is a bug report for `/bug-hunt`, not a fix inside this spec.
