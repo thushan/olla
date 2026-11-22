@@ -476,7 +476,7 @@ jobs:
       
       - uses: actions/setup-go@v4
         with:
-          go-version: '1.24'
+          go-version: '1.27'
       
       - name: Run tests
         run: make test

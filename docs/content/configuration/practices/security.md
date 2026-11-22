@@ -217,7 +217,7 @@ When using Docker:
 
 ```dockerfile
 # Run as non-root user
-FROM golang:1.24-alpine AS builder
+FROM golang:1.27-alpine AS builder
 # ... build steps ...
 
 FROM alpine:latest
