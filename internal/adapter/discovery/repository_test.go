@@ -747,10 +747,10 @@ func TestStaticEndpointRepository_AutoType_EmptyURLs(t *testing.T) {
 		t.Errorf("HealthCheckURLString = %q, expected %q (default fallback)", endpoint.HealthCheckURLString, expectedHealthURL)
 	}
 
-	// Default model URL is "/v1/models"
-	expectedModelURL := "http://localhost:8080/v1/models"
-	if endpoint.ModelURLString != expectedModelURL {
-		t.Errorf("ModelURLString = %q, expected %q (default fallback)", endpoint.ModelURLString, expectedModelURL)
+	// No model_url was set, so ModelURLString stays empty and each auto-detection
+	// candidate probes its own discovery path rather than a guessed /v1/models.
+	if endpoint.ModelURLString != "" {
+		t.Errorf("ModelURLString = %q, expected empty for auto type without model_url", endpoint.ModelURLString)
 	}
 }
 

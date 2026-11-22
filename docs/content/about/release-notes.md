@@ -16,6 +16,58 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Changed: duplicate endpoint URLs now log a warning
+
+Olla keys static endpoints by URL, so when two endpoints in `discovery.static.endpoints` share a URL the later one silently replaced the earlier one and only one registered. Config loading still accepts this so existing files keep working, but it now logs a `WARN` naming both endpoints and the URL, and `--validate-config` lists the same collision. If you declared several endpoints on one URL (to vary `type`, say), give each its own URL. See [Configuration Overview](../configuration/overview.md#endpoint-configuration).
+
+### Changed: auto-detection needs the server to identify itself
+
+With `type` empty or `auto`, an endpoint is only detected as llama.cpp, vLLM, oMLX or Rapid-MLX when its `/v1/models` response carries a matching `owned_by` (`llamacpp`, `vllm`, `omlx`, `rapid-mlx`); [#271](https://github.com/thushan/olla/pull/271) added this check because those backends share the OpenAI response shape and were being misdetected as each other. A server that does not report one of those values is now treated as `openai-compatible`. Endpoints with an explicit `type` are unaffected; if a backend behind a proxy or fork lost its detected type, set `type` explicitly. See [Configuration Overview](../configuration/overview.md#endpoint-configuration). The llama.cpp API reference now shows its real `owned_by` value (`llamacpp`).
+
+### Fixed: `type: auto` endpoints loaded from config discovered no models or the wrong backend
+
+An endpoint in `config.yaml` with `type` empty or `auto` had its model path pre-set to `/v1/models`, so every auto-detection candidate probed that path. Ollama, tried first, accepted any OpenAI-style response as an empty model list, so vLLM, llama.cpp, oMLX, Rapid-MLX and generic servers were detected as Ollama with 0 models, and a real Ollama serving only `/api/tags` failed outright. This has been the case since before v0.1.0. Each candidate now probes its own discovery path unless you set `model_url`, which still overrides all of them, and Ollama and LM Studio are only accepted when the response has their shape. Endpoints with an explicit `type` are unaffected. If an auto endpoint showed no models, restart Olla or wait for the next discovery cycle after upgrading.
+
+### Fixed: auto-detection with an explicit `model_url` no longer mislabels OpenAI-style servers
+
+With `type: auto` and a `model_url`, every candidate probes the same path, and LM Studio accepted any `data` array, so vLLM, Rapid-MLX, oMLX and generic OpenAI servers were registered as LM Studio and lost their context-length fields. LM Studio now needs its own model fields (`type`, `state` or `arch`), and Ollama rejects a body that also carries an OpenAI `data` array, as llama.cpp's does. Without `model_url` nothing changes.
+
+### Fixed: a backend closing an idle connection no longer trips the breaker
+
+net/http's `http: server closed idle connection` on a reused connection, the same keep-alive race as an EOF there, now fails over without demoting the endpoint or charging its circuit breaker, instead of returning a `502`.
+
+### Fixed: a stream aborted after the first byte is logged as a failure
+
+When the Anthropic translator panicked mid-stream the connection was dropped but the request was still logged as `Request completed` at INFO. It now logs `Request failed`.
+
+### Fixed: provider-prefix `/v1/messages` routes send Anthropic-shaped mid-stream errors
+
+A backend dying mid-stream on a route such as `/olla/vllm/v1/messages` got an OpenAI-style error event. Anthropic Messages requests now get the Anthropic `event: error` form on any route.
+
+### Fixed: a translator panic mid-stream now drops the connection
+
+If the Anthropic translator panicked after part of a streamed reply had reached the client, the response ended with an `event: error` and a clean end of stream, which a client could mistake for a finished reply. It now behaves like a backend dying mid-stream: the error event is sent, the request is counted as failed in the translator stats, and the connection is dropped so the client's read fails. A panic before anything was written still returns a `502` JSON error.
+
+### Fixed: the Olla engine now enforces `proxy.read_timeout` on a silent backend
+
+A backend that sent response headers (or some chunks) and then went silent with the connection open blocked the Olla engine's request forever, because the read timeout was only checked between reads. The engine now ends the stream after `proxy.read_timeout` with no data (`AI backend stopped responding - no data received for Xs`), counts it as a failed request, and handles it like a dead backend: the client gets the provider-format error event and a dropped connection. That holds even when the stall comes before the first chunk, because the response headers are already with the client; the one exception is `/olla/anthropic/v1/messages` with translation, where nothing is written until the first chunk, so a stall before it returns a `502` Anthropic-format JSON error. The timeout measures silence from the backend only, so a slow but steady stream is not cut, and a slow client does not trigger it. Sherpa already behaved this way. If you run long silent gaps (a model that thinks for minutes before the first token), raise `proxy.read_timeout`.
+
+### Added: Rapid-MLX backend
+
+Rapid-MLX, the MLX inference server for Apple Silicon, is a supported backend ([#271](https://github.com/thushan/olla/pull/271), thanks to [@raullenchai](https://github.com/raullenchai)). It has a `rapid-mlx` profile (`config/profiles/rapid-mlx.yaml`), the `/olla/rapid-mlx/` route prefix and native Anthropic Messages passthrough. Auto-discovery now tells it apart from other OpenAI-compatible servers. See [Rapid-MLX Integration](../integrations/backend/rapid-mlx.md).
+
+### Fixed: model aliases match consistently with unification
+
+With `model_registry.enable_unifier: true`, alias names now match without regard to case ([#270](https://github.com/thushan/olla/pull/270), fixes [#181](https://github.com/thushan/olla/issues/181), thanks to [@wsj040303](https://github.com/wsj040303)). `My-Model` accepts requests for `my-model` or `MY-MODEL`, and case variants share a sticky-session key. An exact spelling wins; if two aliases differ only in case, an ambiguous spelling selects neither and falls back to normal model routing. With unification off, request model names are lowercased before alias lookup, so a mixed-case alias such as `My-Model` never matches; use lowercase alias names. See [Model Aliases](../concepts/model-aliases.md).
+
+### Fixed: a backend that drops the connection before replying now fails over
+
+When a backend closed the connection before sending any response (an `EOF` from the transport), Olla returned an error instead of trying the next endpoint ([#273](https://github.com/thushan/olla/pull/273), fixes [#272](https://github.com/thushan/olla/issues/272), thanks to [@mikemikimike](https://github.com/mikemikimike)). `EOF` now counts as a connection failure: the request fails over and the endpoint is marked unhealthy. With the default `proxy.retry.non_idempotent: true`, a POST that hits this can now run on a second backend, so a prompt the first backend had already read may run twice. Set `non_idempotent: false` if that matters more than availability.
+
+### Fixed: an idle keep-alive close no longer marks a healthy backend offline
+
+A backend such as vLLM or SGLang (uvicorn, 5 second keep-alive) can close an idle pooled connection just as Olla sends a POST on it. Go's transport never retries a POST it has written, so the request failed with `EOF`, and the #273 change then marked the healthy endpoint offline. With one endpoint that was an outage until the next health check. Both engines now notice when the `EOF` came from a reused connection: the request still fails over to another endpoint, but the endpoint is not demoted and the Olla engine's circuit breaker does not count it. An `EOF` on a fresh connection still demotes, since there the backend really went away. The outbound request also carries a replayable body, so Go retries on its own when it fails before writing anything. Connection refused and reset behave as before.
+
 ### Fixed: `server.host` accepts a bare IPv6 address
 
 A bare IPv6 `server.host` such as `::` built the listen address `:::40114` and failed to bind with "too many colons in address". Bare IPv6 hosts now work; bracketed ones (`[::]`) already did. Raised by @sigil-03 in [#145](https://github.com/thushan/olla/pull/145).
@@ -33,7 +85,7 @@ When a backend failed after response bytes had reached the client, Olla returned
 - Ollama NDJSON: a `{"error":"..."}` line.
 - Plain JSON bodies, chunked or with `Content-Length`: no extra bytes, only the dropped connection.
 
-Non-streaming errors and HTTP error statuses before the first byte are unchanged and still fail over. A client that disconnects is not treated as a backend failure. The access log line is still written at Info with `aborted=true` (the proxy console completion line needs Debug), and a failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
+Non-streaming errors and HTTP error statuses before the first byte are unchanged and still fail over. A client that disconnects is not treated as a backend failure. Olla logs `Backend failed after response started, aborting client connection` at Warn with the request id. When access logging reaches a sink (file output or JSON logs; the default console output leaves access records out), the access record is written at Warn with `aborted=true`, and the proxy console completion line carries `aborted=true` at Debug. A failed Anthropic stream counts under `failed_requests` in `/internal/stats/translators`. Clients that treated a clean end of stream as success will now see a read error on truncated replies; that is the intended signal.
 
 ### Changed: a pre-commit failure on streaming Anthropic translation returns 502
 

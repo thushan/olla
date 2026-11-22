@@ -94,6 +94,7 @@ func RewriteModelForAlias(ctx context.Context, r *http.Request, endpoint *domain
 
 	// Replace the request body with the rewritten content
 	r.Body = io.NopCloser(bytes.NewReader(rewritten))
+	SetReplayableBody(r, rewritten) // the preserved original would replay the un-rewritten model
 	r.ContentLength = int64(len(rewritten))
 }
 

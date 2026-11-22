@@ -257,6 +257,9 @@ Connection errors that trigger automatic retry:
 - **Connection Reset**: Backend crashed or restarted
 - **Connection Timeout**: Backend is overloaded
 - **Network Unreachable**: Network connectivity issues
+- **Closed Connection (EOF)**: Backend accepted the connection then closed it before replying
+
+An EOF on a reused keep-alive connection is the exception to the "Marks Unhealthy" step. A healthy backend closing an idle pooled connection just as a request is sent produces the same EOF, so the request still fails over but the endpoint is not marked unhealthy and the proxy circuit breaker does not count it. An EOF on a fresh connection still marks the endpoint unhealthy.
 
 ## Circuit Breaker Integration
 

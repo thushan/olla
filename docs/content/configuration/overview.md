@@ -256,12 +256,15 @@ Each endpoint requires `url`, `name`, and `type`. The `priority` field is option
 
 | Field | Description | Example |
 |-------|-------------|---------|
-| **url** | Base URL of the endpoint | `http://localhost:11434` |
+| **url** | Base URL of the endpoint. Must be unique per endpoint: Olla keys endpoints by URL, so a repeat replaces the earlier entry (and logs a warning) | `http://localhost:11434` |
 | **name** | Unique identifier | `local-ollama` |
 | **type** | Platform type | `llamacpp`, `vllm`, `openai` (See [integrations](../integrations/overview.md#backend-endpoints)) |
 | **priority** | Selection priority (higher = preferred, default: `100`) | `100` |
 
 Current list of supported types can be found in [integrations](../integrations/overview.md#backend-endpoints).
+
+!!! note "Type auto-detection"
+    With `type` left empty or set to `auto`, Olla probes the endpoint and identifies llama.cpp, vLLM, oMLX and Rapid-MLX from the `owned_by` field in its `/v1/models` response (`llamacpp`, `vllm`, `omlx`, `rapid-mlx`). Each candidate is probed on its own discovery path (Ollama on `/api/tags`, LM Studio on `/api/v0/models`, the rest on `/v1/models`), and a response is only accepted as Ollama or LM Studio when it has that backend's shape. Setting `model_url` makes every candidate use that path instead. Any other OpenAI-compatible server is treated as `openai-compatible`. If your backend reports a different `owned_by` (a fork or a proxy in front of it), set an explicit `type`. An explicit type is never second-guessed.
 
 Optional fields:
 

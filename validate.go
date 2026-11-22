@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/thushan/olla/internal/adapter/discovery"
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/adapter/unifier"
 	"github.com/thushan/olla/internal/config"
@@ -97,7 +98,7 @@ func runValidateConfig(configFile string) (string, int) {
 		} else {
 			source = "loaded from " + source
 		}
-		items = append(items, validationItem{Name: "config.yaml", Detail: source, IgnoredIn: cfg.Filename, Ignored: append(unknownKeyStrings(cfg.UnknownKeys), deprecatedProxyRetryKeys(cfg)...)})
+		items = append(items, validationItem{Name: "config.yaml", Detail: source, IgnoredIn: cfg.Filename, Ignored: append(unknownKeyStrings(cfg.UnknownKeys), deprecatedProxyRetryKeys(cfg)...), Warnings: discovery.DuplicateEndpointURLWarnings(cfg.Discovery.Static.Endpoints)})
 	}
 
 	_, modelErr := unifier.LoadModelConfig()

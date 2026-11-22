@@ -2,9 +2,13 @@
 ## Points at three AIMock instances (test/mock/compose.yaml).
 ##
 ## One endpoint per provider type is registered so each provider-scoped route
-## (/olla/vllm/, /olla/sglang/, etc.) has a live backend to route to. All
-## endpoints point at the same three AIMock URLs; we vary the declared type so
-## Olla's per-provider filtering can select them. AIMock speaks
+## (/olla/vllm/, /olla/sglang/, etc.) has a live backend to route to. Every
+## endpoint reaches one of the same three AIMock instances (ports 9300-9302), but
+## Olla keys endpoints by URL and a repeated URL silently replaces the earlier
+## entry, so each endpoint needs a distinct URL. Each provider group therefore
+## uses its own loopback host (127.0.0.2 to 127.0.0.9): the AIMock containers
+## publish on 0.0.0.0, so any 127.x address reaches them on Linux and Windows
+## (macOS needs the aliases added with ifconfig lo0 alias). AIMock speaks
 ## /v1/chat/completions and /v1/messages for all declared types.
 ##
 ## Lemonade and Ollama endpoints are intentionally absent: AIMock cannot serve
@@ -59,21 +63,21 @@ discovery:
     endpoints:
       # ── openai-compatible ─────────────────────────────────────────────────
       # Three instances give the diversity check something real to find.
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.2:9300"
         name: "mock-compat-a"
         type: "openai-compatible"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.2:9301"
         name: "mock-compat-b"
         type: "openai-compatible"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.2:9302"
         name: "mock-compat-c"
         type: "openai-compatible"
         model_url: "/v1/models"
@@ -83,21 +87,21 @@ discovery:
 
       # ── vllm ──────────────────────────────────────────────────────────────
       # Spread across all three AIMock instances so /olla/vllm/ has real affinity.
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.3:9300"
         name: "mock-vllm-a"
         type: "vllm"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.3:9301"
         name: "mock-vllm-b"
         type: "vllm"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.3:9302"
         name: "mock-vllm-c"
         type: "vllm"
         model_url: "/v1/models"
@@ -106,21 +110,21 @@ discovery:
         check_timeout: 2s
 
       # ── sglang ────────────────────────────────────────────────────────────
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.4:9300"
         name: "mock-sglang-a"
         type: "sglang"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.4:9301"
         name: "mock-sglang-b"
         type: "sglang"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.4:9302"
         name: "mock-sglang-c"
         type: "sglang"
         model_url: "/v1/models"
@@ -129,21 +133,21 @@ discovery:
         check_timeout: 2s
 
       # ── llamacpp ──────────────────────────────────────────────────────────
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.5:9300"
         name: "mock-llamacpp-a"
         type: "llamacpp"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.5:9301"
         name: "mock-llamacpp-b"
         type: "llamacpp"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.5:9302"
         name: "mock-llamacpp-c"
         type: "llamacpp"
         model_url: "/v1/models"
@@ -153,21 +157,21 @@ discovery:
 
       # ── lm-studio ─────────────────────────────────────────────────────────
       # Covers /olla/lmstudio/, /olla/lm-studio/, /olla/lm_studio/ routes.
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.6:9300"
         name: "mock-lmstudio-a"
         type: "lm-studio"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.6:9301"
         name: "mock-lmstudio-b"
         type: "lm-studio"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.6:9302"
         name: "mock-lmstudio-c"
         type: "lm-studio"
         model_url: "/v1/models"
@@ -176,21 +180,21 @@ discovery:
         check_timeout: 2s
 
       # ── litellm ───────────────────────────────────────────────────────────
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.7:9300"
         name: "mock-litellm-a"
         type: "litellm"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.7:9301"
         name: "mock-litellm-b"
         type: "litellm"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.7:9302"
         name: "mock-litellm-c"
         type: "litellm"
         model_url: "/v1/models"
@@ -199,21 +203,21 @@ discovery:
         check_timeout: 2s
 
       # ── docker-model-runner ───────────────────────────────────────────────
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.8:9300"
         name: "mock-dmr-a"
         type: "docker-model-runner"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.8:9301"
         name: "mock-dmr-b"
         type: "docker-model-runner"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.8:9302"
         name: "mock-dmr-c"
         type: "docker-model-runner"
         model_url: "/v1/models"
@@ -222,21 +226,21 @@ discovery:
         check_timeout: 2s
 
       # ── vllm-mlx ──────────────────────────────────────────────────────────
-      - url: "http://127.0.0.1:9300"
+      - url: "http://127.0.0.9:9300"
         name: "mock-vllm-mlx-a"
         type: "vllm-mlx"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9301"
+      - url: "http://127.0.0.9:9301"
         name: "mock-vllm-mlx-b"
         type: "vllm-mlx"
         model_url: "/v1/models"
         health_check_url: "/v1/models"
         check_interval: 5s
         check_timeout: 2s
-      - url: "http://127.0.0.1:9302"
+      - url: "http://127.0.0.9:9302"
         name: "mock-vllm-mlx-c"
         type: "vllm-mlx"
         model_url: "/v1/models"

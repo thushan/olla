@@ -78,7 +78,7 @@ curl -X GET http://localhost:40114/olla/llamacpp/v1/models
       "id": "llama-3.1-8b-instruct-q4_k_m.gguf",
       "object": "model",
       "created": 1704067200,
-      "owned_by": "meta-llama"
+      "owned_by": "llamacpp"
     }
   ]
 }
