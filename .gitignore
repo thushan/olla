@@ -54,3 +54,6 @@ default.yml
 
 # /claude-code-e2e throwaway clones + rendered configs
 test/regression/tmp/
+
+# Repo-local lint tools (make install-deps)
+.bin/

@@ -26,8 +26,9 @@ on:
 
 env:
   BUN_VERSION: "1.3.5"
+  # Keep in sync with GOLANGCI_LINT_VERSION in the makefile; betteralign is
+  # installed and pinned by the makefile itself (make align-check).
   GOLANGCILINT_VERSION: "2.15.0"
-  BETTERALIGN_VERSION: "0.16.1"
 
 permissions:
   contents: read
@@ -128,9 +129,7 @@ jobs:
           verify: false
 
       - name: betteralign checks
-        run: |
-          go install github.com/dkorunic/betteralign/cmd/betteralign@v${{ env.BETTERALIGN_VERSION }}
-          make align-check
+        run: make align-check
 
   cross-platform:
     name: Cross-Platform Build Validation

@@ -18,8 +18,8 @@ This guide covers setting up a complete development environment for Olla.
 
 ### Recommended Tools
 
-- **[golangci-lint](https://golangci-lint.run/usage/install/)**: Linting
-- **[betteralign](https://github.com/dkorunic/betteralign)**: Struct alignment optimisation
+- **[golangci-lint](https://golangci-lint.run/usage/install/)**: Linting (installed by `make install-deps`)
+- **[betteralign](https://github.com/dkorunic/betteralign)**: Struct alignment optimisation (installed by `make install-deps`)
 - **[air](https://github.com/cosmtrek/air)**: Hot reload for development
 - **Docker**: For testing with real backends
 
@@ -54,7 +54,7 @@ cd olla
 # Install Go dependencies
 make deps
 
-# Install development tools at pinned versions
+# Install golangci-lint and betteralign at pinned versions into the repo-local .bin/ (never GOPATH/bin)
 make install-deps
 
 # Or install air for hot reload (not managed by make install-deps)
@@ -270,6 +270,9 @@ make docker-run
 ```json
 {
   "go.lintTool": "golangci-lint",
+  "go.alternateTools": {
+    "golangci-lint": "${workspaceFolder}/.bin/golangci-lint"
+  },
   "go.lintFlags": [
     "--fast"
   ],
@@ -311,7 +314,13 @@ make docker-run
 1. Set Go SDK to 1.27+
 2. Enable Go modules
 3. Configure run configuration with `--config config/config.local.yaml`
-4. Enable golangci-lint file watcher
+4. Enable golangci-lint file watcher, with the program set to `$ProjectFileDir$/.bin/golangci-lint`
+
+Run `make install-deps` first so `.bin/golangci-lint` exists. Pointing the editor at the checkout's `.bin` stops it picking up another repo's version from `PATH`.
+
+!!! note
+
+    The vscode-go settings reference only documents an absolute path or a binary name for `go.alternateTools`. The extension source expands `${workspaceFolder}` there, but if your version does not, use the absolute path to `.bin/golangci-lint`. The extension also ignores `go.alternateTools` in workspace settings until the workspace is trusted.
 
 ## Testing Setup
 
