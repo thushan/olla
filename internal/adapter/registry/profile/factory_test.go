@@ -117,58 +117,6 @@ func TestValidateProfileType_WithRoutingPrefixes(t *testing.T) {
 	}
 }
 
-/*
-	func TestProfileFactoryRegistration(t *testing.T) {
-		factory := &Factory{
-			profiles: make(map[string]domain.PlatformProfile),
-		}
-
-		customProfile := &mockProfile{name: "custom"}
-		factory.RegisterProfile(customProfile)
-
-		profile, err := factory.GetProfile("custom")
-		if err != nil {
-			t.Fatalf("Failed to get custom profile: %v", err)
-		}
-		if profile.GetName() != "custom" {
-			t.Errorf("Expected custom profile, got %q", profile.GetName())
-		}
-	}
-
-	func TestProfileFactoryConcurrency(t *testing.T) {
-		factory := testFactory(t)
-
-		var wg sync.WaitGroup
-		errors := make(chan error, 100)
-
-		for i := 0; i < 50; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				_, err := factory.GetProfile(domain.ProfileOllama)
-				if err != nil {
-					errors <- err
-				}
-			}()
-		}
-
-		for i := 0; i < 10; i++ {
-			wg.Add(1)
-			go func(id int) {
-				defer wg.Done()
-				custom := &mockProfile{name: fmt.Sprintf("custom-%d", id)}
-				factory.RegisterProfile(custom)
-			}(i)
-		}
-
-		wg.Wait()
-		close(errors)
-
-		for err := range errors {
-			t.Errorf("Concurrent access error: %v", err)
-		}
-	}
-*/
 func TestGetAvailableProfiles(t *testing.T) {
 	factory := testFactory(t)
 
