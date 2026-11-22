@@ -16,6 +16,10 @@ names and config keys are the literal wire or YAML identifiers.
 
 ## v0.1.1
 
+### Fixed: `server.host` accepts a bare IPv6 address
+
+`server.host: "::"` or `"::1"` built the listen address `:::40114` and failed to bind with "too many colons in address". Bare and bracketed (`[::]`) IPv6 hosts now both work, as do `0.0.0.0`, hostnames and an empty host. Raised by @sigil-03 in [#145](https://github.com/thushan/olla/pull/145).
+
 ### Fixed: client cancels no longer open the circuit breaker
 
 A client that cancelled or timed out before the first response byte was recorded as a backend failure ([#269](https://github.com/thushan/olla/issues/269)). Five such cancels opened the Olla engine's circuit breaker and a healthy backend returned 502 for 30 seconds, and a cancelled half-open probe re-opened it. A client cancel or client deadline is now ignored by the breaker, and a cancelled half-open probe releases its slot so the next request probes straight away. Both engines also stop counting these cancels as failed requests in the stats and error events. Backend timeouts, such as the response-header timeout, and connection errors still count.
