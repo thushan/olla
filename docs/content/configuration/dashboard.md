@@ -219,10 +219,11 @@ A failed check returns a body naming what failed and what Olla saw, with a match
 !!! warning "Permissive CORS exposes the status JSON"
 
     With `allowed_origins: ["*"]`, any website a visitor's browser is on can `fetch()`
-    the `/internal/*` JSON cross-origin. The dashboard's own gate still applies to
-    `/internal/ui/`, but the data behind it is readable regardless unless
-    `gate_internal_api: true` puts the same policy in front of those endpoints.
-    Do not pair permissive CORS with an ungated `/internal/*`.
+    the `/internal/*` JSON cross-origin and read the answer. `gate_internal_api` does
+    not change that: the policy checks the TCP source and the Host, never the
+    `Origin`, so a browser on an allowed network still carries the request through
+    and the `*` still lets the page read it. Keep `allowed_origins` narrow on any
+    host whose users can reach Olla, on top of the gate.
 
 ## Troubleshooting
 
