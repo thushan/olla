@@ -8,7 +8,7 @@ const (
 	DefaultMaxBackoffMultiplier = 12
 
 	// Maximum backoff duration for health checks and retries
-	DefaultMaxBackoffSeconds = 60 * time.Second
+	DefaultMaxBackoff = 60 * time.Second
 
 	// Default base interval for retry attempts
 	DefaultRetryInterval = 2 * time.Second

@@ -40,19 +40,19 @@ func CalculateEndpointBackoff(checkInterval time.Duration, backoffMultiplier int
 	// Use the provided multiplier directly (already exponential: 1, 2, 4, 8...)
 	backoffInterval := checkInterval * time.Duration(backoffMultiplier)
 
-	if backoffInterval > constants.DefaultMaxBackoffSeconds {
-		backoffInterval = constants.DefaultMaxBackoffSeconds
+	if backoffInterval > constants.DefaultMaxBackoff {
+		backoffInterval = constants.DefaultMaxBackoff
 	}
 
 	return backoffInterval
 }
 
 // CalculateConnectionRetryBackoff computes backoff for connection retry attempts.
-// Linear progression: consecutiveFailures * ConnectionRetryBackoffMultiplier seconds, capped at MaxBackoffSeconds
+// Linear progression: consecutiveFailures * ConnectionRetryBackoffMultiplier seconds, capped at MaxBackoff
 func CalculateConnectionRetryBackoff(consecutiveFailures int) time.Duration {
 	backoffDuration := time.Duration(consecutiveFailures*constants.ConnectionRetryBackoffMultiplier) * time.Second
-	if backoffDuration > constants.DefaultMaxBackoffSeconds {
-		backoffDuration = constants.DefaultMaxBackoffSeconds
+	if backoffDuration > constants.DefaultMaxBackoff {
+		backoffDuration = constants.DefaultMaxBackoff
 	}
 	return backoffDuration
 }

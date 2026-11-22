@@ -11,7 +11,7 @@ import (
 
 // Local constants aliasing the shared backoff defaults
 const (
-	maxBackoffSeconds    = constants.DefaultMaxBackoffSeconds
+	maxBackoff           = constants.DefaultMaxBackoff
 	maxBackoffMultiplier = constants.DefaultMaxBackoffMultiplier
 )
 
@@ -86,9 +86,9 @@ func TestCalculateBackoff(t *testing.T) {
 				BackoffMultiplier: 6,
 			},
 			success:            false,
-			expectedInterval:   maxBackoffSeconds, // 10s * 6 = 60s
+			expectedInterval:   maxBackoff, // 10s * 6 = 60s
 			expectedMultiplier: maxBackoffMultiplier,
-			description:        "Interval should be capped at MaxBackoffSeconds",
+			description:        "Interval should be capped at MaxBackoff",
 		},
 		{
 			name: "already_at_max_multiplier_stays_at_max",
@@ -97,7 +97,7 @@ func TestCalculateBackoff(t *testing.T) {
 				BackoffMultiplier: maxBackoffMultiplier,
 			},
 			success:            false,
-			expectedInterval:   maxBackoffSeconds,
+			expectedInterval:   maxBackoff,
 			expectedMultiplier: maxBackoffMultiplier,
 			description:        "Once at max multiplier, should stay at max",
 		},
@@ -128,11 +128,11 @@ func TestBackoffProgressionSequence(t *testing.T) {
 		interval   time.Duration
 		multiplier int
 	}{
-		{5 * time.Second, 2},                      // First failure - normal interval
-		{10 * time.Second, 4},                     // Second failure - 2x interval
-		{20 * time.Second, 8},                     // Third failure - 4x interval
-		{40 * time.Second, maxBackoffMultiplier},  // Fourth failure - 8x interval (next multiplier capped)
-		{maxBackoffSeconds, maxBackoffMultiplier}, // Fifth failure - capped at max
+		{5 * time.Second, 2},                     // First failure - normal interval
+		{10 * time.Second, 4},                    // Second failure - 2x interval
+		{20 * time.Second, 8},                    // Third failure - 4x interval
+		{40 * time.Second, maxBackoffMultiplier}, // Fourth failure - 8x interval (next multiplier capped)
+		{maxBackoff, maxBackoffMultiplier},       // Fifth failure - capped at max
 	}
 
 	for i, expected := range expectedSequence {

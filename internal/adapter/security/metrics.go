@@ -31,9 +31,5 @@ func (sma *MetricsAdapter) RecordViolation(ctx context.Context, violation ports.
 func (sma *MetricsAdapter) GetMetrics(ctx context.Context) (ports.SecurityMetrics, error) {
 	stats := sma.statsCollector.GetSecurityStats()
 
-	return ports.SecurityMetrics{
-		RateLimitViolations:  stats.RateLimitViolations,
-		SizeLimitViolations:  stats.SizeLimitViolations,
-		UniqueRateLimitedIPs: stats.UniqueRateLimitedIPs,
-	}, nil
+	return ports.SecurityMetrics(stats), nil
 }

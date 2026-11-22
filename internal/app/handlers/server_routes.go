@@ -502,12 +502,13 @@ func (a *Application) registerStaticProviderRoutes() {
 
 			// Human-readable names for logging and debugging
 			displayName := providerName
-			if providerName == constants.ProviderTypeLMStudio {
+			switch providerName {
+			case constants.ProviderTypeLMStudio:
 				displayName = constants.ProviderDisplayLMStudio
 				if prefix != constants.ProviderPrefixLMStudio1 {
 					displayName += fmt.Sprintf(" (%s)", prefix)
 				}
-			} else if providerName == constants.ProviderTypeOllama {
+			case constants.ProviderTypeOllama:
 				displayName = constants.ProviderDisplayOllama
 			}
 
