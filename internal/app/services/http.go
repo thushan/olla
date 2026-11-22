@@ -264,8 +264,10 @@ func dashboardURL(bindAddr string) (string, bool) {
 	}
 
 	// RFC 6874: a zone delimiter inside a URL host must be percent-encoded as
-	// %25. Leave a host that already carries %25 alone.
-	if strings.Contains(displayHost, ":") && !strings.Contains(displayHost, "%25") {
+	// %25. A bind address always carries the raw zone, so encode
+	// unconditionally: a zone such as "253" must not be mistaken for an
+	// already-encoded "%25" prefix.
+	if strings.Contains(displayHost, ":") {
 		displayHost = strings.Replace(displayHost, "%", "%25", 1)
 	}
 

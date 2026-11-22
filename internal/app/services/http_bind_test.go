@@ -56,7 +56,7 @@ func TestDashboardURL(t *testing.T) {
 		{bindAddr: "192.168.1.5:40114", want: "http://192.168.1.5:40114/internal/ui/"},
 		{bindAddr: "[fd00::1]:40114", want: "http://[fd00::1]:40114/internal/ui/"},
 		{bindAddr: "[fe80::1%eth0]:40114", want: "http://[fe80::1%25eth0]:40114/internal/ui/"},
-		{bindAddr: "[fe80::1%25eth0]:40114", want: "http://[fe80::1%25eth0]:40114/internal/ui/"},
+		{bindAddr: "[fe80::1%253]:40114", want: "http://[fe80::1%25253]:40114/internal/ui/"},
 		{bindAddr: ":40114", want: "http://localhost:40114/internal/ui/"},
 	}
 
