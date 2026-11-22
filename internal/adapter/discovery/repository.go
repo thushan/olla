@@ -436,15 +436,36 @@ func malformedEndpointURLError(raw string, err error) error {
 // '@' in the path or query swallows what precedes it, which is acceptable in an
 // error message.
 func redactURLUserinfo(raw string) string {
-	prefix, rest := "", raw
-	if i := strings.Index(raw, "://"); i >= 0 {
-		prefix, rest = raw[:i+3], raw[i+3:]
-	}
-	at := strings.LastIndex(rest, "@")
+	at := strings.LastIndex(raw, "@")
 	if at < 0 {
 		return raw
 	}
-	return prefix + "<redacted>" + rest[at:]
+	// The scheme survives only when it is a real one that precedes the last '@'.
+	// A credential written ahead of the scheme ("tok@http://host") would otherwise
+	// be mistaken for part of the scheme and kept.
+	prefix := ""
+	if i := strings.Index(raw, "://"); i > 0 && i+3 <= at && isURLScheme(raw[:i]) {
+		prefix = raw[:i+3]
+	}
+	return prefix + "<redacted>" + raw[at:]
+}
+
+// isURLScheme reports whether s is a valid RFC 3986 scheme:
+// ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ).
+func isURLScheme(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case i > 0 && (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // DuplicateEndpointURLWarnings describes each endpoint whose URL an earlier endpoint already

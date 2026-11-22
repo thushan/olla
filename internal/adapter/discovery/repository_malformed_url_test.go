@@ -60,6 +60,8 @@ func TestLoadFromConfig_MalformedURLErrorRedactsUserinfo(t *testing.T) {
 		{"bad escape in password", "http://kiwi:wo%zzrd@host:11434", []string{"kiwi", "wo%zzrd"}},
 		{"at in password", "http://dingo:gu@lah7@host:notaport", []string{"dingo", "gu@lah7"}},
 		{"token as username with slash", "http://tok-9b2e7f/x@host:notaport", []string{"tok-9b2e7f"}},
+		{"token before the scheme", "tok-9b2e7f@http://host:notaport", []string{"tok-9b2e7f"}},
+		{"user and password before the scheme", "wombat:q7x9kz@http://host:notaport", []string{"wombat", "q7x9kz"}},
 	}
 
 	for _, tc := range cases {
@@ -121,6 +123,11 @@ func TestRedactURLUserinfo(t *testing.T) {
 		{"http://kiwi:pl#over@host:11434", "http://<redacted>@host:11434"},
 		{"http://kiwi:gl/ob@z1ng@host", "http://<redacted>@host"},
 		{"http://u:p@host?a=b@c", "http://<redacted>@c"},
+		// A credential ahead of the scheme is not part of the scheme.
+		{"tok-9b2e7f@http://host:notaport", "<redacted>@http://host:notaport"},
+		{"u:p@http://host:notaport", "<redacted>@http://host:notaport"},
+		{"1ttp://u:p@host", "<redacted>@host"},
+		{"://u:p@host", "<redacted>@host"},
 	}
 	for _, tc := range cases {
 		if got := redactURLUserinfo(tc.in); got != tc.want {
