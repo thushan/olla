@@ -74,7 +74,6 @@ var (
 	configParseWarnings []string
 )
 
-// LoadModelConfig loads the model unification configuration
 // Names that recur as map values across the family, architecture and organisation
 // tables below. They stay constants so a typo cannot split one family in two.
 const (
@@ -90,6 +89,7 @@ const (
 	capEmbeddings = "embeddings"
 )
 
+// LoadModelConfig loads the model unification configuration
 func LoadModelConfig() (*ModelUnificationConfig, error) {
 	configOnce.Do(func() {
 		configInstance, configSource, configParseWarnings = loadConfigFromFile()
