@@ -71,6 +71,18 @@ func TestDuplicateEndpointURLWarnings(t *testing.T) {
 	}
 }
 
+func TestDuplicateEndpointURLWarnings_RedactsCredentials(t *testing.T) {
+	t.Parallel()
+
+	got := DuplicateEndpointURLWarnings([]config.EndpointConfig{
+		{Name: "a", URL: "http://user:secret@h:1"},
+		{Name: "b", URL: "http://user:secret@h:1"},
+	})
+	if len(got) != 1 || strings.Contains(got[0], "secret") || strings.Contains(got[0], "user") {
+		t.Fatalf("warning leaked credentials or was missed: %v", got)
+	}
+}
+
 // The sticky manual config once declared 24 endpoints on three URLs, so only the last
 // provider group registered and seven provider routes 404ed.
 func TestStickyManualConfig_AllEndpointsRegister(t *testing.T) {

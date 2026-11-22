@@ -421,7 +421,11 @@ func DuplicateEndpointURLWarnings(configs []config.EndpointConfig) []string {
 		}
 		key := u.String()
 		if first, dup := firstNameByURL[key]; dup {
-			warnings = append(warnings, fmt.Sprintf("endpoint %q reuses URL %s: it replaces %q, so only one is registered", cfg.Name, key, first))
+			// --validate-config doesn't reject userinfo, so keep credentials out of the shown
+			// copy; the key keeps them so detection is unchanged.
+			display := *u
+			display.User = nil
+			warnings = append(warnings, fmt.Sprintf("endpoint %q reuses URL %s: it replaces %q, so only one is registered", cfg.Name, display.String(), first))
 			continue
 		}
 		firstNameByURL[key] = cfg.Name
