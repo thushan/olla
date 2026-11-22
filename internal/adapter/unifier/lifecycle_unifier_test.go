@@ -80,6 +80,7 @@ func TestLifecycleUnifier_EndpointStateTracking(t *testing.T) {
 	// Success should restore online state through UnifyModels call
 	models := []*domain.ModelInfo{{Name: "test"}}
 	_, err = unifier.UnifyModels(ctx, models, endpoint)
+	assert.NoError(t, err)
 	state = unifier.GetEndpointState(endpoint.URLString)
 	assert.Equal(t, domain.EndpointStateOnline, state.State)
 	assert.Equal(t, 0, state.ConsecutiveFailures)

@@ -24,6 +24,7 @@ linters:
     - goprintffuncname
     - gosec
     - govet
+    - ineffassign
     - intrange
     - makezero
     - misspell
