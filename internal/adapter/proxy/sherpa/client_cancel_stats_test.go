@@ -12,6 +12,7 @@ import (
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/testutil"
 )
 
 func proxyOnceSherpa(t *testing.T, ctx context.Context, svc *Service, ep *domain.Endpoint) error {
@@ -51,11 +52,10 @@ func TestClientCancelBeforeFirstByte_NotCountedAsFailure(t *testing.T) {
 
 // Positive control: a genuine transport failure is still counted.
 func TestBackendConnectionFailure_StillCountedAsFailure(t *testing.T) {
-	dead := httptest.NewServer(http.NotFoundHandler())
-	u, err := url.Parse(dead.URL)
+	deadURL := testutil.RefusedBackendURL(t)
+	u, err := url.Parse(deadURL)
 	require.NoError(t, err)
-	ep := &domain.Endpoint{Name: "ep", URL: u, URLString: dead.URL, Status: domain.StatusHealthy}
-	dead.Close()
+	ep := &domain.Endpoint{Name: "ep", URL: u, URLString: deadURL, Status: domain.StatusHealthy}
 	svc := newSherpaForCancel(t)
 
 	require.Error(t, proxyOnceSherpa(t, context.Background(), svc, ep))
