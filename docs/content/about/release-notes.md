@@ -58,7 +58,7 @@ Rapid-MLX, the MLX inference server for Apple Silicon, is a supported backend ([
 
 ### Fixed: model aliases match consistently with unification
 
-With `model_registry.enable_unifier: true`, alias names now match without regard to case ([#270](https://github.com/thushan/olla/pull/270), fixes [#181](https://github.com/thushan/olla/issues/181), thanks to [@wsj040303](https://github.com/wsj040303)). `My-Model` accepts requests for `my-model` or `MY-MODEL`, and case variants share a sticky-session key. An exact spelling wins; if two aliases differ only in case, an ambiguous spelling selects neither and falls back to normal model routing. With unification off, aliases only match their exact spelling: a mixed-case alias will not match a differently cased request. See [Model Aliases](../concepts/model-aliases.md).
+With `model_registry.enable_unifier: true`, alias names now match without regard to case ([#270](https://github.com/thushan/olla/pull/270), fixes [#181](https://github.com/thushan/olla/issues/181), thanks to [@wsj040303](https://github.com/wsj040303)). `My-Model` accepts requests for `my-model` or `MY-MODEL`, and case variants share a sticky-session key. An exact spelling wins; if two aliases differ only in case, an ambiguous spelling selects neither and falls back to normal model routing. With unification off, request model names are lowercased before alias lookup, so a mixed-case alias such as `My-Model` never matches; use lowercase alias names. See [Model Aliases](../concepts/model-aliases.md).
 
 ### Fixed: a backend that drops the connection before replying now fails over
 
