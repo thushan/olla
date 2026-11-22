@@ -2,10 +2,8 @@ package discovery
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -170,7 +168,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		endpointURL, err := url.Parse(cfg.URL)
 		if err != nil {
-			return malformedEndpointURLError(cfg.URL, err)
+			return fmt.Errorf("endpoint %q: url could not be parsed", cfg.Name)
 		}
 
 		urlString := endpointURL.String()
@@ -330,52 +328,8 @@ func applyEndpointDefaults(cfg *config.EndpointConfig) {
 }
 
 func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointConfig) error {
-	if cfg.URL == "" {
-		return errors.New("endpoint URL cannot be empty")
-	}
-
-	// Reject embedded credentials (user:pass@host). url.URL.String() preserves
-	// userinfo verbatim, so without this check a credentialed URL would flow
-	// into endpoint.URLString and out through any status API that echoes it.
-	// The endorsed credential path is the auth config block (AuthConfig, held
-	// as json:"-" fields on domain.Endpoint), so this is never a legitimate
-	// config, only ever an accident. The error string spells out the exact
-	// rewrite so a failed boot is a copy-paste fix rather than a guessing game.
-	// Both the username and password are redacted with placeholders - a
-	// username can itself be a secret (API-key-as-username schemes) - so the
-	// startup log never has the operator's real credentials sitting in it.
-	if parsedURL, err := url.Parse(cfg.URL); err == nil && parsedURL.User != nil {
-		_, hasPass := parsedURL.User.Password()
-		host := parsedURL.Host
-		plainURL := fmt.Sprintf("%s://%s", parsedURL.Scheme, host)
-		if parsedURL.Path != "" {
-			plainURL += parsedURL.Path
-		}
-		userinfo := "<your username>"
-		if hasPass {
-			userinfo += ":<your password>"
-		}
-		redactedOriginal := fmt.Sprintf("%s://%s@%s", parsedURL.Scheme, userinfo, host)
-		if parsedURL.Path != "" {
-			redactedOriginal += parsedURL.Path
-		}
-		// Basic auth requires both a username and a password - the username-only
-		// case (user:pass@host with no password) cannot become a valid basic
-		// block, so the example must still carry a password placeholder rather
-		// than a silently-invalid partial one.
-		example := plainURL + "\nauth:\n  type: basic\n  username: <your username>\n  password: <your password>" +
-			"\n  # or username_file / password_file to read from a file"
-		if !hasPass {
-			example += "\n\nBasic auth requires a password. If this was really a token " +
-				"(e.g. https://token@host), it is more likely bearer auth:\n  " +
-				plainURL + "\nauth:\n  type: bearer\n  token: <your token>" +
-				"\n  # or token_file to read from a file"
-		}
-		return fmt.Errorf(
-			"endpoint URL for %q must not embed credentials (user:pass@host); "+
-				"move them to the auth config block. Rewrite\n  %s\nas\n  %s",
-			cfg.Name, redactedOriginal, example,
-		)
+	if err := ValidateEndpointURLs(cfg); err != nil {
+		return err
 	}
 
 	// Allow empty health check and model URLs - they will get defaults from profile or fallback values
@@ -409,65 +363,6 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 	return nil
 }
 
-// malformedEndpointURLError reports a URL that failed to parse without echoing
-// its userinfo. validateEndpointConfig can only redact credentials from URLs
-// that parse, so a malformed one (bad port, unbracketed IPv6) would otherwise
-// carry the username and password into the startup error and its log line.
-// The parser's own detail is dropped whenever the input holds an '@', because it
-// quotes fragments of the input (an "invalid port" message repeats whatever
-// followed the first ':', which is the password when it contains a '/', '?' or
-// '#'). Detail is kept only when there is no userinfo to leak.
-func malformedEndpointURLError(raw string, err error) error {
-	if !strings.Contains(raw, "@") {
-		var urlErr *url.Error
-		if errors.As(err, &urlErr) {
-			err = urlErr.Err
-		}
-		return fmt.Errorf("invalid endpoint URL %q: %w", raw, err)
-	}
-	return fmt.Errorf("invalid endpoint URL %q: could not parse the URL; credentials belong in the auth block, not the URL",
-		redactURLUserinfo(raw))
-}
-
-// redactURLUserinfo replaces anything between the scheme and the last '@' in the
-// string with a placeholder. It works on the raw string because the input is, by
-// definition, unparseable, so '/', '?' and '#' cannot be trusted to end the
-// authority: a password may legitimately hold any of them. The cost is that an
-// '@' in the path or query swallows what precedes it, which is acceptable in an
-// error message.
-func redactURLUserinfo(raw string) string {
-	at := strings.LastIndex(raw, "@")
-	if at < 0 {
-		return raw
-	}
-	// The scheme survives only when it is a real one that precedes the last '@'.
-	// A credential written ahead of the scheme ("tok@http://host") would otherwise
-	// be mistaken for part of the scheme and kept.
-	prefix := ""
-	if i := strings.Index(raw, "://"); i > 0 && i+3 <= at && isURLScheme(raw[:i]) {
-		prefix = raw[:i+3]
-	}
-	return prefix + "<redacted>" + raw[at:]
-}
-
-// isURLScheme reports whether s is a valid RFC 3986 scheme:
-// ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ).
-func isURLScheme(s string) bool {
-	if s == "" {
-		return false
-	}
-	for i := range len(s) {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
-		case i > 0 && (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'):
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 // DuplicateEndpointURLWarnings describes each endpoint whose URL an earlier endpoint already
 // uses, in the wording --validate-config shows. LoadFromConfig keys by URL, so these never
 // register; reporting them ahead of time saves the operator a silent 404.
@@ -475,17 +370,17 @@ func DuplicateEndpointURLWarnings(configs []config.EndpointConfig) []string {
 	var warnings []string
 	firstNameByURL := make(map[string]string, len(configs))
 	for _, cfg := range configs {
+		// An invalid URL is a hard error elsewhere, and echoing it here could print a credential.
+		if ValidateEndpointURLs(cfg) != nil {
+			continue
+		}
 		u, err := url.Parse(cfg.URL)
 		if err != nil {
-			continue // reported as a hard error by the loader
+			continue
 		}
 		key := u.String()
 		if first, dup := firstNameByURL[key]; dup {
-			// --validate-config doesn't reject userinfo, so keep credentials out of the shown
-			// copy; the key keeps them so detection is unchanged.
-			display := *u
-			display.User = nil
-			warnings = append(warnings, fmt.Sprintf("endpoint %q reuses URL %s: it replaces %q, so only one is registered", cfg.Name, display.String(), first))
+			warnings = append(warnings, fmt.Sprintf("endpoint %q reuses URL %s: it replaces %q, so only one is registered", cfg.Name, key, first))
 			continue
 		}
 		firstNameByURL[key] = cfg.Name

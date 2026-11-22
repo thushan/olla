@@ -352,3 +352,18 @@ func TestBuildValidationReport_CapsIgnoredKeys(t *testing.T) {
 		t.Errorf("report lists %d keys, want %d", got, maxUnknownKeysShown)
 	}
 }
+
+func TestEndpointURLErrors(t *testing.T) {
+	t.Parallel()
+
+	good := config.EndpointConfig{Name: "ok", URL: "http://localhost:11434"}
+	bad := config.EndpointConfig{Name: "leaky", URL: "wombat:q7x9kz@http://host:11434"}
+
+	if err := endpointURLErrors([]config.EndpointConfig{good}); err != nil {
+		t.Fatalf("valid endpoint reported: %v", err)
+	}
+	err := endpointURLErrors([]config.EndpointConfig{good, bad})
+	if err == nil || !strings.Contains(err.Error(), `"leaky"`) || strings.Contains(err.Error(), "q7x9kz") {
+		t.Fatalf("want an error naming leaky and not its value, got: %v", err)
+	}
+}

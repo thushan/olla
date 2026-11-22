@@ -890,6 +890,6 @@ func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
 	}
 }
 
-// Userinfo rejection and its redacted-error coverage live in
-// repository_userinfo_test.go (TestEndpointConfigValidation_RejectsUserinfo,
+// URL rule coverage lives in endpoint_url_test.go and
+// repository_userinfo_test.go (TestLoadFromConfig_RejectsCredentialBeforeScheme,
 // TestEndpointConfigValidation_AcceptsPlainURL).

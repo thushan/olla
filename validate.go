@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -98,7 +99,7 @@ func runValidateConfig(configFile string) (string, int) {
 		} else {
 			source = "loaded from " + source
 		}
-		items = append(items, validationItem{Name: "config.yaml", Detail: source, IgnoredIn: cfg.Filename, Ignored: append(unknownKeyStrings(cfg.UnknownKeys), deprecatedProxyRetryKeys(cfg)...), Warnings: discovery.DuplicateEndpointURLWarnings(cfg.Discovery.Static.Endpoints)})
+		items = append(items, validationItem{Name: "config.yaml", Detail: source, IgnoredIn: cfg.Filename, Ignored: append(unknownKeyStrings(cfg.UnknownKeys), deprecatedProxyRetryKeys(cfg)...), Warnings: discovery.DuplicateEndpointURLWarnings(cfg.Discovery.Static.Endpoints), Err: endpointURLErrors(cfg.Discovery.Static.Endpoints)})
 	}
 
 	_, modelErr := unifier.LoadModelConfig()
@@ -196,4 +197,16 @@ func warnUnknownKeys(warn func(msg string, args ...any), keys []config.UnknownKe
 	}
 	warn("Ignoring unknown keys in config (not read by Olla, check for typos)",
 		"count", len(keys), "keys", list)
+}
+
+// endpointURLErrors reports every configured endpoint whose URLs fail the same
+// rules the loader enforces, so --validate-config agrees with startup.
+func endpointURLErrors(endpoints []config.EndpointConfig) error {
+	var errs []error
+	for _, ep := range endpoints {
+		if err := discovery.ValidateEndpointURLs(ep); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
