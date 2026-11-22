@@ -64,7 +64,7 @@ func (sl *PrettyStyledLogger) InfoWithHealthCheck(msg string, endpoint string, a
 }
 
 func (sl *PrettyStyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
-	var formattedNums []string
+	formattedNums := make([]string, 0, len(numbers))
 	for _, num := range numbers {
 		formattedNums = append(formattedNums, sl.Theme.Numbers.Sprint(num))
 	}

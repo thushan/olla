@@ -265,7 +265,7 @@ func shouldRetry(err error, errorType domain.HealthCheckErrorType) bool {
 		// Only retry certain HTTP errors
 		var netErr net.Error
 		if errors.As(err, &netErr) {
-			return netErr.Temporary()
+			return netErr.Timeout()
 		}
 		return false
 	default:
@@ -363,8 +363,8 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 
 	// Use the current BackoffMultiplier for interval (not the new one)
 	backoffInterval := endpoint.CheckInterval * time.Duration(endpoint.BackoffMultiplier)
-	if backoffInterval > MaxBackoffSeconds {
-		backoffInterval = MaxBackoffSeconds
+	if backoffInterval > MaxBackoff {
+		backoffInterval = MaxBackoff
 	}
 
 	return backoffInterval, multiplier

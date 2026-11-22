@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -680,7 +679,7 @@ func (e *teiError) writePlain(w http.ResponseWriter) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(e.status)
 	// text/plain with nosniff is never rendered as HTML; this is a test mock.
-	_, _ = io.WriteString(w, e.msg) //nolint:gosec // G705: plain-text body, not HTML
+	_, _ = io.WriteString(w, e.msg)
 }
 
 // write emits the native {"error","error_type"} shape.
@@ -1333,10 +1332,4 @@ func (srv *mockServer) handleTEIMetrics(w http.ResponseWriter, _ *http.Request) 
 	fmt.Fprint(w, "# HELP tei_mock_requests_total Mock request counter\n"+
 		"# TYPE tei_mock_requests_total counter\n"+
 		"tei_mock_requests_total 0\n")
-}
-
-// contextDone returns a closed channel when ctx is already done, otherwise the
-// ctx.Done() channel. Used in select statements that must compile on Go 1.24.
-func contextDone(ctx context.Context) <-chan struct{} {
-	return ctx.Done()
 }

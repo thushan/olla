@@ -12,7 +12,7 @@ This guide covers setting up a complete development environment for Olla.
 
 ### Required
 
-- **Go 1.24**: [Download Go](https://golang.org/dl/). Olla pins to 1.24; several `golang.org/x/*` packages have moved to 1.25 and are held back. See the dependencies note in `CLAUDE.md` if you plan to update them.
+- **Go 1.27**: [Download Go](https://golang.org/dl/). `go.mod` sets 1.27.0 as the minimum to build from source and a `toolchain` line (go1.27.4) naming the patch release CI and releases build with; a local Go older than that downloads it automatically.
 - **Git**: For version control
 - **Make**: Build automation
 
@@ -308,7 +308,7 @@ make docker-run
 
 ### GoLand/IntelliJ
 
-1. Set Go SDK to 1.24+
+1. Set Go SDK to 1.27+
 2. Enable Go modules
 3. Configure run configuration with `--config config/config.local.yaml`
 4. Enable golangci-lint file watcher

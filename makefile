@@ -7,8 +7,8 @@ USER := $(shell git config user.name 2>/dev/null || whoami)
 TOOL := "make"
 
 # Tool versions (pinned)
-GOLANGCI_LINT_VERSION := v2.11.4
-BETTERALIGN_VERSION := v0.8.2
+GOLANGCI_LINT_VERSION := v2.15.0
+BETTERALIGN_VERSION := v0.16.1
 BUN_VERSION := 1.3.5
 
 # Frontend locations. WEB_DIR is the Svelte source tree; EMBED_DIST is the

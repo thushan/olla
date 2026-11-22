@@ -404,6 +404,11 @@ func BenchmarkOllaObjectPools(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
+			// touch the fields so the pooled object is used the way a request would use it
+			ctx.requestID = "bench"
+			ctx.endpoint = "bench"
+			ctx.targetURL = "bench"
+			ctx.startTime = time.Time{}
 			reqPool.Put(ctx)
 		}
 	})

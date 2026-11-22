@@ -4,24 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"time"
 )
+
+const roleAssistant = "assistant"
 
 // inferenceRequest is the minimal request shape shared across all protocols.
 // Stream nil means "use protocol default" - true for Ollama, false for OpenAI.
 type inferenceRequest struct {
 	Stream *bool  `json:"stream"`
 	Model  string `json:"model"`
-}
-
-func parseInferenceRequest(r *http.Request) (inferenceRequest, error) {
-	var req inferenceRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
-		return inferenceRequest{}, err
-	}
-	return req, nil
 }
 
 // streamBool is true if stream==nil (use given default) or stream==value.
@@ -78,7 +71,7 @@ func (srv *mockServer) nonStreamOllamaChat(w http.ResponseWriter, model string) 
 		"model":      model,
 		"created_at": now,
 		"message": map[string]any{
-			"role":    "assistant",
+			"role":    roleAssistant,
 			"content": fmt.Sprintf("BACKEND:%s model:%s", srv.cfg.name, model),
 		},
 		"done":                 true,
@@ -132,7 +125,7 @@ func (srv *mockServer) streamOllamaChat(w http.ResponseWriter, r *http.Request, 
 			"model":      model,
 			"created_at": now,
 			"message": map[string]any{
-				"role":    "assistant",
+				"role":    roleAssistant,
 				"content": fmt.Sprintf("The answer is 42. BACKEND:%s model:%s chunk:%d", srv.cfg.name, model, i),
 			},
 			"done": false,
@@ -147,7 +140,7 @@ func (srv *mockServer) streamOllamaChat(w http.ResponseWriter, r *http.Request, 
 		"model":      model,
 		"created_at": now,
 		"message": map[string]any{
-			"role":    "assistant",
+			"role":    roleAssistant,
 			"content": "",
 		},
 		"done":                 true,
@@ -238,7 +231,7 @@ func (srv *mockServer) nonStreamOpenAIChat(w http.ResponseWriter, model string) 
 			{
 				"index": 0,
 				"message": map[string]any{
-					"role":    "assistant",
+					"role":    roleAssistant,
 					"content": fmt.Sprintf("BACKEND:%s reply", srv.cfg.name),
 				},
 				"finish_reason": "stop",
@@ -281,7 +274,7 @@ func (srv *mockServer) streamOpenAIChat(w http.ResponseWriter, r *http.Request, 
 				{
 					"index": 0,
 					"delta": map[string]any{
-						"role":    "assistant",
+						"role":    roleAssistant,
 						"content": fmt.Sprintf("BACKEND:%s reply: chunk %d", srv.cfg.name, i),
 					},
 					"finish_reason": nil,
@@ -440,7 +433,7 @@ func (srv *mockServer) nonStreamAnthropic(w http.ResponseWriter, model string) {
 	resp := map[string]any{
 		"id":    "msg_mock_001",
 		"type":  "message",
-		"role":  "assistant",
+		"role":  roleAssistant,
 		"model": model,
 		"content": []map[string]any{
 			{
@@ -474,7 +467,7 @@ func (srv *mockServer) streamAnthropic(w http.ResponseWriter, r *http.Request, m
 		"message": map[string]any{
 			"id":    "msg_mock_001",
 			"type":  "message",
-			"role":  "assistant",
+			"role":  roleAssistant,
 			"model": model,
 			"usage": map[string]any{
 				"input_tokens":  10,

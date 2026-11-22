@@ -16,6 +16,9 @@ import (
 	"github.com/thushan/olla/internal/util"
 )
 
+// openAIModelsPath is the OpenAI-format model listing, relative to a provider prefix.
+const openAIModelsPath = "v1/models"
+
 // staticRoute captures the minimal routing info needed when profile loading is unavailable
 type staticRoute struct {
 	path        string
@@ -341,7 +344,7 @@ func (a *Application) registerProviderPrefixRoutes(prefix, profileName string, c
 
 	// OpenAI compatibility enables cross-provider client support
 	if config.API.OpenAICompatible {
-		openAIPath := basePath + "v1/models"
+		openAIPath := basePath + openAIModelsPath
 
 		// Provider-specific handlers optimise for their unique response formats
 		switch profileName {
@@ -396,7 +399,7 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 			prefixes: []string{constants.ProviderTypeLemonade},
 			routes: []staticRoute{
 				{path: "api/v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeLemonade, constants.ProviderTypeOpenAI), description: "Lemonade models (OpenAI format)", method: "GET"},
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeLemonade, constants.ProviderTypeOpenAI), description: "Lemonade models (OpenAI format alt path)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeLemonade, constants.ProviderTypeOpenAI), description: "Lemonade models (OpenAI format alt path)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "Lemonade proxy", isProxy: true},
 			},
 		},
@@ -404,7 +407,7 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 			prefixes: []string{constants.ProviderTypeOllama},
 			routes: []staticRoute{
 				{path: "api/tags", handler: a.ollamaModelsHandler, description: "models listing", method: "GET"},
-				{path: "v1/models", handler: a.ollamaOpenAIModelsHandler, description: "models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.ollamaOpenAIModelsHandler, description: "models (OpenAI format)", method: "GET"},
 				{path: "api/ps", handler: a.ollamaRunningModelsHandler, description: "running models", method: "GET", rateLimited: true},
 				{path: "api/show", handler: a.ollamaModelShowHandler, description: "model details", method: routeMethodAny},
 				{path: "api/pull", handler: a.unsupportedModelManagementHandler, description: "Model pull (unsupported)", method: routeMethodAny},
@@ -420,7 +423,7 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 			// Mirror the prefixes from lmstudio.yaml for consistency
 			prefixes: []string{constants.ProviderPrefixLMStudio1, constants.ProviderPrefixLMStudio2, constants.ProviderPrefixLMStudio3},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.lmstudioOpenAIModelsHandler, description: "models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.lmstudioOpenAIModelsHandler, description: "models (OpenAI format)", method: "GET"},
 				{path: "api/v1/models", handler: a.lmstudioOpenAIModelsHandler, description: "models (OpenAI format alt path)", method: "GET"},
 				{path: "api/v0/models", handler: a.lmstudioEnhancedModelsHandler, description: "enhanced models", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "proxy", isProxy: true},
@@ -429,49 +432,49 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 		constants.ProviderTypeOpenAI: {
 			prefixes: []string{constants.ProviderTypeOpenAI},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.openaiModelsHandler, description: "OpenAI-compatible models", method: "GET"},
+				{path: openAIModelsPath, handler: a.openaiModelsHandler, description: "OpenAI-compatible models", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "OpenAI-compatible proxy", isProxy: true},
 			},
 		},
 		constants.ProviderTypeLMDeploy: {
 			prefixes: []string{constants.ProviderTypeLMDeploy},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeLMDeploy, constants.ProviderTypeOpenAI), description: "LMDeploy models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeLMDeploy, constants.ProviderTypeOpenAI), description: "LMDeploy models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "LMDeploy proxy", isProxy: true},
 			},
 		},
 		constants.ProviderTypeSGLang: {
 			prefixes: []string{constants.ProviderTypeSGLang},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeSGLang, constants.ProviderTypeOpenAI), description: "SGLang models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeSGLang, constants.ProviderTypeOpenAI), description: "SGLang models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "SGLang proxy", isProxy: true},
 			},
 		},
 		constants.ProviderTypeVLLM: {
 			prefixes: []string{constants.ProviderTypeVLLM},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeVLLM, constants.ProviderTypeOpenAI), description: "vLLM models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeVLLM, constants.ProviderTypeOpenAI), description: "vLLM models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "vLLM proxy", isProxy: true},
 			},
 		},
 		constants.ProviderTypeOMLX: {
 			prefixes: []string{constants.ProviderPrefixOMLX},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeOMLX, constants.ProviderTypeOpenAI), description: "oMLX models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeOMLX, constants.ProviderTypeOpenAI), description: "oMLX models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "oMLX proxy", isProxy: true},
 			},
 		},
 		constants.ProviderTypeRapidMLX: {
 			prefixes: []string{constants.ProviderPrefixRapidMLX},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeRapidMLX, constants.ProviderTypeOpenAI), description: "Rapid-MLX models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeRapidMLX, constants.ProviderTypeOpenAI), description: "Rapid-MLX models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "Rapid-MLX proxy", isProxy: true},
 			},
 		},
 		constants.ProviderTypeDockerMR: {
 			prefixes: []string{constants.ProviderPrefixDockerMR},
 			routes: []staticRoute{
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeDockerMR, constants.ProviderTypeOpenAI), description: "Docker Model Runner models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeDockerMR, constants.ProviderTypeOpenAI), description: "Docker Model Runner models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "Docker Model Runner proxy", isProxy: true},
 			},
 		},
@@ -480,7 +483,7 @@ func getStaticProviders(a *Application) map[string]staticProvider {
 			routes: []staticRoute{
 				// /info is TEI's discovery path - model metadata, not a listing -
 				// so it is left to the catch-all proxy and forwarded verbatim.
-				{path: "v1/models", handler: a.genericProviderModelsHandler(constants.ProviderTypeTextEmbeddingsInference, constants.ProviderTypeOpenAI), description: "Text Embeddings Inference models (OpenAI format)", method: "GET"},
+				{path: openAIModelsPath, handler: a.genericProviderModelsHandler(constants.ProviderTypeTextEmbeddingsInference, constants.ProviderTypeOpenAI), description: "Text Embeddings Inference models (OpenAI format)", method: "GET"},
 				{path: "", handler: a.providerProxyHandler, description: "Text Embeddings Inference proxy", isProxy: true},
 			},
 		},
@@ -499,12 +502,13 @@ func (a *Application) registerStaticProviderRoutes() {
 
 			// Human-readable names for logging and debugging
 			displayName := providerName
-			if providerName == constants.ProviderTypeLMStudio {
+			switch providerName {
+			case constants.ProviderTypeLMStudio:
 				displayName = constants.ProviderDisplayLMStudio
 				if prefix != constants.ProviderPrefixLMStudio1 {
 					displayName += fmt.Sprintf(" (%s)", prefix)
 				}
-			} else if providerName == constants.ProviderTypeOllama {
+			case constants.ProviderTypeOllama:
 				displayName = constants.ProviderDisplayOllama
 			}
 

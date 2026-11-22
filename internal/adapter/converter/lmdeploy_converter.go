@@ -44,7 +44,7 @@ func (c *LMDeployConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 	}
 
 	return profile.LMDeployResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -63,7 +63,7 @@ func (c *LMDeployConverter) convertModel(model *domain.UnifiedModel) *profile.LM
 
 	m := &profile.LMDeployModel{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 	}

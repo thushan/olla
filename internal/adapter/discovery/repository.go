@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -169,7 +170,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 		endpointURL, err := url.Parse(cfg.URL)
 		if err != nil {
-			return fmt.Errorf("invalid endpoint URL %q: %w", cfg.URL, err)
+			return malformedEndpointURLError(cfg.URL, err)
 		}
 
 		urlString := endpointURL.String()
@@ -406,6 +407,65 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 	}
 
 	return nil
+}
+
+// malformedEndpointURLError reports a URL that failed to parse without echoing
+// its userinfo. validateEndpointConfig can only redact credentials from URLs
+// that parse, so a malformed one (bad port, unbracketed IPv6) would otherwise
+// carry the username and password into the startup error and its log line.
+// The parser's own detail is dropped whenever the input holds an '@', because it
+// quotes fragments of the input (an "invalid port" message repeats whatever
+// followed the first ':', which is the password when it contains a '/', '?' or
+// '#'). Detail is kept only when there is no userinfo to leak.
+func malformedEndpointURLError(raw string, err error) error {
+	if !strings.Contains(raw, "@") {
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return fmt.Errorf("invalid endpoint URL %q: %w", raw, err)
+	}
+	return fmt.Errorf("invalid endpoint URL %q: could not parse the URL; credentials belong in the auth block, not the URL",
+		redactURLUserinfo(raw))
+}
+
+// redactURLUserinfo replaces anything between the scheme and the last '@' in the
+// string with a placeholder. It works on the raw string because the input is, by
+// definition, unparseable, so '/', '?' and '#' cannot be trusted to end the
+// authority: a password may legitimately hold any of them. The cost is that an
+// '@' in the path or query swallows what precedes it, which is acceptable in an
+// error message.
+func redactURLUserinfo(raw string) string {
+	at := strings.LastIndex(raw, "@")
+	if at < 0 {
+		return raw
+	}
+	// The scheme survives only when it is a real one that precedes the last '@'.
+	// A credential written ahead of the scheme ("tok@http://host") would otherwise
+	// be mistaken for part of the scheme and kept.
+	prefix := ""
+	if i := strings.Index(raw, "://"); i > 0 && i+3 <= at && isURLScheme(raw[:i]) {
+		prefix = raw[:i+3]
+	}
+	return prefix + "<redacted>" + raw[at:]
+}
+
+// isURLScheme reports whether s is a valid RFC 3986 scheme:
+// ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ).
+func isURLScheme(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z':
+		case i > 0 && (c >= '0' && c <= '9' || c == '+' || c == '-' || c == '.'):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // DuplicateEndpointURLWarnings describes each endpoint whose URL an earlier endpoint already

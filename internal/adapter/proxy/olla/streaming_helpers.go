@@ -48,10 +48,9 @@ func writeStreamData(w http.ResponseWriter, data []byte, isStreaming bool, rc *h
 	// Force data out for real-time streaming
 	// ResponseController provides better error handling than direct Flusher interface
 	if isStreaming {
-		if flushErr := rc.Flush(); flushErr != nil {
-			// Don't fail on flush errors - response may still succeed
-			// Flush errors are typically benign (e.g., client already disconnected)
-		}
+		// Don't fail on flush errors - response may still succeed
+		// Flush errors are typically benign (e.g., client already disconnected)
+		_ = rc.Flush()
 	}
 
 	return written, nil

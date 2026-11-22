@@ -65,10 +65,6 @@ var _ net.Error = (*connectionResetError)(nil)
 func TestIsConnectionError(t *testing.T) {
 	t.Parallel()
 
-	// A genuine net.Error that is NOT a context error.
-	type urlError struct{ msg string }
-	_ = urlError{}
-
 	tests := []struct {
 		name string
 		err  error

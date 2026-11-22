@@ -52,7 +52,7 @@ func (c *LMStudioConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 	}
 
 	return LMStudioModelResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -75,7 +75,7 @@ func (c *LMStudioConverter) convertModel(model *domain.UnifiedModel) *LMStudioMo
 
 	return &LMStudioModelData{
 		ID:               helper.Alias,
-		Object:           "model",
+		Object:           objectModel,
 		Type:             modelType,
 		Publisher:        publisher,
 		Arch:             model.Family,

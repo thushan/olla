@@ -3,7 +3,6 @@ package anthropic
 import (
 	"context"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -465,10 +464,4 @@ func TestProcessStreamLine_ReasoningContentAndToolCallsInOneChunk(t *testing.T) 
 	if textStopIdx > -1 && toolStartIdx > -1 {
 		assert.Less(t, textStopIdx, toolStartIdx, "text block must stop before tool_use block opens")
 	}
-}
-
-// validateStreamingParseTests is a compile-time guard — if any of the above
-// helper dependencies shift, this will fail to compile rather than silently pass.
-func validateStreamingParseTests() {
-	_ = strings.Builder{}
 }

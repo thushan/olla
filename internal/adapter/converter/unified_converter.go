@@ -67,7 +67,7 @@ func (c *UnifiedConverter) ConvertToFormat(models []*domain.UnifiedModel, filter
 	}
 
 	return UnifiedModelResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -90,7 +90,7 @@ func (c *UnifiedConverter) convertModel(model *domain.UnifiedModel) UnifiedModel
 
 	return UnifiedModelData{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: time.Now().Unix(),
 		OwnedBy: "olla",
 		Olla: &OllaExtensions{

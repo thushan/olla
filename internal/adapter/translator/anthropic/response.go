@@ -47,7 +47,7 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 	anthropicResp := AnthropicResponse{
 		ID:    t.generateMessageID(),
 		Type:  "message",
-		Role:  "assistant",
+		Role:  roleAssistant,
 		Model: t.extractModel(respMap),
 	}
 

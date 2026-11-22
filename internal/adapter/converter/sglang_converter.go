@@ -41,7 +41,7 @@ func (c *SGLangConverter) ConvertToFormat(models []*domain.UnifiedModel, filters
 	}
 
 	return profile.SGLangResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -61,7 +61,7 @@ func (c *SGLangConverter) convertModel(model *domain.UnifiedModel) *profile.SGLa
 
 	sglangModel := &profile.SGLangModel{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 		Root:    modelID, // SGLang typically sets root to the model ID

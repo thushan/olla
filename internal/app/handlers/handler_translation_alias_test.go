@@ -37,7 +37,7 @@ func TestPrepareProxyContext_InjectsAliasMapWhenPresent(t *testing.T) {
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
 	ctx := context.Background()
 
-	ctx, r = app.prepareProxyContext(ctx, r, pr)
+	_, r = app.prepareProxyContext(ctx, r, pr)
 
 	// Alias map should be retrievable from the resulting context
 	rawMap := r.Context().Value(constants.ContextModelAliasMapKey)
@@ -70,7 +70,7 @@ func TestPrepareProxyContext_NoAliasMapWhenNoneStored(t *testing.T) {
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
 	ctx := context.Background()
 
-	ctx, r = app.prepareProxyContext(ctx, r, pr)
+	_, r = app.prepareProxyContext(ctx, r, pr)
 
 	// No alias map should be in context for non-alias requests
 	rawMap := r.Context().Value(constants.ContextModelAliasMapKey)
@@ -94,7 +94,7 @@ func TestPrepareProxyContext_NilProfile(t *testing.T) {
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
 	ctx := context.Background()
 
-	ctx, r = app.prepareProxyContext(ctx, r, pr)
+	_, r = app.prepareProxyContext(ctx, r, pr)
 
 	// Should not panic with nil profile and should still set the model
 	rawMap := r.Context().Value(constants.ContextModelAliasMapKey)

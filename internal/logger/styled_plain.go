@@ -60,7 +60,7 @@ func (sl *PlainStyledLogger) InfoWithHealthCheck(msg string, endpoint string, ar
 }
 
 func (sl *PlainStyledLogger) InfoWithNumbers(msg string, numbers ...int64) {
-	var formattedNums []string
+	formattedNums := make([]string, 0, len(numbers))
 	for _, num := range numbers {
 		formattedNums = append(formattedNums, strconv.FormatInt(num, 10))
 	}

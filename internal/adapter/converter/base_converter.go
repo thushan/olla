@@ -6,6 +6,12 @@ import (
 	"github.com/thushan/olla/internal/core/domain"
 )
 
+// OpenAI-style "object" discriminators shared by every converter.
+const (
+	objectList  = "list"
+	objectModel = "model"
+)
+
 // Known AI model organisations for owner detection
 // Package-level to avoid allocations on every call
 // TODO: Move to TaxonomyService + Files

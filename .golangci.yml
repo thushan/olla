@@ -1,7 +1,7 @@
 version: "2"
 
 run:
-  go: "1.24"
+  go: "1.27"
   concurrency: 8
 
 linters:
@@ -20,10 +20,11 @@ linters:
     - gocognit
     - goconst
     - gocritic
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - govet
+    - ineffassign
     - intrange
     - makezero
     - misspell
@@ -33,13 +34,16 @@ linters:
     - nolintlint
     - nosprintfhostport
     - perfsprint
+    - prealloc
     - predeclared
     - reassign
     - revive
     # - tagliatelle
+    - staticcheck
     - testifylint
     - unconvert
     - unparam
+    - unused
     - usetesting
     - wastedassign
 
@@ -64,11 +68,31 @@ linters:
         - shadow
     gocognit:
       min-complexity: 30
+    goconst:
+      # Short, repeated literals are mostly map keys and field names, where a
+      # constant adds indirection without removing a magic string.
+      min-len: 4
+      min-occurrences: 5
+      ignore-map-keys: true
     misspell:
       ignore-rules:
         - thushan
     perfsprint:
       strconcat: false
+    staticcheck:
+      checks:
+        - all
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        - -QF1008  # explicit embedded selectors are deliberate in the registry/proxy wrappers
+        # The context key constants are plain strings on purpose: the same constants
+        # are slog keys, InspectionMeta keys and util.StripRoutePrefix lookups, so
+        # typing them breaks those. Typing the context keys is its own change.
+        - -SA1029
     testifylint:
       enable-all: true
 
@@ -89,6 +113,8 @@ linters:
           - noctx
           - perfsprint
           - predeclared
+          - prealloc
+          - staticcheck
           - testifylint
           - unconvert
           - unparam

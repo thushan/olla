@@ -94,7 +94,7 @@ Agent-driven end-to-end validation against mock backends - no Docker, no real in
 Gates on `make ready` first, then boots seven `test/cmd/ollamock` instances (ports 19431–19437) plus two Olla instances (`test/validate/config.validate*.yaml`, ports 41141/41142) and fans out parallel agents per area. Reports land in `test/results/`. ollamock speaks OpenAI, Ollama-native, LM Studio, Lemonade and Anthropic wire formats with runtime fault injection via `/_mock/behaviour` (see `test/cmd/ollamock/README.md`). Full docs: `docs/content/development/validation.md`.
 
 ## Development Guidelines
-- **Go 1.24** - do not bump to 1.25 (see pins below).
+- **Go 1.27** - the `go` line sets the minimum and the GODEBUG defaults; `toolchain go1.27.4` sets the toolchain CI and releases build with (setup-go reads it). Raise the toolchain line, not the `go` line, to pick up stdlib security patches.
 - Australian English for comments and documentation. No em-dashes.
 - Comment on **why**, not **what**. Concise and direct.
 - Production code must not panic - guard closes with CAS or `sync.Once`.
@@ -112,12 +112,6 @@ Do not add dependencies unless explicitly asked.
 "golang.org/x/sync"              // errgroup
 "golang.org/x/time"              // rate limiting
 ```
-
-### Go 1.24 Compatibility Pins
-From the versions below onward the upstream `go` directive moves to 1.25, so these are held back. `go get -u ./...` silently bumps the toolchain by pulling them - afterwards re-pin in `go.mod`, or use `go get -u=patch ./...`.
-
-- `golang.org/x/sys` v0.41.0 · `golang.org/x/term` v0.40.0 · `golang.org/x/text` v0.34.0
-- `golang.org/x/sync` v0.19.0 · `golang.org/x/time` v0.14.0 · `atomicgo.dev/keyboard` v0.2.9
 
 ## Sub-Agent Delegation
 CRITICAL: delegate work to the appropriate subagent; use the main context only for orchestration and task decomposition.

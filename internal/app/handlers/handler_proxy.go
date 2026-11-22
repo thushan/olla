@@ -542,77 +542,84 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 			return
 		}
 		pr.requestLogger.Error("Request failed", append([]any{"error", err}, logFields...)...)
-	} else {
-		// Log essential completion info at INFO level
-		infoFields := []any{
-			"endpoint", pr.stats.EndpointName,
-			"duration_ms", duration.Milliseconds(),
-			"status", "completed",
-		}
-
-		if pr.upstreamStatus > 0 {
-			infoFields = append(infoFields, "http_status", pr.upstreamStatus)
-		}
-
-		if pr.model != "" {
-			infoFields = append(infoFields, "model", pr.model)
-		}
-
-		if pr.stats.TotalBytes > 0 {
-			infoFields = append(infoFields, "total_bytes", pr.stats.TotalBytes)
-		}
-
-		// translator_mode is only set on translation handler requests
-		if pr.translatorMode != "" {
-			infoFields = append(infoFields, "translator_mode", string(pr.translatorMode))
-		}
-
-		infoFields = appendProviderMetricFields(infoFields, pr.stats.ProviderMetrics)
-
-		// routing fields at INFO so operators can see the strategy without enabling DEBUG
-		if rd := pr.stats.RoutingDecision; rd != nil {
-			if rd.Strategy != "" {
-				infoFields = append(infoFields, "routing_strategy", rd.Strategy)
-			}
-			if rd.Action != "" {
-				infoFields = append(infoFields, "routing_action", rd.Action)
-			}
-			if rd.Reason != "" {
-				infoFields = append(infoFields, "routing_reason", rd.Reason)
-			}
-		}
-
-		// "disabled" carries no signal; omit it to avoid noise in deployments without sticky sessions
-		if pr.stickyOutcome != "" && pr.stickyOutcome != "disabled" {
-			infoFields = append(infoFields, "sticky_outcome", pr.stickyOutcome)
-		}
-
-		// the client-supplied session id, logged alongside the outcome so affinity
-		// routing can be traced without enabling DEBUG
-		if pr.sessionID != "" {
-			infoFields = append(infoFields, "session_id", pr.sessionID)
-		}
-
-		// FallbackReasonNone is the empty string (passthrough succeeded); omit it
-		// because it would appear on the majority of requests and adds no signal
-		if pr.translatorFallbackReason != "" {
-			infoFields = append(infoFields, "fallback_reason", pr.translatorFallbackReason)
-		}
-
-		// A backend 5xx is a backend fault the operator should see when filtering on WARN.
-		// It is per request by design: unlike Olla's own rejections (sampled by
-		// logRequestRejected) this is the only record of what the backend said. Backend 4xx
-		// is the caller's problem and stays at Info.
-		if pr.upstreamStatus >= http.StatusInternalServerError {
-			pr.requestLogger.Warn("Request completed", infoFields...)
-		} else {
-			pr.requestLogger.Info("Request completed", infoFields...)
-		}
-
-		// Log detailed metrics at DEBUG level
-		debugFields := a.buildLogFields(pr, duration)
-		pr.requestLogger.Debug("Request metrics", debugFields...)
+		return
 	}
+
+	a.logRequestCompleted(pr, duration)
+}
+
+// logRequestCompleted logs a finished request: essential fields at INFO (WARN for a backend
+// 5xx), full metrics at DEBUG.
+func (a *Application) logRequestCompleted(pr *proxyRequest, duration time.Duration) {
+	// Log essential completion info at INFO level
+	infoFields := []any{
+		"endpoint", pr.stats.EndpointName,
+		"duration_ms", duration.Milliseconds(),
+		"status", "completed",
+	}
+
+	if pr.upstreamStatus > 0 {
+		infoFields = append(infoFields, "http_status", pr.upstreamStatus)
+	}
+
+	if pr.model != "" {
+		infoFields = append(infoFields, "model", pr.model)
+	}
+
+	if pr.stats.TotalBytes > 0 {
+		infoFields = append(infoFields, "total_bytes", pr.stats.TotalBytes)
+	}
+
+	// translator_mode is only set on translation handler requests
+	if pr.translatorMode != "" {
+		infoFields = append(infoFields, "translator_mode", string(pr.translatorMode))
+	}
+
+	infoFields = appendProviderMetricFields(infoFields, pr.stats.ProviderMetrics)
+
+	// routing fields at INFO so operators can see the strategy without enabling DEBUG
+	if rd := pr.stats.RoutingDecision; rd != nil {
+		if rd.Strategy != "" {
+			infoFields = append(infoFields, "routing_strategy", rd.Strategy)
+		}
+		if rd.Action != "" {
+			infoFields = append(infoFields, "routing_action", rd.Action)
+		}
+		if rd.Reason != "" {
+			infoFields = append(infoFields, "routing_reason", rd.Reason)
+		}
+	}
+
+	// "disabled" carries no signal; omit it to avoid noise in deployments without sticky sessions
+	if pr.stickyOutcome != "" && pr.stickyOutcome != "disabled" {
+		infoFields = append(infoFields, "sticky_outcome", pr.stickyOutcome)
+	}
+
+	// the client-supplied session id, logged alongside the outcome so affinity
+	// routing can be traced without enabling DEBUG
+	if pr.sessionID != "" {
+		infoFields = append(infoFields, "session_id", pr.sessionID)
+	}
+
+	// FallbackReasonNone is the empty string (passthrough succeeded); omit it
+	// because it would appear on the majority of requests and adds no signal
+	if pr.translatorFallbackReason != "" {
+		infoFields = append(infoFields, "fallback_reason", pr.translatorFallbackReason)
+	}
+
+	// A backend 5xx is a backend fault the operator should see when filtering on WARN.
+	// It is per request by design: unlike Olla's own rejections (sampled by
+	// logRequestRejected) this is the only record of what the backend said. Backend 4xx
+	// is the caller's problem and stays at Info.
+	if pr.upstreamStatus >= http.StatusInternalServerError {
+		pr.requestLogger.Warn("Request completed", infoFields...)
+	} else {
+		pr.requestLogger.Info("Request completed", infoFields...)
+	}
+
+	// Log detailed metrics at DEBUG level
+	debugFields := a.buildLogFields(pr, duration)
+	pr.requestLogger.Debug("Request metrics", debugFields...)
 }
 
 // appendProviderMetricFields adds the backend-reported usage fields that are worth an INFO line.
@@ -759,50 +766,58 @@ func (a *Application) stripRoutePrefix(ctx context.Context, path string) string 
 	return util.StripRoutePrefix(ctx, path, constants.ContextRoutePrefixKey)
 }
 
+// filterEndpointsByPlatform is stage 1 of filterEndpointsByProfile: platform
+// compatibility (ollama can't handle openai requests etc). failedClosed reports
+// a provider-scoped request with no endpoint of that type, where the caller must
+// return the empty set rather than fall back to another provider.
+func filterEndpointsByPlatform(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) (filtered []*domain.Endpoint, failedClosed bool) {
+	if profile == nil || len(profile.SupportedBy) == 0 {
+		logger.Debug("No profile filtering applied", "total_endpoints", len(endpoints))
+		return endpoints, false
+	}
+
+	compatible := make([]*domain.Endpoint, 0, len(endpoints))
+	for _, endpoint := range endpoints {
+		// Normalise endpoint type to handle variations (e.g., lmstudio -> lm-studio)
+		normalizedType := NormaliseProviderType(endpoint.Type)
+		if profile.IsCompatibleWith(normalizedType) {
+			compatible = append(compatible, endpoint)
+		}
+	}
+
+	if len(compatible) > 0 {
+		logger.Debug("Filtered endpoints by profile compatibility",
+			"path", profile.Path,
+			"compatible_count", len(compatible),
+			"total_count", len(endpoints),
+			"supported_by", profile.SupportedBy)
+		return compatible, false
+	}
+
+	if profile.FailClosedOnNoMatch {
+		// Provider-scoped request (e.g. /olla/vllm/) with zero healthy
+		// endpoints of that type: return the empty set so the caller's
+		// existing no-routable-endpoints path produces a proper 404/503,
+		// instead of silently crossing into another provider type.
+		// Debug, not Warn: a client can repeat this at wire speed. The sampled
+		// "Request rejected" line carries the cause ("No <type> endpoints available").
+		logger.Debug("No compatible endpoints found for provider-scoped path, failing closed",
+			"path", profile.Path,
+			"supported_by", profile.SupportedBy,
+			"total_endpoints", len(endpoints))
+		return nil, true
+	}
+	logNoCompatibleFallback(logger, profile, len(endpoints))
+	return endpoints, false
+}
+
 // three-stage filtering pipeline that progressively narrows down endpoints.
 // starts broad (platform compatibility), then capabilities (vision, embeddings),
 // finally specific model availability. each stage falls back gracefully.
 func (a *Application) filterEndpointsByProfile(endpoints []*domain.Endpoint, profile *domain.RequestProfile, logger logger.StyledLogger) []*domain.Endpoint {
-	var profileFiltered []*domain.Endpoint
-
-	// stage 1: platform compatibility (ollama can't handle openai requests etc)
-	if profile == nil || len(profile.SupportedBy) == 0 {
-		logger.Debug("No profile filtering applied", "total_endpoints", len(endpoints))
-		profileFiltered = endpoints
-	} else {
-		compatible := make([]*domain.Endpoint, 0, len(endpoints))
-		for _, endpoint := range endpoints {
-			// Normalise endpoint type to handle variations (e.g., lmstudio -> lm-studio)
-			normalizedType := NormaliseProviderType(endpoint.Type)
-			if profile.IsCompatibleWith(normalizedType) {
-				compatible = append(compatible, endpoint)
-			}
-		}
-
-		if len(compatible) == 0 {
-			if profile.FailClosedOnNoMatch {
-				// Provider-scoped request (e.g. /olla/vllm/) with zero healthy
-				// endpoints of that type: return the empty set so the caller's
-				// existing no-routable-endpoints path produces a proper 404/503,
-				// instead of silently crossing into another provider type.
-				// Debug, not Warn: a client can repeat this at wire speed. The sampled
-				// "Request rejected" line carries the cause ("No <type> endpoints available").
-				logger.Debug("No compatible endpoints found for provider-scoped path, failing closed",
-					"path", profile.Path,
-					"supported_by", profile.SupportedBy,
-					"total_endpoints", len(endpoints))
-				return nil
-			}
-			logNoCompatibleFallback(logger, profile, len(endpoints))
-			profileFiltered = endpoints
-		} else {
-			logger.Debug("Filtered endpoints by profile compatibility",
-				"path", profile.Path,
-				"compatible_count", len(compatible),
-				"total_count", len(endpoints),
-				"supported_by", profile.SupportedBy)
-			profileFiltered = compatible
-		}
+	profileFiltered, failedClosed := filterEndpointsByPlatform(endpoints, profile, logger)
+	if failedClosed {
+		return nil
 	}
 
 	// stage 2: capability filtering (vision requests need vision models).

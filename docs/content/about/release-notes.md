@@ -14,7 +14,27 @@ Breaking changes are tagged **Breaking**. Additions and fixes are tagged **Added
 **Fixed**. Behaviour changes that need no migration are tagged **Changed**. Quoted field
 names and config keys are the literal wire or YAML identifiers.
 
-## v0.1.1
+## v0.2.0
+
+### Breaking: Go 1.27 is required to build from source
+
+`go.mod` now declares `go 1.27.0` with `toolchain go1.27.4`, so building needs Go 1.27 or later and a patched toolchain is fetched automatically when yours is older. The binaries and container images are unaffected apart from the macOS note below. Dependencies are updated, including `golang.org/x/*`, `expr-lang/expr`, `testify`, `gjson` and `pterm`. Contributors need golangci-lint v2.15.0 and betteralign v0.16.1 (`make install-deps`); the older pins fail on Go 1.27.
+
+### Breaking: macOS binaries need macOS 13 or later
+
+Go 1.27 no longer targets macOS 12 and earlier, so the `darwin` archives will not run there. Linux, FreeBSD and Windows targets are unchanged.
+
+### Breaking: unbracketed IPv6 endpoint URLs are rejected
+
+Go 1.26 made `net/url` strict about colons in the host, so an endpoint such as `http://::1:11434` no longer parses and Olla fails at startup with `invalid endpoint URL`. Wrap the address in brackets: `http://[::1]:11434`. Hostnames, IPv4 addresses and already-bracketed IPv6 addresses are unaffected. `--validate-config` does not parse endpoint URLs, so it still reports a pass; the error appears when discovery loads the endpoints.
+
+### Fixed: a malformed endpoint URL no longer echoes its credentials
+
+When an endpoint URL failed to parse, the startup error and log line quoted the raw URL, including any `user:password@` or token-as-username in it. The error now shows the URL with the userinfo replaced by `<redacted>`. Valid URLs that carry userinfo are still rejected at startup, as before.
+
+### Changed: release images are built with GoReleaser's `dockers_v2`
+
+The published tags are the same: `latest`, the full tag, `vMAJOR` and `vMAJOR.MINOR`, each as a multi-arch manifest (`linux/amd64`, `linux/arm64`) and as `-amd64` and `-arm64` single-arch tags. Release builds now use `Dockerfile.goreleaser`; the root `Dockerfile` remains for `make docker-build-local`. Prerelease tags still publish nothing.
 
 ### Changed: duplicate endpoint URLs now log a warning
 

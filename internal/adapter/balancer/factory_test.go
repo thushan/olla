@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"testing"
-	"time"
 
 	"github.com/thushan/olla/internal/core/ports"
 
@@ -270,26 +268,4 @@ func (m *mockEndpointSelector) DecrementConnections(endpoint *domain.Endpoint) {
 	if m.statsCollector != nil {
 		m.statsCollector.RecordConnection(endpoint, -1)
 	}
-}
-
-// Helper function to create test endpoints
-func createTestEndpoints(count int, status domain.EndpointStatus) []*domain.Endpoint {
-	endpoints := make([]*domain.Endpoint, count)
-	for i := range count {
-		port := 11434 + i
-		testURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d", port))
-		healthURL, _ := url.Parse(fmt.Sprintf("http://localhost:%d/health", port))
-		endpoints[i] = &domain.Endpoint{
-			Name:                 fmt.Sprintf("endpoint-%d", i),
-			URL:                  testURL,
-			URLString:            testURL.String(),
-			HealthCheckURL:       healthURL,
-			HealthCheckURLString: healthURL.String(),
-			Status:               status,
-			Priority:             100 + i,
-			CheckInterval:        5 * time.Second,
-			CheckTimeout:         2 * time.Second,
-		}
-	}
-	return endpoints
 }

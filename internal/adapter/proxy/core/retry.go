@@ -596,8 +596,8 @@ func (h *RetryHandler) markEndpointUnhealthy(ctx context.Context, endpoint *doma
 		}
 	}
 
-	if backoffInterval > constants.DefaultMaxBackoffSeconds {
-		backoffInterval = constants.DefaultMaxBackoffSeconds
+	if backoffInterval > constants.DefaultMaxBackoff {
+		backoffInterval = constants.DefaultMaxBackoff
 	}
 	endpointCopy.NextCheckTime = now.Add(backoffInterval)
 

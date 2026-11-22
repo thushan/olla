@@ -33,5 +33,5 @@ const (
 
 	// Alias the shared constants for backward compatibility
 	MaxBackoffMultiplier = constants.DefaultMaxBackoffMultiplier
-	MaxBackoffSeconds    = constants.DefaultMaxBackoffSeconds
+	MaxBackoff           = constants.DefaultMaxBackoff
 )

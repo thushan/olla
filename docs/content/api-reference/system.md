@@ -42,7 +42,7 @@ curl -X GET http://localhost:40114/version
   "build": {
     "commit": "abc123def",
     "date": "2026-04-15T10:00:00Z",
-    "go_version": "go1.24.0",
+    "go_version": "go1.27.4",
     "platform": "linux/amd64"
   },
   "capabilities": ["proxy", "load-balancing", "health-checking"],
@@ -543,7 +543,7 @@ curl -X GET http://localhost:40114/internal/process
   },
   "runtime": {
     "uptime": "2h30m15s",
-    "go_version": "go1.24.0",
+    "go_version": "go1.27.4",
     "num_cpu": 8,
     "gomaxprocs": 8
   },

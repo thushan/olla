@@ -251,7 +251,7 @@ func reportProcessStats(logger logger.StyledLogger, startTime time.Time) {
 	)
 
 	if buildInfo := stats.GetBuildInfoSummary(); len(buildInfo) > 0 {
-		var buildArgs []any
+		buildArgs := make([]any, 0, 2*len(buildInfo))
 		for key, value := range buildInfo {
 			buildArgs = append(buildArgs, key, value)
 		}

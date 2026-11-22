@@ -53,7 +53,7 @@ release:
     **Documentation:** [thushan.github.io/olla](https://thushan.github.io/olla/) | **Issues:** [github.com/thushan/olla/issues](https://github.com/thushan/olla/issues)
 
 snapshot:
-  name_template: '{{ incpatch .Version }}-{{.ShortCommit}}'
+  version_template: '{{ incpatch .Version }}-{{.ShortCommit}}'
 
 builds:
   - id: default
@@ -84,89 +84,94 @@ builds:
 #      - all=-trimpath={{ dir (default "." .Env.PWD) }}
 
 
-dockers:
-  - image_templates:
-      - "ghcr.io/thushan/olla:latest-amd64"
-      - "ghcr.io/thushan/olla:{{ .Tag }}-amd64"
-      - "ghcr.io/thushan/olla:v{{ .Major }}-amd64"
-      - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-amd64"
-    dockerfile: Dockerfile
-    goos: linux
-    goarch: amd64
-    use: buildx
-    build_flag_templates:
+# dockers_v2 builds every platform of an entry in one buildx run and pushes the
+# resulting multi-arch index under all of the entry's tags, so there is no
+# separate manifest step. The first entry therefore publishes the four tag
+# families as multi-arch manifests. The second and third publish the same
+# families as single-arch -amd64 and -arm64 tags, which are published today and
+# which users pin to. They build from Dockerfile.goreleaser, which copies the
+# binary from $TARGETPLATFORM/ (the root Dockerfile is for make
+# docker-build-local only).
+#
+# dockers_v2 has no skip_push: auto. The tags are unconditional, so without the
+# disable templates an RC tag would republish :latest, :v0 and :v0.0 to every
+# user. A prerelease is skipped entirely; a snapshot still builds (and loads
+# locally, which is what release-dryrun.yml boots). In a snapshot goreleaser
+# builds the first entry per platform and appends -amd64/-arm64 itself, so the
+# explicit single-arch entries are disabled there rather than double-suffixed.
+#
+# sbom and buildx provenance are off to keep what is published identical to the
+# legacy pipeline: the defaults attach attestation manifests (unknown/unknown
+# platforms) to every index and turn the single-arch tags into indexes too.
+dockers_v2:
+  - id: olla-multiarch
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - "ghcr.io/thushan/olla"
+    tags:
+      - "latest"
+      - "{{ .Tag }}"
+      - "v{{ .Major }}"
+      - "v{{ .Major }}.{{ .Minor }}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    disable: "{{ if and .Prerelease (not .IsSnapshot) }}true{{ end }}"
+    sbom: false
+    flags:
       - "--pull"
-      - "--platform=linux/amd64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--label=org.opencontainers.image.description=High-performance LLM front-end load balancer and proxy"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-    # The image_templates above are unconditional, so without this an RC tag
-    # would republish :latest, :v0 and :v0.0 to every user. "auto" skips the
-    # push for prereleases and snapshots only; a real tag publishes as normal.
-    skip_push: auto
-    extra_files:
-      # Exactly what the Dockerfile COPYs, alongside the binary goreleaser adds.
-      # Docker-flavoured config is staged under build/ by the before-hook above
-      # rather than overwriting the tracked root config.yaml.
+      - "--provenance=false"
+    labels: &olla-labels
+      org.opencontainers.image.created: "{{.Date}}"
+      org.opencontainers.image.title: "{{.ProjectName}}"
+      org.opencontainers.image.revision: "{{.FullCommit}}"
+      org.opencontainers.image.version: "{{.Version}}"
+      org.opencontainers.image.source: "{{.GitURL}}"
+      org.opencontainers.image.description: "High-performance LLM front-end load balancer and proxy"
+      org.opencontainers.image.licenses: "Apache-2.0"
+    extra_files: &olla-extra-files
+      # Exactly what Dockerfile.goreleaser COPYs, alongside the binaries
+      # goreleaser adds. Docker-flavoured config is staged under build/ by the
+      # before-hook above rather than overwriting the tracked root config.yaml.
       - build/docker-config.yaml
       - config/models.yaml
       - config/profiles/
-  - image_templates:
-      - "ghcr.io/thushan/olla:latest-arm64"
-      - "ghcr.io/thushan/olla:{{ .Tag }}-arm64"
-      - "ghcr.io/thushan/olla:v{{ .Major }}-arm64"
-      - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-arm64"
-    dockerfile: Dockerfile
-    goos: linux
-    goarch: arm64
-    use: buildx
-    build_flag_templates:
+  - id: olla-amd64
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - "ghcr.io/thushan/olla"
+    tags:
+      - "latest-amd64"
+      - "{{ .Tag }}-amd64"
+      - "v{{ .Major }}-amd64"
+      - "v{{ .Major }}.{{ .Minor }}-amd64"
+    platforms:
+      - linux/amd64
+    disable: "{{ if or .IsSnapshot .Prerelease }}true{{ end }}"
+    sbom: false
+    flags:
       - "--pull"
-      - "--platform=linux/arm64"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-      - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--label=org.opencontainers.image.description=High-performance LLM front-end load balancer and proxy"
-      - "--label=org.opencontainers.image.licenses=Apache-2.0"
-    # The image_templates above are unconditional, so without this an RC tag
-    # would republish :latest, :v0 and :v0.0 to every user. "auto" skips the
-    # push for prereleases and snapshots only; a real tag publishes as normal.
-    skip_push: auto
-    extra_files:
-      # Exactly what the Dockerfile COPYs, alongside the binary goreleaser adds.
-      # Docker-flavoured config is staged under build/ by the before-hook above
-      # rather than overwriting the tracked root config.yaml.
-      - build/docker-config.yaml
-      - config/models.yaml
-      - config/profiles/
-
-docker_manifests:
-  - skip_push: auto
-    name_template: ghcr.io/thushan/olla:latest
-    image_templates:
-        - "ghcr.io/thushan/olla:latest-amd64"
-        - "ghcr.io/thushan/olla:latest-arm64"
-  - skip_push: auto
-    name_template: ghcr.io/thushan/olla:{{ .Tag }}
-    image_templates:
-        - "ghcr.io/thushan/olla:{{ .Tag }}-amd64"
-        - "ghcr.io/thushan/olla:{{ .Tag }}-arm64"
-  - skip_push: auto
-    name_template: ghcr.io/thushan/olla:v{{ .Major }}
-    image_templates:
-        - "ghcr.io/thushan/olla:v{{ .Major }}-amd64"
-        - "ghcr.io/thushan/olla:v{{ .Major }}-arm64"
-  - skip_push: auto
-    name_template: ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}
-    image_templates:
-        - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-amd64"
-        - "ghcr.io/thushan/olla:v{{ .Major }}.{{ .Minor }}-arm64"
+      - "--provenance=false"
+    labels: *olla-labels
+    extra_files: *olla-extra-files
+  - id: olla-arm64
+    dockerfile: Dockerfile.goreleaser
+    images:
+      - "ghcr.io/thushan/olla"
+    tags:
+      - "latest-arm64"
+      - "{{ .Tag }}-arm64"
+      - "v{{ .Major }}-arm64"
+      - "v{{ .Major }}.{{ .Minor }}-arm64"
+    platforms:
+      - linux/arm64
+    disable: "{{ if or .IsSnapshot .Prerelease }}true{{ end }}"
+    sbom: false
+    flags:
+      - "--pull"
+      - "--provenance=false"
+    labels: *olla-labels
+    extra_files: *olla-extra-files
 
 checksum:
   name_template: "checksums.txt"
@@ -200,9 +205,9 @@ archives:
       - tmp/.gitkeep
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
       - goos: darwin
-        format: zip
+        formats: [zip]
     name_template: >-
       {{ .ProjectName }}_v{{- .Version }}_{{- if eq .Os "darwin" }}macos_{{- else }}{{ .Os }}_{{ end }}{{- .Arch }}
 

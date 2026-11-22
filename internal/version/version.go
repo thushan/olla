@@ -73,13 +73,13 @@ func PrintVersionInfo(extendedInfo bool, vlog *log.Logger) {
 
 	if extendedInfo {
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf(" Commit: %s\n", Commit))
-		b.WriteString(fmt.Sprintf("  Built: %s\n", Date))
-		b.WriteString(fmt.Sprintf("  Using: %s\n", Tool))
-		b.WriteString(fmt.Sprintf("   With: %s\n", Runtime))
-		b.WriteString(fmt.Sprintf("    For: %s\n", runtime.GOOS))
-		b.WriteString(fmt.Sprintf("     On: %s\n", runtime.GOARCH))
-		b.WriteString(fmt.Sprintf("     By: %s\n", User))
+		fmt.Fprintf(&b, " Commit: %s\n", Commit)
+		fmt.Fprintf(&b, "  Built: %s\n", Date)
+		fmt.Fprintf(&b, "  Using: %s\n", Tool)
+		fmt.Fprintf(&b, "   With: %s\n", Runtime)
+		fmt.Fprintf(&b, "    For: %s\n", runtime.GOOS)
+		fmt.Fprintf(&b, "     On: %s\n", runtime.GOARCH)
+		fmt.Fprintf(&b, "     By: %s\n", User)
 	}
 
 	vlog.Println(b.String())

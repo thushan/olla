@@ -41,7 +41,7 @@ func (c *LlamaCppConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 	}
 
 	return profile.LlamaCppResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -61,7 +61,7 @@ func (c *LlamaCppConverter) convertModel(model *domain.UnifiedModel) *profile.Ll
 
 	llamaModel := &profile.LlamaCppModel{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 	}

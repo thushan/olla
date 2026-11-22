@@ -66,15 +66,6 @@ func countExact(recs []capturedRecord, msg string) (n int) {
 	return n
 }
 
-func countMsg(recs []capturedRecord, prefix string) (n int) {
-	for _, r := range recs {
-		if strings.HasPrefix(r.msg, prefix) {
-			n++
-		}
-	}
-	return n
-}
-
 type fakeClock struct {
 	t  time.Time
 	mu sync.Mutex

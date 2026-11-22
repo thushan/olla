@@ -363,7 +363,7 @@ make clean
 make build
 
 # Check Go version
-go version  # Should be 1.24+
+go version  # Should be 1.27+
 
 # Update dependencies
 go mod tidy
@@ -391,7 +391,7 @@ Common setup issues:
 
 1. **Path Issues**: Ensure `$GOPATH/bin` is in your `$PATH`
 2. **Module Issues**: Run `go mod tidy` to fix dependency issues
-3. **Version Issues**: Use Go 1.24+ as specified in `go.mod`
+3. **Version Issues**: Use Go 1.27+ as specified in `go.mod`
 
 ### Performance Problems
 

@@ -1237,7 +1237,7 @@ func (a *Application) tokenCountHandler(trans translator.RequestTranslator) http
 				return
 			}
 			w.WriteHeader(http.StatusOK)
-			if _, wErr := w.Write(body); wErr != nil { //nolint:gosec // body is serialised JSON, not user-controlled data
+			if _, wErr := w.Write(body); wErr != nil {
 				a.logger.Error("Failed to write token count response", "error", wErr)
 			}
 		} else {

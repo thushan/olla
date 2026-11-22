@@ -39,13 +39,12 @@ type FilterStats struct {
 
 // IsEmpty returns true if no filter patterns are configured
 func (fc *FilterConfig) IsEmpty() bool {
-	return (fc.Include == nil || len(fc.Include) == 0) &&
-		(fc.Exclude == nil || len(fc.Exclude) == 0)
+	return len(fc.Include) == 0 && len(fc.Exclude) == 0
 }
 
 // HasIncludeAll returns true if the include patterns would include everything
 func (fc *FilterConfig) HasIncludeAll() bool {
-	if fc.Include == nil || len(fc.Include) == 0 {
+	if len(fc.Include) == 0 {
 		return true
 	}
 
@@ -94,12 +93,13 @@ func validatePattern(pattern string) error {
 		return errors.New("too many wildcards")
 	}
 
-	if asteriskCount == 1 {
+	switch asteriskCount {
+	case 1:
 		// Single wildcard should be at start or end
 		if !strings.HasPrefix(pattern, "*") && !strings.HasSuffix(pattern, "*") {
 			return errors.New("wildcards only supported at start and/or end")
 		}
-	} else if asteriskCount == 2 {
+	case 2:
 		// Two wildcards should only be at start and end for *text* pattern
 		if !strings.HasPrefix(pattern, "*") || !strings.HasSuffix(pattern, "*") {
 			return errors.New("wildcards only supported at start and/or end")

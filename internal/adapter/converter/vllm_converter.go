@@ -43,7 +43,7 @@ func (c *VLLMConverter) ConvertToFormat(models []*domain.UnifiedModel, filters p
 	}
 
 	return profile.VLLMResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -63,7 +63,7 @@ func (c *VLLMConverter) convertModel(model *domain.UnifiedModel) *profile.VLLMMo
 
 	vllmModel := &profile.VLLMModel{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 		Root:    modelID, // vLLM typically sets root to the model ID

@@ -1,0 +1,42 @@
+# Release image, built by goreleaser's dockers_v2 pipe (see .goreleaser.yml).
+#
+# This is the root Dockerfile with one difference: dockers_v2 builds every
+# platform in a single buildx invocation and lays the binaries out as
+# <os>/<arch>/olla in the build context, so the binary is copied from
+# $TARGETPLATFORM rather than the context root. The root Dockerfile stays as it
+# is because `make docker-build-local` builds it from the repo root, where the
+# freshly compiled binary sits beside it. Keep the two in step: base image,
+# user, files, healthcheck and entrypoint must match so a local image and a
+# release image behave identically.
+
+FROM alpine:latest
+
+# Set by buildx for each platform being built (for example linux/arm64).
+ARG TARGETPLATFORM
+
+RUN apk --no-cache add ca-certificates tzdata wget && \
+    adduser -D -s /bin/sh olla && \
+    mkdir -p /app/logs && \
+    chown -R olla:olla /app
+
+WORKDIR /app
+
+# Copy each runtime file by name rather than COPY . . so the image holds exactly
+# what is listed here and nothing else the context happens to carry.
+COPY ${TARGETPLATFORM}/olla /usr/local/bin/olla
+# config/config.yaml, not the root config.yaml: the loader searches
+# config/config.yaml first (internal/config/config.go), so the docker-flavoured
+# config must land there to bind the server beyond loopback.
+COPY build/docker-config.yaml config/config.yaml
+COPY config/models.yaml config/models.yaml
+COPY config/profiles/ config/profiles/
+
+RUN chown -R olla:olla /app
+
+USER olla
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:40114/internal/health || exit 1
+
+EXPOSE 40114
+ENTRYPOINT ["olla"]

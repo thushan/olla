@@ -5,6 +5,12 @@ import (
 	"fmt"
 )
 
+// Wire literals that recur across the request, response and streaming code.
+const (
+	roleAssistant          = "assistant"
+	eventContentBlockStart = "content_block_start"
+)
+
 // AnthropicRequest represents an Anthropic API request
 // Maps to the Anthropic Messages API format
 type AnthropicRequest struct {

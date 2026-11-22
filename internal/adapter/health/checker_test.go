@@ -488,61 +488,6 @@ func TestHTTPHealthChecker_ConcurrentHealthChecks(t *testing.T) {
 	}
 }
 
-/*
-	func TestHTTPHealthChecker_StatusCodeLogging(t *testing.T) {
-		mockRepo := newMockRepository()
-
-		statusCodes := []int{200, 404, 500, 503}
-		mockClient := &statusCodeHTTPClient{
-			statusCodes: statusCodes,
-		}
-
-		loggerCfg := &logger.Config{Level: "debug", Theme: "default"} // Debug to capture all logs
-		log, cleanup, _ := logger.New(loggerCfg)
-		defer cleanup()
-		styledLogger := logger.NewPlainStyledLogger(log)
-
-		checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
-
-		configs := make([]config.EndpointConfig, len(statusCodes))
-		for i := range statusCodes {
-			configs[i] = config.EndpointConfig{
-				Name:           fmt.Sprintf("endpoint-%d", i),
-				URL:            fmt.Sprintf("http://localhost:%d", 11434+i),
-				HealthCheckURL: "/health",
-				CheckTimeout:   time.Second,
-			}
-		}
-		mockRepo.LoadFromConfig(context.Background(), configs)
-
-		ctx := context.Background()
-		checker.StartChecking(ctx)
-		defer checker.StopChecking(ctx)
-
-		err := checker.RunHealthCheck(ctx, false)
-		if err != nil {
-			t.Fatalf("RunHealthCheck failed: %v", err)
-		}
-
-		// Verify endpoints have different statuses based on status codes
-		endpoints, _ := mockRepo.GetAll(ctx)
-
-		expectedStatuses := map[int]domain.EndpointStatus{
-			200: domain.StatusHealthy,
-			404: domain.StatusUnhealthy,
-			500: domain.StatusUnhealthy,
-			503: domain.StatusUnhealthy,
-		}
-
-		for i, endpoint := range endpoints {
-			expectedStatus := expectedStatuses[statusCodes[i]]
-			if endpoint.Status != expectedStatus {
-				t.Errorf("Endpoint %d: expected status %v for HTTP %d, got %v",
-					i, expectedStatus, statusCodes[i], endpoint.Status)
-			}
-		}
-	}
-*/
 func TestHTTPHealthChecker_ContextCancellation(t *testing.T) {
 	mockRepo := newMockRepository()
 
@@ -699,20 +644,6 @@ type panicHTTPClient struct{}
 
 func (p *panicHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	panic("simulated panic in health check")
-}
-
-type statusCodeHTTPClient struct {
-	statusCodes []int
-	callCount   int
-}
-
-func (s *statusCodeHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	statusCode := s.statusCodes[s.callCount%len(s.statusCodes)]
-	s.callCount++
-	return &http.Response{
-		StatusCode: statusCode,
-		Body:       http.NoBody,
-	}, nil
 }
 
 // TestStopChecking_DoubleInvoke verifies concurrent double-stops do not panic.

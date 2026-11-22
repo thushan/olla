@@ -41,7 +41,7 @@ func (c *LemonadeConverter) ConvertToFormat(models []*domain.UnifiedModel, filte
 	}
 
 	return profile.LemonadeResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -61,7 +61,7 @@ func (c *LemonadeConverter) convertModel(model *domain.UnifiedModel) *profile.Le
 
 	lemonadeModel := &profile.LemonadeModel{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 	}
