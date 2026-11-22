@@ -18,8 +18,8 @@ This guide covers setting up a complete development environment for Olla.
 
 ### Recommended Tools
 
-- **[golangci-lint](https://golangci-lint.run/usage/install/)**: Linting
-- **[betteralign](https://github.com/dkorunic/betteralign)**: Struct alignment optimisation
+- **[golangci-lint](https://golangci-lint.run/usage/install/)**: Linting (installed by `make install-deps`)
+- **[betteralign](https://github.com/dkorunic/betteralign)**: Struct alignment optimisation (installed by `make install-deps`)
 - **[air](https://github.com/cosmtrek/air)**: Hot reload for development
 - **Docker**: For testing with real backends
 
@@ -54,7 +54,7 @@ cd olla
 # Install Go dependencies
 make deps
 
-# Install development tools at pinned versions
+# Install golangci-lint and betteralign at pinned versions into the repo-local .bin/ (never GOPATH/bin)
 make install-deps
 
 # Or install air for hot reload (not managed by make install-deps)
