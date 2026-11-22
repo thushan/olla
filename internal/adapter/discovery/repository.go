@@ -413,30 +413,34 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 // its userinfo. validateEndpointConfig can only redact credentials from URLs
 // that parse, so a malformed one (bad port, unbracketed IPv6) would otherwise
 // carry the username and password into the startup error and its log line.
-// The url.Error is unwrapped because its message embeds the raw URL.
+// The parser's own detail is dropped whenever the input holds an '@', because it
+// quotes fragments of the input (an "invalid port" message repeats whatever
+// followed the first ':', which is the password when it contains a '/', '?' or
+// '#'). Detail is kept only when there is no userinfo to leak.
 func malformedEndpointURLError(raw string, err error) error {
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		err = urlErr.Err
+	if !strings.Contains(raw, "@") {
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return fmt.Errorf("invalid endpoint URL %q: %w", raw, err)
 	}
-	return fmt.Errorf("invalid endpoint URL %q: %w", redactURLUserinfo(raw), err)
+	return fmt.Errorf("invalid endpoint URL %q: could not parse the URL; credentials belong in the auth block, not the URL",
+		redactURLUserinfo(raw))
 }
 
-// redactURLUserinfo replaces anything between the scheme and the last '@' before
-// the query or fragment with a placeholder. It works on the raw string because
-// the input is, by definition, unparseable. Cutting at the last '@' also covers
-// a password holding an unescaped '@' or '/'; the cost is that an '@' inside the
-// path swallows the path prefix, which is acceptable in an error message.
+// redactURLUserinfo replaces anything between the scheme and the last '@' in the
+// string with a placeholder. It works on the raw string because the input is, by
+// definition, unparseable, so '/', '?' and '#' cannot be trusted to end the
+// authority: a password may legitimately hold any of them. The cost is that an
+// '@' in the path or query swallows what precedes it, which is acceptable in an
+// error message.
 func redactURLUserinfo(raw string) string {
 	prefix, rest := "", raw
 	if i := strings.Index(raw, "://"); i >= 0 {
 		prefix, rest = raw[:i+3], raw[i+3:]
 	}
-	boundary := len(rest)
-	if i := strings.IndexAny(rest, "?#"); i >= 0 {
-		boundary = i
-	}
-	at := strings.LastIndex(rest[:boundary], "@")
+	at := strings.LastIndex(rest, "@")
 	if at < 0 {
 		return raw
 	}
