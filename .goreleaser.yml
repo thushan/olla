@@ -53,7 +53,7 @@ release:
     **Documentation:** [thushan.github.io/olla](https://thushan.github.io/olla/) | **Issues:** [github.com/thushan/olla/issues](https://github.com/thushan/olla/issues)
 
 snapshot:
-  name_template: '{{ incpatch .Version }}-{{.ShortCommit}}'
+  version_template: '{{ incpatch .Version }}-{{.ShortCommit}}'
 
 builds:
   - id: default
@@ -200,9 +200,9 @@ archives:
       - tmp/.gitkeep
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
       - goos: darwin
-        format: zip
+        formats: [zip]
     name_template: >-
       {{ .ProjectName }}_v{{- .Version }}_{{- if eq .Os "darwin" }}macos_{{- else }}{{ .Os }}_{{ end }}{{- .Arch }}
 
