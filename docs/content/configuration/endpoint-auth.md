@@ -9,17 +9,13 @@ keywords: olla auth, endpoint authentication, bearer token, api key, basic auth,
 Olla can attach outbound authentication headers to requests forwarded to a backend endpoint. This is
 for authenticating **Olla to the backend**. It has no bearing on how clients authenticate to Olla.
 
-!!! warning "Userinfo URLs are rejected at startup"
-    An endpoint URL with embedded credentials - `http://user:pass@host:8080` - fails config
-    load and the process exits with a clear error showing the exact `auth:` block to use
-    instead. Move credentials into an `auth:` block (see below). Without this check the
-    credentials would flow unchanged into every status/dashboard JSON surface that echoes
-    the URL, so the rejection exists to prevent a silent credential leak rather than to
-    impose a new restriction.
+!!! warning "Credentials in URLs are rejected at startup"
+    `url`, `health_check_url` and `model_url` must not contain an `@` (or its escaped form
+    `%40`), so `http://user:pass@host:8080` fails config load and `--validate-config`. Move
+    credentials into an `auth:` block (see below). Without this check the credentials would
+    flow unchanged into every status/dashboard JSON surface that echoes the URL.
 
-    The boot error rewrites the rejected URL into the equivalent `auth:` block, with the
-    username and password replaced by placeholders, so the fix is a copy-paste and the
-    error never echoes your real credentials.
+    The error names the endpoint and field but never echoes the configured value.
 
     See [Release Notes: userinfo URLs](../about/release-notes.md#breaking-userinfo-urls-now-fail-startup)
     for the full rationale.
