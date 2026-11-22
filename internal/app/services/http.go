@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"strings"
 	"time"
 
 	"github.com/thushan/olla/internal/app/handlers"
@@ -260,6 +261,14 @@ func dashboardURL(bindAddr string) (string, bool) {
 	displayHost := host
 	if addr, perr := netip.ParseAddr(host); host == "" || (perr == nil && addr.IsUnspecified()) {
 		displayHost = "localhost"
+	}
+
+	// RFC 6874: a zone delimiter inside a URL host must be percent-encoded as
+	// %25. A bind address always carries the raw zone, so encode
+	// unconditionally: a zone such as "253" must not be mistaken for an
+	// already-encoded "%25" prefix.
+	if strings.Contains(displayHost, ":") {
+		displayHost = strings.Replace(displayHost, "%", "%25", 1)
 	}
 
 	return fmt.Sprintf("http://%s/internal/ui/", net.JoinHostPort(displayHost, port)), true

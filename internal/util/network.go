@@ -1,10 +1,8 @@
 package util
 
 import (
-	"context"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 )
 
@@ -48,14 +46,4 @@ func NormaliseBaseURL(baseURL string) string {
 		return baseURL[:len(baseURL)-1]
 	}
 	return baseURL
-}
-
-// IsPortAvailable checks if a port is available by attempting to bind to it
-func IsPortAvailable(host string, port int) bool {
-	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
-	if err != nil {
-		return false
-	}
-	defer listener.Close()
-	return true
 }

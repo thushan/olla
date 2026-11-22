@@ -68,6 +68,10 @@ When a backend closed the connection before sending any response (an `EOF` from 
 
 A backend such as vLLM or SGLang (uvicorn, 5 second keep-alive) can close an idle pooled connection just as Olla sends a POST on it. Go's transport never retries a POST it has written, so the request failed with `EOF`, and the #273 change then marked the healthy endpoint offline. With one endpoint that was an outage until the next health check. Both engines now notice when the `EOF` came from a reused connection: the request still fails over to another endpoint, but the endpoint is not demoted and the Olla engine's circuit breaker does not count it. An `EOF` on a fresh connection still demotes, since there the backend really went away. The outbound request also carries a replayable body, so Go retries on its own when it fails before writing anything. Connection refused and reset behave as before.
 
+### Fixed: `server.host` accepts a bare IPv6 address
+
+A bare IPv6 `server.host` such as `::` built the listen address `:::40114` and failed to bind with "too many colons in address". Bare IPv6 hosts now work; bracketed ones (`[::]`) already did. Raised by @sigil-03 in [#145](https://github.com/thushan/olla/pull/145).
+
 ### Fixed: client cancels no longer open the circuit breaker
 
 A client that cancelled or timed out before the first response byte was recorded as a backend failure ([#269](https://github.com/thushan/olla/issues/269)). Five such cancels opened the Olla engine's circuit breaker and a healthy backend returned 502 for 30 seconds, and a cancelled half-open probe re-opened it. A client cancel or client deadline is now ignored by the breaker, and a cancelled half-open probe releases its slot so the next request probes straight away. Both engines also stop counting these cancels as failed requests in the stats and error events. Backend timeouts, such as the response-header timeout, and connection errors still count.

@@ -51,7 +51,7 @@ HTTP server and security settings.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `host` | string | `"localhost"` | Network interface to bind |
+| `host` | string | `"localhost"` | Network interface to bind. IPv6 literals may be written bare (`::`, `::1`) or bracketed (`[::]`) |
 | `port` | int | `40114` | TCP port to listen on |
 | `request_logging` | bool | `true` | Enable request logging |
 
