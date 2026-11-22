@@ -21,11 +21,18 @@ BETTERALIGN := $(TOOLS_BIN)/betteralign$(GOEXE)
 # tool-version <binary>: module version recorded in the binary's build info.
 tool-version = $$(go version -m "$(1)" 2>/dev/null | awk '$$1=="mod"{print $$3}')
 
-# ensure-tool <name> <binary> <version> <module>: reinstall on any mismatch.
+# tool-gover <binary>: Go toolchain the binary was built with (the first line
+# of `go version -m` is "<path>: goX.Y.Z").
+tool-gover = $$(go version -m "$(1)" 2>/dev/null | awk 'NR==1{print $$2}')
+
+# ensure-tool <name> <binary> <version> <module>: reinstall on a module or
+# build-Go mismatch. The Go check matters after a go.mod bump, because
+# golangci-lint refuses to lint a module needing a newer Go than it was built with.
 define ensure-tool
 have="$(call tool-version,$(2))"; \
-if [ "$$have" != "$(3)" ]; then \
-	echo "  Installing $(1) $(3) into $(TOOLS_BIN) (found: $${have:-none})..."; \
+gohave="$(call tool-gover,$(2))"; \
+if [ "$$have" != "$(3)" ] || [ "$$gohave" != "$$(go env GOVERSION)" ]; then \
+	echo "  Installing $(1) $(3) into $(TOOLS_BIN) (found: $${have:-none} $${gohave})..."; \
 	GOBIN="$(TOOLS_BIN)" go install $(4)@$(3) || exit 1; \
 fi
 endef
@@ -427,9 +434,9 @@ align: ensure-betteralign
 align-check: ensure-betteralign
 	@echo "Running better-align (check only)..."
 	@printf "  Version: %s \033[32m(verified)\033[0m\n" "$(call tool-version,$(BETTERALIGN))"
-	@output=$$("$(BETTERALIGN)" ./... 2>&1); \
-	if [ -n "$$output" ]; then \
-		echo "Struct alignment issues found:"; \
+	@output=$$("$(BETTERALIGN)" ./... 2>&1); status=$$?; \
+	if [ $$status -ne 0 ] || [ -n "$$output" ]; then \
+		echo "Struct alignment check failed (exit $$status):"; \
 		echo "$$output"; \
 		exit 1; \
 	fi
@@ -469,18 +476,18 @@ install-deps: ensure-golangci-lint ensure-betteralign
 # Check installed tool versions against requirements
 check-deps:
 	@echo "Checking dependencies..."
-	@for t in "golangci-lint:$(GOLANGCI_LINT):$(GOLANGCI_LINT_VERSION)" "betteralign:$(BETTERALIGN):$(BETTERALIGN_VERSION)"; do \
+	@rc=0; for t in "golangci-lint:$(GOLANGCI_LINT):$(GOLANGCI_LINT_VERSION)" "betteralign:$(BETTERALIGN):$(BETTERALIGN_VERSION)"; do \
 		name=$${t%%:*}; rest=$${t#*:}; bin=$${rest%:*}; want=$${rest##*:}; \
 		have=$$(go version -m "$$bin" 2>/dev/null | awk '$$1=="mod"{print $$3}'); \
 		if [ "$$have" = "$$want" ]; then \
 			printf "  %s: %s \033[32m(verified)\033[0m\n" "$$name" "$$have"; \
 		elif [ -z "$$have" ]; then \
-			printf "  %s: not installed [require: %s \033[31m(pinned)\033[0m] - run 'make install-deps'\n" "$$name" "$$want"; \
+			printf "  %s: not installed [require: %s \033[31m(pinned)\033[0m] - run 'make install-deps'\n" "$$name" "$$want"; rc=1; \
 		else \
-			printf "  %s: %s [require: %s \033[31m(pinned)\033[0m] - run 'make install-deps'\n" "$$name" "$$have" "$$want"; \
+			printf "  %s: %s [require: %s \033[31m(pinned)\033[0m] - run 'make install-deps'\n" "$$name" "$$have" "$$want"; rc=1; \
 		fi; \
-	done
-	@if command -v bun > /dev/null 2>&1; then \
+	done; \
+	if command -v bun > /dev/null 2>&1; then \
 		INSTALLED=$$(bun --version 2>/dev/null); \
 		MAJOR=$$(echo $$INSTALLED | cut -d. -f1); \
 		MINOR=$$(echo $$INSTALLED | cut -d. -f2); \
@@ -493,7 +500,8 @@ check-deps:
 		fi \
 	else \
 		printf "  bun:          not installed [require: %s+ \033[31m(pinned)\033[0m]\n" "$(BUN_VERSION)"; \
-	fi
+	fi; \
+	exit $$rc
 
 # Development build (no optimisations). build-web first so the dashboard
 # embed is fresh; see run/run-debug for the same reason.

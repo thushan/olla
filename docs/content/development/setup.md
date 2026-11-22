@@ -270,6 +270,9 @@ make docker-run
 ```json
 {
   "go.lintTool": "golangci-lint",
+  "go.alternateTools": {
+    "golangci-lint": "${workspaceFolder}/.bin/golangci-lint"
+  },
   "go.lintFlags": [
     "--fast"
   ],
@@ -311,7 +314,13 @@ make docker-run
 1. Set Go SDK to 1.27+
 2. Enable Go modules
 3. Configure run configuration with `--config config/config.local.yaml`
-4. Enable golangci-lint file watcher
+4. Enable golangci-lint file watcher, with the program set to `$ProjectFileDir$/.bin/golangci-lint`
+
+Run `make install-deps` first so `.bin/golangci-lint` exists. Pointing the editor at the checkout's `.bin` stops it picking up another repo's version from `PATH`.
+
+!!! note
+
+    The vscode-go settings reference only documents an absolute path or a binary name for `go.alternateTools`. The extension source expands `${workspaceFolder}` there, but if your version does not, use the absolute path to `.bin/golangci-lint`. The extension also ignores `go.alternateTools` in workspace settings until the workspace is trusted.
 
 ## Testing Setup
 
