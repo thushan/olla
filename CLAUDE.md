@@ -94,7 +94,7 @@ Agent-driven end-to-end validation against mock backends - no Docker, no real in
 Gates on `make ready` first, then boots seven `test/cmd/ollamock` instances (ports 19431–19437) plus two Olla instances (`test/validate/config.validate*.yaml`, ports 41141/41142) and fans out parallel agents per area. Reports land in `test/results/`. ollamock speaks OpenAI, Ollama-native, LM Studio, Lemonade and Anthropic wire formats with runtime fault injection via `/_mock/behaviour` (see `test/cmd/ollamock/README.md`). Full docs: `docs/content/development/validation.md`.
 
 ## Development Guidelines
-- **Go 1.27** - `go.mod` sets the minimum; no `toolchain` line, so the 1.27 GODEBUG defaults apply.
+- **Go 1.27** - the `go` line sets the minimum and the GODEBUG defaults; `toolchain go1.27.4` sets the toolchain CI and releases build with (setup-go reads it). Raise the toolchain line, not the `go` line, to pick up stdlib security patches.
 - Australian English for comments and documentation. No em-dashes.
 - Comment on **why**, not **what**. Concise and direct.
 - Production code must not panic - guard closes with CAS or `sync.Once`.

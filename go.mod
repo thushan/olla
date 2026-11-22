@@ -2,6 +2,8 @@ module github.com/thushan/olla
 
 go 1.27.0
 
+toolchain go1.27.4
+
 require (
 	github.com/docker/go-units v0.5.0
 	github.com/expr-lang/expr v1.18.0

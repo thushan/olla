@@ -18,7 +18,7 @@ names and config keys are the literal wire or YAML identifiers.
 
 ### Breaking: Go 1.27 is required to build from source
 
-`go.mod` now declares `go 1.27`, with no `toolchain` line, so building needs Go 1.27 or later. The binaries and container images are unaffected apart from the macOS note below. The `golang.org/x/*` modules and `atomicgo.dev/keyboard` that were held back to stay on Go 1.24 are current again, and `expr-lang/expr`, `testify`, `gjson` and `pterm` are updated alongside them. Contributors need golangci-lint v2.15.0 and betteralign v0.16.1 (`make install-deps`); the older pins fail on Go 1.27.
+`go.mod` now declares `go 1.27.0` with `toolchain go1.27.4`, so building needs Go 1.27 or later and a patched toolchain is fetched automatically when yours is older. The binaries and container images are unaffected apart from the macOS note below. The `golang.org/x/*` modules and `atomicgo.dev/keyboard` that were held back to stay on Go 1.24 are current again, and `expr-lang/expr`, `testify`, `gjson` and `pterm` are updated alongside them. Contributors need golangci-lint v2.15.0 and betteralign v0.16.1 (`make install-deps`); the older pins fail on Go 1.27.
 
 ### Breaking: macOS binaries need macOS 13 or later
 
