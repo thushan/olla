@@ -34,6 +34,7 @@ linters:
     - nolintlint
     - nosprintfhostport
     - perfsprint
+    - prealloc
     - predeclared
     - reassign
     - revive
@@ -111,6 +112,7 @@ linters:
           - noctx
           - perfsprint
           - predeclared
+          - prealloc
           - staticcheck
           - testifylint
           - unconvert
