@@ -7,6 +7,7 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -200,9 +201,17 @@ func (c *AccessPolicyConfig) Validate(zone string) error {
 	return nil
 }
 
-// GetAddress returns the server address in host:port format
+// GetAddress returns the listen address in host:port format. IPv6 hosts may be
+// written bare ("::", "::1") or bracketed ("[::]") in config; both bind. A bare
+// literal can't go through Sprintf("%s:%d") because ":::40114" is unparseable,
+// so one pair of brackets is stripped and net.JoinHostPort re-adds them where
+// the address family needs them. An empty host stays ":port" (all interfaces).
 func (s *ServerConfig) GetAddress() string {
-	return fmt.Sprintf("%s:%d", s.Host, s.Port)
+	host := s.Host
+	if len(host) >= 2 && host[0] == '[' && host[len(host)-1] == ']' {
+		host = host[1 : len(host)-1]
+	}
+	return net.JoinHostPort(host, strconv.Itoa(s.Port))
 }
 
 // ServerRequestLimits defines request size and validation limits
