@@ -110,7 +110,7 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 	// received (a 502 for a connection failure), not 0.
 	if err != nil {
 		if tracker.Started() {
-			pr.abortStream = a.failMidStream(tracker, r, pr, err, false, false)
+			pr.abortStream = a.failMidStream(tracker, r, pr, err, isAnthropicMessagesPath(r.URL.Path), false)
 		} else {
 			a.handleProxyError(tracker, err)
 		}

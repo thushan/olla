@@ -143,6 +143,13 @@ func TestMidStreamBackendDeath_ClientCanDetectTruncation(t *testing.T) {
 		}
 		scenarios = append(scenarios, s)
 	}
+	// Provider-prefix Anthropic passthrough skips the translation handler but the client
+	// still speaks Anthropic, so it must get Anthropic's error event, not OpenAI's.
+	scenarios = append(scenarios, scenario{
+		name: "sse/provider-anthropic-messages", route: statusRoute{name: "provider-messages", handler: "provider", path: "/olla/ollama/v1/messages"},
+		contentType: "text/event-stream", parts: sseParts(5), wantData: "tok0",
+		wantEvent: anthropicErr, wantAbsent: []string{"upstream_stream_interrupted"},
+	})
 	scenarios = append(scenarios,
 		scenario{name: "ndjson/ollama-native", route: ollamaNative, contentType: "application/x-ndjson", wantData: `"content":"a"`,
 			parts:     []string{`{"model":"m","message":{"content":"a"},"done":false}` + "\n", `{"model":"m","message":{"content":"b"},"done":false}` + "\n"},
