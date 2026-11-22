@@ -28,6 +28,22 @@ With `type` empty or `auto`, an endpoint is only detected as llama.cpp, vLLM, oM
 
 An endpoint in `config.yaml` with `type` empty or `auto` had its model path pre-set to `/v1/models`, so every auto-detection candidate probed that path. Ollama, tried first, accepted any OpenAI-style response as an empty model list, so vLLM, llama.cpp, oMLX, Rapid-MLX and generic servers were detected as Ollama with 0 models, and a real Ollama serving only `/api/tags` failed outright. This has been the case since before v0.1.0. Each candidate now probes its own discovery path unless you set `model_url`, which still overrides all of them, and Ollama and LM Studio are only accepted when the response has their shape. Endpoints with an explicit `type` are unaffected. If an auto endpoint showed no models, restart Olla or wait for the next discovery cycle after upgrading.
 
+### Fixed: auto-detection with an explicit `model_url` no longer mislabels OpenAI-style servers
+
+With `type: auto` and a `model_url`, every candidate probes the same path, and LM Studio accepted any `data` array, so vLLM, Rapid-MLX, oMLX and generic OpenAI servers were registered as LM Studio and lost their context-length fields. LM Studio now needs its own model fields (`type`, `state` or `arch`), and Ollama rejects a body that also carries an OpenAI `data` array, as llama.cpp's does. Without `model_url` nothing changes.
+
+### Fixed: a backend closing an idle connection no longer trips the breaker
+
+net/http's `http: server closed idle connection` on a reused connection, the same keep-alive race as an EOF there, now fails over without demoting the endpoint or charging its circuit breaker, instead of returning a `502`.
+
+### Fixed: a stream aborted after the first byte is logged as a failure
+
+When the Anthropic translator panicked mid-stream the connection was dropped but the request was still logged as `Request completed` at INFO. It now logs `Request failed`.
+
+### Fixed: provider-prefix `/v1/messages` routes send Anthropic-shaped mid-stream errors
+
+A backend dying mid-stream on a route such as `/olla/vllm/v1/messages` got an OpenAI-style error event. Anthropic Messages requests now get the Anthropic `event: error` form on any route.
+
 ### Fixed: a translator panic mid-stream now drops the connection
 
 If the Anthropic translator panicked after part of a streamed reply had reached the client, the response ended with an `event: error` and a clean end of stream, which a client could mistake for a finished reply. It now behaves like a backend dying mid-stream: the error event is sent, the request is counted as failed in the translator stats, and the connection is dropped so the client's read fails. A panic before anything was written still returns a `502` JSON error.
@@ -42,7 +58,7 @@ Rapid-MLX, the MLX inference server for Apple Silicon, is a supported backend ([
 
 ### Fixed: model aliases match consistently with unification
 
-With `model_registry.enable_unifier: true`, alias names now match without regard to case ([#270](https://github.com/thushan/olla/pull/270), fixes [#181](https://github.com/thushan/olla/issues/181), thanks to [@wsj040303](https://github.com/wsj040303)). `My-Model` accepts requests for `my-model` or `MY-MODEL`, and case variants share a sticky-session key. An exact spelling wins; if two aliases differ only in case, an ambiguous spelling selects neither and falls back to normal model routing. With unification off, lookup stays case-sensitive. See [Model Aliases](../concepts/model-aliases.md).
+With `model_registry.enable_unifier: true`, alias names now match without regard to case ([#270](https://github.com/thushan/olla/pull/270), fixes [#181](https://github.com/thushan/olla/issues/181), thanks to [@wsj040303](https://github.com/wsj040303)). `My-Model` accepts requests for `my-model` or `MY-MODEL`, and case variants share a sticky-session key. An exact spelling wins; if two aliases differ only in case, an ambiguous spelling selects neither and falls back to normal model routing. With unification off, aliases only match their exact spelling: a mixed-case alias will not match a differently cased request. See [Model Aliases](../concepts/model-aliases.md).
 
 ### Fixed: a backend that drops the connection before replying now fails over
 
