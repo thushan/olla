@@ -78,6 +78,9 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		s.RecordFailure(ctx, endpoint, core.ResolvedModelName(ctx, endpoint, stats.Model), time.Since(stats.StartTime), err)
 		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
+	// NewRequest only sets GetBody for stdlib reader types; without it the
+	// transport cannot replay a POST it failed to write on a stale connection.
+	proxyReq.GetBody = r.GetBody
 
 	rlog.Debug("created proxy request")
 
@@ -108,10 +111,12 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 
 	rlog.Debug("making round-trip request", "target", targetURL.String())
 	backendStart := time.Now()
+	proxyReq, reuse := core.TraceConnReuse(proxyReq)
 	resp, err := s.transport.RoundTrip(proxyReq)
 	stats.BackendResponseMs = time.Since(backendStart).Milliseconds()
 
 	if err != nil {
+		err = reuse.Classify(err)
 		// A client cancel says nothing about the backend: no error stats.
 		// Classify before MakeUserFriendlyError wraps err.
 		if core.IsClientAbort(ctx, err) {

@@ -123,12 +123,15 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
+	proxyReq, reuse := core.TraceConnReuse(proxyReq)
+
 	rlog.Debug("making round-trip request", "target", targetURL.String())
 	backendStart := time.Now()
 	resp, err := transport.RoundTrip(proxyReq)
 	stats.BackendResponseMs = time.Since(backendStart).Milliseconds()
 
 	if err != nil {
+		err = reuse.Classify(err)
 		return s.handleRoundTripError(ctx, cb, attempt, endpoint, resolvedModel, stats, cfg, rlog, err)
 	}
 	defer resp.Body.Close()
@@ -261,7 +264,14 @@ func (s *Service) handleRoundTripError(ctx context.Context, cb *circuitBreaker, 
 		return common.MakeUserFriendlyError(err, time.Since(stats.StartTime), "backend", cfg.GetResponseTimeout())
 	}
 	if cb != nil {
-		cb.RecordFailure(attempt)
+		// An EOF on a reused connection is the backend's idle-timeout race, not
+		// a fault: like a client abort it must not count toward opening the
+		// breaker, only release any half-open probe slot.
+		if core.IsStaleConnError(err) {
+			cb.Abandon(attempt)
+		} else {
+			cb.RecordFailure(attempt)
+		}
 	}
 	// Don't log as error if it's a connection failure - the retry handler will handle it
 	if core.IsConnectionError(err) {

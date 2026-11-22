@@ -97,6 +97,7 @@ func (s *DiscoveryService) Start(ctx context.Context) error {
 	switch s.config.Type {
 	case "static":
 		staticRepo := discovery.NewStaticEndpointRepository()
+		staticRepo.SetLogger(s.logger)
 		if err := staticRepo.LoadFromConfig(ctx, s.config.Static.Endpoints); err != nil {
 			return fmt.Errorf("failed to load endpoints from config: %w", err)
 		}

@@ -236,6 +236,14 @@ func (h *RetryHandler) ExecuteWithRetry(
 			return nil
 		}
 
+		// The client walking away can surface as a connection error (a cancel
+		// racing a transport EOF keeps the EOF in the chain). That says nothing
+		// about the backend, so neither demote it nor fail over for a client
+		// that has gone.
+		if IsClientAbort(ctx, lastErr) {
+			return lastErr
+		}
+
 		// A CB-open rejection is failover-eligible, but unlike a connection
 		// error it must NOT demote the endpoint's persisted health: the breaker
 		// already reflects accumulated failure state, and the proxy engine
@@ -286,7 +294,19 @@ func (h *RetryHandler) ExecuteWithRetry(
 		// The connection genuinely failed, so the endpoint is still demoted, but
 		// the request may already have been read and acted on by that backend.
 		// With non_idempotent off, a POST/PATCH/DELETE is not replayed elsewhere.
+		// An EOF on a reused pooled connection is the keep-alive idle race, not a
+		// dead backend: fail over below but leave the endpoint's health alone.
+		stale := IsStaleConnError(lastErr)
+
 		if h.policy.NoNonIdempotent && !isIdempotent(r.Method) {
+			if stale {
+				h.logger.Debug("Reused connection closed by endpoint, not demoting",
+					"endpoint", endpoint.Name,
+					"error", lastErr,
+					"retry", "skipped: non-idempotent method and proxy.retry.non_idempotent is off",
+					"method", r.Method)
+				return lastErr
+			}
 			h.logger.Warn("Connection failed to endpoint, marking as unhealthy",
 				"endpoint", endpoint.Name,
 				"error", lastErr,
@@ -295,6 +315,15 @@ func (h *RetryHandler) ExecuteWithRetry(
 				"method", r.Method)
 			h.markEndpointUnhealthy(ctx, endpoint)
 			return lastErr
+		}
+
+		if stale {
+			h.logger.Debug("Reused connection closed by endpoint, failing over without demotion",
+				"endpoint", endpoint.Name,
+				"error", lastErr,
+				"attempt", attemptCount)
+			availableEndpoints = h.removeFailedEndpoint(availableEndpoints, endpoint)
+			continue
 		}
 
 		// Handle connection error and retry logic
@@ -327,7 +356,17 @@ func (h *RetryHandler) preserveRequestBody(r *http.Request) ([]byte, error) {
 
 	// Recreate the body for the first attempt
 	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	SetReplayableBody(r, bodyBytes)
 	return bodyBytes, nil
+}
+
+// SetReplayableBody gives r a GetBody over b (a new reader on the same slice,
+// no copy). The engines copy it onto the outbound request so Go's transport can
+// replay the body itself when it fails before writing anything.
+func SetReplayableBody(r *http.Request, b []byte) {
+	r.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(b)), nil
+	}
 }
 
 // checkContextCancellation verifies if the context has been cancelled
@@ -344,6 +383,8 @@ func (h *RetryHandler) checkContextCancellation(ctx context.Context) error {
 func (h *RetryHandler) resetRequestBodyForRetry(r *http.Request, bodyBytes []byte, attemptCount int) {
 	if bodyBytes != nil && attemptCount > 0 {
 		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		// A previous endpoint's alias rewrite may have replaced GetBody.
+		SetReplayableBody(r, bodyBytes)
 	}
 }
 
@@ -459,6 +500,12 @@ func IsConnectionError(err error) bool {
 	// which would falsely mark the endpoint unhealthy for a client timeout.
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return false
+	}
+
+	// A stale-connection error must still fail over (without demotion, which
+	// the retry handler decides separately); its text may not be an EOF.
+	if IsStaleConnError(err) {
+		return true
 	}
 
 	// A backend that closes the connection while RoundTrip is reading the

@@ -969,7 +969,8 @@ func (a *Application) startProxyGoroutine(
 // The committed flag on cw tracks whether any byte has actually been written to
 // the real client ResponseWriter (not just to the backend pipe). When committed,
 // net/http silently ignores a WriteHeader(502), so we emit a spec-valid Anthropic
-// SSE error event instead. When not committed, a plain HTTP 502 with a structured
+// SSE error event and flag the stream for abort, so the connection is dropped
+// rather than ending cleanly. When not committed, a plain HTTP 502 with a structured
 // body reaches the client correctly.
 func (a *Application) handleStreamingPanic(
 	w http.ResponseWriter,
@@ -993,12 +994,18 @@ func (a *Application) handleStreamingPanic(
 			"translator", trans.Name(),
 			"model", pr.model)
 
+		pr.hadError = true
+
 		// If anything was already written to the real client, the response is
 		// committed and WriteHeader(502) is a no-op. Emitting a well-formed SSE
 		// error event is the only way to signal the failure without corrupting
-		// the stream with raw JSON.
+		// the stream with raw JSON. A clean EOF after it would still read as a
+		// complete reply, so also ask translationHandler to drop the connection,
+		// same as a backend dying mid-stream. The abort itself is raised there,
+		// outside this recover, once metrics and logging are done.
 		if cw != nil && cw.committed.Load() {
 			a.writeStreamError(w, streamFormatAnthropicSSE, "internal error during stream transformation")
+			pr.abortStream = true
 			return
 		}
 

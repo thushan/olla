@@ -207,14 +207,9 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 		return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "read_response", resp.StatusCode, duration, fmt.Errorf("model response exceeds %d bytes: %w", MaxResponseSize, ErrResponseTooLarge))
 	}
 
-	// These parsers accept the same OpenAI envelope. During auto-detection,
-	// require server identity before applying backend-specific metadata rules.
 	if endpoint.Type == "" || endpoint.Type == domain.ProfileAuto {
-		switch platformProfile.GetName() {
-		case domain.ProfileLlamaCpp, domain.ProfileVLLM, domain.ProfileRapidMLX, domain.ProfileOMLX:
-			if !hasModelOwner(body, platformProfile.GetName()) {
-				return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, fmt.Errorf("model response does not identify %s", platformProfile.GetName()))
-			}
+		if aerr := checkAutoDetectShape(body, platformProfile.GetName()); aerr != nil {
+			return nil, NewDiscoveryError(discoveryURL, platformProfile.GetName(), "auto_detect", resp.StatusCode, duration, aerr)
 		}
 	}
 
@@ -239,6 +234,60 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 	})
 
 	return models, nil
+}
+
+// checkAutoDetectShape stops a candidate winning auto-detection on a response that is not
+// really its own. The parsers tolerate any JSON, so without this an unrelated envelope would
+// be accepted as an empty model list. Ollama and LM Studio must have their own envelope; the
+// OpenAI look-alikes share one shape, so they must also identify themselves via owned_by.
+func checkAutoDetectShape(body []byte, profileName string) error {
+	switch profileName {
+	case domain.ProfileOllama:
+		// llama.cpp's /v1/models also carries a top-level `models` array (an Ollama-style
+		// compat block) next to its OpenAI `data` envelope. /api/tags never has `data`, so
+		// its presence means the body is an OpenAI-style server, not Ollama.
+		if !gjson.GetBytes(body, "models").IsArray() || gjson.GetBytes(body, "data").IsArray() {
+			return fmt.Errorf("model response is not in %s format", profileName)
+		}
+	case domain.ProfileLmStudio:
+		if !isLMStudioModelList(body) {
+			return fmt.Errorf("model response is not in %s format", profileName)
+		}
+	case domain.ProfileLlamaCpp, domain.ProfileVLLM, domain.ProfileRapidMLX, domain.ProfileOMLX:
+		if !hasModelOwner(body, profileName) {
+			return fmt.Errorf("model response does not identify %s", profileName)
+		}
+	}
+	return nil
+}
+
+// lmStudioFields are model fields only LM Studio's /api/v0/models emits.
+var lmStudioFields = []string{"type", "state", "arch"}
+
+// isLMStudioModelList accepts LM Studio's /api/v0/models shape: a `data` array whose models
+// carry its own `type`, `state` or `arch` fields. Plain OpenAI envelopes (vLLM, Rapid-MLX, oMLX,
+// generic) have none of them, and used to win here and lose their context metadata. An empty list
+// is accepted as before since it gives no evidence either way.
+func isLMStudioModelList(body []byte) bool {
+	data := gjson.GetBytes(body, "data")
+	if !data.IsArray() {
+		return false
+	}
+	models := data.Array()
+	if len(models) == 0 {
+		return true
+	}
+	for _, model := range models {
+		if model.Get("id").String() == "" {
+			continue
+		}
+		for _, field := range lmStudioFields {
+			if model.Get(field).String() != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasModelOwner(body []byte, owner string) bool {

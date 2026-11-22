@@ -11,6 +11,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/registry/profile"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/domain"
+	"github.com/thushan/olla/internal/logger"
 	"github.com/thushan/olla/internal/util"
 	"github.com/thushan/olla/pkg/envresolver"
 )
@@ -29,7 +30,14 @@ const (
 type StaticEndpointRepository struct {
 	endpoints      map[string]*domain.Endpoint
 	profileFactory *profile.Factory
+	logger         logger.StyledLogger
 	mu             sync.RWMutex
+}
+
+// SetLogger lets LoadFromConfig report config problems (duplicate URLs). Optional: a nil
+// logger keeps the repository silent, as in tests and tools that load endpoints directly.
+func (r *StaticEndpointRepository) SetLogger(l logger.StyledLogger) {
+	r.logger = l
 }
 
 func NewStaticEndpointRepository() *StaticEndpointRepository {
@@ -139,6 +147,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 
 	now := time.Now()
 	newEndpoints := make(map[string]*domain.Endpoint, len(configs))
+	firstNameByURL := make(map[string]string, len(configs))
 
 	for _, cfg := range configs {
 		applyEndpointDefaults(&cfg)
@@ -198,7 +207,7 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			URLString:             urlString,
 			HealthCheckPathString: healthCheckPath,
 			HealthCheckURLString:  healthCheckURLString,
-			ModelURLString:        modelURLString,
+			ModelURLString:        userModelURL(cfg, modelURLString),
 			BackoffMultiplier:     1,
 			NextCheckTime:         now,
 			PreservePath:          cfg.PreservePath,
@@ -220,6 +229,9 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 			newEndpoint.Headers = resolvedHeaders
 		}
 
+		// Endpoints are keyed by URL, so a repeat silently replaces the earlier entry. Existing
+		// configs must keep loading, so warn rather than reject.
+		r.noteURL(firstNameByURL, urlString, cfg.Name)
 		newEndpoints[urlString] = newEndpoint
 	}
 
@@ -228,6 +240,26 @@ func (r *StaticEndpointRepository) LoadFromConfig(ctx context.Context, configs [
 	r.mu.Unlock()
 
 	return nil
+}
+
+// noteURL records which endpoint first claimed a URL and warns when a later one repeats it.
+func (r *StaticEndpointRepository) noteURL(firstNameByURL map[string]string, urlString, name string) {
+	if first, dup := firstNameByURL[urlString]; dup && r.logger != nil {
+		r.logger.Warn("Duplicate endpoint URL: the later endpoint replaces the earlier one",
+			"url", urlString, "replaced", first, "replacedBy", name)
+	}
+	firstNameByURL[urlString] = name
+}
+
+// userModelURL returns the resolved model URL only when discovery should treat it as a user
+// choice. An auto-detected endpoint has no profile to supply a path yet, so the universal
+// /v1/models default is a guess; leaving it empty lets each candidate probe its own path
+// (Ollama's /api/tags, for one). An explicit model_url still overrides them (issue #86).
+func userModelURL(cfg config.EndpointConfig, resolved string) string {
+	if (cfg.Type == "" || cfg.Type == domain.ProfileAuto) && cfg.ModelURL == "" {
+		return ""
+	}
+	return resolved
 }
 
 // resolveURLDefaults determines health check and model paths using fallback hierarchy:
@@ -374,4 +406,29 @@ func (r *StaticEndpointRepository) validateEndpointConfig(cfg config.EndpointCon
 	}
 
 	return nil
+}
+
+// DuplicateEndpointURLWarnings describes each endpoint whose URL an earlier endpoint already
+// uses, in the wording --validate-config shows. LoadFromConfig keys by URL, so these never
+// register; reporting them ahead of time saves the operator a silent 404.
+func DuplicateEndpointURLWarnings(configs []config.EndpointConfig) []string {
+	var warnings []string
+	firstNameByURL := make(map[string]string, len(configs))
+	for _, cfg := range configs {
+		u, err := url.Parse(cfg.URL)
+		if err != nil {
+			continue // reported as a hard error by the loader
+		}
+		key := u.String()
+		if first, dup := firstNameByURL[key]; dup {
+			// --validate-config doesn't reject userinfo, so keep credentials out of the shown
+			// copy; the key keeps them so detection is unchanged.
+			display := *u
+			display.User = nil
+			warnings = append(warnings, fmt.Sprintf("endpoint %q reuses URL %s: it replaces %q, so only one is registered", cfg.Name, display.String(), first))
+			continue
+		}
+		firstNameByURL[key] = cfg.Name
+	}
+	return warnings
 }

@@ -26,6 +26,14 @@ const (
 // rather than sent to the client.
 const midStreamErrorMessage = "upstream connection lost during streaming response"
 
+// isAnthropicMessagesPath reports whether path is an Anthropic Messages call. Provider
+// prefix routes (e.g. /olla/vllm/v1/messages) pass Anthropic traffic straight through
+// without the translation handler, so the path is the only signal the error writer has
+// that the client expects Anthropic's `event: error` shape rather than OpenAI's.
+func isAnthropicMessagesPath(path string) bool {
+	return strings.HasSuffix(strings.TrimRight(path, "/"), "/v1/messages")
+}
+
 // streamFormatForContentType picks the error format from the response
 // Content-Type the proxy engine copied from the backend. anthropic selects the
 // Anthropic event shape for SSE bodies on Anthropic routes.

@@ -110,7 +110,7 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 	// received (a 502 for a connection failure), not 0.
 	if err != nil {
 		if tracker.Started() {
-			pr.abortStream = a.failMidStream(tracker, r, pr, err, false, false)
+			pr.abortStream = a.failMidStream(tracker, r, pr, err, isAnthropicMessagesPath(r.URL.Path), false)
 		} else {
 			a.handleProxyError(tracker, err)
 		}
@@ -510,6 +510,8 @@ func (a *Application) logRequestRejected(pr *proxyRequest, status int, reason st
 	pr.requestLogger.Warn("Request rejected", logFields...)
 }
 
+var errStreamAborted = errors.New("response aborted after bytes were sent to the client")
+
 func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 	// A chunked body over the size cap fails mid-read and is answered 413 by handleProxyError.
 	// It is a client rejection, so it takes the sampled path rather than an ERROR per request.
@@ -517,6 +519,13 @@ func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 	if errors.As(err, &maxBytesErr) {
 		a.logRequestRejected(pr, http.StatusRequestEntityTooLarge, "request body too large")
 		return
+	}
+
+	// A translator panic after the first byte is recovered and the handler returns nil, so
+	// the caller sees no error; abortStream is the signal that the client got a truncated
+	// response. Without this it would be logged as a clean completion at INFO.
+	if err == nil && pr.abortStream {
+		err = errStreamAborted
 	}
 
 	duration := time.Since(pr.stats.StartTime)
