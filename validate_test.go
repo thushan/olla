@@ -352,3 +352,38 @@ func TestBuildValidationReport_CapsIgnoredKeys(t *testing.T) {
 		t.Errorf("report lists %d keys, want %d", got, maxUnknownKeysShown)
 	}
 }
+
+func TestRunValidateConfig_InvalidEndpointURLsFail(t *testing.T) {
+	t.Parallel()
+
+	body := `discovery:
+  static:
+    endpoints:
+      - name: "leaky"
+        url: "wombat:q7x9kz@http://host:11434"
+        type: "ollama"
+      - name: "badpath"
+        url: "http://localhost:11434"
+        type: "ollama"
+        model_url: "api/tags"
+`
+	path := filepath.Join(t.TempDir(), "olla.yaml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	report, code := runValidateConfig(path)
+	if code != 1 {
+		t.Fatalf("exit code = %d, want 1:\n%s", code, report)
+	}
+	for _, want := range []string{`"leaky"`, "url", `"badpath"`, "model_url"} {
+		if !strings.Contains(report, want) {
+			t.Errorf("report should contain %q:\n%s", want, report)
+		}
+	}
+	for _, leak := range []string{"q7x", "7x9", "x9k", "9kz", "wombat"} {
+		if strings.Contains(report, leak) {
+			t.Errorf("report leaks %q:\n%s", leak, report)
+		}
+	}
+}

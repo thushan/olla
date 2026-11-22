@@ -71,15 +71,15 @@ func TestDuplicateEndpointURLWarnings(t *testing.T) {
 	}
 }
 
-func TestDuplicateEndpointURLWarnings_RedactsCredentials(t *testing.T) {
+func TestDuplicateEndpointURLWarnings_SkipsInvalidURLs(t *testing.T) {
 	t.Parallel()
 
 	got := DuplicateEndpointURLWarnings([]config.EndpointConfig{
-		{Name: "a", URL: "http://user:secret@h:1"},
-		{Name: "b", URL: "http://user:secret@h:1"},
+		{Name: "a", URL: "wombat:secret@http://h:1"},
+		{Name: "b", URL: "wombat:secret@http://h:1"},
 	})
-	if len(got) != 1 || strings.Contains(got[0], "secret") || strings.Contains(got[0], "user") {
-		t.Fatalf("warning leaked credentials or was missed: %v", got)
+	if len(got) != 0 {
+		t.Fatalf("invalid URLs must not be echoed in a warning, got %v", got)
 	}
 }
 

@@ -338,13 +338,13 @@ discovery:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `static.endpoints[].url` | string | Yes | Endpoint base URL |
+| `static.endpoints[].url` | string | Yes | Endpoint base URL: an absolute `http://` or `https://` URL with a host, no `@` or `%40` (credentials go in `auth`) |
 | `static.endpoints[].name` | string | Yes | Unique endpoint name |
 | `static.endpoints[].type` | string | Yes | Backend type (`ollama`, `lm-studio`, `llamacpp`, `vllm`, `vllm-mlx`, `sglang`, `lemonade`, `litellm`, `lmdeploy`, `docker-model-runner`, `omlx`, `rapid-mlx`, `text-embeddings-inference`, `openai-compatible`). `openai` is accepted as an alias for `openai-compatible`. |
 | `static.endpoints[].priority` | int | No | Selection priority (higher=preferred, default: `100`) |
 | `static.endpoints[].preserve_path` | bool | No | Preserve base path in URL when proxying (default: `false`) |
-| `static.endpoints[].health_check_url` | string | No | Health check path (optional, uses profile default if not specified) |
-| `static.endpoints[].model_url` | string | No | Model discovery path (optional, uses profile default if not specified) |
+| `static.endpoints[].health_check_url` | string | No | Health check path (optional, uses profile default if not specified); a path starting with exactly one leading `/` or an absolute `http(s)://` URL, no `@` or `%40` |
+| `static.endpoints[].model_url` | string | No | Model discovery path (optional, uses profile default if not specified); a path starting with exactly one leading `/` or an absolute `http(s)://` URL, no `@` or `%40` |
 | `static.endpoints[].check_interval` | duration | No | Health check interval (default: `5s`) |
 | `static.endpoints[].check_timeout` | duration | No | Health check timeout (default: `2s`) |
 | `static.endpoints[].model_filter` | object | No | Model filtering for this endpoint |

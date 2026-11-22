@@ -26,11 +26,17 @@ Go 1.27 no longer targets macOS 12 and earlier, so the `darwin` archives will no
 
 ### Breaking: unbracketed IPv6 endpoint URLs are rejected
 
-Go 1.26 made `net/url` strict about colons in the host, so an endpoint such as `http://::1:11434` no longer parses and Olla fails at startup with `invalid endpoint URL`. Wrap the address in brackets: `http://[::1]:11434`. Hostnames, IPv4 addresses and already-bracketed IPv6 addresses are unaffected. `--validate-config` does not parse endpoint URLs, so it still reports a pass; the error appears when discovery loads the endpoints.
+Go 1.26 made `net/url` strict about colons in the host, so an endpoint such as `http://::1:11434` no longer parses and Olla fails at startup. Wrap the address in brackets: `http://[::1]:11434`. Hostnames, IPv4 addresses and already-bracketed IPv6 addresses are unaffected. `--validate-config` reports it too.
 
-### Fixed: a malformed endpoint URL no longer echoes its credentials
+### Breaking: endpoint URLs are validated strictly
 
-When an endpoint URL failed to parse, the startup error and log line quoted the raw URL, including any `user:password@` or token-as-username in it. The error now shows the URL with the userinfo replaced by `<redacted>`. Valid URLs that carry userinfo are still rejected at startup, as before.
+Startup and `--validate-config` now apply three rules to each endpoint:
+
+- `url` must be an absolute `http://` or `https://` URL with a host. An endpoint written without a scheme, such as `localhost:11434`, now fails; use `http://localhost:11434`.
+- `url`, `health_check_url` and `model_url` must not contain `@` or `%40`. Credentials belong in the endpoint's [auth block](../configuration/endpoint-auth.md). This also catches credentials written before the scheme (`name:secret@http://host`), which previously loaded and appeared in logs and `/internal/status`.
+- `health_check_url` and `model_url`, when set, must be a path starting with a single `/` or an absolute `http://` or `https://` URL. `api/tags` and `//host/x` are rejected.
+
+Errors name the endpoint and field and never repeat the configured value.
 
 ### Changed: release images are built with GoReleaser's `dockers_v2`
 
