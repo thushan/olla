@@ -18,7 +18,7 @@ names and config keys are the literal wire or YAML identifiers.
 
 ### Fixed: `server.host` accepts a bare IPv6 address
 
-`server.host: "::"` or `"::1"` built the listen address `:::40114` and failed to bind with "too many colons in address". Bare and bracketed (`[::]`) IPv6 hosts now both work, as do `0.0.0.0`, hostnames and an empty host. Raised by @sigil-03 in [#145](https://github.com/thushan/olla/pull/145).
+A bare IPv6 `server.host` such as `::` built the listen address `:::40114` and failed to bind with "too many colons in address". Bare IPv6 hosts now work; bracketed ones (`[::]`) already did. Raised by @sigil-03 in [#145](https://github.com/thushan/olla/pull/145).
 
 ### Fixed: client cancels no longer open the circuit breaker
 
