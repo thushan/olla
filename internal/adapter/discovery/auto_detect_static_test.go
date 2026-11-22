@@ -194,3 +194,45 @@ func TestStaticExplicitType_Unchanged(t *testing.T) {
 		})
 	}
 }
+
+// With an explicit model_url every candidate probes the same path, so the shape checks alone
+// decide the winner. Bodies are the real upstream shapes.
+func TestStaticAutoDetect_ExplicitModelURLShapes(t *testing.T) {
+	t.Parallel()
+
+	const llamaCppBody = `{"models":[{"name":"m1","model":"m1","modified_at":"","size":"","digest":"","type":"model","description":"","tags":[""],"capabilities":["completion"],"parameters":"","details":{"parent_model":"","format":"gguf","family":"","families":[""],"parameter_size":"","quantization_level":""}}],"object":"list","data":[{"id":"m1","aliases":[],"tags":[],"object":"model","created":1,"owned_by":"llamacpp","meta":{"n_ctx":8192,"n_ctx_train":32768}}]}`
+	const lmStudioBody = `{"object":"list","data":[{"id":"m1","object":"model","type":"llm","publisher":"p","arch":"llama","quantization":"Q4","state":"loaded","max_context_length":4096},{"id":"m2","object":"model","type":"vlm","arch":"qwen","state":"not-loaded"}]}`
+	const ctxBody = `{"object":"list","data":[{"id":"m1","owned_by":%q,"context_window":8192},{"id":"m2","owned_by":%q,"context_window":8192}]}`
+
+	tests := []struct {
+		name string
+		body string
+		want string
+		n    int
+	}{
+		{"rapid-mlx", fmt.Sprintf(ctxBody, "rapid-mlx", "rapid-mlx"), domain.ProfileRapidMLX, 2},
+		{"vllm", fmt.Sprintf(ctxBody, "vllm", "vllm"), domain.ProfileVLLM, 2},
+		{"omlx", fmt.Sprintf(ctxBody, "omlx", "omlx"), domain.ProfileOMLX, 2},
+		{"llamacpp", llamaCppBody, domain.ProfileLlamaCpp, 1},
+		{"generic openai", fmt.Sprintf(ctxBody, "organization-owner", "organization-owner"), domain.ProfileOpenAICompatible, 2},
+		{"ollama api/tags", ollamaTagsBody, domain.ProfileOllama, 2},
+		{"lm studio api/v0/models", lmStudioBody, domain.ProfileLmStudio, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				fmt.Fprint(w, tt.body)
+			}))
+			defer srv.Close()
+
+			n, won, err := discoverStatic(t, config.EndpointConfig{Name: "e", URL: srv.URL, Type: "auto", ModelURL: "/models"})
+			if err != nil {
+				t.Fatalf("discovery failed: %v", err)
+			}
+			if won != tt.want || n != tt.n {
+				t.Errorf("got profile %q with %d models, want %q with %d", won, n, tt.want, tt.n)
+			}
+		})
+	}
+}

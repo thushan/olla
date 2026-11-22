@@ -243,11 +243,14 @@ func (c *HTTPModelDiscoveryClient) discoverWithProfile(ctx context.Context, endp
 func checkAutoDetectShape(body []byte, profileName string) error {
 	switch profileName {
 	case domain.ProfileOllama:
-		if !gjson.GetBytes(body, "models").IsArray() {
+		// llama.cpp's /v1/models also carries a top-level `models` array (an Ollama-style
+		// compat block) next to its OpenAI `data` envelope. /api/tags never has `data`, so
+		// its presence means the body is an OpenAI-style server, not Ollama.
+		if !gjson.GetBytes(body, "models").IsArray() || gjson.GetBytes(body, "data").IsArray() {
 			return fmt.Errorf("model response is not in %s format", profileName)
 		}
 	case domain.ProfileLmStudio:
-		if !gjson.GetBytes(body, "data").IsArray() {
+		if !isLMStudioModelList(body) {
 			return fmt.Errorf("model response is not in %s format", profileName)
 		}
 	case domain.ProfileLlamaCpp, domain.ProfileVLLM, domain.ProfileRapidMLX, domain.ProfileOMLX:
@@ -256,6 +259,35 @@ func checkAutoDetectShape(body []byte, profileName string) error {
 		}
 	}
 	return nil
+}
+
+// lmStudioFields are model fields only LM Studio's /api/v0/models emits.
+var lmStudioFields = []string{"type", "state", "arch"}
+
+// isLMStudioModelList accepts LM Studio's /api/v0/models shape: a `data` array whose models
+// carry its own `type`, `state` or `arch` fields. Plain OpenAI envelopes (vLLM, Rapid-MLX, oMLX,
+// generic) have none of them, and used to win here and lose their context metadata. An empty list
+// is accepted as before since it gives no evidence either way.
+func isLMStudioModelList(body []byte) bool {
+	data := gjson.GetBytes(body, "data")
+	if !data.IsArray() {
+		return false
+	}
+	models := data.Array()
+	if len(models) == 0 {
+		return true
+	}
+	for _, model := range models {
+		if model.Get("id").String() == "" {
+			continue
+		}
+		for _, field := range lmStudioFields {
+			if model.Get(field).String() != "" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func hasModelOwner(body []byte, owner string) bool {
