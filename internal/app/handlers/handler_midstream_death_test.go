@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/core/constants"
+	"github.com/thushan/olla/internal/testutil"
 )
 
 // A backend that dies after the response has started must be detectable by the
@@ -255,11 +256,7 @@ func TestPreCommitBackendFailure_Still502(t *testing.T) {
 	for _, rt := range statusRoutes() {
 		t.Run(rt.name, func(t *testing.T) {
 			t.Parallel()
-			dead := httptest.NewServer(http.NotFoundHandler())
-			url := dead.URL
-			dead.Close() // connection refused
-
-			h := newStatusHarness(t, "olla", rt, url)
+			h := newStatusHarness(t, "olla", rt, testutil.RefusedBackendURL(t))
 			front := newFront(t, h)
 			res := doStreamRequest(t, front.URL+rt.path, streamReqBody)
 

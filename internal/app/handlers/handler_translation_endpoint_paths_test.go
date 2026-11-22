@@ -27,6 +27,7 @@ import (
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/testutil"
 	"github.com/thushan/olla/theme"
 )
 
@@ -91,14 +92,6 @@ func (b *pathBackend) paths() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]string(nil), b.hits...)
-}
-
-// closedBackendURL returns an address nothing listens on, so connecting is refused and the
-// engines fail over. A port freed by a closed httptest server can be reissued to another
-// parallel test, so a privileged port is used instead.
-func closedBackendURL(t *testing.T) string {
-	t.Helper()
-	return "http://127.0.0.1:1"
 }
 
 func liveEndpoint(t *testing.T, name, typ, rawURL string, priority int) *domain.Endpoint {
@@ -300,7 +293,7 @@ func TestTranslation_FailoverUsesEachEndpointsOwnPath(t *testing.T) {
 						t.Parallel()
 
 						live := newPathBackend(t, p.liveServes)
-						dead := liveEndpoint(t, "dead-host", p.deadType, closedBackendURL(t), p.deadPriority)
+						dead := liveEndpoint(t, "dead-host", p.deadType, testutil.RefusedBackendURL(t), p.deadPriority)
 						up := liveEndpoint(t, "live-host", p.liveType, live.URL, 50)
 						eps := []*domain.Endpoint{up, dead}
 						hosts := map[string][]*domain.Endpoint{"shared-model": eps}
@@ -495,7 +488,7 @@ func TestTranslation_StrictModelUnavailableStays503(t *testing.T) {
 			t.Parallel()
 
 			tei := newPathBackend(t, "/embed")
-			down := liveEndpoint(t, "vllm-down", "vllm", closedBackendURL(t), 50)
+			down := liveEndpoint(t, "vllm-down", "vllm", testutil.RefusedBackendURL(t), 50)
 			healthy := []*domain.Endpoint{liveEndpoint(t, "tei-host", "text-embeddings-inference", tei.URL, 100)}
 			f := newTranslationPathApp(t, engine, true, false, healthy, map[string][]*domain.Endpoint{"shared-model": {down}})
 

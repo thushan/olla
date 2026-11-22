@@ -21,6 +21,7 @@ import (
 	"github.com/thushan/olla/internal/adapter/stats"
 	"github.com/thushan/olla/internal/core/constants"
 	"github.com/thushan/olla/internal/logger"
+	"github.com/thushan/olla/internal/testutil"
 	"github.com/thushan/olla/theme"
 )
 
@@ -288,9 +289,7 @@ func TestRequestFailed_CarriesWrittenErrorStatus(t *testing.T) {
 			t.Run(engine+"/"+route.name, func(t *testing.T) {
 				t.Parallel()
 
-				// Port 1 is never listening; a closed httptest port can be reissued to a
-				// parallel test's server and answer instead.
-				h := newStatusHarness(t, engine, route, "http://127.0.0.1:1")
+				h := newStatusHarness(t, engine, route, testutil.RefusedBackendURL(t))
 
 				w := h.post(tagBareChat, false)
 

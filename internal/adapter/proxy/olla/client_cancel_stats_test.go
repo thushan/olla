@@ -12,6 +12,7 @@ import (
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
+	"github.com/thushan/olla/internal/testutil"
 )
 
 func newCancelTestService(t *testing.T, mutate func(*Configuration)) *Service {
@@ -52,9 +53,7 @@ func hangingBackend(t *testing.T) *httptest.Server {
 // Genuine transport failures must keep opening the breaker, otherwise the
 // cancel fix has simply switched failure accounting off.
 func TestBackendRoundTripFailures_StillOpenBreaker(t *testing.T) {
-	dead := httptest.NewServer(http.NotFoundHandler())
-	ep := endpointFor(t, dead.URL)
-	dead.Close() // connection refused from here on
+	ep := endpointFor(t, testutil.RefusedBackendURL(t))
 
 	svc := newCancelTestService(t, nil)
 	for range circuitBreakerThreshold {
