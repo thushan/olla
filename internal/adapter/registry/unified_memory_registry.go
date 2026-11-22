@@ -627,8 +627,8 @@ func (r *UnifiedMemoryModelRegistry) GetModelsByCapability(ctx context.Context, 
 
 	r.globalUnified.Range(func(id string, model *domain.UnifiedModel) bool {
 		// Check if model has the requested capability
-		for _, cap := range model.Capabilities {
-			if capabilityMatches(cap, capability) {
+		for _, capName := range model.Capabilities {
+			if capabilityMatches(capName, capability) {
 				models = append(models, model)
 				return true
 			}

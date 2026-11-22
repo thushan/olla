@@ -321,8 +321,8 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 		state.currentIndex = len(state.contentBlocks)
 		state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
 
-		if err := t.writeEvent(w, "content_block_start", map[string]interface{}{
-			"type":  "content_block_start",
+		if err := t.writeEvent(w, eventContentBlockStart, map[string]interface{}{
+			"type":  eventContentBlockStart,
 			"index": state.currentIndex,
 			"content_block": map[string]interface{}{
 				"type": contentTypeText,
@@ -378,8 +378,8 @@ func (t *Translator) handleReasoningDelta(reasoning string, state *StreamingStat
 		state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
 		state.reasoningOpen = true
 
-		if err := t.writeEvent(w, "content_block_start", map[string]interface{}{
-			"type":  "content_block_start",
+		if err := t.writeEvent(w, eventContentBlockStart, map[string]interface{}{
+			"type":  eventContentBlockStart,
 			"index": state.currentIndex,
 			"content_block": map[string]interface{}{
 				"type":     contentTypeThinking,
@@ -460,8 +460,8 @@ func (t *Translator) initializeToolBlock(id, name string, toolIndex int, state *
 	// track which content block this tool index maps to for finalisation
 	state.toolIndexToBlock[toolIndex] = state.currentIndex
 
-	if err := t.writeEvent(w, "content_block_start", map[string]interface{}{
-		"type":  "content_block_start",
+	if err := t.writeEvent(w, eventContentBlockStart, map[string]interface{}{
+		"type":  eventContentBlockStart,
 		"index": state.currentIndex,
 		"content_block": map[string]interface{}{
 			"type": contentTypeToolUse,
@@ -696,7 +696,7 @@ func (t *Translator) logStreamingResponse(state *StreamingState, original *http.
 	response := AnthropicResponse{
 		ID:           state.messageID,
 		Type:         "message",
-		Role:         "assistant",
+		Role:         roleAssistant,
 		Model:        state.model,
 		Content:      state.contentBlocks,
 		StopReason:   mapFinishReasonToStopReason(state.lastFinishReason),
@@ -734,7 +734,7 @@ func (t *Translator) createMessageStart(state *StreamingState) map[string]interf
 		"message": map[string]interface{}{
 			"id":            state.messageID,
 			"type":          "message",
-			"role":          "assistant",
+			"role":          roleAssistant,
 			"model":         state.model,
 			"content":       []interface{}{},
 			"stop_reason":   nil,

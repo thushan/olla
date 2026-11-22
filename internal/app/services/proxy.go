@@ -103,7 +103,27 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 	// Create a discovery service adapter
 	s.discoveryService = &endpointRepositoryAdapter{repo: s.endpointRepo}
 
-	// Create metrics extractor with profile factory
+	metricsExtractor := s.newMetricsExtractor()
+	s.metricsExtractor = metricsExtractor
+
+	// Create proxy service
+	proxyFactory := proxy.NewFactory(s.statsCollector, metricsExtractor, s.logger)
+	s.proxyService, err = proxyFactory.Create(s.config.Engine, s.discoveryService, s.loadBalancer, proxyConfig)
+	if err != nil {
+		return fmt.Errorf("failed to create proxy service: %w", err)
+	}
+
+	s.logger.Info("Proxy service initialised",
+		"engine", s.config.Engine,
+		"profile", s.config.Profile,
+		"balancer", s.config.LoadBalancer)
+
+	return nil
+}
+
+// newMetricsExtractor builds the metrics extractor, returning nil when the profile
+// factory or extractor cannot be created: the proxy runs fine without provider metrics.
+func (s *ProxyServiceWrapper) newMetricsExtractor() ports.MetricsExtractor {
 	s.logger.Info("Creating metrics extractor...")
 	profileFactory, err := profile.NewFactoryWithDefaults()
 	if err != nil {
@@ -137,21 +157,7 @@ func (s *ProxyServiceWrapper) Start(ctx context.Context) error {
 			}
 		}
 	}
-	s.metricsExtractor = metricsExtractor
-
-	// Create proxy service
-	proxyFactory := proxy.NewFactory(s.statsCollector, metricsExtractor, s.logger)
-	s.proxyService, err = proxyFactory.Create(s.config.Engine, s.discoveryService, s.loadBalancer, proxyConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create proxy service: %w", err)
-	}
-
-	s.logger.Info("Proxy service initialised",
-		"engine", s.config.Engine,
-		"profile", s.config.Profile,
-		"balancer", s.config.LoadBalancer)
-
-	return nil
+	return metricsExtractor
 }
 
 // cleanupable is an optional interface implemented by proxy engines that own

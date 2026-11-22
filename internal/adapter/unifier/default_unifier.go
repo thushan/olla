@@ -349,16 +349,16 @@ func (u *DefaultUnifier) mergeMetadata(unified *domain.UnifiedModel, model *Mode
 
 func (u *DefaultUnifier) mergeCapabilities(existing, newCaps []string) []string {
 	capSet := make(map[string]bool)
-	for _, cap := range existing {
-		capSet[cap] = true
+	for _, capName := range existing {
+		capSet[capName] = true
 	}
-	for _, cap := range newCaps {
-		capSet[cap] = true
+	for _, capName := range newCaps {
+		capSet[capName] = true
 	}
 
 	merged := make([]string, 0, len(capSet))
-	for cap := range capSet {
-		merged = append(merged, cap)
+	for capName := range capSet {
+		merged = append(merged, capName)
 	}
 	return merged
 }
@@ -565,10 +565,10 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		mergeSources(merged, sourceIdx, model.SourceEndpoints)
 		mergeAliases(merged, aliasIdx, model.Aliases)
 
-		for _, cap := range model.Capabilities {
-			if !capSeen[cap] {
-				capSeen[cap] = true
-				merged.Capabilities = append(merged.Capabilities, cap)
+		for _, capName := range model.Capabilities {
+			if !capSeen[capName] {
+				capSeen[capName] = true
+				merged.Capabilities = append(merged.Capabilities, capName)
 			}
 		}
 

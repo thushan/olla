@@ -164,7 +164,7 @@ func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]in
 		if userMsg != nil {
 			result = append(result, userMsg)
 		}
-	} else if msg.Role == "assistant" {
+	} else if msg.Role == roleAssistant {
 		assistantMsg := t.convertAssistantMessage(contentBlocks)
 		if assistantMsg != nil {
 			result = append(result, assistantMsg)
@@ -239,7 +239,7 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 // combine text + tool uses into single openai message
 func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]interface{} {
 	msg := map[string]interface{}{
-		"role": "assistant",
+		"role": roleAssistant,
 	}
 
 	var textContent string

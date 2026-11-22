@@ -99,7 +99,7 @@ func isNilValue[T any](v T) bool {
 	}
 	rv := reflect.ValueOf(any(v))
 	switch rv.Kind() {
-	case reflect.Ptr, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
+	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
 		return rv.IsNil()
 	default:
 		return false

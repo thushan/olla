@@ -680,7 +680,7 @@ func (e *teiError) writePlain(w http.ResponseWriter) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(e.status)
 	// text/plain with nosniff is never rendered as HTML; this is a test mock.
-	_, _ = io.WriteString(w, e.msg) //nolint:gosec // G705: plain-text body, not HTML
+	_, _ = io.WriteString(w, e.msg)
 }
 
 // write emits the native {"error","error_type"} shape.

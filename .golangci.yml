@@ -1,7 +1,7 @@
 version: "2"
 
 run:
-  go: "1.24"
+  go: "1.27"
   concurrency: 8
 
 linters:
@@ -20,7 +20,7 @@ linters:
     - gocognit
     - goconst
     - gocritic
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - gosec
     - govet
@@ -64,6 +64,12 @@ linters:
         - shadow
     gocognit:
       min-complexity: 30
+    goconst:
+      # Short, repeated literals are mostly map keys and field names, where a
+      # constant adds indirection without removing a magic string.
+      min-len: 4
+      min-occurrences: 5
+      ignore-map-keys: true
     misspell:
       ignore-rules:
         - thushan

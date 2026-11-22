@@ -13,7 +13,6 @@ on:
   workflow_dispatch:
 
 env:
-  GO_VERSION: 1.24.x
   BUN_VERSION: "1.3.5"
 
 permissions:
@@ -32,7 +31,7 @@ jobs:
       - name: Configure Go
         uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           cache: true
 
       - name: Configure Bun

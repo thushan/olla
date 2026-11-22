@@ -70,7 +70,7 @@ func walkKnownKeys(n *yaml.Node, t reflect.Type, path string, depth int, w *keyW
 	if n == nil || depth > maxKeyWalkDepth || !w.step() {
 		return
 	}
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	// Custom unmarshalers own their own schema.
@@ -203,7 +203,7 @@ func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) 
 		name, opts, _ := strings.Cut(tag, ",")
 		if strings.Contains(","+opts+",", ",inline,") {
 			ft := f.Type
-			for ft.Kind() == reflect.Ptr {
+			for ft.Kind() == reflect.Pointer {
 				ft = ft.Elem()
 			}
 			switch ft.Kind() {

@@ -46,7 +46,7 @@ func (c *OpenAIConverter) ConvertToFormat(models []*domain.UnifiedModel, filters
 	}
 
 	return OpenAIModelResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -62,7 +62,7 @@ func (c *OpenAIConverter) convertModel(model *domain.UnifiedModel) OpenAIModelDa
 
 	return OpenAIModelData{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: time.Now().Unix(),
 		OwnedBy: "olla",
 	}

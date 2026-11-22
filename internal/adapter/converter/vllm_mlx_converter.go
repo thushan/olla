@@ -42,7 +42,7 @@ func (c *VLLMMLXConverter) ConvertToFormat(models []*domain.UnifiedModel, filter
 	}
 
 	return profile.VLLMMLXResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -60,7 +60,7 @@ func (c *VLLMMLXConverter) convertModel(model *domain.UnifiedModel) *profile.VLL
 
 	return &profile.VLLMMLXModel{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: time.Now().Unix(),
 		OwnedBy: c.determineOwner(modelID),
 	}

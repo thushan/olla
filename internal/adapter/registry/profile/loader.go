@@ -19,6 +19,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// anthropicMessagesPath is the Anthropic Messages API route the built-in profiles expose.
+const anthropicMessagesPath = "/v1/messages"
+
 type ProfileLoader struct {
 	filter        ports.Filter
 	profiles      map[string]domain.InferenceProfile
@@ -191,7 +194,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	ollamaConfig.API.OpenAICompatible = true
 	ollamaConfig.API.AnthropicSupport = &domain.AnthropicSupportConfig{
 		Enabled:      true,
-		MessagesPath: "/v1/messages",
+		MessagesPath: anthropicMessagesPath,
 		MinVersion:   "0.14.0",
 		Limitations:  []string{"token_counting_404"},
 	}
@@ -210,7 +213,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		"/api/ps",
 		"/api/version",
 		"/v1/responses",
-		"/v1/messages",
+		anthropicMessagesPath,
 	}
 	ollamaConfig.API.ModelDiscoveryPath = "/api/tags"
 	ollamaConfig.API.HealthCheckPath = "/"
@@ -325,7 +328,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	lmStudioConfig.API.OpenAICompatible = true
 	lmStudioConfig.API.AnthropicSupport = &domain.AnthropicSupportConfig{
 		Enabled:      true,
-		MessagesPath: "/v1/messages",
+		MessagesPath: anthropicMessagesPath,
 		MinVersion:   "0.4.1",
 	}
 	lmStudioConfig.API.Paths = []string{
@@ -335,7 +338,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		"/v1/embeddings",
 		"/api/v0/models",
 		"/v1/responses",
-		"/v1/messages",
+		anthropicMessagesPath,
 	}
 	lmStudioConfig.API.ModelDiscoveryPath = "/api/v0/models"
 	lmStudioConfig.API.HealthCheckPath = DefaultModelsUri
@@ -419,7 +422,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 	openAIConfig.API.OpenAICompatible = true
 	openAIConfig.API.AnthropicSupport = &domain.AnthropicSupportConfig{
 		Enabled:      false,
-		MessagesPath: "/v1/messages",
+		MessagesPath: anthropicMessagesPath,
 	}
 	openAIConfig.API.Paths = []string{
 		DefaultModelsUri,
@@ -427,7 +430,7 @@ func (l *ProfileLoader) loadBuiltInProfilesInto(profiles map[string]domain.Infer
 		constants.PathV1Completions,
 		"/v1/embeddings",
 		"/v1/responses",
-		"/v1/messages",
+		anthropicMessagesPath,
 	}
 	openAIConfig.API.ModelDiscoveryPath = DefaultModelsUri
 	openAIConfig.API.HealthCheckPath = DefaultModelsUri
@@ -512,7 +515,7 @@ func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.Inference
 	llamaCppConfig.API.OpenAICompatible = true
 	llamaCppConfig.API.AnthropicSupport = &domain.AnthropicSupportConfig{
 		Enabled:      true,
-		MessagesPath: "/v1/messages",
+		MessagesPath: anthropicMessagesPath,
 		MinVersion:   "b4847",
 		TokenCount:   true,
 	}
@@ -527,7 +530,7 @@ func (l *ProfileLoader) loadLlamaCppBuiltIn(profiles map[string]domain.Inference
 		"/detokenize",
 		"/infill",
 		"/v1/responses",
-		"/v1/messages",
+		anthropicMessagesPath,
 		"/v1/messages/count_tokens",
 		"/v1/rerank",
 	}

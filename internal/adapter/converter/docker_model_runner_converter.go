@@ -41,7 +41,7 @@ func (c *DockerModelRunnerConverter) ConvertToFormat(models []*domain.UnifiedMod
 	}
 
 	return profile.DockerModelRunnerResponse{
-		Object: "list",
+		Object: objectList,
 		Data:   data,
 	}, nil
 }
@@ -60,7 +60,7 @@ func (c *DockerModelRunnerConverter) convertModel(model *domain.UnifiedModel) *p
 
 	return &profile.DockerModelRunnerModel{
 		ID:      modelID,
-		Object:  "model",
+		Object:  objectModel,
 		Created: now,
 		OwnedBy: c.determineOwner(modelID),
 	}

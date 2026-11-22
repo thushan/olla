@@ -142,13 +142,13 @@ var nonGenerativeModelTypes = map[string]struct{}{
 	"classifier": {},
 }
 
-var embedderCapabilities = []string{"embeddings", "similarity", "vector-search"}
+var embedderCapabilities = []string{capEmbeddings, "similarity", "vector-search"}
 
 // nonGenerativeCapabilities mark a model that scores or encodes text. Name
 // patterns can add them to a model whose backend doesn't report a kind (a vLLM
 // reranker, an OpenAI-style BGE embedder), and such a model must not keep the
 // text-generation default any more than a typed one does.
-var nonGenerativeCapabilities = []string{"embeddings", "rerank", "classification"}
+var nonGenerativeCapabilities = []string{capEmbeddings, "rerank", "classification"}
 
 // dropGenerativeForNonGenerative removes the generative defaults from a model
 // that name patterns tagged as an embedder, reranker or classifier.
@@ -163,8 +163,8 @@ func dropGenerativeForNonGenerative(capabilities map[string]bool, modelType stri
 			}
 		}
 	}
-	for _, cap := range nonGenerativeCapabilities {
-		if capabilities[cap] {
+	for _, capName := range nonGenerativeCapabilities {
+		if capabilities[capName] {
 			delete(capabilities, "text-generation")
 			// chat reaches an unreported-kind model only through an instruct/chat
 			// name pattern (gte-Qwen2-7B-instruct is still an embedder); a
@@ -184,8 +184,8 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 
 	modelTypeLower := strings.ToLower(modelType)
 	if typeCaps, exists := config.Capabilities.TypeCapabilities[modelTypeLower]; exists {
-		for _, cap := range typeCaps {
-			capabilities[cap] = true
+		for _, capName := range typeCaps {
+			capabilities[capName] = true
 		}
 	}
 	// embedding, rerank and classification models encode or score text, they
@@ -199,8 +199,8 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 	nameLower := strings.ToLower(modelName)
 	for _, pattern := range config.Capabilities.NamePatterns {
 		if pattern.regex != nil && pattern.regex.MatchString(nameLower) {
-			for _, cap := range pattern.Capabilities {
-				capabilities[cap] = true
+			for _, capName := range pattern.Capabilities {
+				capabilities[capName] = true
 			}
 		}
 	}
@@ -229,8 +229,8 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 	// Preserve explicitly declared capabilities from source metadata
 	if metadata != nil {
 		if caps, ok := metadata["capabilities"].([]interface{}); ok {
-			for _, cap := range caps {
-				if capStr, ok := cap.(string); ok {
+			for _, capName := range caps {
+				if capStr, ok := capName.(string); ok {
 					capabilities[capStr] = true
 				}
 			}
@@ -238,8 +238,8 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 	}
 
 	result := make([]string, 0, len(capabilities))
-	for cap := range capabilities {
-		result = append(result, cap)
+	for capName := range capabilities {
+		result = append(result, capName)
 	}
 
 	return result
@@ -390,8 +390,8 @@ func extractFromPatterns(modelName string, config *ModelUnificationConfig) (fami
 // when config doesn't supply an alias for the leading token - kept in sync
 // with the historical hardcoded list so existing behaviour is unaffected.
 var knownDelimiterFamilies = []string{
-	"llama", "gemma", "phi", "qwen", "mistral", "mixtral",
-	"yi", "deepseek", "codellama", "starcoder", "vicuna",
+	familyLlama, familyGemma, "phi", familyQwen, familyMistral, "mixtral",
+	"yi", familyDeepseek, "codellama", "starcoder", "vicuna",
 	"falcon", "gpt2", "gptj", "gptneox", "bloom", "opt", "mpt",
 }
 
