@@ -28,6 +28,7 @@ linters:
     - intrange
     - makezero
     - misspell
+    - modernize
     - nakedret
     - nilerr
     - noctx
@@ -100,6 +101,17 @@ linters:
       # here; os-setenv is on by default.
       context-background: true
       context-todo: true
+    modernize:
+      disable:
+        # omitzero: swapping omitempty for omitzero changes which nested
+        # struct fields reach the JSON wire format; a wire-format change
+        # needs its own deliberate decision.
+        - omitzero
+        # stringsbuilder: one site in the codebase; deliberately left alone
+        # because the churn is not worth it.
+        - stringsbuilder
+        # slicesdelete, appendclipped and bloop are not analyzers in
+        # golangci-lint v2.15.0's modernize set, so they are not listed here.
 
   exclusions:
     generated: strict
