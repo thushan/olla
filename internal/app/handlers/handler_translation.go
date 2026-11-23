@@ -516,8 +516,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Buffer body once -- both passthrough and translation paths need it.
 		// Read maxBodySize+1 to detect oversized requests before JSON parsing
 		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize+1))
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if tooLarge, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			// A chunked body over the server-wide cap. The security chain normally rejects it
 			// first; this keeps a path that skips the chain a 413 and out of the ERROR log,
 			// where a flood of oversized bodies would otherwise write a line per request.
@@ -1192,8 +1191,7 @@ func (a *Application) tokenCountHandler(trans translator.RequestTranslator) http
 
 		// Call the translator's token counting implementation
 		resp, err := counter.CountTokens(ctx, r)
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if tooLarge, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			// See translationHandler: quiet 413 rather than an ERROR line per oversized body.
 			if reject := translatorRejectWriter(trans); reject != nil {
 				reject(w, http.StatusRequestEntityTooLarge,

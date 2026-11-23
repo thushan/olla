@@ -263,8 +263,7 @@ func shouldRetry(err error, errorType domain.HealthCheckErrorType) bool {
 		return true
 	case domain.ErrorTypeHTTPError:
 		// Only retry certain HTTP errors
-		var netErr net.Error
-		if errors.As(err, &netErr) {
+		if netErr, ok := errors.AsType[net.Error](err); ok {
 			return netErr.Timeout()
 		}
 		return false
@@ -279,8 +278,7 @@ func classifyError(err error) domain.HealthCheckErrorType {
 		return domain.ErrorTypeCircuitOpen
 	}
 
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if netErr, ok := errors.AsType[net.Error](err); ok {
 		if netErr.Timeout() {
 			return domain.ErrorTypeTimeout
 		}

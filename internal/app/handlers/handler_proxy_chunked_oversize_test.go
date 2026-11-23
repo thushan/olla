@@ -49,8 +49,7 @@ func TestHandleProxyError_ChunkedOversizedBodyMapsTo413(t *testing.T) {
 	if readErr == nil {
 		t.Fatal("expected http.MaxBytesReader to reject a body over its limit")
 	}
-	var mbErr *http.MaxBytesError
-	if !errors.As(readErr, &mbErr) {
+	if _, ok := errors.AsType[*http.MaxBytesError](readErr); !ok {
 		t.Fatalf("expected io.ReadAll over a MaxBytesReader to yield *http.MaxBytesError, got %T: %v", readErr, readErr)
 	}
 	wrapped := fmt.Errorf("failed to read request body: %w", readErr)

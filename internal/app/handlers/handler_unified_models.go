@@ -103,8 +103,7 @@ func (a *Application) unifiedModelsHandler(w http.ResponseWriter, r *http.Reques
 	// Get converter for the requested format
 	modelConverter, err := a.converterFactory.GetConverter(format)
 	if err != nil {
-		var qpErr *ports.QueryParameterError
-		if errors.As(err, &qpErr) {
+		if qpErr, ok := errors.AsType[*ports.QueryParameterError](err); ok {
 			http.Error(w, qpErr.Error(), http.StatusBadRequest)
 			return
 		}

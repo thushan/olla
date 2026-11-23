@@ -239,8 +239,7 @@ func TestDiscoverModels(t *testing.T) {
 				if tt.errorType != nil {
 					switch tt.errorType.(type) {
 					case *DiscoveryError:
-						var discoveryError *DiscoveryError
-						if !errors.As(err, &discoveryError) {
+						if _, ok := errors.AsType[*DiscoveryError](err); !ok {
 							t.Errorf("Expected DiscoveryError, got %T", err)
 						}
 					}
@@ -569,10 +568,8 @@ func TestDiscoverModelsContextCancellation(t *testing.T) {
 	}
 
 	// Check that it's a discovery error wrapping a network error
-	var discErr *DiscoveryError
-	if errors.As(err, &discErr) {
-		var networkError *NetworkError
-		if !errors.As(discErr.Err, &networkError) {
+	if discErr, ok := errors.AsType[*DiscoveryError](err); ok {
+		if _, ok := errors.AsType[*NetworkError](discErr.Err); !ok {
 			t.Errorf("Expected NetworkError, got %T", discErr.Err)
 		}
 	}
