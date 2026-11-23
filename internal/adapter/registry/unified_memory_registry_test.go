@@ -57,7 +57,7 @@ func createTestUnifiedRegistry() *UnifiedMemoryModelRegistry {
 }
 
 func TestGetHealthyEndpointsForModel(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	registry := createTestUnifiedRegistry()
 
 	// Create test endpoints
@@ -170,7 +170,7 @@ func TestGetHealthyEndpointsForModel(t *testing.T) {
 }
 
 func TestGetModelsByCapability(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	registry := createTestUnifiedRegistry()
 
 	// Manually create and add unified models with different capabilities
@@ -284,7 +284,7 @@ func TestGetHealthyEndpointsForModel_ContextCancellation(t *testing.T) {
 	registry := createTestUnifiedRegistry()
 
 	// Create a cancelled context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	mockRepo := &mockEndpointRepository{}
@@ -299,7 +299,7 @@ func TestGetModelsByCapability_ContextCancellation(t *testing.T) {
 	registry := createTestUnifiedRegistry()
 
 	// Create a cancelled context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	_, err := registry.GetModelsByCapability(ctx, "chat")
@@ -310,7 +310,7 @@ func TestGetModelsByCapability_ContextCancellation(t *testing.T) {
 
 // TestEndpointSetCaching verifies that the endpoint set cache improves performance
 func TestEndpointSetCaching(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	registry := createTestUnifiedRegistry()
 
 	// Create test endpoints
@@ -384,7 +384,7 @@ func TestEndpointSetCaching(t *testing.T) {
 
 // TestEndpointSetCacheConcurrency verifies the cache is thread-safe under concurrent access
 func TestEndpointSetCacheConcurrency(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	registry := createTestUnifiedRegistry()
 
 	// Create test endpoints

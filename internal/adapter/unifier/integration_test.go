@@ -1,7 +1,6 @@
 package unifier_test
 
 import (
-	"context"
 	"sync"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func createTestLogger() logger.StyledLogger {
 
 func TestUnifierIntegrationWithRegistry(t *testing.T) {
 	log := createTestLogger()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create unified registry
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log, nil, nil, nil)
@@ -170,7 +169,7 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 
 func TestUnifierIntegrationEdgeCases(t *testing.T) {
 	log := createTestLogger()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create unified registry
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log, nil, nil, nil)
@@ -256,7 +255,7 @@ func TestUnifierIntegrationEdgeCases(t *testing.T) {
 
 func TestUnifierWithRealWorldScenarios(t *testing.T) {
 	log := createTestLogger()
-	ctx := context.Background()
+	ctx := t.Context()
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(log, nil, nil, nil)
 
 	// Scenario 1: Model migration between endpoints

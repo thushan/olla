@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,7 +13,7 @@ func TestGetModelsByCapability_FunctionCallingAliases(t *testing.T) {
 	t.Parallel()
 
 	reg := createTestUnifiedRegistry()
-	ctx := context.Background()
+	ctx := t.Context()
 	declared := []string{"function_calling"}
 	require.NoError(t, reg.RegisterModelsWithEndpoint(ctx,
 		&domain.Endpoint{Name: "ollama-1", URLString: ollamaURL, Type: domain.ProfileOllama},

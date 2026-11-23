@@ -1,7 +1,6 @@
 package unifier
 
 import (
-	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -160,7 +159,7 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			unifier := NewDefaultUnifier()
 
 			var allModels []*domain.UnifiedModel
@@ -178,7 +177,7 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 }
 
 func TestDefaultUnifier_ResolveModel(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Add some models
@@ -214,7 +213,7 @@ func TestDefaultUnifier_ResolveModel(t *testing.T) {
 }
 
 func TestDefaultUnifier_ModelMerging(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Add model from first endpoint
@@ -264,7 +263,7 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 }
 
 func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Add models from endpoint
@@ -303,7 +302,7 @@ func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
 }
 
 func TestDefaultUnifier_Clear(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Add some models
@@ -327,7 +326,7 @@ func TestDefaultUnifier_Clear(t *testing.T) {
 }
 
 func TestDefaultUnifier_NilAndEmptyInputs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Test nil models
@@ -376,7 +375,7 @@ func TestMergeUnifiedModels_OrderIsStableAndLeadsWithOwnID(t *testing.T) {
 
 	for _, order := range [][]*domain.UnifiedModel{{b, a}, {a, b}} {
 		for range 200 {
-			merged, err := u.MergeUnifiedModels(context.Background(), order)
+			merged, err := u.MergeUnifiedModels(t.Context(), order)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -416,7 +415,7 @@ func TestMergeUnifiedModels_ShuffledInputKeepsOwnIDFirst(t *testing.T) {
 	for range 500 {
 		models := build()
 		rng.Shuffle(len(models), func(i, j int) { models[i], models[j] = models[j], models[i] })
-		merged, err := u.MergeUnifiedModels(context.Background(), models)
+		merged, err := u.MergeUnifiedModels(t.Context(), models)
 		require.NoError(t, err)
 		require.Equal(t, merged.ID, merged.Aliases[0].Name)
 		require.Len(t, merged.Aliases, len(names))

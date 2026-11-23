@@ -18,7 +18,7 @@ func createTestLogger() logger.StyledLogger {
 }
 
 func TestOptimisticStrategy_FallbackBehavior(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	testLogger := createTestLogger()
 
 	healthyEndpoints := []*domain.Endpoint{
@@ -90,7 +90,7 @@ func TestOptimisticStrategy_FallbackBehavior(t *testing.T) {
 }
 
 func TestDiscoveryStrategy_FallbackBehavior(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	testLogger := createTestLogger()
 
 	healthyEndpoints := []*domain.Endpoint{
