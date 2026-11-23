@@ -1,7 +1,6 @@
 package unifier
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -31,7 +30,7 @@ func BenchmarkCatalogStore_GetModel(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming", "function_calling"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 		store.PutModel(model)
@@ -79,7 +78,7 @@ func BenchmarkCatalogStore_PutModel(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming", "function_calling"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 	}
@@ -133,7 +132,7 @@ func BenchmarkCatalogStore_GetAllModels(b *testing.B) {
 						},
 					},
 					Capabilities: []string{"chat", "streaming"},
-					Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+					Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 					LastSeen:     time.Now(),
 				}
 				store.PutModel(model)
@@ -172,7 +171,7 @@ func BenchmarkCatalogStore_ResolveByName(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 		store.PutModel(model)
@@ -229,7 +228,7 @@ func BenchmarkCatalogStore_MixedWorkload(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 		store.PutModel(model)
@@ -287,7 +286,6 @@ func BenchmarkCatalogStore_MixedWorkload(b *testing.B) {
 // BenchmarkDefaultUnifier_UnifyModels benchmarks the full unification flow
 func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 	unifier := NewDefaultUnifier().(*DefaultUnifier)
-	ctx := context.Background()
 
 	endpoint := &domain.Endpoint{
 		URLString: "http://localhost:11434",
@@ -314,6 +312,8 @@ func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 	}
 
 	b.Run("FirstUnification", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		b.ResetTimer()
 		b.ReportAllocs()
 		for range b.N {
@@ -325,6 +325,8 @@ func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 	})
 
 	b.Run("UpdateExisting", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Pre-populate
 		unifier.UnifyModels(ctx, models, endpoint)
 

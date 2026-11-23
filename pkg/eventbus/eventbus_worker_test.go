@@ -22,7 +22,7 @@ func TestWorkerPool_NoGoroutineLeaks(t *testing.T) {
 	eb := New[int]()
 
 	// Subscribe to events
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	ch, cleanup := eb.Subscribe(ctx)
 	defer cleanup()
 	defer cancel()
@@ -86,7 +86,7 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 	eb := NewWithConfig[int](config)
 
 	// Create a slow subscriber
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, _ := eb.Subscribe(ctx)
 	// Don't use cleanup in this test - let Shutdown handle it
 	defer eb.Shutdown()
@@ -106,14 +106,12 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 	// Publish many events rapidly, synchronising on the publisher goroutine's
 	// own completion (a WaitGroup it owns) instead of polling a counter.
 	var publishWg sync.WaitGroup
-	publishWg.Add(1)
-	go func() {
-		defer publishWg.Done()
+	publishWg.Go(func() {
 		for i := range 1000 {
 			eb.PublishAsync(i)
 			published.Add(1)
 		}
-	}()
+	})
 	publishWg.Wait()
 
 	// Drain blocks until every queued event has run through bus.Publish, so
@@ -197,7 +195,7 @@ func TestWorkerPool_QueueDroppedZeroOnNormalFlow(t *testing.T) {
 	eb := NewWithConfig[int](config)
 	defer eb.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, cleanup := eb.Subscribe(ctx)
 	defer cleanup()
 
@@ -254,13 +252,11 @@ func TestWorkerPool_QueueDroppedMonotonic(t *testing.T) {
 	}()
 
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range perGoroutine {
 				wp.PublishAsync(i)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(stop)
@@ -279,7 +275,7 @@ func TestWorkerPool_QueueDroppedMonotonic(t *testing.T) {
 func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	eb := New[string]()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, cleanup := eb.Subscribe(ctx)
 	defer cleanup()
 	defer eb.Shutdown() // Shutdown AFTER cleanup to avoid race

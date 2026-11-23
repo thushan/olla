@@ -85,7 +85,7 @@ func TestDiscoveryClient_IgnoresEnvironmentProxy(t *testing.T) {
 	run := func(client *http.Client) {
 		client.Transport.(*http.Transport).DialContext = dialTo(backendAddr, proxyAddr)
 		dc := discovery.NewHTTPModelDiscoveryClient(profiles, discoveryTestLogger(t), client)
-		_, _ = dc.DiscoverModels(context.Background(), ollamaEndpoint(t, endpointURL))
+		_, _ = dc.DiscoverModels(t.Context(), ollamaEndpoint(t, endpointURL))
 	}
 
 	// control: a client configured with a proxy hands the credentials to it, which
@@ -128,7 +128,7 @@ func TestDiscoveryClient_DoesNotReplayCredentialsOnCrossHostRedirect(t *testing.
 	require.NoError(t, err)
 
 	dc := discovery.NewHTTPModelDiscoveryClient(profiles, discoveryTestLogger(t), newDiscoveryHTTPClient(5*time.Second))
-	_, err = dc.DiscoverModels(context.Background(), ollamaEndpoint(t, origin.URL))
+	_, err = dc.DiscoverModels(t.Context(), ollamaEndpoint(t, origin.URL))
 
 	require.Error(t, err, "a redirect is a discovery failure, never followed")
 	assert.Nil(t, leaked.Load(), "the redirect target must not receive the request, let alone the API key or custom headers")

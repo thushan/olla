@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,26 +17,26 @@ func createResponseTestLogger() logger.StyledLogger {
 func TestTransformResponse_SimpleText(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-123",
 		"model": "claude-3-5-sonnet-20241022",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "Hello! How can I help you today?",
 				},
 				"finish_reason": "stop",
 			},
 		},
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"prompt_tokens":     float64(10),
 			"completion_tokens": float64(8),
 			"total_tokens":      float64(18),
 		},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -59,19 +58,19 @@ func TestTransformResponse_SimpleText(t *testing.T) {
 func TestTransformResponse_WithToolCalls(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-123",
 		"model": "claude-3-5-sonnet-20241022",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "Let me check that for you.",
-					"tool_calls": []interface{}{
-						map[string]interface{}{
+					"tool_calls": []any{
+						map[string]any{
 							"id":   "call_abc123",
 							"type": "function",
-							"function": map[string]interface{}{
+							"function": map[string]any{
 								"name":      "get_weather",
 								"arguments": `{"location":"San Francisco","unit":"celsius"}`,
 							},
@@ -81,13 +80,13 @@ func TestTransformResponse_WithToolCalls(t *testing.T) {
 				"finish_reason": "tool_calls",
 			},
 		},
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"prompt_tokens":     float64(20),
 			"completion_tokens": float64(15),
 		},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -111,24 +110,24 @@ func TestTransformResponse_WithToolCalls(t *testing.T) {
 func TestTransformResponse_MultipleToolCalls(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+	openaiResp := map[string]any{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role": "assistant",
-					"tool_calls": []interface{}{
-						map[string]interface{}{
+					"tool_calls": []any{
+						map[string]any{
 							"id":   "call_1",
 							"type": "function",
-							"function": map[string]interface{}{
+							"function": map[string]any{
 								"name":      "get_weather",
 								"arguments": `{"location":"SF"}`,
 							},
 						},
-						map[string]interface{}{
+						map[string]any{
 							"id":   "call_2",
 							"type": "function",
-							"function": map[string]interface{}{
+							"function": map[string]any{
 								"name":      "get_time",
 								"arguments": `{"timezone":"PST"}`,
 							},
@@ -138,10 +137,10 @@ func TestTransformResponse_MultipleToolCalls(t *testing.T) {
 				"finish_reason": "tool_calls",
 			},
 		},
-		"usage": map[string]interface{}{},
+		"usage": map[string]any{},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -162,25 +161,25 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 
 	t.Run("empty_content", func(t *testing.T) {
 		// OpenAI response with empty content string
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-empty",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"prompt_tokens":     float64(5),
 				"completion_tokens": float64(0),
 			},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -192,19 +191,19 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 
 	t.Run("null_content", func(t *testing.T) {
 		// OpenAI response with null content (tool-only response)
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-null",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": nil,
-						"tool_calls": []interface{}{
-							map[string]interface{}{
+						"tool_calls": []any{
+							map[string]any{
 								"id":   "call_only",
 								"type": "function",
-								"function": map[string]interface{}{
+								"function": map[string]any{
 									"name":      "search",
 									"arguments": `{"query":"test"}`,
 								},
@@ -214,10 +213,10 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 					"finish_reason": "tool_calls",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -233,12 +232,12 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("usage_not_present", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-nousage",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Response without usage",
 					},
@@ -248,7 +247,7 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 			// Missing usage field
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -259,25 +258,25 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 	})
 
 	t.Run("partial_usage", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-partial",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Response with partial usage",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"prompt_tokens": float64(15),
 				// Missing completion_tokens
 			},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -292,19 +291,19 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("malformed_json", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-badjson",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Calling tool",
-						"tool_calls": []interface{}{
-							map[string]interface{}{
+						"tool_calls": []any{
+							map[string]any{
 								"id":   "call_bad",
 								"type": "function",
-								"function": map[string]interface{}{
+								"function": map[string]any{
 									"name":      "get_data",
 									"arguments": `{invalid json syntax`,
 								},
@@ -314,10 +313,10 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 					"finish_reason": "tool_calls",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 
 		if err != nil {
 			assert.Contains(t, err.Error(), "json", "Error should mention JSON parsing issue")
@@ -337,19 +336,19 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 	})
 
 	t.Run("empty_arguments", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-empty-args",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Calling tool with empty args",
-						"tool_calls": []interface{}{
-							map[string]interface{}{
+						"tool_calls": []any{
+							map[string]any{
 								"id":   "call_empty",
 								"type": "function",
-								"function": map[string]interface{}{
+								"function": map[string]any{
 									"name":      "no_params",
 									"arguments": `{}`,
 								},
@@ -359,10 +358,10 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 					"finish_reason": "tool_calls",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -378,19 +377,19 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 func TestTransformResponse_OnlyToolCalls(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-toolonly",
 		"model": "claude-3-5-sonnet-20241022",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": nil, // No text content
-					"tool_calls": []interface{}{
-						map[string]interface{}{
+					"tool_calls": []any{
+						map[string]any{
 							"id":   "call_search",
 							"type": "function",
-							"function": map[string]interface{}{
+							"function": map[string]any{
 								"name":      "web_search",
 								"arguments": `{"query":"Anthropic Claude","max_results":5}`,
 							},
@@ -400,13 +399,13 @@ func TestTransformResponse_OnlyToolCalls(t *testing.T) {
 				"finish_reason": "tool_calls",
 			},
 		},
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"prompt_tokens":     float64(25),
 			"completion_tokens": float64(10),
 		},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -426,22 +425,22 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("stop_to_end_turn", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-finish",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Test response",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -451,19 +450,19 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	})
 
 	t.Run("tool_calls_to_tool_use", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-tools",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Calling tool",
-						"tool_calls": []interface{}{
-							map[string]interface{}{
+						"tool_calls": []any{
+							map[string]any{
 								"id":   "call_test",
 								"type": "function",
-								"function": map[string]interface{}{
+								"function": map[string]any{
 									"name":      "test_tool",
 									"arguments": `{}`,
 								},
@@ -473,10 +472,10 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 					"finish_reason": "tool_calls",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -486,22 +485,22 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	})
 
 	t.Run("length_to_max_tokens", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-length",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Test response",
 					},
 					"finish_reason": "length",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -511,22 +510,22 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	})
 
 	t.Run("explicit_stop_reason", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-explicit",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Response text",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -536,22 +535,22 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 	})
 
 	t.Run("unknown_finish_reason_defaults_to_end_turn", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-unknown",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Test",
 					},
 					"finish_reason": "content_filter", // Unknown reason
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -565,22 +564,22 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("generates_anthropic_format_id", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-original-123",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Test",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -596,23 +595,23 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 	})
 
 	t.Run("generates_unique_ids", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Test",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
 		ids := make(map[string]bool)
 		for range 100 {
-			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+			result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 			require.NoError(t, err)
 
 			anthropicResp, ok := result.(AnthropicResponse)
@@ -626,21 +625,21 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 	})
 
 	t.Run("id_contains_only_valid_base58_chars", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Test",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -667,19 +666,19 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-complex",
 		"model": "claude-3-5-sonnet-20241022",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "Processing request",
-					"tool_calls": []interface{}{
-						map[string]interface{}{
+					"tool_calls": []any{
+						map[string]any{
 							"id":   "call_complex",
 							"type": "function",
-							"function": map[string]interface{}{
+							"function": map[string]any{
 								"name": "process_data",
 								"arguments": `{
 									"filters": {
@@ -696,10 +695,10 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 				"finish_reason": "tool_calls",
 			},
 		},
-		"usage": map[string]interface{}{},
+		"usage": map[string]any{},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -715,16 +714,16 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 	require.NotNil(t, toolBlock)
 
 	assert.NotNil(t, toolBlock.Input["filters"])
-	filters, ok := toolBlock.Input["filters"].(map[string]interface{})
+	filters, ok := toolBlock.Input["filters"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "electronics", filters["category"])
 
-	priceRange, ok := filters["price_range"].(map[string]interface{})
+	priceRange, ok := filters["price_range"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, float64(100), priceRange["min"])
 	assert.Equal(t, float64(500), priceRange["max"])
 
-	tags, ok := toolBlock.Input["tags"].([]interface{})
+	tags, ok := toolBlock.Input["tags"].([]any)
 	require.True(t, ok)
 	assert.Len(t, tags, 2)
 	assert.Equal(t, "sale", tags[0])
@@ -735,58 +734,58 @@ func TestTransformResponse_InvalidFormat(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("missing_choices", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-nochoices",
 			"model": "claude-3-5-sonnet-20241022",
 			// Missing choices field
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "choices", "Error should mention missing choices")
 	})
 
 	t.Run("empty_choices_array", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":      "chatcmpl-emptychoices",
 			"model":   "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{}, // Empty array
-			"usage":   map[string]interface{}{},
+			"choices": []any{}, // Empty array
+			"usage":   map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "choices", "Error should mention empty choices")
 	})
 
 	t.Run("missing_message", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-nomessage",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
+			"choices": []any{
+				map[string]any{
 					// Missing message field
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "message", "Error should mention missing message")
 	})
 
 	t.Run("invalid_choices_type", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":      "chatcmpl-badchoices",
 			"model":   "claude-3-5-sonnet-20241022",
 			"choices": "not an array", // Wrong type
-			"usage":   map[string]interface{}{},
+			"usage":   map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 	})
 }
@@ -795,22 +794,22 @@ func TestTransformResponse_StopSequenceHandling(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
 	t.Run("with_stop_sequence", func(t *testing.T) {
-		openaiResp := map[string]interface{}{
+		openaiResp := map[string]any{
 			"id":    "chatcmpl-stopseq",
 			"model": "claude-3-5-sonnet-20241022",
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "Response until END",
 					},
 					"finish_reason": "stop",
 				},
 			},
-			"usage": map[string]interface{}{},
+			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -843,22 +842,22 @@ func TestTransformResponse_ModelFieldPreservation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			openaiResp := map[string]interface{}{
+			openaiResp := map[string]any{
 				"id":    "chatcmpl-model",
 				"model": tc.modelName,
-				"choices": []interface{}{
-					map[string]interface{}{
-						"message": map[string]interface{}{
+				"choices": []any{
+					map[string]any{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "Test",
 						},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{},
+				"usage": map[string]any{},
 			}
 
-			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+			result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 			require.NoError(t, err)
 
 			anthropicResp, ok := result.(AnthropicResponse)
@@ -872,22 +871,22 @@ func TestTransformResponse_ModelFieldPreservation(t *testing.T) {
 func TestTransformResponse_TypeAndRoleFields(t *testing.T) {
 	translator := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-fields",
 		"model": "claude-3-5-sonnet-20241022",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "Test response",
 				},
 				"finish_reason": "stop",
 			},
 		},
-		"usage": map[string]interface{}{},
+		"usage": map[string]any{},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -900,16 +899,16 @@ func TestTransformResponse_TypeAndRoleFields(t *testing.T) {
 
 func BenchmarkTransformResponse_Simple(b *testing.B) {
 	tr := mustNewTranslator(createResponseTestLogger(), createTestConfig())
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id": "chatcmpl-123", "model": "claude-3-5-sonnet-20241022",
-		"choices": []interface{}{map[string]interface{}{
-			"message":       map[string]interface{}{"role": "assistant", "content": "hi"},
+		"choices": []any{map[string]any{
+			"message":       map[string]any{"role": "assistant", "content": "hi"},
 			"finish_reason": "stop",
 		}},
-		"usage": map[string]interface{}{"prompt_tokens": float64(5), "completion_tokens": float64(2)},
+		"usage": map[string]any{"prompt_tokens": float64(5), "completion_tokens": float64(2)},
 	}
 	b.ReportAllocs()
 	for range b.N {
-		_, _ = tr.TransformResponse(context.Background(), openaiResp, nil)
+		_, _ = tr.TransformResponse(b.Context(), openaiResp, nil)
 	}
 }

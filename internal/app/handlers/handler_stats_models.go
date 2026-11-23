@@ -136,7 +136,13 @@ func (a *Application) buildModelStats(modelStats map[string]ports.ModelStats,
 		}
 	}
 
-	// Sort models by request count (most popular first)
+	// Sort models by request count (most popular first). Kept on sort.Slice
+	// rather than slices.SortFunc, which hands whole ModelStats values to its
+	// comparator and measured 8.3 percent slower on models-5000 (median of
+	// four interleaved pairs, each p = 0.002). The input comes from map
+	// iteration, so no stable variant applies. Recorded exception in the Go
+	// 1.27 modernise series; the numbers are in the commit message that
+	// restored this.
 	sort.Slice(models, func(i, j int) bool {
 		return models[i].TotalRequests > models[j].TotalRequests
 	})

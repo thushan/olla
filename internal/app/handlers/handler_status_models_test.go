@@ -491,7 +491,7 @@ func TestBuildAliasLookup_IncludesCanonicalAndExcludesSelf(t *testing.T) {
 	}
 	app := &Application{modelRegistry: reg}
 
-	lookup := app.buildAliasLookup(context.Background())
+	lookup := app.buildAliasLookup(t.Context())
 	if lookup == nil {
 		t.Fatal("expected non-nil lookup")
 	}
@@ -527,7 +527,7 @@ func TestBuildAliasLookup_AbsentWhenRegistryLacksInterface(t *testing.T) {
 	t.Parallel()
 
 	app := &Application{modelRegistry: &mockStatusModelRegistry{}}
-	if lookup := app.buildAliasLookup(context.Background()); lookup != nil {
+	if lookup := app.buildAliasLookup(t.Context()); lookup != nil {
 		t.Errorf("expected nil lookup when registry lacks GetUnifiedModels, got %v", lookup)
 	}
 }
@@ -623,10 +623,8 @@ func TestModelsStatusHandler_ETagStableAndAliasAware(t *testing.T) {
 
 	seen := time.Now()
 	reg := &mockAliasModelRegistry{
-		mockStatusModelRegistry: mockStatusModelRegistry{
-			endpointModels: map[string]*domain.EndpointModels{
-				"http://localhost:11434": {Models: []*domain.ModelInfo{{Name: "llama3", LastSeen: seen}}},
-			},
+		endpointModels: map[string]*domain.EndpointModels{
+			"http://localhost:11434": {Models: []*domain.ModelInfo{{Name: "llama3", LastSeen: seen}}},
 		},
 		unified: []*domain.UnifiedModel{
 			{

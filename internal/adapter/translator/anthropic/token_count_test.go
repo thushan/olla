@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -114,7 +113,7 @@ func TestCountTokens(t *testing.T) {
 								Type: "tool_use",
 								ID:   "toolu_123",
 								Name: "get_weather", // 11 chars
-								Input: map[string]interface{}{
+								Input: map[string]any{
 									"location": "Sydney", // JSON: {"location":"Sydney"} = 22 chars
 								},
 							},
@@ -215,7 +214,7 @@ func TestCountTokens(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 
 			// Call CountTokens
-			ctx := context.Background()
+			ctx := t.Context()
 			resp, err := trans.CountTokens(ctx, req)
 			if err != nil {
 				t.Fatalf("CountTokens failed: %v", err)
@@ -300,7 +299,7 @@ func TestCountTokensWithRawJSON(t *testing.T) {
 			}
 			req.Header.Set("Content-Type", "application/json")
 
-			ctx := context.Background()
+			ctx := t.Context()
 			resp, err := trans.CountTokens(ctx, req)
 			if err != nil {
 				t.Fatalf("CountTokens failed: %v", err)
@@ -350,7 +349,7 @@ func TestCountTokensErrors(t *testing.T) {
 			}
 			req.Header.Set("Content-Type", "application/json")
 
-			ctx := context.Background()
+			ctx := t.Context()
 			resp, err := trans.CountTokens(ctx, req)
 
 			if tt.shouldError {
@@ -410,7 +409,7 @@ func TestCountTokensMatchesPythonReference(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	resp, err := trans.CountTokens(ctx, req)
 	if err != nil {
 		t.Fatalf("CountTokens failed: %v", err)
@@ -441,7 +440,7 @@ func TestCountTokensWireResponse(t *testing.T) {
 		t.Fatalf("failed to create request: %v", err)
 	}
 
-	resp, err := trans.CountTokens(context.Background(), req)
+	resp, err := trans.CountTokens(t.Context(), req)
 	if err != nil {
 		t.Fatalf("CountTokens failed: %v", err)
 	}
@@ -454,7 +453,7 @@ func TestCountTokensWireResponse(t *testing.T) {
 		t.Fatalf("SerialiseCountTokens failed: %v", err)
 	}
 
-	var wireMap map[string]interface{}
+	var wireMap map[string]any
 	if err := json.Unmarshal(wireBytes, &wireMap); err != nil {
 		t.Fatalf("wire response is not valid JSON: %v", err)
 	}
@@ -522,7 +521,7 @@ func BenchmarkCountTokens(b *testing.B) {
 	for range b.N {
 		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
-		_, _ = trans.CountTokens(context.Background(), req)
+		_, _ = trans.CountTokens(b.Context(), req)
 	}
 }
 
@@ -545,10 +544,10 @@ func TestEstimateInputTokens_WithTools(t *testing.T) {
 		{
 			Name:        "get_weather",
 			Description: "Retrieves current weather for a given location.",
-			InputSchema: map[string]interface{}{
+			InputSchema: map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
-					"location": map[string]interface{}{
+				"properties": map[string]any{
+					"location": map[string]any{
 						"type":        "string",
 						"description": "City and state, e.g. Sydney, NSW",
 					},
@@ -570,10 +569,10 @@ func TestEstimateInputTokens_WithTools(t *testing.T) {
 func TestEstimateInputTokens_ToolOnlyDeltaMatchesCharsDiv4(t *testing.T) {
 	t.Parallel()
 
-	schema := map[string]interface{}{
+	schema := map[string]any{
 		"type": "object",
-		"properties": map[string]interface{}{
-			"query": map[string]interface{}{"type": "string"},
+		"properties": map[string]any{
+			"query": map[string]any{"type": "string"},
 		},
 	}
 	tool := AnthropicTool{
@@ -608,15 +607,15 @@ func BenchmarkCountTokensLargeRequest(b *testing.B) {
 	trans := mustNewTranslator(createTestLogger(), createTestConfig())
 
 	// Large request with multiple messages and content blocks
-	messages := make([]map[string]interface{}, 50)
+	messages := make([]map[string]any, 50)
 	for i := range messages {
-		messages[i] = map[string]interface{}{
+		messages[i] = map[string]any{
 			"role":    "user",
 			"content": "This is a test message with reasonable length to simulate real usage patterns.",
 		}
 	}
 
-	reqData := map[string]interface{}{
+	reqData := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 4096,
 		"system":     "You are a helpful assistant with detailed knowledge.",
@@ -628,6 +627,6 @@ func BenchmarkCountTokensLargeRequest(b *testing.B) {
 	for range b.N {
 		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
-		_, _ = trans.CountTokens(context.Background(), req)
+		_, _ = trans.CountTokens(b.Context(), req)
 	}
 }

@@ -179,7 +179,7 @@ func TestSherpa_PreservePath_URLBuilding(t *testing.T) {
 
 			// Execute the proxy request
 			stats := &ports.RequestStats{}
-			ctx := context.Background()
+			ctx := t.Context()
 			err = service.proxyToSingleEndpoint(ctx, w, req, tt.endpoint, stats, createTestLogger())
 
 			// Assert no error and check captured path
@@ -368,7 +368,7 @@ func TestSherpa_PreservePath_EdgeCases(t *testing.T) {
 			req := httptest.NewRequest("POST", tt.requestPath, nil)
 			w := httptest.NewRecorder()
 			stats := &ports.RequestStats{}
-			ctx := context.Background()
+			ctx := t.Context()
 
 			err = service.proxyToSingleEndpoint(ctx, w, req, tt.endpoint, stats, createTestLogger())
 
@@ -476,7 +476,7 @@ func TestSherpa_PreservePath_QueryStrings(t *testing.T) {
 			req := httptest.NewRequest("GET", tt.requestPath, nil)
 			w := httptest.NewRecorder()
 			stats := &ports.RequestStats{}
-			ctx := context.Background()
+			ctx := t.Context()
 
 			err = service.proxyToSingleEndpoint(ctx, w, req, tt.endpoint, stats, createTestLogger())
 
@@ -621,7 +621,7 @@ func TestSherpa_PreservePath_RealWorldProviders(t *testing.T) {
 			req := httptest.NewRequest("POST", tt.requestPath, nil)
 			w := httptest.NewRecorder()
 			stats := &ports.RequestStats{}
-			ctx := context.Background()
+			ctx := t.Context()
 
 			err = service.proxyToSingleEndpoint(ctx, w, req, tt.endpoint, stats, createTestLogger())
 

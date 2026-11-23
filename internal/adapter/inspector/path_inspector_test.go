@@ -1,7 +1,6 @@
 package inspector
 
 import (
-	"context"
 	"net/http"
 	"path/filepath"
 	"runtime"
@@ -34,7 +33,7 @@ func TestPathInspector_Inspect_RealProfiles_EmbedPaths(t *testing.T) {
 		t.Fatalf("failed to load real profiles from %s: %v", profilesDir, err)
 	}
 	inspector := NewPathInspector(factory, createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const teiProfile = "text-embeddings-inference"
 
@@ -87,7 +86,7 @@ func TestPathInspector_Name(t *testing.T) {
 
 func TestPathInspector_Inspect_EmptyPath(t *testing.T) {
 	inspector := createTestPathInspector(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/", nil)
 	profile := domain.NewRequestProfile("")
 
@@ -104,7 +103,7 @@ func TestPathInspector_Inspect_EmptyPath(t *testing.T) {
 
 func TestPathInspector_Inspect_ChatCompletions(t *testing.T) {
 	inspector := createTestPathInspector(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	profile := domain.NewRequestProfile("/v1/chat/completions")
 
@@ -131,7 +130,7 @@ func TestPathInspector_Inspect_ChatCompletions(t *testing.T) {
 
 func TestPathInspector_Inspect_Completions(t *testing.T) {
 	inspector := createTestPathInspector(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/completions", nil)
 	profile := domain.NewRequestProfile("/v1/completions")
 
@@ -149,7 +148,7 @@ func TestPathInspector_Inspect_Completions(t *testing.T) {
 
 func TestPathInspector_Inspect_OllamaGenerate(t *testing.T) {
 	inspector := createTestPathInspector(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/api/generate", nil)
 	profile := domain.NewRequestProfile("/api/generate")
 
@@ -188,7 +187,7 @@ func TestPathInspector_Inspect_OllamaGenerate(t *testing.T) {
 */
 func TestPathInspector_Inspect_UnknownPath(t *testing.T) {
 	inspector := createTestPathInspector(t)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/unknown/path", nil)
 	profile := domain.NewRequestProfile("/unknown/path")
 
@@ -232,7 +231,7 @@ func TestPathInspector_Inspect_PrefixedPaths(t *testing.T) {
 	}
 
 	inspector := createTestPathInspector(t)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -349,12 +348,7 @@ func createTestLogger() logger.StyledLogger {
 }
 
 func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, item)
 }
 
 func containsAllProfiles(got, expected []string) bool {
@@ -404,7 +398,7 @@ func TestPathInspector_RequiredCapabilitiesByPath(t *testing.T) {
 
 			inspector := NewPathInspector(nil, createTestLogger())
 			reqProfile := domain.NewRequestProfile(tt.path)
-			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+			if err := inspector.Inspect(t.Context(), nil, reqProfile); err != nil {
 				t.Fatalf("Inspect() error = %v", err)
 			}
 
@@ -483,7 +477,7 @@ func TestPathInspector_ShippedProfiles_DeclaredPathsResolveToTheirOwners(t *test
 	for path, want := range owners {
 		t.Run(path, func(t *testing.T) {
 			reqProfile := domain.NewRequestProfile(path)
-			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+			if err := inspector.Inspect(t.Context(), nil, reqProfile); err != nil {
 				t.Fatalf("Inspect(%q) error = %v", path, err)
 			}
 			got := slices.Clone(reqProfile.SupportedBy)
@@ -520,7 +514,7 @@ func TestPathInspector_ShippedProfiles_SingleSegmentPathsDoNotCaptureDeeperPaths
 		deeper := "/api/unlisted" + path
 		t.Run(deeper, func(t *testing.T) {
 			reqProfile := domain.NewRequestProfile(deeper)
-			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+			if err := inspector.Inspect(t.Context(), nil, reqProfile); err != nil {
 				t.Fatalf("Inspect(%q) error = %v", deeper, err)
 			}
 			if len(reqProfile.SupportedBy) != 0 {
@@ -534,7 +528,7 @@ func TestPathInspector_ShippedProfiles_SingleSegmentPathsDoNotCaptureDeeperPaths
 		prefixed := "/mount" + path
 		t.Run(prefixed, func(t *testing.T) {
 			reqProfile := domain.NewRequestProfile(prefixed)
-			if err := inspector.Inspect(context.Background(), nil, reqProfile); err != nil {
+			if err := inspector.Inspect(t.Context(), nil, reqProfile); err != nil {
 				t.Fatalf("Inspect(%q) error = %v", prefixed, err)
 			}
 			for _, owner := range owners {

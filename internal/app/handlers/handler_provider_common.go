@@ -90,7 +90,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	// normalised name (lm-studio) would produce a non-matching prefix and forward
 	// the full /olla/lmstudio/... path to the backend, causing a 404.
 	providerPrefix := getRawProviderPrefix(r.URL.Path)
-	ctx = context.WithValue(ctx, constants.ContextRoutePrefixKey, providerPrefix)
+	ctx = constants.WithRoutePrefix(ctx, providerPrefix)
 	r = r.WithContext(ctx)
 
 	ctx, r = a.setupRequestContext(r, pr.stats)
@@ -240,7 +240,7 @@ func (a *Application) getProviderModels(ctx context.Context, providerType string
 
 // convertModelsToProviderFormat handles the final transformation step for model listings,
 // converting our internal UnifiedModel format to whatever the client expects (Ollama, OpenAI, etc.)
-func (a *Application) convertModelsToProviderFormat(models []*domain.UnifiedModel, format string) (interface{}, error) {
+func (a *Application) convertModelsToProviderFormat(models []*domain.UnifiedModel, format string) (any, error) {
 	converter, err := a.converterFactory.GetConverter(format)
 	if err != nil {
 		return nil, fmt.Errorf("unsupported format: %w", err)

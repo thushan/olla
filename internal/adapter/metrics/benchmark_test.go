@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -78,7 +77,7 @@ func BenchmarkExtractor(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -92,7 +91,7 @@ func BenchmarkExtractor(b *testing.B) {
 func BenchmarkJSONParsing_EncodingJSON(b *testing.B) {
 	b.ReportAllocs()
 	for range b.N {
-		var data interface{}
+		var data any
 		_ = json.Unmarshal(ollamaResponse, &data)
 	}
 }

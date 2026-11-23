@@ -28,6 +28,7 @@ linters:
     - intrange
     - makezero
     - misspell
+    - modernize
     - nakedret
     - nilerr
     - noctx
@@ -89,12 +90,24 @@ linters:
         - -ST1021
         - -ST1022
         - -QF1008  # explicit embedded selectors are deliberate in the registry/proxy wrappers
-        # The context key constants are plain strings on purpose: the same constants
-        # are slog keys, InspectionMeta keys and util.StripRoutePrefix lookups, so
-        # typing them breaks those. Typing the context keys is its own change.
-        - -SA1029
     testifylint:
       enable-all: true
+    usetesting:
+      # context-background and context-todo default to false and are turned on
+      # here; os-setenv is on by default.
+      context-background: true
+      context-todo: true
+    modernize:
+      disable:
+        # omitzero: swapping omitempty for omitzero changes which nested
+        # struct fields reach the JSON wire format; a wire-format change
+        # needs its own deliberate decision.
+        - omitzero
+        # stringsbuilder: one site in the codebase; deliberately left alone
+        # because the churn is not worth it.
+        - stringsbuilder
+        # slicesdelete, appendclipped and bloop are not analyzers in
+        # golangci-lint v2.15.0's modernize set, so they are not listed here.
 
   exclusions:
     generated: strict
@@ -118,7 +131,6 @@ linters:
           - testifylint
           - unconvert
           - unparam
-          - usetesting
           - wastedassign
       - path: internal/util/request.go
         linters:

@@ -1,7 +1,8 @@
 package stats
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -50,8 +51,8 @@ type modelEndpointData struct {
 	totalLatency      *xsync.Counter
 	endpointName      string
 	modelName         string
-	lastUsed          int64 // Keep atomic for timestamp
-	consecutiveErrors int32 // Keep atomic for CAS operations
+	lastUsed          atomic.Int64
+	consecutiveErrors atomic.Int32
 }
 
 // NewModelCollectorWithConfig creates a new ModelCollector with custom configuration
@@ -106,7 +107,7 @@ func (mc *ModelCollector) RecordModelError(model string, endpoint *domain.Endpoi
 
 	endpointMap, _ := mc.modelEndpoints.LoadOrStore(model, xsync.NewMap[string, *modelEndpointData]())
 	if data, ok := endpointMap.Load(endpoint.Name); ok {
-		atomic.AddInt32(&data.consecutiveErrors, 1)
+		data.consecutiveErrors.Add(1)
 	}
 }
 
@@ -189,25 +190,27 @@ func (mc *ModelCollector) updateModelEndpointStats(model string, endpoint *domai
 	endpointMap, _ := mc.modelEndpoints.LoadOrStore(model, xsync.NewMap[string, *modelEndpointData]())
 
 	data, _ := endpointMap.LoadOrCompute(endpoint.Name, func() (*modelEndpointData, bool) {
-		return &modelEndpointData{
+		d := &modelEndpointData{
 			endpointName: endpoint.Name,
 			modelName:    model,
 			requestCount: xsync.NewCounter(),
 			successCount: xsync.NewCounter(),
 			totalLatency: xsync.NewCounter(),
-			lastUsed:     now,
-		}, false
+		}
+		// Set inside the creation callback, before the entry is published.
+		d.lastUsed.Store(now)
+		return d, false
 	})
 
 	data.requestCount.Inc()
 	data.totalLatency.Add(latencyMs)
-	atomic.StoreInt64(&data.lastUsed, now)
+	data.lastUsed.Store(now)
 
 	if status == StatusSuccess {
 		data.successCount.Inc()
-		atomic.StoreInt32(&data.consecutiveErrors, 0)
+		data.consecutiveErrors.Store(0)
 	} else {
-		atomic.AddInt32(&data.consecutiveErrors, 1)
+		data.consecutiveErrors.Add(1)
 	}
 }
 
@@ -283,8 +286,8 @@ func (mc *ModelCollector) calculateEndpointModelStats(data *modelEndpointData) p
 		RequestCount:      requestCount,
 		SuccessRate:       successRate,
 		AverageLatency:    avgLatency,
-		LastUsed:          time.Unix(0, atomic.LoadInt64(&data.lastUsed)),
-		ConsecutiveErrors: int(atomic.LoadInt32(&data.consecutiveErrors)),
+		LastUsed:          time.Unix(0, data.lastUsed.Load()),
+		ConsecutiveErrors: int(data.consecutiveErrors.Load()),
 	}
 }
 
@@ -336,20 +339,19 @@ func (mc *ModelCollector) cleanupOldData(now int64) {
 
 // cleanupClientIPs removes old client IPs and enforces the max clients per model limit
 func (mc *ModelCollector) cleanupClientIPs(data *modelData, cutoff int64) {
-	var ipsToDelete []string
-	var allIPs []struct {
+	type clientLastSeen struct {
 		ip   string
 		time int64
 	}
+
+	var ipsToDelete []string
+	var allIPs []clientLastSeen
 
 	data.uniqueClients.Range(func(ip string, lastSeen int64) bool {
 		if lastSeen < cutoff {
 			ipsToDelete = append(ipsToDelete, ip)
 		} else {
-			allIPs = append(allIPs, struct {
-				ip   string
-				time int64
-			}{ip, lastSeen})
+			allIPs = append(allIPs, clientLastSeen{ip: ip, time: lastSeen})
 		}
 		return true
 	})
@@ -362,8 +364,8 @@ func (mc *ModelCollector) cleanupClientIPs(data *modelData, cutoff int64) {
 	// If we still have too many IPs, remove the oldest ones
 	if len(allIPs) > mc.config.MaxUniqueClientsPerModel {
 		// Sort by time, oldest first
-		sort.Slice(allIPs, func(i, j int) bool {
-			return allIPs[i].time < allIPs[j].time
+		slices.SortFunc(allIPs, func(a, b clientLastSeen) int {
+			return cmp.Compare(a.time, b.time)
 		})
 
 		// Delete the oldest IPs
@@ -390,8 +392,8 @@ func (mc *ModelCollector) pruneExcessModels() {
 	})
 
 	// Sort by last requested time, newest first
-	sort.Slice(models, func(i, j int) bool {
-		return models[i].lastRequested > models[j].lastRequested
+	slices.SortFunc(models, func(a, b modelActivity) int {
+		return cmp.Compare(b.lastRequested, a.lastRequested)
 	})
 
 	// Delete the oldest models

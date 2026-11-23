@@ -2,7 +2,8 @@ package translator
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/thushan/olla/internal/logger"
@@ -77,9 +78,7 @@ func (r *Registry) GetAll() map[string]RequestTranslator {
 
 	// Return a copy to prevent concurrent modification issues
 	result := make(map[string]RequestTranslator, len(r.translators))
-	for name, translator := range r.translators {
-		result[name] = translator
-	}
+	maps.Copy(result, r.translators)
 
 	return result
 }
@@ -100,6 +99,6 @@ func (r *Registry) getAvailableNames() []string {
 	for name := range r.translators {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }

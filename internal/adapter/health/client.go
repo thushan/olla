@@ -263,8 +263,7 @@ func shouldRetry(err error, errorType domain.HealthCheckErrorType) bool {
 		return true
 	case domain.ErrorTypeHTTPError:
 		// Only retry certain HTTP errors
-		var netErr net.Error
-		if errors.As(err, &netErr) {
+		if netErr, ok := errors.AsType[net.Error](err); ok {
 			return netErr.Timeout()
 		}
 		return false
@@ -279,8 +278,7 @@ func classifyError(err error) domain.HealthCheckErrorType {
 		return domain.ErrorTypeCircuitOpen
 	}
 
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if netErr, ok := errors.AsType[net.Error](err); ok {
 		if netErr.Timeout() {
 			return domain.ErrorTypeTimeout
 		}
@@ -356,16 +354,10 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 	}
 
 	// Calculate the multiplier for subsequent failures (exponential: 2, 4, 8...)
-	multiplier := endpoint.BackoffMultiplier * 2
-	if multiplier > MaxBackoffMultiplier {
-		multiplier = MaxBackoffMultiplier
-	}
+	multiplier := min(endpoint.BackoffMultiplier*2, MaxBackoffMultiplier)
 
 	// Use the current BackoffMultiplier for interval (not the new one)
-	backoffInterval := endpoint.CheckInterval * time.Duration(endpoint.BackoffMultiplier)
-	if backoffInterval > MaxBackoff {
-		backoffInterval = MaxBackoff
-	}
+	backoffInterval := min(endpoint.CheckInterval*time.Duration(endpoint.BackoffMultiplier), MaxBackoff)
 
 	return backoffInterval, multiplier
 }

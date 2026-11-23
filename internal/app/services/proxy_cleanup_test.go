@@ -53,7 +53,7 @@ func TestProxyServiceWrapper_Stop_CallsCleanup(t *testing.T) {
 		proxyService: spy,
 	}
 
-	if err := w.Stop(context.Background()); err != nil {
+	if err := w.Stop(t.Context()); err != nil {
 		t.Fatalf("Stop returned unexpected error: %v", err)
 	}
 	if got := spy.cleanupCalls.Load(); got != 1 {
@@ -74,7 +74,7 @@ func TestProxyServiceWrapper_Stop_DoubleCallDoesNotPanic(t *testing.T) {
 	}
 
 	for range 2 {
-		if err := w.Stop(context.Background()); err != nil {
+		if err := w.Stop(t.Context()); err != nil {
 			t.Fatalf("Stop returned error: %v", err)
 		}
 	}
@@ -111,7 +111,7 @@ func TestProxyServiceWrapper_Stop_NoCleanupable(t *testing.T) {
 		logger:       newTestLogger(),
 		proxyService: &bareProxyService{},
 	}
-	if err := w.Stop(context.Background()); err != nil {
+	if err := w.Stop(t.Context()); err != nil {
 		t.Fatalf("Stop returned unexpected error: %v", err)
 	}
 }

@@ -1,7 +1,6 @@
 package services
 
 import (
-	"context"
 	"net"
 	"testing"
 )
@@ -11,7 +10,7 @@ import (
 func TestBindListener_FreePort(t *testing.T) {
 	t.Parallel()
 
-	ln, err := bindListener(context.Background(), "127.0.0.1:0")
+	ln, err := bindListener(t.Context(), "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("expected bind to succeed on a free port: %v", err)
 	}
@@ -34,7 +33,7 @@ func TestBindListener_OccupiedPort(t *testing.T) {
 
 	addr := anchor.Addr().String()
 
-	_, bindErr := bindListener(context.Background(), addr)
+	_, bindErr := bindListener(t.Context(), addr)
 	if bindErr == nil {
 		t.Fatal("expected bindListener to return an error while anchor holds the port, but it succeeded")
 	}

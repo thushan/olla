@@ -72,10 +72,10 @@ func TestConfiguredAliasNameUnification(t *testing.T) {
 					assert.Equal(t, expectedKey, ctx.Value(constants.ContextStickyKeyKey), "case variants of one alias must keep the same session affinity")
 					assert.Equal(t, tc.target, core.ResolvedModelName(ctx, endpoint, requested), "stats must retain the native target even when it resembles another alias")
 					w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
-					return json.NewEncoder(w).Encode(map[string]interface{}{
+					return json.NewEncoder(w).Encode(map[string]any{
 						"id": "chatcmpl-test", "object": "chat.completion", "model": tc.target,
-						"choices": []interface{}{map[string]interface{}{"index": 0, "message": map[string]interface{}{"role": "assistant", "content": "hello"}, "finish_reason": "stop"}},
-						"usage":   map[string]interface{}{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+						"choices": []any{map[string]any{"index": 0, "message": map[string]any{"role": "assistant", "content": "hello"}, "finish_reason": "stop"}},
+						"usage":   map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
 					})
 				}}
 				cfg := config.DefaultConfig()
@@ -99,7 +99,7 @@ func TestConfiguredAliasNameUnification(t *testing.T) {
 				response := httptest.NewRecorder()
 				switch route {
 				case "proxy":
-					req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+					req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 					app.proxyHandler(response, req)
 				case "provider":
 					app.providerProxyHandler(response, req)

@@ -1,7 +1,6 @@
 package health
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -55,7 +54,7 @@ func TestHealthProbe_BearerAuth(t *testing.T) {
 	ep.AuthHeaderValue = token
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 
 	require.NoError(t, err)
 	assert.Equal(t, domain.StatusHealthy, result.Status, "probe with correct bearer token must be healthy")
@@ -74,7 +73,7 @@ func TestHealthProbe_MissingAuth(t *testing.T) {
 	ep := makeEndpoint(t, srv.URL)
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 
 	// No transport error; just an HTTP 401.
 	require.NoError(t, err, "401 is an HTTP response, not a transport error")
@@ -100,7 +99,7 @@ func TestHealthProbe_CustomHeaders(t *testing.T) {
 	}
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 
 	require.NoError(t, err)
 	assert.Equal(t, domain.StatusHealthy, result.Status, "probe with custom header must be healthy")

@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,9 +130,9 @@ func TestGlobFilter_Apply(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := NewGlobFilter()
-			ctx := context.Background()
+			ctx := t.Context()
 
-			result, err := filter.Apply(ctx, tt.config, tt.items, func(item interface{}) string {
+			result, err := filter.Apply(ctx, tt.config, tt.items, func(item any) string {
 				return item.(string)
 			})
 
@@ -172,19 +171,19 @@ func TestGlobFilter_ApplyToMap(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      *domain.FilterConfig
-		items       map[string]interface{}
-		expected    map[string]interface{}
+		items       map[string]any
+		expected    map[string]any
 		expectError bool
 	}{
 		{
 			name:   "no filter returns all items",
 			config: nil,
-			items: map[string]interface{}{
+			items: map[string]any{
 				"ollama":   "profile1",
 				"lmstudio": "profile2",
 				"vllm":     "profile3",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"ollama":   "profile1",
 				"lmstudio": "profile2",
 				"vllm":     "profile3",
@@ -196,12 +195,12 @@ func TestGlobFilter_ApplyToMap(t *testing.T) {
 				Include: []string{"*"},
 				Exclude: []string{"vllm"},
 			},
-			items: map[string]interface{}{
+			items: map[string]any{
 				"ollama":   "profile1",
 				"lmstudio": "profile2",
 				"vllm":     "profile3",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"ollama":   "profile1",
 				"lmstudio": "profile2",
 			},
@@ -211,13 +210,13 @@ func TestGlobFilter_ApplyToMap(t *testing.T) {
 			config: &domain.FilterConfig{
 				Include: []string{"ollama", "lmstudio"},
 			},
-			items: map[string]interface{}{
+			items: map[string]any{
 				"ollama":   "profile1",
 				"lmstudio": "profile2",
 				"vllm":     "profile3",
 				"openai":   "profile4",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"ollama":   "profile1",
 				"lmstudio": "profile2",
 			},
@@ -227,13 +226,13 @@ func TestGlobFilter_ApplyToMap(t *testing.T) {
 			config: &domain.FilterConfig{
 				Include: []string{"*studio*", "ollama"},
 			},
-			items: map[string]interface{}{
+			items: map[string]any{
 				"ollama":    "profile1",
 				"lmstudio":  "profile2",
 				"vllm":      "profile3",
 				"anystudio": "profile4",
 			},
-			expected: map[string]interface{}{
+			expected: map[string]any{
 				"ollama":    "profile1",
 				"lmstudio":  "profile2",
 				"anystudio": "profile4",
@@ -244,7 +243,7 @@ func TestGlobFilter_ApplyToMap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := NewGlobFilter()
-			ctx := context.Background()
+			ctx := t.Context()
 
 			result, err := filter.ApplyToMap(ctx, tt.config, tt.items)
 

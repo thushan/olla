@@ -1,7 +1,6 @@
 package unifier
 
 import (
-	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -12,10 +11,6 @@ import (
 )
 
 // Helper functions
-func ptrString(s string) *string {
-	return &s
-}
-
 func createTestEndpoint(url, name string) *domain.Endpoint {
 	return &domain.Endpoint{
 		URLString: url,
@@ -40,7 +35,7 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 						Name: "llama3:8b",
 						Size: 8000000000,
 						Details: &domain.ModelDetails{
-							Digest: ptrString("sha256:abc123"),
+							Digest: new("sha256:abc123"),
 						},
 					},
 				},
@@ -49,7 +44,7 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 						Name: "llama3-8b",
 						Size: 8000000000,
 						Details: &domain.ModelDetails{
-							Digest: ptrString("sha256:abc123"),
+							Digest: new("sha256:abc123"),
 						},
 					},
 				},
@@ -92,17 +87,17 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 				{
 					{
 						Name:    "llama3:8b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+						Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 					},
 					{
 						Name:    "phi3:mini",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+						Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 					},
 				},
 				{
 					{
 						Name:    "mistral:7b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:ghi789")},
+						Details: &domain.ModelDetails{Digest: new("sha256:ghi789")},
 					},
 				},
 			},
@@ -142,13 +137,13 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 				{
 					{
 						Name:    "llama3:8b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+						Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 					},
 				},
 				{
 					{
 						Name:    "llama3:8b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+						Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 					},
 				},
 			},
@@ -164,7 +159,7 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			unifier := NewDefaultUnifier()
 
 			var allModels []*domain.UnifiedModel
@@ -182,18 +177,18 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 }
 
 func TestDefaultUnifier_ResolveModel(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Add some models
 	models := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 		{
 			Name:    "Phi3:Mini",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+			Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 		},
 	}
 
@@ -218,25 +213,17 @@ func TestDefaultUnifier_ResolveModel(t *testing.T) {
 }
 
 func TestDefaultUnifier_ModelMerging(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
-
-	// Helper functions
-	ptrInt64 := func(i int64) *int64 {
-		return &i
-	}
-	ptrString := func(s string) *string {
-		return &s
-	}
 
 	// Add model from first endpoint
 	models1 := []*domain.ModelInfo{
 		{
 			Name: "llama3:8b",
 			Details: &domain.ModelDetails{
-				Digest:           ptrString("sha256:abc123"),
-				MaxContextLength: ptrInt64(8192),
-				State:            ptrString("loaded"),
+				Digest:           new("sha256:abc123"),
+				MaxContextLength: new(int64(8192)),
+				State:            new("loaded"),
 			},
 		},
 	}
@@ -249,9 +236,9 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 		{
 			Name: "llama3:8b",
 			Details: &domain.ModelDetails{
-				Digest:           ptrString("sha256:abc123"),
-				MaxContextLength: ptrInt64(8192),
-				State:            ptrString("not-loaded"),
+				Digest:           new("sha256:abc123"),
+				MaxContextLength: new(int64(8192)),
+				State:            new("not-loaded"),
 			},
 		},
 	}
@@ -276,18 +263,18 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 }
 
 func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Add models from endpoint
 	models := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 		{
 			Name:    "phi3:mini",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+			Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 		},
 	}
 	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
@@ -298,7 +285,7 @@ func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
 	newModels := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 	}
 	_, err = unifier.UnifyModels(ctx, newModels, endpoint)
@@ -315,14 +302,14 @@ func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
 }
 
 func TestDefaultUnifier_Clear(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Add some models
 	models := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 	}
 	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
@@ -339,7 +326,7 @@ func TestDefaultUnifier_Clear(t *testing.T) {
 }
 
 func TestDefaultUnifier_NilAndEmptyInputs(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	// Test nil models
@@ -388,7 +375,7 @@ func TestMergeUnifiedModels_OrderIsStableAndLeadsWithOwnID(t *testing.T) {
 
 	for _, order := range [][]*domain.UnifiedModel{{b, a}, {a, b}} {
 		for range 200 {
-			merged, err := u.MergeUnifiedModels(context.Background(), order)
+			merged, err := u.MergeUnifiedModels(t.Context(), order)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -428,7 +415,7 @@ func TestMergeUnifiedModels_ShuffledInputKeepsOwnIDFirst(t *testing.T) {
 	for range 500 {
 		models := build()
 		rng.Shuffle(len(models), func(i, j int) { models[i], models[j] = models[j], models[i] })
-		merged, err := u.MergeUnifiedModels(context.Background(), models)
+		merged, err := u.MergeUnifiedModels(t.Context(), models)
 		require.NoError(t, err)
 		require.Equal(t, merged.ID, merged.Aliases[0].Name)
 		require.Len(t, merged.Aliases, len(names))

@@ -53,10 +53,10 @@ func TestStreamingBackendError_ErrorBodyCapped(t *testing.T) {
 		},
 		transformRequestFunc: func(_ context.Context, _ *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":    "test-model",
 					"stream":   true,
-					"messages": []interface{}{map[string]interface{}{"role": "user", "content": "hi"}},
+					"messages": []any{map[string]any{"role": "user", "content": "hi"}},
 				},
 				ModelName:   "test-model",
 				IsStreaming: true,

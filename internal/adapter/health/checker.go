@@ -1,10 +1,11 @@
 package health
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -350,22 +351,21 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		case oldStatus == domain.StatusUnknown:
 			// Initial discovery of unhealthy endpoint
-			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs := make([]any, 0, 8)
 			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
 				"error_type", result.ErrorType,
 			)
 			if checkErr != nil {
-				var healthCheckErr *domain.HealthCheckError
-				if errors.As(checkErr, &healthCheckErr) {
+				if healthCheckErr, ok := errors.AsType[*domain.HealthCheckError](checkErr); ok {
 					detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
 				} else {
 					detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
 				}
 			}
 			c.logger.WarnWithContext("Endpoint discovered offline:", endpoint.Name, logger.LogContext{
-				UserArgs: []interface{}{
+				UserArgs: []any{
 					"status", newStatus.String(),
 					"latency", result.Latency,
 					"next_check_in", nextInterval,
@@ -383,22 +383,21 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		default:
 			// Status changed to unhealthy
-			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs := make([]any, 0, 8)
 			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
 				"error_type", result.ErrorType,
 			)
 			if checkErr != nil {
-				var healthCheckErr *domain.HealthCheckError
-				if errors.As(checkErr, &healthCheckErr) {
+				if healthCheckErr, ok := errors.AsType[*domain.HealthCheckError](checkErr); ok {
 					detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
 				} else {
 					detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
 				}
 			}
 			c.logger.WarnWithContext("Endpoint status changed:", endpoint.Name, logger.LogContext{
-				UserArgs: []interface{}{
+				UserArgs: []any{
 					"status", newStatus.String(),
 					"was", oldStatus.String(),
 					"consecutive_failures", endpoint.ConsecutiveFailures + 1,
@@ -412,21 +411,20 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 	case checkErr != nil && endpoint.ConsecutiveFailures > 0 && endpoint.ConsecutiveFailures%5 == 0:
 		// Log ongoing issues every 5th consecutive failure instead of time-based throttling
 		// Pre-allocate with capacity for all fields including error
-		detailedArgs := make([]interface{}, 0, 8)
+		detailedArgs := make([]any, 0, 8)
 		detailedArgs = append(detailedArgs,
 			"endpoint_url", endpoint.GetURLString(),
 			"status_code", result.StatusCode,
 			"error_type", result.ErrorType,
 		)
-		var healthCheckErr *domain.HealthCheckError
-		if errors.As(checkErr, &healthCheckErr) {
+		if healthCheckErr, ok := errors.AsType[*domain.HealthCheckError](checkErr); ok {
 			detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
 		} else {
 			detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
 		}
 
 		c.logger.WarnWithContext("Endpoint still having issues:", endpoint.Name, logger.LogContext{
-			UserArgs: []interface{}{
+			UserArgs: []any{
 				"status", newStatus.String(),
 				"consecutive_failures", endpoint.ConsecutiveFailures + 1,
 				"next_check_in", nextInterval,
@@ -436,16 +434,16 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 	}
 }
 
-func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
+func (c *HTTPHealthChecker) GetSchedulerStats() map[string]any {
 	running := c.isRunning.Load()
 
 	if !running {
-		return map[string]interface{}{
+		return map[string]any{
 			"isRunning": false,
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"isRunning":      running,
 		"check_interval": DefaultHealthCheckInterval.String(),
 	}
@@ -525,8 +523,8 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].priority > entries[j].priority
+	slices.SortFunc(entries, func(a, b endpointEntry) int {
+		return cmp.Compare(b.priority, a.priority)
 	})
 
 	// Build table

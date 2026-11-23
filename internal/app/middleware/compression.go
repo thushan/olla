@@ -129,7 +129,7 @@ func acceptsGzip(header string) bool {
 	}
 	starQ := float64(-1)
 	gzipQ := float64(-1)
-	for _, part := range strings.Split(header, ",") {
+	for part := range strings.SplitSeq(header, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
@@ -141,7 +141,7 @@ func acceptsGzip(header string) bool {
 		}
 		q := 1.0
 		if params != "" {
-			for _, p := range strings.Split(params, ";") {
+			for p := range strings.SplitSeq(params, ";") {
 				p = strings.TrimSpace(p)
 				if strings.HasPrefix(p, "q=") {
 					if v, err := strconv.ParseFloat(p[2:], 64); err == nil {

@@ -47,7 +47,7 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 	}
 
 	// Convert to OpenAI format
-	openaiReq := make(map[string]interface{})
+	openaiReq := make(map[string]any)
 
 	// Basic parameters - direct mapping
 	openaiReq["model"] = anthropicReq.Model
@@ -99,21 +99,21 @@ func (t *Translator) TransformRequest(ctx context.Context, r *http.Request) (*tr
 		ModelName:     anthropicReq.Model,
 		IsStreaming:   anthropicReq.Stream,
 		TargetPath:    openAIChatCompletionsPath,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"format": "anthropic",
 		},
 	}, nil
 }
 
 // convert messages + inject system prompt if present
-func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, systemPrompt interface{}) ([]map[string]interface{}, error) {
-	openaiMessages := make([]map[string]interface{}, 0, len(anthropicMessages)+1)
+func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, systemPrompt any) ([]map[string]any, error) {
+	openaiMessages := make([]map[string]any, 0, len(anthropicMessages)+1)
 
 	// openai wants system as first message, can be string or content blocks
 	if systemPrompt != nil {
 		systemContent := t.convertSystemPrompt(systemPrompt)
 		if systemContent != nil {
-			openaiMessages = append(openaiMessages, map[string]interface{}{
+			openaiMessages = append(openaiMessages, map[string]any{
 				"role":    "system",
 				"content": systemContent,
 			})
@@ -132,12 +132,12 @@ func (t *Translator) convertMessages(anthropicMessages []AnthropicMessage, syste
 }
 
 // convert single message, might produce multiple openai messages (eg user + tool results)
-func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]interface{}, error) {
-	result := make([]map[string]interface{}, 0, 2)
+func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]any, error) {
+	result := make([]map[string]any, 0, 2)
 
 	if contentStr, ok := msg.Content.(string); ok {
 		if contentStr != "" {
-			result = append(result, map[string]interface{}{
+			result = append(result, map[string]any{
 				"role":    msg.Role,
 				"content": contentStr,
 			})
@@ -146,10 +146,10 @@ func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]in
 	}
 
 	// anthropic uses content blocks for rich messages
-	contentBlocks, ok := msg.Content.([]interface{})
+	contentBlocks, ok := msg.Content.([]any)
 	if !ok {
-		if contentMap, ok := msg.Content.(map[string]interface{}); ok {
-			contentBlocks = []interface{}{contentMap}
+		if contentMap, ok := msg.Content.(map[string]any); ok {
+			contentBlocks = []any{contentMap}
 		} else {
 			return nil, fmt.Errorf("invalid content type: %T", msg.Content)
 		}
@@ -176,12 +176,12 @@ func (t *Translator) convertSingleMessage(msg AnthropicMessage) ([]map[string]in
 }
 
 // split user message into text + tool results (openai needs tool results as separate messages)
-func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interface{}, []map[string]interface{}) {
+func (t *Translator) convertUserMessage(blocks []any) (map[string]any, []map[string]any) {
 	var textParts []string
-	var toolResults []map[string]interface{}
+	var toolResults []map[string]any
 
 	for _, block := range blocks {
-		blockMap, ok := block.(map[string]interface{})
+		blockMap, ok := block.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -215,7 +215,7 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 				content = "Error: " + content
 			}
 
-			toolResults = append(toolResults, map[string]interface{}{
+			toolResults = append(toolResults, map[string]any{
 				"role":         "tool",
 				"tool_call_id": toolUseID,
 				"content":      content,
@@ -226,9 +226,9 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 		}
 	}
 
-	var userMsg map[string]interface{}
+	var userMsg map[string]any
 	if len(textParts) > 0 {
-		userMsg = map[string]interface{}{
+		userMsg = map[string]any{
 			"role":    "user",
 			"content": strings.Join(textParts, ""),
 		}
@@ -238,16 +238,16 @@ func (t *Translator) convertUserMessage(blocks []interface{}) (map[string]interf
 }
 
 // combine text + tool uses into single openai message
-func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]interface{} {
-	msg := map[string]interface{}{
+func (t *Translator) convertAssistantMessage(blocks []any) map[string]any {
+	msg := map[string]any{
 		"role": roleAssistant,
 	}
 
 	var textContent string
-	var toolCalls []map[string]interface{}
+	var toolCalls []map[string]any
 
 	for _, block := range blocks {
-		blockMap, ok := block.(map[string]interface{})
+		blockMap, ok := block.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -285,10 +285,10 @@ func (t *Translator) convertAssistantMessage(blocks []interface{}) map[string]in
 }
 
 // convert tool_use to openai tool_call format
-func (t *Translator) convertToolUse(block map[string]interface{}) map[string]interface{} {
+func (t *Translator) convertToolUse(block map[string]any) map[string]any {
 	id, _ := block["id"].(string)
 	name, _ := block["name"].(string)
-	input, _ := block["input"].(map[string]interface{})
+	input, _ := block["input"].(map[string]any)
 
 	if id == "" || name == "" {
 		return nil
@@ -301,10 +301,10 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 		inputJSON = []byte("{}")
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"id":   id,
 		"type": openAITypeFunction,
-		"function": map[string]interface{}{
+		"function": map[string]any{
 			"name":      name,
 			"arguments": string(inputJSON),
 		},
@@ -312,7 +312,7 @@ func (t *Translator) convertToolUse(block map[string]interface{}) map[string]int
 }
 
 // convert system prompt, handles string or content blocks
-func (t *Translator) convertSystemPrompt(systemPrompt interface{}) interface{} {
+func (t *Translator) convertSystemPrompt(systemPrompt any) any {
 	// use the iterator to extract text from all content blocks
 	var textParts []string
 

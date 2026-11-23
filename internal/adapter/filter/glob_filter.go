@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
 
@@ -26,7 +27,7 @@ func NewGlobFilter() ports.Filter {
 }
 
 // Apply filters a slice of items based on the filter configuration
-func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, items interface{}, nameExtractor func(interface{}) string) (*domain.FilterResult, error) {
+func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, items any, nameExtractor func(any) string) (*domain.FilterResult, error) {
 	// tried without reflection but it was slower
 	// so we'll consider it for now
 	itemsValue := reflect.ValueOf(items)
@@ -43,8 +44,8 @@ func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, ite
 		return nil, fmt.Errorf("invalid filter configuration: %w", err)
 	}
 
-	accepted := make([]interface{}, 0)
-	rejected := make([]interface{}, 0)
+	accepted := make([]any, 0)
+	rejected := make([]any, 0)
 
 	for i := range itemsValue.Len() {
 		item := itemsValue.Index(i).Interface()
@@ -69,13 +70,11 @@ func (f *GlobFilter) Apply(ctx context.Context, config *domain.FilterConfig, ite
 }
 
 // ApplyToMap filters a map of items based on the filter configuration
-func (f *GlobFilter) ApplyToMap(ctx context.Context, config *domain.FilterConfig, items map[string]interface{}) (map[string]interface{}, error) {
+func (f *GlobFilter) ApplyToMap(ctx context.Context, config *domain.FilterConfig, items map[string]any) (map[string]any, error) {
 	if config == nil || config.IsEmpty() {
 		// not filtering needed, return a copy of the original map
-		result := make(map[string]interface{}, len(items))
-		for k, v := range items {
-			result[k] = v
-		}
+		result := make(map[string]any, len(items))
+		maps.Copy(result, items)
 		return result, nil
 	}
 
@@ -83,7 +82,7 @@ func (f *GlobFilter) ApplyToMap(ctx context.Context, config *domain.FilterConfig
 		return nil, fmt.Errorf("invalid filter configuration: %w", err)
 	}
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 
 	for key, value := range items {
 		if f.Matches(config, key) {
@@ -157,16 +156,16 @@ func (f *GlobFilter) matchesPattern(s, patternStr string) bool {
 }
 
 // createResultFromItems creates a FilterResult with all items as accepted
-func (f *GlobFilter) createResultFromItems(items interface{}, rejected []interface{}) *domain.FilterResult {
+func (f *GlobFilter) createResultFromItems(items any, rejected []any) *domain.FilterResult {
 	itemsValue := reflect.ValueOf(items)
-	accepted := make([]interface{}, 0, itemsValue.Len())
+	accepted := make([]any, 0, itemsValue.Len())
 
 	for i := range itemsValue.Len() {
 		accepted = append(accepted, itemsValue.Index(i).Interface())
 	}
 
 	if rejected == nil {
-		rejected = make([]interface{}, 0)
+		rejected = make([]any, 0)
 	}
 
 	return &domain.FilterResult{

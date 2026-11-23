@@ -14,20 +14,20 @@ const (
 // AnthropicRequest represents an Anthropic API request
 // Maps to the Anthropic Messages API format
 type AnthropicRequest struct {
-	ToolChoice    interface{}            `json:"tool_choice,omitempty"`   // string or object
-	System        interface{}            `json:"system,omitempty"`        // string or []ContentBlock
-	Thinking      interface{}            `json:"thinking,omitempty"`      // Extended thinking configuration
-	OutputConfig  interface{}            `json:"output_config,omitempty"` // Output configuration (effort, structured output format)
-	Temperature   *float64               `json:"temperature,omitempty"`
-	TopP          *float64               `json:"top_p,omitempty"`
-	TopK          *int                   `json:"top_k,omitempty"`
-	Metadata      map[string]interface{} `json:"metadata,omitempty"`
-	Model         string                 `json:"model"`
-	Messages      []AnthropicMessage     `json:"messages"`
-	StopSequences []string               `json:"stop_sequences,omitempty"`
-	Tools         []AnthropicTool        `json:"tools,omitempty"`
-	MaxTokens     int                    `json:"max_tokens"`
-	Stream        bool                   `json:"stream,omitempty"`
+	ToolChoice    any                `json:"tool_choice,omitempty"`   // string or object
+	System        any                `json:"system,omitempty"`        // string or []ContentBlock
+	Thinking      any                `json:"thinking,omitempty"`      // Extended thinking configuration
+	OutputConfig  any                `json:"output_config,omitempty"` // Output configuration (effort, structured output format)
+	Temperature   *float64           `json:"temperature,omitempty"`
+	TopP          *float64           `json:"top_p,omitempty"`
+	TopK          *int               `json:"top_k,omitempty"`
+	Metadata      map[string]any     `json:"metadata,omitempty"`
+	Model         string             `json:"model"`
+	Messages      []AnthropicMessage `json:"messages"`
+	StopSequences []string           `json:"stop_sequences,omitempty"`
+	Tools         []AnthropicTool    `json:"tools,omitempty"`
+	MaxTokens     int                `json:"max_tokens"`
+	Stream        bool               `json:"stream,omitempty"`
 }
 
 // Validate checks that required fields are present and all fields have valid values
@@ -61,22 +61,22 @@ func (r *AnthropicRequest) Validate() error {
 // AnthropicMessage represents a message in the conversation
 // Content can be either a simple string or an array of content blocks
 type AnthropicMessage struct {
-	Content interface{} `json:"content"` // string or []ContentBlock
-	Role    string      `json:"role"`    // "user" or "assistant"
+	Content any    `json:"content"` // string or []ContentBlock
+	Role    string `json:"role"`    // "user" or "assistant"
 }
 
 // ContentBlock represents different types of content in messages
 // Anthropic uses a block-based content model for text, images, tool use, tool results, and thinking.
 type ContentBlock struct {
-	Content   interface{}            `json:"content,omitempty"` // for tool_result
-	Source    *ImageSource           `json:"source,omitempty"`
-	Input     map[string]interface{} `json:"input,omitempty"`
-	Type      string                 `json:"type"` // "text", "image", "tool_use", "tool_result", "thinking"
-	Text      string                 `json:"text,omitempty"`
-	Thinking  string                 `json:"thinking,omitempty"` // populated for type="thinking" response blocks
-	ID        string                 `json:"id,omitempty"`
-	Name      string                 `json:"name,omitempty"`
-	ToolUseID string                 `json:"tool_use_id,omitempty"`
+	Content   any            `json:"content,omitempty"` // for tool_result
+	Source    *ImageSource   `json:"source,omitempty"`
+	Input     map[string]any `json:"input,omitempty"`
+	Type      string         `json:"type"` // "text", "image", "tool_use", "tool_result", "thinking"
+	Text      string         `json:"text,omitempty"`
+	Thinking  string         `json:"thinking,omitempty"` // populated for type="thinking" response blocks
+	ID        string         `json:"id,omitempty"`
+	Name      string         `json:"name,omitempty"`
+	ToolUseID string         `json:"tool_use_id,omitempty"`
 }
 
 // ImageSource represents image data in content blocks
@@ -91,9 +91,9 @@ type ImageSource struct {
 // AnthropicTool represents a tool definition
 // Tools enable the model to call external functions
 type AnthropicTool struct {
-	InputSchema map[string]interface{} `json:"input_schema"` // JSON Schema for tool parameters
-	Name        string                 `json:"name"`
-	Description string                 `json:"description,omitempty"`
+	InputSchema map[string]any `json:"input_schema"` // JSON Schema for tool parameters
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
 }
 
 // ToolChoiceAuto represents automatic tool selection
@@ -158,9 +158,9 @@ type ContentBlockStart struct {
 
 // ContentBlockDelta represents incremental content updates
 type ContentBlockDelta struct {
-	Delta interface{} `json:"delta"` // TextDelta or InputJSONDelta
-	Type  string      `json:"type"`  // "content_block_delta"
-	Index int         `json:"index"`
+	Delta any    `json:"delta"` // TextDelta or InputJSONDelta
+	Type  string `json:"type"`  // "content_block_delta"
+	Index int    `json:"index"`
 }
 
 // TextDelta represents incremental text updates

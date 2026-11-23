@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -28,13 +29,7 @@ func TestNewFactory(t *testing.T) {
 	}
 
 	for _, expected := range expectedProfiles {
-		found := false
-		for _, actual := range profiles {
-			if actual == expected {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(profiles, expected)
 		if !found {
 			t.Errorf("Expected profile %q not found", expected)
 		}

@@ -29,7 +29,7 @@ func (c *LlamaCppConverter) GetFormatName() string {
 	return constants.ProviderTypeLlamaCpp
 }
 
-func (c *LlamaCppConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *LlamaCppConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]profile.LlamaCppModel, 0, len(filtered))

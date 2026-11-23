@@ -30,7 +30,7 @@ func (c *VLLMMLXConverter) GetFormatName() string {
 	return constants.ProviderTypeVLLMMLX
 }
 
-func (c *VLLMMLXConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *VLLMMLXConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]profile.VLLMMLXModel, 0, len(filtered))

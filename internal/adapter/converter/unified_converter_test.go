@@ -35,7 +35,7 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 				},
 			},
 			Capabilities:     []string{"chat", "completion"},
-			MaxContextLength: int64Ptr(4096),
+			MaxContextLength: new(int64(4096)),
 			PromptTemplateID: "chatml",
 		},
 		{
@@ -67,7 +67,7 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 				},
 			},
 			Capabilities: []string{"chat", "code"},
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"type": "llm",
 			},
 		},
@@ -155,8 +155,4 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 		require.True(t, ok)
 		assert.Len(t, response.Data, 2) // Both are LLMs
 	})
-}
-
-func int64Ptr(i int64) *int64 {
-	return &i
 }

@@ -26,7 +26,7 @@ func TestModelDiscoveryServiceStartStop(t *testing.T) {
 
 	service := NewModelDiscoveryService(client, endpointRepo, modelRegistry, config, createTestLogger())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := service.Start(ctx)
 	if err != nil {
 		t.Fatalf("Failed to start service: %v", err)
@@ -122,7 +122,7 @@ func TestDiscoverAll(t *testing.T) {
 
 			service := NewModelDiscoveryService(client, endpointRepo, modelRegistry, config, createTestLogger())
 
-			err := service.DiscoverAll(context.Background())
+			err := service.DiscoverAll(t.Context())
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected error but got none")
@@ -195,7 +195,7 @@ func TestDiscoverEndpoint(t *testing.T) {
 
 			service := NewModelDiscoveryService(client, endpointRepo, modelRegistry, config, createTestLogger())
 
-			err := service.DiscoverEndpoint(context.Background(), tt.endpoint)
+			err := service.DiscoverEndpoint(t.Context(), tt.endpoint)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected error but got none")
@@ -270,7 +270,7 @@ func TestEndpointDisabling(t *testing.T) {
 				service.incrementFailureCount(endpoint.URLString)
 			}
 
-			_ = service.DiscoverEndpoint(context.Background(), endpoint)
+			_ = service.DiscoverEndpoint(t.Context(), endpoint)
 
 			isDisabled := service.isEndpointDisabled(endpoint.URLString)
 			if isDisabled != tt.expectedDisabled {
@@ -306,7 +306,7 @@ func TestEndpointDisabledAfterMaxFailures(t *testing.T) {
 
 	// Fail discovery MaxConsecutiveFailures times
 	for i := range MaxConsecutiveFailures {
-		_ = service.DiscoverEndpoint(context.Background(), endpoint)
+		_ = service.DiscoverEndpoint(t.Context(), endpoint)
 
 		// Should not be disabled until we hit the limit
 		if i < MaxConsecutiveFailures-1 {
@@ -328,7 +328,7 @@ func TestEndpointDisabledAfterMaxFailures(t *testing.T) {
 	t.Logf("Debug: Before successful discovery - failure count: %d, disabled: %v",
 		service.getFailureCount(endpoint.URLString), service.isEndpointDisabled(endpoint.URLString))
 
-	err := service.DiscoverEndpoint(context.Background(), endpoint)
+	err := service.DiscoverEndpoint(t.Context(), endpoint)
 	if err != nil {
 		t.Errorf("Expected successful discovery, got error: %v", err)
 	}
@@ -389,7 +389,7 @@ func TestConcurrentDiscovery(t *testing.T) {
 	service := NewModelDiscoveryService(client, endpointRepo, modelRegistry, config, createTestLogger())
 
 	start := time.Now()
-	err := service.DiscoverAll(context.Background())
+	err := service.DiscoverAll(t.Context())
 	duration := time.Since(start)
 
 	if err != nil {

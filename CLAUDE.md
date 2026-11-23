@@ -99,6 +99,7 @@ Gates on `make ready` first, then boots seven `test/cmd/ollamock` instances (por
 - Comment on **why**, not **what**. Concise and direct.
 - Production code must not panic - guard closes with CAS or `sync.Once`.
 - Always run `make ready` before committing, plus `make ci-web` if `web/` changed.
+- modernize linter enforced
 
 ## Dependencies (Endorsed)
 Do not add dependencies unless explicitly asked.

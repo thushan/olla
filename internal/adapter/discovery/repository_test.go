@@ -1,16 +1,12 @@
 package discovery
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/config"
 )
-
-// ptrInt is a test helper to construct *int literals inline.
-func ptrInt(v int) *int { return &v }
 
 // TestApplyEndpointDefaults_SetsZeroValues verifies that zero-value timing and priority
 // fields are filled with the package defaults, ensuring a minimal YAML config can
@@ -47,7 +43,7 @@ func TestApplyEndpointDefaults_PreservesExplicitValues(t *testing.T) {
 		URL:           "http://localhost:11434",
 		CheckInterval: 10 * time.Second,
 		CheckTimeout:  3 * time.Second,
-		Priority:      ptrInt(50),
+		Priority:      new(50),
 	}
 
 	applyEndpointDefaults(cfg)
@@ -75,7 +71,7 @@ func TestApplyEndpointDefaults_PreservesExplicitZeroPriority(t *testing.T) {
 		URL:           "http://localhost:11434",
 		CheckInterval: 5 * time.Second,
 		CheckTimeout:  2 * time.Second,
-		Priority:      ptrInt(0),
+		Priority:      new(0),
 	}
 
 	applyEndpointDefaults(cfg)
@@ -120,7 +116,7 @@ func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
 		{
 			name: "only Priority set",
 			cfg: config.EndpointConfig{
-				Priority: ptrInt(200),
+				Priority: new(200),
 				// CheckInterval and CheckTimeout are zero
 			},
 			wantInterval: DefaultCheckInterval,
@@ -131,7 +127,7 @@ func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
 			name: "CheckInterval and Priority set, CheckTimeout zero",
 			cfg: config.EndpointConfig{
 				CheckInterval: 20 * time.Second,
-				Priority:      ptrInt(75),
+				Priority:      new(75),
 			},
 			wantInterval: 20 * time.Second,
 			wantTimeout:  DefaultCheckTimeout,
@@ -218,7 +214,7 @@ func TestLoadFromConfig_WithMinimalEndpoints(t *testing.T) {
 			t.Parallel()
 
 			repo := NewStaticEndpointRepository()
-			err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{tc.cfg})
+			err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{tc.cfg})
 
 			if tc.expectErr && err == nil {
 				t.Error("expected error but got none")
@@ -229,7 +225,7 @@ func TestLoadFromConfig_WithMinimalEndpoints(t *testing.T) {
 
 			if !tc.expectErr && err == nil {
 				// Confirm the endpoint was actually registered with the default timing values
-				endpoints, getErr := repo.GetAll(context.Background())
+				endpoints, getErr := repo.GetAll(t.Context())
 				if getErr != nil {
 					t.Fatalf("GetAll failed: %v", getErr)
 				}
@@ -262,17 +258,17 @@ func TestLoadFromConfig_ZeroPriorityRoundTrip(t *testing.T) {
 		Name:          "zero-priority",
 		URL:           "http://localhost:11434",
 		Type:          "ollama",
-		Priority:      ptrInt(0),
+		Priority:      new(0),
 		CheckInterval: 5 * time.Second,
 		CheckTimeout:  2 * time.Second,
 	}
 
-	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg})
 	if err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	endpoints, err := repo.GetAll(context.Background())
+	endpoints, err := repo.GetAll(t.Context())
 	if err != nil {
 		t.Fatalf("GetAll failed: %v", err)
 	}
@@ -360,7 +356,7 @@ func TestEndpointConfigValidation_WithType(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := NewStaticEndpointRepository()
-			err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{tc.config})
+			err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{tc.config})
 
 			if tc.expectErr && err == nil {
 				t.Error("Expected error but got none")
@@ -374,7 +370,7 @@ func TestEndpointConfigValidation_WithType(t *testing.T) {
 
 func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -383,7 +379,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "ollama",
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       ptrInt(100),
+			Priority:       new(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},
@@ -393,7 +389,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "lm-studio",
 			HealthCheckURL: "/v1/models",
 			ModelURL:       "/v1/models",
-			Priority:       ptrInt(90),
+			Priority:       new(90),
 			CheckInterval:  10 * time.Second,
 			CheckTimeout:   3 * time.Second,
 		},
@@ -428,7 +424,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 
 func TestStaticEndpointRepository_EmptyConfig(t *testing.T) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := repo.LoadFromConfig(ctx, []config.EndpointConfig{})
 	if err != nil {
@@ -449,7 +445,7 @@ func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
 	// Test that endpoints with nested paths (like Docker) correctly preserve
 	// the path prefix when building model discovery URLs
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -458,7 +454,7 @@ func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
 			Type:           "openai-compatible",
 			HealthCheckURL: "/health",
 			ModelURL:       "/v1/models",
-			Priority:       ptrInt(100),
+			Priority:       new(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},
@@ -570,7 +566,7 @@ func TestEndpointConfigValidation_EmptyURLs(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := NewStaticEndpointRepository()
-			err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{tc.config})
+			err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{tc.config})
 
 			if tc.expectErr && err == nil {
 				t.Error("Expected error but got none")
@@ -585,7 +581,7 @@ func TestEndpointConfigValidation_EmptyURLs(t *testing.T) {
 func TestStaticEndpointRepository_ProfileFallback_HealthCheckURL(t *testing.T) {
 	// Test that empty HealthCheckURL gets populated from profile defaults
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -625,7 +621,7 @@ func TestStaticEndpointRepository_ProfileFallback_HealthCheckURL(t *testing.T) {
 func TestStaticEndpointRepository_ProfileFallback_ModelURL(t *testing.T) {
 	// Test that empty ModelURL gets populated from profile defaults
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -665,7 +661,7 @@ func TestStaticEndpointRepository_ProfileFallback_ModelURL(t *testing.T) {
 func TestStaticEndpointRepository_ProfileFallback_BothURLsEmpty(t *testing.T) {
 	// Test that both empty URLs get populated from profile defaults
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -710,7 +706,7 @@ func TestStaticEndpointRepository_ProfileFallback_BothURLsEmpty(t *testing.T) {
 func TestStaticEndpointRepository_AutoType_EmptyURLs(t *testing.T) {
 	// Test that "auto" type with empty URLs gets sensible defaults
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -757,7 +753,7 @@ func TestStaticEndpointRepository_AutoType_EmptyURLs(t *testing.T) {
 func TestStaticEndpointRepository_LMStudio_ProfileFallback(t *testing.T) {
 	// Test that lm-studio profile defaults work correctly
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -803,7 +799,7 @@ func TestStaticEndpointRepository_LMStudio_ProfileFallback(t *testing.T) {
 func TestStaticEndpointRepository_EmptyURLs_WithNestedPath(t *testing.T) {
 	// Test that empty URLs with nested base paths work correctly
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := []config.EndpointConfig{
 		{
@@ -860,27 +856,27 @@ func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
 			Name:          "rl-endpoint",
 			URL:           "http://localhost:11434",
 			Type:          "ollama",
-			Priority:      ptrInt(100),
+			Priority:      new(100),
 			CheckInterval: 5 * time.Second,
 			CheckTimeout:  2 * time.Second,
 		},
 	}
-	if err := repo.LoadFromConfig(context.Background(), cfg); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), cfg); err != nil {
 		t.Fatalf("LoadFromConfig: %v", err)
 	}
 
-	eps, err := repo.GetAll(context.Background())
+	eps, err := repo.GetAll(t.Context())
 	require.NoError(t, err, "GetAll before UpdateEndpoint")
 	ep := eps[0]
 
 	rateLimitDeadline := time.Now().Add(60 * time.Second).Truncate(time.Millisecond)
 	ep.RateLimitedUntil = rateLimitDeadline
 
-	if err := repo.UpdateEndpoint(context.Background(), ep); err != nil {
+	if err := repo.UpdateEndpoint(t.Context(), ep); err != nil {
 		t.Fatalf("UpdateEndpoint: %v", err)
 	}
 
-	updated, err := repo.GetAll(context.Background())
+	updated, err := repo.GetAll(t.Context())
 	require.NoError(t, err, "GetAll after UpdateEndpoint")
 	if updated[0].RateLimitedUntil.IsZero() {
 		t.Error("RateLimitedUntil was not persisted; got zero time after UpdateEndpoint")

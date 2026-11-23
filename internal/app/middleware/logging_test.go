@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -159,7 +158,7 @@ func TestFormatBytes(t *testing.T) {
 }
 
 func TestGetLoggerWithoutContext(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logger := GetLogger(ctx)
 
 	// Should return the default logger when no logger is in context
@@ -169,7 +168,7 @@ func TestGetLoggerWithoutContext(t *testing.T) {
 }
 
 func TestGetRequestIDWithoutContext(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	requestID := GetRequestID(ctx)
 
 	// Should return empty string when no request ID in context

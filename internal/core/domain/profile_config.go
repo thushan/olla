@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // ProfileConfig is loaded from YAML files so users can add support for
 // new inference platforms without touching Go code. Much easier than
@@ -193,12 +196,7 @@ func (c *AnthropicSupportConfig) HasLimitation(limitation string) bool {
 	if c == nil {
 		return false
 	}
-	for _, l := range c.Limitations {
-		if l == limitation {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Limitations, limitation)
 }
 
 // SupportsPassthrough is a convenience check that the config is non-nil and

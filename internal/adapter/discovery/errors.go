@@ -85,13 +85,11 @@ func (e *NetworkError) Unwrap() error {
 
 // GetUserFriendlyMessage gives a concise, user-friendly error message from discovery errors
 func GetUserFriendlyMessage(err error) string {
-	var parseErr *ParseError
-	if errors.As(err, &parseErr) {
+	if _, ok := errors.AsType[*ParseError](err); ok {
 		return "invalid response format"
 	}
 
-	var discErr *DiscoveryError
-	if errors.As(err, &discErr) {
+	if discErr, ok := errors.AsType[*DiscoveryError](err); ok {
 		if discErr.StatusCode > 0 && discErr.StatusCode != 200 {
 			switch {
 			case discErr.StatusCode >= 400 && discErr.StatusCode < 500:
@@ -123,8 +121,7 @@ func GetUserFriendlyMessage(err error) string {
 		}
 	}
 
-	var networkErr *NetworkError
-	if errors.As(err, &networkErr) {
+	if _, ok := errors.AsType[*NetworkError](err); ok {
 		return "network connection failed"
 	}
 
@@ -137,19 +134,16 @@ func IsRecoverable(err error) bool {
 	// but abstracting it here means we can change it in one place
 
 	// A backend upgrade or a transient response can repair a format mismatch.
-	var parseError *ParseError
-	if errors.As(err, &parseError) {
+	if _, ok := errors.AsType[*ParseError](err); ok {
 		return true
 	}
 
 	// hopefully recoverable?
-	var networkError *NetworkError
-	if errors.As(err, &networkError) {
+	if _, ok := errors.AsType[*NetworkError](err); ok {
 		return true
 	}
 
-	var discErr *DiscoveryError
-	if errors.As(err, &discErr) {
+	if discErr, ok := errors.AsType[*DiscoveryError](err); ok {
 		// HTTP 4xx errors are non-recoverable (wrong endpoint, auth, etc.)
 		if discErr.StatusCode >= 400 && discErr.StatusCode < 500 {
 			return false

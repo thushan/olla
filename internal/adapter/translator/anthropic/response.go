@@ -14,25 +14,25 @@ import (
 
 // convert openai response to anthropic format
 // maps choices/messages to content blocks, handles tools and token usage
-func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
+func (t *Translator) TransformResponse(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
 	// Parse OpenAI response
-	respMap, ok := openaiResp.(map[string]interface{})
+	respMap, ok := openaiResp.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("invalid OpenAI response type: %T", openaiResp)
 	}
 
 	// Extract choices
-	choices, ok := respMap["choices"].([]interface{})
+	choices, ok := respMap["choices"].([]any)
 	if !ok || len(choices) == 0 {
 		return nil, errors.New("no choices in OpenAI response")
 	}
 
-	choice, ok := choices[0].(map[string]interface{})
+	choice, ok := choices[0].(map[string]any)
 	if !ok {
 		return nil, errors.New("invalid choice format")
 	}
 
-	message, ok := choice["message"].(map[string]interface{})
+	message, ok := choice["message"].(map[string]any)
 	if !ok {
 		return nil, errors.New("no message in choice")
 	}
@@ -58,7 +58,7 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 	anthropicResp.StopSequence = nil
 
 	// Convert usage
-	if usage, ok := respMap["usage"].(map[string]interface{}); ok {
+	if usage, ok := respMap["usage"].(map[string]any); ok {
 		anthropicResp.Usage = t.convertUsage(usage)
 	}
 
@@ -83,7 +83,7 @@ func (t *Translator) TransformResponse(ctx context.Context, openaiResp interface
 
 // parse text and tool_calls from openai message into content blocks
 // finish_reason determines what stop_reason to use
-func (t *Translator) convertResponseContent(message map[string]interface{}, finishReason string) ([]ContentBlock, string) {
+func (t *Translator) convertResponseContent(message map[string]any, finishReason string) ([]ContentBlock, string) {
 	var content []ContentBlock
 
 	// Prepend a thinking block when the backend includes chain-of-thought reasoning.
@@ -105,9 +105,9 @@ func (t *Translator) convertResponseContent(message map[string]interface{}, fini
 	}
 
 	// Handle tool calls
-	if toolCalls, ok := message["tool_calls"].([]interface{}); ok && len(toolCalls) > 0 {
+	if toolCalls, ok := message["tool_calls"].([]any); ok && len(toolCalls) > 0 {
 		for _, tc := range toolCalls {
-			toolCall, ok := tc.(map[string]interface{})
+			toolCall, ok := tc.(map[string]any)
 			if !ok {
 				continue
 			}
@@ -149,9 +149,9 @@ func mapFinishReasonToStopReason(finishReason string) string {
 
 // convert openai tool_call to anthropic tool_use block
 // parses json args string into an object, logs errors but doesn't fail
-func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentBlock {
+func (t *Translator) convertToToolUse(toolCall map[string]any) *ContentBlock {
 	id, _ := toolCall["id"].(string)
-	function, ok := toolCall["function"].(map[string]interface{})
+	function, ok := toolCall["function"].(map[string]any)
 	if !ok {
 		return nil
 	}
@@ -160,7 +160,7 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 	argsStr, _ := function["arguments"].(string)
 
 	// openai sends args as json string, we need it as an object
-	var input map[string]interface{}
+	var input map[string]any
 	if err := json.Unmarshal([]byte(argsStr), &input); err != nil {
 		// use empty input if json is bad, don't fail the whole response
 		t.logger.Warn("Failed to parse tool arguments, using empty input",
@@ -169,7 +169,7 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 			"error", err,
 			"raw_arguments", util.TruncateString(argsStr, util.DefaultTruncateLengthPII),
 			"raw_arguments_len", len(argsStr))
-		input = make(map[string]interface{})
+		input = make(map[string]any)
 	}
 
 	return &ContentBlock{
@@ -184,7 +184,7 @@ func (t *Translator) convertToToolUse(toolCall map[string]interface{}) *ContentB
 // checking both field name variants used across backends:
 //   - "reasoning"         - Ollama, LM Studio, Lemonade
 //   - "reasoning_content" - vLLM, SGLang, DeepSeek
-func extractNonStreamingReasoning(message map[string]interface{}) string {
+func extractNonStreamingReasoning(message map[string]any) string {
 	if v, ok := message["reasoning"].(string); ok && v != "" {
 		return v
 	}
@@ -195,7 +195,7 @@ func extractNonStreamingReasoning(message map[string]interface{}) string {
 }
 
 // map openai token counts to anthropic names
-func (t *Translator) convertUsage(usage map[string]interface{}) AnthropicUsage {
+func (t *Translator) convertUsage(usage map[string]any) AnthropicUsage {
 	promptTokens := 0
 	completionTokens := 0
 
@@ -213,7 +213,7 @@ func (t *Translator) convertUsage(usage map[string]interface{}) AnthropicUsage {
 }
 
 // grab model name from response, default to "unknown"
-func (t *Translator) extractModel(resp map[string]interface{}) string {
+func (t *Translator) extractModel(resp map[string]any) string {
 	if model, ok := resp["model"].(string); ok {
 		return model
 	}

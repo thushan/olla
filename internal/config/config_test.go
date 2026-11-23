@@ -83,15 +83,8 @@ func TestLoadConfig_WithEnvironmentVariables(t *testing.T) {
 
 	// Set env vars
 	for key, value := range testEnvVars {
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	// Clean up after test
-	defer func() {
-		for key := range testEnvVars {
-			os.Unsetenv(key)
-		}
-	}()
 
 	cfg, err := Load()
 	if err != nil {
@@ -148,7 +141,7 @@ func TestConfigValidation(t *testing.T) {
 						Name:           "test",
 						URL:            "http://localhost:11434",
 						Type:           "ollama",
-						Priority:       ptrInt(100),
+						Priority:       new(100),
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
 						CheckInterval:  5 * time.Second,
@@ -246,8 +239,7 @@ func TestEnvironmentVariableParsing(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.envVar, func(t *testing.T) {
-			os.Setenv(tc.envVar, tc.envValue)
-			defer os.Unsetenv(tc.envVar)
+			t.Setenv(tc.envVar, tc.envValue)
 
 			cfg, err := Load()
 			if err != nil {
@@ -332,15 +324,8 @@ func TestLoadConfig_WithRequestLimits(t *testing.T) {
 
 	// Set env vars
 	for key, value := range testEnvVars {
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	// Clean up after test
-	defer func() {
-		for key := range testEnvVars {
-			os.Unsetenv(key)
-		}
-	}()
 
 	cfg, err := Load()
 	if err != nil {
@@ -371,15 +356,8 @@ func TestLoadConfig_WithRateLimits(t *testing.T) {
 
 	// Set env vars
 	for key, value := range testEnvVars {
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	// Clean up after test
-	defer func() {
-		for key := range testEnvVars {
-			os.Unsetenv(key)
-		}
-	}()
 
 	cfg, err := Load()
 	if err != nil {
@@ -442,14 +420,8 @@ func TestLoadConfig_WithTrustedProxyCIDRs(t *testing.T) {
 	}
 
 	for key, value := range testEnvVars {
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	defer func() {
-		for key := range testEnvVars {
-			os.Unsetenv(key)
-		}
-	}()
 
 	cfg, err := Load()
 	if err != nil {
@@ -593,15 +565,8 @@ func TestLoadConfig_WithTranslatorConfig(t *testing.T) {
 
 	// Set env vars
 	for key, value := range testEnvVars {
-		os.Setenv(key, value)
+		t.Setenv(key, value)
 	}
-
-	// Clean up after test
-	defer func() {
-		for key := range testEnvVars {
-			os.Unsetenv(key)
-		}
-	}()
 
 	cfg, err := Load()
 	if err != nil {
@@ -634,8 +599,7 @@ func TestLoadConfig_WithPassthroughEnabledEnvVar(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			os.Setenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED", tc.envValue)
-			defer os.Unsetenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED")
+			t.Setenv("OLLA_TRANSLATORS_ANTHROPIC_PASSTHROUGH_ENABLED", tc.envValue)
 
 			cfg, err := Load()
 			if err != nil {
@@ -1409,13 +1373,8 @@ func TestCorsConfig_EnvOverrides(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			for k, v := range tc.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
-			defer func() {
-				for k := range tc.envVars {
-					os.Unsetenv(k)
-				}
-			}()
 
 			cfg, err := Load()
 			if err != nil {
@@ -1610,8 +1569,7 @@ func TestEnvOverrides_NewTunables(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.envVar, func(t *testing.T) {
-			os.Setenv(tc.envVar, tc.value)
-			defer os.Unsetenv(tc.envVar)
+			t.Setenv(tc.envVar, tc.value)
 
 			cfg, err := Load()
 			if err != nil {

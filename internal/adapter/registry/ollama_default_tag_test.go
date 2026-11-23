@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"context"
 	"sort"
 	"testing"
 	"time"
@@ -43,7 +42,7 @@ func modelInfos(names []string) []*domain.ModelInfo {
 func buildUnified(t *testing.T, fleet ...tagFixture) *UnifiedMemoryModelRegistry {
 	t.Helper()
 	reg := createTestUnifiedRegistry()
-	ctx := context.Background()
+	ctx := t.Context()
 	for _, f := range fleet {
 		require.NoError(t, reg.RegisterModelsWithEndpoint(ctx, newEndpoint(f), modelInfos(f.models)))
 	}
@@ -114,7 +113,7 @@ func TestUnifiedRegistry_OllamaDefaultTag(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			reg := buildUnified(t, tt.fleet...)
-			ctx := context.Background()
+			ctx := t.Context()
 
 			got, err := reg.GetEndpointsForModel(ctx, tt.query)
 			require.NoError(t, err)
@@ -131,7 +130,7 @@ func TestUnifiedRegistry_OllamaDefaultTag_GetUnifiedModel(t *testing.T) {
 		tagFixture{url: ollamaURL, name: "ollama-1", typ: domain.ProfileOllama, models: []string{"all-minilm:latest"}},
 		tagFixture{url: vllmURL, name: "vllm-1", typ: domain.ProfileVLLM, models: []string{"only-vllm:latest"}},
 	)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	m, err := reg.GetUnifiedModel(ctx, "all-minilm")
 	require.NoError(t, err)
@@ -150,7 +149,7 @@ func TestUnifiedRegistry_OllamaDefaultTag_MixedCaseKeepsToOllama(t *testing.T) {
 		tagFixture{url: ollamaURL, name: "ollama-1", typ: domain.ProfileOllama, models: []string{"FOO:latest"}},
 		tagFixture{url: vllmURL, name: "vllm-1", typ: domain.ProfileVLLM, models: []string{"foo:latest"}},
 	)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	got, err := reg.GetEndpointsForModel(ctx, "foo")
 	require.NoError(t, err)
@@ -168,7 +167,7 @@ func TestUnifiedRegistry_OllamaDefaultTag_ExactCatalogueMatchBeatsFallback(t *te
 		tagFixture{url: vllmURL, name: "vllm-1", typ: domain.ProfileVLLM, models: []string{"Qwen/Foo"}},
 		tagFixture{url: ollamaURL, name: "ollama-1", typ: domain.ProfileOllama, models: []string{"qwen/foo:latest"}},
 	)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, name := range []string{"Qwen/Foo", "qwen/foo"} {
 		got, err := reg.GetEndpointsForModel(ctx, name)
@@ -211,7 +210,7 @@ func TestUnifiedRegistry_OllamaDefaultTag_CanonicalName(t *testing.T) {
 func TestBaseRegistries_OllamaDefaultTag(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	build := func(t *testing.T) (*MemoryModelRegistry, *RoutingRegistry) {
 		t.Helper()
 		base := NewMemoryModelRegistry(createTestLogger())
@@ -255,7 +254,7 @@ func TestUnifiedRegistry_OllamaDefaultTag_DroppedWithEndpoint(t *testing.T) {
 	t.Parallel()
 
 	reg := buildUnified(t, tagFixture{url: ollamaURL, name: "ollama-1", typ: domain.ProfileOllama, models: []string{"all-minilm:latest"}})
-	ctx := context.Background()
+	ctx := t.Context()
 	require.NoError(t, reg.RemoveEndpoint(ctx, ollamaURL))
 
 	got, err := reg.GetEndpointsForModel(ctx, "all-minilm")

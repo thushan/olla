@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -34,7 +33,7 @@ func TestUnifiedViewHandlers_ConcurrentWithRegistration(t *testing.T) {
 	}
 
 	epA, epB := newEndpoint("a"), newEndpoint("b")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 30 {
 		reg := registry.NewUnifiedMemoryModelRegistry(&mockStyledLogger{}, nil, nil, nil)
@@ -66,16 +65,14 @@ func TestUnifiedViewHandlers_ConcurrentWithRegistration(t *testing.T) {
 		var done atomic.Bool
 		var readers sync.WaitGroup
 		for path, h := range routes {
-			readers.Add(1)
-			go func() {
-				defer readers.Done()
+			readers.Go(func() {
 				for !done.Load() {
 					req := httptest.NewRequest(http.MethodGet, path, nil)
 					req.SetPathValue("id", "llama3:8b")
 					w := httptest.NewRecorder()
 					h(w, req)
 				}
-			}()
+			})
 		}
 
 		// second endpoint merges, then leaves, then the first re-registers

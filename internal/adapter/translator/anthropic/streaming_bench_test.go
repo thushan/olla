@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -59,7 +58,7 @@ func BenchmarkStreaming_ContentDeltas(b *testing.B) {
 	const chunks = 50 // representative of a medium-length response
 
 	tr := newTestTranslator()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -82,7 +81,7 @@ func BenchmarkStreaming_ThinkingDeltas(b *testing.B) {
 	const chunks = 50
 
 	tr := newTestTranslator()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -105,7 +104,7 @@ func BenchmarkStreaming_ToolArgDeltas(b *testing.B) {
 	const chunks = 50
 
 	tr := newTestTranslator()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -159,10 +158,10 @@ func BenchmarkWriteEvent_TextDelta_MapBaseline(b *testing.B) {
 	for range b.N {
 		rec.Body.Reset()
 		// Replicate exact old writeEvent logic: json.Marshal on a nested map + fmt.Fprintf.
-		data := map[string]interface{}{
+		data := map[string]any{
 			"type":  "content_block_delta",
 			"index": 0,
-			"delta": map[string]interface{}{
+			"delta": map[string]any{
 				"type": "text_delta",
 				"text": "hello world",
 			},
@@ -180,7 +179,7 @@ func TestWriteEvent_ConcurrentPoolSafety(t *testing.T) {
 	t.Parallel()
 
 	tr := newTestTranslator()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const goroutines = 20
 	const chunksEach = 30

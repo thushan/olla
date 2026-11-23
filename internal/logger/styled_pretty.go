@@ -125,7 +125,7 @@ func (sl *PrettyStyledLogger) GetUnderlying() *slog.Logger {
 }
 
 func (sl *PrettyStyledLogger) WithRequestID(requestID string) StyledLogger {
-	return sl.With(constants.ContextRequestIdKey, requestID)
+	return sl.With(constants.SlogRequestIdKey, requestID)
 }
 
 func (sl *PrettyStyledLogger) InfoConfigChange(oldName, newName string) {
@@ -182,12 +182,12 @@ func (sl *PrettyStyledLogger) logWithContext(level string, msg string, endpoint 
 
 	// log file: detailed hopefully
 	if len(ctx.DetailedArgs) > 0 {
-		allArgs := make([]interface{}, 0, len(ctx.UserArgs)+len(ctx.DetailedArgs)+2)
+		allArgs := make([]any, 0, len(ctx.UserArgs)+len(ctx.DetailedArgs)+2)
 		allArgs = append(allArgs, "endpoint_name", endpoint)
 		allArgs = append(allArgs, ctx.UserArgs...)
 		allArgs = append(allArgs, ctx.DetailedArgs...)
 
-		detailedCtx := context.WithValue(context.Background(), DefaultDetailedCookie, true)
+		detailedCtx := WithDetailed(context.Background())
 
 		switch level {
 		case LogLevelInfo:

@@ -120,8 +120,8 @@ func (s *ModelDiscoveryService) discoveryLoop(ctx context.Context) {
 func (s *ModelDiscoveryService) LogErrorsWithContext(err error) {
 	userMsg := GetUserFriendlyMessage(err)
 	logCtx := logger.LogContext{
-		UserArgs:     []interface{}{},
-		DetailedArgs: []interface{}{"detailed_error", err},
+		UserArgs:     []any{},
+		DetailedArgs: []any{"detailed_error", err},
 	}
 	s.logger.WarnWithContext(fmt.Sprintf("Regular discovery failed (%s)", userMsg), "", logCtx)
 }
@@ -285,12 +285,10 @@ func (s *ModelDiscoveryService) fetchModelsWithRetry(ctx context.Context, endpoi
 // failure is recoverable across cycles (IsRecoverable) because a backend upgrade
 // can repair it, but the same body comes back seconds later, as does a 4xx.
 func isRetryableWithinCycle(err error) bool {
-	var parseErr *ParseError
-	if errors.As(err, &parseErr) {
+	if _, ok := errors.AsType[*ParseError](err); ok {
 		return false
 	}
-	var profileErr *ProfileNotFoundError
-	if errors.As(err, &profileErr) {
+	if _, ok := errors.AsType[*ProfileNotFoundError](err); ok {
 		return false
 	}
 	// An oversized listing is the backend's steady state, not a blip.
@@ -346,8 +344,8 @@ func (s *ModelDiscoveryService) handleDiscoveryError(endpoint *domain.Endpoint, 
 	userMsg := GetUserFriendlyMessage(err)
 
 	logCtx := logger.LogContext{
-		UserArgs:     []interface{}{},
-		DetailedArgs: []interface{}{"detailed_error", err},
+		UserArgs:     []any{},
+		DetailedArgs: []any{"detailed_error", err},
 	}
 
 	s.logger.ErrorWithContext(fmt.Sprintf("Model discovery failed (%s)", userMsg), endpoint.Name, logCtx)
@@ -490,7 +488,7 @@ func (s *ModelDiscoveryService) applyModelFilter(ctx context.Context, models []*
 	}
 
 	// Use the filter to process models
-	result, err := s.modelFilter.Apply(ctx, filterConfig, models, func(item interface{}) string {
+	result, err := s.modelFilter.Apply(ctx, filterConfig, models, func(item any) string {
 		if model, ok := item.(*domain.ModelInfo); ok {
 			return model.Name
 		}

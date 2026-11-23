@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"maps"
 	"time"
 )
 
@@ -13,21 +14,21 @@ type AliasEntry struct {
 
 // UnifiedModel represents the canonical model format with platform-agnostic naming
 type UnifiedModel struct {
-	LastSeen         time.Time              `json:"last_seen"`
-	MaxContextLength *int64                 `json:"max_context_length,omitempty"`
-	Metadata         map[string]interface{} `json:"metadata"`                     // Platform-specific extras
-	ID               string                 `json:"id"`                           // Canonical ID: {family}/{variant}:{size}-{quant}
-	Family           string                 `json:"family"`                       // Model family (e.g., phi, llama, qwen)
-	Variant          string                 `json:"variant"`                      // Version/variant (e.g., 4, 3.3, 3)
-	ParameterSize    string                 `json:"parameter_size"`               // Normalised size (e.g., 14.7b, 70.6b)
-	Quantization     string                 `json:"quantization"`                 // Normalised quantization (e.g., q4km, q3kl)
-	Format           string                 `json:"format"`                       // Model format (gguf, safetensors, etc.)
-	PromptTemplateID string                 `json:"prompt_template_id,omitempty"` // Associated prompt template
-	Aliases          []AliasEntry           `json:"aliases"`                      // All known aliases with source attribution
-	SourceEndpoints  []SourceEndpoint       `json:"source_endpoints"`             // Where this model is available
-	Capabilities     []string               `json:"capabilities"`                 // Inferred capabilities (chat, completion, vision)
-	ParameterCount   int64                  `json:"parameter_count"`              // Actual parameter count for sorting
-	DiskSize         int64                  `json:"disk_size"`                    // Total disk size across all endpoints
+	LastSeen         time.Time        `json:"last_seen"`
+	MaxContextLength *int64           `json:"max_context_length,omitempty"`
+	Metadata         map[string]any   `json:"metadata"`                     // Platform-specific extras
+	ID               string           `json:"id"`                           // Canonical ID: {family}/{variant}:{size}-{quant}
+	Family           string           `json:"family"`                       // Model family (e.g., phi, llama, qwen)
+	Variant          string           `json:"variant"`                      // Version/variant (e.g., 4, 3.3, 3)
+	ParameterSize    string           `json:"parameter_size"`               // Normalised size (e.g., 14.7b, 70.6b)
+	Quantization     string           `json:"quantization"`                 // Normalised quantization (e.g., q4km, q3kl)
+	Format           string           `json:"format"`                       // Model format (gguf, safetensors, etc.)
+	PromptTemplateID string           `json:"prompt_template_id,omitempty"` // Associated prompt template
+	Aliases          []AliasEntry     `json:"aliases"`                      // All known aliases with source attribution
+	SourceEndpoints  []SourceEndpoint `json:"source_endpoints"`             // Where this model is available
+	Capabilities     []string         `json:"capabilities"`                 // Inferred capabilities (chat, completion, vision)
+	ParameterCount   int64            `json:"parameter_count"`              // Actual parameter count for sorting
+	DiskSize         int64            `json:"disk_size"`                    // Total disk size across all endpoints
 }
 
 // SourceEndpoint represents where a unified model is available
@@ -134,11 +135,11 @@ func (u *UnifiedModel) Clone() *UnifiedModel {
 	return &c
 }
 
-func cloneMetadataMap(m map[string]interface{}) map[string]interface{} {
+func cloneMetadataMap(m map[string]any) map[string]any {
 	if m == nil {
 		return nil
 	}
-	out := make(map[string]interface{}, len(m))
+	out := make(map[string]any, len(m))
 	for k, v := range m {
 		out[k] = cloneMetadataValue(v)
 	}
@@ -148,24 +149,20 @@ func cloneMetadataMap(m map[string]interface{}) map[string]interface{} {
 // cloneMetadataValue copies the container types that metadata is known to carry
 // (the unifier keeps a map[string]bool under "platforms"). Scalars and unknown
 // types are shared, which is safe because nothing mutates them in place.
-func cloneMetadataValue(v interface{}) interface{} {
+func cloneMetadataValue(v any) any {
 	switch t := v.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		return cloneMetadataMap(t)
 	case map[string]bool:
 		out := make(map[string]bool, len(t))
-		for k, b := range t {
-			out[k] = b
-		}
+		maps.Copy(out, t)
 		return out
 	case map[string]string:
 		out := make(map[string]string, len(t))
-		for k, s := range t {
-			out[k] = s
-		}
+		maps.Copy(out, t)
 		return out
-	case []interface{}:
-		out := make([]interface{}, len(t))
+	case []any:
+		out := make([]any, len(t))
 		for i, e := range t {
 			out[i] = cloneMetadataValue(e)
 		}

@@ -3,6 +3,7 @@ package unifier
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -123,11 +124,11 @@ func extractParameterSize(sizeStr string) (string, int64) {
 	}
 
 	// Remove redundant decimal zeros for cleaner representation
-	if strings.HasSuffix(normalizedSize, ".0b") {
-		normalizedSize = strings.TrimSuffix(normalizedSize, ".0b") + "b"
+	if before, ok := strings.CutSuffix(normalizedSize, ".0b"); ok {
+		normalizedSize = before + "b"
 	}
-	if strings.HasSuffix(normalizedSize, ".0m") {
-		normalizedSize = strings.TrimSuffix(normalizedSize, ".0m") + "m"
+	if before, ok := strings.CutSuffix(normalizedSize, ".0m"); ok {
+		normalizedSize = before + "m"
 	}
 
 	return normalizedSize, paramCount
@@ -176,7 +177,7 @@ func dropGenerativeForNonGenerative(capabilities map[string]bool, modelType stri
 }
 
 // inferCapabilitiesFromMetadata infers model capabilities from various metadata fields
-func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]interface{}) []string {
+func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]any) []string {
 	capabilities := make(map[string]bool)
 	config := getConfig()
 
@@ -228,7 +229,7 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 
 	// Preserve explicitly declared capabilities from source metadata
 	if metadata != nil {
-		if caps, ok := metadata["capabilities"].([]interface{}); ok {
+		if caps, ok := metadata["capabilities"].([]any); ok {
 			for _, capName := range caps {
 				if capStr, ok := capName.(string); ok {
 					capabilities[capStr] = true
@@ -426,12 +427,7 @@ func extractFromDelimiters(modelName string, config *ModelUnificationConfig) str
 // isGenericModelName checks if model name is generic
 func isGenericModelName(modelName string, config *ModelUnificationConfig) bool {
 	modelNameLower := strings.ToLower(modelName)
-	for _, generic := range config.SpecialRules.GenericNames {
-		if modelNameLower == generic {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(config.SpecialRules.GenericNames, modelNameLower)
 }
 
 // isMistralPattern checks if pattern is for mistral/mixtral models
@@ -461,7 +457,7 @@ func extractStandardFamily(pattern PatternConfig, matches []string) (family, var
 }
 
 // parseContextLength handles type-polymorphic context length values from diverse platforms.
-func parseContextLength(value interface{}) int64 {
+func parseContextLength(value any) int64 {
 	switch v := value.(type) {
 	case int64:
 		return v
@@ -479,7 +475,7 @@ func parseContextLength(value interface{}) int64 {
 
 // extractPublisher identifies model creators through metadata, naming conventions,
 // and family-to-publisher mappings.
-func extractPublisher(modelName string, metadata map[string]interface{}) string {
+func extractPublisher(modelName string, metadata map[string]any) string {
 	if metadata != nil {
 		if publisher, ok := metadata["publisher"].(string); ok && publisher != "" {
 			return publisher

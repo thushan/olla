@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/thushan/olla/internal/adapter/proxy/common"
-	"github.com/thushan/olla/internal/adapter/proxy/config"
 	"github.com/thushan/olla/internal/core/domain"
 )
 
@@ -183,11 +182,7 @@ func TestService_buildTargetURL_PreservePath(t *testing.T) {
 			// Create a minimal service with configuration
 			s := &Service{}
 			s.configuration.Store(&Configuration{
-				OllaConfig: config.OllaConfig{
-					BaseProxyConfig: config.BaseProxyConfig{
-						ProxyPrefix: tt.proxyPrefix,
-					},
-				},
+				ProxyPrefix: tt.proxyPrefix,
 			})
 
 			// Create a test request
@@ -381,11 +376,7 @@ func TestService_buildTargetURL_EdgeCases(t *testing.T) {
 			// Create a minimal service with configuration
 			s := &Service{}
 			s.configuration.Store(&Configuration{
-				OllaConfig: config.OllaConfig{
-					BaseProxyConfig: config.BaseProxyConfig{
-						ProxyPrefix: tt.proxyPrefix,
-					},
-				},
+				ProxyPrefix: tt.proxyPrefix,
 			})
 
 			// Create a test request
@@ -496,11 +487,7 @@ func TestService_buildTargetURL_QueryString(t *testing.T) {
 
 			s := &Service{}
 			s.configuration.Store(&Configuration{
-				OllaConfig: config.OllaConfig{
-					BaseProxyConfig: config.BaseProxyConfig{
-						ProxyPrefix: "/olla/proxy",
-					},
-				},
+				ProxyPrefix: "/olla/proxy",
 			})
 
 			req, err := http.NewRequest("GET", tt.requestPath, nil)
@@ -647,11 +634,7 @@ func TestService_buildTargetURL_RealWorldScenarios(t *testing.T) {
 
 			s := &Service{}
 			s.configuration.Store(&Configuration{
-				OllaConfig: config.OllaConfig{
-					BaseProxyConfig: config.BaseProxyConfig{
-						ProxyPrefix: "/olla/proxy",
-					},
-				},
+				ProxyPrefix: "/olla/proxy",
 			})
 
 			req, err := http.NewRequest("POST", tt.requestPath, nil)
@@ -715,11 +698,7 @@ func BenchmarkService_buildTargetURL(b *testing.B) {
 		b.Run(scenario.name, func(b *testing.B) {
 			s := &Service{}
 			s.configuration.Store(&Configuration{
-				OllaConfig: config.OllaConfig{
-					BaseProxyConfig: config.BaseProxyConfig{
-						ProxyPrefix: "/olla/proxy",
-					},
-				},
+				ProxyPrefix: "/olla/proxy",
 			})
 
 			req, _ := http.NewRequest("POST", scenario.requestPath, nil)

@@ -153,7 +153,7 @@ func TestInferCapabilitiesFromMetadata(t *testing.T) {
 		modelType            string
 		modelName            string
 		contextLength        int64
-		metadata             map[string]interface{}
+		metadata             map[string]any
 		expectedCapabilities []string
 	}{
 		{
@@ -239,8 +239,8 @@ func TestInferCapabilitiesFromMetadata(t *testing.T) {
 			name:      "Metadata capabilities",
 			modelType: "llm",
 			modelName: "custom-model",
-			metadata: map[string]interface{}{
-				"capabilities": []interface{}{"custom-cap1", "custom-cap2"},
+			metadata: map[string]any{
+				"capabilities": []any{"custom-cap1", "custom-cap2"},
 			},
 			expectedCapabilities: []string{"text-generation", "chat", "completion", "custom-cap1", "custom-cap2"},
 		},
@@ -611,14 +611,14 @@ func TestExtractPublisher(t *testing.T) {
 	tests := []struct {
 		name              string
 		modelName         string
-		metadata          map[string]interface{}
+		metadata          map[string]any
 		expectedPublisher string
 	}{
 		// From metadata
 		{
 			name:              "Publisher in metadata",
 			modelName:         "phi-4",
-			metadata:          map[string]interface{}{"publisher": "microsoft"},
+			metadata:          map[string]any{"publisher": "microsoft"},
 			expectedPublisher: "microsoft",
 		},
 		// From model name prefix
@@ -734,7 +734,7 @@ func TestExtractPublisher(t *testing.T) {
 func TestParseContextLength(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    interface{}
+		input    any
 		expected int64
 	}{
 		{"int64", int64(4096), 4096},
@@ -912,7 +912,7 @@ func TestInferCapabilities_ReportedKindAndDeclarationsBeatNamePatterns(t *testin
 		assert.Contains(t, got, "vision")
 	})
 	t.Run("declared chat survives on a name-tagged embedder", func(t *testing.T) {
-		meta := map[string]interface{}{"capabilities": []interface{}{"chat"}}
+		meta := map[string]any{"capabilities": []any{"chat"}}
 		got := inferCapabilitiesFromMetadata("vllm", "intfloat/e5-mistral-7b-instruct", 0, meta)
 		assert.Contains(t, got, "chat")
 		assert.Contains(t, got, "embeddings")

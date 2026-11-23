@@ -26,7 +26,7 @@ func TestExecuteWithRetry_ClientAbortWithEOF_NoDemotionNoFailover(t *testing.T) 
 
 	// Cancel from inside the first attempt: the loop's top-of-iteration check
 	// would otherwise stop the request before any attempt ran.
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	var attempts []string
 	proxyFunc := func(c context.Context, w http.ResponseWriter, r *http.Request, ep *domain.Endpoint, s *ports.RequestStats) error {

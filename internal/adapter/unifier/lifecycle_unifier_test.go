@@ -22,7 +22,7 @@ func TestLifecycleUnifier_StartStop(t *testing.T) {
 
 	unifier := NewLifecycleUnifier(config, logger).(*LifecycleUnifier)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test starting
 	err := unifier.Start(ctx)
@@ -54,7 +54,7 @@ func TestLifecycleUnifier_EndpointStateTracking(t *testing.T) {
 
 	unifier := NewLifecycleUnifier(config, logger).(*LifecycleUnifier)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := unifier.Start(ctx)
 	require.NoError(t, err)
 	defer unifier.Stop(ctx)
@@ -94,7 +94,7 @@ func TestLifecycleUnifier_ModelTTLCleanup(t *testing.T) {
 
 	unifier := NewLifecycleUnifier(config, logger).(*LifecycleUnifier)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := unifier.Start(ctx)
 	require.NoError(t, err)
 	defer unifier.Stop(ctx)
@@ -110,8 +110,8 @@ func TestLifecycleUnifier_ModelTTLCleanup(t *testing.T) {
 			Name: "test-model",
 			Size: 1000,
 			Details: &domain.ModelDetails{
-				Digest: strPtr("abc123"),
-				State:  strPtr("loaded"),
+				Digest: new("abc123"),
+				State:  new("loaded"),
 			},
 		},
 	}
@@ -143,7 +143,7 @@ func TestLifecycleUnifier_CircuitBreaker(t *testing.T) {
 
 	unifier := NewLifecycleUnifier(config, logger).(*LifecycleUnifier)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := unifier.Start(ctx)
 	require.NoError(t, err)
 	defer unifier.Stop(ctx)
@@ -178,7 +178,7 @@ func TestLifecycleUnifier_EndpointRemoval(t *testing.T) {
 
 	unifier := NewLifecycleUnifier(config, logger).(*LifecycleUnifier)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := unifier.Start(ctx)
 	require.NoError(t, err)
 	defer unifier.Stop(ctx)
@@ -198,16 +198,16 @@ func TestLifecycleUnifier_EndpointRemoval(t *testing.T) {
 			Name: "shared-model",
 			Size: 1000,
 			Details: &domain.ModelDetails{
-				Digest: strPtr("shared123"),
-				State:  strPtr("loaded"),
+				Digest: new("shared123"),
+				State:  new("loaded"),
 			},
 		},
 		{
 			Name: "unique-model",
 			Size: 2000,
 			Details: &domain.ModelDetails{
-				Digest: strPtr("unique123"),
-				State:  strPtr("loaded"),
+				Digest: new("unique123"),
+				State:  new("loaded"),
 			},
 		},
 	}
@@ -250,7 +250,7 @@ func TestLifecycleUnifier_StateTransitions(t *testing.T) {
 
 	unifier := NewLifecycleUnifier(config, logger).(*LifecycleUnifier)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := unifier.Start(ctx)
 	require.NoError(t, err)
 	defer unifier.Stop(ctx)
@@ -266,7 +266,7 @@ func TestLifecycleUnifier_StateTransitions(t *testing.T) {
 			Name: "test-model",
 			Size: 1000,
 			Details: &domain.ModelDetails{
-				State: strPtr("loaded"),
+				State: new("loaded"),
 			},
 		},
 	}
@@ -292,7 +292,7 @@ func TestLifecycleUnifier_ConcurrentOperations(t *testing.T) {
 
 	unifier := NewLifecycleUnifier(config, logger).(*LifecycleUnifier)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	err := unifier.Start(ctx)
 	require.NoError(t, err)
 	defer unifier.Stop(ctx)
@@ -349,10 +349,6 @@ func TestLifecycleUnifier_ConcurrentOperations(t *testing.T) {
 }
 
 // Helper functions
-func strPtr(s string) *string {
-	return &s
-}
-
 func createTestLogger() logger.StyledLogger {
 	opts := &slog.HandlerOptions{Level: slog.LevelError}
 	handler := slog.NewTextHandler(os.Stderr, opts)
@@ -364,7 +360,7 @@ func createTestLogger() logger.StyledLogger {
 // afterwards, not just what the call returned.
 func TestLifecycleUnifier_StateDecorationPersistsInCatalogue(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	u := NewLifecycleUnifier(DefaultConfig(), createTestLogger()).(*LifecycleUnifier)
 	endpoint := &domain.Endpoint{URLString: "http://test-endpoint", Name: "test-endpoint"}
 

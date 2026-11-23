@@ -36,7 +36,7 @@ func TestNewMemoryModelRegistry(t *testing.T) {
 		t.Error("modelToEndpoints not initialised")
 	}
 
-	stats, err := registry.GetStats(context.Background())
+	stats, err := registry.GetStats(t.Context())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestNewMemoryModelRegistry(t *testing.T) {
 func TestRegisterModel_Success(t *testing.T) {
 	modelName := DefaultModelName
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	model := createTestModel(modelName)
 	endpointURL := DefaultOllamaEndpointUri
@@ -79,7 +79,7 @@ func TestRegisterModel_Success(t *testing.T) {
 
 func TestRegisterModel_InvalidInputs(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tests := []struct {
 		name        string
@@ -112,7 +112,7 @@ func TestRegisterModel_InvalidInputs(t *testing.T) {
 
 func TestRegisterModel_UpdateExisting(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 	endpointURL := DefaultOllamaEndpointUri
 
 	model1 := createTestModel(DefaultModelName)
@@ -153,7 +153,7 @@ func TestRegisterModel_UpdateExisting(t *testing.T) {
 
 func TestRegisterModels_Success(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 	endpointURL := DefaultOllamaEndpointUri
 
 	models := []*domain.ModelInfo{
@@ -191,7 +191,7 @@ func TestRegisterModels_Success(t *testing.T) {
 
 func TestRegisterModels_ReplaceExisting(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 	endpointURL := DefaultOllamaEndpointUri
 
 	initialModels := []*domain.ModelInfo{
@@ -237,7 +237,7 @@ func TestRegisterModels_ReplaceExisting(t *testing.T) {
 
 func TestRegisterModels_EmptyList(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 	endpointURL := DefaultOllamaEndpointUri
 
 	initialModels := []*domain.ModelInfo{
@@ -270,7 +270,7 @@ func TestRegisterModels_EmptyList(t *testing.T) {
 
 func TestGetModelsForEndpoint_NonExistent(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	models, err := registry.GetModelsForEndpoint(ctx, "http://nonexistent:11434")
 	if err != nil {
@@ -284,7 +284,7 @@ func TestGetModelsForEndpoint_NonExistent(t *testing.T) {
 
 func TestGetEndpointsForModel_Success(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	model := createTestModel(DefaultModelNameC)
 
@@ -324,7 +324,7 @@ func TestGetEndpointsForModel_Success(t *testing.T) {
 
 func TestGetEndpointsForModel_NonExistent(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints, err := registry.GetEndpointsForModel(ctx, "nonexistent-model")
 	if err != nil {
@@ -338,7 +338,7 @@ func TestGetEndpointsForModel_NonExistent(t *testing.T) {
 
 func TestIsModelAvailable(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	if registry.IsModelAvailable(ctx, "nonexistent") {
 		t.Error("Nonexistent model should not be available")
@@ -361,7 +361,7 @@ func TestIsModelAvailable(t *testing.T) {
 
 func TestGetAllModels(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoint1 := DefaultOllamaEndpointUri
 	endpoint2 := "http://localhost:11435"
@@ -405,7 +405,7 @@ func TestGetAllModels(t *testing.T) {
 
 func TestRemoveEndpoint(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoint1 := DefaultOllamaEndpointUri
 	endpoint2 := "http://localhost:11435"
@@ -458,7 +458,7 @@ func TestRemoveEndpoint(t *testing.T) {
 
 func TestGetStats(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoint1 := DefaultOllamaEndpointUri
 	endpoint2 := "http://localhost:11435"
@@ -508,7 +508,7 @@ func TestGetStats(t *testing.T) {
 func TestContextCancellation(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	model := createTestModel("test")
@@ -536,7 +536,7 @@ func TestContextCancellation(t *testing.T) {
 
 func TestConcurrentAccess(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var wg sync.WaitGroup
 	errors := make(chan error, 200)
@@ -599,7 +599,7 @@ func TestConcurrentAccess(t *testing.T) {
 
 func TestDataIsolation(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	model := createTestModel(DefaultModelName)
 	model.Size = 1000
@@ -628,7 +628,7 @@ func TestDataIsolation(t *testing.T) {
 
 func BenchmarkModelLookup(b *testing.B) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := b.Context()
 
 	for i := range 100 {
 		endpoint := fmt.Sprintf("http://localhost:%d", 11434+i)
@@ -650,7 +650,7 @@ func BenchmarkModelLookup(b *testing.B) {
 
 func BenchmarkModelRegistration(b *testing.B) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
 	for i := range b.N {
@@ -662,7 +662,7 @@ func BenchmarkModelRegistration(b *testing.B) {
 
 func BenchmarkConcurrentAccess(b *testing.B) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := b.Context()
 
 	for i := range 50 {
 		endpoint := fmt.Sprintf("http://localhost:%d", 11434+i)
@@ -730,7 +730,7 @@ func createTestModelWithDetails(name string) *domain.ModelInfo {
 }
 func TestModelDetailsPreservation(t *testing.T) {
 	registry := NewMemoryModelRegistry(createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 	endpointURL := DefaultOllamaEndpointUri
 
 	// Test RegisterModel preserves details

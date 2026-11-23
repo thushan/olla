@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -95,7 +94,7 @@ func TestAllProxies_ModelStatsUseResolvedNameNotAlias(t *testing.T) {
 			stats.Model = clientAlias
 
 			aliasMap := map[string]string{endpoint.URLString: resolvedModel}
-			ctx := context.WithValue(req.Context(), constants.ContextModelAliasMapKey, aliasMap)
+			ctx := constants.WithModelAliasMap(req.Context(), aliasMap)
 			req = req.WithContext(ctx)
 
 			w, err := executeProxyRequest(proxy, req, stats, rlog)

@@ -157,8 +157,7 @@ func (e *RetryableError) Unwrap() error {
 }
 
 func IsRetryable(err error) bool {
-	var retryErr *RetryableError
-	if errors.As(err, &retryErr) {
+	if retryErr, ok := errors.AsType[*RetryableError](err); ok {
 		return retryErr.Retryable
 	}
 

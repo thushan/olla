@@ -96,7 +96,7 @@ func TestDefaultUnifier_ConcurrentReadersDuringMerge(t *testing.T) {
 		for rName, read := range readers {
 			t.Run(sName+"/"+rName, func(t *testing.T) {
 				t.Parallel()
-				ctx := context.Background()
+				ctx := t.Context()
 				for range raceIterations {
 					u := NewDefaultUnifier().(*DefaultUnifier)
 					_, err := u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
@@ -106,12 +106,10 @@ func TestDefaultUnifier_ConcurrentReadersDuringMerge(t *testing.T) {
 
 					var done atomic.Bool
 					var wg sync.WaitGroup
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
+					wg.Go(func() {
 						defer done.Store(true)
 						scenario(ctx, u)
-					}()
+					})
 					for !done.Load() {
 						read(ctx, u)
 					}
@@ -125,7 +123,7 @@ func TestDefaultUnifier_ConcurrentReadersDuringMerge(t *testing.T) {
 func TestDefaultUnifier_GetStatsDuringUnify(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	u := NewDefaultUnifier().(*DefaultUnifier)
 	ep := raceEndpoint("a", "http://a:11434")
 
@@ -147,7 +145,7 @@ func TestDefaultUnifier_GetStatsDuringUnify(t *testing.T) {
 func TestDefaultUnifier_PublishedModelsAreImmutable(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	u := NewDefaultUnifier().(*DefaultUnifier)
 
 	_, err := u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
@@ -205,24 +203,24 @@ func TestUnifiedModelClone_NestedMetadataIsIndependent(t *testing.T) {
 
 	orig := &domain.UnifiedModel{
 		ID: "m",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"platforms": map[string]bool{"ollama": true},
-			"nested":    map[string]interface{}{"k": []interface{}{"v"}},
+			"nested":    map[string]any{"k": []any{"v"}},
 		},
 		SourceEndpoints: []domain.SourceEndpoint{{
 			EndpointURL: "http://a",
-			StateInfo:   &domain.EndpointStateInfo{Metadata: map[string]interface{}{"x": "y"}},
+			StateInfo:   &domain.EndpointStateInfo{Metadata: map[string]any{"x": "y"}},
 		}},
 	}
 	c := orig.Clone()
 
 	c.Metadata["platforms"].(map[string]bool)["lmstudio"] = true
-	c.Metadata["nested"].(map[string]interface{})["k"].([]interface{})[0] = "changed"
+	c.Metadata["nested"].(map[string]any)["k"].([]any)[0] = "changed"
 	c.SourceEndpoints[0].StateInfo.Metadata["x"] = "z"
 	c.SourceEndpoints[0].StateInfo.LastError = "boom"
 
 	require.Len(t, orig.Metadata["platforms"], 1)
-	require.Equal(t, "v", orig.Metadata["nested"].(map[string]interface{})["k"].([]interface{})[0])
+	require.Equal(t, "v", orig.Metadata["nested"].(map[string]any)["k"].([]any)[0])
 	require.Equal(t, "y", orig.SourceEndpoints[0].StateInfo.Metadata["x"])
 	require.Empty(t, orig.SourceEndpoints[0].StateInfo.LastError)
 }
@@ -231,7 +229,6 @@ func TestUnifiedModelClone_NestedMetadataIsIndependent(t *testing.T) {
 // request goroutines held and read them without a lock. Clearing now resets in place.
 func TestUnifiers_ClearDuringUse(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	for name, u := range map[string]ports.ModelUnifier{
 		"default":   NewDefaultUnifier(),
@@ -239,18 +236,18 @@ func TestUnifiers_ClearDuringUse(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			// The subtest owns its context: it is cancelled when the subtest, not the parent, ends.
+			ctx := t.Context()
 			var stop atomic.Bool
 			var wg sync.WaitGroup
 			for range 4 {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					for !stop.Load() {
 						_, _ = u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
 						_, _ = u.ResolveAlias(ctx, "llama3:8b")
 						_ = u.GetStats()
 					}
-				}()
+				})
 			}
 			for range raceIterations {
 				require.NoError(t, u.Clear(ctx))

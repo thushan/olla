@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"testing"
@@ -37,7 +36,7 @@ func BenchmarkFactory_Create(b *testing.B) {
 
 func BenchmarkPrioritySelector_Select(b *testing.B) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Create test endpoints with different prior
 	endpoints := make([]*domain.Endpoint, 10)
@@ -59,7 +58,7 @@ func BenchmarkPrioritySelector_Select(b *testing.B) {
 // BenchmarkPrioritySelector_SelectSamePriority tests weighted selection
 func BenchmarkPrioritySelector_SelectSamePriority(b *testing.B) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Same priority, different statuses for weighted selection
 	endpoints := []*domain.Endpoint{
@@ -82,7 +81,7 @@ func BenchmarkPrioritySelector_SelectSamePriority(b *testing.B) {
 // BenchmarkRoundRobinSelector_Select tests round-robin performance
 func BenchmarkRoundRobinSelector_Select(b *testing.B) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := b.Context()
 
 	endpoints := make([]*domain.Endpoint, 10)
 	for i := range 10 {
@@ -103,7 +102,7 @@ func BenchmarkRoundRobinSelector_Select(b *testing.B) {
 // BenchmarkLeastConnectionsSelector_Select tests lease connections performance
 func BenchmarkLeastConnectionsSelector_Select(b *testing.B) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := b.Context()
 
 	endpoints := make([]*domain.Endpoint, 10)
 	for i := range 10 {
@@ -167,10 +166,10 @@ func BenchmarkConcurrentSelection(b *testing.B) {
 		endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, domain.StatusHealthy, 100+i*50)
 	}
 
-	ctx := context.Background()
-
 	for name, selector := range selectors {
 		b.Run(name, func(b *testing.B) {
+			// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+			ctx := b.Context()
 			b.ResetTimer()
 			b.ReportAllocs()
 
@@ -210,10 +209,10 @@ func BenchmarkLargeEndpointSet(b *testing.B) {
 				endpoints[i] = createBenchEndpoint(fmt.Sprintf("endpoint-%d", i), 11434+i, status, 100+i)
 			}
 
-			ctx := context.Background()
-
 			for selectorName, selector := range selectors {
 				b.Run(selectorName, func(b *testing.B) {
+					// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+					ctx := b.Context()
 					b.ResetTimer()
 					b.ReportAllocs()
 
@@ -254,10 +253,10 @@ func BenchmarkFilteringRoutableEndpoints(b *testing.B) {
 		DefaultBalancerLeastConnections: NewLeastConnectionsSelector(mockStatsCollector),
 	}
 
-	ctx := context.Background()
-
 	for name, selector := range selectors {
 		b.Run(name, func(b *testing.B) {
+			// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+			ctx := b.Context()
 			b.ResetTimer()
 			b.ReportAllocs()
 
@@ -373,7 +372,7 @@ func BenchmarkRealWorldScenario(b *testing.B) {
 		createBenchEndpoint("offline", 11438, domain.StatusOffline, 400),   // Highest priority but offline
 	}
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
 	b.ReportAllocs()

@@ -53,7 +53,7 @@ func injectKey(parent context.Context, key, source string) (context.Context, *St
 	outcome := &StickyOutcome{}
 	ctx := context.WithValue(parent, constants.ContextStickyKeyKey, key)
 	ctx = context.WithValue(ctx, constants.ContextStickyKeySourceKey, source)
-	ctx = context.WithValue(ctx, constants.ContextStickyOutcomeKey, outcome)
+	ctx = constants.WithStickyOutcome(ctx, outcome)
 	return ctx, outcome
 }
 
@@ -73,7 +73,7 @@ func TestStickySessionWrapper_Miss(t *testing.T) {
 	ep2 := makeEndpoint("ep2", "http://backend2:8080")
 	endpoints := []*domain.Endpoint{ep1, ep2}
 
-	ctx, outcome := injectKey(context.Background(), "sess-abc:llama3", "session_header")
+	ctx, outcome := injectKey(t.Context(), "sess-abc:llama3", "session_header")
 
 	chosen, err := w.Select(ctx, endpoints)
 	require.NoError(t, err)
@@ -93,12 +93,12 @@ func TestStickySessionWrapper_Hit(t *testing.T) {
 	const stickyKey = "sess-hit:llama3"
 
 	// First call — should be a miss and pin a backend.
-	ctx1, _ := injectKey(context.Background(), stickyKey, "session_header")
+	ctx1, _ := injectKey(t.Context(), stickyKey, "session_header")
 	first, err := w.Select(ctx1, endpoints)
 	require.NoError(t, err)
 
 	// Second call with same key — should return the same backend (hit).
-	ctx2, outcome2 := injectKey(context.Background(), stickyKey, "session_header")
+	ctx2, outcome2 := injectKey(t.Context(), stickyKey, "session_header")
 	second, err := w.Select(ctx2, endpoints)
 	require.NoError(t, err)
 
@@ -116,7 +116,7 @@ func TestStickySessionWrapper_Repin(t *testing.T) {
 	const stickyKey = "sess-repin:llama3"
 
 	// Pin to ep1.
-	ctx1, _ := injectKey(context.Background(), stickyKey, "session_header")
+	ctx1, _ := injectKey(t.Context(), stickyKey, "session_header")
 	first, err := w.Select(ctx1, []*domain.Endpoint{ep1, ep2})
 	require.NoError(t, err)
 
@@ -130,7 +130,7 @@ func TestStickySessionWrapper_Repin(t *testing.T) {
 		}
 	}
 
-	ctx2, outcome2 := injectKey(context.Background(), stickyKey, "session_header")
+	ctx2, outcome2 := injectKey(t.Context(), stickyKey, "session_header")
 	second, err := w.Select(ctx2, remaining)
 	require.NoError(t, err)
 
@@ -145,9 +145,9 @@ func TestStickySessionWrapper_NoKey(t *testing.T) {
 	ep1 := makeEndpoint("ep1", "http://backend1:8080")
 
 	// Empty key — wrapper should pass through transparently.
-	ctx := context.Background()
+	ctx := t.Context()
 	outcome := &StickyOutcome{}
-	ctx = context.WithValue(ctx, constants.ContextStickyOutcomeKey, outcome)
+	ctx = constants.WithStickyOutcome(ctx, outcome)
 
 	chosen, err := w.Select(ctx, []*domain.Endpoint{ep1})
 	require.NoError(t, err)
@@ -172,12 +172,12 @@ func TestStickySessionWrapper_TTLExpiry(t *testing.T) {
 
 	const stickyKey = "sess-ttl:llama3"
 
-	ctx1, _ := injectKey(context.Background(), stickyKey, "session_header")
+	ctx1, _ := injectKey(t.Context(), stickyKey, "session_header")
 	first, err := w.Select(ctx1, endpoints)
 	require.NoError(t, err)
 
 	// Confirm pinned.
-	ctx2, outcome2 := injectKey(context.Background(), stickyKey, "session_header")
+	ctx2, outcome2 := injectKey(t.Context(), stickyKey, "session_header")
 	second, _ := w.Select(ctx2, endpoints)
 	assert.Equal(t, first.URLString, second.URLString)
 	assert.Equal(t, "hit", outcome2.Result)
@@ -188,7 +188,7 @@ func TestStickySessionWrapper_TTLExpiry(t *testing.T) {
 	// to allow the background janitor goroutine to run the eviction sweep.
 	time.Sleep(time.Duration(cfg.IdleTTLSeconds)*time.Second + 500*time.Millisecond)
 
-	ctx3, outcome3 := injectKey(context.Background(), stickyKey, "session_header")
+	ctx3, outcome3 := injectKey(t.Context(), stickyKey, "session_header")
 	_, err = w.Select(ctx3, endpoints)
 	require.NoError(t, err)
 	// After TTL the entry is gone, so it's a fresh miss not a repin.
@@ -207,7 +207,7 @@ func TestStickySessionWrapper_ModelScoping(t *testing.T) {
 	keyModel1 := "sess-scope:modelA"
 	keyModel2 := "sess-scope:modelB"
 
-	ctx1, _ := injectKey(context.Background(), keyModel1, "session_header")
+	ctx1, _ := injectKey(t.Context(), keyModel1, "session_header")
 	chosenA, err := w.Select(ctx1, endpoints)
 	require.NoError(t, err)
 
@@ -215,14 +215,14 @@ func TestStickySessionWrapper_ModelScoping(t *testing.T) {
 	// Simply select a few times — the round-robin inner will distribute.
 	var chosenB *domain.Endpoint
 	for range 10 {
-		ctx2, _ := injectKey(context.Background(), keyModel2, "session_header")
+		ctx2, _ := injectKey(t.Context(), keyModel2, "session_header")
 		chosenB, _ = w.Select(ctx2, endpoints)
 		if chosenB.URLString != chosenA.URLString {
 			break
 		}
 	}
 	// The important assertion: each model key is tracked independently.
-	ctx3, out3 := injectKey(context.Background(), keyModel1, "session_header")
+	ctx3, out3 := injectKey(t.Context(), keyModel1, "session_header")
 	third, err := w.Select(ctx3, endpoints)
 	require.NoError(t, err)
 	assert.Equal(t, chosenA.URLString, third.URLString, "model-scoped key should return same backend")
@@ -247,7 +247,7 @@ func TestStickySessionWrapper_KeySources_SessionHeader(t *testing.T) {
 	assert.Equal(t, "session_header", source)
 
 	// Verify it routes
-	ctx, out := injectKey(context.Background(), key, source)
+	ctx, out := injectKey(t.Context(), key, source)
 	_, err := w.Select(ctx, endpoints)
 	require.NoError(t, err)
 	assert.Equal(t, "miss", out.Result)
@@ -362,7 +362,7 @@ func TestStickySessionWrapper_Race(t *testing.T) {
 			defer wg.Done()
 			for range iters {
 				key := fmt.Sprintf("sess-race-%d:llama3", g%5) // share some keys to exercise contention
-				ctx, _ := injectKey(context.Background(), key, "session_header")
+				ctx, _ := injectKey(t.Context(), key, "session_header")
 				_, err := w.Select(ctx, endpoints)
 				if err != nil {
 					t.Errorf("Select returned error: %v", err)
@@ -382,23 +382,23 @@ func TestStickySessionWrapper_PurgeDeadEndpoints(t *testing.T) {
 	ep2 := makeEndpoint("ep2", "http://backend2:8080")
 
 	// Pin two different sessions to both backends.
-	ctx1, _ := injectKey(context.Background(), "sess-purge1:m", "session_header")
+	ctx1, _ := injectKey(t.Context(), "sess-purge1:m", "session_header")
 	w.Select(ctx1, []*domain.Endpoint{ep1}) //nolint:errcheck
 
-	ctx2, _ := injectKey(context.Background(), "sess-purge2:m", "session_header")
+	ctx2, _ := injectKey(t.Context(), "sess-purge2:m", "session_header")
 	w.Select(ctx2, []*domain.Endpoint{ep2}) //nolint:errcheck
 
 	// Purge: only ep1 is alive.
 	w.PurgeDeadEndpoints([]*domain.Endpoint{ep1})
 
 	// sess-purge2 (pinned to ep2) should be gone → next select is a miss.
-	ctx3, out3 := injectKey(context.Background(), "sess-purge2:m", "session_header")
+	ctx3, out3 := injectKey(t.Context(), "sess-purge2:m", "session_header")
 	_, err := w.Select(ctx3, []*domain.Endpoint{ep1, ep2})
 	require.NoError(t, err)
 	assert.Equal(t, "miss", out3.Result, "session pinned to purged backend should be a fresh miss")
 
 	// sess-purge1 (pinned to ep1) should still be a hit.
-	ctx4, out4 := injectKey(context.Background(), "sess-purge1:m", "session_header")
+	ctx4, out4 := injectKey(t.Context(), "sess-purge1:m", "session_header")
 	_, err = w.Select(ctx4, []*domain.Endpoint{ep1, ep2})
 	require.NoError(t, err)
 	assert.Equal(t, "hit", out4.Result, "session pinned to surviving backend should still hit")
@@ -559,7 +559,7 @@ func TestNewStickySessionWrapper_ZeroTTL_NoPanic(t *testing.T) {
 	t.Cleanup(w.Stop)
 
 	ep := makeEndpoint("ep1", "http://backend1:8080")
-	ctx, out := injectKey(context.Background(), "zero-ttl-key:llama3", "session_header")
+	ctx, out := injectKey(t.Context(), "zero-ttl-key:llama3", "session_header")
 	_, err := w.Select(ctx, []*domain.Endpoint{ep})
 	require.NoError(t, err)
 	assert.Equal(t, "miss", out.Result, "wrapper with zero TTL must still route requests")

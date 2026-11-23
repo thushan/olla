@@ -101,7 +101,7 @@ func TestMarkEndpointUnhealthyBackoffProgression(t *testing.T) {
 			}
 
 			// Mark endpoint as unhealthy
-			handler.markEndpointUnhealthy(context.Background(), endpoint)
+			handler.markEndpointUnhealthy(t.Context(), endpoint)
 
 			// Verify the updated endpoint has correct values
 			assert.NotNil(t, testDiscovery.updatedEndpoint)
@@ -135,7 +135,7 @@ func TestMarkEndpointUnhealthyNilEndpoint(t *testing.T) {
 	handler := NewRetryHandler(testDiscovery, testLogger)
 
 	// Should not panic or call UpdateEndpointStatus with nil endpoint
-	handler.markEndpointUnhealthy(context.Background(), nil)
+	handler.markEndpointUnhealthy(t.Context(), nil)
 
 	// Verify no update was made
 	assert.Nil(t, testDiscovery.updatedEndpoint, "Should not update nil endpoint")

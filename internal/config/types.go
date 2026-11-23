@@ -7,6 +7,7 @@ import (
 	"net"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -94,10 +95,8 @@ func (c *CorsConfig) Validate() error {
 	// The CORS spec forbids Access-Control-Allow-Origin: * when credentials are in play.
 	// Browsers will refuse the response, so this is a startup error rather than a warning.
 	if c.AllowCredentials {
-		for _, origin := range c.AllowedOrigins {
-			if origin == "*" {
-				return errors.New("cors: allow_credentials=true is incompatible with allowed_origins=[\"*\"]; list explicit origins instead")
-			}
+		if slices.Contains(c.AllowedOrigins, "*") {
+			return errors.New("cors: allow_credentials=true is incompatible with allowed_origins=[\"*\"]; list explicit origins instead")
 		}
 	}
 	return nil

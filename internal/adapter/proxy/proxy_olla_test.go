@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -168,16 +167,14 @@ func TestOllaProxyService_ConnectionPools(t *testing.T) {
 	const numRequests = 10
 
 	for range numRequests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			req, stats, rlog := createTestRequestWithStats("GET", "/api/test", "")
 			w := httptest.NewRecorder()
 			err := proxy2.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
 			if err != nil {
 				t.Errorf("Request failed: %v", err)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -276,7 +273,7 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 					proxy.RecordSuccess(nil, "", latency.Milliseconds(), 1000)
 				} else {
 					// Simulate failure
-					proxy.RecordFailure(context.Background(), nil, "", time.Duration(10)*time.Millisecond, errors.New("test error"))
+					proxy.RecordFailure(t.Context(), nil, "", time.Duration(10)*time.Millisecond, errors.New("test error"))
 				}
 			}
 		}(i)
@@ -285,7 +282,7 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 	wg.Wait()
 
 	// Test that GetStats() works - stats are now tracked via the base components
-	stats, err := proxy.GetStats(context.Background())
+	stats, err := proxy.GetStats(t.Context())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}

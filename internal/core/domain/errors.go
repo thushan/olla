@@ -68,7 +68,7 @@ func (e *ProxyError) Unwrap() error {
 
 type ConfigValidationError struct {
 	Field  string
-	Value  interface{}
+	Value  any
 	Reason string
 }
 

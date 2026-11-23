@@ -18,7 +18,7 @@ func TestRetry_Success(t *testing.T) {
 	}
 
 	attempts := 0
-	err := Retry(context.Background(), policy, func(ctx context.Context) error {
+	err := Retry(t.Context(), policy, func(ctx context.Context) error {
 		attempts++
 		if attempts < 3 {
 			return errors.New("temporary error")
@@ -39,7 +39,7 @@ func TestRetry_MaxAttemptsExceeded(t *testing.T) {
 	}
 
 	attempts := 0
-	err := Retry(context.Background(), policy, func(ctx context.Context) error {
+	err := Retry(t.Context(), policy, func(ctx context.Context) error {
 		attempts++
 		return errors.New("always fails")
 	})
@@ -58,7 +58,7 @@ func TestRetry_PermanentError(t *testing.T) {
 	}
 
 	attempts := 0
-	err := Retry(context.Background(), policy, func(ctx context.Context) error {
+	err := Retry(t.Context(), policy, func(ctx context.Context) error {
 		attempts++
 		return &PermanentError{Err: errors.New("permanent failure")}
 	})
@@ -78,7 +78,7 @@ func TestRetry_ContextCancellation(t *testing.T) {
 		BackoffMultiplier: 2.0,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	attempts := 0
 	go func() {
@@ -105,7 +105,7 @@ func TestRetryWithResult_Success(t *testing.T) {
 	}
 
 	attempts := 0
-	result, err := RetryWithResult(context.Background(), policy, func(ctx context.Context) (string, error) {
+	result, err := RetryWithResult(t.Context(), policy, func(ctx context.Context) (string, error) {
 		attempts++
 		if attempts < 2 {
 			return "", errors.New("temporary error")
@@ -126,7 +126,7 @@ func TestRetryWithResult_Failure(t *testing.T) {
 		BackoffMultiplier: 2.0,
 	}
 
-	result, err := RetryWithResult(context.Background(), policy, func(ctx context.Context) (int, error) {
+	result, err := RetryWithResult(t.Context(), policy, func(ctx context.Context) (int, error) {
 		return 0, errors.New("always fails")
 	})
 
@@ -216,7 +216,7 @@ func TestRetry_BackoffTiming(t *testing.T) {
 	start := time.Now()
 	attempts := 0
 
-	err := Retry(context.Background(), policy, func(ctx context.Context) error {
+	err := Retry(t.Context(), policy, func(ctx context.Context) error {
 		attempts++
 		return errors.New("fail")
 	})

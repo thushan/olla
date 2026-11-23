@@ -69,13 +69,13 @@ func TestTranslatorModelsHandler_Success(t *testing.T) {
 	}
 
 	// Verify response format
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
 	// Verify data field exists
-	data, ok := response["data"].([]interface{})
+	data, ok := response["data"].([]any)
 	if !ok {
 		t.Fatal("expected data field to be array")
 	}
@@ -98,7 +98,7 @@ func TestTranslatorModelsHandler_Success(t *testing.T) {
 
 	// Verify per-entry shape matches the Anthropic spec wire format.
 	if len(data) > 0 {
-		model := data[0].(map[string]interface{})
+		model := data[0].(map[string]any)
 
 		// "type" must be "model" — the Anthropic SDK uses it as a deserialise discriminator.
 		if modelType, ok := model["type"].(string); !ok || modelType != "model" {
@@ -130,12 +130,12 @@ func TestTranslatorModelsHandler_Success(t *testing.T) {
 		w2 := httptest.NewRecorder()
 		handler(w2, req2)
 
-		var response2 map[string]interface{}
+		var response2 map[string]any
 		if err2 := json.NewDecoder(w2.Body).Decode(&response2); err2 != nil {
 			t.Fatalf("failed to decode second response: %v", err2)
 		}
-		if data2, ok2 := response2["data"].([]interface{}); ok2 && len(data2) > 0 {
-			model2 := data2[0].(map[string]interface{})
+		if data2, ok2 := response2["data"].([]any); ok2 && len(data2) > 0 {
+			model2 := data2[0].(map[string]any)
 			createdAt2, ok2 := model2["created_at"].(string)
 			if !ok2 {
 				t.Errorf("expected created_at to be a string on second call, got %T", model2["created_at"])
@@ -179,13 +179,13 @@ func TestTranslatorModelsHandler_EmptyRegistry(t *testing.T) {
 	}
 
 	// Verify response format
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
 	// Verify data field exists and is empty
-	data, ok := response["data"].([]interface{})
+	data, ok := response["data"].([]any)
 	if !ok {
 		t.Fatal("expected data field to be array")
 	}
@@ -237,13 +237,13 @@ func TestTranslatorModelsHandler_ResponseFormat(t *testing.T) {
 	handler(w, req)
 
 	// Verify response
-	var response map[string]interface{}
+	var response map[string]any
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
 	// Verify the Anthropic GET /v1/models wire format.
-	data, ok := response["data"].([]interface{})
+	data, ok := response["data"].([]any)
 	if !ok {
 		t.Fatal("expected data field")
 	}
@@ -263,7 +263,7 @@ func TestTranslatorModelsHandler_ResponseFormat(t *testing.T) {
 		t.Error("expected last_id to be non-null when data is non-empty")
 	}
 
-	model := data[0].(map[string]interface{})
+	model := data[0].(map[string]any)
 
 	if _, ok := model["id"]; !ok {
 		t.Error("expected id field")

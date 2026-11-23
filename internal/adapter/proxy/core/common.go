@@ -161,8 +161,8 @@ func extractClientIP(r *http.Request) string {
 	// Check X-Forwarded-For header
 	if xff := r.Header.Get(constants.HeaderXForwardedFor); xff != "" {
 		// Take the first IP in the comma-separated list
-		if idx := strings.Index(xff, ","); idx != -1 {
-			return strings.TrimSpace(xff[:idx])
+		if before, _, ok := strings.Cut(xff, ","); ok {
+			return strings.TrimSpace(before)
 		}
 		return strings.TrimSpace(xff)
 	}
@@ -242,7 +242,7 @@ func CopyResponseHeaders(dst http.Header, src http.Header, endpoint *domain.Endp
 // by the handler layer after the balancer's Select fills it. Must be called before
 // w.WriteHeader() — calling it afterwards is a no-op on a committed response.
 func SetStickySessionHeaders(w http.ResponseWriter, r *http.Request) {
-	outcome, _ := r.Context().Value(constants.ContextStickyOutcomeKey).(*domain.StickyOutcome)
+	outcome, _ := constants.GetStickyOutcome(r.Context())
 	if outcome == nil {
 		return
 	}

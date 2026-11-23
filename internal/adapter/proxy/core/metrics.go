@@ -51,7 +51,7 @@ func ExtractProviderMetrics(
 
 // AppendProviderMetricsToLog appends provider metrics fields to log fields array.
 // Used by both proxy engines for consistent logging.
-func AppendProviderMetricsToLog(logFields []interface{}, pm *domain.ProviderMetrics) []interface{} {
+func AppendProviderMetricsToLog(logFields []any, pm *domain.ProviderMetrics) []any {
 	if pm == nil {
 		return logFields
 	}

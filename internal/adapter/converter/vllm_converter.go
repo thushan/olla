@@ -31,7 +31,7 @@ func (c *VLLMConverter) GetFormatName() string {
 	return constants.ProviderTypeVLLM
 }
 
-func (c *VLLMConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *VLLMConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]profile.VLLMModel, 0, len(filtered))

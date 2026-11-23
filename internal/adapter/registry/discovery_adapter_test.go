@@ -58,7 +58,7 @@ func (m *mockDiscoveryServiceOnlyHealthy) UpdateEndpointStatus(ctx context.Conte
 }
 
 func TestDiscoveryServiceAdapter_GetEndpoints(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("returns all endpoints when available", func(t *testing.T) {
 		allEndpoints := []*domain.Endpoint{
@@ -102,7 +102,7 @@ func TestDiscoveryServiceAdapter_GetEndpoints(t *testing.T) {
 }
 
 func TestDiscoveryServiceAdapter_GetHealthyEndpoints(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	healthyEndpoints := []*domain.Endpoint{
 		{Name: "ep1", Status: domain.StatusHealthy},
@@ -120,7 +120,7 @@ func TestDiscoveryServiceAdapter_GetHealthyEndpoints(t *testing.T) {
 }
 
 func TestDiscoveryServiceAdapter_UpdateEndpointStatus(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	endpoint := &domain.Endpoint{Name: "test-endpoint"}
 
 	t.Run("forwards update when supported", func(t *testing.T) {
@@ -143,7 +143,7 @@ func TestDiscoveryServiceAdapter_UpdateEndpointStatus(t *testing.T) {
 }
 
 func TestDiscoveryServiceAdapter_RefreshEndpoints(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	mock := &mockDiscoveryService{}
 	adapter := &discoveryServiceAdapter{discovery: mock}

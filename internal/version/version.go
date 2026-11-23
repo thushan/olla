@@ -112,10 +112,7 @@ func formatAsciiBanner() string {
 	githubTextLen := len(GithubHomeText)
 	versionLen := len(version)
 
-	bufferSpace := availableSpace - githubTextLen - versionLen
-	if bufferSpace < 1 {
-		bufferSpace = 1
-	}
+	bufferSpace := max(availableSpace-githubTextLen-versionLen, 1)
 
 	b.WriteString(theme.ColourSplash(`╔─────────────────────────────────────────────────────╗
 │                                      ⠀⠀⣀⣀⠀⠀⠀⠀⠀⣀⣀⠀⠀  │

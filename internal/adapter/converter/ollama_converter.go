@@ -46,7 +46,7 @@ func (c *OllamaConverter) GetFormatName() string {
 	return constants.ProviderTypeOllama
 }
 
-func (c *OllamaConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *OllamaConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]OllamaModelData, 0, len(filtered))

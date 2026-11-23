@@ -10,70 +10,70 @@ func TestDetectPlatform(t *testing.T) {
 	tests := []struct {
 		name         string
 		format       string
-		metadata     map[string]interface{}
+		metadata     map[string]any
 		endpointType string
 		want         string
 	}{
 		{
 			name:         "metadata platform hint",
-			metadata:     map[string]interface{}{"platform": "CUSTOM"},
+			metadata:     map[string]any{"platform": "CUSTOM"},
 			endpointType: "lmstudio",
 			want:         "custom",
 		},
 		{
 			name:         "ollama version in metadata",
-			metadata:     map[string]interface{}{"ollama.version": "0.1.0"},
+			metadata:     map[string]any{"ollama.version": "0.1.0"},
 			endpointType: "lmstudio",
 			want:         constants.ProviderTypeOllama,
 		},
 		{
 			name:         "lmstudio version in metadata",
-			metadata:     map[string]interface{}{"lmstudio.version": "1.0.0"},
+			metadata:     map[string]any{"lmstudio.version": "1.0.0"},
 			endpointType: "openai",
 			want:         constants.ProviderTypeLMStudio,
 		},
 		{
 			name:         "endpoint type used when no metadata hints",
-			metadata:     map[string]interface{}{},
+			metadata:     map[string]any{},
 			endpointType: "lmstudio",
 			want:         "lmstudio",
 		},
 		{
 			name:         "endpoint type lowercase",
-			metadata:     map[string]interface{}{},
+			metadata:     map[string]any{},
 			endpointType: "LMStudio",
 			want:         "lmstudio",
 		},
 		{
 			name:         "endpoint type with hyphen normalized",
-			metadata:     map[string]interface{}{},
+			metadata:     map[string]any{},
 			endpointType: "lm-studio",
 			want:         "lmstudio",
 		},
 		{
 			name:         "endpoint type with underscore normalized",
-			metadata:     map[string]interface{}{},
+			metadata:     map[string]any{},
 			endpointType: "lm_studio",
 			want:         "lmstudio",
 		},
 		{
 			name:         "gguf format defaults to ollama when no endpoint type",
 			format:       "gguf",
-			metadata:     map[string]interface{}{},
+			metadata:     map[string]any{},
 			endpointType: "",
 			want:         constants.ProviderTypeOllama,
 		},
 		{
 			name:         "endpoint type overrides gguf format",
 			format:       "gguf",
-			metadata:     map[string]interface{}{},
+			metadata:     map[string]any{},
 			endpointType: "lmstudio",
 			want:         "lmstudio",
 		},
 		{
 			name:         "default to openai when no hints",
 			format:       "",
-			metadata:     map[string]interface{}{},
+			metadata:     map[string]any{},
 			endpointType: "",
 			want:         constants.ProviderTypeOpenAI,
 		},

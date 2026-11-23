@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +15,7 @@ import (
 // This ensures requests are proxied to the correct OpenAI endpoint
 func TestPathTranslation(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	tests := []struct {
 		name               string
@@ -59,7 +58,7 @@ func TestPathTranslation(t *testing.T) {
 					{
 						Name:        "get_weather",
 						Description: "Get weather",
-						InputSchema: map[string]interface{}{"type": "object"},
+						InputSchema: map[string]any{"type": "object"},
 					},
 				},
 			},
@@ -95,7 +94,7 @@ func TestPathTranslation(t *testing.T) {
 // TestPathTranslationPreservesOtherFields verifies that setting TargetPath doesn't affect other fields
 func TestPathTranslationPreservesOtherFields(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-sonnet-4-20250929",
@@ -133,7 +132,7 @@ func TestPathTranslationPreservesOtherFields(t *testing.T) {
 	assert.False(t, stream)
 
 	// Verify messages contain system prompt
-	messages, ok := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := transformed.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2) // system + user
 	assert.Equal(t, "system", messages[0]["role"])
@@ -157,7 +156,7 @@ func TestTranslatorSetsPathWithoutOllaPrefix(t *testing.T) {
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 
-	transformed, err := translator.TransformRequest(context.Background(), req)
+	transformed, err := translator.TransformRequest(t.Context(), req)
 
 	require.NoError(t, err)
 	assert.Equal(t, "/v1/chat/completions", transformed.TargetPath,

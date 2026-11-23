@@ -26,9 +26,9 @@ import (
 // asserts the pre-existing contract is preserved, so it does not fail when
 // new keys appear alongside the pinned ones.
 
-func jsonShape(t *testing.T, body []byte) map[string]interface{} {
+func jsonShape(t *testing.T, body []byte) map[string]any {
 	t.Helper()
-	var m map[string]interface{}
+	var m map[string]any
 	require.NoError(t, json.Unmarshal(body, &m), "response was not a JSON object")
 	return m
 }
@@ -51,7 +51,7 @@ func doStatus(t *testing.T, app *Application, target string) []byte {
 	return w.Body.Bytes()
 }
 
-func assertKeysTyped(t *testing.T, obj map[string]interface{}, expected map[string]string) {
+func assertKeysTyped(t *testing.T, obj map[string]any, expected map[string]string) {
 	t.Helper()
 	for key, wantType := range expected {
 		got, ok := obj[key]
@@ -67,10 +67,10 @@ func assertKeysTyped(t *testing.T, obj map[string]interface{}, expected map[stri
 			_, ok := got.(bool)
 			assert.True(t, ok, "key %q: want bool, got %T (%v)", key, got, got)
 		case "object":
-			_, ok := got.(map[string]interface{})
+			_, ok := got.(map[string]any)
 			assert.True(t, ok, "key %q: want object, got %T (%v)", key, got, got)
 		case "array":
-			_, ok := got.([]interface{})
+			_, ok := got.([]any)
 			assert.True(t, ok, "key %q: want array, got %T (%v)", key, got, got)
 		default:
 			t.Fatalf("test bug: unknown wantType %q for key %q", wantType, key)
@@ -90,7 +90,7 @@ func TestWireShape_StatusResponse(t *testing.T) {
 		"system":    "object",
 	})
 
-	sys, _ := shape["system"].(map[string]interface{})
+	sys, _ := shape["system"].(map[string]any)
 	require.NotNil(t, sys, "system was not an object")
 	assertKeysTyped(t, sys, map[string]string{
 		"status":              "string",
@@ -107,7 +107,7 @@ func TestWireShape_StatusResponse(t *testing.T) {
 		"total_failures":      "number",
 	})
 
-	proxy, _ := shape["proxy"].(map[string]interface{})
+	proxy, _ := shape["proxy"].(map[string]any)
 	require.NotNil(t, proxy)
 	assertKeysTyped(t, proxy, map[string]string{
 		"engine":   "string",
@@ -115,7 +115,7 @@ func TestWireShape_StatusResponse(t *testing.T) {
 		"balancer": "string",
 	})
 
-	sec, _ := shape["security"].(map[string]interface{})
+	sec, _ := shape["security"].(map[string]any)
 	require.NotNil(t, sec)
 	assertKeysTyped(t, sec, map[string]string{
 		"status":      "string",
@@ -123,9 +123,9 @@ func TestWireShape_StatusResponse(t *testing.T) {
 		"violations":  "object",
 	})
 
-	endpoints, _ := shape["endpoints"].([]interface{})
+	endpoints, _ := shape["endpoints"].([]any)
 	require.NotEmpty(t, endpoints, "seed should produce at least one endpoint")
-	first, _ := endpoints[0].(map[string]interface{})
+	first, _ := endpoints[0].(map[string]any)
 	require.NotNil(t, first)
 	assertKeysTyped(t, first, map[string]string{
 		"name":         "string",
@@ -156,13 +156,13 @@ func TestWireShape_EndpointsStatusResponse(t *testing.T) {
 		"routable_count": "number",
 	})
 
-	endpoints, _ := shape["endpoints"].([]interface{})
+	endpoints, _ := shape["endpoints"].([]any)
 	require.NotEmpty(t, endpoints)
 	// Find the endpoint with traffic so request_count / health_check are
 	// non-omitempty and present. Other endpoint entries pin the always-on keys.
-	var withTraffic map[string]interface{}
+	var withTraffic map[string]any
 	for _, e := range endpoints {
-		em, _ := e.(map[string]interface{})
+		em, _ := e.(map[string]any)
 		require.NotNil(t, em)
 		if _, ok := em["request_count"]; ok {
 			if rc, _ := em["request_count"].(float64); rc > 0 {
@@ -202,10 +202,10 @@ func TestWireShape_ModelsStatusResponse(t *testing.T) {
 		"total_endpoints":  "number",
 	})
 
-	modelsByFamily, _ := shape["models_by_family"].(map[string]interface{})
+	modelsByFamily, _ := shape["models_by_family"].(map[string]any)
 	require.NotNil(t, modelsByFamily)
 	for family, vals := range modelsByFamily {
-		arr, ok := vals.([]interface{})
+		arr, ok := vals.([]any)
 		assert.True(t, ok, "models_by_family[%q] should be array", family)
 		for _, v := range arr {
 			_, ok := v.(string)
@@ -213,9 +213,9 @@ func TestWireShape_ModelsStatusResponse(t *testing.T) {
 		}
 	}
 
-	recent, _ := shape["recent_models"].([]interface{})
+	recent, _ := shape["recent_models"].([]any)
 	require.NotEmpty(t, recent)
-	first, _ := recent[0].(map[string]interface{})
+	first, _ := recent[0].(map[string]any)
 	require.NotNil(t, first)
 	assertKeysTyped(t, first, map[string]string{
 		"name":         "string",

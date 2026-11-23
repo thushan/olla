@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -22,7 +21,7 @@ func TestPrepareProxyContext_InjectsAliasMapWhenPresent(t *testing.T) {
 		"http://ollama:11434":  "gpt-oss:120b",
 		"http://lmstudio:1234": "gpt-oss-120b-MLX",
 	}
-	profile.SetInspectionMeta(constants.ContextModelAliasMapKey, aliasMap)
+	profile.SetInspectionMeta(constants.InspectionMetaModelAliasMapKey, aliasMap)
 	profile.RoutingDecision = &domain.ModelRoutingDecision{
 		Strategy: "alias",
 		Action:   "routed",
@@ -35,7 +34,7 @@ func TestPrepareProxyContext_InjectsAliasMapWhenPresent(t *testing.T) {
 	}
 
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, r = app.prepareProxyContext(ctx, r, pr)
 
@@ -68,7 +67,7 @@ func TestPrepareProxyContext_NoAliasMapWhenNoneStored(t *testing.T) {
 	}
 
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, r = app.prepareProxyContext(ctx, r, pr)
 
@@ -92,7 +91,7 @@ func TestPrepareProxyContext_NilProfile(t *testing.T) {
 	}
 
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, r = app.prepareProxyContext(ctx, r, pr)
 

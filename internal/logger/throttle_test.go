@@ -157,9 +157,7 @@ func TestThrottle_DistinctKeyStormStaysBounded(t *testing.T) {
 	var full atomic.Int64
 	var wg sync.WaitGroup
 	for w := range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := w; i < total; i += workers {
 				if th.Allow(fmt.Sprintf("10.%d.%d.%d", i>>16&255, i>>8&255, i&255)) {
 					full.Add(1)
@@ -168,7 +166,7 @@ func TestThrottle_DistinctKeyStormStaysBounded(t *testing.T) {
 					require.LessOrEqual(t, th.Len(), DefaultThrottleMaxKeys)
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

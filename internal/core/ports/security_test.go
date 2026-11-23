@@ -68,7 +68,7 @@ func TestSecurityChain_Validate_AllAllow(t *testing.T) {
 	validator3 := &mockSecurityValidator{name: "validator3", shouldAllow: true}
 
 	chain := NewSecurityChain(validator1, validator2, validator3)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := SecurityRequest{
 		ClientID: "192.168.1.100",
@@ -102,7 +102,7 @@ func TestSecurityChain_Validate_FirstRejects(t *testing.T) {
 	validator3 := &mockSecurityValidator{name: "validator3", shouldAllow: true}
 
 	chain := NewSecurityChain(validator1, validator2, validator3)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := SecurityRequest{
 		ClientID: "192.168.1.100",
@@ -140,7 +140,7 @@ func TestSecurityChain_Validate_MiddleRejects(t *testing.T) {
 	validator3 := &mockSecurityValidator{name: "validator3", shouldAllow: true}
 
 	chain := NewSecurityChain(validator1, validator2, validator3)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := SecurityRequest{
 		ClientID: "192.168.1.100",
@@ -179,7 +179,7 @@ func TestSecurityChain_Validate_ErrorHandling(t *testing.T) {
 	validator3 := &mockSecurityValidator{name: "validator3", shouldAllow: true}
 
 	chain := NewSecurityChain(validator1, validator2, validator3)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := SecurityRequest{
 		ClientID: "192.168.1.100",
@@ -213,7 +213,7 @@ func TestSecurityChain_Validate_ErrorHandling(t *testing.T) {
 
 func TestSecurityChain_Validate_EmptyChain(t *testing.T) {
 	chain := NewSecurityChain()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := SecurityRequest{
 		ClientID: "192.168.1.100",
@@ -234,7 +234,7 @@ func TestSecurityChain_Validate_EmptyChain(t *testing.T) {
 func TestSecurityChain_Validate_SingleValidator(t *testing.T) {
 	validator := &mockSecurityValidator{name: "single", shouldAllow: true}
 	chain := NewSecurityChain(validator)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := SecurityRequest{
 		ClientID: "192.168.1.100",

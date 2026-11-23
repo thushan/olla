@@ -1,7 +1,6 @@
 package filter_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -99,7 +98,7 @@ func TestProfileFilteringIntegration(t *testing.T) {
 }
 
 func TestModelFilteringIntegration(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create sample models
 	models := []*domain.ModelInfo{
@@ -167,7 +166,7 @@ func TestModelFilteringIntegration(t *testing.T) {
 			f := filter.NewGlobFilter()
 
 			// Apply filter
-			result, err := f.Apply(ctx, tt.filterConfig, models, func(item interface{}) string {
+			result, err := f.Apply(ctx, tt.filterConfig, models, func(item any) string {
 				if model, ok := item.(*domain.ModelInfo); ok {
 					return model.Name
 				}
@@ -245,7 +244,7 @@ func TestFilterConfigOperations(t *testing.T) {
 }
 
 func TestEndToEndFiltering(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Simulate a complete filtering workflow
 	t.Run("complete filtering workflow", func(t *testing.T) {
@@ -271,7 +270,7 @@ func TestEndToEndFiltering(t *testing.T) {
 		// Test profile filtering
 		profileFilter := configs["production-profiles"]
 
-		profiles := map[string]interface{}{
+		profiles := map[string]any{
 			"ollama":       "ollama-profile",
 			"openai":       "openai-profile",
 			"openai-test":  "openai-test-profile",
@@ -298,7 +297,7 @@ func TestEndToEndFiltering(t *testing.T) {
 			{Name: "adult-content-gen"},
 		}
 
-		result, err := filterImpl.Apply(ctx, modelFilter, models, func(item interface{}) string {
+		result, err := filterImpl.Apply(ctx, modelFilter, models, func(item any) string {
 			if model, ok := item.(*domain.ModelInfo); ok {
 				return model.Name
 			}
@@ -322,7 +321,6 @@ func TestEndToEndFiltering(t *testing.T) {
 }
 
 func BenchmarkFilterOperations(b *testing.B) {
-	ctx := context.Background()
 	f := filter.NewGlobFilter()
 
 	config := &domain.FilterConfig{
@@ -341,8 +339,10 @@ func BenchmarkFilterOperations(b *testing.B) {
 	b.ResetTimer()
 
 	b.Run("filter_1000_models", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		for range b.N {
-			_, _ = f.Apply(ctx, config, models, func(item interface{}) string {
+			_, _ = f.Apply(ctx, config, models, func(item any) string {
 				if model, ok := item.(*domain.ModelInfo); ok {
 					return model.Name
 				}

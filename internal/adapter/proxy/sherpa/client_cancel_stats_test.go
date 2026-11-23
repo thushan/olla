@@ -42,7 +42,7 @@ func TestClientCancelBeforeFirstByte_NotCountedAsFailure(t *testing.T) {
 	ep := &domain.Endpoint{Name: "ep", URL: u, URLString: srv.URL, Status: domain.StatusHealthy}
 	svc := newSherpaForCancel(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	_ = proxyOnceSherpa(t, ctx, svc, ep)
 	cancel()
@@ -58,6 +58,6 @@ func TestBackendConnectionFailure_StillCountedAsFailure(t *testing.T) {
 	ep := &domain.Endpoint{Name: "ep", URL: u, URLString: deadURL, Status: domain.StatusHealthy}
 	svc := newSherpaForCancel(t)
 
-	require.Error(t, proxyOnceSherpa(t, context.Background(), svc, ep))
+	require.Error(t, proxyOnceSherpa(t, t.Context(), svc, ep))
 	require.Positive(t, svc.GetProxyStats().FailedRequests)
 }

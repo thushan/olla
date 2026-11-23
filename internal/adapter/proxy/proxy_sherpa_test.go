@@ -47,6 +47,7 @@ func createTestSherpaProxyWithConfig(endpoints []*domain.Endpoint, config *sherp
 }
 
 func createTestRequestWithStats(method, path, body string) (*http.Request, *ports.RequestStats, logger.StyledLogger) {
+	// A request context that only carries the stats metadata: it has no test to tie to.
 	ctx := context.WithValue(context.Background(), constants.ContextRequestIdKey, "test-request-id")
 	ctx = context.WithValue(ctx, constants.ContextRequestTimeKey, time.Now())
 
@@ -168,7 +169,7 @@ func TestProxyService_ClientDisconnectHandling(t *testing.T) {
 			proxy := tc.createFunc()
 
 			// Create a context that we'll cancel to simulate client disconnect
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 
 			req := httptest.NewRequest("GET", "/test", nil).WithContext(ctx)
 			w := httptest.NewRecorder()
@@ -387,7 +388,7 @@ func TestSherpaProxyService_StatsAccuracy(t *testing.T) {
 	}
 
 	// Check stats
-	proxyStats, err := proxy.GetStats(context.Background())
+	proxyStats, err := proxy.GetStats(t.Context())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}
@@ -714,7 +715,7 @@ func TestProxyService_SecurityHeaderFiltering(t *testing.T) {
 				RequestID: "test-123",
 			}
 
-			err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+			err := proxy.ProxyRequest(t.Context(), w, req, stats, createTestLogger())
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, w.Code)
 		})
@@ -777,7 +778,7 @@ func TestProxyService_ProxyHeaderAddition(t *testing.T) {
 				RequestID: "test-123",
 			}
 
-			err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+			err := proxy.ProxyRequest(t.Context(), w, req, stats, createTestLogger())
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, w.Code)
 		})

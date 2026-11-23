@@ -1,10 +1,10 @@
 package router
 
 import (
-	"context"
+	"cmp"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 
 	"github.com/pterm/pterm"
 	"github.com/thushan/olla/internal/adapter/security"
@@ -51,7 +51,7 @@ func (r *RouteRegistry) RegisterWithMethod(route string, handler http.HandlerFun
 
 func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFunc, description string, method string) {
 	wrappedHandler := func(w http.ResponseWriter, req *http.Request) {
-		ctx := context.WithValue(req.Context(), constants.ContextRoutePrefixKey, route)
+		ctx := constants.WithRoutePrefix(req.Context(), route)
 		handler(w, req.WithContext(ctx))
 	}
 	r.registerWithMethod(route, wrappedHandler, description, method, true)
@@ -111,8 +111,8 @@ func (r *RouteRegistry) logRoutesTable() {
 		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].order < entries[j].order
+	slices.SortFunc(entries, func(a, b routeEntry) int {
+		return cmp.Compare(a.order, b.order)
 	})
 
 	tableData := [][]string{
@@ -136,7 +136,7 @@ func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
 	return r.routes
 }
 
-func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters interface{}) {
+func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters any) {
 	type securityAdapterProvider interface {
 		CreateChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler
 		CreateRateLimitMiddleware() func(http.Handler) http.Handler

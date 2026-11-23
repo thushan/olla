@@ -39,7 +39,7 @@ func TestDiscoveryRetry_RecoversFromTransientFailures(t *testing.T) {
 	reg := &mockModelRegistry{}
 	svc := retryService(failNTimes(2, transient, &calls), ep, 3, reg)
 
-	if err := svc.DiscoverEndpoint(context.Background(), ep); err != nil {
+	if err := svc.DiscoverEndpoint(t.Context(), ep); err != nil {
 		t.Fatalf("expected recovery on the third attempt, got %v", err)
 	}
 	if calls.Load() != 3 {
@@ -60,7 +60,7 @@ func TestDiscoveryRetry_ExhaustedCountsAsOneFailure(t *testing.T) {
 	var calls atomic.Int32
 	svc := retryService(failNTimes(100, netErr, &calls), ep, 3, &mockModelRegistry{})
 
-	if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+	if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 		t.Fatal("expected failure once retries are spent")
 	}
 	if calls.Load() != 4 {
@@ -94,7 +94,7 @@ func TestDiscoveryRetry_NonRetryableErrorsAreNotRetried(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			var calls atomic.Int32
 			svc := retryService(failNTimes(100, failure, &calls), ep, 3, &mockModelRegistry{})
-			if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+			if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 				t.Fatal("expected failure")
 			}
 			if calls.Load() != 1 {
@@ -108,7 +108,7 @@ func TestDiscoveryRetry_ZeroAttemptsMeansOneRequest(t *testing.T) {
 	ep := createMockEndpoint("http://backend", "backend")
 	var calls atomic.Int32
 	svc := retryService(failNTimes(100, &NetworkError{URL: "x", Err: errors.New("down")}, &calls), ep, 0, &mockModelRegistry{})
-	_ = svc.DiscoverEndpoint(context.Background(), ep)
+	_ = svc.DiscoverEndpoint(t.Context(), ep)
 	if calls.Load() != 1 {
 		t.Fatalf("calls=%d, want 1", calls.Load())
 	}
@@ -120,7 +120,7 @@ func TestDiscoveryRetry_NegativeBackoffBehavesAsZero(t *testing.T) {
 	svc := NewModelDiscoveryService(failNTimes(100, &NetworkError{URL: "x", Err: errors.New("down")}, &calls),
 		&mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
 		DiscoveryConfig{Timeout: time.Second, ConcurrentWorkers: 1, RetryAttempts: 2, RetryBackoff: -time.Hour}, createTestLogger())
-	if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+	if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 		t.Fatal("expected failure once retries are spent")
 	}
 	if calls.Load() != 3 {
@@ -135,7 +135,7 @@ func TestDiscoveryRetry_HonoursCancellationDuringBackoff(t *testing.T) {
 	svc := NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
 		DiscoveryConfig{Timeout: 2 * time.Hour, ConcurrentWorkers: 1, RetryAttempts: 5, RetryBackoff: time.Hour}, createTestLogger())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- svc.DiscoverEndpoint(ctx, ep) }()
 
@@ -168,12 +168,12 @@ func TestDiscoveryRetry_StopDuringBackoffIsNotAFailure(t *testing.T) {
 	client := failNTimes(100, &NetworkError{URL: "x", Err: errors.New("down")}, &calls)
 	svc := NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
 		DiscoveryConfig{Interval: time.Hour, Timeout: 2 * time.Hour, ConcurrentWorkers: 1, RetryAttempts: 5, RetryBackoff: time.Hour}, createTestLogger())
-	if err := svc.Start(context.Background()); err != nil {
+	if err := svc.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
 	done := make(chan error, 1)
-	go func() { done <- svc.DiscoverEndpoint(context.Background(), ep) }()
+	go func() { done <- svc.DiscoverEndpoint(t.Context(), ep) }()
 
 	deadline := time.After(5 * time.Second)
 	for calls.Load() < 1 {
@@ -183,7 +183,7 @@ func TestDiscoveryRetry_StopDuringBackoffIsNotAFailure(t *testing.T) {
 		case <-time.After(time.Millisecond):
 		}
 	}
-	if err := svc.Stop(context.Background()); err != nil {
+	if err := svc.Stop(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -212,7 +212,7 @@ func TestDiscoveryRetry_CycleStaysWithinOneTimeout(t *testing.T) {
 			DiscoveryConfig{Timeout: 100 * time.Millisecond, ConcurrentWorkers: 1, RetryAttempts: 50, RetryBackoff: 40 * time.Millisecond}, createTestLogger())
 
 		start := time.Now()
-		if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+		if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 			t.Fatal("expected failure")
 		}
 		if elapsed := time.Since(start); elapsed > 2*time.Second {
@@ -238,7 +238,7 @@ func TestDiscoveryRetry_CycleStaysWithinOneTimeout(t *testing.T) {
 			DiscoveryConfig{Timeout: 100 * time.Millisecond, ConcurrentWorkers: 1, RetryAttempts: 3, RetryBackoff: time.Millisecond}, createTestLogger())
 
 		start := time.Now()
-		if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+		if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 			t.Fatal("expected failure")
 		}
 		if elapsed := time.Since(start); elapsed > 2*time.Second {
@@ -257,7 +257,7 @@ func TestDiscoveryRetry_SingleRetryAttempt(t *testing.T) {
 	t.Run("recovers on the one retry", func(t *testing.T) {
 		var calls atomic.Int32
 		svc := retryService(failNTimes(1, transient, &calls), ep, 1, &mockModelRegistry{})
-		if err := svc.DiscoverEndpoint(context.Background(), ep); err != nil {
+		if err := svc.DiscoverEndpoint(t.Context(), ep); err != nil {
 			t.Fatalf("expected recovery, got %v", err)
 		}
 		if calls.Load() != 2 {
@@ -268,7 +268,7 @@ func TestDiscoveryRetry_SingleRetryAttempt(t *testing.T) {
 	t.Run("stops after the one retry", func(t *testing.T) {
 		var calls atomic.Int32
 		svc := retryService(failNTimes(100, transient, &calls), ep, 1, &mockModelRegistry{})
-		if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+		if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 			t.Fatal("expected failure")
 		}
 		if calls.Load() != 2 {
@@ -290,7 +290,7 @@ func TestDiscoveryRetry_BackoffLargerThanRemainingTimeoutIsSkipped(t *testing.T)
 		DiscoveryConfig{Timeout: 500 * time.Millisecond, ConcurrentWorkers: 1, RetryAttempts: 5, RetryBackoff: time.Hour}, createTestLogger())
 
 	start := time.Now()
-	if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+	if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 		t.Fatal("expected failure")
 	}
 	if elapsed := time.Since(start); elapsed > 250*time.Millisecond {
@@ -328,7 +328,7 @@ func TestDiscoveryRetry_CancelMidBackoffReturnsPromptly(t *testing.T) {
 	svc := NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
 		DiscoveryConfig{Timeout: 2 * time.Hour, ConcurrentWorkers: 1, RetryAttempts: 5, RetryBackoff: time.Hour}, createTestLogger())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- svc.DiscoverEndpoint(ctx, ep) }()
 
@@ -382,7 +382,7 @@ func TestDiscoveryRetry_HTTPBackend(t *testing.T) {
 			_, _ = w.Write([]byte(`{"models":[{"name":"m"}]}`))
 		})
 		svc, ep, reg := newService(t, srv.URL, 3)
-		if err := svc.DiscoverEndpoint(context.Background(), ep); err != nil {
+		if err := svc.DiscoverEndpoint(t.Context(), ep); err != nil {
 			t.Fatal(err)
 		}
 		if calls.Load() != 2 || reg.registerCallCount != 1 || svc.getFailureCount(ep.URLString) != 0 {
@@ -394,7 +394,7 @@ func TestDiscoveryRetry_HTTPBackend(t *testing.T) {
 		var calls atomic.Int32
 		srv := serve(t, &calls, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{"models":`)) })
 		svc, ep, _ := newService(t, srv.URL, 3)
-		if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+		if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 			t.Fatal("expected failure")
 		}
 		if calls.Load() != 1 {
@@ -407,7 +407,7 @@ func TestDiscoveryRetry_HTTPBackend(t *testing.T) {
 		body := `{"models":[{"name":"m"}]}` + strings.Repeat(" ", MaxResponseSize)
 		srv := serve(t, &calls, func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) })
 		svc, ep, _ := newService(t, srv.URL, 3)
-		err := svc.DiscoverEndpoint(context.Background(), ep)
+		err := svc.DiscoverEndpoint(t.Context(), ep)
 		if !errors.Is(err, ErrResponseTooLarge) {
 			t.Fatalf("err=%v, want ErrResponseTooLarge", err)
 		}
@@ -420,7 +420,7 @@ func TestDiscoveryRetry_HTTPBackend(t *testing.T) {
 		var calls atomic.Int32
 		srv := serve(t, &calls, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotFound) })
 		svc, ep, _ := newService(t, srv.URL, 3)
-		if err := svc.DiscoverEndpoint(context.Background(), ep); err == nil {
+		if err := svc.DiscoverEndpoint(t.Context(), ep); err == nil {
 			t.Fatal("expected failure")
 		}
 		if calls.Load() != 1 {
@@ -436,17 +436,17 @@ func TestDiscoveryRetry_StopWithZeroBackoffStopsRetrying(t *testing.T) {
 	var svc *ModelDiscoveryService
 	client := &discoveryFuncClient{discover: func(context.Context, *domain.Endpoint) ([]*domain.ModelInfo, error) {
 		if calls.Add(1) == 1 {
-			_ = svc.Stop(context.Background())
+			_ = svc.Stop(t.Context())
 		}
 		return nil, &NetworkError{URL: "x", Err: errors.New("down")}
 	}}
 	svc = NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
 		DiscoveryConfig{Interval: time.Hour, Timeout: time.Second, ConcurrentWorkers: 1, RetryAttempts: 3, RetryBackoff: 0}, createTestLogger())
-	if err := svc.Start(context.Background()); err != nil {
+	if err := svc.Start(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 
-	err := svc.DiscoverEndpoint(context.Background(), ep)
+	err := svc.DiscoverEndpoint(t.Context(), ep)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("err=%v, want a cancellation", err)
 	}
@@ -467,7 +467,7 @@ func TestDiscoveryRetry_InitialBackoffIsCapped(t *testing.T) {
 		&mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{ep}}, &mockModelRegistry{},
 		DiscoveryConfig{Timeout: time.Hour, ConcurrentWorkers: 1, RetryAttempts: 1, RetryBackoff: 24 * time.Hour}, createTestLogger())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- svc.DiscoverEndpoint(ctx, ep) }()
 	for calls.Load() < 1 {

@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -47,11 +46,11 @@ func TestFilteringOutOllamaProfile(t *testing.T) {
 		repo := discovery.NewStaticEndpointRepository()
 
 		// Load empty config - should work fine
-		err = repo.LoadFromConfig(context.Background(), []config.EndpointConfig{})
+		err = repo.LoadFromConfig(t.Context(), []config.EndpointConfig{})
 		assert.NoError(t, err, "Loading empty config should work even with ollama filtered")
 
 		// Try to get endpoints - should work fine
-		endpoints, err := repo.GetAll(context.Background())
+		endpoints, err := repo.GetAll(t.Context())
 		assert.NoError(t, err)
 		assert.Empty(t, endpoints)
 	})
@@ -94,7 +93,7 @@ func TestFilteringOutOllamaProfile(t *testing.T) {
 		}
 
 		// This should fail because ollama profile is filtered out
-		err = repo.LoadFromConfig(context.Background(), configs)
+		err = repo.LoadFromConfig(t.Context(), configs)
 		assert.Error(t, err, "Should fail to load endpoint with filtered profile type")
 		assert.Contains(t, err.Error(), "unsupported endpoint type: ollama")
 	})
@@ -139,11 +138,11 @@ func TestFilteringOutOllamaProfile(t *testing.T) {
 		}
 
 		// This should work because empty type skips validation
-		err = repo.LoadFromConfig(context.Background(), configs)
+		err = repo.LoadFromConfig(t.Context(), configs)
 		assert.NoError(t, err, "Should load endpoint with empty type even with ollama filtered")
 
 		// Verify endpoint was loaded
-		endpoints, err := repo.GetAll(context.Background())
+		endpoints, err := repo.GetAll(t.Context())
 		assert.NoError(t, err)
 		assert.Len(t, endpoints, 1)
 		assert.Empty(t, endpoints[0].Type)

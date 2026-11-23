@@ -3,6 +3,7 @@ package unifier
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type Model struct {
-	Metadata      map[string]interface{}
+	Metadata      map[string]any
 	ID            string
 	Name          string
 	Family        string
@@ -324,7 +325,7 @@ func (u *DefaultUnifier) canMergeByName(existing *domain.UnifiedModel, newModel 
 
 func (u *DefaultUnifier) mergeMetadata(unified *domain.UnifiedModel, model *Model) {
 	if unified.Metadata == nil {
-		unified.Metadata = make(map[string]interface{})
+		unified.Metadata = make(map[string]any)
 	}
 	if model.Digest != "" {
 		unified.Metadata["digest"] = model.Digest
@@ -396,7 +397,7 @@ func (u *DefaultUnifier) convertModelInfoToModel(info *domain.ModelInfo) *Model 
 		ID:       info.Name,
 		Name:     info.Name,
 		Size:     info.Size,
-		Metadata: make(map[string]interface{}),
+		Metadata: make(map[string]any),
 	}
 
 	if info.Details != nil {
@@ -457,7 +458,7 @@ func (u *DefaultUnifier) applyModelDetails(model *Model, details *domain.ModelDe
 	}
 	if len(details.Capabilities) > 0 {
 		// inferCapabilitiesFromMetadata reads declared capabilities as []interface{}
-		declared := make([]interface{}, len(details.Capabilities))
+		declared := make([]any, len(details.Capabilities))
 		for i, c := range details.Capabilities {
 			declared[i] = c
 		}
@@ -552,7 +553,7 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 		MaxContextLength: models[0].MaxContextLength,
 		DiskSize:         0,
 		LastSeen:         models[0].LastSeen,
-		Metadata:         make(map[string]interface{}),
+		Metadata:         make(map[string]any),
 	}
 
 	// Ordered slices with index maps, not ranged maps: listings emit the first
@@ -576,9 +577,7 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 			merged.LastSeen = model.LastSeen
 		}
 
-		for k, v := range model.Metadata {
-			merged.Metadata[k] = v
-		}
+		maps.Copy(merged.Metadata, model.Metadata)
 	}
 
 	for _, source := range merged.SourceEndpoints {

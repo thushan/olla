@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -21,10 +22,10 @@ type FilterConfig struct {
 // FilterResult represents the result of applying a filter
 type FilterResult struct {
 	// Items that passed the filter
-	Accepted []interface{} `json:"accepted"`
+	Accepted []any `json:"accepted"`
 
 	// Items that were filtered out
-	Rejected []interface{} `json:"rejected"`
+	Rejected []any `json:"rejected"`
 
 	// Statistics about the filtering operation
 	Stats FilterStats `json:"stats"`
@@ -48,13 +49,7 @@ func (fc *FilterConfig) HasIncludeAll() bool {
 		return true
 	}
 
-	for _, pattern := range fc.Include {
-		if pattern == "*" {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(fc.Include, "*")
 }
 
 // Validate checks if the filter configuration is valid

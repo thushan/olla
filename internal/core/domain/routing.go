@@ -1,6 +1,10 @@
 package domain
 
-import "github.com/puzpuzpuz/xsync/v4"
+import (
+	"slices"
+
+	"github.com/puzpuzpuz/xsync/v4"
+)
 
 const (
 	InspectionMetaPathSupport = "path_support"
@@ -18,7 +22,7 @@ const (
 )
 
 type RequestProfile struct {
-	InspectionMeta *xsync.Map[string, interface{}]
+	InspectionMeta *xsync.Map[string, any]
 
 	// Rich request metadata for intelligent routing
 	ModelCapabilities    *ModelCapabilities    // What the request needs
@@ -60,7 +64,7 @@ func NewRequestProfile(path string) *RequestProfile {
 	return &RequestProfile{
 		Path:           path,
 		SupportedBy:    make([]string, 0, 4),
-		InspectionMeta: xsync.NewMap[string, interface{}](),
+		InspectionMeta: xsync.NewMap[string, any](),
 	}
 }
 
@@ -93,16 +97,14 @@ func (rp *RequestProfile) AddSupportedProfile(profileType string) {
 		return
 	}
 
-	for _, existing := range rp.SupportedBy {
-		if existing == profileType {
-			return
-		}
+	if slices.Contains(rp.SupportedBy, profileType) {
+		return
 	}
 
 	rp.SupportedBy = append(rp.SupportedBy, profileType)
 }
 
-func (rp *RequestProfile) SetInspectionMeta(key string, value interface{}) {
+func (rp *RequestProfile) SetInspectionMeta(key string, value any) {
 	rp.InspectionMeta.Store(key, value)
 }
 

@@ -33,7 +33,10 @@ func TestEventBus_BasicPubSub(t *testing.T) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Not bare t.Context(): Subscribe's cancellation watcher has to be
+	// released before bus.Shutdown runs, and t.Context() is cancelled only
+	// after the deferred shutdown.
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	events, cleanup := bus.Subscribe(ctx)
@@ -60,7 +63,7 @@ func TestEventBus_MultipleSubscribers(t *testing.T) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	numSubscribers := 5
 	var subscribers []<-chan TestEvent
 	var cleanups []func()
@@ -99,7 +102,7 @@ func TestEventBus_ContextCancellation(t *testing.T) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -133,7 +136,7 @@ func TestEventBus_BackpressureHandling(t *testing.T) {
 	bus := NewWithConfig[TestEvent](config)
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -176,7 +179,7 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 	const numSubscribers = 5
 	const eventsPerPublisher = 100
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	var subscribers []<-chan TestEvent
@@ -190,9 +193,7 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 		cleanups = append(cleanups, cleanup)
 
 		idx := i
-		subscriberWg.Add(1)
-		go func() {
-			defer subscriberWg.Done()
+		subscriberWg.Go(func() {
 			for {
 				select {
 				case <-events:
@@ -201,7 +202,7 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	defer func() {
 		for _, cleanup := range cleanups {
@@ -248,7 +249,7 @@ func TestEventBus_PublishAsync(t *testing.T) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -277,7 +278,7 @@ func TestEventBus_PublishAsync(t *testing.T) {
 func TestEventBus_Shutdown(t *testing.T) {
 	bus := New[TestEvent]()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -337,7 +338,7 @@ func TestEventBus_Stats(t *testing.T) {
 		t.Errorf("Expected empty bus stats, got %+v", stats)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Add subscribers
 	_, cleanup1 := bus.Subscribe(ctx)
@@ -369,7 +370,10 @@ func TestEventBus_CleanupInactiveSubscribers(t *testing.T) {
 	bus := NewWithConfig[TestEvent](config)
 	defer bus.Shutdown()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Not bare t.Context(): Subscribe's cancellation watcher has to be
+	// released before bus.Shutdown runs, and t.Context() is cancelled only
+	// after the deferred shutdown.
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
@@ -412,7 +416,7 @@ func BenchmarkEventBus_Publish(b *testing.B) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := b.Context()
 	_, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -428,7 +432,7 @@ func BenchmarkEventBus_PublishMultipleSubscribers(b *testing.B) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Create 10 subscribers
 	var cleanups []func()
@@ -454,7 +458,7 @@ func BenchmarkEventBus_ConcurrentPublish(b *testing.B) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := b.Context()
 	_, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -472,7 +476,7 @@ func TestEventBus_PublishAsyncOrderBasic(t *testing.T) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -504,7 +508,7 @@ func TestEventBus_TypeSafety(t *testing.T) {
 	defer healthBus.Shutdown()
 	defer testBus.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	healthEvents, healthCleanup := healthBus.Subscribe(ctx)
 	testEvents, testCleanup := testBus.Subscribe(ctx)

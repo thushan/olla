@@ -29,7 +29,7 @@ func (c *DockerModelRunnerConverter) GetFormatName() string {
 	return constants.ProviderTypeDockerMR
 }
 
-func (c *DockerModelRunnerConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *DockerModelRunnerConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]profile.DockerModelRunnerModel, 0, len(filtered))

@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -12,7 +11,7 @@ import (
 
 func BenchmarkRepository_GetAll(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Setup test endpoints via config
 	configs := make([]config.EndpointConfig, 100)
@@ -23,7 +22,7 @@ func BenchmarkRepository_GetAll(b *testing.B) {
 			URL:            fmt.Sprintf("http://localhost:%d", port),
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       ptrInt(100),
+			Priority:       new(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		}
@@ -44,7 +43,7 @@ func BenchmarkRepository_GetAll(b *testing.B) {
 
 func BenchmarkRepository_GetRoutable(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Mix of statuses - 60% routable (healthy + busy + warming)
 	configs := make([]config.EndpointConfig, 100)
@@ -63,7 +62,7 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 			URL:            fmt.Sprintf("http://localhost:%d", port),
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       ptrInt(100),
+			Priority:       new(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		}
@@ -91,14 +90,14 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 
 func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	cfg := config.EndpointConfig{
 		Name:           "bench-update",
 		URL:            "http://localhost:11434",
 		HealthCheckURL: "/health",
 		ModelURL:       "/api/tags",
-		Priority:       ptrInt(100),
+		Priority:       new(100),
 		CheckInterval:  5 * time.Second,
 		CheckTimeout:   2 * time.Second,
 	}
@@ -130,7 +129,7 @@ func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 
 func BenchmarkRepository_LoadFromConfig(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Create realistic config with 10 endpoints
 	configs := make([]config.EndpointConfig, 10)
@@ -141,7 +140,7 @@ func BenchmarkRepository_LoadFromConfig(b *testing.B) {
 			URL:            fmt.Sprintf("http://localhost:%d", port),
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       ptrInt(100 + i*10),
+			Priority:       new(100 + i*10),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		}

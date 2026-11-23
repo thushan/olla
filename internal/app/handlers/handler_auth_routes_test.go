@@ -149,7 +149,7 @@ func TestAuthAcrossProxyRoutes_ProxyHandler(t *testing.T) {
 	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 
 	// Inject the route prefix the router would normally set.
-	ctx := context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/")
+	ctx := constants.WithRoutePrefix(req.Context(), "/olla/proxy/")
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()
@@ -205,16 +205,16 @@ func TestAuthAcrossProxyRoutes_TranslationHandler(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
 		},
 	}
 
 	handler := app.translationHandler(trans)
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"model":      "claude-3-sonnet",
 		"max_tokens": 100,
-		"messages":   []interface{}{map[string]interface{}{"role": "user", "content": "hi"}},
+		"messages":   []any{map[string]any{"role": "user", "content": "hi"}},
 	}
 	bodyBytes, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/olla/anthropic/v1/messages",

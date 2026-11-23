@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -27,11 +28,11 @@ const (
 )
 
 type EndpointStateInfo struct {
-	LastStateChange     time.Time              `json:"last_state_change"`
-	Metadata            map[string]interface{} `json:"metadata,omitempty"`
-	State               EndpointState          `json:"state"`
-	LastError           string                 `json:"last_error,omitempty"`
-	ConsecutiveFailures int                    `json:"consecutive_failures"`
+	LastStateChange     time.Time      `json:"last_state_change"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
+	State               EndpointState  `json:"state"`
+	LastError           string         `json:"last_error,omitempty"`
+	ConsecutiveFailures int            `json:"consecutive_failures"`
 }
 
 type StateTransition struct {
@@ -72,12 +73,7 @@ func (s EndpointState) CanTransitionTo(target EndpointState) bool {
 		return false
 	}
 
-	for _, state := range allowed {
-		if state == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, target)
 }
 
 func (s ModelState) IsHealthy() bool {

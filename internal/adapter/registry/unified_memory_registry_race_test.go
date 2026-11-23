@@ -91,7 +91,7 @@ func writeWhileReading(read, write func()) {
 
 func seedTwoEndpoints(t *testing.T, r *UnifiedMemoryModelRegistry) {
 	t.Helper()
-	ctx := context.Background()
+	ctx := t.Context()
 	// one at a time: the unified ID comes from whichever endpoint unifies first
 	require.NoError(t, r.RegisterModelsWithEndpoint(ctx, raceEndpoint("a", "http://a:11434"), []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}))
 	r.WaitForUnification()
@@ -101,12 +101,13 @@ func seedTwoEndpoints(t *testing.T, r *UnifiedMemoryModelRegistry) {
 
 func TestUnifiedRegistry_ReadersDuringSecondEndpointRegister(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	probe := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
-	for name := range readers(ctx, probe) {
+	for name := range readers(t.Context(), probe) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			// The subtest owns its context: it is cancelled when the subtest, not the parent, ends.
+			ctx := t.Context()
 			for range registryRaceIterations {
 				r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 				require.NoError(t, r.RegisterModelsWithEndpoint(ctx, raceEndpoint("a", "http://a:11434"), []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}))
@@ -123,12 +124,13 @@ func TestUnifiedRegistry_ReadersDuringSecondEndpointRegister(t *testing.T) {
 
 func TestUnifiedRegistry_ReadersDuringRemoveEndpoint(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	probe := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
-	for name := range readers(ctx, probe) {
+	for name := range readers(t.Context(), probe) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			// The subtest owns its context: it is cancelled when the subtest, not the parent, ends.
+			ctx := t.Context()
 			for range registryRaceIterations {
 				r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 				seedTwoEndpoints(t, r)
@@ -143,12 +145,13 @@ func TestUnifiedRegistry_ReadersDuringRemoveEndpoint(t *testing.T) {
 
 func TestUnifiedRegistry_ReadersDuringRediscoveryCycle(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	probe := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
-	for name := range readers(ctx, probe) {
+	for name := range readers(t.Context(), probe) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			// The subtest owns its context: it is cancelled when the subtest, not the parent, ends.
+			ctx := t.Context()
 			r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 			seedTwoEndpoints(t, r)
 
@@ -164,7 +167,7 @@ func TestUnifiedRegistry_ReadersDuringRediscoveryCycle(t *testing.T) {
 
 func TestLifecycleRegistry_MarkEndpointOfflineDuringReads(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 	seedTwoEndpoints(t, r)
@@ -193,7 +196,7 @@ func TestLifecycleRegistry_MarkEndpointOfflineDuringReads(t *testing.T) {
 // return the registry's current record after MarkEndpointOffline replaces it.
 func TestLifecycleRegistry_MarkEndpointOfflineVisibleToAliasLookup(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 	seedTwoEndpoints(t, r)
@@ -209,7 +212,7 @@ func TestLifecycleRegistry_MarkEndpointOfflineVisibleToAliasLookup(t *testing.T)
 
 func TestUnifiedRegistry_RemoveEndpointLeavesHeldModelIntact(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 	seedTwoEndpoints(t, r)
@@ -229,7 +232,7 @@ func TestUnifiedRegistry_RemoveEndpointLeavesHeldModelIntact(t *testing.T) {
 
 func TestUnifiedRegistry_GetUnifiedStatsDuringRegister(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 	writeWhileReading(func() { _, _ = r.GetUnifiedStats(ctx) }, func() {
@@ -244,7 +247,7 @@ func TestUnifiedRegistry_GetUnifiedStatsDuringRegister(t *testing.T) {
 // the same id with the model's own id leading the aliases; the merge used to range over maps.
 func TestUnifiedRegistry_MergedListingIsStableAcrossRefreshOrder(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 	epA, epB := raceEndpoint("a", "http://a:11434"), raceEndpoint("b", "http://b:11434")
 	modelsA := []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -151,8 +152,8 @@ func (l *ProfileLoader) applyProfileFilter(allProfiles map[string]domain.Inferen
 }
 
 // convertProfilesToMap converts typed profile map to generic map for filtering
-func convertProfilesToMap(profiles map[string]domain.InferenceProfile) map[string]interface{} {
-	result := make(map[string]interface{}, len(profiles))
+func convertProfilesToMap(profiles map[string]domain.InferenceProfile) map[string]any {
+	result := make(map[string]any, len(profiles))
 	for name, profile := range profiles {
 		result[name] = profile
 	}
@@ -661,9 +662,7 @@ func (l *ProfileLoader) GetAllProfiles() map[string]domain.InferenceProfile {
 
 	// return a copy to prevent external modifications
 	profiles := make(map[string]domain.InferenceProfile, len(l.profiles))
-	for k, v := range l.profiles {
-		profiles[k] = v
-	}
+	maps.Copy(profiles, l.profiles)
 	return profiles
 }
 

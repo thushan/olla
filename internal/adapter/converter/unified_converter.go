@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"slices"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -58,7 +59,7 @@ func (c *UnifiedConverter) GetFormatName() string {
 	return "unified"
 }
 
-func (c *UnifiedConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *UnifiedConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]UnifiedModelData, 0, len(filtered))
@@ -205,10 +206,5 @@ func matchesCapabilityFilter(model *domain.UnifiedModel, capability string) bool
 }
 
 func hasCapability(capabilities []string, capability string) bool {
-	for _, c := range capabilities {
-		if c == capability {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(capabilities, capability)
 }

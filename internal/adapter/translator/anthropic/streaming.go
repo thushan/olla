@@ -63,9 +63,9 @@ type openAIUsage struct {
 // padding on amd64). JSON tag order (delta, index, type) differs from field
 // declaration order; clients parse JSON by key, not position, so this is safe.
 type sseDeltaEvent struct {
-	Delta interface{} `json:"delta"` // sseTextDelta | sseThinkingDelta | sseInputJSONDelta
-	Type  string      `json:"type"`
-	Index int         `json:"index"`
+	Delta any    `json:"delta"` // sseTextDelta | sseThinkingDelta | sseInputJSONDelta
+	Type  string `json:"type"`
+	Index int    `json:"index"`
 }
 
 // sseTextDelta is the delta payload for text_delta events.
@@ -132,7 +132,7 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 	// vLLM and lmdeploy both emit real input_tokens in message_start rather than 0;
 	// this brings the translation path in line with that behaviour. The value is
 	// overwritten by actual upstream usage when (and if) the backend sends it.
-	if estimate, ok := ctx.Value(constants.ContextInputTokensKey).(int); ok && estimate > 0 {
+	if estimate, ok := constants.GetInputTokens(ctx); ok && estimate > 0 {
 		state.inputTokens = estimate
 	}
 
@@ -321,10 +321,10 @@ func (t *Translator) handleContentDelta(content string, state *StreamingState, w
 		state.currentIndex = len(state.contentBlocks)
 		state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
 
-		if err := t.writeEvent(w, eventContentBlockStart, map[string]interface{}{
+		if err := t.writeEvent(w, eventContentBlockStart, map[string]any{
 			"type":  eventContentBlockStart,
 			"index": state.currentIndex,
-			"content_block": map[string]interface{}{
+			"content_block": map[string]any{
 				"type": contentTypeText,
 				"text": "",
 			},
@@ -378,10 +378,10 @@ func (t *Translator) handleReasoningDelta(reasoning string, state *StreamingStat
 		state.contentBlocks = append(state.contentBlocks, *state.currentBlock)
 		state.reasoningOpen = true
 
-		if err := t.writeEvent(w, eventContentBlockStart, map[string]interface{}{
+		if err := t.writeEvent(w, eventContentBlockStart, map[string]any{
 			"type":  eventContentBlockStart,
 			"index": state.currentIndex,
-			"content_block": map[string]interface{}{
+			"content_block": map[string]any{
 				"type":     contentTypeThinking,
 				"thinking": "",
 			},
@@ -420,7 +420,7 @@ func (t *Translator) closeCurrentBlock(state *StreamingState, w http.ResponseWri
 	if state.currentBlock == nil {
 		return nil
 	}
-	if err := t.writeEvent(w, "content_block_stop", map[string]interface{}{
+	if err := t.writeEvent(w, "content_block_stop", map[string]any{
 		"type":  "content_block_stop",
 		"index": state.currentIndex,
 	}); err != nil {
@@ -460,10 +460,10 @@ func (t *Translator) initializeToolBlock(id, name string, toolIndex int, state *
 	// track which content block this tool index maps to for finalisation
 	state.toolIndexToBlock[toolIndex] = state.currentIndex
 
-	if err := t.writeEvent(w, eventContentBlockStart, map[string]interface{}{
+	if err := t.writeEvent(w, eventContentBlockStart, map[string]any{
 		"type":  eventContentBlockStart,
 		"index": state.currentIndex,
-		"content_block": map[string]interface{}{
+		"content_block": map[string]any{
 			"type": contentTypeToolUse,
 			"id":   id,
 			"name": name,
@@ -524,9 +524,9 @@ func (t *Translator) sendToolArgumentsDelta(args string, toolIndex int, state *S
 	// Corrupt tool input is worse than a failed stream - abort with a spec-valid error event.
 	if state.currentBlock == nil || blockIndex != state.currentIndex {
 		msg := fmt.Sprintf("tool arguments received for already-stopped block (tool_index=%d, block_index=%d)", toolIndex, blockIndex)
-		_ = t.writeEvent(w, "error", map[string]interface{}{
+		_ = t.writeEvent(w, "error", map[string]any{
 			"type": "error",
-			"error": map[string]interface{}{
+			"error": map[string]any{
 				"type":    "api_error",
 				"message": msg,
 			},
@@ -603,7 +603,7 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 	for toolIndex, builder := range state.toolCallBuffers {
 		argsJSON := builder.String()
 		if argsJSON != "" {
-			var input map[string]interface{}
+			var input map[string]any
 			if err := json.Unmarshal([]byte(argsJSON), &input); err == nil {
 				// use mapping to find the correct block, avoids linear search
 				if blockIndex, found := state.toolIndexToBlock[toolIndex]; found {
@@ -642,22 +642,19 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 			charCount += len(block.Text) + len(block.Thinking)
 		}
 		if charCount > 0 {
-			estimated := charCount / 4
-			if estimated < 1 {
-				estimated = 1
-			}
+			estimated := max(charCount/4, 1)
 			state.outputTokens = estimated
 		}
 	}
 
 	// send delta with stop_reason + usage
-	if err := t.writeEvent(w, "message_delta", map[string]interface{}{
+	if err := t.writeEvent(w, "message_delta", map[string]any{
 		"type": "message_delta",
-		"delta": map[string]interface{}{
+		"delta": map[string]any{
 			"stop_reason":   stopReason,
 			"stop_sequence": nil,
 		},
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"input_tokens":                state.inputTokens,
 			"output_tokens":               state.outputTokens,
 			"cache_creation_input_tokens": 0,
@@ -671,7 +668,7 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 	}
 
 	// final event
-	if err := t.writeEvent(w, "message_stop", map[string]interface{}{
+	if err := t.writeEvent(w, "message_stop", map[string]any{
 		"type": "message_stop",
 	}); err != nil {
 		return err
@@ -728,18 +725,18 @@ func (t *Translator) logStreamingResponse(state *StreamingState, original *http.
 }
 
 // create initial message_start event with metadata
-func (t *Translator) createMessageStart(state *StreamingState) map[string]interface{} {
-	return map[string]interface{}{
+func (t *Translator) createMessageStart(state *StreamingState) map[string]any {
+	return map[string]any{
 		"type": "message_start",
-		"message": map[string]interface{}{
+		"message": map[string]any{
 			"id":            state.messageID,
 			"type":          "message",
 			"role":          roleAssistant,
 			"model":         state.model,
-			"content":       []interface{}{},
+			"content":       []any{},
 			"stop_reason":   nil,
 			"stop_sequence": nil,
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"input_tokens":                state.inputTokens,
 				"output_tokens":               0,
 				"cache_creation_input_tokens": 0,
@@ -755,7 +752,7 @@ func (t *Translator) createMessageStart(state *StreamingState) map[string]interf
 // The SSE frame format is: "event: <name>\ndata: <json>\n\n".
 // The pooled buffer is reset and returned before this function returns, so
 // there is no aliasing risk - w receives a copy via its own internal write path.
-func (t *Translator) writeEvent(w http.ResponseWriter, event string, data interface{}) error {
+func (t *Translator) writeEvent(w http.ResponseWriter, event string, data any) error {
 	buf, err := t.bufferPool.Get()
 	if err != nil {
 		return fmt.Errorf("writeEvent: buffer pool exhausted: %w", err)

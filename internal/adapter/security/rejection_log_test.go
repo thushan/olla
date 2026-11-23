@@ -190,9 +190,7 @@ func TestRateLimitMiddleware_DistinctIPStormKeepsThrottleBounded(t *testing.T) {
 	const workers = 8
 	var wg sync.WaitGroup
 	for w := range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := w; i < total; i += workers {
 				req := httptest.NewRequest(http.MethodPost, "/x", nil)
 				req.RemoteAddr = fmt.Sprintf("10.%d.%d.%d:5000", i>>16&255, i>>8&255, i&255)
@@ -200,7 +198,7 @@ func TestRateLimitMiddleware_DistinctIPStormKeepsThrottleBounded(t *testing.T) {
 				h.ServeHTTP(httptest.NewRecorder(), req)
 				h.ServeHTTP(httptest.NewRecorder(), req)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

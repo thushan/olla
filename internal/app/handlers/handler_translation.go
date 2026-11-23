@@ -516,8 +516,7 @@ func (a *Application) translationHandler(trans translator.RequestTranslator) htt
 		// Buffer body once -- both passthrough and translation paths need it.
 		// Read maxBodySize+1 to detect oversized requests before JSON parsing
 		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize+1))
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if tooLarge, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			// A chunked body over the server-wide cap. The security chain normally rejects it
 			// first; this keeps a path that skips the chain a 413 and out of the ERROR log,
 			// where a flood of oversized bodies would otherwise write a line per request.
@@ -677,13 +676,13 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 		// Opportunistic parse: pass the map if the body is valid JSON so the
 		// error formatter can extract a message; pass nil otherwise and let
 		// extractAndLogBackendError fall back to its generic message.
-		var openaiErrResp map[string]interface{}
+		var openaiErrResp map[string]any
 		_ = json.Unmarshal(recorder.body.Bytes(), &openaiErrResp)
 		return a.handleNonStreamingBackendError(w, r, recorder, openaiErrResp, pr, trans)
 	}
 
 	// Success path: strict parse - a malformed 200 body is a gateway error.
-	var openaiResp map[string]interface{}
+	var openaiResp map[string]any
 	if jerr := json.Unmarshal(recorder.body.Bytes(), &openaiResp); jerr != nil {
 		return fmt.Errorf("failed to parse OpenAI response: %w", jerr)
 	}
@@ -697,7 +696,7 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 	if pr.model != "" {
 		ctx = context.WithValue(ctx, constants.ContextModelKey, pr.model)
 		if native := a.canonicalModelName(pr.model); native != pr.model {
-			ctx = context.WithValue(ctx, constants.ContextCanonicalModelKey, core.CanonicalModel{Requested: pr.model, Native: native})
+			ctx = core.WithCanonicalModel(ctx, core.CanonicalModel{Requested: pr.model, Native: native})
 		}
 		r = r.WithContext(ctx)
 	}
@@ -715,9 +714,9 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 	// if a model alias was resolved, pass the endpoint→model rewrite map through context
 	// so the proxy can rewrite the model name in the request body for the selected backend
 	if pr.profile != nil {
-		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.ContextModelAliasMapKey); ok {
+		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.InspectionMetaModelAliasMapKey); ok {
 			if aliasMap, ok := aliasMapRaw.(map[string]string); ok {
-				ctx = context.WithValue(ctx, constants.ContextModelAliasMapKey, aliasMap)
+				ctx = constants.WithModelAliasMap(ctx, aliasMap)
 				ctx = a.withCanonicalAliasTargets(ctx, pr.model, aliasMap)
 				r = r.WithContext(ctx)
 			}
@@ -732,7 +731,7 @@ func (a *Application) handleNonStreamingBackendError(
 	w http.ResponseWriter,
 	r *http.Request,
 	recorder *responseRecorder,
-	openaiResp map[string]interface{},
+	openaiResp map[string]any,
 	pr *proxyRequest,
 	trans translator.RequestTranslator,
 ) error {
@@ -764,7 +763,7 @@ func (a *Application) handleNonStreamingBackendError(
 
 // extractAndLogBackendError extracts error details from OpenAI response and logs them
 func (a *Application) extractAndLogBackendError(
-	openaiResp map[string]interface{},
+	openaiResp map[string]any,
 	statusCode int,
 	pr *proxyRequest,
 	trans translator.RequestTranslator,
@@ -772,7 +771,7 @@ func (a *Application) extractAndLogBackendError(
 	errorMsg := "Backend error"
 	var errorType, errorParam, errorCode string
 
-	errObj, ok := openaiResp["error"].(map[string]interface{})
+	errObj, ok := openaiResp["error"].(map[string]any)
 	if !ok {
 		pr.requestLogger.Info("Translating backend error response",
 			"status_code", statusCode,
@@ -813,7 +812,7 @@ func (a *Application) writeTranslatedSuccessResponse(
 	ctx context.Context,
 	r *http.Request,
 	recorder *responseRecorder,
-	openaiResp map[string]interface{},
+	openaiResp map[string]any,
 	trans translator.RequestTranslator,
 ) error {
 	// Transform successful OpenAI response back to target format
@@ -922,9 +921,9 @@ func (a *Application) writeStreamingNoEndpointsError(
 	// fallback to generic error
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusServiceUnavailable)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"type": "error",
-		"error": map[string]interface{}{
+		"error": map[string]any{
 			"type":    "api_error",
 			"message": "No healthy endpoints available",
 		},
@@ -1066,9 +1065,9 @@ func (a *Application) handleStreamingBackendError(
 func (a *Application) parseStreamingErrorMessage(errorBody []byte) string {
 	errorMsg := "Backend error"
 
-	var openaiResp map[string]interface{}
+	var openaiResp map[string]any
 	if err := json.Unmarshal(errorBody, &openaiResp); err == nil {
-		if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
+		if errObj, ok := openaiResp["error"].(map[string]any); ok {
 			if msg, ok := errObj["message"].(string); ok && msg != "" {
 				errorMsg = msg
 			}
@@ -1081,9 +1080,9 @@ func (a *Application) parseStreamingErrorMessage(errorBody []byte) string {
 // writeGenericStreamingError writes a generic streaming error response
 func (a *Application) writeGenericStreamingError(w http.ResponseWriter, statusCode int) {
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"type": "error",
-		"error": map[string]interface{}{
+		"error": map[string]any{
 			"type":    "api_error",
 			"message": "Backend returned an error",
 		},
@@ -1162,8 +1161,8 @@ func (a *Application) respondTranslatorError(
 	}
 
 	// fallback to generic json
-	errorResp := map[string]interface{}{
-		"error": map[string]interface{}{
+	errorResp := map[string]any{
+		"error": map[string]any{
 			"message": err.Error(),
 			"type":    "translation_error",
 		},
@@ -1192,8 +1191,7 @@ func (a *Application) tokenCountHandler(trans translator.RequestTranslator) http
 
 		// Call the translator's token counting implementation
 		resp, err := counter.CountTokens(ctx, r)
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
+		if tooLarge, ok := errors.AsType[*http.MaxBytesError](err); ok {
 			// See translationHandler: quiet 413 rather than an ERROR line per oversized body.
 			if reject := translatorRejectWriter(trans); reject != nil {
 				reject(w, http.StatusRequestEntityTooLarge,

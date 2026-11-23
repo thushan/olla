@@ -143,9 +143,7 @@ func TestAnthropicModelsCache_ConcurrentSafety(t *testing.T) {
 	}
 
 	// Simulate discovery updates while readers are running.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := range 5 {
 			reg.mu.Lock()
 			reg.models = append(reg.models, &domain.UnifiedModel{
@@ -154,7 +152,7 @@ func TestAnthropicModelsCache_ConcurrentSafety(t *testing.T) {
 			})
 			reg.mu.Unlock()
 		}
-	}()
+	})
 
 	wg.Wait()
 }
@@ -234,7 +232,7 @@ func TestAnthropicModelsCache_InvalidatesOnAliasChange(t *testing.T) {
 	if len(data1) != 1 {
 		t.Fatalf("expected 1 model, got %d", len(data1))
 	}
-	firstID1, ok := data1[0].(map[string]interface{})["id"].(string)
+	firstID1, ok := data1[0].(map[string]any)["id"].(string)
 	if !ok {
 		t.Fatal("expected id to be a string")
 	}
@@ -257,7 +255,7 @@ func TestAnthropicModelsCache_InvalidatesOnAliasChange(t *testing.T) {
 	if len(data2) != 1 {
 		t.Fatalf("expected 1 model after alias update, got %d", len(data2))
 	}
-	firstID2, ok := data2[0].(map[string]interface{})["id"].(string)
+	firstID2, ok := data2[0].(map[string]any)["id"].(string)
 	if !ok {
 		t.Fatal("expected id to be a string")
 	}
@@ -295,13 +293,13 @@ func doGetModels(t *testing.T, handler http.HandlerFunc) []byte {
 	return out
 }
 
-func decodeModelsData(t *testing.T, body []byte) []interface{} {
+func decodeModelsData(t *testing.T, body []byte) []any {
 	t.Helper()
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(body, &resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	data, ok := resp["data"].([]interface{})
+	data, ok := resp["data"].([]any)
 	if !ok {
 		t.Fatalf("expected data to be an array, got %T", resp["data"])
 	}
@@ -310,7 +308,7 @@ func decodeModelsData(t *testing.T, body []byte) []interface{} {
 
 func validateModelsEnvelope(t *testing.T, body []byte) {
 	t.Helper()
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(body, &resp); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}

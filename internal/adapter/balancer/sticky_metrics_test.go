@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -26,12 +25,12 @@ func TestStickySessionWrapper_Stats_TracksMetrics(t *testing.T) {
 	endpoints := []*domain.Endpoint{ep1}
 
 	// First select: miss → insertion + miss-style get (Get returns nil → not a hit).
-	ctx1, _ := injectKey(context.Background(), "stats-key:llama3", "session_header")
+	ctx1, _ := injectKey(t.Context(), "stats-key:llama3", "session_header")
 	_, err := w.Select(ctx1, endpoints)
 	require.NoError(t, err)
 
 	// Second select: hit on the same key → Hits++.
-	ctx2, _ := injectKey(context.Background(), "stats-key:llama3", "session_header")
+	ctx2, _ := injectKey(t.Context(), "stats-key:llama3", "session_header")
 	_, err = w.Select(ctx2, endpoints)
 	require.NoError(t, err)
 
@@ -155,12 +154,12 @@ func TestStickySessionWrapper_EmptyModel_RoutesAndPins(t *testing.T) {
 	key, source := ComputeStickyKey(req, "", cfg, nil)
 	require.NotEmpty(t, key, "issue #139: empty model + session header must still yield a key")
 
-	ctx1, out1 := injectKey(context.Background(), key, source)
+	ctx1, out1 := injectKey(t.Context(), key, source)
 	first, err := w.Select(ctx1, endpoints)
 	require.NoError(t, err)
 	assert.Equal(t, "miss", out1.Result)
 
-	ctx2, out2 := injectKey(context.Background(), key, source)
+	ctx2, out2 := injectKey(t.Context(), key, source)
 	second, err := w.Select(ctx2, endpoints)
 	require.NoError(t, err)
 	assert.Equal(t, "hit", out2.Result)

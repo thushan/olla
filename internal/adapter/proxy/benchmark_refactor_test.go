@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -106,7 +105,7 @@ func benchmarkRefactoredSimpleRequest(b *testing.B, proxyType string) {
 			StartTime: time.Now(),
 		}
 
-		err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+		err := proxy.ProxyRequest(b.Context(), w, req, stats, createTestLogger())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -136,15 +135,18 @@ func benchmarkRefactoredErrorHandling(b *testing.B, proxyType string) {
 			StartTime: time.Now(),
 		}
 
-		_ = proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+		_ = proxy.ProxyRequest(b.Context(), w, req, stats, createTestLogger())
 	}
 }
 
 func benchmarkRefactoredHeaderProcessing(b *testing.B, proxyType string) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Echo back headers
+		// Echo back headers. The Header() lookup stays inside the loop on
+		// purpose: the upstream echo is inside what this row measures, so
+		// collapsing the calls changes the row rather than the proxy.
 		for k, v := range r.Header {
-			w.Header()[k] = v
+			dst := w.Header()
+			dst[k] = v
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -172,7 +174,7 @@ func benchmarkRefactoredHeaderProcessing(b *testing.B, proxyType string) {
 			StartTime: time.Now(),
 		}
 
-		err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+		err := proxy.ProxyRequest(b.Context(), w, req, stats, createTestLogger())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -214,7 +216,7 @@ func benchmarkRefactoredStreamingResponse(b *testing.B, proxyType string) {
 			StartTime: time.Now(),
 		}
 
-		err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+		err := proxy.ProxyRequest(b.Context(), w, req, stats, createTestLogger())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -252,7 +254,7 @@ func benchmarkRefactoredStatsCollection(b *testing.B, proxyType string) {
 		b.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -272,7 +274,7 @@ func BenchmarkEventBusPublish(b *testing.B) {
 
 	// Create some subscribers
 	for range 10 {
-		ch, cleanup := bus.Subscribe(context.Background())
+		ch, cleanup := bus.Subscribe(b.Context())
 		defer cleanup()
 
 		// Drain events in background

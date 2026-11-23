@@ -79,9 +79,7 @@ func TestModelsStatusHandler_Concurrent(t *testing.T) {
 	errs := make(chan error, goroutines)
 
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			req := httptest.NewRequest(http.MethodGet, "/internal/status/models?detailed=true&group=family", nil)
 			w := httptest.NewRecorder()
@@ -103,7 +101,7 @@ func TestModelsStatusHandler_Concurrent(t *testing.T) {
 			if resp.TotalModels != 1 {
 				errs <- assert.AnError
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -152,9 +150,7 @@ func TestStatusHandler_Concurrent(t *testing.T) {
 	errs := make(chan error, goroutines)
 
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			req := httptest.NewRequest(http.MethodGet, "/internal/status", nil)
 			w := httptest.NewRecorder()
@@ -175,7 +171,7 @@ func TestStatusHandler_Concurrent(t *testing.T) {
 			if len(resp.Endpoints) != 2 {
 				errs <- assert.AnError
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

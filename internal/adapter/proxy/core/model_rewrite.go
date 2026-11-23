@@ -24,6 +24,20 @@ type CanonicalModel struct {
 	Native    string
 }
 
+// WithCanonicalModel installs a CanonicalModel in the context. It lives here,
+// beside the type, rather than in the constants package: constants cannot
+// import this package's type without a cycle.
+func WithCanonicalModel(ctx context.Context, canonical CanonicalModel) context.Context {
+	return context.WithValue(ctx, constants.ContextCanonicalModelKey, canonical)
+}
+
+// GetCanonicalModel reads the CanonicalModel installed by WithCanonicalModel.
+// ok reports presence; a zero value may still be absent.
+func GetCanonicalModel(ctx context.Context) (CanonicalModel, bool) {
+	canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel)
+	return canonical, ok
+}
+
 // ResolvedModelName returns the model name actually dispatched to endpoint:
 // the alias map's per-endpoint entry if the request was alias-resolved, the
 // native name when a bare Ollama name was resolved to it, otherwise
@@ -35,9 +49,9 @@ type CanonicalModel struct {
 // served rather than fragmenting across whatever alias each client happened
 // to send.
 func ResolvedModelName(ctx context.Context, endpoint *domain.Endpoint, requestedModel string) string {
-	if aliasMap, ok := ctx.Value(constants.ContextModelAliasMapKey).(map[string]string); ok && endpoint != nil {
+	if aliasMap, ok := constants.GetModelAliasMap(ctx); ok && endpoint != nil {
 		if actualModel, ok := aliasMap[endpoint.GetURLString()]; ok {
-			if canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel); ok {
+			if canonical, ok := GetCanonicalModel(ctx); ok {
 				if native, ok := canonical.Targets[actualModel]; ok {
 					return native
 				}
@@ -45,7 +59,7 @@ func ResolvedModelName(ctx context.Context, endpoint *domain.Endpoint, requested
 			return actualModel
 		}
 	}
-	if canonical, ok := ctx.Value(constants.ContextCanonicalModelKey).(CanonicalModel); ok && canonical.Native != "" && canonical.Requested == requestedModel {
+	if canonical, ok := GetCanonicalModel(ctx); ok && canonical.Native != "" && canonical.Requested == requestedModel {
 		return canonical.Native
 	}
 	return requestedModel
@@ -66,7 +80,7 @@ func ResolvedModelName(ctx context.Context, endpoint *domain.Endpoint, requested
 //   - the request has no body or is not JSON
 //   - the body does not contain a top-level "model" field
 func RewriteModelForAlias(ctx context.Context, r *http.Request, endpoint *domain.Endpoint) {
-	aliasMap, ok := ctx.Value(constants.ContextModelAliasMapKey).(map[string]string)
+	aliasMap, ok := constants.GetModelAliasMap(ctx)
 	if !ok || len(aliasMap) == 0 {
 		return
 	}

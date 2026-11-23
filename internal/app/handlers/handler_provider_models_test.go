@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -72,7 +71,7 @@ func TestProviderSpecificModelEndpoints(t *testing.T) {
 
 	// Create registry and register models
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Register endpoints
 	for _, ep := range endpoints {
@@ -297,7 +296,7 @@ func TestProviderModelFiltering(t *testing.T) {
 
 	// Create registry
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Register endpoints
 	for _, ep := range endpoints {
@@ -383,7 +382,7 @@ func TestUnifiedModelsFormatFiltering(t *testing.T) {
 
 	// Create registry
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Register endpoints
 	for _, ep := range endpoints {

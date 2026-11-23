@@ -2,7 +2,6 @@ package inspector
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,7 +17,7 @@ import (
 )
 
 func TestBodyInspector_Inspect(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
@@ -143,7 +142,7 @@ func TestBodyInspector_Inspect(t *testing.T) {
 }
 
 func TestBodyInspector_LargeBody(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
@@ -185,7 +184,7 @@ func TestBodyInspector_LargeBody(t *testing.T) {
 // base64 image payloads) in a request body exceeding MaxBodySize.
 // This is the field-order case that the fixed 64 KB prefix approach would silently miss.
 func TestBodyInspector_LargeBodyModelAfterMessages(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
@@ -221,7 +220,7 @@ func TestBodyInspector_LargeBodyModelAfterMessages(t *testing.T) {
 }
 
 func TestBodyInspector_NoBody(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
@@ -265,7 +264,7 @@ func TestBodyInspector_NoBody(t *testing.T) {
 }
 
 func TestBodyInspector_BufferPoolReuse(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
@@ -294,7 +293,7 @@ func TestBodyInspector_BufferPoolReuse(t *testing.T) {
 }
 
 func TestBodyInspector_CapabilityDetection(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	logCfg := &logger.Config{Level: "debug", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(t, err)
@@ -561,7 +560,7 @@ func TestBodyInspector_CapabilityDetection(t *testing.T) {
 }
 
 func BenchmarkBodyInspector_Inspect(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	logCfg := &logger.Config{Level: "error", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(b, err)
@@ -592,7 +591,7 @@ func BenchmarkBodyInspector_Inspect(b *testing.B) {
 }
 
 func BenchmarkBodyInspector_LargeBody(b *testing.B) {
-	ctx := context.Background()
+	ctx := b.Context()
 	logCfg := &logger.Config{Level: "error", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(b, err)
@@ -694,7 +693,7 @@ func TestBodyInspector_PathCapabilitiesVersusBody(t *testing.T) {
 			req, err := http.NewRequest(http.MethodPost, "/x", strings.NewReader(tt.body))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
-			require.NoError(t, inspector.Inspect(context.Background(), req, reqProfile))
+			require.NoError(t, inspector.Inspect(t.Context(), req, reqProfile))
 
 			require.NotNil(t, reqProfile.ModelCapabilities)
 			assert.Equal(t, tt.wantRerank, reqProfile.ModelCapabilities.Rerank, "rerank")
@@ -779,7 +778,7 @@ func TestBodyInspector_BodyDecidesNotContentType(t *testing.T) {
 			}
 			profile := domain.NewRequestProfile("/v1/embeddings")
 
-			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+			require.NoError(t, bi.Inspect(t.Context(), req, profile))
 
 			if tt.wantUntouch {
 				assert.Empty(t, profile.ModelName)
@@ -809,7 +808,7 @@ func TestBodyInspector_CloseReachesOriginalBody(t *testing.T) {
 	for _, body := range []string{`{"model":"m"}`, "not json", ""} {
 		closer := &closeTracker{Reader: strings.NewReader(body)}
 		req := &http.Request{Body: closer, Header: make(http.Header), ContentLength: int64(len(body)) + 1}
-		require.NoError(t, bi.Inspect(context.Background(), req, domain.NewRequestProfile("/x")))
+		require.NoError(t, bi.Inspect(t.Context(), req, domain.NewRequestProfile("/x")))
 		require.NoError(t, req.Body.Close())
 		assert.True(t, closer.closed, "Close must propagate for body %q", body)
 	}
@@ -838,7 +837,7 @@ func TestBodyInspector_PeekWindowBoundary(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			profile := domain.NewRequestProfile("/v1/embeddings")
 
-			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+			require.NoError(t, bi.Inspect(t.Context(), req, profile))
 			assert.Equal(t, "x", profile.ModelName)
 			got, err := io.ReadAll(req.Body)
 			require.NoError(t, err)
@@ -881,7 +880,7 @@ func TestBodyInspector_ChunkedLimitBoundary(t *testing.T) {
 			req := &http.Request{Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header), ContentLength: -1}
 			profile := domain.NewRequestProfile("/v1/embeddings")
 
-			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+			require.NoError(t, bi.Inspect(t.Context(), req, profile))
 			if tt.wantFull {
 				assert.Equal(t, "x", profile.ModelName)
 				require.NotNil(t, profile.ModelCapabilities)
@@ -926,7 +925,7 @@ func TestBodyInspector_PartialBodySurvivesReadError(t *testing.T) {
 		if ct != "" {
 			req.Header.Set("Content-Type", ct)
 		}
-		require.NoError(t, bi.Inspect(context.Background(), req, domain.NewRequestProfile("/x")))
+		require.NoError(t, bi.Inspect(t.Context(), req, domain.NewRequestProfile("/x")))
 
 		got, rerr := io.ReadAll(req.Body)
 		assert.Equal(t, prefix, string(got), "consumed prefix must reach downstream (ct %q)", ct)
@@ -962,7 +961,7 @@ func TestBodyInspector_LeadingWhitespaceIsBounded(t *testing.T) {
 		req := &http.Request{Body: io.NopCloser(cr), Header: make(http.Header), ContentLength: -1}
 		profile := domain.NewRequestProfile("/x")
 
-		require.NoError(t, bi.Inspect(context.Background(), req, profile))
+		require.NoError(t, bi.Inspect(t.Context(), req, profile))
 		assert.Empty(t, profile.ModelName)
 		// Work is bounded by the cap (plus one read-ahead window), not by body size.
 		assert.LessOrEqual(t, cr.n, maxLeadingWhitespace+2*peekWindow)
@@ -978,7 +977,7 @@ func TestBodyInspector_LeadingWhitespaceIsBounded(t *testing.T) {
 		req := &http.Request{Body: io.NopCloser(iotest.OneByteReader(strings.NewReader(body))), Header: make(http.Header), ContentLength: -1}
 		profile := domain.NewRequestProfile("/v1/embeddings")
 
-		require.NoError(t, bi.Inspect(context.Background(), req, profile))
+		require.NoError(t, bi.Inspect(t.Context(), req, profile))
 		assert.Equal(t, "x", profile.ModelName)
 		got, err := io.ReadAll(req.Body)
 		require.NoError(t, err)
@@ -1010,7 +1009,7 @@ func TestBodyInspector_RepeatedContentEncodingHeaders(t *testing.T) {
 				req.Header.Add("Content-Encoding", v)
 			}
 			profile := domain.NewRequestProfile("/v1/chat/completions")
-			require.NoError(t, bi.Inspect(context.Background(), req, profile))
+			require.NoError(t, bi.Inspect(t.Context(), req, profile))
 			assert.Equal(t, tt.wantModel, profile.ModelName)
 		})
 	}

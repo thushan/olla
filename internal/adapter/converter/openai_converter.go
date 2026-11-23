@@ -37,7 +37,7 @@ func (c *OpenAIConverter) GetFormatName() string {
 	return "openai"
 }
 
-func (c *OpenAIConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *OpenAIConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]OpenAIModelData, 0, len(filtered))

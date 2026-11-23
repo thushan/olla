@@ -19,7 +19,7 @@ func TestDetectStreamingMode(t *testing.T) {
 		name        string
 		profile     string
 		contentType string
-		ctxStream   interface{} // Value for "stream" in context
+		ctxStream   any // Value for "stream" in context
 		want        bool
 	}{
 		// Profile takes precedence - when ops explicitly configure streaming/buffering
@@ -220,9 +220,9 @@ func TestDetectStreamingMode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			if tt.ctxStream != nil {
-				ctx = context.WithValue(ctx, "stream", tt.ctxStream)
+				ctx = context.WithValue(ctx, constants.ContextKeyStream, tt.ctxStream)
 			}
 
 			resp := &http.Response{

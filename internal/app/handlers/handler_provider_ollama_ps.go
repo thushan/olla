@@ -78,9 +78,7 @@ func (a *Application) ollamaRunningModelsHandler(w http.ResponseWriter, r *http.
 		results := make([]ollamaPSResult, len(targets))
 		var wg sync.WaitGroup
 		for i, ep := range targets {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				// a panic here would take the process down, and a bad peer
 				// response must not be able to do that
 				defer func() {
@@ -89,7 +87,7 @@ func (a *Application) ollamaRunningModelsHandler(w http.ResponseWriter, r *http.
 					}
 				}()
 				results[i].models, results[i].err = fetchOllamaPS(ctx, ep)
-			}()
+			})
 		}
 		wg.Wait()
 

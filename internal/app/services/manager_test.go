@@ -94,13 +94,11 @@ func TestServiceManager_StopServices_ConcurrentRegister(t *testing.T) {
 
 	// Concurrently stop the initial batch while registering a second batch -
 	// stopServices' map read and Register's map write must not race.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := sm.stopServices(context.Background(), initial); err != nil {
+	wg.Go(func() {
+		if err := sm.stopServices(t.Context(), initial); err != nil {
 			t.Errorf("stopServices failed: %v", err)
 		}
-	}()
+	})
 
 	for i := range n {
 		wg.Add(1)
@@ -135,13 +133,11 @@ func TestServiceManager_Start_ConcurrentRegister(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := sm.Start(context.Background()); err != nil {
+	wg.Go(func() {
+		if err := sm.Start(t.Context()); err != nil {
 			t.Errorf("Start failed: %v", err)
 		}
-	}()
+	})
 
 	for i := range n {
 		wg.Add(1)
@@ -195,7 +191,7 @@ func TestServiceManager_Start_RollbackOrder(t *testing.T) {
 			sm := NewServiceManager(newTestLogger())
 			registerChain(t, sm, rec, tt.failAt, boom)
 
-			err := sm.Start(context.Background())
+			err := sm.Start(t.Context())
 			if !errors.Is(err, boom) {
 				t.Fatalf("Start error = %v, want it to wrap %v", err, boom)
 			}
@@ -217,7 +213,7 @@ func TestServiceManager_Start_Success_ThenStopReversed(t *testing.T) {
 	sm := NewServiceManager(newTestLogger())
 	registerChain(t, sm, rec, "", nil)
 
-	if err := sm.Start(context.Background()); err != nil {
+	if err := sm.Start(t.Context()); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	starts, stops, _ := rec.snapshot()
@@ -228,7 +224,7 @@ func TestServiceManager_Start_Success_ThenStopReversed(t *testing.T) {
 		t.Errorf("Start stopped %v on success, want none", stops)
 	}
 
-	if err := sm.Stop(context.Background()); err != nil {
+	if err := sm.Stop(t.Context()); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	_, stops, _ = rec.snapshot()
@@ -246,7 +242,7 @@ func TestServiceManager_Start_RollbackIgnoresCancelledContext(t *testing.T) {
 	sm := NewServiceManager(newTestLogger())
 	registerChain(t, sm, rec, "c", context.Canceled)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	if err := sm.Start(ctx); !errors.Is(err, context.Canceled) {
@@ -271,7 +267,7 @@ func TestServiceManager_Rollback_DoesNotMutateInput(t *testing.T) {
 	registerChain(t, sm, rec, "", nil)
 
 	started := []string{"a", "b", "c"}
-	sm.rollback(context.Background(), started)
+	sm.rollback(t.Context(), started)
 
 	if want := []string{"a", "b", "c"}; !slices.Equal(started, want) {
 		t.Errorf("rollback mutated input: %v, want %v", started, want)

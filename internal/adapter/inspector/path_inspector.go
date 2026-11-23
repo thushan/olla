@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -230,7 +229,7 @@ func (pi *PathInspector) TranslationProfiles(target string) []string {
 			out = append(out, name)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -264,13 +263,7 @@ func (pi *PathInspector) Inspect(_ context.Context, _ *http.Request, profile *do
 		if pathMatches(path, mapPath) {
 			for _, profileName := range profiles {
 				// Check if this profile is already in the supported list
-				alreadySupported := false
-				for _, existing := range profile.SupportedBy {
-					if existing == profileName {
-						alreadySupported = true
-						break
-					}
-				}
+				alreadySupported := slices.Contains(profile.SupportedBy, profileName)
 
 				if !alreadySupported {
 					profile.AddSupportedProfile(profileName)
