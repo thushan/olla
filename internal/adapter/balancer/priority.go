@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"math/rand"
-	"sort"
+	"slices"
 
 	"github.com/thushan/olla/internal/core/domain"
 	"github.com/thushan/olla/internal/core/ports"
@@ -45,9 +45,18 @@ func (p *PrioritySelector) Select(ctx context.Context, endpoints []*domain.Endpo
 		return nil, errors.New("no routable endpoints available")
 	}
 
-	// Sort by priority (highest first)
-	sort.Slice(routable, func(i, j int) bool {
-		return routable[i].Priority > routable[j].Priority
+	// Sort by priority (highest first). Unstable on purpose: an endpoint's
+	// position inside a tied tier does not change its share, because the
+	// weighted selection below gives every endpoint weight/total whatever
+	// the order, so a stable sort would only cost more.
+	slices.SortFunc(routable, func(a, b *domain.Endpoint) int {
+		switch {
+		case a.Priority > b.Priority:
+			return -1
+		case a.Priority < b.Priority:
+			return 1
+		}
+		return 0
 	})
 
 	// Get the highest priority tier

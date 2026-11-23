@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"hash"
 	"hash/fnv"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -149,7 +150,7 @@ func (a *Application) buildModelSummaries(
 	for endpointURL := range modelMap {
 		endpointURLs = append(endpointURLs, endpointURL)
 	}
-	sort.Strings(endpointURLs)
+	slices.Sort(endpointURLs)
 
 	for _, endpointURL := range endpointURLs {
 		endpointModels := modelMap[endpointURL]
@@ -220,7 +221,7 @@ func (a *Application) buildModelSummaries(
 	for _, summary := range uniqueModels {
 		sortModelSummaryEndpoints(summary)
 		if len(summary.Aliases) > 0 {
-			sort.Strings(summary.Aliases)
+			slices.Sort(summary.Aliases)
 		}
 		summaries = append(summaries, *summary)
 	}
@@ -290,11 +291,11 @@ func sortModelSummaryEndpoints(summary *ModelSummary) {
 	for i := range n {
 		pairs[i] = endpointNameID{Name: summary.Endpoints[i], ID: summary.EndpointIDs[i]}
 	}
-	sort.Slice(pairs, func(i, j int) bool {
-		if pairs[i].Name != pairs[j].Name {
-			return pairs[i].Name < pairs[j].Name
-		}
-		return pairs[i].ID < pairs[j].ID
+	slices.SortFunc(pairs, func(a, b endpointNameID) int {
+		return cmp.Or(
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.ID, b.ID),
+		)
 	})
 	for i := range n {
 		summary.Endpoints[i] = pairs[i].Name
@@ -346,7 +347,7 @@ func (a *Application) buildAliasLookup(ctx context.Context) map[string][]string 
 		for name := range seen {
 			all = append(all, name)
 		}
-		sort.Strings(all)
+		slices.Sort(all)
 		// Each identifier resolves to every other identifier on the model.
 		// The queried name is excluded from its own result by construction.
 		for _, query := range all {
@@ -361,7 +362,7 @@ func (a *Application) buildAliasLookup(ctx context.Context) map[string][]string 
 				// ambiguity; merge deterministically so the ETag stays
 				// stable across polls rather than swapping between writes.
 				merged := mergeStringSets(existing, siblings)
-				sort.Strings(merged)
+				slices.Sort(merged)
 				lookup[query] = merged
 			} else {
 				lookup[query] = siblings
@@ -444,7 +445,7 @@ func (a *Application) groupModelsByFamily(models []ModelSummary) map[string][]st
 	}
 
 	for family := range familyGroup {
-		sort.Strings(familyGroup[family])
+		slices.Sort(familyGroup[family])
 	}
 
 	return familyGroup
@@ -475,10 +476,10 @@ func (a *Application) groupModelsByFamilyWithDetails(models []ModelSummary) []Mo
 		for ep := range endpointSet {
 			epSlice = append(epSlice, ep)
 		}
-		sort.Strings(epSlice)
+		slices.Sort(epSlice)
 
-		sort.Slice(familyModels, func(i, j int) bool {
-			return familyModels[i].Name < familyModels[j].Name
+		slices.SortFunc(familyModels, func(a, b ModelSummary) int {
+			return cmp.Compare(a.Name, b.Name)
 		})
 
 		modelGroups = append(modelGroups, ModelGroupSummary{
@@ -489,14 +490,17 @@ func (a *Application) groupModelsByFamilyWithDetails(models []ModelSummary) []Mo
 		})
 	}
 
-	sort.Slice(modelGroups, func(i, j int) bool {
-		if modelGroups[i].Family == familyUnknown {
-			return false
+	slices.SortFunc(modelGroups, func(a, b ModelGroupSummary) int {
+		// The unknown family sorts after every named one; within each class
+		// families are alphabetical.
+		aUnknown, bUnknown := a.Family == familyUnknown, b.Family == familyUnknown
+		if aUnknown != bUnknown {
+			if aUnknown {
+				return 1
+			}
+			return -1
 		}
-		if modelGroups[j].Family == familyUnknown {
-			return true
-		}
-		return modelGroups[i].Family < modelGroups[j].Family
+		return cmp.Compare(a.Family, b.Family)
 	})
 
 	return modelGroups
@@ -525,14 +529,14 @@ func modelLastSeenTime(m ModelSummary) time.Time {
 }
 
 func (a *Application) getRecentModels(models []ModelSummary) []ModelSummary {
-	sort.Slice(models, func(i, j int) bool {
-		ti, tj := modelLastSeenTime(models[i]), modelLastSeenTime(models[j])
-		if !ti.Equal(tj) {
-			return ti.After(tj)
-		}
-		// Break ties by name for a stable, diffable order across polls
-		// (deterministic ordering matters for ETag hashing too).
-		return models[i].Name < models[j].Name
+	slices.SortFunc(models, func(a, b ModelSummary) int {
+		return cmp.Or(
+			// Newest first.
+			modelLastSeenTime(b).Compare(modelLastSeenTime(a)),
+			// Break ties by name for a stable, diffable order across polls
+			// (deterministic ordering matters for ETag hashing too).
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
 
 	if len(models) > recentModelsLimit {
@@ -598,7 +602,7 @@ func hashModelStatusResponse(resp *ModelStatusResponse) string {
 	for f := range resp.ModelsByFamily {
 		families = append(families, f)
 	}
-	sort.Strings(families)
+	slices.Sort(families)
 	for _, f := range families {
 		hashEtagString(h, f)
 		hashEtagStringSlice(h, resp.ModelsByFamily[f])

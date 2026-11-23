@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"cmp"
 	"encoding/json"
 	"hash"
 	"hash/fnv"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -89,15 +90,17 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 		summaries = append(summaries, summary)
 	}
 
-	sort.Slice(summaries, func(i, j int) bool {
-		if summaries[i].Priority != summaries[j].Priority {
-			return summaries[i].Priority > summaries[j].Priority
+	slices.SortFunc(summaries, func(a, b EndpointSummary) int {
+		if c := cmp.Compare(b.Priority, a.Priority); c != 0 {
+			return c
 		}
 		// Within a priority band, healthy comes before anything else.
-		iHealthy := summaries[i].Status == healthyStatus
-		jHealthy := summaries[j].Status == healthyStatus
-		if iHealthy != jHealthy {
-			return iHealthy
+		aHealthy, bHealthy := a.Status == healthyStatus, b.Status == healthyStatus
+		if aHealthy != bHealthy {
+			if aHealthy {
+				return -1
+			}
+			return 1
 		}
 		// Tie-breaker for deterministic ordering across polls: the input
 		// slice comes from map iteration, so without a final comparison
@@ -107,10 +110,10 @@ func (a *Application) endpointsStatusHandler(w http.ResponseWriter, r *http.Requ
 		// sanitised URL) because sanitisation strips query/fragment and two
 		// distinct endpoints can share a display URL, which would leave the
 		// comparison tied and ordering unstable again.
-		if summaries[i].Name != summaries[j].Name {
-			return summaries[i].Name < summaries[j].Name
-		}
-		return summaries[i].ID < summaries[j].ID
+		return cmp.Or(
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.ID, b.ID),
+		)
 	})
 
 	// create a response with minimal mallocs
@@ -299,11 +302,11 @@ func buildEndpointIDs(endpoints []*domain.Endpoint) map[string]string {
 		// requires matching Name AND matching sanitised URL). Not fixed by
 		// hashing the query (reintroduces the secret-influence sanitisation
 		// removed) or persistent UUIDs (disproportionate for a DOM anchor).
-		sort.Slice(siblings, func(i, j int) bool {
-			if siblings[i].Name != siblings[j].Name {
-				return siblings[i].Name < siblings[j].Name
-			}
-			return siblings[i].URLString < siblings[j].URLString
+		slices.SortFunc(siblings, func(a, b *domain.Endpoint) int {
+			return cmp.Or(
+				cmp.Compare(a.Name, b.Name),
+				cmp.Compare(a.URLString, b.URLString),
+			)
 		})
 		for i, ep := range siblings {
 			ids[ep.URLString] = base + "-" + strconv.Itoa(i)

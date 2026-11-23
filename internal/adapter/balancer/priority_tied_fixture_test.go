@@ -93,10 +93,12 @@ func byPriorityDesc(a, b *domain.Endpoint) int {
 	return 0
 }
 
-// TestPrioritySelector_TiedPriorityFixture_UnstableSortReorders shows the
-// current sort.Slice in PrioritySelector.Select does not preserve insertion
-// order among equal-priority endpoints on the FR-9 (b) fixture, and prints the
-// order each candidate implementation produces so WP-3d can compare them.
+// TestPrioritySelector_TiedPriorityFixture_UnstableSortReorders shows an
+// unstable descending-priority sort does not preserve insertion order among
+// equal-priority endpoints on the FR-9 (b) fixture, and prints the order each
+// implementation produces so the choice of sort can be compared against the
+// order sort.Slice gave (the production sort before WP-3d; slices.SortFunc
+// replaced it because it produced the identical order on this fixture).
 //
 // Select itself never reveals the order (it weight-selects one endpoint from
 // the top tier), so the test applies each sort to a copy of the routable
@@ -119,7 +121,8 @@ func TestPrioritySelector_TiedPriorityFixture_UnstableSortReorders(t *testing.T)
 	insertionTop := tierOf(routable, topPriority)
 	t.Logf("insertion top tier:     %s", fixtureOrder(insertionTop))
 
-	// The production sort: sort.Slice with the descending-priority comparator.
+	// The reference order: sort.Slice with the descending-priority comparator,
+	// which Select used before WP-3d.
 	current := slices.Clone(routable)
 	sort.Slice(current, func(i, j int) bool {
 		return current[i].Priority > current[j].Priority
@@ -131,7 +134,7 @@ func TestPrioritySelector_TiedPriorityFixture_UnstableSortReorders(t *testing.T)
 	slices.SortStableFunc(stable, byPriorityDesc)
 	t.Logf("SortStableFunc order:   %s", fixtureOrder(stable))
 
-	// An unstable replacement with the same comparator shape.
+	// The production sort since WP-3d: slices.SortFunc with the same comparator.
 	unstable := slices.Clone(routable)
 	slices.SortFunc(unstable, byPriorityDesc)
 	t.Logf("SortFunc order:         %s", fixtureOrder(unstable))
@@ -157,7 +160,7 @@ func TestPrioritySelector_TiedPriorityFixture_UnstableSortReorders(t *testing.T)
 		t.Errorf("sort.Slice top priority %d, want %d", top, topPriority)
 	}
 
-	// The claim FR-9 (b) rests on: the current sort reorders equal-priority
+	// The claim FR-9 (b) rests on: the unstable sort reorders equal-priority
 	// endpoints against insertion order, within the tier that gets selected.
 	if got, want := fixtureOrder(tierOf(current, topPriority)), fixtureOrder(insertionTop); got == want {
 		t.Errorf("sort.Slice preserved the top tier's insertion order on the tied fixture; the fixture no longer demonstrates the FR-9 (b) hazard")

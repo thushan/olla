@@ -1,9 +1,10 @@
 package handlers
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -137,8 +138,8 @@ func (a *Application) buildModelStats(modelStats map[string]ports.ModelStats,
 	}
 
 	// Sort models by request count (most popular first)
-	sort.Slice(models, func(i, j int) bool {
-		return models[i].TotalRequests > models[j].TotalRequests
+	slices.SortFunc(models, func(a, b ModelStats) int {
+		return cmp.Compare(b.TotalRequests, a.TotalRequests)
 	})
 
 	return models, acc

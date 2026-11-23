@@ -21,7 +21,8 @@ package stats
 */
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -462,8 +463,8 @@ func (c *Collector) cleanup(now int64) {
 			ages = append(ages, endpointAge{url, atomic.LoadInt64(&data.lastUsed)})
 			return true
 		})
-		sort.Slice(ages, func(i, j int) bool {
-			return ages[i].time < ages[j].time
+		slices.SortFunc(ages, func(a, b endpointAge) int {
+			return cmp.Compare(a.time, b.time)
 		})
 		remove := len(ages) - MaxTrackedEndpoints + 100
 		for i := 0; i < remove && i < len(ages); i++ {

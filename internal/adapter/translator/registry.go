@@ -3,7 +3,7 @@ package translator
 import (
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/thushan/olla/internal/logger"
@@ -99,6 +99,6 @@ func (r *Registry) getAvailableNames() []string {
 	for name := range r.translators {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }

@@ -1,9 +1,10 @@
 package handlers
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -106,8 +107,8 @@ func (a *Application) buildTranslatorStats(translatorStats map[string]ports.Tran
 	}
 
 	// Sort translators by total request count (most popular first)
-	sort.Slice(translators, func(i, j int) bool {
-		return translators[i].TotalRequests > translators[j].TotalRequests
+	slices.SortFunc(translators, func(a, b TranslatorStatsEntry) int {
+		return cmp.Compare(b.TotalRequests, a.TotalRequests)
 	})
 
 	return translators
