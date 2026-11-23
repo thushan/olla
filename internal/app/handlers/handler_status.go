@@ -546,7 +546,7 @@ func etagMatches(ifNoneMatch, etag string) bool {
 		return true
 	}
 	cmpCur := stripWeakPrefix(etag)
-	for _, t := range strings.Split(ifNoneMatch, ",") {
+	for t := range strings.SplitSeq(ifNoneMatch, ",") {
 		if stripWeakPrefix(strings.TrimSpace(t)) == cmpCur {
 			return true
 		}
