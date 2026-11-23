@@ -193,7 +193,6 @@ func joinKeyPath(parent, key string) string {
 func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) {
 	fields = make(map[string]reflect.Type, t.NumField())
 	for f := range t.Fields() {
-		f := f
 		if f.PkgPath != "" && !f.Anonymous {
 			continue
 		}
