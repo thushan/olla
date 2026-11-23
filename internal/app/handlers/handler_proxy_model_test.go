@@ -159,7 +159,7 @@ func TestBodyInspectorIntegration(t *testing.T) {
 			req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 
 			// Inspect
-			profile, err := chain.Inspect(context.Background(), req, tt.path)
+			profile, err := chain.Inspect(t.Context(), req, tt.path)
 			require.NoError(t, err)
 
 			// Verify model extraction

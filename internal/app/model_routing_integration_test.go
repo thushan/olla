@@ -107,7 +107,7 @@ func TestModelRoutingIntegration(t *testing.T) {
 	}
 
 	// Register models on endpoints
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// llama3 available on endpoints 1 and 2
 	llamaModel := &domain.ModelInfo{

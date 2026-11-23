@@ -212,7 +212,7 @@ func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *i
 	strategyCfg config.ModelRoutingStrategy, fleet []fleetEndpoint, path, body string) (*httptest.ResponseRecorder, []*domain.Endpoint) {
 	t.Helper()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	cfg := strategyCfg
 	unified := registry.NewUnifiedMemoryModelRegistry(styledLog, nil, &cfg, nil)
 

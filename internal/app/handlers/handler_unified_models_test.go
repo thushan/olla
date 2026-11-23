@@ -90,7 +90,7 @@ func TestUnifiedModelsHandler_IncludeUnavailable(t *testing.T) {
 
 	// Create registry with test models
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(styledLogger, nil, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Register models on both endpoints
 	models := []*domain.ModelInfo{
@@ -218,7 +218,7 @@ func newModelDetailMux(t *testing.T) *http.ServeMux {
 	require.NoError(t, err)
 
 	reg := registry.NewUnifiedMemoryModelRegistry(styled, nil, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 	var endpoints []*domain.Endpoint
 	wantUnified := 0
 	// newUnified is how many models the registration adds to the unified set; a
@@ -317,7 +317,7 @@ func newKindFixture(t *testing.T) (*Application, *http.ServeMux) {
 	require.NoError(t, err)
 
 	reg := registry.NewUnifiedMemoryModelRegistry(styled, nil, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 	var endpoints []*domain.Endpoint
 	wantUnified := 0
 	register := func(name, typ, body string) {
@@ -469,7 +469,7 @@ func TestUnifiedModelsHandler_OllamaCapabilitiesListVision(t *testing.T) {
 
 	log, _, _ := logger.New(&logger.Config{Level: "error", Theme: "default"})
 	styledLogger := logger.NewPlainStyledLogger(log)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	ollamaURL, _ := url.Parse("http://ollama-new:11434")
 	oldURL, _ := url.Parse("http://ollama-old:11434")

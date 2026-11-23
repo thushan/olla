@@ -220,7 +220,7 @@ func TestMidStreamClientCancel_NoEventNoAbort(t *testing.T) {
 				h := newStatusHarness(t, engine, rt, backend.URL)
 				front := newFront(t, h)
 
-				ctx, cancel := context.WithCancel(context.Background())
+				ctx, cancel := context.WithCancel(t.Context())
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, front.URL+rt.path, strings.NewReader(streamReqBody))
 				require.NoError(t, err)
 				req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
