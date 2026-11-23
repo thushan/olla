@@ -11,8 +11,9 @@ import (
 )
 
 // xffChain builds the X-Forwarded-For value a request carries after n hops,
-// each hop appending the address it saw. Both address families appear so the
-// parser meets the bracketed IPv6 form real deployments send.
+// each hop appending the address it saw, as plain (unbracketed) IPv4 and IPv6
+// text joined with ", ". Only the first address is ever parsed, so the chain
+// length changes the header size, not the parsing work.
 func xffChain(hops int) string {
 	parts := make([]string, hops)
 	for i := range hops {
@@ -37,8 +38,11 @@ func xffRequest(hops int) *http.Request {
 var benchXFFSink string
 
 // BenchmarkExtractClientIP covers the stringscut finding on the X-Forwarded-For
-// split in extractClientIP. Multi-address rows matter because the split is what
-// a rewrite changes; the zero-hop row is the RemoteAddr fallback.
+// split in extractClientIP. extractClientIP reads the header and cuts at the
+// first comma, so the single-, three- and eight-address rows all parse one
+// address and do the same work; they differ only in the header string the
+// request carries. The zero-hop row is the RemoteAddr fallback (a
+// net.SplitHostPort and one allocation).
 func BenchmarkExtractClientIP(b *testing.B) {
 	cases := []struct {
 		name string
@@ -63,8 +67,12 @@ func BenchmarkExtractClientIP(b *testing.B) {
 }
 
 // BenchmarkUpdateForwardedHeaders_MultiAddressXFF times the whole forwarded
-// header rewrite, which reads the chain once in updateForwardedHeaders and
-// again in extractClientIP, then sets the joined value.
+// header rewrite on a three-address chain: one extractClientIP call (the
+// updateForwardedHeaders branch with an existing XFF header does not call it
+// twice), three header sets, and the httptest.NewRequest that builds the
+// outbound request each iteration. That request construction is the larger
+// part of the row, so the header work itself is a fraction of the time
+// reported; BenchmarkExtractClientIP is the row that isolates the parsing.
 func BenchmarkUpdateForwardedHeaders_MultiAddressXFF(b *testing.B) {
 	original := xffRequest(3)
 	original.Host = "olla.local"
