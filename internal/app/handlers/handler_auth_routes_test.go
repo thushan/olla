@@ -149,7 +149,7 @@ func TestAuthAcrossProxyRoutes_ProxyHandler(t *testing.T) {
 	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 
 	// Inject the route prefix the router would normally set.
-	ctx := context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/")
+	ctx := constants.WithRoutePrefix(req.Context(), "/olla/proxy/")
 	req = req.WithContext(ctx)
 
 	rec := httptest.NewRecorder()

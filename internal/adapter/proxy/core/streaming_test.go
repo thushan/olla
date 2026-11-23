@@ -222,7 +222,7 @@ func TestDetectStreamingMode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := t.Context()
 			if tt.ctxStream != nil {
-				ctx = context.WithValue(ctx, "stream", tt.ctxStream)
+				ctx = context.WithValue(ctx, constants.ContextKeyStream, tt.ctxStream)
 			}
 
 			resp := &http.Response{

@@ -113,7 +113,7 @@ func TestAliasRejection_StrictRouting_FailsFastWithoutProxying(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/olla/proxy/api/chat", strings.NewReader(body))
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
-		ctx := context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/")
+		ctx := constants.WithRoutePrefix(req.Context(), "/olla/proxy/")
 		req = req.WithContext(ctx)
 		w := httptest.NewRecorder()
 

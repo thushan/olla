@@ -72,7 +72,7 @@ func TestResolveAliasEndpoints_ResolvesToCorrectEndpoints(t *testing.T) {
 	assert.Contains(t, result, candidates[1]) // lmstudio
 
 	// Verify the alias rewrite map was stored in the profile
-	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.InspectionMetaModelAliasMapKey)
 	require.True(t, ok, "alias rewrite map should be stored in profile")
 
 	aliasMap, ok := aliasMapRaw.(map[string]string)
@@ -250,7 +250,7 @@ func TestResolveAliasEndpoints_NoIntersectionWithCandidates_StrictRejects(t *tes
 	assert.Equal(t, "rejected", profile.RoutingDecision.Action)
 	assert.Equal(t, http.StatusNotFound, profile.RoutingDecision.StatusCode)
 
-	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.InspectionMetaModelAliasMapKey)
 	assert.False(t, ok, "rejected fallback must not carry an alias rewrite map")
 	assert.Nil(t, aliasMapRaw)
 }
@@ -309,7 +309,7 @@ func TestResolveAliasEndpoints_NoIntersectionWithCandidates_OptimisticFallsBack(
 	require.NotNil(t, profile.RoutingDecision)
 	assert.NotEqual(t, "rejected", profile.RoutingDecision.Action)
 
-	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.InspectionMetaModelAliasMapKey)
 	assert.False(t, ok, "fallback endpoints weren't confirmed to serve the aliased model, so no rewrite map must be set")
 	assert.Nil(t, aliasMapRaw)
 }
@@ -364,7 +364,7 @@ func TestResolveAliasEndpoints_SelfReferencingAlias(t *testing.T) {
 	assert.Len(t, result, 2)
 
 	// Verify rewrite map: ollama gets gpt-oss:120b, lmstudio gets gpt-oss-120b (its native name)
-	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.ContextModelAliasMapKey)
+	aliasMapRaw, ok := profile.InspectionMeta.Load(constants.InspectionMetaModelAliasMapKey)
 	require.True(t, ok)
 
 	aliasMap := aliasMapRaw.(map[string]string)

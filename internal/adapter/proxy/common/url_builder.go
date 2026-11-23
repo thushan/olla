@@ -22,7 +22,7 @@ func BuildTargetURL(r *http.Request, endpoint *domain.Endpoint, proxyPrefix stri
 	targetPath := util.StripPrefix(r.URL.Path, proxyPrefix)
 	// A per-endpoint path is already the backend's own path: it carries no proxy prefix, and
 	// it replaces whatever path the request holds because that path was chosen for the fleet.
-	if paths, ok := r.Context().Value(constants.ContextEndpointPathMapKey).(map[string]string); ok {
+	if paths, ok := constants.GetEndpointPathMap(r.Context()); ok {
 		if p, ok := paths[endpoint.GetURLString()]; ok && p != "" {
 			targetPath = p
 		}

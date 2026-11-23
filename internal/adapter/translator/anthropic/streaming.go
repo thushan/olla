@@ -132,7 +132,7 @@ func (t *Translator) TransformStreamingResponse(ctx context.Context, openaiStrea
 	// vLLM and lmdeploy both emit real input_tokens in message_start rather than 0;
 	// this brings the translation path in line with that behaviour. The value is
 	// overwritten by actual upstream usage when (and if) the backend sends it.
-	if estimate, ok := ctx.Value(constants.ContextInputTokensKey).(int); ok && estimate > 0 {
+	if estimate, ok := constants.GetInputTokens(ctx); ok && estimate > 0 {
 		state.inputTokens = estimate
 	}
 

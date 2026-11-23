@@ -21,7 +21,7 @@ func TestPrepareProxyContext_InjectsAliasMapWhenPresent(t *testing.T) {
 		"http://ollama:11434":  "gpt-oss:120b",
 		"http://lmstudio:1234": "gpt-oss-120b-MLX",
 	}
-	profile.SetInspectionMeta(constants.ContextModelAliasMapKey, aliasMap)
+	profile.SetInspectionMeta(constants.InspectionMetaModelAliasMapKey, aliasMap)
 	profile.RoutingDecision = &domain.ModelRoutingDecision{
 		Strategy: "alias",
 		Action:   "routed",

@@ -2,7 +2,6 @@ package router
 
 import (
 	"cmp"
-	"context"
 	"fmt"
 	"net/http"
 	"slices"
@@ -52,7 +51,7 @@ func (r *RouteRegistry) RegisterWithMethod(route string, handler http.HandlerFun
 
 func (r *RouteRegistry) RegisterProxyRoute(route string, handler http.HandlerFunc, description string, method string) {
 	wrappedHandler := func(w http.ResponseWriter, req *http.Request) {
-		ctx := context.WithValue(req.Context(), constants.ContextRoutePrefixKey, route)
+		ctx := constants.WithRoutePrefix(req.Context(), route)
 		handler(w, req.WithContext(ctx))
 	}
 	r.registerWithMethod(route, wrappedHandler, description, method, true)

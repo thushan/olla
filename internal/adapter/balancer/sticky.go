@@ -88,10 +88,10 @@ func (s *StickySessionWrapper) DecrementConnections(endpoint *domain.Endpoint) {
 // and the backend is still routable. On a miss or dead-backend, it delegates to
 // the inner selector and pins the newly chosen backend for next time.
 func (s *StickySessionWrapper) Select(ctx context.Context, endpoints []*domain.Endpoint) (*domain.Endpoint, error) {
-	outcome, _ := ctx.Value(constants.ContextStickyOutcomeKey).(*StickyOutcome)
+	outcome, _ := constants.GetStickyOutcome(ctx)
 
-	key, _ := ctx.Value(constants.ContextStickyKeyKey).(string)
-	source, _ := ctx.Value(constants.ContextStickyKeySourceKey).(string)
+	key := constants.GetStickyKey(ctx)
+	source := constants.GetStickyKeySource(ctx)
 
 	if key == "" {
 		// No affinity key — pass through transparently.

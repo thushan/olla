@@ -93,7 +93,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	// which supersedes both the raw request and the alias map for the rest
 	// of this function - recompute the resolved-for-stats name below from
 	// this updated stats.Model, not the value captured before this point.
-	if model, ok := ctx.Value(constants.ContextModelKey).(string); ok && model != "" {
+	if model, ok := constants.GetModel(ctx); ok && model != "" {
 		proxyReq.Header.Set(constants.HeaderXModel, model)
 		stats.Model = model
 	}

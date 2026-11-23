@@ -24,6 +24,12 @@ const (
 	OllaDefaultMaxIdleConns    = 100
 	OllaDefaultMaxConnsPerHost = 50
 	OllaDefaultIdleConnTimeout = 90 * time.Second
+
+	// defaultProxyPrefix is the sentinel an unset ProxyPrefix resolves to. It
+	// borrows the route_prefix context key's spelling but is a plain string on
+	// purpose: it is compared against request paths as a never-matching default,
+	// never used as a context key (constants.ContextRoutePrefixKey is that role).
+	defaultProxyPrefix = "route_prefix"
 )
 
 type Configuration struct {
@@ -53,7 +59,7 @@ func (c *Configuration) GetProxyProfile() string {
 }
 func (c *Configuration) GetProxyPrefix() string {
 	if c.ProxyPrefix == "" {
-		return constants.ContextRoutePrefixKey
+		return defaultProxyPrefix
 	}
 	return c.ProxyPrefix
 }

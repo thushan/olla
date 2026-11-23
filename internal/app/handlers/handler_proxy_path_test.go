@@ -88,7 +88,7 @@ func TestProxyPathStripping(t *testing.T) {
 
 			// Inject the route prefix into context, mirroring what the router does
 			if tt.routePrefix != "" {
-				ctx := context.WithValue(req.Context(), constants.ContextRoutePrefixKey, tt.routePrefix)
+				ctx := constants.WithRoutePrefix(req.Context(), tt.routePrefix)
 				req = req.WithContext(ctx)
 			}
 

@@ -218,7 +218,7 @@ func (f *tagFleet) do(t *testing.T, route tagRoute, model string) *httptest.Resp
 	req := httptest.NewRequest(http.MethodPost, route.path, strings.NewReader(body))
 	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	if route.handler == "proxy" {
-		req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+		req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 		f.app.proxyHandler(w, req)
 	} else {
 		f.app.providerProxyHandler(w, req)
@@ -254,7 +254,7 @@ func TestProxyRoutes_OllamaBareNameResolvesToLatest(t *testing.T) {
 					assert.Equal(t, constants.RoutingReasonModelFound, got.decision.Reason)
 					assert.Contains(t, got.body, `"model":"`+model+`"`, "the client's spelling is forwarded untouched")
 
-					canonical, hasCanonical := got.ctx.Value(constants.ContextCanonicalModelKey).(core.CanonicalModel)
+					canonical, hasCanonical := core.GetCanonicalModel(got.ctx)
 					if spelling == "bare" {
 						require.True(t, hasCanonical, "a bare name is labelled with its native name for stats")
 						assert.Equal(t, route.bare+":latest", canonical.Native)
@@ -312,11 +312,11 @@ func TestProxyRoutes_OllamaBareName_StickyKeyIsSpellingIndependent(t *testing.T)
 		req := httptest.NewRequest(http.MethodPost, "/olla/proxy/v1/embeddings", strings.NewReader(body))
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		req.Header.Set(constants.HeaderXOllaSessionID, "session-1")
-		req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+		req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 		w := httptest.NewRecorder()
 		fleet.app.proxyHandler(w, req)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-		key, _ := got.ctx.Value(constants.ContextStickyKeyKey).(string)
+		key := constants.GetStickyKey(got.ctx)
 		require.NotEmpty(t, key)
 		return key
 	}
@@ -336,13 +336,13 @@ func TestProxyRoutes_OllamaBareName_AliasTargetStatsUseNativeName(t *testing.T) 
 	body := `{"model":"embed","input":"hi"}`
 	req := httptest.NewRequest(http.MethodPost, "/olla/proxy/v1/embeddings", strings.NewReader(body))
 	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
-	req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+	req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 	w := httptest.NewRecorder()
 	fleet.app.proxyHandler(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Equal(t, []string{"ollama-1"}, got.endpoints)
-	aliasMap, _ := got.ctx.Value(constants.ContextModelAliasMapKey).(map[string]string)
+	aliasMap, _ := constants.GetModelAliasMap(got.ctx)
 	assert.Equal(t, tagBareEmbed, aliasMap[fleet.endpoints[0].GetURLString()], "the backend is sent the target as configured")
 	assert.Equal(t, tagBareEmbed+":latest", core.ResolvedModelName(got.ctx, fleet.endpoints[0], "embed"), "stats use the native name")
 }
@@ -418,7 +418,7 @@ func TestProxyEngines_OllamaBareName(t *testing.T) {
 					req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 					w := httptest.NewRecorder()
 					if strings.HasPrefix(path, "/olla/proxy/") {
-						req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+						req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 						fleet.app.proxyHandler(w, req)
 					} else {
 						fleet.app.providerProxyHandler(w, req)
