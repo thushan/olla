@@ -623,10 +623,8 @@ func TestModelsStatusHandler_ETagStableAndAliasAware(t *testing.T) {
 
 	seen := time.Now()
 	reg := &mockAliasModelRegistry{
-		mockStatusModelRegistry: mockStatusModelRegistry{
-			endpointModels: map[string]*domain.EndpointModels{
-				"http://localhost:11434": {Models: []*domain.ModelInfo{{Name: "llama3", LastSeen: seen}}},
-			},
+		endpointModels: map[string]*domain.EndpointModels{
+			"http://localhost:11434": {Models: []*domain.ModelInfo{{Name: "llama3", LastSeen: seen}}},
 		},
 		unified: []*domain.UnifiedModel{
 			{
