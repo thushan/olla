@@ -249,16 +249,14 @@ func TestLeastConnectionsSelector_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent selections
 	for range 20 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 10 {
 				_, err := selector.Select(ctx, endpoints)
 				if err != nil {
 					errors <- err
 				}
 			}
-		}()
+		})
 	}
 
 	// Concurrent connection tracking

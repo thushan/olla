@@ -543,16 +543,14 @@ func TestPerformanceCharacteristics(t *testing.T) {
 			errors := make(chan error, numRequests)
 
 			for range numRequests {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 					w := httptest.NewRecorder()
 					err := proxy.ProxyRequest(req.Context(), w, req, stats, rlog)
 					if err != nil {
 						errors <- err
 					}
-				}()
+				})
 			}
 
 			wg.Wait()

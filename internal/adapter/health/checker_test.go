@@ -380,14 +380,12 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	errors := make(chan error, 20)
 
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			err := checker.RunHealthCheck(ctx, false)
 			if err != nil {
 				errors <- err
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

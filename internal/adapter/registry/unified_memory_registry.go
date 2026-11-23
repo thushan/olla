@@ -148,11 +148,9 @@ func (r *UnifiedMemoryModelRegistry) RegisterModels(ctx context.Context, endpoin
 	}
 
 	// Then unify them
-	r.unifyWG.Add(1)
-	go func() {
-		defer r.unifyWG.Done()
+	r.unifyWG.Go(func() {
 		r.unifyModelsAsync(ctx, endpointURL, models)
-	}()
+	})
 
 	return nil
 }

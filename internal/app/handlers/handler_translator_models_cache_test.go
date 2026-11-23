@@ -143,9 +143,7 @@ func TestAnthropicModelsCache_ConcurrentSafety(t *testing.T) {
 	}
 
 	// Simulate discovery updates while readers are running.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for i := range 5 {
 			reg.mu.Lock()
 			reg.models = append(reg.models, &domain.UnifiedModel{
@@ -154,7 +152,7 @@ func TestAnthropicModelsCache_ConcurrentSafety(t *testing.T) {
 			})
 			reg.mu.Unlock()
 		}
-	}()
+	})
 
 	wg.Wait()
 }

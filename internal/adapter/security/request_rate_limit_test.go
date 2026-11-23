@@ -767,13 +767,11 @@ func TestRateLimitValidator_Validate_ConcurrentGlobalRejectionKeepsPerIPToken(t 
 
 	var wg sync.WaitGroup
 	for range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 300 {
 				_, _ = v.Validate(context.Background(), ports.SecurityRequest{ClientID: "a"})
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -803,13 +801,11 @@ func TestRateLimitValidator_Validate_ConcurrentRejectionsKeepGlobalTokens(t *tes
 
 	var wg sync.WaitGroup
 	for i := range 32 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 300 {
 				_, _ = v.Validate(context.Background(), ports.SecurityRequest{ClientID: fmt.Sprintf("c%d", i)})
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

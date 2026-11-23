@@ -106,12 +106,10 @@ func TestDefaultUnifier_ConcurrentReadersDuringMerge(t *testing.T) {
 
 					var done atomic.Bool
 					var wg sync.WaitGroup
-					wg.Add(1)
-					go func() {
-						defer wg.Done()
+					wg.Go(func() {
 						defer done.Store(true)
 						scenario(ctx, u)
-					}()
+					})
 					for !done.Load() {
 						read(ctx, u)
 					}
@@ -242,15 +240,13 @@ func TestUnifiers_ClearDuringUse(t *testing.T) {
 			var stop atomic.Bool
 			var wg sync.WaitGroup
 			for range 4 {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					for !stop.Load() {
 						_, _ = u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
 						_, _ = u.ResolveAlias(ctx, "llama3:8b")
 						_ = u.GetStats()
 					}
-				}()
+				})
 			}
 			for range raceIterations {
 				require.NoError(t, u.Clear(ctx))

@@ -265,12 +265,10 @@ func TestCollector_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent connection tracking
 	for range numGoroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			collector.RecordConnection(endpoint, 1)
 			collector.RecordConnection(endpoint, -1)
-		}()
+		})
 	}
 
 	// Concurrent security violations
@@ -514,13 +512,11 @@ func TestRecordRateLimitedIP_ConcurrentRace(t *testing.T) {
 	}
 	// Concurrent readers.
 	for range 4 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range iters {
 				_ = collector.GetSecurityStats()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

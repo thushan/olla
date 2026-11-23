@@ -94,13 +94,11 @@ func TestServiceManager_StopServices_ConcurrentRegister(t *testing.T) {
 
 	// Concurrently stop the initial batch while registering a second batch -
 	// stopServices' map read and Register's map write must not race.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := sm.stopServices(context.Background(), initial); err != nil {
 			t.Errorf("stopServices failed: %v", err)
 		}
-	}()
+	})
 
 	for i := range n {
 		wg.Add(1)
@@ -135,13 +133,11 @@ func TestServiceManager_Start_ConcurrentRegister(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err := sm.Start(context.Background()); err != nil {
 			t.Errorf("Start failed: %v", err)
 		}
-	}()
+	})
 
 	for i := range n {
 		wg.Add(1)

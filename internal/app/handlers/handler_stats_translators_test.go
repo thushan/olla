@@ -510,9 +510,7 @@ func TestTranslatorStatsHandler_Concurrent(t *testing.T) {
 	results := make(chan int, numRequests)
 
 	for range numRequests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			req := httptest.NewRequest(http.MethodGet, "/internal/stats/translators", nil)
 			w := httptest.NewRecorder()
@@ -542,7 +540,7 @@ func TestTranslatorStatsHandler_Concurrent(t *testing.T) {
 			}
 
 			results <- w.Code
-		}()
+		})
 	}
 
 	wg.Wait()

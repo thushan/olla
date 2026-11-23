@@ -260,9 +260,7 @@ func TestEndpointsStatusHandler_Concurrent(t *testing.T) {
 	results := make(chan int, numRequests)
 
 	for range numRequests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			req := httptest.NewRequest(http.MethodGet, "/internal/status/endpoints", nil)
 			w := httptest.NewRecorder()
@@ -292,7 +290,7 @@ func TestEndpointsStatusHandler_Concurrent(t *testing.T) {
 			}
 
 			results <- w.Code
-		}()
+		})
 	}
 
 	wg.Wait()
