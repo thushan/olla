@@ -130,14 +130,14 @@ func TestModelRoutingIntegration(t *testing.T) {
 	// Test cases
 	tests := []struct {
 		name           string
-		requestBody    map[string]interface{}
+		requestBody    map[string]any
 		expectedStatus int
 		setupSelector  func() *mockEndpointSelector
 		description    string
 	}{
 		{
 			name: "Route to healthy endpoint with model",
-			requestBody: map[string]interface{}{
+			requestBody: map[string]any{
 				"model":  "llama3:8b",
 				"prompt": "Hello",
 			},
@@ -157,7 +157,7 @@ func TestModelRoutingIntegration(t *testing.T) {
 		},
 		{
 			name: "Model only on unhealthy endpoint",
-			requestBody: map[string]interface{}{
+			requestBody: map[string]any{
 				"model":  "mistral:7b",
 				"prompt": "Hello",
 			},
@@ -177,7 +177,7 @@ func TestModelRoutingIntegration(t *testing.T) {
 		},
 		{
 			name: "Non-existent model",
-			requestBody: map[string]interface{}{
+			requestBody: map[string]any{
 				"model":  "gpt-4",
 				"prompt": "Hello",
 			},
@@ -197,7 +197,7 @@ func TestModelRoutingIntegration(t *testing.T) {
 		},
 		{
 			name: "Request without model field",
-			requestBody: map[string]interface{}{
+			requestBody: map[string]any{
 				"prompt": "Hello",
 			},
 			expectedStatus: http.StatusOK,
@@ -232,7 +232,7 @@ func TestModelRoutingIntegration(t *testing.T) {
 			// Simple handler that simulates the model routing logic
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Read and parse request body
-				var requestData map[string]interface{}
+				var requestData map[string]any
 				if r.Body != nil {
 					decoder := json.NewDecoder(r.Body)
 					decoder.Decode(&requestData)

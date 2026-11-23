@@ -58,7 +58,7 @@ func (c *UnifiedConverter) GetFormatName() string {
 	return "unified"
 }
 
-func (c *UnifiedConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *UnifiedConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]UnifiedModelData, 0, len(filtered))

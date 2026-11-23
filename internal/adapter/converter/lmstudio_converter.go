@@ -40,7 +40,7 @@ func (c *LMStudioConverter) GetFormatName() string {
 	return constants.ProviderPrefixLMStudio1
 }
 
-func (c *LMStudioConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *LMStudioConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]LMStudioModelData, 0, len(filtered))

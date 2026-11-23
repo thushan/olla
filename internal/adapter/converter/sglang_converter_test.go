@@ -137,7 +137,7 @@ func TestSGLangConverter_ConvertToFormat_ModelWithMetadata(t *testing.T) {
 
 	model := &domain.UnifiedModel{
 		ID: "test-model-with-metadata",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"radix_cache_size":     int64(2097152),
 			"speculative_decoding": true,
 			"frontend_enabled":     true,

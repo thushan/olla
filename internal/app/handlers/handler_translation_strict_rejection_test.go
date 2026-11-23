@@ -73,10 +73,10 @@ func TestTranslationHandler_StrictRejection_DecisionAwareStatusAndHeaders(t *tes
 
 	// Anthropic-shaped JSON error body must be preserved - the route must never
 	// fall back to the plain-text writeNoRoutableEndpoints format.
-	var errResp map[string]interface{}
+	var errResp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errResp))
 	assert.Equal(t, "error", errResp["type"])
-	errObj, ok := errResp["error"].(map[string]interface{})
+	errObj, ok := errResp["error"].(map[string]any)
 	require.True(t, ok, "response must carry an Anthropic-shaped error object")
 	assert.Equal(t, "not_found_error", errObj["type"], "404 must map to Anthropic's not_found_error type")
 }
@@ -130,9 +130,9 @@ func TestTranslationHandler_StrictRejection_ModelUnavailableMaps503(t *testing.T
 	assert.Equal(t, "rejected", w.Header().Get(constants.HeaderXOllaRoutingDecision))
 	assert.Equal(t, "model_unavailable", w.Header().Get(constants.HeaderXOllaRoutingReason))
 
-	var errResp map[string]interface{}
+	var errResp map[string]any
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errResp))
-	errObj, ok := errResp["error"].(map[string]interface{})
+	errObj, ok := errResp["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "api_error", errObj["type"], "503 falls back to the generic api_error type per the Anthropic taxonomy")
 }

@@ -149,7 +149,7 @@ func TestBaseConverter_FindProviderEndpoint(t *testing.T) {
 func TestBaseConverter_ExtractMetadata(t *testing.T) {
 	base := NewBaseConverter("test")
 
-	metadata := map[string]interface{}{
+	metadata := map[string]any{
 		"string_val": "test",
 		"int_val":    42,
 		"float_val":  42.5,
@@ -204,7 +204,7 @@ func TestConversionHelper(t *testing.T) {
 			},
 			DiskSize: 35000000000, // Different from endpoint
 			LastSeen: now,
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"digest": "sha256:abc123",
 				"type":   "chat",
 			},
@@ -275,7 +275,7 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 		{
 			name: "from metadata type",
 			model: &domain.UnifiedModel{
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"type": "chat",
 				},
 			},
@@ -331,7 +331,7 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 		{
 			name: "metadata takes precedence over capabilities",
 			model: &domain.UnifiedModel{
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"type": "custom",
 				},
 				Capabilities: []string{"vision"},
@@ -342,7 +342,7 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 		{
 			name: "specific model_type beats the generic model marker",
 			model: &domain.UnifiedModel{
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"type":       "model",
 					"model_type": "embeddings",
 				},
@@ -353,7 +353,7 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 		{
 			name: "generic model marker alone falls through to capabilities",
 			model: &domain.UnifiedModel{
-				Metadata:     map[string]interface{}{"type": "model"},
+				Metadata:     map[string]any{"type": "model"},
 				Capabilities: []string{"vision", "chat"},
 			},
 			defaultType: "llm",
@@ -362,7 +362,7 @@ func TestBaseConverter_DetermineModelType(t *testing.T) {
 		{
 			name: "reranker kind is reported as itself",
 			model: &domain.UnifiedModel{
-				Metadata: map[string]interface{}{"type": "reranker", "model_type": "reranker"},
+				Metadata: map[string]any{"type": "reranker", "model_type": "reranker"},
 			},
 			defaultType: "llm",
 			want:        "reranker",

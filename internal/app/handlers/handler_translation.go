@@ -677,13 +677,13 @@ func (a *Application) executeTranslatedNonStreamingRequest(
 		// Opportunistic parse: pass the map if the body is valid JSON so the
 		// error formatter can extract a message; pass nil otherwise and let
 		// extractAndLogBackendError fall back to its generic message.
-		var openaiErrResp map[string]interface{}
+		var openaiErrResp map[string]any
 		_ = json.Unmarshal(recorder.body.Bytes(), &openaiErrResp)
 		return a.handleNonStreamingBackendError(w, r, recorder, openaiErrResp, pr, trans)
 	}
 
 	// Success path: strict parse - a malformed 200 body is a gateway error.
-	var openaiResp map[string]interface{}
+	var openaiResp map[string]any
 	if jerr := json.Unmarshal(recorder.body.Bytes(), &openaiResp); jerr != nil {
 		return fmt.Errorf("failed to parse OpenAI response: %w", jerr)
 	}
@@ -732,7 +732,7 @@ func (a *Application) handleNonStreamingBackendError(
 	w http.ResponseWriter,
 	r *http.Request,
 	recorder *responseRecorder,
-	openaiResp map[string]interface{},
+	openaiResp map[string]any,
 	pr *proxyRequest,
 	trans translator.RequestTranslator,
 ) error {
@@ -764,7 +764,7 @@ func (a *Application) handleNonStreamingBackendError(
 
 // extractAndLogBackendError extracts error details from OpenAI response and logs them
 func (a *Application) extractAndLogBackendError(
-	openaiResp map[string]interface{},
+	openaiResp map[string]any,
 	statusCode int,
 	pr *proxyRequest,
 	trans translator.RequestTranslator,
@@ -772,7 +772,7 @@ func (a *Application) extractAndLogBackendError(
 	errorMsg := "Backend error"
 	var errorType, errorParam, errorCode string
 
-	errObj, ok := openaiResp["error"].(map[string]interface{})
+	errObj, ok := openaiResp["error"].(map[string]any)
 	if !ok {
 		pr.requestLogger.Info("Translating backend error response",
 			"status_code", statusCode,
@@ -813,7 +813,7 @@ func (a *Application) writeTranslatedSuccessResponse(
 	ctx context.Context,
 	r *http.Request,
 	recorder *responseRecorder,
-	openaiResp map[string]interface{},
+	openaiResp map[string]any,
 	trans translator.RequestTranslator,
 ) error {
 	// Transform successful OpenAI response back to target format
@@ -922,9 +922,9 @@ func (a *Application) writeStreamingNoEndpointsError(
 	// fallback to generic error
 	w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	w.WriteHeader(http.StatusServiceUnavailable)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"type": "error",
-		"error": map[string]interface{}{
+		"error": map[string]any{
 			"type":    "api_error",
 			"message": "No healthy endpoints available",
 		},
@@ -1066,9 +1066,9 @@ func (a *Application) handleStreamingBackendError(
 func (a *Application) parseStreamingErrorMessage(errorBody []byte) string {
 	errorMsg := "Backend error"
 
-	var openaiResp map[string]interface{}
+	var openaiResp map[string]any
 	if err := json.Unmarshal(errorBody, &openaiResp); err == nil {
-		if errObj, ok := openaiResp["error"].(map[string]interface{}); ok {
+		if errObj, ok := openaiResp["error"].(map[string]any); ok {
 			if msg, ok := errObj["message"].(string); ok && msg != "" {
 				errorMsg = msg
 			}
@@ -1081,9 +1081,9 @@ func (a *Application) parseStreamingErrorMessage(errorBody []byte) string {
 // writeGenericStreamingError writes a generic streaming error response
 func (a *Application) writeGenericStreamingError(w http.ResponseWriter, statusCode int) {
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"type": "error",
-		"error": map[string]interface{}{
+		"error": map[string]any{
 			"type":    "api_error",
 			"message": "Backend returned an error",
 		},
@@ -1162,8 +1162,8 @@ func (a *Application) respondTranslatorError(
 	}
 
 	// fallback to generic json
-	errorResp := map[string]interface{}{
-		"error": map[string]interface{}{
+	errorResp := map[string]any{
+		"error": map[string]any{
 			"message": err.Error(),
 			"type":    "translation_error",
 		},

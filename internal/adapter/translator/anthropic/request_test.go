@@ -52,7 +52,7 @@ func TestTransformRequest_SimpleMessage(t *testing.T) {
 	assert.Equal(t, 1024, openaiReq["max_tokens"])
 	assert.Equal(t, false, openaiReq["stream"])
 
-	messages, ok := openaiReq["messages"].([]map[string]interface{})
+	messages, ok := openaiReq["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 	assert.Equal(t, "user", messages[0]["role"])
@@ -84,7 +84,7 @@ func TestTransformRequest_WithSystemPrompt(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
 
@@ -113,10 +113,10 @@ func TestTransformRequest_WithTools(t *testing.T) {
 			{
 				Name:        "get_weather",
 				Description: "Get weather information",
-				InputSchema: map[string]interface{}{
+				InputSchema: map[string]any{
 					"type": "object",
-					"properties": map[string]interface{}{
-						"location": map[string]interface{}{
+					"properties": map[string]any{
+						"location": map[string]any{
 							"type":        "string",
 							"description": "City name",
 						},
@@ -138,17 +138,17 @@ func TestTransformRequest_WithTools(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	tools, ok := result.OpenAIRequest["tools"].([]map[string]interface{})
+	tools, ok := result.OpenAIRequest["tools"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, tools, 1)
 
 	assert.Equal(t, "function", tools[0]["type"])
-	function, ok := tools[0]["function"].(map[string]interface{})
+	function, ok := tools[0]["function"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "get_weather", function["name"])
 	assert.Equal(t, "Get weather information", function["description"])
 
-	parameters, ok := function["parameters"].(map[string]interface{})
+	parameters, ok := function["parameters"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "object", parameters["type"])
 
@@ -172,17 +172,17 @@ func TestTransformRequest_MultipleTools(t *testing.T) {
 			{
 				Name:        "get_weather",
 				Description: "Get weather information",
-				InputSchema: map[string]interface{}{
+				InputSchema: map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 				},
 			},
 			{
 				Name:        "get_time",
 				Description: "Get current time",
-				InputSchema: map[string]interface{}{
+				InputSchema: map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 				},
 			},
 		},
@@ -198,16 +198,16 @@ func TestTransformRequest_MultipleTools(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	tools, ok := result.OpenAIRequest["tools"].([]map[string]interface{})
+	tools, ok := result.OpenAIRequest["tools"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, tools, 2)
 
 	assert.Equal(t, "function", tools[0]["type"])
-	function0 := tools[0]["function"].(map[string]interface{})
+	function0 := tools[0]["function"].(map[string]any)
 	assert.Equal(t, "get_weather", function0["name"])
 
 	assert.Equal(t, "function", tools[1]["type"])
-	function1 := tools[1]["function"].(map[string]interface{})
+	function1 := tools[1]["function"].(map[string]any)
 	assert.Equal(t, "get_time", function1["name"])
 }
 
@@ -216,8 +216,8 @@ func TestConvertToolChoice(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		anthropicChoice interface{}
-		expectedChoice  interface{}
+		anthropicChoice any
+		expectedChoice  any
 		description     string
 	}{
 		{
@@ -240,25 +240,25 @@ func TestConvertToolChoice(t *testing.T) {
 		},
 		{
 			name:            "object_auto",
-			anthropicChoice: map[string]interface{}{"type": "auto"},
+			anthropicChoice: map[string]any{"type": "auto"},
 			expectedChoice:  "auto",
 			description:     "object form with auto",
 		},
 		{
 			name:            "object_any",
-			anthropicChoice: map[string]interface{}{"type": "any"},
+			anthropicChoice: map[string]any{"type": "any"},
 			expectedChoice:  "required",
 			description:     "object form with any",
 		},
 		{
 			name: "object_tool",
-			anthropicChoice: map[string]interface{}{
+			anthropicChoice: map[string]any{
 				"type": "tool",
 				"name": "get_weather",
 			},
-			expectedChoice: map[string]interface{}{
+			expectedChoice: map[string]any{
 				"type": "function",
-				"function": map[string]interface{}{
+				"function": map[string]any{
 					"name": "get_weather",
 				},
 			},
@@ -285,7 +285,7 @@ func TestConvertToolChoice_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("object_tool_without_name_errors", func(t *testing.T) {
-		_, err := translator.convertToolChoice(map[string]interface{}{
+		_, err := translator.convertToolChoice(map[string]any{
 			"type": "tool",
 			// missing name
 		})
@@ -294,7 +294,7 @@ func TestConvertToolChoice_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("unknown_object_type_defaults_to_auto", func(t *testing.T) {
-		result, err := translator.convertToolChoice(map[string]interface{}{
+		result, err := translator.convertToolChoice(map[string]any{
 			"type": "unknown",
 		})
 		require.NoError(t, err)
@@ -323,16 +323,16 @@ func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 			// Assistant responds with tool use
 			{
 				Role: "assistant",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type": "text",
 						"text": "Let me check that for you.",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "tool_use",
 						"id":   "toolu_123",
 						"name": "get_weather",
-						"input": map[string]interface{}{
+						"input": map[string]any{
 							"location": "San Francisco",
 							"unit":     "celsius",
 						},
@@ -342,8 +342,8 @@ func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 			// User provides tool result
 			{
 				Role: "user",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": "toolu_123",
 						"content":     "Temperature is 18°C, partly cloudy",
@@ -363,7 +363,7 @@ func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 3) // user, assistant, tool
 
@@ -375,19 +375,19 @@ func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 	assert.Equal(t, "assistant", messages[1]["role"])
 	assert.Equal(t, "Let me check that for you.", messages[1]["content"])
 
-	toolCalls, ok := messages[1]["tool_calls"].([]map[string]interface{})
+	toolCalls, ok := messages[1]["tool_calls"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, toolCalls, 1)
 
 	assert.Equal(t, "toolu_123", toolCalls[0]["id"])
 	assert.Equal(t, "function", toolCalls[0]["type"])
 
-	function, ok := toolCalls[0]["function"].(map[string]interface{})
+	function, ok := toolCalls[0]["function"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "get_weather", function["name"])
 
 	// Parse arguments JSON string
-	var args map[string]interface{}
+	var args map[string]any
 	err = json.Unmarshal([]byte(function["arguments"].(string)), &args)
 	require.NoError(t, err)
 	assert.Equal(t, "San Francisco", args["location"])
@@ -408,12 +408,12 @@ func TestTransformRequest_ComplexContent(t *testing.T) {
 		Messages: []AnthropicMessage{
 			{
 				Role: "user",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type": "text",
 						"text": "First part ",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "text",
 						"text": "second part",
 					},
@@ -432,7 +432,7 @@ func TestTransformRequest_ComplexContent(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
@@ -474,7 +474,7 @@ func TestTransformRequest_MultipleMessages(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 4)
 
@@ -516,7 +516,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 		result, err := translator.TransformRequest(context.Background(), req)
 		require.NoError(t, err)
 
-		messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+		messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 		require.True(t, ok)
 		assert.Empty(t, messages) // empty content gets filtered
 	})
@@ -528,8 +528,8 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 			Messages: []AnthropicMessage{
 				{
 					Role: "user",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type": "text",
 							"text": "",
 						},
@@ -548,7 +548,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 		result, err := translator.TransformRequest(context.Background(), req)
 		require.NoError(t, err)
 
-		messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+		messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 		require.True(t, ok)
 		assert.Empty(t, messages) // empty blocks get filtered
 	})
@@ -629,12 +629,12 @@ func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 		Messages: []AnthropicMessage{
 			{
 				Role: "assistant",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type": "tool_use",
 						"id":   "toolu_456",
 						"name": "search",
-						"input": map[string]interface{}{
+						"input": map[string]any{
 							"query": "golang best practices",
 						},
 					},
@@ -653,7 +653,7 @@ func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
@@ -661,7 +661,7 @@ func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 	assert.Equal(t, "assistant", messages[0]["role"])
 	assert.Nil(t, messages[0]["content"])
 
-	toolCalls, ok := messages[0]["tool_calls"].([]map[string]interface{})
+	toolCalls, ok := messages[0]["tool_calls"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, toolCalls, 1)
 	assert.Equal(t, "toolu_456", toolCalls[0]["id"])
@@ -676,8 +676,8 @@ func TestTransformRequest_UserWithOnlyToolResults(t *testing.T) {
 		Messages: []AnthropicMessage{
 			{
 				Role: "user",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": "toolu_789",
 						"content":     "Result data here",
@@ -697,7 +697,7 @@ func TestTransformRequest_UserWithOnlyToolResults(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
@@ -716,11 +716,11 @@ func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 		Messages: []AnthropicMessage{
 			{
 				Role: "user",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": "toolu_struct",
-						"content": map[string]interface{}{
+						"content": map[string]any{
 							"temperature": 18,
 							"conditions":  "partly cloudy",
 						},
@@ -740,7 +740,7 @@ func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
@@ -751,7 +751,7 @@ func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 	contentStr, ok := messages[0]["content"].(string)
 	require.True(t, ok)
 
-	var parsedContent map[string]interface{}
+	var parsedContent map[string]any
 	err = json.Unmarshal([]byte(contentStr), &parsedContent)
 	require.NoError(t, err)
 	assert.Equal(t, float64(18), parsedContent["temperature"]) // JSON numbers are float64
@@ -767,24 +767,24 @@ func TestTransformRequest_MultipleToolCalls(t *testing.T) {
 		Messages: []AnthropicMessage{
 			{
 				Role: "assistant",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type": "text",
 						"text": "Let me gather that information.",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "tool_use",
 						"id":   "tool_1",
 						"name": "get_weather",
-						"input": map[string]interface{}{
+						"input": map[string]any{
 							"location": "NYC",
 						},
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "tool_use",
 						"id":   "tool_2",
 						"name": "get_time",
-						"input": map[string]interface{}{
+						"input": map[string]any{
 							"timezone": "EST",
 						},
 					},
@@ -803,23 +803,23 @@ func TestTransformRequest_MultipleToolCalls(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 1)
 
 	assert.Equal(t, "assistant", messages[0]["role"])
 	assert.Equal(t, "Let me gather that information.", messages[0]["content"])
 
-	toolCalls, ok := messages[0]["tool_calls"].([]map[string]interface{})
+	toolCalls, ok := messages[0]["tool_calls"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, toolCalls, 2)
 
 	assert.Equal(t, "tool_1", toolCalls[0]["id"])
-	func0 := toolCalls[0]["function"].(map[string]interface{})
+	func0 := toolCalls[0]["function"].(map[string]any)
 	assert.Equal(t, "get_weather", func0["name"])
 
 	assert.Equal(t, "tool_2", toolCalls[1]["id"])
-	func1 := toolCalls[1]["function"].(map[string]interface{})
+	func1 := toolCalls[1]["function"].(map[string]any)
 	assert.Equal(t, "get_time", func1["name"])
 }
 
@@ -827,27 +827,27 @@ func TestConvertToolUse_InvalidData(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
 
 	t.Run("missing_id", func(t *testing.T) {
-		block := map[string]interface{}{
+		block := map[string]any{
 			"type":  "tool_use",
 			"name":  "get_weather",
-			"input": map[string]interface{}{},
+			"input": map[string]any{},
 		}
 		result := translator.convertToolUse(block)
 		assert.Nil(t, result)
 	})
 
 	t.Run("missing_name", func(t *testing.T) {
-		block := map[string]interface{}{
+		block := map[string]any{
 			"type":  "tool_use",
 			"id":    "tool_123",
-			"input": map[string]interface{}{},
+			"input": map[string]any{},
 		}
 		result := translator.convertToolUse(block)
 		assert.Nil(t, result)
 	})
 
 	t.Run("nil_input", func(t *testing.T) {
-		block := map[string]interface{}{
+		block := map[string]any{
 			"type": "tool_use",
 			"id":   "tool_123",
 			"name": "get_weather",
@@ -855,7 +855,7 @@ func TestConvertToolUse_InvalidData(t *testing.T) {
 		}
 		result := translator.convertToolUse(block)
 		require.NotNil(t, result)
-		function := result["function"].(map[string]interface{})
+		function := result["function"].(map[string]any)
 		assert.Equal(t, "null", function["arguments"])
 	})
 }
@@ -897,13 +897,13 @@ func TestTransformRequest_ToolChoiceObjectForm(t *testing.T) {
 			{
 				Name:        "get_weather",
 				Description: "Get weather",
-				InputSchema: map[string]interface{}{
+				InputSchema: map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 				},
 			},
 		},
-		ToolChoice: map[string]interface{}{
+		ToolChoice: map[string]any{
 			"type": "tool",
 			"name": "get_weather",
 		},
@@ -919,11 +919,11 @@ func TestTransformRequest_ToolChoiceObjectForm(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	toolChoice, ok := result.OpenAIRequest["tool_choice"].(map[string]interface{})
+	toolChoice, ok := result.OpenAIRequest["tool_choice"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "function", toolChoice["type"])
 
-	function, ok := toolChoice["function"].(map[string]interface{})
+	function, ok := toolChoice["function"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "get_weather", function["name"])
 }
@@ -937,12 +937,12 @@ func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
 		Messages: []AnthropicMessage{
 			{
 				Role: "user",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type": "text",
 						"text": "Here's the result:",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": "tool_mixed",
 						"content":     "Data from tool",
@@ -962,7 +962,7 @@ func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
 
@@ -991,12 +991,12 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	})
 
 	t.Run("interface_array_format", func(t *testing.T) {
-		systemBlocks := []interface{}{
-			map[string]interface{}{
+		systemBlocks := []any{
+			map[string]any{
 				"type": "text",
 				"text": "First part. ",
 			},
-			map[string]interface{}{
+			map[string]any{
 				"type": "text",
 				"text": "Second part.",
 			},
@@ -1006,8 +1006,8 @@ func TestConvertSystemPrompt_AllFormats(t *testing.T) {
 	})
 
 	t.Run("interface_array_with_empty_blocks", func(t *testing.T) {
-		systemBlocks := []interface{}{
-			map[string]interface{}{
+		systemBlocks := []any{
+			map[string]any{
 				"type": "text",
 				"text": "",
 			},
@@ -1078,12 +1078,12 @@ func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type": "text",
 				"text": "You are a helpful ",
 			},
-			map[string]interface{}{
+			map[string]any{
 				"type": "text",
 				"text": "AI assistant.",
 			},
@@ -1106,7 +1106,7 @@ func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
 
@@ -1170,12 +1170,12 @@ func TestConvertUserMessage_ToolResultPrecedesText(t *testing.T) {
 		Messages: []AnthropicMessage{
 			{
 				Role: "assistant",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type": "tool_use",
 						"id":   "toolu_agentic",
 						"name": "bash",
-						"input": map[string]interface{}{
+						"input": map[string]any{
 							"command": "ls",
 						},
 					},
@@ -1184,13 +1184,13 @@ func TestConvertUserMessage_ToolResultPrecedesText(t *testing.T) {
 			{
 				// Claude Code sends [tool_result, text] on virtually every agentic turn.
 				Role: "user",
-				Content: []interface{}{
-					map[string]interface{}{
+				Content: []any{
+					map[string]any{
 						"type":        "tool_result",
 						"tool_use_id": "toolu_agentic",
 						"content":     "file1.go file2.go",
 					},
-					map[string]interface{}{
+					map[string]any{
 						"type": "text",
 						"text": "That worked great.",
 					},
@@ -1209,7 +1209,7 @@ func TestConvertUserMessage_ToolResultPrecedesText(t *testing.T) {
 	result, err := tr.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	// assistant(tool_calls), tool(result), user(text)
 	require.Len(t, messages, 3)
@@ -1235,18 +1235,18 @@ func TestConvertUserMessage_MultipleToolResultsPrecedeText(t *testing.T) {
 	msgs := []AnthropicMessage{
 		{
 			Role: "user",
-			Content: []interface{}{
-				map[string]interface{}{
+			Content: []any{
+				map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": "tool_r1",
 					"content":     "result one",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": "tool_r2",
 					"content":     "result two",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "text",
 					"text": "Here is what I got.",
 				},
@@ -1298,8 +1298,8 @@ func TestConvertUserMessage_IsError_True(t *testing.T) {
 	msgs := []AnthropicMessage{
 		{
 			Role: "user",
-			Content: []interface{}{
-				map[string]interface{}{
+			Content: []any{
+				map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": "toolu_err",
 					"content":     "file not found",
@@ -1330,8 +1330,8 @@ func TestConvertUserMessage_IsError_AlreadyPrefixed(t *testing.T) {
 	msgs := []AnthropicMessage{
 		{
 			Role: "user",
-			Content: []interface{}{
-				map[string]interface{}{
+			Content: []any{
+				map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": "toolu_dup",
 					"content":     "Error: already prefixed message",
@@ -1359,8 +1359,8 @@ func TestConvertUserMessage_IsError_False(t *testing.T) {
 	msgs := []AnthropicMessage{
 		{
 			Role: "user",
-			Content: []interface{}{
-				map[string]interface{}{
+			Content: []any{
+				map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": "toolu_ok",
 					"content":     "result data",
@@ -1388,8 +1388,8 @@ func TestConvertUserMessage_IsError_Absent(t *testing.T) {
 	msgs := []AnthropicMessage{
 		{
 			Role: "user",
-			Content: []interface{}{
-				map[string]interface{}{
+			Content: []any{
+				map[string]any{
 					"type":        "tool_result",
 					"tool_use_id": "toolu_absent",
 					"content":     "normal result",

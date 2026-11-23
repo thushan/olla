@@ -151,8 +151,8 @@ func (l *ProfileLoader) applyProfileFilter(allProfiles map[string]domain.Inferen
 }
 
 // convertProfilesToMap converts typed profile map to generic map for filtering
-func convertProfilesToMap(profiles map[string]domain.InferenceProfile) map[string]interface{} {
-	result := make(map[string]interface{}, len(profiles))
+func convertProfilesToMap(profiles map[string]domain.InferenceProfile) map[string]any {
+	result := make(map[string]any, len(profiles))
 	for name, profile := range profiles {
 		result[name] = profile
 	}

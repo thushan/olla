@@ -120,7 +120,7 @@ func countToolDefinitionChars(tool *AnthropicTool) int {
 
 // system prompt char counting
 // handles string and content block formats
-func countSystemChars(system interface{}) int {
+func countSystemChars(system any) int {
 	totalChars := 0
 
 	_ = forEachSystemBlock(system, func(block ContentBlock) error {
@@ -140,7 +140,7 @@ func countSystemChars(system interface{}) int {
 // forEachSystemBlock iterates over system prompt content blocks regardless of input format.
 // This is a standalone version of the iterator that doesn't require a Translator instance.
 // Handles: string, []ContentBlock, *[]ContentBlock, []interface{}
-func forEachSystemBlock(system interface{}, fn func(block ContentBlock) error) error {
+func forEachSystemBlock(system any, fn func(block ContentBlock) error) error {
 	if system == nil {
 		return nil
 	}
@@ -175,7 +175,7 @@ func forEachSystemBlock(system interface{}, fn func(block ContentBlock) error) e
 		return nil
 	}
 
-	if systemBlocks, ok := system.([]interface{}); ok {
+	if systemBlocks, ok := system.([]any); ok {
 		for _, block := range systemBlocks {
 			if normalised, nok := normaliseContentBlock(block); nok {
 				if err := fn(*normalised); err != nil {
@@ -199,7 +199,7 @@ func countMessageChars(msg *AnthropicMessage) int {
 		// plain string content
 		totalChars += len(content)
 
-	case []interface{}:
+	case []any:
 		// untyped block arrays - normalise then count
 		for _, block := range content {
 			if normalised, ok := normaliseContentBlock(block); ok {
@@ -220,7 +220,7 @@ func countMessageChars(msg *AnthropicMessage) int {
 // normaliseContentBlock converts various content block representations to a typed ContentBlock.
 // This centralises the type conversion logic so character counting can work with a single type.
 // Returns the normalised block and true on success, or an empty block and false on failure.
-func normaliseContentBlock(block interface{}) (*ContentBlock, bool) {
+func normaliseContentBlock(block any) (*ContentBlock, bool) {
 	// already a typed ContentBlock pointer, return as-is
 	if typedBlock, ok := block.(*ContentBlock); ok {
 		return typedBlock, true
@@ -232,7 +232,7 @@ func normaliseContentBlock(block interface{}) (*ContentBlock, bool) {
 	}
 
 	// untyped map needs conversion to ContentBlock
-	blockMap, ok := block.(map[string]interface{})
+	blockMap, ok := block.(map[string]any)
 	if !ok {
 		return nil, false
 	}
@@ -251,7 +251,7 @@ func normaliseContentBlock(block interface{}) (*ContentBlock, bool) {
 
 	// extract input field for tool_use blocks
 	if input, exists := blockMap["input"]; exists {
-		if inputMap, iok := input.(map[string]interface{}); iok {
+		if inputMap, iok := input.(map[string]any); iok {
 			normalised.Input = inputMap
 		}
 	}
@@ -260,7 +260,7 @@ func normaliseContentBlock(block interface{}) (*ContentBlock, bool) {
 }
 
 // extractString safely extracts a string value from a map, returning empty string if not found or wrong type
-func extractString(m map[string]interface{}, key string) string {
+func extractString(m map[string]any, key string) string {
 	if val, ok := m[key].(string); ok {
 		return val
 	}
@@ -299,7 +299,7 @@ func countContentBlockChars(block *ContentBlock) int {
 
 // countToolResultContent handles the various content formats in tool_result blocks.
 // Content can be a string, []interface{}, []ContentBlock, or *[]ContentBlock.
-func countToolResultContent(content interface{}) int {
+func countToolResultContent(content any) int {
 	if content == nil {
 		return 0
 	}
@@ -309,7 +309,7 @@ func countToolResultContent(content interface{}) int {
 	}
 
 	// untyped block array
-	if contentArray, ok := content.([]interface{}); ok {
+	if contentArray, ok := content.([]any); ok {
 		totalChars := 0
 		for _, nestedBlock := range contentArray {
 			if normalized, ok := normaliseContentBlock(nestedBlock); ok {
@@ -344,7 +344,7 @@ func countToolResultContent(content interface{}) int {
 
 // countToolInput counts characters in tool input by marshalling to JSON.
 // Returns 0 if input is nil or marshalling fails.
-func countToolInput(input map[string]interface{}) int {
+func countToolInput(input map[string]any) int {
 	if input == nil {
 		return 0
 	}

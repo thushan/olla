@@ -29,7 +29,7 @@ import (
 type mockTranslator struct {
 	name                      string
 	transformRequestFunc      func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error)
-	transformResponseFunc     func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error)
+	transformResponseFunc     func(ctx context.Context, openaiResp any, original *http.Request) (any, error)
 	transformStreamingFunc    func(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error
 	writeErrorFunc            func(w http.ResponseWriter, err error, statusCode int)
 	countTokensFunc           func(ctx context.Context, r *http.Request) (*translator.TokenCountResponse, error)
@@ -50,10 +50,10 @@ func (m *mockTranslator) TransformRequest(ctx context.Context, r *http.Request) 
 		return m.transformRequestFunc(ctx, r)
 	}
 	return &translator.TransformedRequest{
-		OpenAIRequest: map[string]interface{}{
+		OpenAIRequest: map[string]any{
 			"model": "test-model",
-			"messages": []interface{}{
-				map[string]interface{}{
+			"messages": []any{
+				map[string]any{
 					"role":    "user",
 					"content": "test",
 				},
@@ -64,11 +64,11 @@ func (m *mockTranslator) TransformRequest(ctx context.Context, r *http.Request) 
 	}, nil
 }
 
-func (m *mockTranslator) TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
+func (m *mockTranslator) TransformResponse(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
 	if m.transformResponseFunc != nil {
 		return m.transformResponseFunc(ctx, openaiResp, original)
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"id":      "mock-response-id",
 		"content": "mock response",
 	}, nil
@@ -128,15 +128,15 @@ func (m *mockProxyService) ProxyRequestToEndpoints(
 	if m.proxyFunc != nil {
 		return m.proxyFunc(ctx, w, r, endpoints, stats, logger)
 	}
-	response := map[string]interface{}{
+	response := map[string]any{
 		"id":      "chatcmpl-123",
 		"object":  "chat.completion",
 		"created": 1677652288,
 		"model":   "test-model",
-		"choices": []interface{}{
-			map[string]interface{}{
+		"choices": []any{
+			map[string]any{
 				"index": 0,
-				"message": map[string]interface{}{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "Hello! How can I help you?",
 				},
@@ -217,9 +217,9 @@ func TestTranslationHandler_PlainTextBackendError(t *testing.T) {
 					}
 					w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 					w.WriteHeader(statusCode)
-					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					_ = json.NewEncoder(w).Encode(map[string]any{
 						"type": "error",
-						"error": map[string]interface{}{
+						"error": map[string]any{
 							"type":    errorType,
 							"message": err.Error(),
 						},
@@ -247,10 +247,10 @@ func TestTranslationHandler_PlainTextBackendError(t *testing.T) {
 				Config:           &config.Config{},
 			}
 
-			reqBody, _ := json.Marshal(map[string]interface{}{
+			reqBody, _ := json.Marshal(map[string]any{
 				"model":      "test-model",
 				"max_tokens": 100,
-				"messages":   []map[string]interface{}{{"role": "user", "content": "hello"}},
+				"messages":   []map[string]any{{"role": "user", "content": "hello"}},
 			})
 
 			req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -263,12 +263,12 @@ func TestTranslationHandler_PlainTextBackendError(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, rec.Code,
 				"upstream status code must be preserved, not flattened to 502")
 
-			var errBody map[string]interface{}
+			var errBody map[string]any
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errBody),
 				"error body must be valid JSON")
 			assert.Equal(t, "error", errBody["type"])
 
-			errObj, ok := errBody["error"].(map[string]interface{})
+			errObj, ok := errBody["error"].(map[string]any)
 			require.True(t, ok)
 			assert.Equal(t, tt.expectedType, errObj["type"],
 				"error type must match the expected Anthropic error type for this status")
@@ -284,7 +284,7 @@ func TestTranslationHandler_NonStreaming(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"error": err.Error(),
 			})
 		},
@@ -303,10 +303,10 @@ func TestTranslationHandler_NonStreaming(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model": "test-model",
-		"messages": []interface{}{
-			map[string]interface{}{
+		"messages": []any{
+			map[string]any{
 				"role":    "user",
 				"content": "Hello",
 			},
@@ -327,7 +327,7 @@ func TestTranslationHandler_NonStreaming(t *testing.T) {
 	assert.NotEmpty(t, rec.Header().Get(constants.HeaderXOllaEndpoint))
 
 	// Verify response was transformed
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "mock-response-id", response["id"])
@@ -342,17 +342,17 @@ func TestTranslationHandler_Streaming(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"error": err.Error(),
 			})
 		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":  "test-model",
 					"stream": true,
-					"messages": []interface{}{
-						map[string]interface{}{
+					"messages": []any{
+						map[string]any{
 							"role":    "user",
 							"content": "test",
 						},
@@ -395,11 +395,11 @@ func TestTranslationHandler_Streaming(t *testing.T) {
 
 	handler := app.translationHandler(streamingTrans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model":  "test-model",
 		"stream": true,
-		"messages": []interface{}{
-			map[string]interface{}{
+		"messages": []any{
+			map[string]any{
 				"role":    "user",
 				"content": "Hello",
 			},
@@ -430,9 +430,9 @@ func TestTranslationHandler_TransformRequestError(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"type": "error",
-				"error": map[string]interface{}{
+				"error": map[string]any{
 					"type":    "invalid_request_error",
 					"message": err.Error(),
 				},
@@ -459,7 +459,7 @@ func TestTranslationHandler_TransformRequestError(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "error", response["type"])
@@ -474,8 +474,8 @@ func TestTranslationHandler_NoHealthyEndpoints(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{
-				"error": map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": map[string]any{
 					"message": err.Error(),
 					"type":    "service_unavailable",
 				},
@@ -503,7 +503,7 @@ func TestTranslationHandler_NoHealthyEndpoints(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{"model": "test-model"}
+	reqBody := map[string]any{"model": "test-model"}
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest("POST", "/test", bytes.NewReader(body))
 
@@ -532,9 +532,9 @@ func TestTranslationHandler_HeaderPreservation(t *testing.T) {
 			w.Header().Set(constants.HeaderXOllaRoutingDecision, "selected")
 			w.Header().Set(constants.HeaderXOllaRoutingReason, "health check passed")
 
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "test-id",
-				"choices": []interface{}{},
+				"choices": []any{},
 			}
 			return json.NewEncoder(w).Encode(response)
 		},
@@ -554,7 +554,7 @@ func TestTranslationHandler_HeaderPreservation(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{"model": "test-model"}
+	reqBody := map[string]any{"model": "test-model"}
 	body, _ := json.Marshal(reqBody)
 	req := httptest.NewRequest("POST", "/test", bytes.NewReader(body))
 
@@ -583,7 +583,7 @@ func TestWriteTranslatorError_WithErrorWriter(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"custom_error": err.Error(),
 			})
 		},
@@ -603,7 +603,7 @@ func TestWriteTranslatorError_WithErrorWriter(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "test error", response["custom_error"])
@@ -630,11 +630,11 @@ func TestWriteTranslatorError_WithoutErrorWriter(t *testing.T) {
 
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 
-	var response map[string]interface{}
+	var response map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	errorObj, ok := response["error"].(map[string]interface{})
+	errorObj, ok := response["error"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "test error", errorObj["message"])
 	assert.Equal(t, "translation_error", errorObj["type"])
@@ -817,10 +817,10 @@ func (m *mockTranslatorWithoutErrorWriter) Name() string {
 
 func (m *mockTranslatorWithoutErrorWriter) TransformRequest(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 	return &translator.TransformedRequest{
-		OpenAIRequest: map[string]interface{}{
+		OpenAIRequest: map[string]any{
 			"model": "test-model",
-			"messages": []interface{}{
-				map[string]interface{}{
+			"messages": []any{
+				map[string]any{
 					"role":    "user",
 					"content": "test",
 				},
@@ -831,8 +831,8 @@ func (m *mockTranslatorWithoutErrorWriter) TransformRequest(ctx context.Context,
 	}, nil
 }
 
-func (m *mockTranslatorWithoutErrorWriter) TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
-	return map[string]interface{}{
+func (m *mockTranslatorWithoutErrorWriter) TransformResponse(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
+	return map[string]any{
 		"id":      "mock-response-id",
 		"content": "mock response",
 	}, nil
@@ -855,17 +855,17 @@ func TestTranslationHandler_StreamingPanicRecovery(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"error": err.Error(),
 			})
 		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":  "test-model",
 					"stream": true,
-					"messages": []interface{}{
-						map[string]interface{}{
+					"messages": []any{
+						map[string]any{
 							"role":    "user",
 							"content": "test",
 						},
@@ -910,11 +910,11 @@ func TestTranslationHandler_StreamingPanicRecovery(t *testing.T) {
 
 	handler := app.translationHandler(panicTrans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model":  "test-model",
 		"stream": true,
-		"messages": []interface{}{
-			map[string]interface{}{
+		"messages": []any{
+			map[string]any{
 				"role":    "user",
 				"content": "test",
 			},
@@ -950,7 +950,7 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 	tests := []struct {
 		name               string
 		backendStatus      int
-		backendError       map[string]interface{}
+		backendError       map[string]any
 		expectedErrorType  string
 		expectedStatusCode int
 		expectedMessage    string
@@ -958,8 +958,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 		{
 			name:          "404_model_not_found",
 			backendStatus: 404,
-			backendError: map[string]interface{}{
-				"error": map[string]interface{}{
+			backendError: map[string]any{
+				"error": map[string]any{
 					"message": "Model not found",
 					"type":    "invalid_request_error",
 					"code":    "model_not_found",
@@ -972,8 +972,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 		{
 			name:          "500_internal_error",
 			backendStatus: 500,
-			backendError: map[string]interface{}{
-				"error": map[string]interface{}{
+			backendError: map[string]any{
+				"error": map[string]any{
 					"message": "Internal server error",
 					"type":    "api_error",
 				},
@@ -985,8 +985,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 		{
 			name:          "429_rate_limit",
 			backendStatus: 429,
-			backendError: map[string]interface{}{
-				"error": map[string]interface{}{
+			backendError: map[string]any{
+				"error": map[string]any{
 					"message": "Rate limit exceeded",
 					"type":    "rate_limit_error",
 				},
@@ -998,8 +998,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 		{
 			name:          "400_bad_request",
 			backendStatus: 400,
-			backendError: map[string]interface{}{
-				"error": map[string]interface{}{
+			backendError: map[string]any{
+				"error": map[string]any{
 					"message": "Invalid temperature value",
 					"type":    "invalid_request_error",
 				},
@@ -1011,8 +1011,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 		{
 			name:          "401_authentication_error",
 			backendStatus: 401,
-			backendError: map[string]interface{}{
-				"error": map[string]interface{}{
+			backendError: map[string]any{
+				"error": map[string]any{
 					"message": "Invalid API key",
 					"type":    "authentication_error",
 				},
@@ -1024,8 +1024,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 		{
 			name:          "403_permission_error",
 			backendStatus: 403,
-			backendError: map[string]interface{}{
-				"error": map[string]interface{}{
+			backendError: map[string]any{
+				"error": map[string]any{
 					"message": "Access denied",
 					"type":    "permission_error",
 				},
@@ -1037,8 +1037,8 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 		{
 			name:          "503_service_unavailable",
 			backendStatus: 503,
-			backendError: map[string]interface{}{
-				"error": map[string]interface{}{
+			backendError: map[string]any{
+				"error": map[string]any{
 					"message": "Service overloaded",
 					"type":    "overloaded_error",
 				},
@@ -1075,9 +1075,9 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 						errorType = "overloaded_error"
 					}
 
-					errorResp := map[string]interface{}{
+					errorResp := map[string]any{
 						"type": "error",
-						"error": map[string]interface{}{
+						"error": map[string]any{
 							"type":    errorType,
 							"message": err.Error(),
 						},
@@ -1116,10 +1116,10 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 			}
 
 			// Create Anthropic request
-			anthropicReq := map[string]interface{}{
+			anthropicReq := map[string]any{
 				"model":      "claude-3-5-sonnet-20241022",
 				"max_tokens": 1024,
-				"messages": []map[string]interface{}{
+				"messages": []map[string]any{
 					{"role": "user", "content": "hello"},
 				},
 			}
@@ -1138,14 +1138,14 @@ func TestTranslationHandler_BackendErrorTranslation(t *testing.T) {
 			assert.Equal(t, tt.expectedStatusCode, rec.Code, "Status code should match backend error")
 
 			// 2. Parse response body
-			var anthropicError map[string]interface{}
+			var anthropicError map[string]any
 			err := json.Unmarshal(rec.Body.Bytes(), &anthropicError)
 			require.NoError(t, err, "Response should be valid JSON")
 
 			// 3. Verify Anthropic error format
 			assert.Equal(t, "error", anthropicError["type"], "Response type should be 'error'")
 
-			errorObj, ok := anthropicError["error"].(map[string]interface{})
+			errorObj, ok := anthropicError["error"].(map[string]any)
 			require.True(t, ok, "Error object should exist")
 
 			// 4. Verify error type mapping
@@ -1207,17 +1207,17 @@ func TestTranslationHandler_StreamingErrorTranslation(t *testing.T) {
 				writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 					w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 					w.WriteHeader(statusCode)
-					json.NewEncoder(w).Encode(map[string]interface{}{
+					json.NewEncoder(w).Encode(map[string]any{
 						"error": err.Error(),
 					})
 				},
 				transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 					return &translator.TransformedRequest{
-						OpenAIRequest: map[string]interface{}{
+						OpenAIRequest: map[string]any{
 							"model":  "test-model",
 							"stream": true,
-							"messages": []interface{}{
-								map[string]interface{}{
+							"messages": []any{
+								map[string]any{
 									"role":    "user",
 									"content": "test",
 								},
@@ -1274,11 +1274,11 @@ func TestTranslationHandler_StreamingErrorTranslation(t *testing.T) {
 			}
 
 			// Create streaming Anthropic request
-			anthropicReq := map[string]interface{}{
+			anthropicReq := map[string]any{
 				"model":      "claude-3-5-sonnet-20241022",
 				"max_tokens": 1024,
 				"stream":     true,
-				"messages": []map[string]interface{}{
+				"messages": []map[string]any{
 					{"role": "user", "content": "hello"},
 				},
 			}
@@ -1320,10 +1320,10 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 			name: "test-translator-with-path",
 			transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 				return &translator.TransformedRequest{
-					OpenAIRequest: map[string]interface{}{
+					OpenAIRequest: map[string]any{
 						"model": "test-model",
-						"messages": []interface{}{
-							map[string]interface{}{
+						"messages": []any{
+							map[string]any{
 								"role":    "user",
 								"content": "test",
 							},
@@ -1349,7 +1349,7 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 
 		handler := app.translationHandler(trans)
 
-		reqBody := map[string]interface{}{"model": "test-model"}
+		reqBody := map[string]any{"model": "test-model"}
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/v1/messages", bytes.NewReader(body))
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
@@ -1368,10 +1368,10 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 			name: "test-translator-no-path",
 			transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 				return &translator.TransformedRequest{
-					OpenAIRequest: map[string]interface{}{
+					OpenAIRequest: map[string]any{
 						"model": "test-model",
-						"messages": []interface{}{
-							map[string]interface{}{
+						"messages": []any{
+							map[string]any{
 								"role":    "user",
 								"content": "test",
 							},
@@ -1397,7 +1397,7 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 
 		handler := app.translationHandler(trans)
 
-		reqBody := map[string]interface{}{"model": "test-model"}
+		reqBody := map[string]any{"model": "test-model"}
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/v1/messages", bytes.NewReader(body))
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
@@ -1416,10 +1416,10 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 			name: "passthrough",
 			transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 				return &translator.TransformedRequest{
-					OpenAIRequest: map[string]interface{}{
+					OpenAIRequest: map[string]any{
 						"model": "test-model",
-						"messages": []interface{}{
-							map[string]interface{}{
+						"messages": []any{
+							map[string]any{
 								"role":    "user",
 								"content": "test",
 							},
@@ -1445,7 +1445,7 @@ func TestTranslationHandler_PathValidationLogging(t *testing.T) {
 
 		handler := app.translationHandler(trans)
 
-		reqBody := map[string]interface{}{"model": "test-model"}
+		reqBody := map[string]any{"model": "test-model"}
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/v1/messages", bytes.NewReader(body))
 		req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
@@ -1502,9 +1502,9 @@ func TestTranslationHandler_TargetPathPrefixStripping(t *testing.T) {
 				name: "test-translator",
 				transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 					return &translator.TransformedRequest{
-						OpenAIRequest: map[string]interface{}{
+						OpenAIRequest: map[string]any{
 							"model":    "test-model",
-							"messages": []map[string]interface{}{},
+							"messages": []map[string]any{},
 						},
 						TargetPath:  tt.targetPath,
 						ModelName:   "test-model",
@@ -1517,9 +1517,9 @@ func TestTranslationHandler_TargetPathPrefixStripping(t *testing.T) {
 				proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, logger logger.StyledLogger) error {
 					receivedPath = r.URL.Path
 
-					response := map[string]interface{}{
+					response := map[string]any{
 						"id":      "test-id",
-						"choices": []interface{}{},
+						"choices": []any{},
 					}
 					w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 					w.WriteHeader(http.StatusOK)
@@ -1650,15 +1650,15 @@ func TestExecuteTranslatedStreamingRequest_ProxyErrorBeforeWrite(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+			json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
 		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":  "test-model",
 					"stream": true,
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
+					"messages": []any{
+						map[string]any{"role": "user", "content": "test"},
 					},
 				},
 				ModelName:   "test-model",
@@ -1693,11 +1693,11 @@ func TestExecuteTranslatedStreamingRequest_ProxyErrorBeforeWrite(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model":  "test-model",
 		"stream": true,
-		"messages": []interface{}{
-			map[string]interface{}{"role": "user", "content": "Hello"},
+		"messages": []any{
+			map[string]any{"role": "user", "content": "Hello"},
 		},
 	}
 	body, _ := json.Marshal(reqBody)
@@ -1741,15 +1741,15 @@ func TestExecuteTranslatedStreamingRequest_ContextCancellationUnblocks(t *testin
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+			json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
 		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":  "test-model",
 					"stream": true,
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
+					"messages": []any{
+						map[string]any{"role": "user", "content": "test"},
 					},
 				},
 				ModelName:   "test-model",
@@ -1779,11 +1779,11 @@ func TestExecuteTranslatedStreamingRequest_ContextCancellationUnblocks(t *testin
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model":  "test-model",
 		"stream": true,
-		"messages": []interface{}{
-			map[string]interface{}{"role": "user", "content": "Hello"},
+		"messages": []any{
+			map[string]any{"role": "user", "content": "Hello"},
 		},
 	}
 	body, _ := json.Marshal(reqBody)
@@ -1825,15 +1825,15 @@ func TestExecuteTranslatedStreamingRequest_SuccessfulFlow(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+			json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
 		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":  "test-model",
 					"stream": true,
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
+					"messages": []any{
+						map[string]any{"role": "user", "content": "test"},
 					},
 				},
 				ModelName:   "test-model",
@@ -1871,11 +1871,11 @@ func TestExecuteTranslatedStreamingRequest_SuccessfulFlow(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model":  "test-model",
 		"stream": true,
-		"messages": []interface{}{
-			map[string]interface{}{"role": "user", "content": "Hello"},
+		"messages": []any{
+			map[string]any{"role": "user", "content": "Hello"},
 		},
 	}
 	body, _ := json.Marshal(reqBody)
@@ -2020,9 +2020,9 @@ func TestStreamingPanic_BeforeWrite_Returns502(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"type": "error",
-				"error": map[string]interface{}{
+				"error": map[string]any{
 					"type":    "api_error",
 					"message": err.Error(),
 				},
@@ -2030,11 +2030,11 @@ func TestStreamingPanic_BeforeWrite_Returns502(t *testing.T) {
 		},
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":  "test-model",
 					"stream": true,
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
+					"messages": []any{
+						map[string]any{"role": "user", "content": "test"},
 					},
 				},
 				ModelName:   "test-model",
@@ -2071,11 +2071,11 @@ func TestStreamingPanic_BeforeWrite_Returns502(t *testing.T) {
 
 	handler := app.translationHandler(panicTrans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":  "test-model",
 		"stream": true,
-		"messages": []interface{}{
-			map[string]interface{}{"role": "user", "content": "test"},
+		"messages": []any{
+			map[string]any{"role": "user", "content": "test"},
 		},
 	})
 	req := httptest.NewRequest("POST", "/test", bytes.NewReader(reqBody))
@@ -2086,12 +2086,12 @@ func TestStreamingPanic_BeforeWrite_Returns502(t *testing.T) {
 	assert.Equal(t, http.StatusBadGateway, rec.Code,
 		"502 must be returned when the panic fires before any bytes are written")
 
-	var errBody map[string]interface{}
+	var errBody map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errBody),
 		"error body must be valid JSON")
 	assert.Equal(t, "error", errBody["type"],
 		"Anthropic error envelope type must be 'error'")
-	errObj, ok := errBody["error"].(map[string]interface{})
+	errObj, ok := errBody["error"].(map[string]any)
 	require.True(t, ok, "error object must be present")
 	assert.Equal(t, "api_error", errObj["type"])
 }
@@ -2153,9 +2153,9 @@ func TestTokenCountHandler_SerialiseFailureReturns500(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"type": "error",
-				"error": map[string]interface{}{
+				"error": map[string]any{
 					"type":    "api_error",
 					"message": err.Error(),
 				},
@@ -2175,9 +2175,9 @@ func TestTokenCountHandler_SerialiseFailureReturns500(t *testing.T) {
 
 	handler := app.tokenCountHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":    "test-model",
-		"messages": []interface{}{map[string]interface{}{"role": "user", "content": "hi"}},
+		"messages": []any{map[string]any{"role": "user", "content": "hi"}},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/olla/anthropic/v1/messages/count_tokens", bytes.NewReader(reqBody))
 	rec := httptest.NewRecorder()
@@ -2215,9 +2215,9 @@ func TestTokenCountHandler_SerialiseSuccess(t *testing.T) {
 	app := &Application{logger: mockLogger}
 	handler := app.tokenCountHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":    "test-model",
-		"messages": []interface{}{map[string]interface{}{"role": "user", "content": "hi"}},
+		"messages": []any{map[string]any{"role": "user", "content": "hi"}},
 	})
 	req := httptest.NewRequest(http.MethodPost, "/olla/anthropic/v1/messages/count_tokens", bytes.NewReader(reqBody))
 	rec := httptest.NewRecorder()

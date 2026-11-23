@@ -40,7 +40,7 @@ func TestLemonadeConverter_ConvertToFormat_SingleModel(t *testing.T) {
 
 	model := &domain.UnifiedModel{
 		ID: "qwen/2.5:0.5b-instruct-cpu",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"checkpoint": "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx",
 			"recipe":     "oga-cpu",
 		},
@@ -78,7 +78,7 @@ func TestLemonadeConverter_ConvertToFormat_MultipleModels(t *testing.T) {
 	models := []*domain.UnifiedModel{
 		{
 			ID: "qwen/2.5:0.5b-instruct-cpu",
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"checkpoint": "amd/Qwen2.5-0.5B-Instruct-quantized_int4-float16-cpu-onnx",
 				"recipe":     "oga-cpu",
 			},
@@ -88,7 +88,7 @@ func TestLemonadeConverter_ConvertToFormat_MultipleModels(t *testing.T) {
 		},
 		{
 			ID: "llama/3.2:1b-instruct-npu",
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"checkpoint": "meta-llama/Llama-3.2-1B-Instruct-ONNX",
 				"recipe":     "oga-npu",
 			},
@@ -132,7 +132,7 @@ func TestLemonadeConverter_ConvertToFormat_DifferentRecipes(t *testing.T) {
 	for i, recipe := range recipes {
 		models[i] = &domain.UnifiedModel{
 			ID: "test-model-" + recipe,
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"checkpoint": "test/checkpoint-" + recipe,
 				"recipe":     recipe,
 			},
@@ -162,7 +162,7 @@ func TestLemonadeConverter_ConvertToFormat_ModelWithCheckpointOnly(t *testing.T)
 
 	model := &domain.UnifiedModel{
 		ID: "test-checkpoint-only",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"checkpoint": "test/model-checkpoint",
 		},
 		Aliases: []domain.AliasEntry{
@@ -189,7 +189,7 @@ func TestLemonadeConverter_ConvertToFormat_ModelWithRecipeOnly(t *testing.T) {
 
 	model := &domain.UnifiedModel{
 		ID: "test-recipe-only",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"recipe": "llamacpp",
 		},
 		Aliases: []domain.AliasEntry{
@@ -426,7 +426,7 @@ func TestLemonadeConverter_ApplyMetadataFeatures(t *testing.T) {
 
 	t.Run("applies checkpoint and recipe from metadata", func(t *testing.T) {
 		model := &domain.UnifiedModel{
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"checkpoint": "test/checkpoint-path",
 				"recipe":     "oga-npu",
 			},
@@ -453,7 +453,7 @@ func TestLemonadeConverter_ApplyMetadataFeatures(t *testing.T) {
 
 	t.Run("handles wrong type in metadata", func(t *testing.T) {
 		model := &domain.UnifiedModel{
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"checkpoint": 12345,           // Wrong type
 				"recipe":     []string{"oga"}, // Wrong type
 			},
@@ -475,7 +475,7 @@ func BenchmarkLemonadeConverter_ConvertToFormat(b *testing.B) {
 	for i := range 1000 {
 		models[i] = &domain.UnifiedModel{
 			ID: "performance-test-model-" + strconv.Itoa(i),
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"checkpoint": "test/checkpoint-" + strconv.Itoa(i),
 				"recipe":     "oga-cpu",
 			},

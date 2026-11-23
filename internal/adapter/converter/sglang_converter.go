@@ -29,7 +29,7 @@ func (c *SGLangConverter) GetFormatName() string {
 	return constants.ProviderTypeSGLang
 }
 
-func (c *SGLangConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *SGLangConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]profile.SGLangModel, 0, len(filtered))
@@ -125,7 +125,7 @@ func (c *SGLangConverter) applyMetadataFeatures(model *domain.UnifiedModel, sgla
 }
 
 // extractMetadataInt64 safely extracts an int64 value from metadata
-func (c *SGLangConverter) extractMetadataInt64(metadata map[string]interface{}, key string) int64 {
+func (c *SGLangConverter) extractMetadataInt64(metadata map[string]any, key string) int64 {
 	if val, ok := metadata[key].(int64); ok {
 		return val
 	}

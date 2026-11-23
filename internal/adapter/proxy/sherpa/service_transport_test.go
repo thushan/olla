@@ -11,7 +11,7 @@ import (
 
 // funcName extracts the full symbol name of a function value for comparison.
 // http.ProxyFromEnvironment is a named function so the pointer is stable across builds.
-func funcName(f interface{}) string {
+func funcName(f any) string {
 	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
 }
 

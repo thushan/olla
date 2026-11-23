@@ -167,7 +167,7 @@ func TestModelFilteringIntegration(t *testing.T) {
 			f := filter.NewGlobFilter()
 
 			// Apply filter
-			result, err := f.Apply(ctx, tt.filterConfig, models, func(item interface{}) string {
+			result, err := f.Apply(ctx, tt.filterConfig, models, func(item any) string {
 				if model, ok := item.(*domain.ModelInfo); ok {
 					return model.Name
 				}
@@ -271,7 +271,7 @@ func TestEndToEndFiltering(t *testing.T) {
 		// Test profile filtering
 		profileFilter := configs["production-profiles"]
 
-		profiles := map[string]interface{}{
+		profiles := map[string]any{
 			"ollama":       "ollama-profile",
 			"openai":       "openai-profile",
 			"openai-test":  "openai-test-profile",
@@ -298,7 +298,7 @@ func TestEndToEndFiltering(t *testing.T) {
 			{Name: "adult-content-gen"},
 		}
 
-		result, err := filterImpl.Apply(ctx, modelFilter, models, func(item interface{}) string {
+		result, err := filterImpl.Apply(ctx, modelFilter, models, func(item any) string {
 			if model, ok := item.(*domain.ModelInfo); ok {
 				return model.Name
 			}
@@ -342,7 +342,7 @@ func BenchmarkFilterOperations(b *testing.B) {
 
 	b.Run("filter_1000_models", func(b *testing.B) {
 		for range b.N {
-			_, _ = f.Apply(ctx, config, models, func(item interface{}) string {
+			_, _ = f.Apply(ctx, config, models, func(item any) string {
 				if model, ok := item.(*domain.ModelInfo); ok {
 					return model.Name
 				}

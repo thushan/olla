@@ -28,10 +28,10 @@ func BenchmarkTranslationHandler_NonStreamingOverhead(b *testing.B) {
 		name: "bench-translator",
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model": "test-model",
-					"messages": []interface{}{
-						map[string]interface{}{
+					"messages": []any{
+						map[string]any{
 							"role":    "user",
 							"content": "test",
 						},
@@ -41,8 +41,8 @@ func BenchmarkTranslationHandler_NonStreamingOverhead(b *testing.B) {
 				IsStreaming: false,
 			}, nil
 		},
-		transformResponseFunc: func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
-			return map[string]interface{}{
+		transformResponseFunc: func(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
+			return map[string]any{
 				"id":      "bench-response",
 				"content": "benchmark response",
 			}, nil
@@ -51,15 +51,15 @@ func BenchmarkTranslationHandler_NonStreamingOverhead(b *testing.B) {
 
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, logger logger.StyledLogger) error {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-bench",
 				"object":  "chat.completion",
 				"created": 1677652288,
 				"model":   "test-model",
-				"choices": []interface{}{
-					map[string]interface{}{
+				"choices": []any{
+					map[string]any{
 						"index": 0,
-						"message": map[string]interface{}{
+						"message": map[string]any{
 							"role":    "assistant",
 							"content": "Hello!",
 						},
@@ -85,10 +85,10 @@ func BenchmarkTranslationHandler_NonStreamingOverhead(b *testing.B) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model": "test-model",
-		"messages": []interface{}{
-			map[string]interface{}{
+		"messages": []any{
+			map[string]any{
 				"role":    "user",
 				"content": "Hello",
 			},
@@ -121,11 +121,11 @@ func BenchmarkTranslationHandler_StreamingSetup(b *testing.B) {
 		name: "streaming-bench-translator",
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":  "test-model",
 					"stream": true,
-					"messages": []interface{}{
-						map[string]interface{}{
+					"messages": []any{
+						map[string]any{
 							"role":    "user",
 							"content": "test",
 						},
@@ -163,11 +163,11 @@ func BenchmarkTranslationHandler_StreamingSetup(b *testing.B) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model":  "test-model",
 		"stream": true,
-		"messages": []interface{}{
-			map[string]interface{}{
+		"messages": []any{
+			map[string]any{
 				"role":    "user",
 				"content": "Hello",
 			},

@@ -92,7 +92,7 @@ func BenchmarkExtractor(b *testing.B) {
 func BenchmarkJSONParsing_EncodingJSON(b *testing.B) {
 	b.ReportAllocs()
 	for range b.N {
-		var data interface{}
+		var data any
 		_ = json.Unmarshal(ollamaResponse, &data)
 	}
 }

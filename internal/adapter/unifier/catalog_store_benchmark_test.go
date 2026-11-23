@@ -31,7 +31,7 @@ func BenchmarkCatalogStore_GetModel(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming", "function_calling"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 		store.PutModel(model)
@@ -79,7 +79,7 @@ func BenchmarkCatalogStore_PutModel(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming", "function_calling"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 	}
@@ -133,7 +133,7 @@ func BenchmarkCatalogStore_GetAllModels(b *testing.B) {
 						},
 					},
 					Capabilities: []string{"chat", "streaming"},
-					Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+					Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 					LastSeen:     time.Now(),
 				}
 				store.PutModel(model)
@@ -172,7 +172,7 @@ func BenchmarkCatalogStore_ResolveByName(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 		store.PutModel(model)
@@ -229,7 +229,7 @@ func BenchmarkCatalogStore_MixedWorkload(b *testing.B) {
 				},
 			},
 			Capabilities: []string{"chat", "streaming"},
-			Metadata:     map[string]interface{}{"digest": fmt.Sprintf("sha256:%d", i)},
+			Metadata:     map[string]any{"digest": fmt.Sprintf("sha256:%d", i)},
 			LastSeen:     time.Now(),
 		}
 		store.PutModel(model)

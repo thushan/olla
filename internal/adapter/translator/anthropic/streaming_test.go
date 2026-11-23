@@ -266,10 +266,10 @@ func TestTransformStreamingResponse_UsageTokens(t *testing.T) {
 	// verify message_start includes usage structure (values will be 0 initially)
 	messageStart := getEventByType(events, "message_start")
 	require.NotNil(t, messageStart, "message_start event should exist")
-	message, ok := messageStart["message"].(map[string]interface{})
+	message, ok := messageStart["message"].(map[string]any)
 	require.True(t, ok, "message_start should have message field")
 
-	startUsage, ok := message["usage"].(map[string]interface{})
+	startUsage, ok := message["usage"].(map[string]any)
 	require.True(t, ok, "message_start.message should have usage field")
 
 	// openai provides usage at the end of the stream, so message_start will have 0 tokens
@@ -558,9 +558,9 @@ func TestTransformStreamingResponse_MessageStartCacheFields(t *testing.T) {
 
 	start := getEventByType(events, "message_start")
 	require.NotNil(t, start)
-	message, ok := start["message"].(map[string]interface{})
+	message, ok := start["message"].(map[string]any)
 	require.True(t, ok)
-	usage, ok := message["usage"].(map[string]interface{})
+	usage, ok := message["usage"].(map[string]any)
 	require.True(t, ok)
 
 	_, hasCacheCreate := usage["cache_creation_input_tokens"]
@@ -596,7 +596,7 @@ func TestTransformStreamingResponse_MessageDeltaCacheFields(t *testing.T) {
 
 	delta := getEventByType(events, "message_delta")
 	require.NotNil(t, delta)
-	usage, ok := delta["usage"].(map[string]interface{})
+	usage, ok := delta["usage"].(map[string]any)
 	require.True(t, ok)
 
 	_, hasCacheCreate := usage["cache_creation_input_tokens"]
@@ -893,10 +893,10 @@ func TestTransformStreamingResponse_MessageStartInputTokensSeeded(t *testing.T) 
 	messageStart := getEventByType(events, "message_start")
 	require.NotNil(t, messageStart, "message_start event must be present")
 
-	message, ok := messageStart["message"].(map[string]interface{})
+	message, ok := messageStart["message"].(map[string]any)
 	require.True(t, ok, "message_start must have a message field")
 
-	usage, ok := message["usage"].(map[string]interface{})
+	usage, ok := message["usage"].(map[string]any)
 	require.True(t, ok, "message_start.message must have a usage field")
 
 	inputTokens, ok := usage["input_tokens"].(float64)
@@ -930,8 +930,8 @@ func TestTransformStreamingResponse_MessageStartNoSeedIsZero(t *testing.T) {
 	messageStart := getEventByType(events, "message_start")
 	require.NotNil(t, messageStart)
 
-	message := messageStart["message"].(map[string]interface{})
-	usage := message["usage"].(map[string]interface{})
+	message := messageStart["message"].(map[string]any)
+	usage := message["usage"].(map[string]any)
 	inputTokens := usage["input_tokens"].(float64)
 	assert.Equal(t, float64(0), inputTokens, "no seed in context should give 0 input_tokens in message_start")
 }
@@ -1226,7 +1226,7 @@ func TestTransformStreamingResponse_SynthesisedOutputTokensWhenNoBackendUsage(t 
 	delta := getEventByType(events, "message_delta")
 	require.NotNil(t, delta, "message_delta must be present")
 
-	usage, ok := delta["usage"].(map[string]interface{})
+	usage, ok := delta["usage"].(map[string]any)
 	require.True(t, ok, "message_delta must have usage")
 
 	outputTokens, ok := usage["output_tokens"].(float64)
@@ -1266,7 +1266,7 @@ func TestTransformStreamingResponse_RealUsageWinsOverSynthesis(t *testing.T) {
 	delta := getEventByType(events, "message_delta")
 	require.NotNil(t, delta, "message_delta must be present")
 
-	usage, ok := delta["usage"].(map[string]interface{})
+	usage, ok := delta["usage"].(map[string]any)
 	require.True(t, ok, "message_delta must have usage")
 
 	outputTokens, ok := usage["output_tokens"].(float64)
@@ -1300,7 +1300,7 @@ func TestTransformStreamingResponse_SynthesisedOutputTokensEmptyContent(t *testi
 	delta := getEventByType(events, "message_delta")
 	require.NotNil(t, delta, "message_delta must be present")
 
-	usage, ok := delta["usage"].(map[string]interface{})
+	usage, ok := delta["usage"].(map[string]any)
 	require.True(t, ok, "message_delta must have usage")
 
 	outputTokens, ok := usage["output_tokens"].(float64)
@@ -1336,7 +1336,7 @@ func TestTransformStreamingResponse_SynthesisedOutputTokensThinkingContent(t *te
 	delta := getEventByType(events, "message_delta")
 	require.NotNil(t, delta, "message_delta must be present")
 
-	usage, ok := delta["usage"].(map[string]interface{})
+	usage, ok := delta["usage"].(map[string]any)
 	require.True(t, ok, "message_delta must have usage")
 
 	outputTokens, ok := usage["output_tokens"].(float64)

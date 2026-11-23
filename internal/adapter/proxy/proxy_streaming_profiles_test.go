@@ -384,7 +384,7 @@ func TestStreamingProfilesComprehensive(t *testing.T) {
 				name          string
 				profile       string
 				contentType   string
-				contextStream interface{} // nil, true, or false
+				contextStream any // nil, true, or false
 				expectFlushes bool
 				description   string
 			}{

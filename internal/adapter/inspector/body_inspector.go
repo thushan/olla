@@ -309,7 +309,7 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 
 	// Fall back to flexible map-based extraction to handle non-standard formats.
 	// This only succeeds for complete, valid JSON bodies.
-	var data map[string]interface{}
+	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
 		return ""
 	}
@@ -323,8 +323,8 @@ func (bi *BodyInspector) extractModelName(body []byte) string {
 	}
 
 	// Some APIs specify model per-message rather than at the request level
-	if messages, ok := data["messages"].([]interface{}); ok && len(messages) > 0 {
-		if firstMsg, ok := messages[0].(map[string]interface{}); ok {
+	if messages, ok := data["messages"].([]any); ok && len(messages) > 0 {
+		if firstMsg, ok := messages[0].(map[string]any); ok {
 			if model, ok := firstMsg["model"].(string); ok && model != "" {
 				return bi.normalizeModelName(model)
 			}
@@ -453,7 +453,7 @@ func (bi *BodyInspector) detectRequiredCapabilities(body []byte) *domain.ModelCa
 		return nil
 	}
 
-	var data map[string]interface{}
+	var data map[string]any
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil
 	}
@@ -485,9 +485,9 @@ func (bi *BodyInspector) detectRequiredCapabilities(body []byte) *domain.ModelCa
 	}
 
 	// Check for vision requirements in messages
-	if messages, ok := data["messages"].([]interface{}); ok {
+	if messages, ok := data["messages"].([]any); ok {
 		for _, msg := range messages {
-			if msgMap, ok := msg.(map[string]interface{}); ok {
+			if msgMap, ok := msg.(map[string]any); ok {
 				// Check content for vision elements
 				if content, ok := msgMap["content"]; ok {
 					if bi.hasVisionContent(content) {
@@ -515,15 +515,15 @@ func (bi *BodyInspector) detectRequiredCapabilities(body []byte) *domain.ModelCa
 }
 
 // hasVisionContent checks if the content contains image data
-func (bi *BodyInspector) hasVisionContent(content interface{}) bool {
+func (bi *BodyInspector) hasVisionContent(content any) bool {
 	switch v := content.(type) {
 	case string:
 		// Simple text content, no vision
 		return false
-	case []interface{}:
+	case []any:
 		// Multi-modal content array
 		for _, item := range v {
-			if itemMap, ok := item.(map[string]interface{}); ok {
+			if itemMap, ok := item.(map[string]any); ok {
 				itemType, _ := itemMap["type"].(string)
 				if itemType == "image_url" || itemType == "image" {
 					return true
@@ -536,7 +536,7 @@ func (bi *BodyInspector) hasVisionContent(content interface{}) bool {
 				}
 			}
 		}
-	case map[string]interface{}:
+	case map[string]any:
 		// Check if it's an image object
 		if imgType, ok := v["type"].(string); ok && (imgType == "image_url" || imgType == "image") {
 			return true
@@ -546,7 +546,7 @@ func (bi *BodyInspector) hasVisionContent(content interface{}) bool {
 }
 
 // hasCodeGenerationHints checks for indicators that code generation is needed
-func (bi *BodyInspector) hasCodeGenerationHints(data map[string]interface{}) bool {
+func (bi *BodyInspector) hasCodeGenerationHints(data map[string]any) bool {
 	// Check for code-related parameters
 	if bi.hasCodeParameters(data) {
 		return true
@@ -557,7 +557,7 @@ func (bi *BodyInspector) hasCodeGenerationHints(data map[string]interface{}) boo
 }
 
 // hasCodeParameters checks for explicit code-related parameters
-func (bi *BodyInspector) hasCodeParameters(data map[string]interface{}) bool {
+func (bi *BodyInspector) hasCodeParameters(data map[string]any) bool {
 	if lang, ok := data["language"].(string); ok && lang != "" {
 		return true
 	}
@@ -568,8 +568,8 @@ func (bi *BodyInspector) hasCodeParameters(data map[string]interface{}) bool {
 }
 
 // hasCodeInSystemPrompt checks for code keywords in system prompts
-func (bi *BodyInspector) hasCodeInSystemPrompt(data map[string]interface{}) bool {
-	messages, ok := data["messages"].([]interface{})
+func (bi *BodyInspector) hasCodeInSystemPrompt(data map[string]any) bool {
+	messages, ok := data["messages"].([]any)
 	if !ok {
 		return false
 	}
@@ -583,8 +583,8 @@ func (bi *BodyInspector) hasCodeInSystemPrompt(data map[string]interface{}) bool
 }
 
 // isSystemMessageWithCodeKeywords checks if a message is a system message containing code keywords
-func (bi *BodyInspector) isSystemMessageWithCodeKeywords(msg interface{}) bool {
-	msgMap, ok := msg.(map[string]interface{})
+func (bi *BodyInspector) isSystemMessageWithCodeKeywords(msg any) bool {
+	msgMap, ok := msg.(map[string]any)
 	if !ok {
 		return false
 	}

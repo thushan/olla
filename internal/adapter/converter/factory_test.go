@@ -117,7 +117,7 @@ type mockConverter struct {
 	formatName string
 }
 
-func (m *mockConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (m *mockConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	return nil, nil
 }
 

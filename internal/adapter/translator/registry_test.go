@@ -19,7 +19,7 @@ func (m *mockTranslator) TransformRequest(ctx context.Context, r *http.Request) 
 	return nil, nil
 }
 
-func (m *mockTranslator) TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
+func (m *mockTranslator) TransformResponse(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
 	return nil, nil
 }
 

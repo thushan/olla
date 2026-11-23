@@ -71,7 +71,7 @@ func (b *BaseConverter) FindProviderEndpoint(model *domain.UnifiedModel, provide
 }
 
 // ExtractMetadataString safely extracts a string value from metadata
-func (b *BaseConverter) ExtractMetadataString(metadata map[string]interface{}, key string) string {
+func (b *BaseConverter) ExtractMetadataString(metadata map[string]any, key string) string {
 	if val, ok := metadata[key].(string); ok {
 		return val
 	}
@@ -79,7 +79,7 @@ func (b *BaseConverter) ExtractMetadataString(metadata map[string]interface{}, k
 }
 
 // ExtractMetadataInt safely extracts an int value from metadata
-func (b *BaseConverter) ExtractMetadataInt(metadata map[string]interface{}, key string) int {
+func (b *BaseConverter) ExtractMetadataInt(metadata map[string]any, key string) int {
 	if val, ok := metadata[key].(int); ok {
 		return val
 	}
@@ -90,7 +90,7 @@ func (b *BaseConverter) ExtractMetadataInt(metadata map[string]interface{}, key 
 }
 
 // ExtractMetadataBool safely extracts a bool value from metadata
-func (b *BaseConverter) ExtractMetadataBool(metadata map[string]interface{}, key string) bool {
+func (b *BaseConverter) ExtractMetadataBool(metadata map[string]any, key string) bool {
 	if val, ok := metadata[key].(bool); ok {
 		return val
 	}

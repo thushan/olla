@@ -78,7 +78,7 @@ func (e *Extractor) ValidateProfile(profile domain.InferenceProfile) error {
 		}
 
 		// Create environment with expected variables
-		env := map[string]interface{}{
+		env := map[string]any{
 			"input_tokens":       0,
 			"output_tokens":      0,
 			"eval_duration_ns":   0,
@@ -178,7 +178,7 @@ func (e *Extractor) doExtract(data []byte, headers http.Header, providerName str
 	}
 
 	// Extract values using cached gjson paths
-	values := make(map[string]interface{})
+	values := make(map[string]any)
 	for field := range metricsConfig.Paths {
 		cacheKey := fmt.Sprintf("%s:%s", profile.GetName(), field)
 		if pathObj, ok := e.fieldPaths.Load(cacheKey); ok {
@@ -240,9 +240,9 @@ func (e *Extractor) mapFieldToMetrics(field string, result gjson.Result, metrics
 }
 
 // runCalculations executes pre-compiled expr expressions
-func (e *Extractor) runCalculations(profileName string, values map[string]interface{}, calculations map[string]string, metrics *domain.ProviderMetrics) {
+func (e *Extractor) runCalculations(profileName string, values map[string]any, calculations map[string]string, metrics *domain.ProviderMetrics) {
 	// Convert all values to float64 for calculations
-	env := make(map[string]interface{})
+	env := make(map[string]any)
 	for k, v := range values {
 		switch val := v.(type) {
 		case float64:

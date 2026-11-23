@@ -18,7 +18,7 @@ const (
 )
 
 type RequestProfile struct {
-	InspectionMeta *xsync.Map[string, interface{}]
+	InspectionMeta *xsync.Map[string, any]
 
 	// Rich request metadata for intelligent routing
 	ModelCapabilities    *ModelCapabilities    // What the request needs
@@ -60,7 +60,7 @@ func NewRequestProfile(path string) *RequestProfile {
 	return &RequestProfile{
 		Path:           path,
 		SupportedBy:    make([]string, 0, 4),
-		InspectionMeta: xsync.NewMap[string, interface{}](),
+		InspectionMeta: xsync.NewMap[string, any](),
 	}
 }
 
@@ -102,7 +102,7 @@ func (rp *RequestProfile) AddSupportedProfile(profileType string) {
 	rp.SupportedBy = append(rp.SupportedBy, profileType)
 }
 
-func (rp *RequestProfile) SetInspectionMeta(key string, value interface{}) {
+func (rp *RequestProfile) SetInspectionMeta(key string, value any) {
 	rp.InspectionMeta.Store(key, value)
 }
 
