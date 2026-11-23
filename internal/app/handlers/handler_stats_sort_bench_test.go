@@ -54,9 +54,12 @@ func benchModelStats(n int) (map[string]ports.ModelStats, map[string]map[string]
 	return modelStats, modelEndpointStats
 }
 
-// BenchmarkBuildModelStats_Sort covers the sort.Slice in buildModelStats,
-// the larger of the two stats handler sorts: ModelStats is a wide struct with
-// a map and eight strings, so the swap cost dominates the comparator.
+// BenchmarkBuildModelStats_Sort covers the sort.Slice in buildModelStats. The
+// row times the whole build (map iteration, per-model conversion and
+// formatting, the sort), and the sort is a small share of it, so a sort
+// slowdown has to be several times the NFR-1 threshold to move the row. Within
+// the sort, swapping wide ModelStats values (a map and eight strings) costs
+// more than the comparator calls.
 func BenchmarkBuildModelStats_Sort(b *testing.B) {
 	app := &Application{}
 
@@ -74,9 +77,11 @@ func BenchmarkBuildModelStats_Sort(b *testing.B) {
 }
 
 // BenchmarkBuildTranslatorStats_Sort covers the sort.Slice in
-// buildTranslatorStats. Production has a handful of translators; the large row
-// exists so the sort dominates the formatting work and a change to the
-// comparator is visible.
+// buildTranslatorStats. The row times the whole build: map iteration, the
+// formatting of each entry and the sort. Formatting is most of it, so the
+// sort is a minority share and a sort slowdown has to be several times the
+// NFR-1 threshold to move this row. The 3-translator row is the production
+// shape; the 1000-translator row exists so the sort share grows.
 func BenchmarkBuildTranslatorStats_Sort(b *testing.B) {
 	app := &Application{}
 
