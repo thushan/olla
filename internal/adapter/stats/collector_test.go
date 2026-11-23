@@ -3,7 +3,6 @@ package stats
 import (
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -463,7 +462,7 @@ func TestCollector_MinLatencySentinel(t *testing.T) {
 	endpoint := createTestEndpoint("http://localhost:8080", "local")
 	uri := endpoint.URL.String()
 
-	if got := atomic.LoadInt64(&collector.minLatency); got != -1 {
+	if got := collector.minLatency.Load(); got != -1 {
 		t.Errorf("global minLatency sentinel before any sample = %d, want -1", got)
 	}
 
@@ -474,10 +473,10 @@ func TestCollector_MinLatencySentinel(t *testing.T) {
 	if !ok {
 		t.Fatal("request must create endpoint stats")
 	}
-	if got := atomic.LoadInt64(&data.minLatency); got != -1 {
+	if got := data.minLatency.Load(); got != -1 {
 		t.Errorf("endpoint minLatency sentinel after failure-only request = %d, want -1", got)
 	}
-	if got := atomic.LoadInt64(&collector.minLatency); got != -1 {
+	if got := collector.minLatency.Load(); got != -1 {
 		t.Errorf("global minLatency sentinel after failure-only request = %d, want -1", got)
 	}
 
@@ -568,7 +567,7 @@ func TestRecordRateLimitedIP_AgeEviction(t *testing.T) {
 	collector.securityMu.Unlock()
 
 	// Force cleanup by resetting lastIPCleanup to zero so the threshold is exceeded.
-	atomic.StoreInt64(&collector.lastIPCleanup, 0)
+	collector.lastIPCleanup.Store(0)
 	collector.cleanupOldRateLimitedIPs(time.Now().UnixNano())
 
 	stats := collector.GetSecurityStats()
