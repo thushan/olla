@@ -40,7 +40,7 @@ func (w *keyWalk) step() bool {
 	return w.budget >= 0
 }
 
-var yamlUnmarshalerType = reflect.TypeOf((*yaml.Unmarshaler)(nil)).Elem()
+var yamlUnmarshalerType = reflect.TypeFor[yaml.Unmarshaler]()
 
 // UnknownKey is a key present in the config file that no Config field reads.
 type UnknownKey struct {
@@ -63,7 +63,7 @@ func FindUnknownKeys(data []byte) []UnknownKey {
 		return nil
 	}
 	w := &keyWalk{budget: maxKeyWalkVisits, seen: make(map[UnknownKey]struct{})}
-	walkKnownKeys(&doc, reflect.TypeOf(Config{}), "", 0, w)
+	walkKnownKeys(&doc, reflect.TypeFor[Config](), "", 0, w)
 	return w.out
 }
 
