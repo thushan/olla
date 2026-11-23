@@ -54,12 +54,12 @@ func benchModelStats(n int) (map[string]ports.ModelStats, map[string]map[string]
 	return modelStats, modelEndpointStats
 }
 
-// BenchmarkBuildModelStats_Sort covers the slices.SortFunc in buildModelStats. The
-// row times the whole build (map iteration, per-model conversion and
-// formatting, the sort), and the sort is a small share of it, so a sort
-// slowdown has to be several times the NFR-1 threshold to move the row. Within
-// the sort, swapping wide ModelStats values (a map and eight strings) costs
-// more than the comparator calls.
+// BenchmarkBuildModelStats_Sort covers the sort.Slice in buildModelStats, which
+// stays there because slices.SortFunc hands whole ModelStats values to its
+// comparator and measured slower in the modernise series. The row times the
+// whole build (map iteration, per-model conversion and formatting, the sort),
+// and the baseline's profile puts the sort under a tenth of it, so a sort-only
+// slowdown has to be several times the NFR-1 threshold to move the row.
 func BenchmarkBuildModelStats_Sort(b *testing.B) {
 	app := &Application{}
 
@@ -76,12 +76,13 @@ func BenchmarkBuildModelStats_Sort(b *testing.B) {
 	}
 }
 
-// BenchmarkBuildTranslatorStats_Sort covers the slices.SortFunc in
-// buildTranslatorStats. The row times the whole build: map iteration, the
-// formatting of each entry and the sort. Formatting is most of it, so the
-// sort is a minority share and a sort slowdown has to be several times the
-// NFR-1 threshold to move this row. The 3-translator row is the production
-// shape; the 1000-translator row exists so the sort share grows.
+// BenchmarkBuildTranslatorStats_Sort covers the sort.Slice in
+// buildTranslatorStats, kept there for the same reason. The row measures the
+// whole build: map iteration, the formatting of each entry and the sort. The
+// baseline's profile puts the sort at about a fifth of it, so a sort-only
+// slowdown has to be several times the NFR-1 threshold to move this row. The
+// 3-translator row is the production shape; the 1000-translator row exists so
+// the sort share grows.
 func BenchmarkBuildTranslatorStats_Sort(b *testing.B) {
 	app := &Application{}
 
