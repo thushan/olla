@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +20,7 @@ func TestEndpointConfigValidation_AcceptsPlainURL(t *testing.T) {
 		CheckInterval:  5 * time.Second,
 		CheckTimeout:   2 * time.Second,
 	}
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("plain URL should load, got: %v", err)
 	}
 }
@@ -36,7 +35,7 @@ func TestLoadFromConfig_RejectsCredentialBeforeScheme(t *testing.T) {
 		CheckInterval: 5 * time.Second,
 		CheckTimeout:  2 * time.Second,
 	}
-	err := NewStaticEndpointRepository().LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	err := NewStaticEndpointRepository().LoadFromConfig(t.Context(), []config.EndpointConfig{cfg})
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}

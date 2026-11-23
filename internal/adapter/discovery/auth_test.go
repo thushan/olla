@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -207,7 +206,7 @@ func TestLoadFromConfig_AuthValidation_RejectsInvalidShape(t *testing.T) {
 	}
 
 	repo := NewStaticEndpointRepository()
-	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{badAuth})
+	err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{badAuth})
 	if err == nil {
 		t.Fatal("expected error for conflicting token/token_file, got nil")
 	}
@@ -222,7 +221,7 @@ func TestLoadFromConfig_AuthNil_Succeeds(t *testing.T) {
 	// Auth is nil by default
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig with nil auth failed: %v", err)
 	}
 }
@@ -238,11 +237,11 @@ func TestAuthResolve_EnvVar_ExpandsToken(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "${OLLA_TEST_TOKEN}"}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	if len(eps) != 1 {
 		t.Fatalf("expected 1 endpoint, got %d", len(eps))
 	}
@@ -264,7 +263,7 @@ func TestAuthResolve_MissingEnvVar_FatalError(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: fmt.Sprintf("${%s}", varName)}
 
 	repo := NewStaticEndpointRepository()
-	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg})
 	if err == nil {
 		t.Fatal("expected error for unset env var, got nil")
 	}
@@ -288,11 +287,11 @@ func TestAuthResolve_TokenFile_ReadsAndTrims(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "bearer", TokenFile: tokenPath}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	if !strings.HasSuffix(eps[0].AuthHeaderValue, "file-secret") {
 		t.Errorf("AuthHeaderValue %q does not end with trimmed file content", eps[0].AuthHeaderValue)
 	}
@@ -311,7 +310,7 @@ func TestAuthResolve_BothInlineAndFile_FatalError(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "inline", TokenFile: tokenPath}
 
 	repo := NewStaticEndpointRepository()
-	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg})
 	if err == nil {
 		t.Fatal("expected error for both token and token_file, got nil")
 	}
@@ -326,7 +325,7 @@ func TestAuthResolve_EmptyAfterExpansion_FatalError(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "${OLLA_EMPTY_TOKEN:-}"}
 
 	repo := NewStaticEndpointRepository()
-	err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg})
+	err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg})
 	if err == nil {
 		t.Fatal("expected error for empty-resolved token, got nil")
 	}
@@ -343,11 +342,11 @@ func TestAuthPrecompute_Bearer_AuthorizationHeader(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "mysecrettoken"}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	ep := eps[0]
 
 	if ep.AuthHeaderName != "Authorization" {
@@ -367,11 +366,11 @@ func TestAuthPrecompute_APIKey_DefaultHeader(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "api_key", Key: "mykey"}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	ep := eps[0]
 
 	if ep.AuthHeaderName != "X-Api-Key" {
@@ -391,11 +390,11 @@ func TestAuthPrecompute_APIKey_CustomHeader(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "api_key", Key: "mykey", Header: "X-My-Auth"}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	ep := eps[0]
 
 	if ep.AuthHeaderName != "X-My-Auth" {
@@ -415,11 +414,11 @@ func TestAuthPrecompute_Basic_CorrectBase64(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "basic", Username: "alice", Password: "s3cret"}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	ep := eps[0]
 
 	if ep.AuthHeaderName != "Authorization" {
@@ -451,11 +450,11 @@ func TestAuthPrecompute_NoAuth_EmptyFields(t *testing.T) {
 	cfg := validEndpointBase("no-auth-fields")
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	ep := eps[0]
 
 	if ep.AuthHeaderName != "" {
@@ -481,11 +480,11 @@ func TestAuthPrecompute_Headers_EnvResolved(t *testing.T) {
 	}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	ep := eps[0]
 
 	if ep.Headers["X-Tenant"] != "acme-corp" {
@@ -510,13 +509,13 @@ func TestAuthSecurity_AuthHeaderValue_NotInJSON(t *testing.T) {
 	cfg.Auth = &config.AuthConfig{Type: "bearer", Token: "super-secret-do-not-leak"}
 
 	repo := NewStaticEndpointRepository()
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatalf("LoadFromConfig failed: %v", err)
 	}
 
 	// The domain.Endpoint JSON test already covers the tag; here we exercise
 	// the full load → retrieve → marshal path to catch end-to-end regressions.
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 	ep := eps[0]
 
 	// AuthHeaderValue must be set (we loaded auth successfully).

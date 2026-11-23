@@ -37,7 +37,7 @@ func TestDiscoveryFailureDoesNotCancelOtherEndpoints(t *testing.T) {
 	}}
 	registry := &mockModelRegistry{}
 	service := NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{failed, healthy}}, registry, DiscoveryConfig{Timeout: time.Second, ConcurrentWorkers: 1}, createTestLogger())
-	err := service.DiscoverAll(context.Background())
+	err := service.DiscoverAll(t.Context())
 	if !errors.Is(err, failure) {
 		t.Fatalf("expected original failure, got %v", err)
 	}
@@ -52,7 +52,7 @@ func TestDiscoveryFailureDoesNotCancelOtherEndpoints(t *testing.T) {
 func TestDiscoveryCancellationAndRequestTimeout(t *testing.T) {
 	for _, parentCancelled := range []bool{true, false} {
 		t.Run(fmt.Sprintf("parent_cancelled=%v", parentCancelled), func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			endpoint := createMockEndpoint("http://backend", "backend")
 			client := &discoveryFuncClient{discover: func(ctx context.Context, _ *domain.Endpoint) ([]*domain.ModelInfo, error) {
@@ -94,7 +94,7 @@ func TestDiscoveryCooldownRecovery(t *testing.T) {
 	registry := &mockModelRegistry{}
 	service := NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{endpoint}}, registry, DiscoveryConfig{Timeout: time.Second, ConcurrentWorkers: 1}, createTestLogger())
 	for i := 1; i <= MaxConsecutiveFailures; i++ {
-		if err := service.DiscoverAll(context.Background()); err == nil {
+		if err := service.DiscoverAll(t.Context()); err == nil {
 			t.Fatal("expected failure")
 		}
 		if i < MaxConsecutiveFailures && service.GetMetrics().ErrorsByEndpoint["_disabled_endpoints"] != 0 {
@@ -104,7 +104,7 @@ func TestDiscoveryCooldownRecovery(t *testing.T) {
 	if got := service.GetMetrics().ErrorsByEndpoint["_disabled_endpoints"]; got != 1 {
 		t.Fatalf("disabled=%d", got)
 	}
-	if err := service.DiscoverAll(context.Background()); err != nil {
+	if err := service.DiscoverAll(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if calls != MaxConsecutiveFailures {
@@ -116,7 +116,7 @@ func TestDiscoveryCooldownRecovery(t *testing.T) {
 		service.mu.Unlock()
 	}
 	expireCooldown()
-	if err := service.DiscoverAll(context.Background()); err == nil {
+	if err := service.DiscoverAll(t.Context()); err == nil {
 		t.Fatal("expected failed recovery probe")
 	}
 	if !service.isEndpointDisabled(endpoint.URLString) {
@@ -124,7 +124,7 @@ func TestDiscoveryCooldownRecovery(t *testing.T) {
 	}
 	expireCooldown()
 	broken = false
-	if err := service.DiscoverAll(context.Background()); err != nil {
+	if err := service.DiscoverAll(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	if calls != MaxConsecutiveFailures+2 || registry.registerCallCount != 1 || service.getFailureCount(endpoint.URLString) != 0 {
@@ -151,7 +151,7 @@ func TestHTTPDiscoveryParseErrorClassification(t *testing.T) {
 	defer server.Close()
 	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 	defer client.Close()
-	_, err := client.DiscoverModels(context.Background(), createTestEndpoint(server.URL, domain.ProfileOllama))
+	_, err := client.DiscoverModels(t.Context(), createTestEndpoint(server.URL, domain.ProfileOllama))
 	var parseErr *ParseError
 	var discoveryErr *DiscoveryError
 	if !errors.As(err, &parseErr) || !errors.As(err, &discoveryErr) || discoveryErr.StatusCode != http.StatusOK {
@@ -175,7 +175,7 @@ func TestHTTPDiscoveryResponseSizeBoundary(t *testing.T) {
 			defer server.Close()
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 			defer client.Close()
-			_, err := client.DiscoverModels(context.Background(), createTestEndpoint(server.URL, domain.ProfileOllama))
+			_, err := client.DiscoverModels(t.Context(), createTestEndpoint(server.URL, domain.ProfileOllama))
 			if extra == 0 && err != nil {
 				t.Fatal(err)
 			}
@@ -197,7 +197,7 @@ func TestHTTPAutoDiscoveryContinuesAfterParseFailure(t *testing.T) {
 	defer server.Close()
 	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 	defer client.Close()
-	models, err := client.DiscoverModels(context.Background(), createTestEndpoint(server.URL, domain.ProfileAuto))
+	models, err := client.DiscoverModels(t.Context(), createTestEndpoint(server.URL, domain.ProfileAuto))
 	if err != nil || len(models) != 1 {
 		t.Fatalf("auto detection did not recover: %v, %+v", err, models)
 	}
@@ -213,14 +213,14 @@ func TestExplicitDiscoveryResetsCooldownAfterRegistration(t *testing.T) {
 	registry := &mockModelRegistry{registerError: registryErr}
 	service := NewModelDiscoveryService(&mockDiscoveryClient{}, nil, registry, DiscoveryConfig{Timeout: time.Second}, createTestLogger())
 	service.disableEndpoint(endpoint.URLString)
-	if err := service.DiscoverEndpoint(context.Background(), endpoint); !errors.Is(err, registryErr) {
+	if err := service.DiscoverEndpoint(t.Context(), endpoint); !errors.Is(err, registryErr) {
 		t.Fatalf("expected registry error, got %v", err)
 	}
 	if !service.isEndpointDisabled(endpoint.URLString) {
 		t.Fatal("failed registration cleared cooldown")
 	}
 	registry.registerError = nil
-	if err := service.DiscoverEndpoint(context.Background(), endpoint); err != nil {
+	if err := service.DiscoverEndpoint(t.Context(), endpoint); err != nil {
 		t.Fatal(err)
 	}
 	if service.isEndpointDisabled(endpoint.URLString) || service.getFailureCount(endpoint.URLString) != 0 {
@@ -238,7 +238,7 @@ func TestLlamaCppMetadataDriftRegistersModels(t *testing.T) {
 	endpoint := createTestEndpoint(server.URL, domain.ProfileLlamaCpp)
 	registry := &mockModelRegistry{}
 	service := NewModelDiscoveryService(client, nil, registry, DiscoveryConfig{Timeout: time.Second}, createTestLogger())
-	if err := service.DiscoverEndpoint(context.Background(), endpoint); err != nil {
+	if err := service.DiscoverEndpoint(t.Context(), endpoint); err != nil {
 		t.Fatal(err)
 	}
 	if registry.registerCallCount != 1 || len(registry.registeredModels) != 1 || registry.registeredModels[0].Name != "Qwen3.5-35B-A3B" {
@@ -277,7 +277,7 @@ func TestConcurrentDiscoveryKeepsHealthyRequestRunning(t *testing.T) {
 	}}
 	registry := &mockModelRegistry{}
 	service := NewModelDiscoveryService(client, &mockEndpointRepository{healthyEndpoints: []*domain.Endpoint{failed, healthy, queued}}, registry, DiscoveryConfig{Timeout: time.Second, ConcurrentWorkers: 2}, createTestLogger())
-	if err := service.DiscoverAll(context.Background()); err == nil {
+	if err := service.DiscoverAll(t.Context()); err == nil {
 		t.Fatal("expected endpoint error")
 	}
 	if registry.registerCallCount != 2 || service.getFailureCount(healthy.URLString) != 0 {

@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -12,7 +11,7 @@ import (
 
 func BenchmarkRepository_GetAll(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Setup test endpoints via config
 	configs := make([]config.EndpointConfig, 100)
@@ -44,7 +43,7 @@ func BenchmarkRepository_GetAll(b *testing.B) {
 
 func BenchmarkRepository_GetRoutable(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Mix of statuses - 60% routable (healthy + busy + warming)
 	configs := make([]config.EndpointConfig, 100)
@@ -91,7 +90,7 @@ func BenchmarkRepository_GetRoutable(b *testing.B) {
 
 func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	cfg := config.EndpointConfig{
 		Name:           "bench-update",
@@ -130,7 +129,7 @@ func BenchmarkRepository_UpdateEndpoint(b *testing.B) {
 
 func BenchmarkRepository_LoadFromConfig(b *testing.B) {
 	repo := NewStaticEndpointRepository()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	// Create realistic config with 10 endpoints
 	configs := make([]config.EndpointConfig, 10)

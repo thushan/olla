@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -37,17 +36,17 @@ func discoverStatic(t *testing.T, cfg config.EndpointConfig) (int, string, error
 		t.Fatal(err)
 	}
 	repo := NewStaticEndpointRepositoryWithFactory(factory)
-	if err := repo.LoadFromConfig(context.Background(), []config.EndpointConfig{cfg}); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), []config.EndpointConfig{cfg}); err != nil {
 		t.Fatal(err)
 	}
-	eps, _ := repo.GetAll(context.Background())
+	eps, _ := repo.GetAll(t.Context())
 
 	var logs bytes.Buffer
 	lg := logger.NewPlainStyledLogger(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	c := NewHTTPModelDiscoveryClientWithDefaults(factory, lg)
 	defer c.Close()
 
-	models, derr := c.DiscoverModels(context.Background(), eps[0])
+	models, derr := c.DiscoverModels(t.Context(), eps[0])
 	won := ""
 	for _, p := range []string{
 		domain.ProfileOllama, domain.ProfileLlamaCpp, domain.ProfileLmStudio, domain.ProfileVLLM,

@@ -227,7 +227,7 @@ func TestDiscoverModels(t *testing.T) {
 			endpoint := createTestEndpoint(server.URL, tt.endpointType)
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			ctx := context.Background()
+			ctx := t.Context()
 			models, err := client.DiscoverModels(ctx, endpoint)
 
 			if tt.expectedError {
@@ -310,7 +310,7 @@ func TestAutoDetectionOpenAIModelIdentity(t *testing.T) {
 			}
 			client := NewHTTPModelDiscoveryClientWithDefaults(factory, createTestLogger())
 			defer client.Close()
-			models, err := client.DiscoverModels(context.Background(), createTestEndpoint(server.URL, tt.endpointType))
+			models, err := client.DiscoverModels(t.Context(), createTestEndpoint(server.URL, tt.endpointType))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -515,7 +515,7 @@ func TestDiscoverModelsAutoDetection(t *testing.T) {
 
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			ctx := context.Background()
+			ctx := t.Context()
 			models, err := client.DiscoverModels(ctx, endpoint)
 
 			if tt.expectedError {
@@ -559,7 +559,7 @@ func TestDiscoverModelsContextCancellation(t *testing.T) {
 	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
 	// Create context with short timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 
 	_, err := client.DiscoverModels(ctx, endpoint)
@@ -608,7 +608,7 @@ func TestHealthCheck(t *testing.T) {
 			endpoint := createTestEndpoint(server.URL, domain.ProfileOllama)
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			err := client.HealthCheck(context.Background(), endpoint)
+			err := client.HealthCheck(t.Context(), endpoint)
 
 			if tt.expectedError && err == nil {
 				t.Errorf("Expected error but got none")
@@ -643,7 +643,7 @@ func TestGetMetrics(t *testing.T) {
 	defer server.Close()
 
 	endpoint := createTestEndpoint(server.URL, domain.ProfileOllama)
-	_, err := client.DiscoverModels(context.Background(), endpoint)
+	_, err := client.DiscoverModels(t.Context(), endpoint)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -674,7 +674,7 @@ func TestMaxResponseSizeLimit(t *testing.T) {
 	endpoint := createTestEndpoint(server.URL, domain.ProfileOllama)
 	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-	_, err := client.DiscoverModels(context.Background(), endpoint)
+	_, err := client.DiscoverModels(t.Context(), endpoint)
 	if err == nil {
 		t.Errorf("Expected error due to response size limit")
 	}
@@ -767,7 +767,7 @@ func TestModelURLOverride(t *testing.T) {
 
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			models, err := client.DiscoverModels(context.Background(), endpoint)
+			models, err := client.DiscoverModels(t.Context(), endpoint)
 
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
@@ -850,7 +850,7 @@ func TestModelURLFallbackToProfileDefault(t *testing.T) {
 
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			models, err := client.DiscoverModels(context.Background(), endpoint)
+			models, err := client.DiscoverModels(t.Context(), endpoint)
 
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
@@ -932,7 +932,7 @@ func TestOpenAICompatibleModelURLBehavior(t *testing.T) {
 
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			models, err := client.DiscoverModels(context.Background(), endpoint)
+			models, err := client.DiscoverModels(t.Context(), endpoint)
 
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
@@ -1043,7 +1043,7 @@ func TestDiscoverModels_AuthenticatedEndpoint(t *testing.T) {
 	}
 
 	client := NewHTTPModelDiscoveryClientWithDefaults(factory, createTestLogger())
-	models, err := client.DiscoverModels(context.Background(), endpoint)
+	models, err := client.DiscoverModels(t.Context(), endpoint)
 	if err != nil {
 		t.Fatalf("DiscoverModels failed: %v", err)
 	}
