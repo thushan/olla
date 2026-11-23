@@ -142,9 +142,12 @@ func benchmarkRefactoredErrorHandling(b *testing.B, proxyType string) {
 
 func benchmarkRefactoredHeaderProcessing(b *testing.B, proxyType string) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Echo back headers
+		// Echo back headers. The Header() lookup stays inside the loop on
+		// purpose: the upstream echo is inside what this row measures, so
+		// collapsing the calls changes the row rather than the proxy.
 		for k, v := range r.Header {
-			w.Header()[k] = v
+			dst := w.Header()
+			dst[k] = v
 		}
 		w.WriteHeader(http.StatusOK)
 	}))

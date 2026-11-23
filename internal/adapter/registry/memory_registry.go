@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 	"sync"
@@ -434,9 +435,7 @@ func (r *MemoryModelRegistry) GetStats(ctx context.Context) (domain.RegistryStat
 	defer r.mu.RUnlock()
 
 	modelsPerEndpoint := make(map[string]int, len(r.stats.ModelsPerEndpoint))
-	for k, v := range r.stats.ModelsPerEndpoint {
-		modelsPerEndpoint[k] = v
-	}
+	maps.Copy(modelsPerEndpoint, r.stats.ModelsPerEndpoint)
 
 	return domain.RegistryStats{
 		TotalEndpoints:    r.stats.TotalEndpoints,

@@ -2,6 +2,7 @@ package translator
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"sync"
 
@@ -77,9 +78,7 @@ func (r *Registry) GetAll() map[string]RequestTranslator {
 
 	// Return a copy to prevent concurrent modification issues
 	result := make(map[string]RequestTranslator, len(r.translators))
-	for name, translator := range r.translators {
-		result[name] = translator
-	}
+	maps.Copy(result, r.translators)
 
 	return result
 }

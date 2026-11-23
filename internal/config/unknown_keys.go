@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 
@@ -209,9 +210,7 @@ func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) 
 			switch ft.Kind() {
 			case reflect.Struct:
 				sub, sf := structKeys(ft)
-				for k, v := range sub {
-					fields[k] = v
-				}
+				maps.Copy(fields, sub)
 				freeForm = freeForm || sf
 			case reflect.Map:
 				freeForm = true

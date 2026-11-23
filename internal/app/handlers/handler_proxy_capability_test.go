@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"maps"
 	"net/url"
 	"sync"
 	"testing"
@@ -501,9 +502,7 @@ func (w *warnRecorder) snapshot() map[string]int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	out := make(map[string]int, len(w.warns))
-	for k, v := range w.warns {
-		out[k] = v
-	}
+	maps.Copy(out, w.warns)
 	return out
 }
 
