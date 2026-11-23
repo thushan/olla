@@ -260,8 +260,8 @@ func (p *PriorityBalancer) Select(ctx context.Context,
     }
     
     // Sort by priority (highest first)
-    sort.Slice(healthy, func(i, j int) bool {
-        return healthy[i].Priority > healthy[j].Priority
+    slices.SortFunc(healthy, func(a, b *domain.Endpoint) int {
+        return cmp.Compare(b.Priority, a.Priority)
     })
     
     return healthy[0], nil
@@ -345,7 +345,7 @@ sequenceDiagram
 // Simplified request flow
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     // 1. Extract request metadata
-    ctx := context.WithValue(r.Context(), "request-id", generateID())
+    ctx := context.WithValue(r.Context(), constants.ContextRequestIdKey, generateID())
     
     // 2. Apply security policies
     if err := h.security.ValidateRequest(r); err != nil {

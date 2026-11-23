@@ -112,14 +112,12 @@ func TestConcurrentStats(t *testing.T) {
     workers := 100
     iterations := 1000
     
-    wg.Add(workers)
-    for i := 0; i < workers; i++ {
-        go func() {
-            defer wg.Done()
-            for j := 0; j < iterations; j++ {
+    for range workers {
+        wg.Go(func() {
+            for range iterations {
                 stats.IncrementRequests()
             }
-        }()
+        })
     }
     
     wg.Wait()
@@ -135,7 +133,7 @@ func TestConcurrentStats(t *testing.T) {
 
 ```go
 func TestRequestWithTimeout(t *testing.T) {
-    ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+    ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
     defer cancel()
     
     service := NewService()
@@ -203,7 +201,7 @@ func TestProxyForwarding(t *testing.T) {
     rec := httptest.NewRecorder()
     
     // Test
-    err := proxy.ProxyRequest(context.Background(), rec, req)
+    err := proxy.ProxyRequest(t.Context(), rec, req)
     if err != nil {
         t.Fatalf("proxy failed: %v", err)
     }
@@ -240,7 +238,7 @@ func TestStreamingResponse(t *testing.T) {
     req := httptest.NewRequest("GET", "/stream", nil)
     rec := httptest.NewRecorder()
     
-    err := proxy.ProxyRequest(context.Background(), rec, req)
+    err := proxy.ProxyRequest(t.Context(), rec, req)
     if err != nil {
         t.Fatalf("streaming failed: %v", err)
     }
@@ -279,7 +277,7 @@ func TestProxyWithMockDiscovery(t *testing.T) {
     proxy := NewProxy(mock)
     
     // Test with mock
-    endpoints, err := proxy.GetAvailableEndpoints(context.Background())
+    endpoints, err := proxy.GetAvailableEndpoints(t.Context())
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
@@ -342,7 +340,7 @@ func GenerateEndpoints(count int) []*Endpoint {
 
 // test/helpers/context.go
 func ContextWithTimeout(t *testing.T, timeout time.Duration) context.Context {
-    ctx, cancel := context.WithTimeout(context.Background(), timeout)
+    ctx, cancel := context.WithTimeout(t.Context(), timeout)
     t.Cleanup(cancel)
     return ctx
 }
