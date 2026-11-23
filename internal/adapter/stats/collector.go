@@ -80,11 +80,11 @@ type Collector struct {
 	// Global latency bounds across all endpoints, CAS-updated the same way as
 	// endpointData's per-endpoint bounds (see updateLatencyBounds). minLatency
 	// starts at -1 as an "unset" sentinel since 0 is a valid observed latency.
-	minLatency int64
-	maxLatency int64
+	minLatency atomic.Int64
+	maxLatency atomic.Int64
 
-	lastCleanup   int64
-	lastIPCleanup int64 // atomic: tracks when the age-eviction scan last ran
+	lastCleanup   atomic.Int64
+	lastIPCleanup atomic.Int64 // tracks when the age-eviction scan last ran
 	securityMu    sync.RWMutex
 
 	cleanupMu sync.Mutex
@@ -98,10 +98,10 @@ type endpointData struct {
 	totalLatency       *xsync.Counter
 	name               string
 	url                string
-	activeConnections  int64 // Still using atomic for decrement operations
-	minLatency         int64 // Keep atomic for CAS operations
-	maxLatency         int64 // Keep atomic for CAS operations
-	lastUsed           int64 // Keep atomic for timestamp
+	activeConnections  atomic.Int64
+	minLatency         atomic.Int64
+	maxLatency         atomic.Int64
+	lastUsed           atomic.Int64
 }
 
 func NewCollector(logger logger.StyledLogger) *Collector {
@@ -114,12 +114,18 @@ func NewCollectorWithConfig(logger logger.StyledLogger, modelConfig *ModelCollec
 		modelConfig = DefaultModelCollectorConfig()
 	}
 
-	return &Collector{
-		uniqueRateLimitedIPs: make(map[string]int64),
+	uniqueIPs := make(map[string]int64)
+	endpoints := xsync.NewMap[string, *endpointData]()
+	// Sampled exactly where the base's composite literal sampled it: after the
+	// map allocations, before the sub-collector constructors.
+	now := time.Now().UnixNano()
+	// atomic.Int64 cannot carry a non-zero value in a composite literal, so
+	// the sentinel and the cleanup watermark are stored after the literal,
+	// still before c is published to callers.
+	c := &Collector{
+		uniqueRateLimitedIPs: uniqueIPs,
 		logger:               logger,
-		endpoints:            xsync.NewMap[string, *endpointData](),
-		lastCleanup:          time.Now().UnixNano(),
-		minLatency:           -1,
+		endpoints:            endpoints,
 		modelCollector:       NewModelCollectorWithConfig(modelConfig),
 		translatorCollector:  NewTranslatorCollector(),
 		totalRequests:        xsync.NewCounter(),
@@ -129,6 +135,9 @@ func NewCollectorWithConfig(logger logger.StyledLogger, modelConfig *ModelCollec
 		rateLimitViolations:  xsync.NewCounter(),
 		sizeLimitViolations:  xsync.NewCounter(),
 	}
+	c.lastCleanup.Store(now)
+	c.minLatency.Store(-1)
+	return c
 }
 
 func (c *Collector) RecordRequest(endpoint *domain.Endpoint, status string, latency time.Duration, bytes int64) {
@@ -159,12 +168,12 @@ func (c *Collector) RecordConnection(endpoint *domain.Endpoint, delta int) {
 	data := c.getOrInitEndpoint(endpoint, now)
 
 	if delta > 0 {
-		atomic.AddInt64(&data.activeConnections, int64(delta))
+		data.activeConnections.Add(int64(delta))
 	} else if delta < 0 {
 		for {
-			current := atomic.LoadInt64(&data.activeConnections)
+			current := data.activeConnections.Load()
 			newVal := max(current+int64(delta), 0)
-			if atomic.CompareAndSwapInt64(&data.activeConnections, current, newVal) {
+			if data.activeConnections.CompareAndSwap(current, newVal) {
 				break
 			}
 		}
@@ -194,7 +203,7 @@ func (c *Collector) GetProxyStats() ports.ProxyStats {
 		avgLatency = totalLatency / successful
 	}
 
-	minLatency := atomic.LoadInt64(&c.minLatency)
+	minLatency := c.minLatency.Load()
 	if minLatency == -1 {
 		minLatency = 0
 	}
@@ -205,7 +214,7 @@ func (c *Collector) GetProxyStats() ports.ProxyStats {
 		FailedRequests:     failed,
 		AverageLatency:     avgLatency,
 		MinLatency:         minLatency,
-		MaxLatency:         atomic.LoadInt64(&c.maxLatency),
+		MaxLatency:         c.maxLatency.Load(),
 	}
 }
 
@@ -213,9 +222,9 @@ func (c *Collector) GetProxyStats() ports.ProxyStats {
 // updateLatencyBounds, feeding GetProxyStats' MinLatency/MaxLatency.
 func (c *Collector) updateGlobalLatencyBounds(latencyMs int64) {
 	for {
-		minLatency := atomic.LoadInt64(&c.minLatency)
+		minLatency := c.minLatency.Load()
 		if minLatency == -1 || latencyMs < minLatency {
-			if atomic.CompareAndSwapInt64(&c.minLatency, minLatency, latencyMs) {
+			if c.minLatency.CompareAndSwap(minLatency, latencyMs) {
 				break
 			}
 		} else {
@@ -223,9 +232,9 @@ func (c *Collector) updateGlobalLatencyBounds(latencyMs int64) {
 		}
 	}
 	for {
-		maxLatency := atomic.LoadInt64(&c.maxLatency)
+		maxLatency := c.maxLatency.Load()
 		if latencyMs > maxLatency {
-			if atomic.CompareAndSwapInt64(&c.maxLatency, maxLatency, latencyMs) {
+			if c.maxLatency.CompareAndSwap(maxLatency, latencyMs) {
 				break
 			}
 		} else {
@@ -252,7 +261,7 @@ func (c *Collector) GetEndpointStats() map[string]ports.EndpointStats {
 			successRate = float64(successful) / float64(total) * 100
 		}
 
-		minLatency := atomic.LoadInt64(&data.minLatency)
+		minLatency := data.minLatency.Load()
 		if minLatency == -1 {
 			minLatency = 0
 		}
@@ -260,15 +269,15 @@ func (c *Collector) GetEndpointStats() map[string]ports.EndpointStats {
 		stats[url] = ports.EndpointStats{
 			Name:               data.name,
 			URL:                data.url,
-			ActiveConnections:  atomic.LoadInt64(&data.activeConnections),
+			ActiveConnections:  data.activeConnections.Load(),
 			TotalRequests:      total,
 			SuccessfulRequests: successful,
 			FailedRequests:     failed,
 			TotalBytes:         data.totalBytes.Value(),
 			AverageLatency:     avgLatency,
 			MinLatency:         minLatency,
-			MaxLatency:         atomic.LoadInt64(&data.maxLatency),
-			LastUsedNano:       atomic.LoadInt64(&data.lastUsed),
+			MaxLatency:         data.maxLatency.Load(),
+			LastUsedNano:       data.lastUsed.Load(),
 			SuccessRate:        successRate,
 		}
 		return true
@@ -293,7 +302,7 @@ func (c *Collector) GetConnectionStats() map[string]int64 {
 	stats := make(map[string]int64)
 
 	c.endpoints.Range(func(url string, data *endpointData) bool {
-		stats[url] = atomic.LoadInt64(&data.activeConnections)
+		stats[url] = data.activeConnections.Load()
 		return true
 	})
 
@@ -309,7 +318,7 @@ func (c *Collector) GetConnectionCount(endpoint string) int64 {
 	if !ok {
 		return 0
 	}
-	return atomic.LoadInt64(&data.activeConnections)
+	return data.activeConnections.Load()
 }
 
 func (c *Collector) RecordSecurityViolation(violation ports.SecurityViolation) {
@@ -328,7 +337,7 @@ func (c *Collector) recordRateLimitedIP(clientIP string) {
 	// Age-eviction scan runs at most once per ipCleanupInterval, not on every
 	// violation. The pre-check outside the lock avoids contention when the
 	// interval has not yet elapsed (the common case under a flood).
-	lastClean := atomic.LoadInt64(&c.lastIPCleanup)
+	lastClean := c.lastIPCleanup.Load()
 	if now-lastClean >= int64(ipCleanupInterval) {
 		c.cleanupOldRateLimitedIPs(now)
 	}
@@ -350,7 +359,7 @@ func (c *Collector) cleanupOldRateLimitedIPs(now int64) {
 	defer c.cleanupMu.Unlock()
 
 	// Second check after acquiring the cleanup lock.
-	if now-atomic.LoadInt64(&c.lastIPCleanup) < int64(ipCleanupInterval) {
+	if now-c.lastIPCleanup.Load() < int64(ipCleanupInterval) {
 		return
 	}
 
@@ -364,7 +373,7 @@ func (c *Collector) cleanupOldRateLimitedIPs(now int64) {
 	}
 	c.securityMu.Unlock()
 
-	atomic.StoreInt64(&c.lastIPCleanup, now)
+	c.lastIPCleanup.Store(now)
 }
 
 func (c *Collector) updateEndpointStats(endpoint *domain.Endpoint, status string, latencyMs, bytes int64, now int64) {
@@ -372,7 +381,7 @@ func (c *Collector) updateEndpointStats(endpoint *domain.Endpoint, status string
 
 	data.totalRequests.Inc()
 	data.totalBytes.Add(bytes)
-	atomic.StoreInt64(&data.lastUsed, now)
+	data.lastUsed.Store(now)
 
 	if status == StatusSuccess {
 		data.successfulRequests.Inc()
@@ -385,9 +394,9 @@ func (c *Collector) updateEndpointStats(endpoint *domain.Endpoint, status string
 
 func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 	for {
-		minLatency := atomic.LoadInt64(&data.minLatency)
+		minLatency := data.minLatency.Load()
 		if minLatency == -1 || latencyMs < minLatency {
-			if atomic.CompareAndSwapInt64(&data.minLatency, minLatency, latencyMs) {
+			if data.minLatency.CompareAndSwap(minLatency, latencyMs) {
 				break
 			}
 		} else {
@@ -395,9 +404,9 @@ func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 		}
 	}
 	for {
-		maxLatency := atomic.LoadInt64(&data.maxLatency)
+		maxLatency := data.maxLatency.Load()
 		if latencyMs > maxLatency {
-			if atomic.CompareAndSwapInt64(&data.maxLatency, maxLatency, latencyMs) {
+			if data.maxLatency.CompareAndSwap(maxLatency, latencyMs) {
 				break
 			}
 		} else {
@@ -409,17 +418,22 @@ func (c *Collector) updateLatencyBounds(data *endpointData, latencyMs int64) {
 func (c *Collector) getOrInitEndpoint(endpoint *domain.Endpoint, now int64) *endpointData {
 	key := endpoint.URLString
 	data, _ := c.endpoints.LoadOrCompute(key, func() (newValue *endpointData, cancel bool) {
-		return &endpointData{
+		d := &endpointData{
 			url:                key,
 			name:               endpoint.Name,
-			lastUsed:           now,
-			minLatency:         -1,
 			totalRequests:      xsync.NewCounter(),
 			successfulRequests: xsync.NewCounter(),
 			failedRequests:     xsync.NewCounter(),
 			totalBytes:         xsync.NewCounter(),
 			totalLatency:       xsync.NewCounter(),
-		}, false
+		}
+		// Set inside the creation callback, before the entry is published:
+		// a zero lastUsed would let TTL cleanup evict an endpoint whose first
+		// update was connection-only, and minLatency needs the -1 sentinel
+		// because 0 is a valid observed latency.
+		d.lastUsed.Store(now)
+		d.minLatency.Store(-1)
+		return d, false
 	})
 	return data
 }
@@ -428,12 +442,12 @@ func (c *Collector) tryCleanup(now int64) {
 	c.cleanupMu.Lock()
 	defer c.cleanupMu.Unlock()
 
-	if now-atomic.LoadInt64(&c.lastCleanup) < int64(CleanupInterval) {
+	if now-c.lastCleanup.Load() < int64(CleanupInterval) {
 		return
 	}
 
 	c.cleanup(now)
-	atomic.StoreInt64(&c.lastCleanup, now)
+	c.lastCleanup.Store(now)
 }
 
 func (c *Collector) cleanup(now int64) {
@@ -443,7 +457,7 @@ func (c *Collector) cleanup(now int64) {
 
 	c.endpoints.Range(func(url string, data *endpointData) bool {
 		count++
-		if atomic.LoadInt64(&data.lastUsed) < cutoff {
+		if data.lastUsed.Load() < cutoff {
 			toRemove = append(toRemove, url)
 		}
 		return true
@@ -460,7 +474,7 @@ func (c *Collector) cleanup(now int64) {
 		}
 		var ages []endpointAge
 		c.endpoints.Range(func(url string, data *endpointData) bool {
-			ages = append(ages, endpointAge{url, atomic.LoadInt64(&data.lastUsed)})
+			ages = append(ages, endpointAge{url, data.lastUsed.Load()})
 			return true
 		})
 		slices.SortFunc(ages, func(a, b endpointAge) int {
