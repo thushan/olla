@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -104,7 +103,7 @@ func TestSecurityServices_ChainValidation_AllPass(t *testing.T) {
 	services, adapters := createNewTestSecurityServices()
 	defer adapters.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req := ports.SecurityRequest{
 		ClientID:      "192.168.1.100",
 		Endpoint:      "/api/test",
@@ -131,7 +130,7 @@ func TestSecurityServices_ChainValidation_RateLimitFails(t *testing.T) {
 	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req := ports.SecurityRequest{
 		ClientID:      "192.168.1.100",
 		Endpoint:      "/api/test",
@@ -180,7 +179,7 @@ func TestSecurityServices_ChainValidation_SizeLimitFails(t *testing.T) {
 	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req := ports.SecurityRequest{
 		ClientID:      "192.168.1.100",
 		Endpoint:      "/api/test",
@@ -211,7 +210,7 @@ func TestSecurityServices_ChainValidation_StopsAtFirstFailure(t *testing.T) {
 	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req := ports.SecurityRequest{
 		ClientID:      "192.168.1.100",
 		Endpoint:      "/api/test",
@@ -271,7 +270,7 @@ func TestSecurityServices_MetricsIntegration(t *testing.T) {
 	services, adapters := createNewTestSecurityServicesWithConfig(cfg)
 	defer adapters.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Record some violations
 	violation1 := ports.SecurityViolation{

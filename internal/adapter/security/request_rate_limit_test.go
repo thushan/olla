@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -109,7 +108,7 @@ func TestRateLimitValidator_Validate_Disabled(t *testing.T) {
 	}
 
 	for i := range 10 {
-		result, err := validator.Validate(context.Background(), req)
+		result, err := validator.Validate(t.Context(), req)
 		if err != nil {
 			t.Fatalf("Validate failed: %v", err)
 		}
@@ -135,7 +134,7 @@ func TestRateLimitValidator_Validate_HealthEndpoint(t *testing.T) {
 	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	clientIP := "192.168.1.100"
 
 	regularReq := ports.SecurityRequest{
@@ -180,7 +179,7 @@ func TestRateLimitValidator_Validate_BurstCapacity(t *testing.T) {
 	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req := ports.SecurityRequest{
 		ClientID:      "192.168.1.100",
 		Endpoint:      "/api/test",
@@ -226,7 +225,7 @@ func TestRateLimitValidator_Validate_PerIPIsolation(t *testing.T) {
 	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req1 := ports.SecurityRequest{
 		ClientID:      "192.168.1.100",
@@ -277,7 +276,7 @@ func TestRateLimitValidator_Validate_GlobalLimit(t *testing.T) {
 	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ips := []string{"192.168.1.100", "192.168.1.101", "192.168.1.102"}
 	globalBlocked := false
 
@@ -324,7 +323,7 @@ func TestRateLimitValidator_Validate_ConcurrentAccess(t *testing.T) {
 	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	var wg sync.WaitGroup
 	errors := make(chan error, 100)
 
@@ -368,7 +367,7 @@ func TestRateLimitValidator_Cleanup(t *testing.T) {
 	validator := createTestRateLimitValidator(limits)
 	defer validator.Stop()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for i := range 5 {
 		req := ports.SecurityRequest{
@@ -443,7 +442,7 @@ func TestRateLimitValidator_Validate_PerIPDisabledStillEnforcesGlobal(t *testing
 	const requests = 50
 	allowed := 0
 	for i := range requests {
-		result, err := validator.Validate(context.Background(), req)
+		result, err := validator.Validate(t.Context(), req)
 		if err != nil {
 			t.Fatalf("Validate failed on request %d: %v", i+1, err)
 		}
@@ -469,7 +468,7 @@ func sendN(t *testing.T, v *RateLimitValidator, client string, n int) []ports.Se
 	t.Helper()
 	out := make([]ports.SecurityResult, 0, n)
 	for range n {
-		res, err := v.Validate(context.Background(), ports.SecurityRequest{
+		res, err := v.Validate(t.Context(), ports.SecurityRequest{
 			ClientID: client, Endpoint: "/api/test", Method: "POST",
 		})
 		if err != nil {
@@ -769,7 +768,7 @@ func TestRateLimitValidator_Validate_ConcurrentGlobalRejectionKeepsPerIPToken(t 
 	for range 32 {
 		wg.Go(func() {
 			for range 300 {
-				_, _ = v.Validate(context.Background(), ports.SecurityRequest{ClientID: "a"})
+				_, _ = v.Validate(t.Context(), ports.SecurityRequest{ClientID: "a"})
 			}
 		})
 	}
@@ -803,7 +802,7 @@ func TestRateLimitValidator_Validate_ConcurrentRejectionsKeepGlobalTokens(t *tes
 	for i := range 32 {
 		wg.Go(func() {
 			for range 300 {
-				_, _ = v.Validate(context.Background(), ports.SecurityRequest{ClientID: fmt.Sprintf("c%d", i)})
+				_, _ = v.Validate(t.Context(), ports.SecurityRequest{ClientID: fmt.Sprintf("c%d", i)})
 			}
 		})
 	}

@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,7 +14,7 @@ import (
 
 func TestRequestValidation_RequiredFields(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("missing_model", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
@@ -60,7 +59,7 @@ func TestRequestValidation_RequiredFields(t *testing.T) {
 
 func TestRequestValidation_ParameterRanges(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("negative_max_tokens", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
@@ -222,7 +221,7 @@ func TestRequestValidation_ParameterRanges(t *testing.T) {
 
 func TestRequestValidation_ValidParameters(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("valid_temperature_boundary", func(t *testing.T) {
 		temp := 2.0 // exactly 2.0 should be valid
@@ -293,7 +292,7 @@ func TestRequestValidation_ValidParameters(t *testing.T) {
 
 func TestRequestSizeLimit(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("request_exceeding_10MB", func(t *testing.T) {
 		// Create a request that exceeds 10MB
@@ -347,7 +346,7 @@ func TestRequestSizeLimit(t *testing.T) {
 
 func TestUnknownFieldsTolerated(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("request_with_unknown_field", func(t *testing.T) {
 		// Unknown fields must be silently ignored, not rejected. A proxy must not be
@@ -391,7 +390,7 @@ func TestUnknownFieldsTolerated(t *testing.T) {
 
 func TestSecurityFeaturesCombined(t *testing.T) {
 	translator := mustNewTranslator(createTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("invalid_params_with_unknown_fields", func(t *testing.T) {
 		// Unknown field is tolerated; validation still rejects the out-of-range temperature.

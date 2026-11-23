@@ -138,7 +138,7 @@ func reasoningContentChunk(messageID, model, reasoning string) string {
 func executeTransform(t *testing.T, translator *Translator, stream io.Reader) *httptest.ResponseRecorder {
 	t.Helper()
 	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), stream, recorder, nil)
+	err := translator.TransformStreamingResponse(t.Context(), stream, recorder, nil)
 	require.NoError(t, err)
 	return recorder
 }
