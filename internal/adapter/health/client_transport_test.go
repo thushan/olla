@@ -1,7 +1,6 @@
 package health
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -106,7 +105,7 @@ func TestHealthClient_RefusesCrossHostRedirect(t *testing.T) {
 	ep.AuthHeaderName = "X-Api-Key"
 	ep.AuthHeaderValue = "sk-SECRET-123"
 
-	result, _ := checker.Check(context.Background(), ep)
+	result, _ := checker.Check(t.Context(), ep)
 
 	if hits.Load() != 0 {
 		t.Fatalf("redirect target was reached %d times with X-Api-Key=%v", hits.Load(), leakedKey.Load())

@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -78,7 +77,7 @@ func BenchmarkExtractor(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ResetTimer()
 	b.ReportAllocs()

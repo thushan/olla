@@ -1,7 +1,6 @@
 package filter_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -99,7 +98,7 @@ func TestProfileFilteringIntegration(t *testing.T) {
 }
 
 func TestModelFilteringIntegration(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create sample models
 	models := []*domain.ModelInfo{
@@ -245,7 +244,7 @@ func TestFilterConfigOperations(t *testing.T) {
 }
 
 func TestEndToEndFiltering(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Simulate a complete filtering workflow
 	t.Run("complete filtering workflow", func(t *testing.T) {
@@ -322,7 +321,6 @@ func TestEndToEndFiltering(t *testing.T) {
 }
 
 func BenchmarkFilterOperations(b *testing.B) {
-	ctx := context.Background()
 	f := filter.NewGlobFilter()
 
 	config := &domain.FilterConfig{
@@ -341,6 +339,8 @@ func BenchmarkFilterOperations(b *testing.B) {
 	b.ResetTimer()
 
 	b.Run("filter_1000_models", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		for range b.N {
 			_, _ = f.Apply(ctx, config, models, func(item any) string {
 				if model, ok := item.(*domain.ModelInfo); ok {

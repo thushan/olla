@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
@@ -151,7 +150,7 @@ func TestExtractor_ExtractMetrics_OllamaResponse(t *testing.T) {
 	responseBytes, err := json.Marshal(ollamaResponse)
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	metrics := extractor.ExtractMetrics(ctx, responseBytes, nil, "ollama")
 	require.NotNil(t, metrics)
 
@@ -192,7 +191,7 @@ func TestExtractor_ExtractMetrics_InvalidJSON(t *testing.T) {
 	extractor, err := NewExtractor(factory, testLogger)
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test with invalid JSON - should return empty metrics but not nil
 	metrics := extractor.ExtractMetrics(ctx, []byte("not json"), nil, "test")
@@ -229,7 +228,7 @@ func TestExtractor_ExtractFromChunk(t *testing.T) {
 	extractor, err := NewExtractor(factory, testLogger)
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	chunk := []byte(`{"tokens": 15}`)
 
 	metrics := extractor.ExtractFromChunk(ctx, chunk, "chunk")
@@ -265,7 +264,7 @@ func TestExtractor_ExtractFromHeaders(t *testing.T) {
 	extractor, err := NewExtractor(factory, testLogger)
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	headers := http.Header{
 		"X-RateLimit-Remaining": []string{"100"},
 	}

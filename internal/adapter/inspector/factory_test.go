@@ -1,7 +1,6 @@
 package inspector
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -40,7 +39,7 @@ func TestFactory_CreateDefaultChain(t *testing.T) {
 	}
 
 	// chain is functional by testing with a known path
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -75,7 +74,7 @@ func TestFactory_CreateDefaultChain_PathInspectorIncluded(t *testing.T) {
 	chain := factory.CreateDefaultChain()
 
 	// test with Ollama-specific path
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/api/generate", nil)
 	targetPath := "/api/generate"
 
@@ -107,7 +106,7 @@ func TestFactory_CreateDefaultChain_MultipleCallsReturnDifferentInstances(t *tes
 		t.Error("CreateDefaultChain() should return different instances on each call")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -138,7 +137,7 @@ func TestFactory_CreatePathInspector(t *testing.T) {
 		t.Errorf("CreatePathInspector() name = %v, want 'path'", inspector.Name())
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	profile := domain.NewRequestProfile("/v1/chat/completions")
 
@@ -181,7 +180,7 @@ func TestFactory_CreateChain(t *testing.T) {
 		t.Fatal("CreateChain() should not return nil")
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -206,7 +205,7 @@ func TestFactory_CreateChain_CanAddInspectors(t *testing.T) {
 
 	chain.AddInspector(pathInspector)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -261,7 +260,7 @@ func TestFactory_IntegrationWithRealProfiles(t *testing.T) {
 		},
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -334,7 +333,7 @@ func TestFactory_Phase2Readiness(t *testing.T) {
 	customChain.AddInspector(pathInspector)
 	// phase 2, we would add: customChain.AddInspector(factory.CreateModelInspector())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 
 	profile1, err1 := chain.Inspect(ctx, req, "/v1/chat/completions")

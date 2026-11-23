@@ -1,7 +1,6 @@
 package health
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -50,7 +49,7 @@ func TestRateLimit_RetryAfterSeconds(t *testing.T) {
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
 	before := time.Now()
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 	after := time.Now()
 
 	require.NoError(t, err)
@@ -76,7 +75,7 @@ func TestRateLimit_RetryAfterHTTPDate(t *testing.T) {
 	ep := rlEndpoint(t, srv.URL)
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 
 	require.NoError(t, err)
 	assert.Equal(t, domain.StatusRateLimited, result.Status)
@@ -95,7 +94,7 @@ func TestRateLimit_NoRetryAfterUsesDefault(t *testing.T) {
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
 	before := time.Now()
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 	after := time.Now()
 
 	require.NoError(t, err)
@@ -118,7 +117,7 @@ func TestRateLimit_DoesNotTripCircuitBreaker(t *testing.T) {
 	hc := NewHealthClient(http.DefaultClient, cb)
 
 	for range DefaultCircuitBreakerThreshold * 3 {
-		_, _ = hc.Check(context.Background(), ep)
+		_, _ = hc.Check(t.Context(), ep)
 	}
 
 	open, _ := cb.IsOpen(ep.HealthCheckURLString, ep.CheckTimeout)
