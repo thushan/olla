@@ -193,9 +193,7 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 		cleanups = append(cleanups, cleanup)
 
 		idx := i
-		subscriberWg.Add(1)
-		go func() {
-			defer subscriberWg.Done()
+		subscriberWg.Go(func() {
 			for {
 				select {
 				case <-events:
@@ -204,7 +202,7 @@ func TestEventBus_ConcurrentPublishSubscribe(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 	defer func() {
 		for _, cleanup := range cleanups {

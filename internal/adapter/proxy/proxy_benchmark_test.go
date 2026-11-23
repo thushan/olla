@@ -279,9 +279,7 @@ func benchmarkHighThroughput(b *testing.B, suite ProxyTestSuite) {
 	close(requests)
 
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range requests {
 				req, stats, rlog := createTestRequestWithBody("GET", "/api/test", "")
 				w := httptest.NewRecorder()
@@ -291,7 +289,7 @@ func benchmarkHighThroughput(b *testing.B, suite ProxyTestSuite) {
 					b.Errorf("Request failed: %v", err)
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

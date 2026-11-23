@@ -168,16 +168,14 @@ func TestOllaProxyService_ConnectionPools(t *testing.T) {
 	const numRequests = 10
 
 	for range numRequests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			req, stats, rlog := createTestRequestWithStats("GET", "/api/test", "")
 			w := httptest.NewRecorder()
 			err := proxy2.ProxyRequestToEndpoints(req.Context(), w, req, []*domain.Endpoint{endpoint}, stats, rlog)
 			if err != nil {
 				t.Errorf("Request failed: %v", err)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

@@ -106,14 +106,12 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 	// Publish many events rapidly, synchronising on the publisher goroutine's
 	// own completion (a WaitGroup it owns) instead of polling a counter.
 	var publishWg sync.WaitGroup
-	publishWg.Add(1)
-	go func() {
-		defer publishWg.Done()
+	publishWg.Go(func() {
 		for i := range 1000 {
 			eb.PublishAsync(i)
 			published.Add(1)
 		}
-	}()
+	})
 	publishWg.Wait()
 
 	// Drain blocks until every queued event has run through bus.Publish, so
@@ -254,13 +252,11 @@ func TestWorkerPool_QueueDroppedMonotonic(t *testing.T) {
 	}()
 
 	for range goroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := range perGoroutine {
 				wp.PublishAsync(i)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(stop)

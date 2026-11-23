@@ -147,9 +147,7 @@ func TestTranslatorCollector_ConcurrentAccess(t *testing.T) {
 
 	// Launch goroutines recording passthrough events
 	for range numGoroutines / 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range requestsPerGoroutine {
 				event := ports.TranslatorRequestEvent{
 					TranslatorName: "anthropic",
@@ -162,14 +160,12 @@ func TestTranslatorCollector_ConcurrentAccess(t *testing.T) {
 				}
 				collector.Record(event)
 			}
-		}()
+		})
 	}
 
 	// Launch goroutines recording translation events with fallback
 	for range numGoroutines / 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range requestsPerGoroutine {
 				event := ports.TranslatorRequestEvent{
 					TranslatorName: "anthropic",
@@ -182,7 +178,7 @@ func TestTranslatorCollector_ConcurrentAccess(t *testing.T) {
 				}
 				collector.Record(event)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

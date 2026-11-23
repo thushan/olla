@@ -83,9 +83,7 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 	const numTimeoutTests = 20 // Reduced from 50
 
 	for range numTimeoutTests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ctx := context.Background()
 
 			// Create a new state for each goroutine to avoid race conditions
@@ -102,15 +100,13 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 			if err == nil && result != nil {
 				t.Error("Expected timeout but got result")
 			}
-		}()
+		})
 	}
 
 	// Test context cancellation concurrently too
 	const numCancelTests = 20 // Reduced from 50
 	for range numCancelTests {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ctx, cancel := context.WithCancel(context.Background())
 
 			// Create a new state for each goroutine to avoid race conditions
@@ -127,7 +123,7 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 
 			// This should return nil due to context cancellation
 			s.performTimedRead(ctx, reader, localBuffer, 10*time.Millisecond, localState, logger)
-		}()
+		})
 	}
 
 	// Wait for all tests to complete

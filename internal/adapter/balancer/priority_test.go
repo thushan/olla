@@ -308,16 +308,14 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 
 	// probably a bit lame way to test concurrency
 	for range 20 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 10 {
 				_, err := selector.Select(ctx, endpoints)
 				if err != nil {
 					errors <- err
 				}
 			}
-		}()
+		})
 	}
 
 	for i := range 20 {
@@ -333,16 +331,14 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 	}
 
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 5 {
 				stats := selector.statsCollector.GetConnectionStats()
 				if stats == nil {
 					errors <- fmt.Errorf("got nil stats")
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

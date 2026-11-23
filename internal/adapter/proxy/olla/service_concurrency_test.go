@@ -59,9 +59,7 @@ func TestUpdateConfig_ConcurrentReadWrite(t *testing.T) {
 
 	// Readers: load the config and assert it is coherent (both fields set together)
 	for range readers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range iters {
 				cfg := s.configuration.Load()
 				rt := cfg.GetReadTimeout()
@@ -76,7 +74,7 @@ func TestUpdateConfig_ConcurrentReadWrite(t *testing.T) {
 					t.Errorf("GetResponseTimeout returned unexpected value %v — possible torn read", rsp)
 				}
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
