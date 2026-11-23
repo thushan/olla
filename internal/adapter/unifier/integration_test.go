@@ -19,15 +19,6 @@ func createTestLogger() logger.StyledLogger {
 	return logger.NewPlainStyledLogger(log)
 }
 
-// Test helper functions
-func strPtr(s string) *string {
-	return &s
-}
-
-func int64Ptr(i int64) *int64 {
-	return &i
-}
-
 func TestUnifierIntegrationWithRegistry(t *testing.T) {
 	log := createTestLogger()
 	ctx := context.Background()
@@ -43,10 +34,10 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 		{
 			Name: "phi4:latest",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("phi3"), // Misclassified
-				ParameterSize:     strPtr("14.7B"),
-				QuantizationLevel: strPtr("Q4_K_M"),
-				State:             strPtr("loaded"),
+				Family:            new("phi3"), // Misclassified
+				ParameterSize:     new("14.7B"),
+				QuantizationLevel: new("Q4_K_M"),
+				State:             new("loaded"),
 			},
 			Size:     8_000_000_000,
 			LastSeen: time.Now(),
@@ -54,9 +45,9 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 		{
 			Name: "llama3.3:latest",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("llama"),
-				ParameterSize:     strPtr("70.6B"),
-				QuantizationLevel: strPtr("Q4_K_M"),
+				Family:            new("llama"),
+				ParameterSize:     new("70.6B"),
+				QuantizationLevel: new("Q4_K_M"),
 			},
 			Size:     40_000_000_000,
 			LastSeen: time.Now(),
@@ -64,9 +55,9 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 		{
 			Name: "hf.co/unsloth/Qwen3-32B-GGUF:Q4_K_XL",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("qwen3"),
-				ParameterSize:     strPtr("32.8B"),
-				QuantizationLevel: strPtr("unknown"),
+				Family:            new("qwen3"),
+				ParameterSize:     new("32.8B"),
+				QuantizationLevel: new("unknown"),
 			},
 			Size:     20_000_000_000,
 			LastSeen: time.Now(),
@@ -77,11 +68,11 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 		{
 			Name: "microsoft/phi-4-mini-reasoning",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("phi3"), // Also misclassified
-				QuantizationLevel: strPtr("Q4_K_M"),
-				MaxContextLength:  int64Ptr(131072),
-				Type:              strPtr("llm"),
-				State:             strPtr("not-loaded"),
+				Family:            new("phi3"), // Also misclassified
+				QuantizationLevel: new("Q4_K_M"),
+				MaxContextLength:  new(int64(131072)),
+				Type:              new("llm"),
+				State:             new("not-loaded"),
 			},
 			Size:     8_000_000_000,
 			LastSeen: time.Now(),
@@ -89,9 +80,9 @@ func TestUnifierIntegrationWithRegistry(t *testing.T) {
 		{
 			Name: "deepseek/deepseek-r1-0528-qwen3-8b",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("qwen3"),
-				QuantizationLevel: strPtr("Q4_K_M"),
-				Type:              strPtr("llm"),
+				Family:            new("qwen3"),
+				QuantizationLevel: new("Q4_K_M"),
+				Type:              new("llm"),
 			},
 			Size:     5_000_000_000,
 			LastSeen: time.Now(),
@@ -198,16 +189,16 @@ func TestUnifierIntegrationEdgeCases(t *testing.T) {
 			{
 				Name: "valid:model",
 				Details: &domain.ModelDetails{
-					Family:        strPtr("test"),
-					ParameterSize: strPtr("7B"),
+					Family:        new("test"),
+					ParameterSize: new("7B"),
 				},
 			},
 			nil, // Should be handled gracefully
 			{
 				Name: "another:model",
 				Details: &domain.ModelDetails{
-					Family:        strPtr("test2"),
-					ParameterSize: strPtr("13B"),
+					Family:        new("test2"),
+					ParameterSize: new("13B"),
 				},
 			},
 		}
@@ -228,9 +219,9 @@ func TestUnifierIntegrationEdgeCases(t *testing.T) {
 		model := &domain.ModelInfo{
 			Name: "concurrent:test",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("concurrent"),
-				ParameterSize:     strPtr("7B"),
-				QuantizationLevel: strPtr("Q4_0"),
+				Family:            new("concurrent"),
+				ParameterSize:     new("7B"),
+				QuantizationLevel: new("Q4_0"),
 			},
 			Size: 4_000_000_000,
 		}
@@ -276,9 +267,9 @@ func TestUnifierWithRealWorldScenarios(t *testing.T) {
 		model := &domain.ModelInfo{
 			Name: "migrating:model",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("test"),
-				ParameterSize:     strPtr("7B"),
-				QuantizationLevel: strPtr("Q4_K_M"),
+				Family:            new("test"),
+				ParameterSize:     new("7B"),
+				QuantizationLevel: new("Q4_K_M"),
 			},
 		}
 
@@ -318,10 +309,10 @@ func TestUnifierWithRealWorldScenarios(t *testing.T) {
 		oldModel := &domain.ModelInfo{
 			Name: "llama2:13b",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("llama"),
-				ParameterSize:     strPtr("13B"),
-				QuantizationLevel: strPtr("Q4_0"),
-				Digest:            strPtr("old-digest"),
+				Family:            new("llama"),
+				ParameterSize:     new("13B"),
+				QuantizationLevel: new("Q4_0"),
+				Digest:            new("old-digest"),
 			},
 			LastSeen: time.Now().Add(-24 * time.Hour),
 		}
@@ -335,10 +326,10 @@ func TestUnifierWithRealWorldScenarios(t *testing.T) {
 		newModel := &domain.ModelInfo{
 			Name: "llama2:13b",
 			Details: &domain.ModelDetails{
-				Family:            strPtr("llama"),
-				ParameterSize:     strPtr("13B"),
-				QuantizationLevel: strPtr("Q4_K_M"), // Better quantization
-				Digest:            strPtr("new-digest"),
+				Family:            new("llama"),
+				ParameterSize:     new("13B"),
+				QuantizationLevel: new("Q4_K_M"), // Better quantization
+				Digest:            new("new-digest"),
 			},
 			LastSeen: time.Now(),
 		}

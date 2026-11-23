@@ -58,7 +58,7 @@ func TestLMStudioConverter_ConvertToFormat(t *testing.T) {
 				},
 			},
 			Capabilities:     []string{"chat", "code"},
-			MaxContextLength: int64Ptr(131072),
+			MaxContextLength: new(int64(131072)),
 			Metadata: map[string]any{
 				"type":      "llm",
 				"publisher": "microsoft",

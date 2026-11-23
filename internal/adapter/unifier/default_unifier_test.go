@@ -12,10 +12,6 @@ import (
 )
 
 // Helper functions
-func ptrString(s string) *string {
-	return &s
-}
-
 func createTestEndpoint(url, name string) *domain.Endpoint {
 	return &domain.Endpoint{
 		URLString: url,
@@ -40,7 +36,7 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 						Name: "llama3:8b",
 						Size: 8000000000,
 						Details: &domain.ModelDetails{
-							Digest: ptrString("sha256:abc123"),
+							Digest: new("sha256:abc123"),
 						},
 					},
 				},
@@ -49,7 +45,7 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 						Name: "llama3-8b",
 						Size: 8000000000,
 						Details: &domain.ModelDetails{
-							Digest: ptrString("sha256:abc123"),
+							Digest: new("sha256:abc123"),
 						},
 					},
 				},
@@ -92,17 +88,17 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 				{
 					{
 						Name:    "llama3:8b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+						Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 					},
 					{
 						Name:    "phi3:mini",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+						Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 					},
 				},
 				{
 					{
 						Name:    "mistral:7b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:ghi789")},
+						Details: &domain.ModelDetails{Digest: new("sha256:ghi789")},
 					},
 				},
 			},
@@ -142,13 +138,13 @@ func TestDefaultUnifier_UnifyModels(t *testing.T) {
 				{
 					{
 						Name:    "llama3:8b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+						Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 					},
 				},
 				{
 					{
 						Name:    "llama3:8b",
-						Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+						Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 					},
 				},
 			},
@@ -189,11 +185,11 @@ func TestDefaultUnifier_ResolveModel(t *testing.T) {
 	models := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 		{
 			Name:    "Phi3:Mini",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+			Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 		},
 	}
 
@@ -221,22 +217,14 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 	ctx := context.Background()
 	unifier := NewDefaultUnifier()
 
-	// Helper functions
-	ptrInt64 := func(i int64) *int64 {
-		return &i
-	}
-	ptrString := func(s string) *string {
-		return &s
-	}
-
 	// Add model from first endpoint
 	models1 := []*domain.ModelInfo{
 		{
 			Name: "llama3:8b",
 			Details: &domain.ModelDetails{
-				Digest:           ptrString("sha256:abc123"),
-				MaxContextLength: ptrInt64(8192),
-				State:            ptrString("loaded"),
+				Digest:           new("sha256:abc123"),
+				MaxContextLength: new(int64(8192)),
+				State:            new("loaded"),
 			},
 		},
 	}
@@ -249,9 +237,9 @@ func TestDefaultUnifier_ModelMerging(t *testing.T) {
 		{
 			Name: "llama3:8b",
 			Details: &domain.ModelDetails{
-				Digest:           ptrString("sha256:abc123"),
-				MaxContextLength: ptrInt64(8192),
-				State:            ptrString("not-loaded"),
+				Digest:           new("sha256:abc123"),
+				MaxContextLength: new(int64(8192)),
+				State:            new("not-loaded"),
 			},
 		},
 	}
@@ -283,11 +271,11 @@ func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
 	models := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 		{
 			Name:    "phi3:mini",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:def456")},
+			Details: &domain.ModelDetails{Digest: new("sha256:def456")},
 		},
 	}
 	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")
@@ -298,7 +286,7 @@ func TestDefaultUnifier_EndpointCleanup(t *testing.T) {
 	newModels := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 	}
 	_, err = unifier.UnifyModels(ctx, newModels, endpoint)
@@ -322,7 +310,7 @@ func TestDefaultUnifier_Clear(t *testing.T) {
 	models := []*domain.ModelInfo{
 		{
 			Name:    "llama3:8b",
-			Details: &domain.ModelDetails{Digest: ptrString("sha256:abc123")},
+			Details: &domain.ModelDetails{Digest: new("sha256:abc123")},
 		},
 	}
 	endpoint := createTestEndpoint("http://localhost:11434", "Ollama Server")

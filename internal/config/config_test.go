@@ -148,7 +148,7 @@ func TestConfigValidation(t *testing.T) {
 						Name:           "test",
 						URL:            "http://localhost:11434",
 						Type:           "ollama",
-						Priority:       ptrInt(100),
+						Priority:       new(100),
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
 						CheckInterval:  5 * time.Second,
