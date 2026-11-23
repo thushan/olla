@@ -44,10 +44,11 @@ func benchClassifyCases() []struct {
 		{"dial-refused-net-error", dialRefused},
 		{"read-reset-net-error", readReset},
 		// An errno-shaped error outside a net.OpError. syscall.Errno implements
-		// net.Error (Error, Timeout, Temporary), so the errors.As net.Error
-		// branch catches it first; the syscall.Errno branch of the classifier
-		// is unreachable for every input. The row still times the classifier
-		// on this shape.
+		// net.Error (Error, Timeout, Temporary), so the errors.As into net.Error
+		// catches it before the syscall.Errno check. The syscall.Errno branch is
+		// unreachable for every error that does not customise As; only a type
+		// whose As sets a *syscall.Errno target and declines a *net.Error one
+		// can still reach it. The row still times the classifier on this shape.
 		{"errno-refused-unwrapped", fmt.Errorf("write: %w", syscall.ECONNREFUSED)},
 		{"string-fallback-nohost", errors.New("dial tcp: lookup backend.local: no such host")},
 		{"string-fallback-timeout", errors.New("read tcp: i/o timeout")},

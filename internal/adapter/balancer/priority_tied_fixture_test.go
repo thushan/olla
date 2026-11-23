@@ -213,8 +213,11 @@ func BenchmarkPrioritySelector_SelectTiedPriority(b *testing.B) {
 	}
 }
 
-// BenchmarkPrioritySelector_TiedPrioritySort isolates the sort alone, so the
-// comparator swap cost can be read without the weighted selection on top.
+// BenchmarkPrioritySelector_TiedPrioritySort isolates the comparator and swap
+// cost on the tied fixture, so the sort can be read without the weighted
+// selection on top. It times a test-local sort.Slice on a copy of the fixture,
+// not the production sort in priority.go, so it will not respond to a change
+// there; BenchmarkPrioritySelector_SelectTiedPriority is the row that does.
 func BenchmarkPrioritySelector_TiedPrioritySort(b *testing.B) {
 	routable := routableOf(tiedPriorityFixture())
 	work := make([]*domain.Endpoint, len(routable))
