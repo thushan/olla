@@ -192,8 +192,8 @@ func joinKeyPath(parent, key string) string {
 // structs. freeForm is true when an inline map accepts arbitrary keys.
 func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) {
 	fields = make(map[string]reflect.Type, t.NumField())
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
+		f := f
 		if f.PkgPath != "" && !f.Anonymous {
 			continue
 		}
