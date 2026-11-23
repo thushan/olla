@@ -18,7 +18,7 @@ names and config keys are the literal wire or YAML identifiers.
 
 ### Breaking: Go 1.27 is required to build from source
 
-`go.mod` now declares `go 1.27.0` with `toolchain go1.27.4`, so building needs Go 1.27 or later and a patched toolchain is fetched automatically when yours is older. The binaries and container images are unaffected apart from the macOS note below. Dependencies are updated, including `golang.org/x/*`, `expr-lang/expr`, `testify`, `gjson` and `pterm`. Contributors need golangci-lint v2.15.0 and betteralign v0.16.1 (`make install-deps`); the older pins fail on Go 1.27.
+`go.mod` now declares `go 1.27.0` with `toolchain go1.27.4`, so building needs Go 1.27 or later and a patched toolchain is fetched automatically when yours is older. The binaries and container images are unaffected apart from the macOS note below. Dependencies are updated, including `golang.org/x/*`, `expr-lang/expr`, `testify`, `gjson` and `pterm`. Contributors need golangci-lint v2.15.0 and betteralign v0.16.1 (`make install-deps`, which installs them into `.bin/`); the older pins fail on Go 1.27.
 
 ### Breaking: macOS binaries need macOS 13 or later
 
@@ -41,6 +41,14 @@ Errors name the endpoint and field and never repeat the configured value.
 ### Changed: release images are built with GoReleaser's `dockers_v2`
 
 The published tags are the same: `latest`, the full tag, `vMAJOR` and `vMAJOR.MINOR`, each as a multi-arch manifest (`linux/amd64`, `linux/arm64`) and as `-amd64` and `-arm64` single-arch tags. Release builds now use `Dockerfile.goreleaser`; the root `Dockerfile` remains for `make docker-build-local`. Prerelease tags still publish nothing.
+
+### Changed: the codebase uses Go 1.27 idioms
+
+There is no behaviour change for users. Contributors building on main will meet the new style: `any` instead of `interface{}`, `t.Context()` and `t.Setenv` in tests, `sync.WaitGroup.Go`, typed atomics in the stats collectors, and typed context keys read and written through accessors in `internal/core/constants/context.go`. `make lint` now enforces `modernize` (with `omitzero` and `stringsbuilder` off), `usetesting` and staticcheck SA1029, so code using the old forms fails the lint step. See [Development Setup](../development/setup.md).
+
+### Changed: `make lint` and `make align` use repo-local tools
+
+Both targets install golangci-lint and betteralign into `.bin/` at the versions the makefile pins, reinstalling when the version or the Go version they were built with differs, and run them from there instead of whatever is on `PATH`. A missing tool now fails the target rather than being skipped, and `make check-deps` exits non-zero on a missing or mismatched tool. See [Development Setup](../development/setup.md).
 
 ### Changed: duplicate endpoint URLs now log a warning
 
