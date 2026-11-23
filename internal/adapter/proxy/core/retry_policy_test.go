@@ -67,7 +67,7 @@ func TestExecuteWithRetry_Policy(t *testing.T) {
 			}
 
 			req := httptest.NewRequest(tt.method, "/v1/chat", nil)
-			err := h.ExecuteWithRetry(context.Background(), httptest.NewRecorder(), req, eps,
+			err := h.ExecuteWithRetry(t.Context(), httptest.NewRecorder(), req, eps,
 				&roundRobinSelector{}, &ports.RequestStats{}, proxyFunc)
 
 			assert.Equal(t, tt.wantAttempts, attempts)
@@ -113,7 +113,7 @@ func TestExecuteWithRetry_CBOpenDoesNotSpendBudget(t *testing.T) {
 			}
 
 			req := httptest.NewRequest(http.MethodPost, "/v1/chat", nil)
-			err := h.ExecuteWithRetry(context.Background(), httptest.NewRecorder(), req,
+			err := h.ExecuteWithRetry(t.Context(), httptest.NewRecorder(), req,
 				[]*domain.Endpoint{namedEndpoint("a"), namedEndpoint("b")}, &roundRobinSelector{}, &ports.RequestStats{}, proxyFunc)
 
 			require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestExecuteWithRetry_AllCBOpen_TerminatesWithPolicyDisabled(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/models", nil)
-	err := h.ExecuteWithRetry(context.Background(), httptest.NewRecorder(), req,
+	err := h.ExecuteWithRetry(t.Context(), httptest.NewRecorder(), req,
 		[]*domain.Endpoint{namedEndpoint("a"), namedEndpoint("b")}, &roundRobinSelector{}, &ports.RequestStats{}, proxyFunc)
 
 	require.ErrorIs(t, err, ErrCircuitBreakerOpen)
@@ -164,7 +164,7 @@ func TestExecuteWithRetry_NonIdempotentOff_CBOpenStillFailsOver(t *testing.T) {
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat", nil)
-	err := h.ExecuteWithRetry(context.Background(), httptest.NewRecorder(), req,
+	err := h.ExecuteWithRetry(t.Context(), httptest.NewRecorder(), req,
 		[]*domain.Endpoint{namedEndpoint("a"), namedEndpoint("b")}, &roundRobinSelector{}, &ports.RequestStats{}, proxyFunc)
 
 	require.NoError(t, err)

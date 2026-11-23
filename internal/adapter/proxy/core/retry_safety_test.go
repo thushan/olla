@@ -214,7 +214,7 @@ func TestRetry_POSTWithBytesWritten_NoRetry(t *testing.T) {
 		return &connectionResetError{}
 	}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
+	err := h.ExecuteWithRetry(t.Context(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
 	// Error expected; the stream failed.
@@ -249,7 +249,7 @@ func TestRetry_POSTBeforeBytesWritten_DoesRetry(t *testing.T) {
 		return nil
 	}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
+	err := h.ExecuteWithRetry(t.Context(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
 	require.NoError(t, err)
@@ -279,7 +279,7 @@ func TestRetry_GETMidStreamRST_NoRetry(t *testing.T) {
 		return &connectionResetError{}
 	}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
+	err := h.ExecuteWithRetry(t.Context(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
 	require.Error(t, err)
@@ -314,7 +314,7 @@ func TestRetry_ConnectionErrorThenCBOpen_ReportsMixedFailure(t *testing.T) {
 		return ErrCircuitBreakerOpen
 	}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
+	err := h.ExecuteWithRetry(t.Context(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
 	require.Error(t, err)
@@ -346,7 +346,7 @@ func TestRetry_AllEndpointsCBOpen_StillReportsCBOpen(t *testing.T) {
 		return ErrCircuitBreakerOpen
 	}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
+	err := h.ExecuteWithRetry(t.Context(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
 	require.Error(t, err)
@@ -507,7 +507,7 @@ func TestRetry_HTTPTestBackend_PostRSTBeforeBody(t *testing.T) {
 		return nil
 	}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req, []*domain.Endpoint{ep1, ep2},
+	err := h.ExecuteWithRetry(t.Context(), w, req, []*domain.Endpoint{ep1, ep2},
 		&roundRobinSelector{}, stats, proxyFunc)
 
 	require.NoError(t, err)
@@ -579,9 +579,9 @@ func (n noFlushWriter) WriteHeader(c int)           { n.rec.WriteHeader(c) }
 func TestIsClientAbort(t *testing.T) {
 	t.Parallel()
 
-	cancelled, cancel := context.WithCancel(context.Background())
+	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
-	expired, cancelExpired := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	expired, cancelExpired := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
 	defer cancelExpired()
 
 	tests := []struct {
@@ -591,11 +591,11 @@ func TestIsClientAbort(t *testing.T) {
 		want bool
 	}{
 		{"nil error", cancelled, nil, false},
-		{"live ctx, transport error", context.Background(), errors.New("connection refused"), false},
-		{"live ctx, backend timeout", context.Background(), &net.DNSError{IsTimeout: true}, false},
+		{"live ctx, transport error", t.Context(), errors.New("connection refused"), false},
+		{"live ctx, backend timeout", t.Context(), &net.DNSError{IsTimeout: true}, false},
 		{"cancelled ctx", cancelled, errors.New("anything the transport said"), true},
 		{"client deadline", expired, context.DeadlineExceeded, true},
-		{"wrapped canceled, live ctx (internal cancel)", context.Background(), fmt.Errorf("round trip: %w", context.Canceled), false},
+		{"wrapped canceled, live ctx (internal cancel)", t.Context(), fmt.Errorf("round trip: %w", context.Canceled), false},
 		{"wrapped canceled, cancelled ctx", cancelled, fmt.Errorf("round trip: %w", context.Canceled), true},
 	}
 	for _, tt := range tests {

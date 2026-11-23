@@ -623,7 +623,7 @@ func testConcurrentRequests(t *testing.T, suite ProxyTestSuite) {
 		t.Errorf("Concurrent request failed: %v", err)
 	}
 
-	proxyStats, err := proxy.GetStats(context.Background())
+	proxyStats, err := proxy.GetStats(t.Context())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}
@@ -642,7 +642,7 @@ func testConcurrentRequests(t *testing.T, suite ProxyTestSuite) {
 func testGetStats(t *testing.T, suite ProxyTestSuite) {
 	proxy, _, _ := createTestProxyComponents(suite, []*domain.Endpoint{})
 
-	proxyStats, err := proxy.GetStats(context.Background())
+	proxyStats, err := proxy.GetStats(t.Context())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}
@@ -946,7 +946,7 @@ func testUpdateConfig(t *testing.T, suite ProxyTestSuite) {
 	proxy.UpdateConfig(newConfig)
 
 	// Verify we can still get stats after config update
-	_, err := proxy.GetStats(context.Background())
+	_, err := proxy.GetStats(t.Context())
 	if err != nil {
 		t.Errorf("GetStats failed after config update: %v", err)
 	}

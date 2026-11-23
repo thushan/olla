@@ -55,7 +55,7 @@ func TestClientCancelBeforeFirstByte_DoesNotTripBreaker(t *testing.T) {
 	for range cancelled {
 		// WithCancel, not WithTimeout: a client hanging up surfaces as
 		// context.Canceled, which is what curl -m produces server-side.
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		time.AfterFunc(50*time.Millisecond, cancel)
 		_, _ = do(ctx, "/v1/chat/completions")
 		cancel()
@@ -65,7 +65,7 @@ func TestClientCancelBeforeFirstByte_DoesNotTripBreaker(t *testing.T) {
 	require.False(t, cb.Tripped(), "breaker open after %d client cancels (failures=%d)", cancelled, cb.Failures())
 	require.Zero(t, cb.Failures(), "client cancels were recorded as backend failures")
 
-	code, err := do(context.Background(), "/v1/chat/completions?fast=1")
+	code, err := do(t.Context(), "/v1/chat/completions?fast=1")
 	require.NoError(t, err, "healthy request rejected after client cancels")
 	require.Equal(t, http.StatusOK, code)
 }
@@ -95,7 +95,7 @@ func TestClientCancelOnHalfOpenProbe_DoesNotReopenBreaker(t *testing.T) {
 	require.True(t, cb.Tripped())
 	cb.SetLastFailureNanos(time.Now().Add(-time.Minute).UnixNano())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil).WithContext(ctx)
 	_, _ = func() (int, error) {
