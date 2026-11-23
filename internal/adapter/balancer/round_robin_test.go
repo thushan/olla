@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"sync"
@@ -34,7 +33,7 @@ func TestNewRoundRobinSelector(t *testing.T) {
 
 func TestRoundRobinSelector_Select_NoEndpoints(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
 	if err == nil {
@@ -47,7 +46,7 @@ func TestRoundRobinSelector_Select_NoEndpoints(t *testing.T) {
 
 func TestRoundRobinSelector_Select_NoRoutableEndpoints(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("offline", 11434, domain.StatusOffline),
@@ -66,7 +65,7 @@ func TestRoundRobinSelector_Select_NoRoutableEndpoints(t *testing.T) {
 
 func TestRoundRobinSelector_Select_SingleEndpoint(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("single", 11434, domain.StatusHealthy),
@@ -89,7 +88,7 @@ func TestRoundRobinSelector_Select_SingleEndpoint(t *testing.T) {
 
 func TestRoundRobinSelector_Select_RoundRobinDistribution(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -113,7 +112,7 @@ func TestRoundRobinSelector_Select_RoundRobinDistribution(t *testing.T) {
 
 func TestRoundRobinSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("offline", 11434, domain.StatusOffline),     // Not routable
@@ -160,7 +159,7 @@ func TestRoundRobinSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 
 func TestRoundRobinSelector_Select_CounterOverflow(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -218,7 +217,7 @@ func TestRoundRobinSelector_ConnectionTracking(t *testing.T) {
 	// Connection tracking doesn't affect selection in round-robin,
 	// but we should verify it doesn't cause errors
 	endpoints := []*domain.Endpoint{endpoint}
-	selected, err := selector.Select(context.Background(), endpoints)
+	selected, err := selector.Select(t.Context(), endpoints)
 	if err != nil {
 		t.Errorf("Selection failed after connection tracking: %v", err)
 	}
@@ -243,7 +242,7 @@ func TestRoundRobinSelector_DecrementBelowZero(t *testing.T) {
 	}
 
 	endpoints := []*domain.Endpoint{endpoint}
-	_, err := selector.Select(context.Background(), endpoints)
+	_, err := selector.Select(t.Context(), endpoints)
 	if err != nil {
 		t.Errorf("Selection failed after decrement below zero: %v", err)
 	}
@@ -251,7 +250,7 @@ func TestRoundRobinSelector_DecrementBelowZero(t *testing.T) {
 
 func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -333,7 +332,7 @@ func TestRoundRobinSelector_ConcurrentAccess(t *testing.T) {
 
 func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Start with 2 endpoints
 	endpoints := []*domain.Endpoint{
@@ -380,7 +379,7 @@ func TestRoundRobinSelector_DynamicEndpointChanges(t *testing.T) {
 
 func TestRoundRobinSelector_StatusChanges(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -415,7 +414,7 @@ func TestRoundRobinSelector_StatusChanges(t *testing.T) {
 
 func TestRoundRobinSelector_DistributionFairness(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createRoundRobinEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -447,7 +446,7 @@ func TestRoundRobinSelector_DistributionFairness(t *testing.T) {
 
 func TestRoundRobinSelector_LargeEndpointSet(t *testing.T) {
 	selector := NewRoundRobinSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create 50 endpoints
 	endpoints := make([]*domain.Endpoint, 50)
