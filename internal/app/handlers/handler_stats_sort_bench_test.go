@@ -54,7 +54,7 @@ func benchModelStats(n int) (map[string]ports.ModelStats, map[string]map[string]
 	return modelStats, modelEndpointStats
 }
 
-// BenchmarkBuildModelStats_Sort covers the sort.Slice in buildModelStats. The
+// BenchmarkBuildModelStats_Sort covers the slices.SortFunc in buildModelStats. The
 // row times the whole build (map iteration, per-model conversion and
 // formatting, the sort), and the sort is a small share of it, so a sort
 // slowdown has to be several times the NFR-1 threshold to move the row. Within
@@ -76,7 +76,7 @@ func BenchmarkBuildModelStats_Sort(b *testing.B) {
 	}
 }
 
-// BenchmarkBuildTranslatorStats_Sort covers the sort.Slice in
+// BenchmarkBuildTranslatorStats_Sort covers the slices.SortFunc in
 // buildTranslatorStats. The row times the whole build: map iteration, the
 // formatting of each entry and the sort. Formatting is most of it, so the
 // sort is a minority share and a sort slowdown has to be several times the
