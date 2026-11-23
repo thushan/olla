@@ -164,14 +164,18 @@ func (m *mockDiscoveryServiceWithHealthy) UpdateEndpointStatus(ctx context.Conte
 	return nil
 }
 
-// captureProxyService records the request context so tests can assert which
-// values the handler propagated to the proxy engine.
+// captureProxyService records the request context and the path the proxy stage
+// receives (already prefix-stripped by dispatchToEndpoints, so it is the path
+// the backend would see) so tests can assert which values the handler
+// propagated to the proxy engine.
 type captureProxyService struct {
-	capturedCtx context.Context
+	capturedCtx  context.Context
+	capturedPath string
 }
 
 func (m *captureProxyService) ProxyRequestToEndpoints(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoints []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 	m.capturedCtx = r.Context()
+	m.capturedPath = r.URL.Path
 	// Simulate the sticky wrapper writing outcome headers before the proxy flushes.
 	if outcome, ok := r.Context().Value(constants.ContextStickyOutcomeKey).(*balancer.StickyOutcome); ok && outcome != nil {
 		outcome.Result = "miss"
@@ -399,6 +403,53 @@ func TestProviderPathStripping(t *testing.T) {
 
 			if resultPath != tt.expectedPath {
 				t.Errorf("Expected path '%s', got '%s'", tt.expectedPath, resultPath)
+			}
+		})
+	}
+}
+
+// TestProviderProxyHandler_RawAliasPrefixOverridesRegistration pins the
+// provider handler's route-prefix override directly (producer
+// handler_provider_common.go: the RAW path segment, so alias spellings strip
+// correctly). The request arrives with a route prefix already installed, as
+// route registration would have supplied for /olla/proxy/; the provider
+// handler must replace it with the raw alias prefix, observable through the
+// stripped path the proxy stage (and so the backend) receives. The companion
+// "absent for translator registration" surface is pinned separately by the
+// route-table probe test in contextkeys_route_table_test.go.
+func TestProviderProxyHandler_RawAliasPrefixOverridesRegistration(t *testing.T) {
+	for _, spelling := range []string{"lmstudio", "lm-studio", "lm_studio"} {
+		t.Run(spelling, func(t *testing.T) {
+			app := createTestApplication(t)
+
+			u, _ := url.Parse("http://localhost:1234")
+			app.discoveryService = &mockDiscoveryServiceWithHealthy{
+				endpoints: []*domain.Endpoint{{
+					Name:      "lmstudio-1",
+					URL:       u,
+					URLString: u.String(),
+					Type:      "lm-studio",
+					Status:    domain.StatusHealthy,
+				}},
+			}
+			capture := &captureProxyService{}
+			app.proxyService = capture
+
+			req := httptest.NewRequest(http.MethodPost, "/olla/"+spelling+"/v1/chat/completions", strings.NewReader(`{"model":"llama3"}`))
+			req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
+			// A stale registration-shaped value the handler must override: had it
+			// survived, no prefix would match and the backend would receive the
+			// full /olla/<spelling>/... path.
+			req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+			w := httptest.NewRecorder()
+
+			app.providerProxyHandler(w, req)
+
+			if capture.capturedCtx == nil {
+				t.Fatalf("proxy was never invoked; handler failed before reaching executeProxyRequest (status=%d body=%q)", w.Code, w.Body.String())
+			}
+			if got := capture.capturedPath; got != "/v1/chat/completions" {
+				t.Errorf("backend received path %q, want /v1/chat/completions stripped by the raw alias prefix /olla/%s", got, spelling)
 			}
 		})
 	}
