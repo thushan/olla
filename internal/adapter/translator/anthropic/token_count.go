@@ -95,10 +95,7 @@ func estimateTokensFromRequest(req *AnthropicRequest) int {
 		totalChars += countToolDefinitionChars(&req.Tools[i])
 	}
 
-	tokenCount := totalChars / 4
-	if tokenCount < 1 {
-		tokenCount = 1
-	}
+	tokenCount := max(totalChars/4, 1)
 
 	return tokenCount
 }

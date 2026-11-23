@@ -356,16 +356,10 @@ func calculateBackoff(endpoint *domain.Endpoint, success bool) (time.Duration, i
 	}
 
 	// Calculate the multiplier for subsequent failures (exponential: 2, 4, 8...)
-	multiplier := endpoint.BackoffMultiplier * 2
-	if multiplier > MaxBackoffMultiplier {
-		multiplier = MaxBackoffMultiplier
-	}
+	multiplier := min(endpoint.BackoffMultiplier*2, MaxBackoffMultiplier)
 
 	// Use the current BackoffMultiplier for interval (not the new one)
-	backoffInterval := endpoint.CheckInterval * time.Duration(endpoint.BackoffMultiplier)
-	if backoffInterval > MaxBackoff {
-		backoffInterval = MaxBackoff
-	}
+	backoffInterval := min(endpoint.CheckInterval*time.Duration(endpoint.BackoffMultiplier), MaxBackoff)
 
 	return backoffInterval, multiplier
 }
