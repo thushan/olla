@@ -337,8 +337,8 @@ func TestAnthropicStreamEventOrder(t *testing.T) {
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "event: ") {
-			eventOrder = append(eventOrder, strings.TrimPrefix(line, "event: "))
+		if after, ok := strings.CutPrefix(line, "event: "); ok {
+			eventOrder = append(eventOrder, after)
 		}
 	}
 

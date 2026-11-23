@@ -171,10 +171,10 @@ func parseAnthropicEventsWithErr(body string) ([]map[string]any, error) {
 
 	var currentEvent string
 	for _, line := range lines {
-		if strings.HasPrefix(line, "event: ") {
-			currentEvent = strings.TrimPrefix(line, "event: ")
-		} else if strings.HasPrefix(line, "data: ") {
-			dataStr := strings.TrimPrefix(line, "data: ")
+		if after, ok := strings.CutPrefix(line, "event: "); ok {
+			currentEvent = after
+		} else if after, ok := strings.CutPrefix(line, "data: "); ok {
+			dataStr := after
 			var data map[string]any
 			if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
 				return nil, err
