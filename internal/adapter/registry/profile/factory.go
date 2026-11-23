@@ -3,7 +3,7 @@ package profile
 import (
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"sync"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -86,7 +86,7 @@ func (f *Factory) GetAvailableProfiles() []string {
 		}
 	}
 
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }
 

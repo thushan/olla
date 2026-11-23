@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/thushan/olla/internal/adapter/registry/profile"
@@ -230,7 +229,7 @@ func (pi *PathInspector) TranslationProfiles(target string) []string {
 			out = append(out, name)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

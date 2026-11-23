@@ -1,10 +1,11 @@
 package health
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -522,8 +523,8 @@ func (c *HTTPHealthChecker) logEndpointsTable(endpoints []*domain.Endpoint) {
 		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].priority > entries[j].priority
+	slices.SortFunc(entries, func(a, b endpointEntry) int {
+		return cmp.Compare(b.priority, a.priority)
 	})
 
 	// Build table

@@ -1,10 +1,11 @@
 package router
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/http"
-	"sort"
+	"slices"
 
 	"github.com/pterm/pterm"
 	"github.com/thushan/olla/internal/adapter/security"
@@ -111,8 +112,8 @@ func (r *RouteRegistry) logRoutesTable() {
 		})
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].order < entries[j].order
+	slices.SortFunc(entries, func(a, b routeEntry) int {
+		return cmp.Compare(a.order, b.order)
 	})
 
 	tableData := [][]string{
