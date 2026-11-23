@@ -29,10 +29,6 @@ const (
 	DefaultDiscoveryType     = "static"
 )
 
-// ptrInt returns a pointer to the given int value.
-// Used for config fields where nil means "not set by the user".
-func ptrInt(v int) *int { return &v }
-
 var DefaultLocalNetworkTrustedCIDRs = []string{
 	"127.0.0.0/8",
 	"10.0.0.0/8",
@@ -107,7 +103,7 @@ func DefaultConfig() *Config {
 						URL:            "http://localhost:11434",
 						Name:           "localhost",
 						Type:           "ollama",
-						Priority:       ptrInt(100),
+						Priority:       new(100),
 						HealthCheckURL: "/health",
 						ModelURL:       "/api/tags",
 						CheckInterval:  5 * time.Second,

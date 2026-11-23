@@ -9,9 +9,6 @@ import (
 	"github.com/thushan/olla/internal/config"
 )
 
-// ptrInt is a test helper to construct *int literals inline.
-func ptrInt(v int) *int { return &v }
-
 // TestApplyEndpointDefaults_SetsZeroValues verifies that zero-value timing and priority
 // fields are filled with the package defaults, ensuring a minimal YAML config can
 // pass validation without requiring explicit timing fields.
@@ -47,7 +44,7 @@ func TestApplyEndpointDefaults_PreservesExplicitValues(t *testing.T) {
 		URL:           "http://localhost:11434",
 		CheckInterval: 10 * time.Second,
 		CheckTimeout:  3 * time.Second,
-		Priority:      ptrInt(50),
+		Priority:      new(50),
 	}
 
 	applyEndpointDefaults(cfg)
@@ -75,7 +72,7 @@ func TestApplyEndpointDefaults_PreservesExplicitZeroPriority(t *testing.T) {
 		URL:           "http://localhost:11434",
 		CheckInterval: 5 * time.Second,
 		CheckTimeout:  2 * time.Second,
-		Priority:      ptrInt(0),
+		Priority:      new(0),
 	}
 
 	applyEndpointDefaults(cfg)
@@ -120,7 +117,7 @@ func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
 		{
 			name: "only Priority set",
 			cfg: config.EndpointConfig{
-				Priority: ptrInt(200),
+				Priority: new(200),
 				// CheckInterval and CheckTimeout are zero
 			},
 			wantInterval: DefaultCheckInterval,
@@ -131,7 +128,7 @@ func TestApplyEndpointDefaults_PartialDefaults(t *testing.T) {
 			name: "CheckInterval and Priority set, CheckTimeout zero",
 			cfg: config.EndpointConfig{
 				CheckInterval: 20 * time.Second,
-				Priority:      ptrInt(75),
+				Priority:      new(75),
 			},
 			wantInterval: 20 * time.Second,
 			wantTimeout:  DefaultCheckTimeout,
@@ -262,7 +259,7 @@ func TestLoadFromConfig_ZeroPriorityRoundTrip(t *testing.T) {
 		Name:          "zero-priority",
 		URL:           "http://localhost:11434",
 		Type:          "ollama",
-		Priority:      ptrInt(0),
+		Priority:      new(0),
 		CheckInterval: 5 * time.Second,
 		CheckTimeout:  2 * time.Second,
 	}
@@ -383,7 +380,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "ollama",
 			HealthCheckURL: "/health",
 			ModelURL:       "/api/tags",
-			Priority:       ptrInt(100),
+			Priority:       new(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},
@@ -393,7 +390,7 @@ func TestStaticEndpointRepository_LoadFromConfig(t *testing.T) {
 			Type:           "lm-studio",
 			HealthCheckURL: "/v1/models",
 			ModelURL:       "/v1/models",
-			Priority:       ptrInt(90),
+			Priority:       new(90),
 			CheckInterval:  10 * time.Second,
 			CheckTimeout:   3 * time.Second,
 		},
@@ -458,7 +455,7 @@ func TestStaticEndpointRepository_NestedPathURLs(t *testing.T) {
 			Type:           "openai-compatible",
 			HealthCheckURL: "/health",
 			ModelURL:       "/v1/models",
-			Priority:       ptrInt(100),
+			Priority:       new(100),
 			CheckInterval:  5 * time.Second,
 			CheckTimeout:   2 * time.Second,
 		},
@@ -860,7 +857,7 @@ func TestUpdateEndpoint_PersistsRateLimitedUntil(t *testing.T) {
 			Name:          "rl-endpoint",
 			URL:           "http://localhost:11434",
 			Type:          "ollama",
-			Priority:      ptrInt(100),
+			Priority:      new(100),
 			CheckInterval: 5 * time.Second,
 			CheckTimeout:  2 * time.Second,
 		},

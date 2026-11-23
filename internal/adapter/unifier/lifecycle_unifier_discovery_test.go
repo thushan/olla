@@ -27,7 +27,7 @@ func (m *mockDiscoveryClient) DiscoverModels(ctx context.Context, endpoint *doma
 			Name: "test-model",
 			Size: 1000,
 			Details: &domain.ModelDetails{
-				State: strPtr("loaded"),
+				State: new("loaded"),
 			},
 		},
 	}, nil
@@ -56,7 +56,7 @@ func TestLifecycleUnifier_ForceEndpointCheck(t *testing.T) {
 					Name: "test-model",
 					Size: 1000,
 					Details: &domain.ModelDetails{
-						State: strPtr("loaded"),
+						State: new("loaded"),
 					},
 				},
 			}, nil
@@ -167,7 +167,7 @@ func TestLifecycleUnifier_DiscoveryIntegration(t *testing.T) {
 					Name: "model-1",
 					Size: 1000,
 					Details: &domain.ModelDetails{
-						State: strPtr("loaded"),
+						State: new("loaded"),
 					},
 				},
 			}, nil

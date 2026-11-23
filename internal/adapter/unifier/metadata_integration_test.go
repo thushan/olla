@@ -63,13 +63,13 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 					Name: "gemma3:12b",
 					Size: 8149190253,
 					Details: &domain.ModelDetails{
-						Family:            ptrString("gemma3"),
+						Family:            new("gemma3"),
 						Families:          []string{"gemma3"},
-						ParameterSize:     ptrString("12.2B"),
-						QuantizationLevel: ptrString("Q4_K_M"),
-						Format:            ptrString("gguf"),
-						Digest:            ptrString("f4031aab637d1ffa37b42570452ae0e4fad0314754d17ded67322e4b95836f8a"),
-						ModifiedAt:        ptrTime(time.Now()),
+						ParameterSize:     new("12.2B"),
+						QuantizationLevel: new("Q4_K_M"),
+						Format:            new("gguf"),
+						Digest:            new("f4031aab637d1ffa37b42570452ae0e4fad0314754d17ded67322e4b95836f8a"),
+						ModifiedAt:        new(time.Now()),
 					},
 				},
 			},
@@ -136,9 +136,9 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 				{
 					Name: "codellama-34b-instruct",
 					Details: &domain.ModelDetails{
-						ParameterSize:     ptrString("34B"),
-						QuantizationLevel: ptrString("Q3_K_L"),
-						Family:            ptrString("codellama"),
+						ParameterSize:     new("34B"),
+						QuantizationLevel: new("Q3_K_L"),
+						Family:            new("codellama"),
 					},
 				},
 			},
@@ -253,8 +253,8 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 				{
 					Name: "claude-3-opus",
 					Details: &domain.ModelDetails{
-						MaxContextLength: ptrInt64(2000000),
-						ParameterSize:    ptrString("175B"),
+						MaxContextLength: new(int64(2000000)),
+						ParameterSize:    new("175B"),
 					},
 				},
 			},
@@ -321,8 +321,8 @@ func TestDefaultUnifier_MetadataMerging(t *testing.T) {
 			Name: "llama3.2:1b",
 			Size: 1000000000,
 			Details: &domain.ModelDetails{
-				Digest: ptrString("sha256:abc123"),
-				Family: ptrString("llama"),
+				Digest: new("sha256:abc123"),
+				Family: new("llama"),
 			},
 		},
 	}
@@ -336,11 +336,11 @@ func TestDefaultUnifier_MetadataMerging(t *testing.T) {
 			Name: "llama3.2:1b",
 			Type: "llm",
 			Details: &domain.ModelDetails{
-				Digest:            ptrString("sha256:abc123"),
-				ParameterSize:     ptrString("1.2B"),
-				QuantizationLevel: ptrString("Q4_K_M"),
-				MaxContextLength:  ptrInt64(128000),
-				Publisher:         ptrString("meta"),
+				Digest:            new("sha256:abc123"),
+				ParameterSize:     new("1.2B"),
+				QuantizationLevel: new("Q4_K_M"),
+				MaxContextLength:  new(int64(128000)),
+				Publisher:         new("meta"),
 			},
 		},
 	}
@@ -363,14 +363,6 @@ func TestDefaultUnifier_MetadataMerging(t *testing.T) {
 	// Platform diversity and publisher information preserved through merging
 	assert.Contains(t, model.Metadata, "platform")
 	assert.Contains(t, model.Metadata, "publisher")
-}
-
-func ptrTime(t time.Time) *time.Time {
-	return &t
-}
-
-func ptrInt64(i int64) *int64 {
-	return &i
 }
 
 // Provider parsers once put their own name in ModelInfo.Type, which the
