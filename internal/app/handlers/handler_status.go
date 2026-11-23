@@ -1,13 +1,14 @@
 package handlers
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"hash"
 	"hash/fnv"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -352,15 +353,17 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 		}
 	}
 
-	sort.Slice(endpoints, func(i, j int) bool {
-		if endpoints[i].Priority != endpoints[j].Priority {
-			return endpoints[i].Priority > endpoints[j].Priority
+	slices.SortFunc(endpoints, func(a, b EndpointResponse) int {
+		if c := cmp.Compare(b.Priority, a.Priority); c != 0 {
+			return c
 		}
 		// Within a priority band, healthy comes before anything else.
-		iHealthy := endpoints[i].Status == statusHealthy
-		jHealthy := endpoints[j].Status == statusHealthy
-		if iHealthy != jHealthy {
-			return iHealthy
+		aHealthy, bHealthy := a.Status == statusHealthy, b.Status == statusHealthy
+		if aHealthy != bHealthy {
+			if aHealthy {
+				return -1
+			}
+			return 1
 		}
 		// Tie-breaker for deterministic ordering across polls: the input
 		// slice comes from map iteration, so without a final comparison
@@ -370,10 +373,10 @@ func (a *Application) buildUnifiedEndpoints(all []*domain.Endpoint, statsMap map
 		// sanitised URL) because sanitisation strips query/fragment and two
 		// distinct endpoints can share a display URL, which would leave the
 		// comparison tied and ordering unstable again.
-		if endpoints[i].Name != endpoints[j].Name {
-			return endpoints[i].Name < endpoints[j].Name
-		}
-		return endpoints[i].ID < endpoints[j].ID
+		return cmp.Or(
+			cmp.Compare(a.Name, b.Name),
+			cmp.Compare(a.ID, b.ID),
+		)
 	})
 }
 

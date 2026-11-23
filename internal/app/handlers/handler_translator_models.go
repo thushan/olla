@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -75,7 +75,7 @@ func modelSetFingerprint(models []*domain.UnifiedModel) string {
 		}
 		ids = append(ids, m.ID+"\x00"+emitted)
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return strings.Join(ids, ",")
 }
 
