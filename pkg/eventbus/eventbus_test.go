@@ -33,7 +33,10 @@ func TestEventBus_BasicPubSub(t *testing.T) {
 	bus := New[TestEvent]()
 	defer bus.Shutdown()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Not bare t.Context(): Subscribe's cancellation watcher has to be
+	// released before bus.Shutdown runs, and t.Context() is cancelled only
+	// after the deferred shutdown.
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
 	events, cleanup := bus.Subscribe(ctx)
@@ -369,7 +372,10 @@ func TestEventBus_CleanupInactiveSubscribers(t *testing.T) {
 	bus := NewWithConfig[TestEvent](config)
 	defer bus.Shutdown()
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// Not bare t.Context(): Subscribe's cancellation watcher has to be
+	// released before bus.Shutdown runs, and t.Context() is cancelled only
+	// after the deferred shutdown.
+	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	events, cleanup := bus.Subscribe(ctx)
 	defer cleanup()

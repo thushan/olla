@@ -717,8 +717,7 @@ func TestHealthCheckLoop_SurvivesPanic(t *testing.T) {
 	// Use a very short ticker interval so the test doesn't have to wait long.
 	checker := NewHTTPHealthChecker(panicRepo, styledLogger, &mockHTTPClient{statusCode: 200})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	checker.isRunning.Store(true)
 	checker.ticker = time.NewTicker(20 * time.Millisecond)
