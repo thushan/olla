@@ -1,7 +1,8 @@
 package stats
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -336,20 +337,19 @@ func (mc *ModelCollector) cleanupOldData(now int64) {
 
 // cleanupClientIPs removes old client IPs and enforces the max clients per model limit
 func (mc *ModelCollector) cleanupClientIPs(data *modelData, cutoff int64) {
-	var ipsToDelete []string
-	var allIPs []struct {
+	type clientLastSeen struct {
 		ip   string
 		time int64
 	}
+
+	var ipsToDelete []string
+	var allIPs []clientLastSeen
 
 	data.uniqueClients.Range(func(ip string, lastSeen int64) bool {
 		if lastSeen < cutoff {
 			ipsToDelete = append(ipsToDelete, ip)
 		} else {
-			allIPs = append(allIPs, struct {
-				ip   string
-				time int64
-			}{ip, lastSeen})
+			allIPs = append(allIPs, clientLastSeen{ip: ip, time: lastSeen})
 		}
 		return true
 	})
@@ -362,8 +362,8 @@ func (mc *ModelCollector) cleanupClientIPs(data *modelData, cutoff int64) {
 	// If we still have too many IPs, remove the oldest ones
 	if len(allIPs) > mc.config.MaxUniqueClientsPerModel {
 		// Sort by time, oldest first
-		sort.Slice(allIPs, func(i, j int) bool {
-			return allIPs[i].time < allIPs[j].time
+		slices.SortFunc(allIPs, func(a, b clientLastSeen) int {
+			return cmp.Compare(a.time, b.time)
 		})
 
 		// Delete the oldest IPs
@@ -390,8 +390,8 @@ func (mc *ModelCollector) pruneExcessModels() {
 	})
 
 	// Sort by last requested time, newest first
-	sort.Slice(models, func(i, j int) bool {
-		return models[i].lastRequested > models[j].lastRequested
+	slices.SortFunc(models, func(a, b modelActivity) int {
+		return cmp.Compare(b.lastRequested, a.lastRequested)
 	})
 
 	// Delete the oldest models
