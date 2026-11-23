@@ -22,7 +22,7 @@ func TestWorkerPool_NoGoroutineLeaks(t *testing.T) {
 	eb := New[int]()
 
 	// Subscribe to events
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	ch, cleanup := eb.Subscribe(ctx)
 	defer cleanup()
 	defer cancel()
@@ -86,7 +86,7 @@ func TestWorkerPool_HandlesBackpressure(t *testing.T) {
 	eb := NewWithConfig[int](config)
 
 	// Create a slow subscriber
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, _ := eb.Subscribe(ctx)
 	// Don't use cleanup in this test - let Shutdown handle it
 	defer eb.Shutdown()
@@ -195,7 +195,7 @@ func TestWorkerPool_QueueDroppedZeroOnNormalFlow(t *testing.T) {
 	eb := NewWithConfig[int](config)
 	defer eb.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, cleanup := eb.Subscribe(ctx)
 	defer cleanup()
 
@@ -275,7 +275,7 @@ func TestWorkerPool_QueueDroppedMonotonic(t *testing.T) {
 func TestWorkerPool_ConcurrentPublishing(t *testing.T) {
 	eb := New[string]()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, cleanup := eb.Subscribe(ctx)
 	defer cleanup()
 	defer eb.Shutdown() // Shutdown AFTER cleanup to avoid race
