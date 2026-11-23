@@ -2,7 +2,7 @@ package stats
 
 import (
 	"math/rand/v2"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -68,9 +68,7 @@ func (rs *ReservoirSampler) GetPercentiles() (p50, p95, p99 int64) {
 	// Create a copy to avoid modifying the original samples
 	sorted := make([]int64, len(rs.samples))
 	copy(sorted, rs.samples)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i] < sorted[j]
-	})
+	slices.Sort(sorted)
 
 	// Calculate percentile indices
 	p50Idx := len(sorted) * 50 / 100
