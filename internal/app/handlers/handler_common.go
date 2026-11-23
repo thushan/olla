@@ -102,9 +102,9 @@ func getRawProviderPrefix(path string) string {
 		return constants.DefaultOllaProxyPathPrefix
 	}
 	withoutBase := strings.TrimPrefix(path, constants.DefaultOllaProxyPathPrefix)
-	slashIdx := strings.Index(withoutBase, constants.DefaultPathPrefix)
-	if slashIdx == -1 {
+	before, _, ok := strings.Cut(withoutBase, constants.DefaultPathPrefix)
+	if !ok {
 		return constants.DefaultOllaProxyPathPrefix + withoutBase
 	}
-	return constants.DefaultOllaProxyPathPrefix + withoutBase[:slashIdx]
+	return constants.DefaultOllaProxyPathPrefix + before
 }
