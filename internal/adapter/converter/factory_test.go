@@ -2,6 +2,7 @@ package converter
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,13 +102,7 @@ func TestConverterFactory(t *testing.T) {
 
 		// Should appear in supported formats
 		formats := factory.GetSupportedFormats()
-		hasCustom := false
-		for _, f := range formats {
-			if f == "custom" {
-				hasCustom = true
-				break
-			}
-		}
+		hasCustom := slices.Contains(formats, "custom")
 		assert.True(t, hasCustom)
 	})
 }

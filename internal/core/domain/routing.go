@@ -1,6 +1,10 @@
 package domain
 
-import "github.com/puzpuzpuz/xsync/v4"
+import (
+	"slices"
+
+	"github.com/puzpuzpuz/xsync/v4"
+)
 
 const (
 	InspectionMetaPathSupport = "path_support"
@@ -93,10 +97,8 @@ func (rp *RequestProfile) AddSupportedProfile(profileType string) {
 		return
 	}
 
-	for _, existing := range rp.SupportedBy {
-		if existing == profileType {
-			return
-		}
+	if slices.Contains(rp.SupportedBy, profileType) {
+		return
 	}
 
 	rp.SupportedBy = append(rp.SupportedBy, profileType)

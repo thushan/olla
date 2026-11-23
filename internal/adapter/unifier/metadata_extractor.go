@@ -3,6 +3,7 @@ package unifier
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -426,12 +427,7 @@ func extractFromDelimiters(modelName string, config *ModelUnificationConfig) str
 // isGenericModelName checks if model name is generic
 func isGenericModelName(modelName string, config *ModelUnificationConfig) bool {
 	modelNameLower := strings.ToLower(modelName)
-	for _, generic := range config.SpecialRules.GenericNames {
-		if modelNameLower == generic {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(config.SpecialRules.GenericNames, modelNameLower)
 }
 
 // isMistralPattern checks if pattern is for mistral/mixtral models

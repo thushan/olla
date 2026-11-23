@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -75,12 +76,7 @@ var staticSupportedProviders = []string{
 // isStaticSupportedProvider reports whether provider (already normalised) is
 // one of staticSupportedProviders.
 func isStaticSupportedProvider(provider string) bool {
-	for _, p := range staticSupportedProviders {
-		if p == provider {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(staticSupportedProviders, provider)
 }
 
 // isProviderSupported checks if a provider type is valid using the profile factory

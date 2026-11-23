@@ -264,13 +264,7 @@ func (pi *PathInspector) Inspect(_ context.Context, _ *http.Request, profile *do
 		if pathMatches(path, mapPath) {
 			for _, profileName := range profiles {
 				// Check if this profile is already in the supported list
-				alreadySupported := false
-				for _, existing := range profile.SupportedBy {
-					if existing == profileName {
-						alreadySupported = true
-						break
-					}
-				}
+				alreadySupported := slices.Contains(profile.SupportedBy, profileName)
 
 				if !alreadySupported {
 					profile.AddSupportedProfile(profileName)

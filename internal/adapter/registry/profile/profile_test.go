@@ -2,6 +2,7 @@ package profile
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -159,13 +160,7 @@ func TestDetectionHints(t *testing.T) {
 		t.Error("ProfileOllama should have path indicators for detection")
 	}
 
-	found := false
-	for _, path := range hints.PathIndicators {
-		if path == "/api/tags" {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(hints.PathIndicators, "/api/tags")
 	if !found {
 		t.Error("ProfileOllama should have /api/tags as path indicator")
 	}

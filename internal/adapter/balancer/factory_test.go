@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/thushan/olla/internal/core/ports"
@@ -31,13 +32,7 @@ func TestNewFactory(t *testing.T) {
 	}
 
 	for _, expected := range expectedStrategies {
-		found := false
-		for _, actual := range available {
-			if actual == expected {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(available, expected)
 		if !found {
 			t.Errorf("Expected strategy %q not found in available strategies", expected)
 		}
@@ -102,13 +97,7 @@ func TestFactory_Register_CustomStrategy(t *testing.T) {
 
 	// Verify it's in available strategies
 	available := factory.GetAvailableStrategies()
-	found := false
-	for _, strategy := range available {
-		if strategy == customName {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(available, customName)
 	if !found {
 		t.Error("Custom strategy not found in available strategies")
 	}

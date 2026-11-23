@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"slices"
 	"time"
 
 	"github.com/thushan/olla/internal/core/domain"
@@ -205,10 +206,5 @@ func matchesCapabilityFilter(model *domain.UnifiedModel, capability string) bool
 }
 
 func hasCapability(capabilities []string, capability string) bool {
-	for _, c := range capabilities {
-		if c == capability {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(capabilities, capability)
 }

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -72,12 +73,7 @@ func (s EndpointState) CanTransitionTo(target EndpointState) bool {
 		return false
 	}
 
-	for _, state := range allowed {
-		if state == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, target)
 }
 
 func (s ModelState) IsHealthy() bool {
