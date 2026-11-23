@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -39,7 +38,7 @@ func TestNewSecurityMetricsAdapter(t *testing.T) {
 
 func TestSecurityMetricsAdapter_RecordViltion_RateLimit(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	violation := ports.SecurityViolation{
 		ClientID:      "192.168.1.100",
@@ -72,7 +71,7 @@ func TestSecurityMetricsAdapter_RecordViltion_RateLimit(t *testing.T) {
 
 func TestSecurityMetricsAdapter_RecordViolation_LargeRequest(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	violation := ports.SecurityViolation{
 		ClientID:      "192.168.1.100",
@@ -99,7 +98,7 @@ func TestSecurityMetricsAdapter_RecordViolation_LargeRequest(t *testing.T) {
 
 func TestSecurityMetricsAdapter_RecordViolation_MultipleIPs(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	ips := []string{"192.168.1.100", "192.168.1.101", "192.168.1.102", "192.168.1.103"}
 
@@ -133,7 +132,7 @@ func TestSecurityMetricsAdapter_RecordViolation_MultipleIPs(t *testing.T) {
 
 func TestSecurityMetricsAdapter_RecordViolation_DuplicateIP(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	ip := "192.168.1.100"
 
@@ -167,7 +166,7 @@ func TestSecurityMetricsAdapter_RecordViolation_DuplicateIP(t *testing.T) {
 
 func TestSecurityMetricsAdapter_RecordViolation_UnknownType(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	violation := ports.SecurityViolation{
 		ClientID:      "192.168.1.100",
@@ -197,7 +196,7 @@ func TestSecurityMetricsAdapter_RecordViolation_UnknownType(t *testing.T) {
 
 func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var wg sync.WaitGroup
 	errors := make(chan error, 100)
@@ -315,7 +314,7 @@ func TestSecurityMetricsAdapter_ConcurrentAccess(t *testing.T) {
 */
 func TestSecurityMetricsAdapter_RecordViolation_RateLimit(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	violation := ports.SecurityViolation{
 		ClientID:      "192.168.1.100",
@@ -343,7 +342,7 @@ func TestSecurityMetricsAdapter_RecordViolation_RateLimit(t *testing.T) {
 
 func TestSecurityMetricsAdapter_RecordViolation_SizeLimit(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	violation := ports.SecurityViolation{
 		ClientID:      "192.168.1.100",
@@ -370,7 +369,7 @@ func TestSecurityMetricsAdapter_RecordViolation_SizeLimit(t *testing.T) {
 
 func TestSecurityMetricsAdapter_GetMetrics(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test initial state
 	metrics, err := adapter.GetMetrics(ctx)
@@ -390,7 +389,7 @@ func TestSecurityMetricsAdapter_GetMetrics(t *testing.T) {
 }
 func TestSecurityMetricsAdapter_GetMetrics_Empty(t *testing.T) {
 	adapter := createNewTestSecurityMetricsAdapter()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	metrics, err := adapter.GetMetrics(ctx)
 	if err != nil {

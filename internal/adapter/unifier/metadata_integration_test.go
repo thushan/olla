@@ -1,7 +1,6 @@
 package unifier
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -47,7 +46,7 @@ func parseLMStudioModels(t *testing.T, body string) []*domain.ModelInfo {
 
 // TestDefaultUnifier_MetadataExtraction validates metadata extraction
 func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	tests := []struct {
@@ -313,7 +312,7 @@ func TestDefaultUnifier_MetadataExtraction(t *testing.T) {
 // TestDefaultUnifier_MetadataMerging verifies that metadata from multiple endpoints
 // is properly merged without loss, enriching the unified model representation.
 func TestDefaultUnifier_MetadataMerging(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	unifier := NewDefaultUnifier()
 
 	models1 := []*domain.ModelInfo{
@@ -370,7 +369,7 @@ func TestDefaultUnifier_MetadataMerging(t *testing.T) {
 // model's type. None of them may do that, and the listing must fall back to
 // "llm" for a model whose kind the backend doesn't say.
 func TestDefaultUnifier_ProviderNameIsNotModelType(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	body := `{"data":[{"id":"acme/chatty-7b","object":"model","owned_by":"acme"}]}`
 
 	for _, prof := range []string{

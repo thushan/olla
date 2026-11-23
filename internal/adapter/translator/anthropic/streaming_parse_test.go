@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -24,7 +23,7 @@ func TestProcessStreamLine_NullContentDelta(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -50,7 +49,7 @@ func TestProcessStreamLine_RoleOnlyDelta(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -79,7 +78,7 @@ func TestProcessStreamLine_ReasoningBeatsContent(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -124,7 +123,7 @@ func TestProcessStreamLine_ReasoningContentFieldName(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -162,7 +161,7 @@ func TestProcessStreamLine_ToolCallContinuationNoID(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -200,7 +199,7 @@ func TestProcessStreamLine_ToolCallAbsentIndexDefaultsToZero(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -237,7 +236,7 @@ func TestProcessStreamLine_MalformedChunkSkipped(t *testing.T) {
 	recorder := httptest.NewRecorder()
 
 	// must not return an error
-	err := tr.TransformStreamingResponse(context.Background(), stream, recorder, nil)
+	err := tr.TransformStreamingResponse(t.Context(), stream, recorder, nil)
 	require.NoError(t, err)
 
 	body := recorder.Body.String()
@@ -267,7 +266,7 @@ func TestProcessStreamLine_UsageFinalChunk(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -312,7 +311,7 @@ func TestProcessStreamLine_EmptyToolCallsArrayNoBlocks(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -341,7 +340,7 @@ func TestProcessStreamLine_FinishReasonNullVsAbsent(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 	assertStopReason(t, events, "end_turn")
@@ -366,7 +365,7 @@ func TestProcessStreamLine_ReasoningAndToolCallsInOneChunk(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -413,7 +412,7 @@ func TestProcessStreamLine_ReasoningContentAndToolCallsInOneChunk(t *testing.T) 
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -34,7 +33,7 @@ func TestUnifiedViewHandlers_ConcurrentWithRegistration(t *testing.T) {
 	}
 
 	epA, epB := newEndpoint("a"), newEndpoint("b")
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 30 {
 		reg := registry.NewUnifiedMemoryModelRegistry(&mockStyledLogger{}, nil, nil, nil)

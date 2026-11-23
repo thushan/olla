@@ -375,7 +375,7 @@ func benchmarkStatsCollection(b *testing.B, suite ProxyTestSuite) {
 	b.ReportAllocs()
 
 	for range b.N {
-		_, err := proxy.GetStats(context.Background())
+		_, err := proxy.GetStats(b.Context())
 		if err != nil {
 			b.Fatalf("GetStats failed: %v", err)
 		}
@@ -441,7 +441,7 @@ func BenchmarkProxyStats(b *testing.B) {
 			b.ReportAllocs()
 
 			for range b.N {
-				_, err := proxy.GetStats(context.Background())
+				_, err := proxy.GetStats(b.Context())
 				if err != nil {
 					b.Fatalf("GetStats failed: %v", err)
 				}

@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,7 +71,7 @@ func TestAliasResolver_ResolveEndpoints(t *testing.T) {
 		"gpt-oss-120b": {"gpt-oss:120b", "gpt-oss-120b-MLX", "gguf_gpt_oss_120b.gguf"},
 	}
 	resolver := NewAliasResolver(aliases, createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create a registry with some models registered
 	reg := NewMemoryModelRegistry(createTestLogger())
@@ -102,7 +101,7 @@ func TestAliasResolver_ResolveEndpoints_NoMatches(t *testing.T) {
 		"gpt-oss-120b": {"model-not-registered"},
 	}
 	resolver := NewAliasResolver(aliases, createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	reg := NewMemoryModelRegistry(createTestLogger())
 
@@ -122,7 +121,7 @@ func TestAliasResolver_ResolveEndpoints_SameEndpointMultipleModels(t *testing.T)
 		"gpt-oss-120b": {"gpt-oss:120b", "gpt-oss-120b"},
 	}
 	resolver := NewAliasResolver(aliases, createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	reg := NewMemoryModelRegistry(createTestLogger())
 	_ = reg.RegisterModel(ctx, "http://endpoint:1234", &domain.ModelInfo{Name: "gpt-oss:120b"})
@@ -150,7 +149,7 @@ func TestAliasResolver_AliasNameSameAsActualModel(t *testing.T) {
 		"gpt-oss-120b": {"gpt-oss:120b", "gpt-oss-120b"},
 	}
 	resolver := NewAliasResolver(aliases, createTestLogger())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	reg := NewMemoryModelRegistry(createTestLogger())
 	// ollama endpoint has the model as gpt-oss:120b

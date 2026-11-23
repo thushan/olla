@@ -51,7 +51,7 @@ func TestChain_AddInspector(t *testing.T) {
 func TestChain_Inspect_EmptyChain(t *testing.T) {
 	logger := createTestLogger()
 	chain := NewChain(logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -77,7 +77,7 @@ func TestChain_Inspect_EmptyChain(t *testing.T) {
 func TestChain_Inspect_SingleInspector_Success(t *testing.T) {
 	logger := createTestLogger()
 	chain := NewChain(logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -114,7 +114,7 @@ func TestChain_Inspect_SingleInspector_Success(t *testing.T) {
 func TestChain_Inspect_MultipleInspectors_AllSuccess(t *testing.T) {
 	logger := createTestLogger()
 	chain := NewChain(logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -165,7 +165,7 @@ func TestChain_Inspect_MultipleInspectors_AllSuccess(t *testing.T) {
 func TestChain_Inspect_InspectorFailure_ContinuesChain(t *testing.T) {
 	logger := createTestLogger()
 	chain := NewChain(logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -205,7 +205,7 @@ func TestChain_Inspect_InspectorFailure_ContinuesChain(t *testing.T) {
 func TestChain_Inspect_AllInspectorsFail_ReturnsProfile(t *testing.T) {
 	logger := createTestLogger()
 	chain := NewChain(logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 
@@ -278,7 +278,7 @@ func TestChain_Inspect_NilContext(t *testing.T) {
 func TestChain_Inspect_ExecutionOrder(t *testing.T) {
 	logger := createTestLogger()
 	chain := NewChain(logger)
-	ctx := context.Background()
+	ctx := t.Context()
 	req, _ := http.NewRequest("POST", "/v1/chat/completions", nil)
 	targetPath := "/v1/chat/completions"
 

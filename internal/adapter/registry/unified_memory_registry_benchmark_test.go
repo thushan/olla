@@ -1,7 +1,6 @@
 package registry
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -10,7 +9,6 @@ import (
 )
 
 func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
-	ctx := context.Background()
 	registry := createTestUnifiedRegistry()
 
 	// Create mock endpoint repository
@@ -40,12 +38,14 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 				Name:     models[modelIdx],
 				LastSeen: time.Now(),
 			}
-			registry.RegisterModel(ctx, ep.URLString, model)
+			registry.RegisterModel(b.Context(), ep.URLString, model)
 		}
 	}
 
 	// Benchmark different scenarios
 	b.Run("ExistingModel", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		b.ResetTimer()
 		b.ReportAllocs()
 		for range b.N {
@@ -58,6 +58,8 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 	})
 
 	b.Run("NonExistentModel", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		b.ResetTimer()
 		b.ReportAllocs()
 		for range b.N {
@@ -70,6 +72,8 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 	})
 
 	b.Run("Parallel", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		b.ResetTimer()
 		b.ReportAllocs()
 		b.RunParallel(func(pb *testing.PB) {
@@ -88,7 +92,6 @@ func BenchmarkGetHealthyEndpointsForModel(b *testing.B) {
 }
 
 func BenchmarkGetModelsByCapability(b *testing.B) {
-	ctx := context.Background()
 	registry := createTestUnifiedRegistry()
 
 	// Create test models with various capabilities
@@ -116,6 +119,8 @@ func BenchmarkGetModelsByCapability(b *testing.B) {
 
 	for _, capability := range testCases {
 		b.Run(capability, func(b *testing.B) {
+			// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+			ctx := b.Context()
 			b.ResetTimer()
 			b.ReportAllocs()
 			for range b.N {
@@ -129,6 +134,8 @@ func BenchmarkGetModelsByCapability(b *testing.B) {
 	}
 
 	b.Run("Parallel", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		b.ResetTimer()
 		b.ReportAllocs()
 		b.RunParallel(func(pb *testing.PB) {
@@ -147,11 +154,12 @@ func BenchmarkGetModelsByCapability(b *testing.B) {
 }
 
 func BenchmarkRegistryWithXSync(b *testing.B) {
-	ctx := context.Background()
 	registry := createTestUnifiedRegistry()
 
 	// Benchmark concurrent model registration with xsync
 	b.Run("ConcurrentRegistration", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		b.ResetTimer()
 		b.ReportAllocs()
 		b.RunParallel(func(pb *testing.PB) {
@@ -173,6 +181,8 @@ func BenchmarkRegistryWithXSync(b *testing.B) {
 
 	// Benchmark concurrent reads with xsync
 	b.Run("ConcurrentReads", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Pre-populate with some data
 		for i := range 100 {
 			model := &domain.ModelInfo{
@@ -198,13 +208,13 @@ func BenchmarkRegistryWithXSync(b *testing.B) {
 }
 
 func BenchmarkMemoryUsage(b *testing.B) {
-	ctx := context.Background()
-
 	// Test memory usage with different numbers of models
 	testSizes := []int{100, 1000, 10000}
 
 	for _, size := range testSizes {
 		b.Run(fmt.Sprintf("Models_%d", size), func(b *testing.B) {
+			// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+			ctx := b.Context()
 			b.ResetTimer()
 			b.ReportAllocs()
 

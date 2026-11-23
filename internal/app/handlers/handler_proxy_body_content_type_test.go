@@ -54,7 +54,7 @@ func TestProxyRouting_NamedModelIgnoresContentType(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			ctx := context.Background()
+			ctx := t.Context()
 			cfg := config.ModelRoutingStrategy{Type: "optimistic", Options: config.ModelRoutingStrategyOptions{FallbackBehavior: constants.FallbackBehaviorAll}}
 			unified := registry.NewUnifiedMemoryModelRegistry(styledLog, nil, &cfg, nil)
 

@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -102,7 +101,7 @@ func simulateBackendResponse(content string, toolCalls []map[string]any, finishR
 
 func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 	translator := mustNewTranslator(createIntegrationTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("simple_text_conversation", func(t *testing.T) {
 		// setup test request
@@ -384,7 +383,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 
 func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 	translator := mustNewTranslator(createIntegrationTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("single_tool_definition", func(t *testing.T) {
 		// 1. Create request with tool definition
@@ -837,7 +836,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 
 func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 	translator := mustNewTranslator(createIntegrationTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("empty_messages_array", func(t *testing.T) {
 		anthropicReq := AnthropicRequest{
@@ -1045,7 +1044,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 
 func TestAnthropicModelPreservation(t *testing.T) {
 	translator := mustNewTranslator(createIntegrationTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	models := []string{
 		ClaudeSonnetModel,
@@ -1086,7 +1085,7 @@ func TestAnthropicModelPreservation(t *testing.T) {
 
 func TestAnthropicUsageTracking(t *testing.T) {
 	translator := mustNewTranslator(createIntegrationTestLogger(), createTestConfig())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	anthropicReq := AnthropicRequest{
 		Model:     ClaudeSonnetModel,
@@ -1163,9 +1162,10 @@ func TestAnthropicUsageTracking(t *testing.T) {
 // BenchmarkTransformRequest measures the performance of transforming Anthropic requests to OpenAI format.
 func BenchmarkTransformRequest(b *testing.B) {
 	translator := mustNewTranslator(createIntegrationTestLogger(), createTestConfig())
-	ctx := context.Background()
 
 	b.Run("simple_text_request", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create a representative simple text request
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1194,6 +1194,8 @@ func BenchmarkTransformRequest(b *testing.B) {
 	})
 
 	b.Run("multi_turn_conversation", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create a multi-turn conversation request
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeOpusModel,
@@ -1230,6 +1232,8 @@ func BenchmarkTransformRequest(b *testing.B) {
 	})
 
 	b.Run("with_system_prompt_and_params", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create request with system prompt and optional parameters
 		temp := 0.7
 		topP := 0.9
@@ -1265,6 +1269,8 @@ func BenchmarkTransformRequest(b *testing.B) {
 	})
 
 	b.Run("with_tool_definitions", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create request with tool definitions
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1314,6 +1320,8 @@ func BenchmarkTransformRequest(b *testing.B) {
 	})
 
 	b.Run("complex_content_blocks", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create request with multiple content blocks
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1354,9 +1362,10 @@ func BenchmarkTransformRequest(b *testing.B) {
 // BenchmarkTransformResponse measures the performance of transforming OpenAI responses to Anthropic format.
 func BenchmarkTransformResponse(b *testing.B) {
 	translator := mustNewTranslator(createIntegrationTestLogger(), createTestConfig())
-	ctx := context.Background()
 
 	b.Run("simple_text_response", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create a simple request and response
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1386,6 +1395,8 @@ func BenchmarkTransformResponse(b *testing.B) {
 	})
 
 	b.Run("response_with_single_tool_call", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create request and response with tool call
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1424,6 +1435,8 @@ func BenchmarkTransformResponse(b *testing.B) {
 	})
 
 	b.Run("response_with_multiple_tool_calls", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create response with multiple simultaneous tool calls
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1468,6 +1481,8 @@ func BenchmarkTransformResponse(b *testing.B) {
 	})
 
 	b.Run("response_with_complex_tool_arguments", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create response with complex nested tool arguments
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1515,6 +1530,8 @@ func BenchmarkTransformResponse(b *testing.B) {
 	})
 
 	b.Run("response_with_usage_tracking", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create response with usage data
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,
@@ -1558,6 +1575,8 @@ func BenchmarkTransformResponse(b *testing.B) {
 	})
 
 	b.Run("tool_only_response", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Setup: Create response with tool calls but no text content
 		anthropicReq := AnthropicRequest{
 			Model:     ClaudeSonnetModel,

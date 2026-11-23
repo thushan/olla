@@ -65,7 +65,7 @@ func TestOllamaRunningModels_MergesPerInstance(t *testing.T) {
 	other := psBackend(t, 200, `{"models":[{"name":"not-ollama"}]}`)
 	down := psBackend(t, 200, `{"models":[{"name":"unhealthy"}]}`)
 
-	w := runPS(t, context.Background(),
+	w := runPS(t, t.Context(),
 		psEndpoint("a", "ollama", a, domain.StatusHealthy),
 		psEndpoint("b", "ollama", b, domain.StatusHealthy),
 		psEndpoint("v", "vllm", other, domain.StatusHealthy),
@@ -94,7 +94,7 @@ func TestOllamaRunningModels_SkipsFailingInstances(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			w := runPS(t, context.Background(),
+			w := runPS(t, t.Context(),
 				psEndpoint("good", "ollama", good, domain.StatusHealthy),
 				psEndpoint("bad", "ollama", bad, domain.StatusHealthy))
 
@@ -121,7 +121,7 @@ func TestOllamaRunningModels_TimeoutDoesNotHoldTheAnswer(t *testing.T) {
 	t.Cleanup(func() { close(release); hang.Close() })
 	good := psBackend(t, 200, `{"models":[{"name":"llama3:8b"}]}`)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 300*time.Millisecond)
 	defer cancel()
 	start := time.Now()
 	w := runPS(t, ctx,
@@ -137,10 +137,10 @@ func TestOllamaRunningModels_AllFailingIs502_NoInstancesIsEmpty(t *testing.T) {
 	t.Parallel()
 
 	bad := psBackend(t, 500, `boom`)
-	w := runPS(t, context.Background(), psEndpoint("bad", "ollama", bad, domain.StatusHealthy))
+	w := runPS(t, t.Context(), psEndpoint("bad", "ollama", bad, domain.StatusHealthy))
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 
-	w = runPS(t, context.Background(), psEndpoint("v", "vllm", bad, domain.StatusHealthy))
+	w = runPS(t, t.Context(), psEndpoint("v", "vllm", bad, domain.StatusHealthy))
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.JSONEq(t, `{"models":[]}`, w.Body.String())
 }
@@ -156,13 +156,13 @@ func TestOllamaRunningModels_SendsEndpointAuthAndRefusesRedirects(t *testing.T) 
 	t.Cleanup(authed.Close)
 	ep := psEndpoint("authed", "ollama", authed, domain.StatusHealthy)
 	ep.AuthHeaderName, ep.AuthHeaderValue = "Authorization", "Bearer tok"
-	require.Equal(t, http.StatusOK, runPS(t, context.Background(), ep).Code)
+	require.Equal(t, http.StatusOK, runPS(t, t.Context(), ep).Code)
 	assert.Equal(t, "Bearer tok", gotAuth)
 
 	target := psBackend(t, 200, `{"models":[{"name":"elsewhere"}]}`)
 	redirector := httptest.NewServer(http.RedirectHandler(target.URL+"/api/ps", http.StatusFound))
 	t.Cleanup(redirector.Close)
-	w := runPS(t, context.Background(), psEndpoint("r", "ollama", redirector, domain.StatusHealthy))
+	w := runPS(t, t.Context(), psEndpoint("r", "ollama", redirector, domain.StatusHealthy))
 	assert.Equal(t, http.StatusBadGateway, w.Code, "a redirect is a failure, never followed")
 }
 
@@ -263,7 +263,7 @@ func TestOllamaRunningModels_ShapeMatchesOllamaPlusTag(t *testing.T) {
 		`"size_vram":5137025024,"context_length":4096,"future_field":[1,{"x":null}]}`
 	a := psBackend(t, 200, `{"models":[`+entry+`]}`)
 
-	w := runPS(t, context.Background(), psEndpoint("a", "ollama", a, domain.StatusHealthy))
+	w := runPS(t, t.Context(), psEndpoint("a", "ollama", a, domain.StatusHealthy))
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.Contains(t, w.Header().Get("Content-Type"), "application/json")
 
@@ -288,7 +288,7 @@ func TestOllamaRunningModels_EmptyResultsStayAnEmptyArray(t *testing.T) {
 
 	a := psBackend(t, 200, `{"models":[]}`)
 	b := psBackend(t, 200, `{}`)
-	w := runPS(t, context.Background(),
+	w := runPS(t, t.Context(),
 		psEndpoint("a", "ollama", a, domain.StatusHealthy),
 		psEndpoint("b", "ollama", b, domain.StatusHealthy))
 	require.Equal(t, http.StatusOK, w.Code)
@@ -316,7 +316,7 @@ func TestOllamaRunningModels_CredentialsStayPerEndpoint(t *testing.T) {
 	epA.Headers = map[string]string{"X-Custom": "only-a"}
 	epB := psEndpoint("b", "ollama", seen(&gotB), domain.StatusHealthy)
 
-	require.Equal(t, http.StatusOK, runPS(t, context.Background(), epA, epB).Code)
+	require.Equal(t, http.StatusOK, runPS(t, t.Context(), epA, epB).Code)
 	assert.Equal(t, "key-a|only-a", gotA.Load())
 	assert.Equal(t, "|", gotB.Load(), "endpoint b must not receive a's credentials")
 }
@@ -341,13 +341,13 @@ func TestOllamaRunningModels_NoGoroutineLeak(t *testing.T) {
 	before := runtime.NumGoroutine()
 	// The handler's own context cancel reclaims connections on return, which would
 	// mask an unclosed body, so the error path is driven directly with a context
-	// that never ends.
+	// that outlives the request.
 	for range 5 {
-		_, err := fetchOllamaPS(context.Background(), psEndpoint("b", "ollama", bad, domain.StatusHealthy))
+		_, err := fetchOllamaPS(t.Context(), psEndpoint("b", "ollama", bad, domain.StatusHealthy))
 		require.ErrorIs(t, err, errOllamaPSStatus)
 	}
 	for range 5 {
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 		runPS(t, ctx,
 			psEndpoint("g", "ollama", good, domain.StatusHealthy),
 			psEndpoint("s", "ollama", slow, domain.StatusHealthy))
@@ -382,7 +382,7 @@ func TestOllamaPSClient_PooledAndNeverProxied(t *testing.T) {
 
 	ep := &domain.Endpoint{Name: "a", URL: mustParseURL(t, srv.URL), URLString: srv.URL}
 	for range 3 {
-		_, err := fetchOllamaPS(context.Background(), ep)
+		_, err := fetchOllamaPS(t.Context(), ep)
 		require.NoError(t, err)
 	}
 	assert.EqualValues(t, 1, conns.Load(), "sequential fetches should reuse one keep-alive connection")
@@ -459,12 +459,12 @@ func TestFetchOllamaPS_BodyCap(t *testing.T) {
 
 	pad := strings.Repeat("x", ollamaPSMaxBody)
 	big := psBackend(t, 200, `{"models":[{"name":"m","pad":"`+pad+`"}]}`)
-	_, err := fetchOllamaPS(context.Background(), psEndpoint("big", "ollama", big, domain.StatusHealthy))
+	_, err := fetchOllamaPS(t.Context(), psEndpoint("big", "ollama", big, domain.StatusHealthy))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exceeds")
 
 	small := psBackend(t, 200, `{"models":[{"name":"m","pad":"`+strings.Repeat("x", 1<<20)+`"}]}`)
-	got, err := fetchOllamaPS(context.Background(), psEndpoint("small", "ollama", small, domain.StatusHealthy))
+	got, err := fetchOllamaPS(t.Context(), psEndpoint("small", "ollama", small, domain.StatusHealthy))
 	require.NoError(t, err)
 	assert.Len(t, got, 1)
 }
@@ -489,7 +489,7 @@ func TestFetchOllamaPS_HonoursPreservePath(t *testing.T) {
 		ep.URL = mustParseURL(t, srv.URL+"/ollama")
 		ep.URLString = srv.URL + "/ollama"
 		ep.PreservePath = preserve
-		_, err := fetchOllamaPS(context.Background(), ep)
+		_, err := fetchOllamaPS(t.Context(), ep)
 		require.NoError(t, err)
 	}
 	assert.Equal(t, []string{"/ollama/api/ps", "/api/ps"}, paths)

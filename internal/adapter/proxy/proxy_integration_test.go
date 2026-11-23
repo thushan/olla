@@ -379,7 +379,7 @@ func TestStatsCollectorIntegration(t *testing.T) {
 			}
 
 			// Check proxy stats
-			proxyStats, err := proxy.GetStats(context.Background())
+			proxyStats, err := proxy.GetStats(t.Context())
 			if err != nil {
 				t.Fatalf("GetStats failed: %v", err)
 			}
@@ -501,7 +501,7 @@ func TestCircuitBreakerBehavior(t *testing.T) {
 		}
 
 		// Just verify it handles the requests without panicking
-		stats, err := proxy.GetStats(context.Background())
+		stats, err := proxy.GetStats(t.Context())
 		if err != nil {
 			t.Errorf("GetStats failed: %v", err)
 		}
@@ -569,7 +569,7 @@ func TestPerformanceCharacteristics(t *testing.T) {
 			}
 
 			// Check stats consistency
-			stats, err := proxy.GetStats(context.Background())
+			stats, err := proxy.GetStats(t.Context())
 			if err != nil {
 				t.Fatalf("GetStats failed: %v", err)
 			}
@@ -622,7 +622,7 @@ func TestConfigurationCompatibility(t *testing.T) {
 				proxy.UpdateConfig(config)
 
 				// Should still be able to get stats
-				_, err := proxy.GetStats(context.Background())
+				_, err := proxy.GetStats(t.Context())
 				if err != nil {
 					t.Errorf("GetStats failed after config update %d: %v", i, err)
 				}

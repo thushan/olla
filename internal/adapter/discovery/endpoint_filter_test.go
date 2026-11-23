@@ -77,7 +77,7 @@ func TestEndpointModelFilterPreservation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 			repo := NewStaticEndpointRepository()
 
 			// Load config
@@ -164,7 +164,7 @@ func TestDiscoveryServiceEndpointFiltering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// Create mock components using a modified mockDiscoveryClient
 			discoveredModels := tt.discoveredModels

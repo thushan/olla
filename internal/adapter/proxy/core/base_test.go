@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"net/url"
 	"testing"
@@ -62,7 +61,7 @@ func TestBaseProxyComponents_RecordFailure_WithModelName(t *testing.T) {
 	b, collector := newBaseTestComponents()
 	endpoint := newBaseTestEndpoint()
 
-	b.RecordFailure(context.Background(), endpoint, "llama3.2", 15*time.Millisecond, errors.New("boom"))
+	b.RecordFailure(t.Context(), endpoint, "llama3.2", 15*time.Millisecond, errors.New("boom"))
 
 	modelStats := collector.GetModelStats()
 	ms, ok := modelStats["llama3.2"]
@@ -99,7 +98,7 @@ func TestBaseProxyComponents_RecordSuccess_EmptyModelNameSkipsModelStats(t *test
 func TestBaseProxyComponents_RecordFailure_EmptyModelNameSkipsModelStats(t *testing.T) {
 	b, collector := newBaseTestComponents()
 
-	b.RecordFailure(context.Background(), nil, "", 5*time.Millisecond, errors.New("no healthy endpoints"))
+	b.RecordFailure(t.Context(), nil, "", 5*time.Millisecond, errors.New("no healthy endpoints"))
 
 	if _, ok := collector.GetModelStats()[""]; ok {
 		t.Error("empty model name must not create a model-stats entry")

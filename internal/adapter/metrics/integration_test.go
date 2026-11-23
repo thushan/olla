@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -74,7 +73,7 @@ func TestIntegration_OllamaMetricsExtraction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test extraction
-	ctx := context.Background()
+	ctx := t.Context()
 	metrics := extractor.ExtractFromChunk(ctx, ollamaResponse, "ollama")
 	require.NotNil(t, metrics)
 
@@ -140,7 +139,7 @@ func TestIntegration_PerformanceRegression(t *testing.T) {
 	err = extractor.ValidateProfile(profile)
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Warm up
 	for range 100 {
@@ -206,7 +205,7 @@ func TestIntegration_LargeChunkHandling(t *testing.T) {
 	extractor, err := NewExtractor(factory, testLogger)
 	require.NoError(t, err)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	metrics := extractor.ExtractFromChunk(ctx, largeResponse, "ollama")
 	require.NotNil(t, metrics)
 

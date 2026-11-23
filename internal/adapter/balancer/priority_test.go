@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"sync"
@@ -29,7 +28,7 @@ func TestNewPrioritySelector(t *testing.T) {
 
 func TestPrioritySelector_Select_NoEndpoints(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
 	if err == nil {
@@ -42,7 +41,7 @@ func TestPrioritySelector_Select_NoEndpoints(t *testing.T) {
 
 func TestPrioritySelector_Select_NoRoutableEndpoints(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("offline", 11434, domain.StatusOffline, 100),
@@ -61,7 +60,7 @@ func TestPrioritySelector_Select_NoRoutableEndpoints(t *testing.T) {
 
 func TestPrioritySelector_Select_SingleEndpoint(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("single", 11434, domain.StatusHealthy, 100),
@@ -81,7 +80,7 @@ func TestPrioritySelector_Select_SingleEndpoint(t *testing.T) {
 
 func TestPrioritySelector_Select_HighestPriority(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("low", 11434, domain.StatusHealthy, 100),
@@ -103,7 +102,7 @@ func TestPrioritySelector_Select_HighestPriority(t *testing.T) {
 
 func TestPrioritySelector_Select_SamePriorityWeightedSelection(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// All endpoints have same priority but different statuses
 	endpoints := []*domain.Endpoint{
@@ -144,7 +143,7 @@ func TestPrioritySelector_Select_SamePriorityWeightedSelection(t *testing.T) {
 
 func TestPrioritySelector_Select_PriorityOverridesWeight(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("low-healthy", 11434, domain.StatusHealthy, 100), // Lower priority but healthy
@@ -165,7 +164,7 @@ func TestPrioritySelector_Select_PriorityOverridesWeight(t *testing.T) {
 
 func TestPrioritySelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("offline-high", 11434, domain.StatusOffline, 300),    // Highest priority but offline
@@ -256,7 +255,7 @@ func TestPrioritySelector_GetConnectionStats(t *testing.T) {
 
 func TestPrioritySelector_WeightedSelect_ZeroWeight(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// All endpoints have zero weight (emulating an offline status)
 	endpoints := []*domain.Endpoint{
@@ -276,7 +275,7 @@ func TestPrioritySelector_WeightedSelect_ZeroWeight(t *testing.T) {
 
 func TestPrioritySelector_WeightedSelect_SingleEndpointSamePriority(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("single", 11434, domain.StatusHealthy, 100),
@@ -295,7 +294,7 @@ func TestPrioritySelector_WeightedSelect_SingleEndpointSamePriority(t *testing.T
 
 func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("endpoint-1", 11434, domain.StatusHealthy, 200),
@@ -351,7 +350,7 @@ func TestPrioritySelector_ConcurrentAccess(t *testing.T) {
 
 func TestPrioritySelector_MultiTierPriority(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		// Tier 1 (priority 300) - should always be selected first
@@ -386,7 +385,7 @@ func TestPrioritySelector_MultiTierPriority(t *testing.T) {
 
 func TestPrioritySelector_FallbackToLowerTier(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		// Tier 1 (offline)
@@ -428,7 +427,7 @@ func TestPrioritySelector_FallbackToLowerTier(t *testing.T) {
 
 func TestPrioritySelector_TrafficWeightDistribution(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createPriorityEndpoint("healthy", 11434, domain.StatusHealthy, 100), // Weight: 1.0
@@ -486,7 +485,7 @@ func TestPrioritySelector_SeedingConsistency(t *testing.T) {
 
 	for i := range 20 {
 		selector := NewPrioritySelector(NewTestStatsCollector())
-		endpoint, _ := selector.Select(context.Background(), endpoints)
+		endpoint, _ := selector.Select(t.Context(), endpoints)
 		results[i] = endpoint.Name
 	}
 

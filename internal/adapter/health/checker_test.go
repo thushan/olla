@@ -151,7 +151,7 @@ func TestHTTPHealthChecker_Check_Success(t *testing.T) {
 		CheckTimeout:   time.Second,
 	}
 
-	result, err := checker.Check(context.Background(), endpoint)
+	result, err := checker.Check(t.Context(), endpoint)
 
 	if err != nil {
 		t.Fatalf("Check failed: %v", err)
@@ -180,7 +180,7 @@ func TestHTTPHealthChecker_Check_NetworkError(t *testing.T) {
 		CheckTimeout:   time.Second,
 	}
 
-	result, err := checker.Check(context.Background(), endpoint)
+	result, err := checker.Check(t.Context(), endpoint)
 
 	if err == nil {
 		t.Fatal("Expected error but got none")
@@ -212,7 +212,7 @@ func TestHTTPHealthChecker_Check_SlowResponse(t *testing.T) {
 		CheckTimeout:   time.Minute,
 	}
 
-	result, err := checker.Check(context.Background(), endpoint)
+	result, err := checker.Check(t.Context(), endpoint)
 
 	if err != nil {
 		t.Fatalf("Check failed: %v", err)
@@ -280,7 +280,7 @@ func TestHealthChecker_StartStop(t *testing.T) {
 	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
-	ctx := context.Background()
+	ctx := t.Context()
 
 	err := checker.StartChecking(ctx)
 	if err != nil {
@@ -313,7 +313,7 @@ func TestHTTPHealthChecker_ForceHealthCheck(t *testing.T) {
 	styledLogger := logger.NewPlainStyledLogger(log) // Fix: add theme
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Add some endpoints
 	configs := []config.EndpointConfig{
@@ -357,7 +357,7 @@ func TestHealthChecker_ConcurrentAccess(t *testing.T) {
 	styledLogger := logger.NewPlainStyledLogger(log)
 
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, mockClient)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	configs := make([]config.EndpointConfig, 5)
 	for i := range 5 {
@@ -415,9 +415,9 @@ func TestHTTPHealthChecker_PanicRecovery(t *testing.T) {
 			CheckTimeout:   time.Second,
 		},
 	}
-	mockRepo.LoadFromConfig(context.Background(), configs)
+	mockRepo.LoadFromConfig(t.Context(), configs)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	checker.StartChecking(ctx)
 	defer checker.StopChecking(ctx)
 
@@ -456,9 +456,9 @@ func TestHTTPHealthChecker_ConcurrentHealthChecks(t *testing.T) {
 			CheckTimeout:   time.Second,
 		}
 	}
-	mockRepo.LoadFromConfig(context.Background(), configs)
+	mockRepo.LoadFromConfig(t.Context(), configs)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	checker.StartChecking(ctx)
 	defer checker.StopChecking(ctx)
 
@@ -509,10 +509,10 @@ func TestHTTPHealthChecker_ContextCancellation(t *testing.T) {
 			CheckTimeout:   time.Second,
 		},
 	}
-	mockRepo.LoadFromConfig(context.Background(), configs)
+	mockRepo.LoadFromConfig(t.Context(), configs)
 
 	// Start checker
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	checker.StartChecking(ctx)
 	defer checker.StopChecking(ctx)
 
@@ -616,7 +616,7 @@ func TestUnhealthyCallbackPredicate(t *testing.T) {
 				}
 			}))
 
-			ctx := context.Background()
+			ctx := t.Context()
 			checker.checkEndpoint(ctx, ep)
 
 			// The callback dispatches asynchronously in a goroutine; give it a
@@ -659,7 +659,7 @@ func TestStopChecking_DoubleInvoke(t *testing.T) {
 	checker := NewHTTPHealthChecker(mockRepo, styledLogger, &mockHTTPClient{statusCode: 200})
 
 	// Start the checker so isRunning == true.
-	if err := checker.StartChecking(context.Background()); err != nil {
+	if err := checker.StartChecking(t.Context()); err != nil {
 		t.Fatalf("StartChecking: %v", err)
 	}
 
@@ -669,7 +669,7 @@ func TestStopChecking_DoubleInvoke(t *testing.T) {
 	for range 2 {
 		go func() {
 			defer wg.Done()
-			_ = checker.StopChecking(context.Background())
+			_ = checker.StopChecking(t.Context())
 		}()
 	}
 	wg.Wait()
@@ -796,7 +796,7 @@ func TestHealthCheckLoop_CancelledContextAbortsInFlightChecks(t *testing.T) {
 	blocking := &blockingHTTPClient{doEntered: make(chan struct{}), cancelled: make(chan struct{})}
 	checker := NewHTTPHealthChecker(repo, styledLogger, blocking)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	// Also release the context if an assertion below aborts the test early.
 	defer cancel()
 

@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -28,7 +27,7 @@ func TestStreaming_Reasoning_ReasoningField(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -73,7 +72,7 @@ func TestStreaming_Reasoning_ReasoningContentField(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -102,7 +101,7 @@ func TestStreaming_Reasoning_OnlyReasoningNoContent(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -166,7 +165,7 @@ func TestStreaming_Reasoning_BlockOrderExactSequence(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
 	assertEventSequence(t, events, []string{
@@ -206,7 +205,7 @@ func TestStreaming_Reasoning_MultipleChunksAccumulated(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -264,7 +263,7 @@ func TestResponse_Reasoning_ReasoningField(t *testing.T) {
 		},
 	}
 
-	result, err := tr.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := tr.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	resp, ok := result.(AnthropicResponse)
@@ -301,7 +300,7 @@ func TestResponse_Reasoning_ReasoningContentField(t *testing.T) {
 		"usage": map[string]any{},
 	}
 
-	result, err := tr.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := tr.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	resp, ok := result.(AnthropicResponse)
@@ -336,7 +335,7 @@ func TestResponse_Reasoning_NoReasoningUnchanged(t *testing.T) {
 		"usage": map[string]any{},
 	}
 
-	result, err := tr.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := tr.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	resp, ok := result.(AnthropicResponse)
@@ -368,7 +367,7 @@ func TestResponse_Reasoning_ReasoningOnlyNoContent(t *testing.T) {
 		"usage": map[string]any{},
 	}
 
-	result, err := tr.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := tr.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	resp, ok := result.(AnthropicResponse)

@@ -176,7 +176,7 @@ func TestRetryOnConnectionFailure(t *testing.T) {
 
 	// Execute through the production proxy path.
 	err = service.ProxyRequestToEndpointsWithRetry(
-		context.Background(),
+		t.Context(),
 		w,
 		req,
 		[]*domain.Endpoint{failingEndpoint, successEndpoint},
@@ -304,7 +304,7 @@ func TestRetryExhaustsAllEndpoints(t *testing.T) {
 
 	// Execute with retry
 	err = retryHandler.ExecuteWithRetry(
-		context.Background(),
+		t.Context(),
 		w,
 		req,
 		[]*domain.Endpoint{endpoint1, endpoint2, endpoint3},
@@ -393,7 +393,7 @@ func TestRetryPreservesRequestBody(t *testing.T) {
 
 	// Execute with retry
 	err = retryHandler.ExecuteWithRetry(
-		context.Background(),
+		t.Context(),
 		w,
 		req,
 		[]*domain.Endpoint{failingEndpoint, successEndpoint},

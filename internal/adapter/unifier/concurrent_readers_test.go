@@ -96,7 +96,7 @@ func TestDefaultUnifier_ConcurrentReadersDuringMerge(t *testing.T) {
 		for rName, read := range readers {
 			t.Run(sName+"/"+rName, func(t *testing.T) {
 				t.Parallel()
-				ctx := context.Background()
+				ctx := t.Context()
 				for range raceIterations {
 					u := NewDefaultUnifier().(*DefaultUnifier)
 					_, err := u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
@@ -123,7 +123,7 @@ func TestDefaultUnifier_ConcurrentReadersDuringMerge(t *testing.T) {
 func TestDefaultUnifier_GetStatsDuringUnify(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	u := NewDefaultUnifier().(*DefaultUnifier)
 	ep := raceEndpoint("a", "http://a:11434")
 
@@ -145,7 +145,7 @@ func TestDefaultUnifier_GetStatsDuringUnify(t *testing.T) {
 func TestDefaultUnifier_PublishedModelsAreImmutable(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	u := NewDefaultUnifier().(*DefaultUnifier)
 
 	_, err := u.UnifyModels(ctx, []*domain.ModelInfo{raceModel("llama3:8b", "sha-1")}, raceEndpoint("a", "http://a:11434"))
@@ -229,7 +229,6 @@ func TestUnifiedModelClone_NestedMetadataIsIndependent(t *testing.T) {
 // request goroutines held and read them without a lock. Clearing now resets in place.
 func TestUnifiers_ClearDuringUse(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	for name, u := range map[string]ports.ModelUnifier{
 		"default":   NewDefaultUnifier(),
@@ -237,6 +236,8 @@ func TestUnifiers_ClearDuringUse(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			// The subtest owns its context: it is cancelled when the subtest, not the parent, ends.
+			ctx := t.Context()
 			var stop atomic.Bool
 			var wg sync.WaitGroup
 			for range 4 {

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"net/http/httptest"
 	"testing"
 
@@ -35,7 +34,7 @@ func TestPrepareProxyContext_InjectsAliasMapWhenPresent(t *testing.T) {
 	}
 
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, r = app.prepareProxyContext(ctx, r, pr)
 
@@ -68,7 +67,7 @@ func TestPrepareProxyContext_NoAliasMapWhenNoneStored(t *testing.T) {
 	}
 
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, r = app.prepareProxyContext(ctx, r, pr)
 
@@ -92,7 +91,7 @@ func TestPrepareProxyContext_NilProfile(t *testing.T) {
 	}
 
 	r := httptest.NewRequest("POST", "/v1/messages", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	_, r = app.prepareProxyContext(ctx, r, pr)
 

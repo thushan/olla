@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"sort"
@@ -184,7 +183,7 @@ func TestPrioritySelector_TiedPriorityFixture_UnstableSortReorders(t *testing.T)
 func TestPrioritySelector_TiedPriorityFixture_SelectsTopTier(t *testing.T) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
 	fixture := tiedPriorityFixture()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	for range 1000 {
 		ep, err := selector.Select(ctx, fixture)
@@ -205,7 +204,7 @@ func TestPrioritySelector_TiedPriorityFixture_SelectsTopTier(t *testing.T) {
 func BenchmarkPrioritySelector_SelectTiedPriority(b *testing.B) {
 	selector := NewPrioritySelector(NewTestStatsCollector())
 	fixture := tiedPriorityFixture()
-	ctx := context.Background()
+	ctx := b.Context()
 
 	b.ReportAllocs()
 	b.ResetTimer()

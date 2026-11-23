@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -41,7 +40,7 @@ func TestTransformRequest_SimpleMessage(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 	assert.Equal(t, "claude-3-5-sonnet-20241022", result.ModelName)
 	assert.False(t, result.IsStreaming)
@@ -81,7 +80,7 @@ func TestTransformRequest_WithSystemPrompt(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -135,7 +134,7 @@ func TestTransformRequest_WithTools(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	tools, ok := result.OpenAIRequest["tools"].([]map[string]any)
@@ -195,7 +194,7 @@ func TestTransformRequest_MultipleTools(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	tools, ok := result.OpenAIRequest["tools"].([]map[string]any)
@@ -360,7 +359,7 @@ func TestConvertMessages_ToolUseAndResult(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -429,7 +428,7 @@ func TestTransformRequest_ComplexContent(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -471,7 +470,7 @@ func TestTransformRequest_MultipleMessages(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -513,7 +512,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 			Body: io.NopCloser(bytes.NewReader(body)),
 		}
 
-		result, err := translator.TransformRequest(context.Background(), req)
+		result, err := translator.TransformRequest(t.Context(), req)
 		require.NoError(t, err)
 
 		messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -545,7 +544,7 @@ func TestTransformRequest_EmptyContent(t *testing.T) {
 			Body: io.NopCloser(bytes.NewReader(body)),
 		}
 
-		result, err := translator.TransformRequest(context.Background(), req)
+		result, err := translator.TransformRequest(t.Context(), req)
 		require.NoError(t, err)
 
 		messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -562,7 +561,7 @@ func TestTransformRequest_InvalidJSON(t *testing.T) {
 			Body: io.NopCloser(bytes.NewReader([]byte("{invalid json"))),
 		}
 
-		_, err := translator.TransformRequest(context.Background(), req)
+		_, err := translator.TransformRequest(t.Context(), req)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to parse Anthropic request")
 	})
@@ -572,7 +571,7 @@ func TestTransformRequest_InvalidJSON(t *testing.T) {
 			Body: io.NopCloser(bytes.NewReader([]byte(""))),
 		}
 
-		_, err := translator.TransformRequest(context.Background(), req)
+		_, err := translator.TransformRequest(t.Context(), req)
 		assert.Error(t, err)
 	})
 }
@@ -605,7 +604,7 @@ func TestTransformRequest_OptionalParameters(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	assert.True(t, result.IsStreaming)
@@ -650,7 +649,7 @@ func TestTransformRequest_AssistantWithOnlyToolCalls(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -694,7 +693,7 @@ func TestTransformRequest_UserWithOnlyToolResults(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -737,7 +736,7 @@ func TestTransformRequest_ToolResultWithStructuredContent(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -800,7 +799,7 @@ func TestTransformRequest_MultipleToolCalls(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -876,7 +875,7 @@ func TestTransformRequest_NoMessages(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	_, err = translator.TransformRequest(context.Background(), req)
+	_, err = translator.TransformRequest(t.Context(), req)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one message is required")
 }
@@ -916,7 +915,7 @@ func TestTransformRequest_ToolChoiceObjectForm(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	toolChoice, ok := result.OpenAIRequest["tool_choice"].(map[string]any)
@@ -959,7 +958,7 @@ func TestTransformRequest_MixedTextAndToolResults(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -1103,7 +1102,7 @@ func TestTransformRequest_SystemPromptWithContentBlocks(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -1206,7 +1205,7 @@ func TestConvertUserMessage_ToolResultPrecedesText(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := tr.TransformRequest(context.Background(), req)
+	result, err := tr.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)

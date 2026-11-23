@@ -48,7 +48,7 @@ func TestRegisterProviderRoutes_TextEmbeddingsInference(t *testing.T) {
 	}
 
 	unifiedRegistry := registry.NewUnifiedMemoryModelRegistry(&mockStyledLogger{}, nil, nil, nil)
-	ctx := context.Background()
+	ctx := t.Context()
 	unifiedRegistry.RegisterEndpoint(endpoint)
 
 	const teiModel = "Snowflake/snowflake-arctic-embed-l-v2.0"

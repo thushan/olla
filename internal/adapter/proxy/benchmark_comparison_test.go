@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -89,7 +88,7 @@ func benchmarkProxy(b *testing.B, proxy ports.ProxyService) {
 			StartTime: time.Now(),
 		}
 
-		err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+		err := proxy.ProxyRequest(b.Context(), w, req, stats, createTestLogger())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -148,7 +147,7 @@ func benchmarkStreamingProxy(b *testing.B, proxy ports.ProxyService) {
 			StartTime: time.Now(),
 		}
 
-		err := proxy.ProxyRequest(context.Background(), w, req, stats, createTestLogger())
+		err := proxy.ProxyRequest(b.Context(), w, req, stats, createTestLogger())
 		if err != nil {
 			b.Fatal(err)
 		}

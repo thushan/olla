@@ -1,7 +1,6 @@
 package routing
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -17,7 +16,7 @@ import (
 // rejects with 503, and no match anywhere rejects with 404. Handlers rely on these
 // exact status codes to fail fast instead of falling through to the proxy engine.
 func TestStrictStrategy_GetRoutableEndpoints(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	testLogger := createTestLogger()
 	strategy := NewStrictStrategy(testLogger)
 

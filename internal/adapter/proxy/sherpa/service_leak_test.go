@@ -33,8 +33,8 @@ func TestCreateCombinedContext_NoGoroutineLeak(t *testing.T) {
 
 	// Create many contexts and ensure goroutines are cleaned up
 	for i := range 100 {
-		ctx1, cancel1 := context.WithCancel(context.Background())
-		ctx2, cancel2 := context.WithCancel(context.Background())
+		ctx1, cancel1 := context.WithCancel(t.Context())
+		ctx2, cancel2 := context.WithCancel(t.Context())
 
 		combinedCtx, combinedCancel := s.createCombinedContext(ctx1, ctx2)
 
@@ -84,7 +84,7 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 
 	for range numTimeoutTests {
 		wg.Go(func() {
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// Create a new state for each goroutine to avoid race conditions
 			localState := &streamState{}
@@ -107,7 +107,7 @@ func TestPerformTimedRead_NoGoroutineLeak(t *testing.T) {
 	const numCancelTests = 20 // Reduced from 50
 	for range numCancelTests {
 		wg.Go(func() {
-			ctx, cancel := context.WithCancel(context.Background())
+			ctx, cancel := context.WithCancel(t.Context())
 
 			// Create a new state for each goroutine to avoid race conditions
 			localState := &streamState{}
@@ -166,8 +166,8 @@ func TestStreamResponseWithTimeout_ClientDisconnect(t *testing.T) {
 
 	// Simulate multiple client disconnections
 	for range 20 {
-		clientCtx, clientCancel := context.WithCancel(context.Background())
-		upstreamCtx := context.Background()
+		clientCtx, clientCancel := context.WithCancel(t.Context())
+		upstreamCtx := t.Context()
 		writer := &mockWriter{}
 
 		// Start streaming in goroutine

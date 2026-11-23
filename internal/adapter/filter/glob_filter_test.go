@@ -1,7 +1,6 @@
 package filter
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -131,7 +130,7 @@ func TestGlobFilter_Apply(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := NewGlobFilter()
-			ctx := context.Background()
+			ctx := t.Context()
 
 			result, err := filter.Apply(ctx, tt.config, tt.items, func(item any) string {
 				return item.(string)
@@ -244,7 +243,7 @@ func TestGlobFilter_ApplyToMap(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			filter := NewGlobFilter()
-			ctx := context.Background()
+			ctx := t.Context()
 
 			result, err := filter.ApplyToMap(ctx, tt.config, tt.items)
 

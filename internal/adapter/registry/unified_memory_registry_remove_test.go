@@ -14,10 +14,11 @@ import (
 // removing an endpoint has to clear it there too or a removed host keeps being offered.
 func TestUnifiedRegistry_RemoveEndpointForgetsItInAliasResolution(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
 	t.Run("sole host", func(t *testing.T) {
 		t.Parallel()
+		// The subtest owns its context: it is cancelled when the subtest, not the parent, ends.
+		ctx := t.Context()
 		r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 		require.NoError(t, r.RegisterModelsWithEndpoint(ctx, raceEndpoint("a", "http://a:11434"),
 			[]*domain.ModelInfo{raceModel("solo:1b", "sha-solo")}))
@@ -38,6 +39,7 @@ func TestUnifiedRegistry_RemoveEndpointForgetsItInAliasResolution(t *testing.T) 
 
 	t.Run("one of two hosts", func(t *testing.T) {
 		t.Parallel()
+		ctx := t.Context()
 		r := NewUnifiedMemoryModelRegistry(createTestLogger(), nil, nil, nil)
 		seedTwoEndpoints(t, r)
 
@@ -61,7 +63,8 @@ func TestUnifiedRegistry_RemoveEndpointForgetsItInAliasResolution(t *testing.T) 
 
 func seedLifecycleRegistry(t *testing.T) (*LifecycleUnifiedRegistry, *unifier.LifecycleUnifier) {
 	t.Helper()
-	ctx := context.Background()
+	// Stop runs from Cleanup, after t.Context() is cancelled, so the context must outlive the test.
+	ctx := context.WithoutCancel(t.Context())
 	r := NewLifecycleUnifiedRegistry(createTestLogger(), unifier.DefaultConfig())
 	require.NoError(t, r.Start(ctx))
 	t.Cleanup(func() { _ = r.Stop(ctx) })
@@ -77,7 +80,7 @@ func seedLifecycleRegistry(t *testing.T) (*LifecycleUnifiedRegistry, *unifier.Li
 
 func TestLifecycleUnifiedRegistry_RegisterThenRemoveRoundTrip(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	r, _ := seedLifecycleRegistry(t)
 
 	_, err := r.GetUnifiedModel(ctx, "solo:1b")
@@ -94,11 +97,11 @@ func TestLifecycleUnifiedRegistry_RemoveEndpointCancelledKeepsState(t *testing.T
 	t.Parallel()
 	r, lu := seedLifecycleRegistry(t)
 
-	cctx, cancel := context.WithCancel(context.Background())
+	cctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	require.Error(t, r.RemoveEndpoint(cctx, "http://a:11434"))
 
-	ctx := context.Background()
+	ctx := t.Context()
 	assert.Equal(t, 1, r.endpoints.Size(), "endpoint must still be registered")
 	m, err := r.GetUnifiedModel(ctx, "solo:1b")
 	require.NoError(t, err, "alias or unified lookup must still resolve")
@@ -111,7 +114,7 @@ func TestLifecycleUnifiedRegistry_RemoveEndpointCancelledKeepsState(t *testing.T
 
 func TestLifecycleUnifiedRegistry_RemoveEndpointCleansLifecycleUnifier(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	r, lu := seedLifecycleRegistry(t)
 	require.NotNil(t, lu.GetEndpointState("http://a:11434"))
 

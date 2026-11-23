@@ -2,7 +2,6 @@ package core
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -58,7 +57,7 @@ func TestTraceConnReuse_ObservesPoolReuse(t *testing.T) {
 	defer tr.CloseIdleConnections()
 
 	do := func() *ConnReuseTrace {
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
 		require.NoError(t, err)
 		req, trace := TraceConnReuse(req)
 		resp, err := tr.RoundTrip(req)

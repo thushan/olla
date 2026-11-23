@@ -792,6 +792,6 @@ func TestBuildTargetURL_PerEndpointPath(t *testing.T) {
 
 	// the map's path is the backend's own, so a proxy prefix must not be stripped from it
 	prefixed := map[string]string{dmr.URLString: "/olla/proxy/odd"}
-	req = req.WithContext(context.WithValue(context.Background(), constants.ContextEndpointPathMapKey, prefixed))
+	req = req.WithContext(context.WithValue(t.Context(), constants.ContextEndpointPathMapKey, prefixed))
 	assert.Equal(t, "http://dmr:12434/olla/proxy/odd?stream=true", BuildTargetURL(req, dmr, "/olla/proxy").String())
 }

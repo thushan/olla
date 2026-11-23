@@ -95,6 +95,11 @@ linters:
         - -SA1029
     testifylint:
       enable-all: true
+    usetesting:
+      # context-background and context-todo default to false and are turned on
+      # here; os-setenv is on by default.
+      context-background: true
+      context-todo: true
 
   exclusions:
     generated: strict
@@ -118,7 +123,6 @@ linters:
           - testifylint
           - unconvert
           - unparam
-          - usetesting
           - wastedassign
       - path: internal/util/request.go
         linters:

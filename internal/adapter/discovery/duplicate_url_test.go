@@ -2,7 +2,6 @@ package discovery
 
 import (
 	"bytes"
-	"context"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -36,7 +35,7 @@ func TestLoadFromConfig_DuplicateURLWarns(t *testing.T) {
 		{Name: "second", URL: "http://127.0.0.1:9300", Type: "sglang"},
 		{Name: "other", URL: "http://127.0.0.1:9301", Type: "vllm"},
 	}
-	if err := repo.LoadFromConfig(context.Background(), cfgs); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), cfgs); err != nil {
 		t.Fatalf("duplicate URLs must still load: %v", err)
 	}
 
@@ -49,7 +48,7 @@ func TestLoadFromConfig_DuplicateURLWarns(t *testing.T) {
 	if strings.Contains(out, "other") {
 		t.Errorf("unique endpoint named in warning: %s", out)
 	}
-	all, _ := repo.GetAll(context.Background())
+	all, _ := repo.GetAll(t.Context())
 	if len(all) != 2 {
 		t.Errorf("registered %d endpoints, want 2", len(all))
 	}
@@ -97,10 +96,10 @@ func TestStickyManualConfig_AllEndpointsRegister(t *testing.T) {
 		t.Fatal("no endpoints configured")
 	}
 	repo := newRealProfileRepo(t)
-	if err := repo.LoadFromConfig(context.Background(), configured); err != nil {
+	if err := repo.LoadFromConfig(t.Context(), configured); err != nil {
 		t.Fatalf("LoadFromConfig: %v", err)
 	}
-	all, _ := repo.GetAll(context.Background())
+	all, _ := repo.GetAll(t.Context())
 	if len(all) != len(configured) {
 		t.Errorf("registered %d of %d endpoints; URLs must be unique: %v",
 			len(all), len(configured), DuplicateEndpointURLWarnings(configured))

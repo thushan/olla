@@ -77,7 +77,7 @@ func TestHealthCheckerRecoveryCallback(t *testing.T) {
 	recoveryCallback := &testRecoveryCallback{}
 	checker.SetRecoveryCallback(recoveryCallback)
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Start health checking
 	err := checker.StartChecking(ctx)
@@ -131,7 +131,7 @@ func TestRecoveryCallbackFunc(t *testing.T) {
 		Status: domain.StatusHealthy,
 	}
 
-	err := callbackFunc.OnEndpointRecovered(context.Background(), testEndpoint)
+	err := callbackFunc.OnEndpointRecovered(t.Context(), testEndpoint)
 
 	assert.NoError(t, err)
 	assert.True(t, called)
@@ -141,7 +141,7 @@ func TestRecoveryCallbackFunc(t *testing.T) {
 func TestNoOpRecoveryCallback(t *testing.T) {
 	callback := NoOpRecoveryCallback{}
 
-	err := callback.OnEndpointRecovered(context.Background(), &domain.Endpoint{
+	err := callback.OnEndpointRecovered(t.Context(), &domain.Endpoint{
 		Name: "test",
 	})
 

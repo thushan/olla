@@ -89,7 +89,7 @@ func TestExecuteWithRetry_CBOpen_FailoverWithoutDemotion(t *testing.T) {
 	w := httptest.NewRecorder()
 	stats := &ports.RequestStats{}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req,
+	err := h.ExecuteWithRetry(t.Context(), w, req,
 		[]*domain.Endpoint{endpointA, endpointB},
 		&roundRobinSelector{}, stats, proxyFunc)
 
@@ -132,7 +132,7 @@ func TestExecuteWithRetry_AllCBOpen_CleanExhaustionError(t *testing.T) {
 	w := httptest.NewRecorder()
 	stats := &ports.RequestStats{}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req, endpoints,
+	err := h.ExecuteWithRetry(t.Context(), w, req, endpoints,
 		&roundRobinSelector{}, stats, proxyFunc)
 
 	require.Error(t, err, "total CB-open exhaustion must surface an error")
@@ -190,7 +190,7 @@ func TestExecuteWithRetry_CBOpen_POSTResponseStarted_NoRetry(t *testing.T) {
 	w := httptest.NewRecorder()
 	stats := &ports.RequestStats{}
 
-	err := h.ExecuteWithRetry(context.Background(), w, req,
+	err := h.ExecuteWithRetry(t.Context(), w, req,
 		[]*domain.Endpoint{endpointA, endpointB},
 		&roundRobinSelector{}, stats, proxyFunc)
 

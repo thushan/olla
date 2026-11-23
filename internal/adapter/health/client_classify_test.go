@@ -1,7 +1,6 @@
 package health
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -44,7 +43,7 @@ func TestDetermineStatus_401_IsConfigError(t *testing.T) {
 	ep := probeEndpoint(t, srv.URL)
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 
 	require.NoError(t, err, "401 is a valid HTTP response, not a transport error")
 	assert.Equal(t, domain.StatusConfigError, result.Status)
@@ -58,7 +57,7 @@ func TestDetermineStatus_403_IsConfigError(t *testing.T) {
 	ep := probeEndpoint(t, srv.URL)
 
 	hc := NewHealthClient(http.DefaultClient, NewCircuitBreaker())
-	result, err := hc.Check(context.Background(), ep)
+	result, err := hc.Check(t.Context(), ep)
 
 	require.NoError(t, err)
 	assert.Equal(t, domain.StatusConfigError, result.Status)
@@ -79,7 +78,7 @@ func TestConfigError_DoesNotTripCircuitBreaker(t *testing.T) {
 
 	// Fire well past the CB threshold.
 	for range DefaultCircuitBreakerThreshold * 3 {
-		_, _ = hc.Check(context.Background(), ep)
+		_, _ = hc.Check(t.Context(), ep)
 	}
 
 	open, _ := cb.IsOpen(ep.HealthCheckURLString, ep.CheckTimeout)

@@ -1,7 +1,6 @@
 package security
 
 import (
-	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -74,7 +73,7 @@ func TestSizeValidator_Validate_SmallRequest(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -104,7 +103,7 @@ func TestSizeValidator_Validate_BodyTooLarge(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -134,7 +133,7 @@ func TestSizeValidator_Validate_HeadersTooLarge(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -170,7 +169,7 @@ func TestSizeValidator_Validate_ZeroHeaderLimitUsesDefaultCap(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	oversized := strings.Repeat("z", http.DefaultMaxHeaderBytes+1)
 	req := ports.SecurityRequest{
@@ -219,7 +218,7 @@ func TestSizeValidator_Validate_ZeroBodyDisabled_ZeroHeaderUnderDefaultCap(t *te
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -248,7 +247,7 @@ func TestSizeValidator_Validate_NegativeLimitsDisabled(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -277,7 +276,7 @@ func TestSizeValidator_Validate_ExactLimit(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -306,7 +305,7 @@ func TestSizeValidator_Validate_OneByteTooLarge(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -333,7 +332,7 @@ func TestSizeValidator_Validate_EmptyBody(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -362,7 +361,7 @@ func TestSizeValidator_Validate_MultipleHeaders(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -394,7 +393,7 @@ func TestSizeValidator_Validate_ConcurrentRequests(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	var wg sync.WaitGroup
 	errors := make(chan error, 20)
@@ -463,7 +462,7 @@ func TestSizeValidator_Validate_MultiValueHeaders(t *testing.T) {
 	}
 
 	validator := createTestSizeLimitValidator(limits)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	req := ports.SecurityRequest{
 		ClientID:   "192.168.1.100",
@@ -561,7 +560,7 @@ func TestCreateNonProxyMiddleware_ChunkedOversizedBody_RecordsViolation(t *testi
 
 	handler.ServeHTTP(httptest.NewRecorder(), req)
 
-	metrics, err := metricsAdapter.GetMetrics(context.Background())
+	metrics, err := metricsAdapter.GetMetrics(t.Context())
 	if err != nil {
 		t.Fatalf("GetMetrics failed: %v", err)
 	}

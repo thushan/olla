@@ -84,7 +84,7 @@ func newTagFleet(t *testing.T, strategy config.ModelRoutingStrategy, urls map[st
 	cfg := strategy
 	unified := registry.NewUnifiedMemoryModelRegistry(log, nil, &cfg, nil)
 
-	ctx := context.Background()
+	ctx := t.Context()
 	var endpoints []*domain.Endpoint
 	var registered []*domain.ModelInfo
 	for _, spec := range []struct{ name, typ, models string }{

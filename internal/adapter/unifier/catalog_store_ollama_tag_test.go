@@ -1,7 +1,6 @@
 package unifier
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,7 +15,7 @@ func unifyOn(t *testing.T, u ports.ModelUnifier, endpointType, url string, names
 	for _, n := range names {
 		models = append(models, &domain.ModelInfo{Name: n})
 	}
-	_, err := u.UnifyModels(context.Background(), models, &domain.Endpoint{URLString: url, Name: url, Type: endpointType})
+	_, err := u.UnifyModels(t.Context(), models, &domain.Endpoint{URLString: url, Name: url, Type: endpointType})
 	require.NoError(t, err)
 }
 
@@ -65,7 +64,7 @@ func TestCatalogResolveByName_OllamaDefaultTag(t *testing.T) {
 			u := NewDefaultUnifier()
 			tt.setup(t, u)
 
-			got, err := u.ResolveAlias(context.Background(), tt.query)
+			got, err := u.ResolveAlias(t.Context(), tt.query)
 			if tt.wantID == "" {
 				assert.Error(t, err)
 				return

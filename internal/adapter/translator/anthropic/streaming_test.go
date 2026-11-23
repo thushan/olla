@@ -150,7 +150,7 @@ func TestTransformStreamingResponse_ContextCancellation(t *testing.T) {
 	translator := newTestTranslator()
 
 	// create a cancellable context
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 
 	// create a slow stream that will be cancelled
 	slowStream := &slowReader{
@@ -471,7 +471,7 @@ func TestTransformStreamingResponse_InterleavedToolArguments(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	err := translator.TransformStreamingResponse(context.Background(), stream, recorder, nil)
+	err := translator.TransformStreamingResponse(t.Context(), stream, recorder, nil)
 	// stream must be aborted with the sentinel error
 	require.ErrorIs(t, err, errInterleavedToolArguments)
 
@@ -552,7 +552,7 @@ func TestTransformStreamingResponse_MessageStartCacheFields(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -590,7 +590,7 @@ func TestTransformStreamingResponse_MessageDeltaCacheFields(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -882,7 +882,7 @@ func TestTransformStreamingResponse_MessageStartInputTokensSeeded(t *testing.T) 
 
 	// Simulate the handler injecting a pre-computed estimate into context.
 	const seedTokens = 42
-	ctx := context.WithValue(context.Background(), constants.ContextInputTokensKey, seedTokens)
+	ctx := context.WithValue(t.Context(), constants.ContextInputTokensKey, seedTokens)
 
 	recorder := httptest.NewRecorder()
 	err := trans.TransformStreamingResponse(ctx, stream, recorder, nil)
@@ -923,7 +923,7 @@ func TestTransformStreamingResponse_MessageStartNoSeedIsZero(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	err := trans.TransformStreamingResponse(context.Background(), stream, recorder, nil)
+	err := trans.TransformStreamingResponse(t.Context(), stream, recorder, nil)
 	require.NoError(t, err)
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
@@ -1074,7 +1074,7 @@ func TestTransformStreamingResponse_LateArgDeltaDropped(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	err := tr.TransformStreamingResponse(context.Background(), stream, recorder, nil)
+	err := tr.TransformStreamingResponse(t.Context(), stream, recorder, nil)
 	require.ErrorIs(t, err, errInterleavedToolArguments)
 
 	body := recorder.Body.String()
@@ -1115,7 +1115,7 @@ func TestTransformStreamingResponse_UsageOnlyFinalChunk(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -1140,7 +1140,7 @@ func TestTransformStreamingResponse_UsageOnlyChunkOverridesEstimate(t *testing.T
 
 	// Seed a non-zero estimate that differs from the real usage.
 	const seedTokens = 10
-	ctx := context.WithValue(context.Background(), constants.ContextInputTokensKey, seedTokens)
+	ctx := context.WithValue(t.Context(), constants.ContextInputTokensKey, seedTokens)
 
 	recorder := httptest.NewRecorder()
 	require.NoError(t, tr.TransformStreamingResponse(ctx, stream, recorder, nil))
@@ -1175,7 +1175,7 @@ func TestTransformStreamingResponse_RepeatedToolIDNameDoesNotReinit(t *testing.T
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	body := recorder.Body.String()
 	events := parseAnthropicEvents(t, body)
@@ -1219,7 +1219,7 @@ func TestTransformStreamingResponse_SynthesisedOutputTokensWhenNoBackendUsage(t 
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -1259,7 +1259,7 @@ func TestTransformStreamingResponse_RealUsageWinsOverSynthesis(t *testing.T) {
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -1293,7 +1293,7 @@ func TestTransformStreamingResponse_SynthesisedOutputTokensEmptyContent(t *testi
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -1329,7 +1329,7 @@ func TestTransformStreamingResponse_SynthesisedOutputTokensThinkingContent(t *te
 	})
 
 	recorder := httptest.NewRecorder()
-	require.NoError(t, tr.TransformStreamingResponse(context.Background(), stream, recorder, nil))
+	require.NoError(t, tr.TransformStreamingResponse(t.Context(), stream, recorder, nil))
 
 	events := parseAnthropicEvents(t, recorder.Body.String())
 
@@ -1382,7 +1382,7 @@ func TestTransformStreamingResponse_ReadErrorDoesNotFinalise(t *testing.T) {
 		err: cause,
 	}
 
-	recorder, err := executeTransformWithContext(t, translator, context.Background(), stream)
+	recorder, err := executeTransformWithContext(t, translator, t.Context(), stream)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, io.ErrUnexpectedEOF)
@@ -1394,7 +1394,7 @@ func TestTransformStreamingResponse_ReadErrorDoesNotFinalise(t *testing.T) {
 
 func TestTransformStreamingResponse_ReadErrorBeforeAnyChunk(t *testing.T) {
 	translator := newTestTranslator()
-	recorder, err := executeTransformWithContext(t, translator, context.Background(),
+	recorder, err := executeTransformWithContext(t, translator, t.Context(),
 		&errAfterReader{r: strings.NewReader(""), err: io.ErrClosedPipe})
 
 	require.ErrorIs(t, err, io.ErrClosedPipe)

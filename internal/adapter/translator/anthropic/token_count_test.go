@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -215,7 +214,7 @@ func TestCountTokens(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 
 			// Call CountTokens
-			ctx := context.Background()
+			ctx := t.Context()
 			resp, err := trans.CountTokens(ctx, req)
 			if err != nil {
 				t.Fatalf("CountTokens failed: %v", err)
@@ -300,7 +299,7 @@ func TestCountTokensWithRawJSON(t *testing.T) {
 			}
 			req.Header.Set("Content-Type", "application/json")
 
-			ctx := context.Background()
+			ctx := t.Context()
 			resp, err := trans.CountTokens(ctx, req)
 			if err != nil {
 				t.Fatalf("CountTokens failed: %v", err)
@@ -350,7 +349,7 @@ func TestCountTokensErrors(t *testing.T) {
 			}
 			req.Header.Set("Content-Type", "application/json")
 
-			ctx := context.Background()
+			ctx := t.Context()
 			resp, err := trans.CountTokens(ctx, req)
 
 			if tt.shouldError {
@@ -410,7 +409,7 @@ func TestCountTokensMatchesPythonReference(t *testing.T) {
 		t.Fatalf("Failed to create request: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx := t.Context()
 	resp, err := trans.CountTokens(ctx, req)
 	if err != nil {
 		t.Fatalf("CountTokens failed: %v", err)
@@ -441,7 +440,7 @@ func TestCountTokensWireResponse(t *testing.T) {
 		t.Fatalf("failed to create request: %v", err)
 	}
 
-	resp, err := trans.CountTokens(context.Background(), req)
+	resp, err := trans.CountTokens(t.Context(), req)
 	if err != nil {
 		t.Fatalf("CountTokens failed: %v", err)
 	}
@@ -522,7 +521,7 @@ func BenchmarkCountTokens(b *testing.B) {
 	for range b.N {
 		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
-		_, _ = trans.CountTokens(context.Background(), req)
+		_, _ = trans.CountTokens(b.Context(), req)
 	}
 }
 
@@ -628,6 +627,6 @@ func BenchmarkCountTokensLargeRequest(b *testing.B) {
 	for range b.N {
 		req, _ := http.NewRequest("POST", "/v1/messages/count_tokens", bytes.NewReader(reqBody))
 		req.Header.Set("Content-Type", "application/json")
-		_, _ = trans.CountTokens(context.Background(), req)
+		_, _ = trans.CountTokens(b.Context(), req)
 	}
 }

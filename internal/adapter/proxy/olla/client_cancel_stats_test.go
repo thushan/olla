@@ -57,7 +57,7 @@ func TestBackendRoundTripFailures_StillOpenBreaker(t *testing.T) {
 
 	svc := newCancelTestService(t, nil)
 	for range circuitBreakerThreshold {
-		require.Error(t, proxyOnce(context.Background(), svc, ep))
+		require.Error(t, proxyOnce(t.Context(), svc, ep))
 	}
 
 	cb := svc.GetCircuitBreaker(ep.Name)
@@ -75,7 +75,7 @@ func TestResponseHeaderTimeout_StillCountsAgainstBreaker(t *testing.T) {
 		c.ResponseHeaderTimeout = 50 * time.Millisecond
 	})
 	for range circuitBreakerThreshold {
-		require.Error(t, proxyOnce(context.Background(), svc, ep))
+		require.Error(t, proxyOnce(t.Context(), svc, ep))
 	}
 
 	cb := svc.GetCircuitBreaker(ep.Name)
@@ -89,7 +89,7 @@ func TestClientCancel_DoesNotCountAsFailedRequest(t *testing.T) {
 	ep := endpointFor(t, srv.URL)
 	svc := newCancelTestService(t, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	_ = proxyOnce(ctx, svc, ep)
 	cancel()
@@ -110,7 +110,7 @@ func TestClientCancelOnHalfOpenProbe_ReleasesProbeSlot(t *testing.T) {
 	}
 	cb.SetLastFailureNanos(time.Now().Add(-time.Minute).UnixNano())
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	_ = proxyOnce(ctx, svc, ep)
 	cancel()

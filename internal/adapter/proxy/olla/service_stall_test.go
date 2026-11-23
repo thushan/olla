@@ -1,7 +1,6 @@
 package olla
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,7 +47,7 @@ func TestStalledMidStream_TimesOutWithinReadTimeout(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
 			rec := httptest.NewRecorder()
-			ctx := context.Background()
+			ctx := t.Context()
 			done := make(chan error, 1)
 			go func() {
 				done <- svc.ProxyRequestToEndpoints(ctx, rec, req, []*domain.Endpoint{ep}, &ports.RequestStats{StartTime: time.Now()}, createTestLogger())

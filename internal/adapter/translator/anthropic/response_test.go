@@ -1,7 +1,6 @@
 package anthropic
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,7 +36,7 @@ func TestTransformResponse_SimpleText(t *testing.T) {
 		},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -87,7 +86,7 @@ func TestTransformResponse_WithToolCalls(t *testing.T) {
 		},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -141,7 +140,7 @@ func TestTransformResponse_MultipleToolCalls(t *testing.T) {
 		"usage": map[string]any{},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -180,7 +179,7 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 			},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -217,7 +216,7 @@ func TestTransformResponse_EmptyResponse(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -248,7 +247,7 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 			// Missing usage field
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -277,7 +276,7 @@ func TestTransformResponse_MissingUsage(t *testing.T) {
 			},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -317,7 +316,7 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 
 		if err != nil {
 			assert.Contains(t, err.Error(), "json", "Error should mention JSON parsing issue")
@@ -362,7 +361,7 @@ func TestTransformResponse_InvalidToolArguments(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -406,7 +405,7 @@ func TestTransformResponse_OnlyToolCalls(t *testing.T) {
 		},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -441,7 +440,7 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -476,7 +475,7 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -501,7 +500,7 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -526,7 +525,7 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -551,7 +550,7 @@ func TestTransformResponse_FinishReasonMapping(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -580,7 +579,7 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -612,7 +611,7 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 
 		ids := make(map[string]bool)
 		for range 100 {
-			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+			result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 			require.NoError(t, err)
 
 			anthropicResp, ok := result.(AnthropicResponse)
@@ -640,7 +639,7 @@ func TestTransformResponse_MessageIDGeneration(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -699,7 +698,7 @@ func TestTransformResponse_ComplexToolArguments(t *testing.T) {
 		"usage": map[string]any{},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -742,7 +741,7 @@ func TestTransformResponse_InvalidFormat(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "choices", "Error should mention missing choices")
 	})
@@ -755,7 +754,7 @@ func TestTransformResponse_InvalidFormat(t *testing.T) {
 			"usage":   map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "choices", "Error should mention empty choices")
 	})
@@ -773,7 +772,7 @@ func TestTransformResponse_InvalidFormat(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "message", "Error should mention missing message")
 	})
@@ -786,7 +785,7 @@ func TestTransformResponse_InvalidFormat(t *testing.T) {
 			"usage":   map[string]any{},
 		}
 
-		_, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		_, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		assert.Error(t, err)
 	})
 }
@@ -810,7 +809,7 @@ func TestTransformResponse_StopSequenceHandling(t *testing.T) {
 			"usage": map[string]any{},
 		}
 
-		result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+		result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 		require.NoError(t, err)
 
 		anthropicResp, ok := result.(AnthropicResponse)
@@ -858,7 +857,7 @@ func TestTransformResponse_ModelFieldPreservation(t *testing.T) {
 				"usage": map[string]any{},
 			}
 
-			result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+			result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 			require.NoError(t, err)
 
 			anthropicResp, ok := result.(AnthropicResponse)
@@ -887,7 +886,7 @@ func TestTransformResponse_TypeAndRoleFields(t *testing.T) {
 		"usage": map[string]any{},
 	}
 
-	result, err := translator.TransformResponse(context.Background(), openaiResp, nil)
+	result, err := translator.TransformResponse(t.Context(), openaiResp, nil)
 	require.NoError(t, err)
 
 	anthropicResp, ok := result.(AnthropicResponse)
@@ -910,6 +909,6 @@ func BenchmarkTransformResponse_Simple(b *testing.B) {
 	}
 	b.ReportAllocs()
 	for range b.N {
-		_, _ = tr.TransformResponse(context.Background(), openaiResp, nil)
+		_, _ = tr.TransformResponse(b.Context(), openaiResp, nil)
 	}
 }

@@ -1,7 +1,6 @@
 package balancer
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"sync"
@@ -31,7 +30,7 @@ func TestNewLeastConnectionsSelector(t *testing.T) {
 
 func TestLeastConnectionsSelector_Select_NoEndpoints(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoint, err := selector.Select(ctx, []*domain.Endpoint{})
 	if err == nil {
@@ -44,7 +43,7 @@ func TestLeastConnectionsSelector_Select_NoEndpoints(t *testing.T) {
 
 func TestLeastConnectionsSelector_Select_NoRoutableEndpoints(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Create endpoints with non-routable statuses
 	endpoints := []*domain.Endpoint{
@@ -64,7 +63,7 @@ func TestLeastConnectionsSelector_Select_NoRoutableEndpoints(t *testing.T) {
 
 func TestLeastConnectionsSelector_Select_SingleEndpoint(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -84,7 +83,7 @@ func TestLeastConnectionsSelector_Select_SingleEndpoint(t *testing.T) {
 
 func TestLeastConnectionsSelector_Select_MultipleEndpoints(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -120,7 +119,7 @@ func TestLeastConnectionsSelector_Select_MultipleEndpoints(t *testing.T) {
 
 func TestLeastConnectionsSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("offline", 11434, domain.StatusOffline),
@@ -174,7 +173,7 @@ func TestLeastConnectionsSelector_Select_OnlyRoutableEndpoints(t *testing.T) {
 
 func TestLeastConnectionsSelector_ConnectionTracking(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoint := createTestEndpoint("test", 11434, domain.StatusHealthy)
 
@@ -226,7 +225,7 @@ func TestLeastConnectionsSelector_DecrementBelowZero(t *testing.T) {
 	}
 
 	selector.IncrementConnections(endpoints[1])
-	selected, _ := selector.Select(context.Background(), endpoints)
+	selected, _ := selector.Select(t.Context(), endpoints)
 
 	// First endpoint should be selected (0 connections vs 1)
 	if selected.Name != "test" {
@@ -236,7 +235,7 @@ func TestLeastConnectionsSelector_DecrementBelowZero(t *testing.T) {
 
 func TestLeastConnectionsSelector_ConcurrentAccess(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -283,7 +282,7 @@ func TestLeastConnectionsSelector_ConcurrentAccess(t *testing.T) {
 
 func TestLeastConnectionsSelector_LoadBalancing(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("endpoint-1", 11434, domain.StatusHealthy),
@@ -358,7 +357,7 @@ func TestLeastConnectionsSelector_DifferentURLFormats(t *testing.T) {
 
 			// Verify it works by selecting
 			endpoints := []*domain.Endpoint{endpoint}
-			selected, err := selector.Select(context.Background(), endpoints)
+			selected, err := selector.Select(t.Context(), endpoints)
 			if err != nil {
 				t.Errorf("Selection failed for URL %s: %v", tc.url, err)
 			}
@@ -376,7 +375,7 @@ func TestLeastConnectionsSelector_DifferentURLFormats(t *testing.T) {
 // immediately eligible to receive traffic ahead of busier ones.
 func TestLeastConnectionsSelector_Select_UnknownEndpointCountsAsZero(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	busy := createTestEndpoint("busy", 11434, domain.StatusHealthy)
 	unknown := createTestEndpoint("unknown", 11435, domain.StatusHealthy)
@@ -397,7 +396,7 @@ func TestLeastConnectionsSelector_Select_UnknownEndpointCountsAsZero(t *testing.
 // connection counts to guard against an off-by-one in the min-tracking loop.
 func TestLeastConnectionsSelector_Select_PicksFewestAmongMany(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("five", 11434, domain.StatusHealthy),
@@ -431,7 +430,7 @@ func TestLeastConnectionsSelector_Select_PicksFewestAmongMany(t *testing.T) {
 // cursor, not pin to one.
 func TestLeastConnectionsSelector_Select_TiedEndpointsAlternate(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("recovered", 11434, domain.StatusHealthy),
@@ -464,7 +463,7 @@ func TestLeastConnectionsSelector_Select_TiedEndpointsAlternate(t *testing.T) {
 // cursor position.
 func TestLeastConnectionsSelector_Select_UnequalCountsIgnoreCursor(t *testing.T) {
 	selector := NewLeastConnectionsSelector(NewTestStatsCollector())
-	ctx := context.Background()
+	ctx := t.Context()
 
 	endpoints := []*domain.Endpoint{
 		createTestEndpoint("busy", 11434, domain.StatusHealthy),

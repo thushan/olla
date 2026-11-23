@@ -2,7 +2,6 @@ package inspector
 
 import (
 	"bytes"
-	"context"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -13,7 +12,6 @@ import (
 )
 
 func BenchmarkChain_WithAndWithoutBodyInspector(b *testing.B) {
-	ctx := context.Background()
 	logCfg := &logger.Config{Level: "error", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(b, err)
@@ -26,6 +24,8 @@ func BenchmarkChain_WithAndWithoutBodyInspector(b *testing.B) {
 	requestBody := `{"model": "llama3.1:8b", "messages": [{"role": "user", "content": "Hello world"}]}`
 
 	b.Run("WithPathInspectorOnly", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Create chain with only path inspector
 		factory := NewFactory(profileFactory, styledLog)
 		chain := factory.CreateChain()
@@ -48,6 +48,8 @@ func BenchmarkChain_WithAndWithoutBodyInspector(b *testing.B) {
 	})
 
 	b.Run("WithPathAndBodyInspectors", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Create chain with both inspectors
 		factory := NewFactory(profileFactory, styledLog)
 		chain := factory.CreateChain()
@@ -77,7 +79,6 @@ func BenchmarkChain_WithAndWithoutBodyInspector(b *testing.B) {
 
 // Benchmark the overhead of model extraction in isolation
 func BenchmarkBodyInspector_Overhead(b *testing.B) {
-	ctx := context.Background()
 	logCfg := &logger.Config{Level: "error", PrettyLogs: false}
 	log, _, err := logger.New(logCfg)
 	require.NoError(b, err)
@@ -119,6 +120,8 @@ func BenchmarkBodyInspector_Overhead(b *testing.B) {
 
 	for _, bm := range benchmarks {
 		b.Run(bm.name, func(b *testing.B) {
+			// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+			ctx := b.Context()
 			chain := factory.CreateChain()
 			pathInspector := factory.CreatePathInspector()
 			bodyInspector, err := factory.CreateBodyInspector()

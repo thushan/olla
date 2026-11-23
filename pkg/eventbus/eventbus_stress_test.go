@@ -1,7 +1,6 @@
 package eventbus
 
 import (
-	"context"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -38,7 +37,7 @@ func TestWorkerPool_ConcurrentPublishingStress(t *testing.T) {
 	}
 	eb := New[string]()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, cleanup := eb.Subscribe(ctx)
 	defer cleanup()
 	defer eb.Shutdown()
@@ -166,7 +165,7 @@ func TestEventBus_HighVolumePublishing(t *testing.T) {
 	bus := New[int]()
 	defer bus.Shutdown()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	ch, cleanup := bus.Subscribe(ctx)
 	defer cleanup()
 
@@ -282,7 +281,7 @@ func TestEventBus_ConcurrentSubscribers(t *testing.T) {
 	}
 	bus := New[int]()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	const numSubscribers = 50
 	const eventsToPublish = 1000
 

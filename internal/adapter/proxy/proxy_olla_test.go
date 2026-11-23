@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -274,7 +273,7 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 					proxy.RecordSuccess(nil, "", latency.Milliseconds(), 1000)
 				} else {
 					// Simulate failure
-					proxy.RecordFailure(context.Background(), nil, "", time.Duration(10)*time.Millisecond, errors.New("test error"))
+					proxy.RecordFailure(t.Context(), nil, "", time.Duration(10)*time.Millisecond, errors.New("test error"))
 				}
 			}
 		}(i)
@@ -283,7 +282,7 @@ func TestOllaProxyService_AtomicStats(t *testing.T) {
 	wg.Wait()
 
 	// Test that GetStats() works - stats are now tracked via the base components
-	stats, err := proxy.GetStats(context.Background())
+	stats, err := proxy.GetStats(t.Context())
 	if err != nil {
 		t.Fatalf("GetStats failed: %v", err)
 	}

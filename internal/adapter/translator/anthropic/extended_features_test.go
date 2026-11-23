@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -67,7 +66,7 @@ func TestTransformRequest_WithThinkingField(t *testing.T) {
 			}
 
 			// Transform should succeed without "unknown field" error
-			result, err := translator.TransformRequest(context.Background(), req)
+			result, err := translator.TransformRequest(t.Context(), req)
 			require.NoError(t, err, tt.desc)
 			assert.NotNil(t, result)
 
@@ -112,7 +111,7 @@ func TestTransformRequest_SystemPromptAsArray(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -160,7 +159,7 @@ func TestTransformRequest_SystemPromptArrayWithEmptyBlocks(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -195,7 +194,7 @@ func TestTransformRequest_SystemPromptArrayEmpty(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -228,7 +227,7 @@ func TestTransformRequest_SystemPromptString(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 
 	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
@@ -272,7 +271,7 @@ func TestTransformRequest_CombinedThinkingAndSystemArray(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -395,7 +394,7 @@ func TestTransformRequest_WithContextManagementField(t *testing.T) {
 		Body: io.NopCloser(bytes.NewReader([]byte(rawJSON))),
 	}
 
-	result, err := translator.TransformRequest(context.Background(), req)
+	result, err := translator.TransformRequest(t.Context(), req)
 	require.NoError(t, err, "context_management field must be tolerated and not cause a parse error")
 	require.NotNil(t, result)
 

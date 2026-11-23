@@ -1704,7 +1704,7 @@ func TestExecuteTranslatedStreamingRequest_ProxyErrorBeforeWrite(t *testing.T) {
 
 	// Use a context with a generous timeout so the test fails clearly rather than
 	// hanging the suite if the deadlock resurfaces.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "/test", bytes.NewReader(body))
@@ -1789,7 +1789,7 @@ func TestExecuteTranslatedStreamingRequest_ContextCancellationUnblocks(t *testin
 	body, _ := json.Marshal(reqBody)
 
 	// Cancel the context after a short delay to simulate client disconnect / server timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "/test", bytes.NewReader(body))
@@ -1880,7 +1880,7 @@ func TestExecuteTranslatedStreamingRequest_SuccessfulFlow(t *testing.T) {
 	}
 	body, _ := json.Marshal(reqBody)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "POST", "/test", bytes.NewReader(body))

@@ -1,7 +1,6 @@
 package discovery
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -375,7 +374,7 @@ func TestEnhancedModelDiscoveryIntegration(t *testing.T) {
 			endpoint := createTestEndpoint(server.URL, tt.platformType)
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			ctx := context.Background()
+			ctx := t.Context()
 			models, err := client.DiscoverModels(ctx, endpoint)
 
 			if err != nil {
@@ -434,7 +433,7 @@ func TestAutoDetectionWithRichMetadata(t *testing.T) {
 	endpoint := createTestEndpoint(server.URL, domain.ProfileAuto)
 	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-	ctx := context.Background()
+	ctx := t.Context()
 	models, err := client.DiscoverModels(ctx, endpoint)
 
 	if err != nil {
@@ -534,7 +533,7 @@ func TestLMStudioEnhancedMetadata(t *testing.T) {
 	endpoint := createTestEndpoint(server.URL, domain.ProfileLmStudio)
 	client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-	models, err := client.DiscoverModels(context.Background(), endpoint)
+	models, err := client.DiscoverModels(t.Context(), endpoint)
 	if err != nil {
 		t.Fatalf("LM Studio discovery failed: %v", err)
 	}
@@ -650,7 +649,7 @@ func TestResilientModelParsing(t *testing.T) {
 			endpoint := createTestEndpoint(server.URL, tt.platformType)
 			client := NewHTTPModelDiscoveryClientWithDefaults(createTestProfileFactory(t), createTestLogger())
 
-			models, err := client.DiscoverModels(context.Background(), endpoint)
+			models, err := client.DiscoverModels(t.Context(), endpoint)
 			if err != nil {
 				if tt.expectError {
 					// other tests will fail, so continue

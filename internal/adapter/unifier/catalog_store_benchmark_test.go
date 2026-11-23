@@ -1,7 +1,6 @@
 package unifier
 
 import (
-	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -287,7 +286,6 @@ func BenchmarkCatalogStore_MixedWorkload(b *testing.B) {
 // BenchmarkDefaultUnifier_UnifyModels benchmarks the full unification flow
 func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 	unifier := NewDefaultUnifier().(*DefaultUnifier)
-	ctx := context.Background()
 
 	endpoint := &domain.Endpoint{
 		URLString: "http://localhost:11434",
@@ -314,6 +312,8 @@ func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 	}
 
 	b.Run("FirstUnification", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		b.ResetTimer()
 		b.ReportAllocs()
 		for range b.N {
@@ -325,6 +325,8 @@ func BenchmarkDefaultUnifier_UnifyModels(b *testing.B) {
 	})
 
 	b.Run("UpdateExisting", func(b *testing.B) {
+		// The sub-benchmark owns its context: it is cancelled when this b.Run pass, not the parent, ends.
+		ctx := b.Context()
 		// Pre-populate
 		unifier.UnifyModels(ctx, models, endpoint)
 

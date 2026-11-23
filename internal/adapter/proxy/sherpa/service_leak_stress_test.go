@@ -33,7 +33,7 @@ func TestPerformTimedRead_NoGoroutineLeak_Stress(t *testing.T) {
 
 	// Run many reads that will timeout (original 50 iterations)
 	for range 50 {
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Use a reader that delays then returns data
 		reader := &delayedReader{delay: 150 * time.Millisecond} // Longer than read timeout
@@ -50,7 +50,7 @@ func TestPerformTimedRead_NoGoroutineLeak_Stress(t *testing.T) {
 
 	// Also test context cancellation with non-blocking reader
 	for range 50 {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 
 		// Use a reader that returns data immediately
 		reader := strings.NewReader("test data")
@@ -110,7 +110,7 @@ func TestPerformTimedRead_ConcurrentStress(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			ctx := context.Background()
+			ctx := t.Context()
 
 			// Each goroutine needs its own streamState to avoid data races —
 			// in production, each streaming response has its own state.
