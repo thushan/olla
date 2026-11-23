@@ -53,7 +53,7 @@ func (b *lockedBuffer) lines(t *testing.T, msg string) []logLine {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	var out []logLine
-	for _, raw := range strings.Split(b.buf.String(), "\n") {
+	for raw := range strings.SplitSeq(b.buf.String(), "\n") {
 		if raw == "" {
 			continue
 		}

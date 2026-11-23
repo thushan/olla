@@ -285,10 +285,7 @@ func (a *Application) mergeModelSummaryFields(existing *ModelSummary, model *dom
 // is randomised per run - decides the response order, churning the ETag on
 // every poll even though nothing actually changed.
 func sortModelSummaryEndpoints(summary *ModelSummary) {
-	n := len(summary.Endpoints)
-	if len(summary.EndpointIDs) < n {
-		n = len(summary.EndpointIDs)
-	}
+	n := min(len(summary.EndpointIDs), len(summary.Endpoints))
 	pairs := make([]endpointNameID, n)
 	for i := range n {
 		pairs[i] = endpointNameID{Name: summary.Endpoints[i], ID: summary.EndpointIDs[i]}

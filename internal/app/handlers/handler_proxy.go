@@ -515,8 +515,7 @@ var errStreamAborted = errors.New("response aborted after bytes were sent to the
 func (a *Application) logRequestResult(pr *proxyRequest, err error) {
 	// A chunked body over the size cap fails mid-read and is answered 413 by handleProxyError.
 	// It is a client rejection, so it takes the sampled path rather than an ERROR per request.
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		a.logRequestRejected(pr, http.StatusRequestEntityTooLarge, "request body too large")
 		return
 	}
@@ -740,8 +739,7 @@ func (a *Application) handleProxyError(w *core.ResponseStartedWriter, err error)
 	// large" condition the pre-check rejects with 413. Match that response
 	// exactly so the client sees one consistent envelope regardless of which
 	// path caught the oversize body.
-	var maxBytesErr *http.MaxBytesError
-	if errors.As(err, &maxBytesErr) {
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
 		http.Error(w, "Request body too large", http.StatusRequestEntityTooLarge)
 		return
 	}

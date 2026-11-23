@@ -60,8 +60,7 @@ func MakeUserFriendlyError(err error, duration time.Duration, errorContext strin
 	}
 
 	// Network connection errors
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if netErr, ok := errors.AsType[net.Error](err); ok {
 		if netErr.Timeout() {
 			return fmt.Errorf("network timeout after %.1fs - unable to connect to LLM backend (check backend availability)", duration.Seconds())
 		}
@@ -69,8 +68,7 @@ func MakeUserFriendlyError(err error, duration time.Duration, errorContext strin
 	}
 
 	// TCP/connection errors
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
+	if opErr, ok := errors.AsType[*net.OpError](err); ok {
 		if opErr.Op == "dial" {
 			return fmt.Errorf("connection failed after %.1fs - cannot reach LLM backend at %s (check backend is running)",
 				duration.Seconds(), opErr.Addr)
@@ -84,8 +82,7 @@ func MakeUserFriendlyError(err error, duration time.Duration, errorContext strin
 	}
 
 	// Connection refused (backend down)
-	var syscallErr *syscall.Errno
-	if errors.As(err, &syscallErr) {
+	if syscallErr, ok := errors.AsType[*syscall.Errno](err); ok {
 		if errors.Is(*syscallErr, syscall.ECONNREFUSED) {
 			return fmt.Errorf("connection refused after %.1fs - LLM backend is not running or not accepting connections", duration.Seconds())
 		}

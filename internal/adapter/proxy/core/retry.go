@@ -343,8 +343,7 @@ func (h *RetryHandler) preserveRequestBody(r *http.Request) ([]byte, error) {
 	if err != nil {
 		// An oversized chunked body is a client rejection the handler answers with 413 and
 		// samples; an ERROR here would write one line per request.
-		var maxBytesErr *http.MaxBytesError
-		if !errors.As(err, &maxBytesErr) {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); !ok {
 			h.logger.Error("Failed to read request body for retry preservation", "error", err)
 		}
 		return nil, fmt.Errorf("failed to read request body: %w", err)
@@ -515,13 +514,11 @@ func IsConnectionError(err error) bool {
 		return true
 	}
 
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if _, ok := errors.AsType[net.Error](err); ok {
 		return true
 	}
 
-	var syscallErr syscall.Errno
-	if errors.As(err, &syscallErr) {
+	if syscallErr, ok := errors.AsType[syscall.Errno](err); ok {
 		switch syscallErr {
 		case syscall.ECONNREFUSED, syscall.ECONNRESET, syscall.ECONNABORTED:
 			return true

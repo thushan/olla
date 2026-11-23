@@ -1,6 +1,7 @@
 package unifier
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -321,10 +322,8 @@ func (c *CatalogStore) Size() int {
 
 func (c *CatalogStore) addToIndex(index map[string][]string, key, value string) {
 	if values, exists := index[key]; exists {
-		for _, v := range values {
-			if v == value {
-				return
-			}
+		if slices.Contains(values, value) {
+			return
 		}
 		index[key] = append(values, value)
 	} else {

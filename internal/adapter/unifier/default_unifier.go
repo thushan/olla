@@ -3,6 +3,7 @@ package unifier
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -576,9 +577,7 @@ func (u *DefaultUnifier) MergeUnifiedModels(ctx context.Context, models []*domai
 			merged.LastSeen = model.LastSeen
 		}
 
-		for k, v := range model.Metadata {
-			merged.Metadata[k] = v
-		}
+		maps.Copy(merged.Metadata, model.Metadata)
 	}
 
 	for _, source := range merged.SourceEndpoints {

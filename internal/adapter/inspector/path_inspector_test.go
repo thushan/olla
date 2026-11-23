@@ -349,12 +349,7 @@ func createTestLogger() logger.StyledLogger {
 }
 
 func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, item)
 }
 
 func containsAllProfiles(got, expected []string) bool {

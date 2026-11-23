@@ -209,7 +209,6 @@ func TestDockerModelRunnerParser_NamespaceFormats(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.modelID, func(t *testing.T) {
 			t.Parallel()
 			response := `{"object":"list","data":[{"id":"` + tc.modelID + `","object":"model","created":1734000007,"owned_by":"docker"}]}`

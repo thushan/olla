@@ -276,11 +276,11 @@ func assertPrometheusFamiliesGrouped(t *testing.T, body string) {
 }
 
 func prometheusMetricName(line string) string {
-	if idx := strings.IndexByte(line, '{'); idx >= 0 {
-		return line[:idx]
+	if before, _, ok := strings.Cut(line, "{"); ok {
+		return before
 	}
-	if idx := strings.IndexByte(line, ' '); idx >= 0 {
-		return line[:idx]
+	if before, _, ok := strings.Cut(line, " "); ok {
+		return before
 	}
 	return line
 }

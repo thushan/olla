@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -336,8 +337,8 @@ func TestAnthropicStreamEventOrder(t *testing.T) {
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "event: ") {
-			eventOrder = append(eventOrder, strings.TrimPrefix(line, "event: "))
+		if after, ok := strings.CutPrefix(line, "event: "); ok {
+			eventOrder = append(eventOrder, after)
 		}
 	}
 
@@ -368,13 +369,7 @@ func TestAnthropicStreamEventOrder(t *testing.T) {
 	}
 
 	// Confirm at least one content_block_delta was emitted.
-	hasDelta := false
-	for _, e := range eventOrder {
-		if e == "content_block_delta" {
-			hasDelta = true
-			break
-		}
-	}
+	hasDelta := slices.Contains(eventOrder, "content_block_delta")
 	if !hasDelta {
 		t.Error("no content_block_delta events in stream")
 	}

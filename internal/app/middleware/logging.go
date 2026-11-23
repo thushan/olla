@@ -284,10 +284,7 @@ func combinedLoggingMiddleware(styledLogger logger.StyledLogger, now func() time
 				requestID = util.GenerateRequestID()
 			}
 
-			requestSize := r.ContentLength
-			if requestSize < 0 {
-				requestSize = 0
-			}
+			requestSize := max(r.ContentLength, 0)
 
 			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
 			baseLogger := styledLogger.GetUnderlying().With(constants.ContextRequestIdKey, requestID)

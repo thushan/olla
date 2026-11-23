@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"maps"
 	"time"
 )
 
@@ -154,15 +155,11 @@ func cloneMetadataValue(v any) any {
 		return cloneMetadataMap(t)
 	case map[string]bool:
 		out := make(map[string]bool, len(t))
-		for k, b := range t {
-			out[k] = b
-		}
+		maps.Copy(out, t)
 		return out
 	case map[string]string:
 		out := make(map[string]string, len(t))
-		for k, s := range t {
-			out[k] = s
-		}
+		maps.Copy(out, t)
 		return out
 	case []any:
 		out := make([]any, len(t))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -326,9 +327,7 @@ func (c *HTTPModelDiscoveryClient) GetMetrics() DiscoveryMetrics {
 	defer c.mu.RUnlock()
 
 	errorsByEndpoint := make(map[string]int64, len(c.metrics.ErrorsByEndpoint))
-	for k, v := range c.metrics.ErrorsByEndpoint {
-		errorsByEndpoint[k] = v
-	}
+	maps.Copy(errorsByEndpoint, c.metrics.ErrorsByEndpoint)
 
 	return DiscoveryMetrics{
 		TotalDiscoveries:   atomic.LoadInt64(&c.metrics.TotalDiscoveries),

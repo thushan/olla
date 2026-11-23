@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
 	"strings"
 
@@ -39,7 +40,7 @@ func (w *keyWalk) step() bool {
 	return w.budget >= 0
 }
 
-var yamlUnmarshalerType = reflect.TypeOf((*yaml.Unmarshaler)(nil)).Elem()
+var yamlUnmarshalerType = reflect.TypeFor[yaml.Unmarshaler]()
 
 // UnknownKey is a key present in the config file that no Config field reads.
 type UnknownKey struct {
@@ -62,7 +63,7 @@ func FindUnknownKeys(data []byte) []UnknownKey {
 		return nil
 	}
 	w := &keyWalk{budget: maxKeyWalkVisits, seen: make(map[UnknownKey]struct{})}
-	walkKnownKeys(&doc, reflect.TypeOf(Config{}), "", 0, w)
+	walkKnownKeys(&doc, reflect.TypeFor[Config](), "", 0, w)
 	return w.out
 }
 
@@ -191,8 +192,7 @@ func joinKeyPath(parent, key string) string {
 // structs. freeForm is true when an inline map accepts arbitrary keys.
 func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) {
 	fields = make(map[string]reflect.Type, t.NumField())
-	for i := range t.NumField() {
-		f := t.Field(i)
+	for f := range t.Fields() {
 		if f.PkgPath != "" && !f.Anonymous {
 			continue
 		}
@@ -209,9 +209,7 @@ func structKeys(t reflect.Type) (fields map[string]reflect.Type, freeForm bool) 
 			switch ft.Kind() {
 			case reflect.Struct:
 				sub, sf := structKeys(ft)
-				for k, v := range sub {
-					fields[k] = v
-				}
+				maps.Copy(fields, sub)
 				freeForm = freeForm || sf
 			case reflect.Map:
 				freeForm = true

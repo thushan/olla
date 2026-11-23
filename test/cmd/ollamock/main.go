@@ -113,7 +113,7 @@ func parseModels(s string) []string {
 // empty value means nothing is resident.
 func parseLoaded(s string) []string {
 	var out []string
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}

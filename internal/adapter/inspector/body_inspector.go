@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/thushan/olla/internal/core/constants"
@@ -574,12 +575,7 @@ func (bi *BodyInspector) hasCodeInSystemPrompt(data map[string]any) bool {
 		return false
 	}
 
-	for _, msg := range messages {
-		if bi.isSystemMessageWithCodeKeywords(msg) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(messages, bi.isSystemMessageWithCodeKeywords)
 }
 
 // isSystemMessageWithCodeKeywords checks if a message is a system message containing code keywords

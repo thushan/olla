@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -192,13 +193,7 @@ func TestShippedConfig_DashboardPopulated(t *testing.T) {
 	// http://localhost:40114/... to work out of the box. IP-literal loopback
 	// Hosts (127.0.0.1, [::1]) need no entry; their presence is harmless but
 	// redundant, so we assert only the non-IP name.
-	foundLocalhost := false
-	for _, h := range ap.AllowedHosts {
-		if h == "localhost" {
-			foundLocalhost = true
-			break
-		}
-	}
+	foundLocalhost := slices.Contains(ap.AllowedHosts, "localhost")
 	if !foundLocalhost {
 		t.Errorf("shipped allowed_hosts must list %q for browser access via "+
 			"localhost URL; got %v", "localhost", ap.AllowedHosts)

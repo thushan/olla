@@ -72,7 +72,7 @@ func BuildTargetURL(r *http.Request, endpoint *domain.Endpoint, proxyPrefix stri
 
 // containsDotDot returns true if any decoded path segment is ".." or "."
 func containsDotDot(p string) bool {
-	for _, seg := range strings.Split(p, "/") {
+	for seg := range strings.SplitSeq(p, "/") {
 		if seg == ".." || seg == "." {
 			return true
 		}

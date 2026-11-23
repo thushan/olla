@@ -3,6 +3,7 @@ package filter
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
 
@@ -73,9 +74,7 @@ func (f *GlobFilter) ApplyToMap(ctx context.Context, config *domain.FilterConfig
 	if config == nil || config.IsEmpty() {
 		// not filtering needed, return a copy of the original map
 		result := make(map[string]any, len(items))
-		for k, v := range items {
-			result[k] = v
-		}
+		maps.Copy(result, items)
 		return result, nil
 	}
 

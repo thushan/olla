@@ -390,8 +390,8 @@ func TestProviderPathStripping(t *testing.T) {
 			providerPrefix := constants.DefaultOllaProxyPathPrefix + tt.provider
 
 			resultPath := originalPath
-			if strings.HasPrefix(originalPath, providerPrefix) {
-				resultPath = strings.TrimPrefix(originalPath, providerPrefix)
+			if after, ok := strings.CutPrefix(originalPath, providerPrefix); ok {
+				resultPath = after
 				if resultPath == "" {
 					resultPath = "/"
 				}

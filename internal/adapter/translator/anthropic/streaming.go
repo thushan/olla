@@ -642,10 +642,7 @@ func (t *Translator) finalizeStream(state *StreamingState, w http.ResponseWriter
 			charCount += len(block.Text) + len(block.Thinking)
 		}
 		if charCount > 0 {
-			estimated := charCount / 4
-			if estimated < 1 {
-				estimated = 1
-			}
+			estimated := max(charCount/4, 1)
 			state.outputTokens = estimated
 		}
 	}

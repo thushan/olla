@@ -285,12 +285,10 @@ func (s *ModelDiscoveryService) fetchModelsWithRetry(ctx context.Context, endpoi
 // failure is recoverable across cycles (IsRecoverable) because a backend upgrade
 // can repair it, but the same body comes back seconds later, as does a 4xx.
 func isRetryableWithinCycle(err error) bool {
-	var parseErr *ParseError
-	if errors.As(err, &parseErr) {
+	if _, ok := errors.AsType[*ParseError](err); ok {
 		return false
 	}
-	var profileErr *ProfileNotFoundError
-	if errors.As(err, &profileErr) {
+	if _, ok := errors.AsType[*ProfileNotFoundError](err); ok {
 		return false
 	}
 	// An oversized listing is the backend's steady state, not a blip.

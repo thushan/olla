@@ -357,8 +357,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 				"error_type", result.ErrorType,
 			)
 			if checkErr != nil {
-				var healthCheckErr *domain.HealthCheckError
-				if errors.As(checkErr, &healthCheckErr) {
+				if healthCheckErr, ok := errors.AsType[*domain.HealthCheckError](checkErr); ok {
 					detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
 				} else {
 					detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
@@ -390,8 +389,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 				"error_type", result.ErrorType,
 			)
 			if checkErr != nil {
-				var healthCheckErr *domain.HealthCheckError
-				if errors.As(checkErr, &healthCheckErr) {
+				if healthCheckErr, ok := errors.AsType[*domain.HealthCheckError](checkErr); ok {
 					detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
 				} else {
 					detailedArgs = append(detailedArgs, "check_error", checkErr.Error())
@@ -418,8 +416,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 			"status_code", result.StatusCode,
 			"error_type", result.ErrorType,
 		)
-		var healthCheckErr *domain.HealthCheckError
-		if errors.As(checkErr, &healthCheckErr) {
+		if healthCheckErr, ok := errors.AsType[*domain.HealthCheckError](checkErr); ok {
 			detailedArgs = append(detailedArgs, "check_error", healthCheckErr.Error())
 		} else {
 			detailedArgs = append(detailedArgs, "check_error", checkErr.Error())

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -661,9 +662,7 @@ func (l *ProfileLoader) GetAllProfiles() map[string]domain.InferenceProfile {
 
 	// return a copy to prevent external modifications
 	profiles := make(map[string]domain.InferenceProfile, len(l.profiles))
-	for k, v := range l.profiles {
-		profiles[k] = v
-	}
+	maps.Copy(profiles, l.profiles)
 	return profiles
 }
 

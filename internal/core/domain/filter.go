@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -48,13 +49,7 @@ func (fc *FilterConfig) HasIncludeAll() bool {
 		return true
 	}
 
-	for _, pattern := range fc.Include {
-		if pattern == "*" {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(fc.Include, "*")
 }
 
 // Validate checks if the filter configuration is valid

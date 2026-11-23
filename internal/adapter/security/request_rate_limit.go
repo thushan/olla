@@ -277,10 +277,7 @@ func (rl *RateLimitValidator) globalRetryAfter() int {
 }
 
 func (rl *RateLimitValidator) calculateRemaining(limiterInfo *ipLimiterInfo, limit int) int {
-	remaining := limit - limiterInfo.tokensUsed
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(limit-limiterInfo.tokensUsed, 0)
 	return remaining
 }
 

@@ -162,10 +162,7 @@ func (c *Collector) RecordConnection(endpoint *domain.Endpoint, delta int) {
 	} else if delta < 0 {
 		for {
 			current := atomic.LoadInt64(&data.activeConnections)
-			newVal := current + int64(delta)
-			if newVal < 0 {
-				newVal = 0
-			}
+			newVal := max(current+int64(delta), 0)
 			if atomic.CompareAndSwapInt64(&data.activeConnections, current, newVal) {
 				break
 			}
