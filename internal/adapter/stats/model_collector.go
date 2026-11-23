@@ -51,8 +51,8 @@ type modelEndpointData struct {
 	totalLatency      *xsync.Counter
 	endpointName      string
 	modelName         string
-	lastUsed          int64 // Keep atomic for timestamp
-	consecutiveErrors int32 // Keep atomic for CAS operations
+	lastUsed          atomic.Int64
+	consecutiveErrors atomic.Int32
 }
 
 // NewModelCollectorWithConfig creates a new ModelCollector with custom configuration
@@ -107,7 +107,7 @@ func (mc *ModelCollector) RecordModelError(model string, endpoint *domain.Endpoi
 
 	endpointMap, _ := mc.modelEndpoints.LoadOrStore(model, xsync.NewMap[string, *modelEndpointData]())
 	if data, ok := endpointMap.Load(endpoint.Name); ok {
-		atomic.AddInt32(&data.consecutiveErrors, 1)
+		data.consecutiveErrors.Add(1)
 	}
 }
 
@@ -190,25 +190,27 @@ func (mc *ModelCollector) updateModelEndpointStats(model string, endpoint *domai
 	endpointMap, _ := mc.modelEndpoints.LoadOrStore(model, xsync.NewMap[string, *modelEndpointData]())
 
 	data, _ := endpointMap.LoadOrCompute(endpoint.Name, func() (*modelEndpointData, bool) {
-		return &modelEndpointData{
+		d := &modelEndpointData{
 			endpointName: endpoint.Name,
 			modelName:    model,
 			requestCount: xsync.NewCounter(),
 			successCount: xsync.NewCounter(),
 			totalLatency: xsync.NewCounter(),
-			lastUsed:     now,
-		}, false
+		}
+		// Set inside the creation callback, before the entry is published.
+		d.lastUsed.Store(now)
+		return d, false
 	})
 
 	data.requestCount.Inc()
 	data.totalLatency.Add(latencyMs)
-	atomic.StoreInt64(&data.lastUsed, now)
+	data.lastUsed.Store(now)
 
 	if status == StatusSuccess {
 		data.successCount.Inc()
-		atomic.StoreInt32(&data.consecutiveErrors, 0)
+		data.consecutiveErrors.Store(0)
 	} else {
-		atomic.AddInt32(&data.consecutiveErrors, 1)
+		data.consecutiveErrors.Add(1)
 	}
 }
 
@@ -284,8 +286,8 @@ func (mc *ModelCollector) calculateEndpointModelStats(data *modelEndpointData) p
 		RequestCount:      requestCount,
 		SuccessRate:       successRate,
 		AverageLatency:    avgLatency,
-		LastUsed:          time.Unix(0, atomic.LoadInt64(&data.lastUsed)),
-		ConsecutiveErrors: int(atomic.LoadInt32(&data.consecutiveErrors)),
+		LastUsed:          time.Unix(0, data.lastUsed.Load()),
+		ConsecutiveErrors: int(data.consecutiveErrors.Load()),
 	}
 }
 
