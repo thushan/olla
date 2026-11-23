@@ -44,18 +44,18 @@ func TestJSONParsingWithThinkingAndSystemArray(t *testing.T) {
 
 	// Verify thinking field
 	require.NotNil(t, req.Thinking)
-	thinkingMap, ok := req.Thinking.(map[string]interface{})
+	thinkingMap, ok := req.Thinking.(map[string]any)
 	require.True(t, ok, "Thinking should be a map")
 	assert.Equal(t, "enabled", thinkingMap["type"])
 	assert.Equal(t, float64(2000), thinkingMap["budget_tokens"]) // JSON numbers are float64
 
 	// Verify system array
 	require.NotNil(t, req.System)
-	systemArray, ok := req.System.([]interface{})
+	systemArray, ok := req.System.([]any)
 	require.True(t, ok, "System should be an array")
 	require.Len(t, systemArray, 1)
 
-	systemBlock, ok := systemArray[0].(map[string]interface{})
+	systemBlock, ok := systemArray[0].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "text", systemBlock["type"])
 	assert.Equal(t, "You are a helpful AI assistant.", systemBlock["text"])
@@ -106,7 +106,7 @@ func TestJSONParsingWithThinkingVariants(t *testing.T) {
 				"messages": [{"role": "user", "content": "test"}]
 			}`,
 			validate: func(t *testing.T, req *AnthropicRequest) {
-				thinkingMap, ok := req.Thinking.(map[string]interface{})
+				thinkingMap, ok := req.Thinking.(map[string]any)
 				require.True(t, ok)
 				assert.Equal(t, "enabled", thinkingMap["type"])
 			},
@@ -167,8 +167,8 @@ func TestAnthropicRequestMarshalRoundTrip(t *testing.T) {
 	original := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type": "text",
 				"text": "System prompt",
 			},
@@ -179,7 +179,7 @@ func TestAnthropicRequestMarshalRoundTrip(t *testing.T) {
 				Content: "Hello",
 			},
 		},
-		Thinking: map[string]interface{}{
+		Thinking: map[string]any{
 			"type": "enabled",
 		},
 	}

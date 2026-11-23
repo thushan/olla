@@ -216,7 +216,7 @@ func TestStreaming_Reasoning_MultipleChunksAccumulated(t *testing.T) {
 	thinkingDeltas := 0
 	textDeltas := 0
 	for _, d := range deltas {
-		delta, ok := d["delta"].(map[string]interface{})
+		delta, ok := d["delta"].(map[string]any)
 		if !ok {
 			continue
 		}
@@ -245,12 +245,12 @@ func TestResponse_Reasoning_ReasoningField(t *testing.T) {
 	t.Parallel()
 	tr := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-nr",
 		"model": "deepseek-r1",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":      "assistant",
 					"reasoning": "First I consider the options.",
 					"content":   "The answer is 7.",
@@ -258,7 +258,7 @@ func TestResponse_Reasoning_ReasoningField(t *testing.T) {
 				"finish_reason": "stop",
 			},
 		},
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"prompt_tokens":     float64(10),
 			"completion_tokens": float64(5),
 		},
@@ -285,12 +285,12 @@ func TestResponse_Reasoning_ReasoningContentField(t *testing.T) {
 	t.Parallel()
 	tr := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-rcc",
 		"model": "qwq-32b",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":              "assistant",
 					"reasoning_content": "Step 1: identify the pattern.",
 					"content":           "Pattern identified.",
@@ -298,7 +298,7 @@ func TestResponse_Reasoning_ReasoningContentField(t *testing.T) {
 				"finish_reason": "stop",
 			},
 		},
-		"usage": map[string]interface{}{},
+		"usage": map[string]any{},
 	}
 
 	result, err := tr.TransformResponse(context.Background(), openaiResp, nil)
@@ -321,19 +321,19 @@ func TestResponse_Reasoning_NoReasoningUnchanged(t *testing.T) {
 	t.Parallel()
 	tr := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-norr",
 		"model": "llama3",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":    "assistant",
 					"content": "Simple answer.",
 				},
 				"finish_reason": "stop",
 			},
 		},
-		"usage": map[string]interface{}{},
+		"usage": map[string]any{},
 	}
 
 	result, err := tr.TransformResponse(context.Background(), openaiResp, nil)
@@ -352,12 +352,12 @@ func TestResponse_Reasoning_ReasoningOnlyNoContent(t *testing.T) {
 	t.Parallel()
 	tr := mustNewTranslator(createResponseTestLogger(), createTestConfig())
 
-	openaiResp := map[string]interface{}{
+	openaiResp := map[string]any{
 		"id":    "chatcmpl-ron",
 		"model": "deepseek-r1",
-		"choices": []interface{}{
-			map[string]interface{}{
-				"message": map[string]interface{}{
+		"choices": []any{
+			map[string]any{
+				"message": map[string]any{
 					"role":      "assistant",
 					"reasoning": "Internal thoughts only.",
 					// no "content" field
@@ -365,7 +365,7 @@ func TestResponse_Reasoning_ReasoningOnlyNoContent(t *testing.T) {
 				"finish_reason": "stop",
 			},
 		},
-		"usage": map[string]interface{}{},
+		"usage": map[string]any{},
 	}
 
 	result, err := tr.TransformResponse(context.Background(), openaiResp, nil)

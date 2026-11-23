@@ -144,8 +144,8 @@ func (a *Application) translatorModelsHandler(trans translator.RequestTranslator
 // convertModelsToAnthropicFormat emits the Anthropic GET /v1/models wire format.
 // The SDK uses "type" as a deserialise discriminator so it must be "model", not "chat".
 // "display_name" and "created_at" (RFC3339) match the published Anthropic spec.
-func (a *Application) convertModelsToAnthropicFormat(models []*domain.UnifiedModel) map[string]interface{} {
-	data := make([]map[string]interface{}, 0, len(models))
+func (a *Application) convertModelsToAnthropicFormat(models []*domain.UnifiedModel) map[string]any {
+	data := make([]map[string]any, 0, len(models))
 
 	for _, model := range models {
 		// prefer the first alias as the canonical id clients send back to us
@@ -154,7 +154,7 @@ func (a *Application) convertModelsToAnthropicFormat(models []*domain.UnifiedMod
 			modelID = model.Aliases[0].Name
 		}
 
-		entry := map[string]interface{}{
+		entry := map[string]any{
 			"type":         "model",
 			"id":           modelID,
 			"display_name": modelID,
@@ -165,13 +165,13 @@ func (a *Application) convertModelsToAnthropicFormat(models []*domain.UnifiedMod
 	}
 
 	// first_id / last_id are null when the list is empty
-	var firstID, lastID interface{}
+	var firstID, lastID any
 	if len(data) > 0 {
 		firstID = data[0]["id"]
 		lastID = data[len(data)-1]["id"]
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"data":     data,
 		"has_more": false,
 		"first_id": firstID,
@@ -193,8 +193,8 @@ func (a *Application) writeTranslatorModelsError(w http.ResponseWriter, trans tr
 		return
 	}
 
-	errorResp := map[string]interface{}{
-		"error": map[string]interface{}{
+	errorResp := map[string]any{
+		"error": map[string]any{
 			"message": message,
 			"type":    "models_error",
 		},

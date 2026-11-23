@@ -29,7 +29,7 @@ func (c *LemonadeConverter) GetFormatName() string {
 	return constants.ProviderTypeLemonade
 }
 
-func (c *LemonadeConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *LemonadeConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]profile.LemonadeModel, 0, len(filtered))

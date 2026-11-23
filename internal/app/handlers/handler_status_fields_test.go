@@ -116,11 +116,11 @@ func TestEndpointsStatusHandler_URLSanitised(t *testing.T) {
 	w := httptest.NewRecorder()
 	app.endpointsStatusHandler(w, req)
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
-	endpointsArr, _ := raw["endpoints"].([]interface{})
+	endpointsArr, _ := raw["endpoints"].([]any)
 	require.Len(t, endpointsArr, 1)
-	first, _ := endpointsArr[0].(map[string]interface{})
+	first, _ := endpointsArr[0].(map[string]any)
 	urlField, _ := first["url"].(string)
 	assert.Equal(t, "https://ollama.local:11434/v1", urlField)
 	assert.NotContains(t, urlField, "alice")
@@ -146,9 +146,9 @@ func TestStatusHandler_StartTimeAbsolute(t *testing.T) {
 	w := httptest.NewRecorder()
 	app.statusHandler(w, req)
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
-	sys, _ := raw["system"].(map[string]interface{})
+	sys, _ := raw["system"].(map[string]any)
 	require.NotNil(t, sys)
 	startTimeStr, _ := sys["start_time"].(string)
 	assert.Equal(t, start.Format(time.RFC3339), startTimeStr)
@@ -192,9 +192,9 @@ func TestStatusHandler_FreshBootAllHealthy_NotCritical(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
-	sys, _ := raw["system"].(map[string]interface{})
+	sys, _ := raw["system"].(map[string]any)
 	require.NotNil(t, sys)
 
 	assert.Equal(t, statusHealthy, sys["status"], "fresh boot with all endpoints healthy must not report critical")
@@ -222,9 +222,9 @@ func TestStatusHandler_PartialHealthZeroTraffic_StatusFromHealth(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
-	sys, _ := raw["system"].(map[string]interface{})
+	sys, _ := raw["system"].(map[string]any)
 	require.NotNil(t, sys)
 
 	assert.Equal(t, statusCritical, sys["status"], "1/3 healthy is below 0.5 so status comes from health alone")
@@ -248,9 +248,9 @@ func TestStatusHandler_TrafficHighFailureRate_CriticalDespiteHealthyEndpoints(t 
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
-	sys, _ := raw["system"].(map[string]interface{})
+	sys, _ := raw["system"].(map[string]any)
 	require.NotNil(t, sys)
 
 	assert.Equal(t, statusCritical, sys["status"], "80% success rate is below the 90% threshold even with all endpoints healthy")
@@ -272,9 +272,9 @@ func TestStatusHandler_EmptyFleetZeroTraffic_Critical(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
-	sys, _ := raw["system"].(map[string]interface{})
+	sys, _ := raw["system"].(map[string]any)
 	require.NotNil(t, sys)
 
 	assert.Equal(t, statusCritical, sys["status"], "a fleet with zero endpoints cannot be healthy")
@@ -296,9 +296,9 @@ func TestStatusHandler_OneHealthyEndpointZeroTraffic_Healthy(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 
-	var raw map[string]interface{}
+	var raw map[string]any
 	require.NoError(t, json.NewDecoder(w.Body).Decode(&raw))
-	sys, _ := raw["system"].(map[string]interface{})
+	sys, _ := raw["system"].(map[string]any)
 	require.NotNil(t, sys)
 
 	assert.Equal(t, statusHealthy, sys["status"], "a single healthy endpoint with no traffic yet must still report healthy")

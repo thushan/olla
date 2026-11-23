@@ -209,7 +209,7 @@ func (s *Service) proxyToSingleEndpoint(ctx context.Context, w http.ResponseWrit
 	core.ExtractProviderMetrics(ctx, s.MetricsExtractor, lastChunk, endpoint, stats, rlog, "Sherpa")
 
 	// Log detailed completion metrics at Debug level
-	logFields := []interface{}{
+	logFields := []any{
 		"endpoint", endpoint.Name,
 		"latency_ms", stats.Latency,
 		"processing_ms", stats.RequestProcessingMs,

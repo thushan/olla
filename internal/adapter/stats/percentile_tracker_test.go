@@ -165,7 +165,7 @@ func BenchmarkArrayImplementation(b *testing.B) {
 func BenchmarkMemoryAllocation(b *testing.B) {
 	b.Run("Current_1000_Array", func(b *testing.B) {
 		b.ReportAllocs()
-		var sink interface{}
+		var sink any
 		for range b.N {
 			sink = make([]int64, 1000)
 		}
@@ -174,7 +174,7 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 
 	b.Run("ReservoirSampler_100", func(b *testing.B) {
 		b.ReportAllocs()
-		var sink interface{}
+		var sink any
 		for range b.N {
 			sink = NewReservoirSampler(100)
 		}
@@ -183,7 +183,7 @@ func BenchmarkMemoryAllocation(b *testing.B) {
 
 	b.Run("SimpleStatsTracker", func(b *testing.B) {
 		b.ReportAllocs()
-		var sink interface{}
+		var sink any
 		for range b.N {
 			sink = NewSimpleStatsTracker()
 		}

@@ -182,7 +182,7 @@ func (sl *PrettyStyledLogger) logWithContext(level string, msg string, endpoint 
 
 	// log file: detailed hopefully
 	if len(ctx.DetailedArgs) > 0 {
-		allArgs := make([]interface{}, 0, len(ctx.UserArgs)+len(ctx.DetailedArgs)+2)
+		allArgs := make([]any, 0, len(ctx.UserArgs)+len(ctx.DetailedArgs)+2)
 		allArgs = append(allArgs, "endpoint_name", endpoint)
 		allArgs = append(allArgs, ctx.UserArgs...)
 		allArgs = append(allArgs, ctx.DetailedArgs...)

@@ -159,10 +159,10 @@ func BenchmarkWriteEvent_TextDelta_MapBaseline(b *testing.B) {
 	for range b.N {
 		rec.Body.Reset()
 		// Replicate exact old writeEvent logic: json.Marshal on a nested map + fmt.Fprintf.
-		data := map[string]interface{}{
+		data := map[string]any{
 			"type":  "content_block_delta",
 			"index": 0,
-			"delta": map[string]interface{}{
+			"delta": map[string]any{
 				"type": "text_delta",
 				"text": "hello world",
 			},

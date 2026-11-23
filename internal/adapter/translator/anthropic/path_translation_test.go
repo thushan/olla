@@ -59,7 +59,7 @@ func TestPathTranslation(t *testing.T) {
 					{
 						Name:        "get_weather",
 						Description: "Get weather",
-						InputSchema: map[string]interface{}{"type": "object"},
+						InputSchema: map[string]any{"type": "object"},
 					},
 				},
 			},
@@ -133,7 +133,7 @@ func TestPathTranslationPreservesOtherFields(t *testing.T) {
 	assert.False(t, stream)
 
 	// Verify messages contain system prompt
-	messages, ok := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := transformed.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2) // system + user
 	assert.Equal(t, "system", messages[0]["role"])

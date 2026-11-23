@@ -67,7 +67,7 @@ func TestUnifiedConverter_ConvertToFormat(t *testing.T) {
 				},
 			},
 			Capabilities: []string{"chat", "code"},
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"type": "llm",
 			},
 		},

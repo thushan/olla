@@ -27,11 +27,11 @@ const (
 )
 
 type EndpointStateInfo struct {
-	LastStateChange     time.Time              `json:"last_state_change"`
-	Metadata            map[string]interface{} `json:"metadata,omitempty"`
-	State               EndpointState          `json:"state"`
-	LastError           string                 `json:"last_error,omitempty"`
-	ConsecutiveFailures int                    `json:"consecutive_failures"`
+	LastStateChange     time.Time      `json:"last_state_change"`
+	Metadata            map[string]any `json:"metadata,omitempty"`
+	State               EndpointState  `json:"state"`
+	LastError           string         `json:"last_error,omitempty"`
+	ConsecutiveFailures int            `json:"consecutive_failures"`
 }
 
 type StateTransition struct {

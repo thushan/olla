@@ -156,7 +156,7 @@ func executeTransformWithContext(t *testing.T, translator *Translator, ctx conte
 
 // parseAnthropicEvents parses SSE output into structured event maps.
 // Each event will have an "_event_type" field indicating the Anthropic event type.
-func parseAnthropicEvents(t *testing.T, body string) []map[string]interface{} {
+func parseAnthropicEvents(t *testing.T, body string) []map[string]any {
 	t.Helper()
 	events, err := parseAnthropicEventsWithErr(body)
 	require.NoError(t, err)
@@ -165,8 +165,8 @@ func parseAnthropicEvents(t *testing.T, body string) []map[string]interface{} {
 
 // parseAnthropicEventsWithErr parses events but returns the error instead of failing.
 // Use this when you want to test error handling.
-func parseAnthropicEventsWithErr(body string) ([]map[string]interface{}, error) {
-	var events []map[string]interface{}
+func parseAnthropicEventsWithErr(body string) ([]map[string]any, error) {
+	var events []map[string]any
 	lines := strings.Split(body, "\n")
 
 	var currentEvent string
@@ -175,7 +175,7 @@ func parseAnthropicEventsWithErr(body string) ([]map[string]interface{}, error) 
 			currentEvent = strings.TrimPrefix(line, "event: ")
 		} else if strings.HasPrefix(line, "data: ") {
 			dataStr := strings.TrimPrefix(line, "data: ")
-			var data map[string]interface{}
+			var data map[string]any
 			if err := json.Unmarshal([]byte(dataStr), &data); err != nil {
 				return nil, err
 			}
@@ -191,8 +191,8 @@ func parseAnthropicEventsWithErr(body string) ([]map[string]interface{}, error) 
 // -------------------
 
 // findEventsByType returns all events matching the specified type.
-func findEventsByType(events []map[string]interface{}, eventType string) []map[string]interface{} {
-	var matches []map[string]interface{}
+func findEventsByType(events []map[string]any, eventType string) []map[string]any {
+	var matches []map[string]any
 	for _, event := range events {
 		if event["_event_type"] == eventType {
 			matches = append(matches, event)
@@ -202,7 +202,7 @@ func findEventsByType(events []map[string]interface{}, eventType string) []map[s
 }
 
 // getEventByType returns the first event of the specified type, or nil if not found.
-func getEventByType(events []map[string]interface{}, eventType string) map[string]interface{} {
+func getEventByType(events []map[string]any, eventType string) map[string]any {
 	matches := findEventsByType(events, eventType)
 	if len(matches) > 0 {
 		return matches[0]
@@ -211,12 +211,12 @@ func getEventByType(events []map[string]interface{}, eventType string) map[strin
 }
 
 // countEventsByType returns the number of events of the specified type.
-func countEventsByType(events []map[string]interface{}, eventType string) int {
+func countEventsByType(events []map[string]any, eventType string) int {
 	return len(findEventsByType(events, eventType))
 }
 
 // getEventTypes returns a list of all event types in order.
-func getEventTypes(events []map[string]interface{}) []string {
+func getEventTypes(events []map[string]any) []string {
 	var types []string
 	for _, event := range events {
 		if eventType, ok := event["_event_type"].(string); ok {
@@ -227,7 +227,7 @@ func getEventTypes(events []map[string]interface{}) []string {
 }
 
 // hasEventType checks if at least one event of the type exists.
-func hasEventType(events []map[string]interface{}, eventType string) bool {
+func hasEventType(events []map[string]any, eventType string) bool {
 	return countEventsByType(events, eventType) > 0
 }
 
@@ -236,34 +236,34 @@ func hasEventType(events []map[string]interface{}, eventType string) bool {
 
 // assertEventSequence validates that events appear in the specified order.
 // This requires exact match of the sequence.
-func assertEventSequence(t *testing.T, events []map[string]interface{}, expectedTypes []string) {
+func assertEventSequence(t *testing.T, events []map[string]any, expectedTypes []string) {
 	t.Helper()
 	actualTypes := getEventTypes(events)
 	assert.Equal(t, expectedTypes, actualTypes, "Event sequence should match expected order")
 }
 
 // assertEventCount validates the number of events of a specific type.
-func assertEventCount(t *testing.T, events []map[string]interface{}, eventType string, expectedCount int) {
+func assertEventCount(t *testing.T, events []map[string]any, eventType string, expectedCount int) {
 	t.Helper()
 	actualCount := countEventsByType(events, eventType)
 	assert.Equal(t, expectedCount, actualCount, "Event count for %s should be %d", eventType, expectedCount)
 }
 
 // assertHasEventType asserts that at least one event of the type exists.
-func assertHasEventType(t *testing.T, events []map[string]interface{}, eventType string) {
+func assertHasEventType(t *testing.T, events []map[string]any, eventType string) {
 	t.Helper()
 	assert.True(t, hasEventType(events, eventType), "Should have at least one %s event", eventType)
 }
 
 // assertContentBlockCount validates the number of content blocks (start events).
-func assertContentBlockCount(t *testing.T, events []map[string]interface{}, expectedCount int) {
+func assertContentBlockCount(t *testing.T, events []map[string]any, expectedCount int) {
 	t.Helper()
 	assertEventCount(t, events, "content_block_start", expectedCount)
 }
 
 // assertBlocksClosed validates that all started blocks are also stopped.
 // This ensures proper block lifecycle management.
-func assertBlocksClosed(t *testing.T, events []map[string]interface{}) {
+func assertBlocksClosed(t *testing.T, events []map[string]any) {
 	t.Helper()
 	starts := countEventsByType(events, "content_block_start")
 	stops := countEventsByType(events, "content_block_stop")
@@ -272,7 +272,7 @@ func assertBlocksClosed(t *testing.T, events []map[string]interface{}) {
 
 // assertRequiredEvents checks that all essential Anthropic stream events are present.
 // A valid stream must have: message_start, message_stop, and typically message_delta.
-func assertRequiredEvents(t *testing.T, events []map[string]interface{}) {
+func assertRequiredEvents(t *testing.T, events []map[string]any) {
 	t.Helper()
 	assertHasEventType(t, events, "message_start")
 	assertHasEventType(t, events, "message_stop")
@@ -302,7 +302,7 @@ func assertSSEFormat(t *testing.T, body string) {
 			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "data: ") {
 				dataFound = true
 				dataStr := strings.TrimPrefix(lines[i+1], "data: ")
-				var data map[string]interface{}
+				var data map[string]any
 				err := json.Unmarshal([]byte(dataStr), &data)
 				assert.NoError(t, err, "Data field should contain valid JSON")
 			}
@@ -317,8 +317,8 @@ func assertSSEFormat(t *testing.T, body string) {
 // ------------------------
 
 // getUsageTokens extracts token counts from a message_delta event.
-func getUsageTokens(event map[string]interface{}) (inputTokens, outputTokens float64, ok bool) {
-	usage, found := event["usage"].(map[string]interface{})
+func getUsageTokens(event map[string]any) (inputTokens, outputTokens float64, ok bool) {
+	usage, found := event["usage"].(map[string]any)
 	if !found {
 		return 0, 0, false
 	}
@@ -330,8 +330,8 @@ func getUsageTokens(event map[string]interface{}) (inputTokens, outputTokens flo
 }
 
 // getStopReason extracts the stop_reason from a message_delta event.
-func getStopReason(event map[string]interface{}) (string, bool) {
-	delta, ok := event["delta"].(map[string]interface{})
+func getStopReason(event map[string]any) (string, bool) {
+	delta, ok := event["delta"].(map[string]any)
 	if !ok {
 		return "", false
 	}
@@ -340,8 +340,8 @@ func getStopReason(event map[string]interface{}) (string, bool) {
 }
 
 // getContentBlockType extracts the type from a content_block_start event.
-func getContentBlockType(event map[string]interface{}) (string, bool) {
-	block, ok := event["content_block"].(map[string]interface{})
+func getContentBlockType(event map[string]any) (string, bool) {
+	block, ok := event["content_block"].(map[string]any)
 	if !ok {
 		return "", false
 	}
@@ -350,7 +350,7 @@ func getContentBlockType(event map[string]interface{}) (string, bool) {
 }
 
 // getContentBlockIndex extracts the index from a content block event.
-func getContentBlockIndex(event map[string]interface{}) (int, bool) {
+func getContentBlockIndex(event map[string]any) (int, bool) {
 	index, ok := event["index"].(float64)
 	if !ok {
 		return 0, false
@@ -375,7 +375,7 @@ func assertTextContent(t *testing.T, body string, content string) {
 }
 
 // assertStopReason validates the stop_reason in message_delta.
-func assertStopReason(t *testing.T, events []map[string]interface{}, expectedReason string) {
+func assertStopReason(t *testing.T, events []map[string]any, expectedReason string) {
 	t.Helper()
 	messageDelta := getEventByType(events, "message_delta")
 	require.NotNil(t, messageDelta, "message_delta event should exist")
@@ -386,7 +386,7 @@ func assertStopReason(t *testing.T, events []map[string]interface{}, expectedRea
 }
 
 // assertUsageTokens validates token usage in message_delta event.
-func assertUsageTokens(t *testing.T, events []map[string]interface{}, expectedInput, expectedOutput int) {
+func assertUsageTokens(t *testing.T, events []map[string]any, expectedInput, expectedOutput int) {
 	t.Helper()
 	messageDelta := getEventByType(events, "message_delta")
 	require.NotNil(t, messageDelta, "message_delta event should exist")
@@ -405,7 +405,7 @@ func assertThinkingContent(t *testing.T, body string, thinking string) {
 
 // assertThinkingBlockTransitionOrder validates that a thinking block stops before any
 // text or tool block starts. Anthropic requires thinking blocks to precede content.
-func assertThinkingBlockTransitionOrder(t *testing.T, events []map[string]interface{}) {
+func assertThinkingBlockTransitionOrder(t *testing.T, events []map[string]any) {
 	t.Helper()
 
 	thinkingStopIdx := -1
@@ -435,7 +435,7 @@ func assertThinkingBlockTransitionOrder(t *testing.T, events []map[string]interf
 
 // assertBlockTransitionOrder validates that text block stops before tool block starts.
 // This is critical for proper content block lifecycle when transitioning types.
-func assertBlockTransitionOrder(t *testing.T, events []map[string]interface{}) {
+func assertBlockTransitionOrder(t *testing.T, events []map[string]any) {
 	t.Helper()
 
 	// Find the text block stop and tool block start indices

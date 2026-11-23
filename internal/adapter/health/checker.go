@@ -350,7 +350,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		case oldStatus == domain.StatusUnknown:
 			// Initial discovery of unhealthy endpoint
-			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs := make([]any, 0, 8)
 			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
@@ -365,7 +365,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 				}
 			}
 			c.logger.WarnWithContext("Endpoint discovered offline:", endpoint.Name, logger.LogContext{
-				UserArgs: []interface{}{
+				UserArgs: []any{
 					"status", newStatus.String(),
 					"latency", result.Latency,
 					"next_check_in", nextInterval,
@@ -383,7 +383,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 
 		default:
 			// Status changed to unhealthy
-			detailedArgs := make([]interface{}, 0, 8)
+			detailedArgs := make([]any, 0, 8)
 			detailedArgs = append(detailedArgs,
 				"endpoint_url", endpoint.GetURLString(),
 				"status_code", result.StatusCode,
@@ -398,7 +398,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 				}
 			}
 			c.logger.WarnWithContext("Endpoint status changed:", endpoint.Name, logger.LogContext{
-				UserArgs: []interface{}{
+				UserArgs: []any{
 					"status", newStatus.String(),
 					"was", oldStatus.String(),
 					"consecutive_failures", endpoint.ConsecutiveFailures + 1,
@@ -412,7 +412,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 	case checkErr != nil && endpoint.ConsecutiveFailures > 0 && endpoint.ConsecutiveFailures%5 == 0:
 		// Log ongoing issues every 5th consecutive failure instead of time-based throttling
 		// Pre-allocate with capacity for all fields including error
-		detailedArgs := make([]interface{}, 0, 8)
+		detailedArgs := make([]any, 0, 8)
 		detailedArgs = append(detailedArgs,
 			"endpoint_url", endpoint.GetURLString(),
 			"status_code", result.StatusCode,
@@ -426,7 +426,7 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 		}
 
 		c.logger.WarnWithContext("Endpoint still having issues:", endpoint.Name, logger.LogContext{
-			UserArgs: []interface{}{
+			UserArgs: []any{
 				"status", newStatus.String(),
 				"consecutive_failures", endpoint.ConsecutiveFailures + 1,
 				"next_check_in", nextInterval,
@@ -436,16 +436,16 @@ func (c *HTTPHealthChecker) logHealthCheckResult(
 	}
 }
 
-func (c *HTTPHealthChecker) GetSchedulerStats() map[string]interface{} {
+func (c *HTTPHealthChecker) GetSchedulerStats() map[string]any {
 	running := c.isRunning.Load()
 
 	if !running {
-		return map[string]interface{}{
+		return map[string]any{
 			"isRunning": false,
 		}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"isRunning":      running,
 		"check_interval": DefaultHealthCheckInterval.String(),
 	}

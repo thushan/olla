@@ -380,7 +380,7 @@ func (m *mockModelRegistryWithCapture) HasModel(ctx context.Context, modelName s
 	return false
 }
 
-func (m *mockModelRegistryWithCapture) GetModelStatistics(ctx context.Context) map[string]interface{} {
+func (m *mockModelRegistryWithCapture) GetModelStatistics(ctx context.Context) map[string]any {
 	return nil
 }
 
@@ -388,9 +388,9 @@ func (m *mockModelRegistryWithCapture) GetEndpointModels(ctx context.Context, en
 	return nil, nil
 }
 
-func (m *mockModelRegistryWithCapture) AddObserver(observer func(event string, data interface{})) {}
+func (m *mockModelRegistryWithCapture) AddObserver(observer func(event string, data any)) {}
 
-func (m *mockModelRegistryWithCapture) NotifyObservers(event string, data interface{}) {}
+func (m *mockModelRegistryWithCapture) NotifyObservers(event string, data any) {}
 
 func (m *mockModelRegistryWithCapture) StartCleanup(ctx context.Context, interval time.Duration) {}
 

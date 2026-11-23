@@ -53,8 +53,8 @@ func NewWithTheme(cfg *Config) (*slog.Logger, StyledLogger, func(), error) {
 	return logger, styledLogger, cleanup, nil
 }
 
-func toInterfaceSlice(strs []string) []interface{} {
-	result := make([]interface{}, len(strs))
+func toInterfaceSlice(strs []string) []any {
+	result := make([]any, len(strs))
 	for i, s := range strs {
 		result[i] = s
 	}
@@ -69,6 +69,6 @@ func toInterfaceSlice(strs []string) []interface{} {
 
 // LogContext separates user-facing from detailed logging context
 type LogContext struct {
-	UserArgs     []interface{}
-	DetailedArgs []interface{}
+	UserArgs     []any
+	DetailedArgs []any
 }

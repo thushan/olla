@@ -134,7 +134,7 @@ func TestExtractor_ExtractMetrics_OllamaResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Test Ollama response
-	ollamaResponse := map[string]interface{}{
+	ollamaResponse := map[string]any{
 		"model":                "llama2:latest",
 		"created_at":           "2024-01-01T00:00:00Z",
 		"response":             "Hello, world!",

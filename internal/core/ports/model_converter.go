@@ -9,7 +9,7 @@ import (
 // ModelResponseConverter converts unified models to different API response formats
 type ModelResponseConverter interface {
 	// ConvertToFormat converts unified models to the specified format with optional filters
-	ConvertToFormat(models []*domain.UnifiedModel, filters ModelFilters) (interface{}, error)
+	ConvertToFormat(models []*domain.UnifiedModel, filters ModelFilters) (any, error)
 	// GetFormatName returns the name of the format this converter handles
 	GetFormatName() string
 }

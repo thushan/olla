@@ -61,8 +61,8 @@ func createHTTPRequest(t *testing.T, anthropicReq AnthropicRequest) *http.Reques
 }
 
 // mock backend response
-func simulateBackendResponse(content string, toolCalls []map[string]interface{}, finishReason string) map[string]interface{} {
-	message := map[string]interface{}{
+func simulateBackendResponse(content string, toolCalls []map[string]any, finishReason string) map[string]any {
+	message := map[string]any{
 		"role": "assistant",
 	}
 
@@ -75,24 +75,24 @@ func simulateBackendResponse(content string, toolCalls []map[string]interface{},
 
 	// convert tool calls to required interface format
 	if len(toolCalls) > 0 {
-		converted := make([]interface{}, len(toolCalls))
+		converted := make([]any, len(toolCalls))
 		for i, tc := range toolCalls {
 			converted[i] = tc
 		}
 		message["tool_calls"] = converted
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"id":    "chatcmpl-test-123",
 		"model": ClaudeSonnetModel,
-		"choices": []interface{}{
-			map[string]interface{}{
+		"choices": []any{
+			map[string]any{
 				"message":       message,
 				"finish_reason": finishReason,
 				"index":         0,
 			},
 		},
-		"usage": map[string]interface{}{
+		"usage": map[string]any{
 			"prompt_tokens":     float64(25),
 			"completion_tokens": float64(15),
 			"total_tokens":      float64(40),
@@ -132,7 +132,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 		assert.Equal(t, 1024, openaiReq["max_tokens"])
 		assert.Equal(t, false, openaiReq["stream"])
 
-		messages, ok := openaiReq["messages"].([]map[string]interface{})
+		messages, ok := openaiReq["messages"].([]map[string]any)
 		require.True(t, ok)
 		require.Len(t, messages, 1)
 		assert.Equal(t, "user", messages[0]["role"])
@@ -193,7 +193,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify conversation history preserved
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		require.Len(t, messages, 3)
 		assert.Equal(t, "user", messages[0]["role"])
 		assert.Equal(t, "assistant", messages[1]["role"])
@@ -230,7 +230,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify system prompt injected as first message
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		require.Len(t, messages, 2)
 		assert.Equal(t, "system", messages[0]["role"])
 		assert.Equal(t, "You are a helpful assistant that speaks like a pirate.", messages[0]["content"])
@@ -349,12 +349,12 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 			Messages: []AnthropicMessage{
 				{
 					Role: "user",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type": "text",
 							"text": "First part ",
 						},
-						map[string]interface{}{
+						map[string]any{
 							"type": "text",
 							"text": "second part",
 						},
@@ -368,7 +368,7 @@ func TestAnthropicToOpenAIToAnthropic_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify text blocks concatenated
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		require.Len(t, messages, 1)
 		assert.Equal(t, "First part second part", messages[0]["content"])
 
@@ -401,14 +401,14 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 				{
 					Name:        "get_weather",
 					Description: "Get current weather for a location",
-					InputSchema: map[string]interface{}{
+					InputSchema: map[string]any{
 						"type": "object",
-						"properties": map[string]interface{}{
-							"location": map[string]interface{}{
+						"properties": map[string]any{
+							"location": map[string]any{
 								"type":        "string",
 								"description": "City name",
 							},
-							"unit": map[string]interface{}{
+							"unit": map[string]any{
 								"type": "string",
 								"enum": []string{"celsius", "fahrenheit"},
 							},
@@ -426,36 +426,36 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// 3. Verify tool definition conversion
-		tools, ok := transformed.OpenAIRequest["tools"].([]map[string]interface{})
+		tools, ok := transformed.OpenAIRequest["tools"].([]map[string]any)
 		require.True(t, ok)
 		require.Len(t, tools, 1)
 
 		assert.Equal(t, "function", tools[0]["type"])
-		function := tools[0]["function"].(map[string]interface{})
+		function := tools[0]["function"].(map[string]any)
 		assert.Equal(t, "get_weather", function["name"])
 		assert.Equal(t, "Get current weather for a location", function["description"])
 
 		// Verify input_schema mapped to parameters
-		parameters := function["parameters"].(map[string]interface{})
+		parameters := function["parameters"].(map[string]any)
 		assert.Equal(t, "object", parameters["type"])
-		properties := parameters["properties"].(map[string]interface{})
+		properties := parameters["properties"].(map[string]any)
 		assert.Contains(t, properties, "location")
 
 		// Verify tool_choice mapping
 		assert.Equal(t, "auto", transformed.OpenAIRequest["tool_choice"])
 
 		// 4. Simulate backend response with tool call
-		toolCall := map[string]interface{}{
+		toolCall := map[string]any{
 			"id":   "call_weather_123",
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      "get_weather",
 				"arguments": `{"location":"Melbourne","unit":"celsius"}`,
 			},
 		}
 		backendResp := simulateBackendResponse(
 			"Let me check the weather for you.",
-			[]map[string]interface{}{toolCall},
+			[]map[string]any{toolCall},
 			"tool_calls",
 		)
 
@@ -510,12 +510,12 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 				// Assistant's tool call
 				{
 					Role: "assistant",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type": "tool_use",
 							"id":   "toolu_weather_123",
 							"name": "get_weather",
-							"input": map[string]interface{}{
+							"input": map[string]any{
 								"location": "Melbourne",
 							},
 						},
@@ -524,8 +524,8 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 				// User provides tool result
 				{
 					Role: "user",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type":        "tool_result",
 							"tool_use_id": "toolu_weather_123",
 							"content":     "Temperature: 18°C, partly cloudy",
@@ -540,7 +540,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify OpenAI message structure
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		require.Len(t, messages, 3) // user, assistant, tool
 
 		// Check user message
@@ -549,10 +549,10 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 
 		// Check assistant message with tool call
 		assert.Equal(t, "assistant", messages[1]["role"])
-		toolCalls := messages[1]["tool_calls"].([]map[string]interface{})
+		toolCalls := messages[1]["tool_calls"].([]map[string]any)
 		require.Len(t, toolCalls, 1)
 		assert.Equal(t, "toolu_weather_123", toolCalls[0]["id"])
-		assert.Equal(t, "get_weather", toolCalls[0]["function"].(map[string]interface{})["name"])
+		assert.Equal(t, "get_weather", toolCalls[0]["function"].(map[string]any)["name"])
 
 		// Check tool result message
 		assert.Equal(t, "tool", messages[2]["role"])
@@ -584,12 +584,12 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 				{
 					Name:        "get_weather",
 					Description: "Get weather",
-					InputSchema: map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
+					InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 				},
 				{
 					Name:        "get_time",
 					Description: "Get current time",
-					InputSchema: map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
+					InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 				},
 			},
 		}
@@ -599,10 +599,10 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify both tools converted
-		tools := transformed.OpenAIRequest["tools"].([]map[string]interface{})
+		tools := transformed.OpenAIRequest["tools"].([]map[string]any)
 		require.Len(t, tools, 2)
-		assert.Equal(t, "get_weather", tools[0]["function"].(map[string]interface{})["name"])
-		assert.Equal(t, "get_time", tools[1]["function"].(map[string]interface{})["name"])
+		assert.Equal(t, "get_weather", tools[0]["function"].(map[string]any)["name"])
+		assert.Equal(t, "get_time", tools[1]["function"].(map[string]any)["name"])
 	})
 
 	t.Run("multiple_tool_calls_in_response", func(t *testing.T) {
@@ -618,11 +618,11 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Simulate multiple tool calls
-		toolCalls := []map[string]interface{}{
+		toolCalls := []map[string]any{
 			{
 				"id":   "call_1",
 				"type": "function",
-				"function": map[string]interface{}{
+				"function": map[string]any{
 					"name":      "get_weather",
 					"arguments": `{"location":"NYC"}`,
 				},
@@ -630,7 +630,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 			{
 				"id":   "call_2",
 				"type": "function",
-				"function": map[string]interface{}{
+				"function": map[string]any{
 					"name":      "get_time",
 					"arguments": `{"timezone":"EST"}`,
 				},
@@ -667,8 +667,8 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		// Test different tool_choice values
 		testCases := []struct {
 			name               string
-			toolChoice         interface{}
-			expectedOpenAI     interface{}
+			toolChoice         any
+			expectedOpenAI     any
 			expectedShouldFail bool
 		}{
 			{"auto", "auto", "auto", false},
@@ -676,10 +676,10 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 			{"none", "none", "none", false},
 			{
 				"specific_tool",
-				map[string]interface{}{"type": "tool", "name": "get_weather"},
-				map[string]interface{}{
+				map[string]any{"type": "tool", "name": "get_weather"},
+				map[string]any{
 					"type": "function",
-					"function": map[string]interface{}{
+					"function": map[string]any{
 						"name": "get_weather",
 					},
 				},
@@ -697,7 +697,7 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 						{
 							Name:        "get_weather",
 							Description: "Get weather",
-							InputSchema: map[string]interface{}{"type": "object"},
+							InputSchema: map[string]any{"type": "object"},
 						},
 					},
 					ToolChoice: tc.toolChoice,
@@ -730,28 +730,28 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Simulate tool-only response (no text)
-		toolCall := map[string]interface{}{
+		toolCall := map[string]any{
 			"id":   "call_search",
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      "web_search",
 				"arguments": `{"query":"test"}`,
 			},
 		}
-		backendResp := map[string]interface{}{
+		backendResp := map[string]any{
 			"id":    "chatcmpl-test",
 			"model": ClaudeSonnetModel,
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":       "assistant",
 						"content":    nil, // No text content
-						"tool_calls": []interface{}{toolCall},
+						"tool_calls": []any{toolCall},
 					},
 					"finish_reason": "tool_calls",
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"prompt_tokens":     float64(10),
 				"completion_tokens": float64(5),
 			},
@@ -782,10 +782,10 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Simulate response with complex arguments
-		complexArgs := map[string]interface{}{
-			"filters": map[string]interface{}{
+		complexArgs := map[string]any{
+			"filters": map[string]any{
 				"category": "electronics",
-				"price_range": map[string]interface{}{
+				"price_range": map[string]any{
 					"min": 100,
 					"max": 500,
 				},
@@ -795,16 +795,16 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 		}
 		argsJSON, _ := json.Marshal(complexArgs)
 
-		toolCall := map[string]interface{}{
+		toolCall := map[string]any{
 			"id":   "call_complex",
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      "process_data",
 				"arguments": string(argsJSON),
 			},
 		}
 
-		backendResp := simulateBackendResponse("Processing", []map[string]interface{}{toolCall}, "tool_calls")
+		backendResp := simulateBackendResponse("Processing", []map[string]any{toolCall}, "tool_calls")
 		anthropicResp, err := translator.TransformResponse(ctx, backendResp, httpReq)
 		require.NoError(t, err)
 
@@ -822,14 +822,14 @@ func TestAnthropicToolCalling_RoundTrip(t *testing.T) {
 
 		// Verify complex structure preserved
 		assert.Equal(t, "tool_use", toolBlock.Type)
-		filters := toolBlock.Input["filters"].(map[string]interface{})
+		filters := toolBlock.Input["filters"].(map[string]any)
 		assert.Equal(t, "electronics", filters["category"])
 
-		priceRange := filters["price_range"].(map[string]interface{})
+		priceRange := filters["price_range"].(map[string]any)
 		assert.Equal(t, float64(100), priceRange["min"])
 		assert.Equal(t, float64(500), priceRange["max"])
 
-		tags := toolBlock.Input["tags"].([]interface{})
+		tags := toolBlock.Input["tags"].([]any)
 		require.Len(t, tags, 2)
 		assert.Equal(t, "sale", tags[0])
 	})
@@ -866,7 +866,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Empty content should be filtered out
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		assert.Empty(t, messages)
 	})
 
@@ -882,16 +882,16 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Simulate backend response with malformed JSON
-		toolCall := map[string]interface{}{
+		toolCall := map[string]any{
 			"id":   "call_bad",
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      "test",
 				"arguments": `{invalid json}`, // Malformed JSON
 			},
 		}
 
-		backendResp := simulateBackendResponse("", []map[string]interface{}{toolCall}, "tool_calls")
+		backendResp := simulateBackendResponse("", []map[string]any{toolCall}, "tool_calls")
 		anthropicResp, err := translator.TransformResponse(ctx, backendResp, httpReq)
 
 		// Should handle gracefully - either error or empty input
@@ -916,7 +916,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		require.NoError(t, err)
 
 		// Backend response missing choices
-		backendResp := map[string]interface{}{
+		backendResp := map[string]any{
 			"id":    "chatcmpl-nochoices",
 			"model": ClaudeSonnetModel,
 			// Missing choices field
@@ -935,12 +935,12 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 			Messages: []AnthropicMessage{
 				{
 					Role: "assistant",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type": "tool_use",
 							"id":   "toolu_only",
 							"name": "search",
-							"input": map[string]interface{}{
+							"input": map[string]any{
 								"query": "test",
 							},
 						},
@@ -953,7 +953,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		transformed, err := translator.TransformRequest(ctx, httpReq)
 		require.NoError(t, err)
 
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		require.Len(t, messages, 1)
 
 		// Content should be null when only tool calls present
@@ -970,12 +970,12 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 			Messages: []AnthropicMessage{
 				{
 					Role: "user",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type": "text",
 							"text": "Here's the result:",
 						},
-						map[string]interface{}{
+						map[string]any{
 							"type":        "tool_result",
 							"tool_use_id": "tool_123",
 							"content":     "Result data",
@@ -992,7 +992,7 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		// tool messages must come before the user text so they sit immediately after
 		// the assistant tool_calls message; OpenAI-compatible backends reject any
 		// other role between them.
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		require.Len(t, messages, 2)
 
 		assert.Equal(t, "tool", messages[0]["role"])
@@ -1011,11 +1011,11 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 			Messages: []AnthropicMessage{
 				{
 					Role: "user",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type":        "tool_result",
 							"tool_use_id": "tool_struct",
-							"content": map[string]interface{}{
+							"content": map[string]any{
 								"temperature": 18,
 								"conditions":  "cloudy",
 							},
@@ -1029,14 +1029,14 @@ func TestAnthropicEdgeCases_RoundTrip(t *testing.T) {
 		transformed, err := translator.TransformRequest(ctx, httpReq)
 		require.NoError(t, err)
 
-		messages := transformed.OpenAIRequest["messages"].([]map[string]interface{})
+		messages := transformed.OpenAIRequest["messages"].([]map[string]any)
 		require.Len(t, messages, 1)
 
 		assert.Equal(t, "tool", messages[0]["role"])
 
 		// Content should be JSON string
 		contentStr := messages[0]["content"].(string)
-		var parsed map[string]interface{}
+		var parsed map[string]any
 		err = json.Unmarshal([]byte(contentStr), &parsed)
 		require.NoError(t, err)
 		assert.Equal(t, float64(18), parsed["temperature"])
@@ -1112,16 +1112,16 @@ func TestAnthropicUsageTracking(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			backendResp := map[string]interface{}{
+			backendResp := map[string]any{
 				"id":    "chatcmpl-usage",
 				"model": ClaudeSonnetModel,
-				"choices": []interface{}{
-					map[string]interface{}{
-						"message":       map[string]interface{}{"role": "assistant", "content": "Test"},
+				"choices": []any{
+					map[string]any{
+						"message":       map[string]any{"role": "assistant", "content": "Test"},
 						"finish_reason": "stop",
 					},
 				},
-				"usage": map[string]interface{}{
+				"usage": map[string]any{
 					"prompt_tokens":     tc.promptTokens,
 					"completion_tokens": tc.completionTokens,
 					"total_tokens":      tc.promptTokens + tc.completionTokens,
@@ -1139,12 +1139,12 @@ func TestAnthropicUsageTracking(t *testing.T) {
 
 	t.Run("missing_usage", func(t *testing.T) {
 		// Test response without usage field
-		backendResp := map[string]interface{}{
+		backendResp := map[string]any{
 			"id":    "chatcmpl-nousage",
 			"model": ClaudeSonnetModel,
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message":       map[string]interface{}{"role": "assistant", "content": "Test"},
+			"choices": []any{
+				map[string]any{
+					"message":       map[string]any{"role": "assistant", "content": "Test"},
 					"finish_reason": "stop",
 				},
 			},
@@ -1279,14 +1279,14 @@ func BenchmarkTransformRequest(b *testing.B) {
 				{
 					Name:        "get_weather",
 					Description: "Get current weather for a location",
-					InputSchema: map[string]interface{}{
+					InputSchema: map[string]any{
 						"type": "object",
-						"properties": map[string]interface{}{
-							"location": map[string]interface{}{
+						"properties": map[string]any{
+							"location": map[string]any{
 								"type":        "string",
 								"description": "City name",
 							},
-							"unit": map[string]interface{}{
+							"unit": map[string]any{
 								"type": "string",
 								"enum": []string{"celsius", "fahrenheit"},
 							},
@@ -1321,12 +1321,12 @@ func BenchmarkTransformRequest(b *testing.B) {
 			Messages: []AnthropicMessage{
 				{
 					Role: "user",
-					Content: []interface{}{
-						map[string]interface{}{
+					Content: []any{
+						map[string]any{
 							"type": "text",
 							"text": "First part ",
 						},
-						map[string]interface{}{
+						map[string]any{
 							"type": "text",
 							"text": "second part",
 						},
@@ -1397,10 +1397,10 @@ func BenchmarkTransformResponse(b *testing.B) {
 		body, _ := json.Marshal(anthropicReq)
 		httpReq.Body = io.NopCloser(bytes.NewReader(body))
 
-		toolCall := map[string]interface{}{
+		toolCall := map[string]any{
 			"id":   "call_weather_123",
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      "get_weather",
 				"arguments": `{"location":"Melbourne","unit":"celsius"}`,
 			},
@@ -1408,7 +1408,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 
 		backendResp := simulateBackendResponse(
 			"Let me check the weather for you.",
-			[]map[string]interface{}{toolCall},
+			[]map[string]any{toolCall},
 			"tool_calls",
 		)
 
@@ -1435,11 +1435,11 @@ func BenchmarkTransformResponse(b *testing.B) {
 		body, _ := json.Marshal(anthropicReq)
 		httpReq.Body = io.NopCloser(bytes.NewReader(body))
 
-		toolCalls := []map[string]interface{}{
+		toolCalls := []map[string]any{
 			{
 				"id":   "call_1",
 				"type": "function",
-				"function": map[string]interface{}{
+				"function": map[string]any{
 					"name":      "get_weather",
 					"arguments": `{"location":"NYC"}`,
 				},
@@ -1447,7 +1447,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 			{
 				"id":   "call_2",
 				"type": "function",
-				"function": map[string]interface{}{
+				"function": map[string]any{
 					"name":      "get_time",
 					"arguments": `{"timezone":"EST"}`,
 				},
@@ -1479,10 +1479,10 @@ func BenchmarkTransformResponse(b *testing.B) {
 		body, _ := json.Marshal(anthropicReq)
 		httpReq.Body = io.NopCloser(bytes.NewReader(body))
 
-		complexArgs := map[string]interface{}{
-			"filters": map[string]interface{}{
+		complexArgs := map[string]any{
+			"filters": map[string]any{
 				"category": "electronics",
-				"price_range": map[string]interface{}{
+				"price_range": map[string]any{
 					"min": 100,
 					"max": 500,
 				},
@@ -1492,16 +1492,16 @@ func BenchmarkTransformResponse(b *testing.B) {
 		}
 		argsJSON, _ := json.Marshal(complexArgs)
 
-		toolCall := map[string]interface{}{
+		toolCall := map[string]any{
 			"id":   "call_complex",
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      "process_data",
 				"arguments": string(argsJSON),
 			},
 		}
 
-		backendResp := simulateBackendResponse("Processing", []map[string]interface{}{toolCall}, "tool_calls")
+		backendResp := simulateBackendResponse("Processing", []map[string]any{toolCall}, "tool_calls")
 
 		b.ReportAllocs()
 		b.ResetTimer()
@@ -1526,12 +1526,12 @@ func BenchmarkTransformResponse(b *testing.B) {
 		body, _ := json.Marshal(anthropicReq)
 		httpReq.Body = io.NopCloser(bytes.NewReader(body))
 
-		backendResp := map[string]interface{}{
+		backendResp := map[string]any{
 			"id":    "chatcmpl-usage",
 			"model": ClaudeSonnetModel,
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":    "assistant",
 						"content": "This is a longer response to generate more token usage",
 					},
@@ -1539,7 +1539,7 @@ func BenchmarkTransformResponse(b *testing.B) {
 					"index":         0,
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"prompt_tokens":     float64(150),
 				"completion_tokens": float64(75),
 				"total_tokens":      float64(225),
@@ -1569,30 +1569,30 @@ func BenchmarkTransformResponse(b *testing.B) {
 		body, _ := json.Marshal(anthropicReq)
 		httpReq.Body = io.NopCloser(bytes.NewReader(body))
 
-		toolCall := map[string]interface{}{
+		toolCall := map[string]any{
 			"id":   "call_search",
 			"type": "function",
-			"function": map[string]interface{}{
+			"function": map[string]any{
 				"name":      "web_search",
 				"arguments": `{"query":"test"}`,
 			},
 		}
 
-		backendResp := map[string]interface{}{
+		backendResp := map[string]any{
 			"id":    "chatcmpl-test",
 			"model": ClaudeSonnetModel,
-			"choices": []interface{}{
-				map[string]interface{}{
-					"message": map[string]interface{}{
+			"choices": []any{
+				map[string]any{
+					"message": map[string]any{
 						"role":       "assistant",
 						"content":    nil,
-						"tool_calls": []interface{}{toolCall},
+						"tool_calls": []any{toolCall},
 					},
 					"finish_reason": "tool_calls",
 					"index":         0,
 				},
 			},
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"prompt_tokens":     float64(10),
 				"completion_tokens": float64(5),
 			},

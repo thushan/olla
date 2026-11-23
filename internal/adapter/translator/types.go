@@ -17,7 +17,7 @@ type RequestTranslator interface {
 
 	// converts openai response back to original format
 	// uses original request to keep context (model, metadata)
-	TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error)
+	TransformResponse(ctx context.Context, openaiResp any, original *http.Request) (any, error)
 
 	// handles streaming response conversion
 	// reads openai sse stream and writes target format
@@ -30,12 +30,12 @@ type RequestTranslator interface {
 // holds converted request and metadata
 // preserving info for response translation
 type TransformedRequest struct {
-	OpenAIRequest map[string]interface{} // Converted OpenAI format request body
-	Metadata      map[string]interface{} // Additional context for response translation
-	ModelName     string                 // Extracted model name for routing
-	TargetPath    string                 // Target API path for the backend (e.g., "/v1/chat/completions" - proxy handles /olla prefix)
-	OriginalBody  []byte                 // Original request body for response translation context
-	IsStreaming   bool                   // Whether response should stream
+	OpenAIRequest map[string]any // Converted OpenAI format request body
+	Metadata      map[string]any // Additional context for response translation
+	ModelName     string         // Extracted model name for routing
+	TargetPath    string         // Target API path for the backend (e.g., "/v1/chat/completions" - proxy handles /olla prefix)
+	OriginalBody  []byte         // Original request body for response translation context
+	IsStreaming   bool           // Whether response should stream
 }
 
 // optional interface for translators to define their api endpoints
@@ -101,7 +101,7 @@ type TokenCountResponse struct {
 // optional interface for translators that provide model listings
 // exposes available models in their native api format
 type ModelsProvider interface {
-	GetModels(ctx context.Context) (interface{}, error)
+	GetModels(ctx context.Context) (any, error)
 }
 
 // PassthroughCapable is an optional interface for translators that can bypass

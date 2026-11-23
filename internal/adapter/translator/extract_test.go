@@ -165,12 +165,12 @@ func BenchmarkExtractModelName(b *testing.B) {
 // The actual performance improvement over TransformRequest is larger than shown here.
 func BenchmarkFullUnmarshal(b *testing.B) {
 	type anthropicReq struct {
-		Model     string      `json:"model"`
-		MaxTokens int         `json:"max_tokens"`
-		System    interface{} `json:"system,omitempty"`
+		Model     string `json:"model"`
+		MaxTokens int    `json:"max_tokens"`
+		System    any    `json:"system,omitempty"`
 		Messages  []struct {
-			Content interface{} `json:"content"`
-			Role    string      `json:"role"`
+			Content any    `json:"content"`
+			Role    string `json:"role"`
 		} `json:"messages"`
 		Stream      bool     `json:"stream,omitempty"`
 		Temperature *float64 `json:"temperature,omitempty"`

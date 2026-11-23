@@ -19,7 +19,7 @@ func TestDetectStreamingMode(t *testing.T) {
 		name        string
 		profile     string
 		contentType string
-		ctxStream   interface{} // Value for "stream" in context
+		ctxStream   any // Value for "stream" in context
 		want        bool
 	}{
 		// Profile takes precedence - when ops explicitly configure streaming/buffering

@@ -205,24 +205,24 @@ func TestUnifiedModelClone_NestedMetadataIsIndependent(t *testing.T) {
 
 	orig := &domain.UnifiedModel{
 		ID: "m",
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"platforms": map[string]bool{"ollama": true},
-			"nested":    map[string]interface{}{"k": []interface{}{"v"}},
+			"nested":    map[string]any{"k": []any{"v"}},
 		},
 		SourceEndpoints: []domain.SourceEndpoint{{
 			EndpointURL: "http://a",
-			StateInfo:   &domain.EndpointStateInfo{Metadata: map[string]interface{}{"x": "y"}},
+			StateInfo:   &domain.EndpointStateInfo{Metadata: map[string]any{"x": "y"}},
 		}},
 	}
 	c := orig.Clone()
 
 	c.Metadata["platforms"].(map[string]bool)["lmstudio"] = true
-	c.Metadata["nested"].(map[string]interface{})["k"].([]interface{})[0] = "changed"
+	c.Metadata["nested"].(map[string]any)["k"].([]any)[0] = "changed"
 	c.SourceEndpoints[0].StateInfo.Metadata["x"] = "z"
 	c.SourceEndpoints[0].StateInfo.LastError = "boom"
 
 	require.Len(t, orig.Metadata["platforms"], 1)
-	require.Equal(t, "v", orig.Metadata["nested"].(map[string]interface{})["k"].([]interface{})[0])
+	require.Equal(t, "v", orig.Metadata["nested"].(map[string]any)["k"].([]any)[0])
 	require.Equal(t, "y", orig.SourceEndpoints[0].StateInfo.Metadata["x"])
 	require.Empty(t, orig.SourceEndpoints[0].StateInfo.LastError)
 }

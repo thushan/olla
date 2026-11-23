@@ -40,13 +40,13 @@ func TestTranslationHandler_PassthroughNonStreaming(t *testing.T) {
 		receivedBody = body
 
 		// Return Anthropic format response
-		response := map[string]interface{}{
+		response := map[string]any{
 			"id":      "msg_01XFDUDYJgAACzvnptvVoYEL",
 			"type":    "message",
 			"role":    "assistant",
-			"content": []map[string]interface{}{{"type": "text", "text": "Hello! How can I help you?"}},
+			"content": []map[string]any{{"type": "text", "text": "Hello! How can I help you?"}},
 			"model":   "claude-3-5-sonnet-20241022",
-			"usage": map[string]interface{}{
+			"usage": map[string]any{
 				"input_tokens":  10,
 				"output_tokens": 20,
 			},
@@ -94,7 +94,7 @@ func TestTranslationHandler_PassthroughNonStreaming(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{"error": err.Error()})
+			json.NewEncoder(w).Encode(map[string]any{"error": err.Error()})
 		},
 	}
 
@@ -146,10 +146,10 @@ func TestTranslationHandler_PassthroughNonStreaming(t *testing.T) {
 	handler := app.translationHandler(trans)
 
 	// Create Anthropic request
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -169,7 +169,7 @@ func TestTranslationHandler_PassthroughNonStreaming(t *testing.T) {
 	assert.Equal(t, "passthrough", rec.Header().Get("X-Olla-Mode"), "Should have passthrough mode header")
 
 	// Verify request was passed through unchanged
-	var receivedReq map[string]interface{}
+	var receivedReq map[string]any
 	err := json.Unmarshal(receivedBody, &receivedReq)
 	require.NoError(t, err)
 	assert.Equal(t, "claude-3-5-sonnet-20241022", receivedReq["model"])
@@ -179,7 +179,7 @@ func TestTranslationHandler_PassthroughNonStreaming(t *testing.T) {
 	assert.Equal(t, "/v1/messages", receivedPath)
 
 	// Verify response
-	var response map[string]interface{}
+	var response map[string]any
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "message", response["type"])
@@ -310,11 +310,11 @@ data: {"type":"message_stop"}
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
 		"stream":     true,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -357,7 +357,7 @@ func TestTranslationHandler_PassthroughWithMultipleEndpoints(t *testing.T) {
 	// Setup multiple mock backends
 	backend1 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		backendsCalled["backend1"] = true
-		response := map[string]interface{}{"id": "msg_01", "type": "message", "role": "assistant"}
+		response := map[string]any{"id": "msg_01", "type": "message", "role": "assistant"}
 		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.Header().Set(constants.HeaderXOllaEndpoint, "vllm-1")
 		w.WriteHeader(http.StatusOK)
@@ -367,7 +367,7 @@ func TestTranslationHandler_PassthroughWithMultipleEndpoints(t *testing.T) {
 
 	backend2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		backendsCalled["backend2"] = true
-		response := map[string]interface{}{"id": "msg_02", "type": "message", "role": "assistant"}
+		response := map[string]any{"id": "msg_02", "type": "message", "role": "assistant"}
 		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.Header().Set(constants.HeaderXOllaEndpoint, "vllm-2")
 		w.WriteHeader(http.StatusOK)
@@ -452,10 +452,10 @@ func TestTranslationHandler_PassthroughWithMultipleEndpoints(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -506,7 +506,7 @@ func TestTranslationHandler_PassthroughUsed_MixedEndpoints(t *testing.T) {
 			passthroughEndpointsReceived = eps
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"id": "msg_123", "type": "message"})
+			return json.NewEncoder(w).Encode(map[string]any{"id": "msg_123", "type": "message"})
 		},
 	}
 
@@ -528,10 +528,10 @@ func TestTranslationHandler_PassthroughUsed_MixedEndpoints(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -573,10 +573,10 @@ func TestTranslationHandler_FallbackToTranslation_PassthroughDisabled(t *testing
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			translationUsed = true
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model": "claude-3-5-sonnet-20241022",
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
+					"messages": []any{
+						map[string]any{"role": "user", "content": "test"},
 					},
 				},
 				ModelName:   "claude-3-5-sonnet-20241022",
@@ -588,10 +588,10 @@ func TestTranslationHandler_FallbackToTranslation_PassthroughDisabled(t *testing
 
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-123",
 				"object":  "chat.completion",
-				"choices": []interface{}{},
+				"choices": []any{},
 			}
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
@@ -617,10 +617,10 @@ func TestTranslationHandler_FallbackToTranslation_PassthroughDisabled(t *testing
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -657,10 +657,10 @@ func TestTranslationHandler_FallbackToTranslation_NoAnthropicSupport(t *testing.
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			translationUsed = true
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model": "claude-3-5-sonnet-20241022",
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
+					"messages": []any{
+						map[string]any{"role": "user", "content": "test"},
 					},
 				},
 				ModelName:   "claude-3-5-sonnet-20241022",
@@ -672,10 +672,10 @@ func TestTranslationHandler_FallbackToTranslation_NoAnthropicSupport(t *testing.
 
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-123",
 				"object":  "chat.completion",
-				"choices": []interface{}{},
+				"choices": []any{},
 			}
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
@@ -701,10 +701,10 @@ func TestTranslationHandler_FallbackToTranslation_NoAnthropicSupport(t *testing.
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -727,9 +727,9 @@ func TestTranslationHandler_PassthroughErrorPreservation(t *testing.T) {
 		w.Header().Set(constants.HeaderXOllaEndpoint, "test-backend")
 		w.WriteHeader(http.StatusBadRequest)
 
-		errorResp := map[string]interface{}{
+		errorResp := map[string]any{
 			"type": "error",
-			"error": map[string]interface{}{
+			"error": map[string]any{
 				"type":    "invalid_request_error",
 				"message": "Invalid model specified",
 			},
@@ -806,10 +806,10 @@ func TestTranslationHandler_PassthroughErrorPreservation(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "invalid-model",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -823,12 +823,12 @@ func TestTranslationHandler_PassthroughErrorPreservation(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 	assert.Equal(t, "passthrough", rec.Header().Get("X-Olla-Mode"))
 
-	var errorResp map[string]interface{}
+	var errorResp map[string]any
 	err := json.Unmarshal(rec.Body.Bytes(), &errorResp)
 	require.NoError(t, err)
 	assert.Equal(t, "error", errorResp["type"])
 
-	errorObj := errorResp["error"].(map[string]interface{})
+	errorObj := errorResp["error"].(map[string]any)
 	assert.Equal(t, "invalid_request_error", errorObj["type"])
 	assert.Contains(t, errorObj["message"], "Invalid model")
 }
@@ -844,7 +844,7 @@ func TestTranslationHandler_ExistingTranslationTestsStillPass(t *testing.T) {
 		writeErrorFunc: func(w http.ResponseWriter, err error, statusCode int) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(statusCode)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"error": err.Error(),
 			})
 		},
@@ -863,10 +863,10 @@ func TestTranslationHandler_ExistingTranslationTestsStillPass(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody := map[string]interface{}{
+	reqBody := map[string]any{
 		"model": "test-model",
-		"messages": []interface{}{
-			map[string]interface{}{
+		"messages": []any{
+			map[string]any{
 				"role":    "user",
 				"content": "Hello",
 			},
@@ -905,7 +905,7 @@ func (m *mockPassthroughProfileLookup) GetAnthropicSupport(endpointType string) 
 type mockPassthroughTranslator struct {
 	name                   string
 	transformRequestFunc   func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error)
-	transformResponseFunc  func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error)
+	transformResponseFunc  func(ctx context.Context, openaiResp any, original *http.Request) (any, error)
 	transformStreamingFunc func(ctx context.Context, openaiStream io.Reader, w http.ResponseWriter, original *http.Request) error
 	writeErrorFunc         func(w http.ResponseWriter, err error, statusCode int)
 	implementsErrorWriter  bool
@@ -923,7 +923,7 @@ func (m *mockPassthroughTranslator) TransformRequest(ctx context.Context, r *htt
 	}
 	// Default implementation
 	body, _ := io.ReadAll(r.Body)
-	var req map[string]interface{}
+	var req map[string]any
 	json.Unmarshal(body, &req)
 
 	modelName := ""
@@ -937,20 +937,20 @@ func (m *mockPassthroughTranslator) TransformRequest(ctx context.Context, r *htt
 	}
 
 	return &translator.TransformedRequest{
-		OpenAIRequest: map[string]interface{}{
+		OpenAIRequest: map[string]any{
 			"model":    modelName,
-			"messages": []interface{}{},
+			"messages": []any{},
 		},
 		ModelName:   modelName,
 		IsStreaming: isStreaming,
 	}, nil
 }
 
-func (m *mockPassthroughTranslator) TransformResponse(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
+func (m *mockPassthroughTranslator) TransformResponse(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
 	if m.transformResponseFunc != nil {
 		return m.transformResponseFunc(ctx, openaiResp, original)
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"id":      "mock-response-id",
 		"content": "mock response",
 	}, nil
@@ -996,7 +996,7 @@ func (m *mockPassthroughTranslator) CanPassthrough(endpoints []*domain.Endpoint,
 
 // PreparePassthrough implements PassthroughCapable
 func (m *mockPassthroughTranslator) PreparePassthrough(bodyBytes []byte, r *http.Request, profileLookup translator.ProfileLookup) (*translator.PassthroughRequest, error) {
-	var req map[string]interface{}
+	var req map[string]any
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}
@@ -1102,11 +1102,11 @@ func TestTranslationHandler_MetricsRecordedForPassthrough(t *testing.T) {
 	mockBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Add small delay to ensure measurable latency
 		time.Sleep(1 * time.Millisecond)
-		response := map[string]interface{}{
+		response := map[string]any{
 			"id":      "msg_01XFDUDYJgAACzvnptvVoYEL",
 			"type":    "message",
 			"role":    "assistant",
-			"content": []map[string]interface{}{{"type": "text", "text": "Hello"}},
+			"content": []map[string]any{{"type": "text", "text": "Hello"}},
 			"model":   "claude-3-5-sonnet-20241022",
 		}
 		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
@@ -1181,10 +1181,10 @@ func TestTranslationHandler_MetricsRecordedForPassthrough(t *testing.T) {
 	handler := app.translationHandler(trans)
 
 	// Send non-streaming request
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -1232,10 +1232,10 @@ func TestTranslationHandler_MetricsRecordedForTranslation(t *testing.T) {
 		profileLookup:      profileLookup,
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model": "claude-3-5-sonnet-20241022",
-					"messages": []interface{}{
-						map[string]interface{}{"role": "user", "content": "test"},
+					"messages": []any{
+						map[string]any{"role": "user", "content": "test"},
 					},
 				},
 				ModelName:   "claude-3-5-sonnet-20241022",
@@ -1243,8 +1243,8 @@ func TestTranslationHandler_MetricsRecordedForTranslation(t *testing.T) {
 				TargetPath:  "/v1/chat/completions",
 			}, nil
 		},
-		transformResponseFunc: func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
-			return map[string]interface{}{
+		transformResponseFunc: func(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
+			return map[string]any{
 				"id":   "msg_123",
 				"type": "message",
 			}, nil
@@ -1254,10 +1254,10 @@ func TestTranslationHandler_MetricsRecordedForTranslation(t *testing.T) {
 
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
-			response := map[string]interface{}{
+			response := map[string]any{
 				"id":      "chatcmpl-123",
 				"object":  "chat.completion",
-				"choices": []interface{}{},
+				"choices": []any{},
 			}
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
@@ -1281,10 +1281,10 @@ func TestTranslationHandler_MetricsRecordedForTranslation(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -1337,24 +1337,24 @@ func TestTranslationHandler_MetricsRecordedForPassthrough_MixedEndpoints(t *test
 		profileLookup:      profileLookup,
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":    "claude-3-5-sonnet-20241022",
-					"messages": []interface{}{map[string]interface{}{"role": "user", "content": "test"}},
+					"messages": []any{map[string]any{"role": "user", "content": "test"}},
 				},
 				ModelName:   "claude-3-5-sonnet-20241022",
 				IsStreaming: false,
 				TargetPath:  "/v1/chat/completions",
 			}, nil
 		},
-		transformResponseFunc: func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
-			return map[string]interface{}{"id": "msg_123", "type": "message"}, nil
+		transformResponseFunc: func(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
+			return map[string]any{"id": "msg_123", "type": "message"}, nil
 		},
 		implementsErrorWriter: true,
 	}
 
 	proxyService := &mockProxyService{
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
-			response := map[string]interface{}{"id": "chatcmpl-123", "object": "chat.completion", "choices": []interface{}{}}
+			response := map[string]any{"id": "chatcmpl-123", "object": "chat.completion", "choices": []any{}}
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
 			return json.NewEncoder(w).Encode(response)
@@ -1377,10 +1377,10 @@ func TestTranslationHandler_MetricsRecordedForPassthrough_MixedEndpoints(t *test
 
 	handler := app.translationHandler(trans)
 
-	anthropicReq := map[string]interface{}{
+	anthropicReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages": []map[string]interface{}{
+		"messages": []map[string]any{
 			{"role": "user", "content": "Hello"},
 		},
 	}
@@ -1411,7 +1411,7 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 		time.Sleep(1 * time.Millisecond)
 		// Check if request is streaming based on request body
 		body, _ := io.ReadAll(r.Body)
-		var req map[string]interface{}
+		var req map[string]any
 		json.Unmarshal(body, &req)
 
 		if stream, ok := req["stream"].(bool); ok && stream {
@@ -1422,7 +1422,7 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 			fmt.Fprint(w, "event: message_stop\ndata: {\\\"type\\\":\\\"message_stop\\\"}\n\n")
 		} else {
 			// Return JSON response
-			response := map[string]interface{}{"id": "msg_123", "type": "message"}
+			response := map[string]any{"id": "msg_123", "type": "message"}
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(response)
@@ -1454,7 +1454,7 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 		implementsErrorWriter: true,
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			body, _ := io.ReadAll(r.Body)
-			var req map[string]interface{}
+			var req map[string]any
 			json.Unmarshal(body, &req)
 
 			modelName := "claude-3-5-sonnet-20241022"
@@ -1514,11 +1514,11 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 	handler := app.translationHandler(trans)
 
 	// Test 1: Non-streaming request
-	nonStreamingReq := map[string]interface{}{
+	nonStreamingReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
 		"stream":     false,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "Hello"}},
+		"messages":   []map[string]any{{"role": "user", "content": "Hello"}},
 	}
 	reqBody, _ := json.Marshal(nonStreamingReq)
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -1528,11 +1528,11 @@ func TestTranslationHandler_MetricsRecordedForStreamingVsNonStreaming(t *testing
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	// Test 2: Streaming request
-	streamingReq := map[string]interface{}{
+	streamingReq := map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
 		"stream":     true,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "Hello"}},
+		"messages":   []map[string]any{{"role": "user", "content": "Hello"}},
 	}
 	reqBody2, _ := json.Marshal(streamingReq)
 	req2 := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody2))
@@ -1557,7 +1557,7 @@ func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 	successBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Add small delay to ensure measurable latency
 		time.Sleep(1 * time.Millisecond)
-		response := map[string]interface{}{"id": "msg_123", "type": "message"}
+		response := map[string]any{"id": "msg_123", "type": "message"}
 		w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(response)
@@ -1565,9 +1565,9 @@ func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 	defer successBackend.Close()
 
 	errorBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		errorResp := map[string]interface{}{
+		errorResp := map[string]any{
 			"type": "error",
-			"error": map[string]interface{}{
+			"error": map[string]any{
 				"type":    "invalid_request_error",
 				"message": "Test error",
 			},
@@ -1636,10 +1636,10 @@ func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "Hello"}},
+		"messages":   []map[string]any{{"role": "user", "content": "Hello"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -1667,10 +1667,10 @@ func TestTranslationHandler_MetricsRecordedForSuccessVsError(t *testing.T) {
 
 	handler2 := app2.translationHandler(trans)
 
-	reqBody2, _ := json.Marshal(map[string]interface{}{
+	reqBody2, _ := json.Marshal(map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "Hello"}},
+		"messages":   []map[string]any{{"role": "user", "content": "Hello"}},
 	})
 
 	req2 := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody2))
@@ -1724,7 +1724,7 @@ func TestTranslatorMode_SetOnPassthroughPath(t *testing.T) {
 			// before this point.
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message"})
 		},
 	}
 
@@ -1746,10 +1746,10 @@ func TestTranslatorMode_SetOnPassthroughPath(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "hi"}},
+		"messages":   []map[string]any{{"role": "user", "content": "hi"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -1785,17 +1785,17 @@ func TestTranslatorMode_SetOnTranslationPath(t *testing.T) {
 		profileLookup:      profileLookup,
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{
+				OpenAIRequest: map[string]any{
 					"model":    "claude-3-5-sonnet-20241022",
-					"messages": []interface{}{map[string]interface{}{"role": "user", "content": "test"}},
+					"messages": []any{map[string]any{"role": "user", "content": "test"}},
 				},
 				ModelName:   "claude-3-5-sonnet-20241022",
 				IsStreaming: false,
 				TargetPath:  "/v1/chat/completions",
 			}, nil
 		},
-		transformResponseFunc: func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
-			return map[string]interface{}{"id": "msg_translated", "type": "message"}, nil
+		transformResponseFunc: func(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
+			return map[string]any{"id": "msg_translated", "type": "message"}, nil
 		},
 		implementsErrorWriter: true,
 	}
@@ -1804,8 +1804,8 @@ func TestTranslatorMode_SetOnTranslationPath(t *testing.T) {
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{
-				"id": "chatcmpl-123", "object": "chat.completion", "choices": []interface{}{},
+			return json.NewEncoder(w).Encode(map[string]any{
+				"id": "chatcmpl-123", "object": "chat.completion", "choices": []any{},
 			})
 		},
 	}
@@ -1824,10 +1824,10 @@ func TestTranslatorMode_SetOnTranslationPath(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 1024,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "hi"}},
+		"messages":   []map[string]any{{"role": "user", "content": "hi"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -1879,7 +1879,7 @@ func TestPassthrough_ProfileMessagesPathOverride(t *testing.T) {
 			capturedPath = r.URL.Path
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message", "id": "msg_dmr"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message", "id": "msg_dmr"})
 		},
 	}
 
@@ -1897,10 +1897,10 @@ func TestPassthrough_ProfileMessagesPathOverride(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":      "ai/llama3.2",
 		"max_tokens": 512,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "hello"}},
+		"messages":   []map[string]any{{"role": "user", "content": "hello"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -1966,7 +1966,7 @@ func TestPassthrough_MixedMessagesPathsFiltersToCompatibleSubset(t *testing.T) {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.Header().Set(constants.HeaderXOllaEndpoint, eps[0].Name)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message", "id": "msg_vllm"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message", "id": "msg_vllm"})
 		},
 	}
 
@@ -1984,10 +1984,10 @@ func TestPassthrough_MixedMessagesPathsFiltersToCompatibleSubset(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":      "claude-3-5-sonnet-20241022",
 		"max_tokens": 512,
-		"messages":   []map[string]interface{}{{"role": "user", "content": "hello"}},
+		"messages":   []map[string]any{{"role": "user", "content": "hello"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -2042,7 +2042,7 @@ func TestPassthrough_MixedFleet_TwoVllmOneDmr_PicksVllmSubset(t *testing.T) {
 			capturedPath = r.URL.Path
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message", "id": "msg_1"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message", "id": "msg_1"})
 		},
 	}
 
@@ -2060,9 +2060,9 @@ func TestPassthrough_MixedFleet_TwoVllmOneDmr_PicksVllmSubset(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":    "claude-3-5-sonnet-20241022",
-		"messages": []map[string]interface{}{{"role": "user", "content": "hello"}},
+		"messages": []map[string]any{{"role": "user", "content": "hello"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -2115,7 +2115,7 @@ func TestPassthrough_UniformDmrFleet_AllEndpointsPassed(t *testing.T) {
 			capturedPath = r.URL.Path
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message", "id": "msg_dmr"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message", "id": "msg_dmr"})
 		},
 	}
 
@@ -2133,9 +2133,9 @@ func TestPassthrough_UniformDmrFleet_AllEndpointsPassed(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":    "ai/llama3.2",
-		"messages": []map[string]interface{}{{"role": "user", "content": "hello"}},
+		"messages": []map[string]any{{"role": "user", "content": "hello"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -2179,14 +2179,14 @@ func TestPassthrough_LimitationFiltering_NoToolUse(t *testing.T) {
 		profileLookup:      profileLookup,
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{"model": "claude-3-5-sonnet-20241022", "messages": []interface{}{}},
+				OpenAIRequest: map[string]any{"model": "claude-3-5-sonnet-20241022", "messages": []any{}},
 				ModelName:     "claude-3-5-sonnet-20241022",
 				IsStreaming:   false,
 				TargetPath:    "/v1/chat/completions",
 			}, nil
 		},
-		transformResponseFunc: func(ctx context.Context, openaiResp interface{}, original *http.Request) (interface{}, error) {
-			return map[string]interface{}{"type": "message", "id": "msg_translated"}, nil
+		transformResponseFunc: func(ctx context.Context, openaiResp any, original *http.Request) (any, error) {
+			return map[string]any{"type": "message", "id": "msg_translated"}, nil
 		},
 		implementsErrorWriter: true,
 	}
@@ -2195,7 +2195,7 @@ func TestPassthrough_LimitationFiltering_NoToolUse(t *testing.T) {
 		proxyFunc: func(ctx context.Context, w http.ResponseWriter, r *http.Request, eps []*domain.Endpoint, stats *ports.RequestStats, rlog logger.StyledLogger) error {
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message", "id": "msg_proxy"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message", "id": "msg_proxy"})
 		},
 	}
 
@@ -2214,11 +2214,11 @@ func TestPassthrough_LimitationFiltering_NoToolUse(t *testing.T) {
 	handler := app.translationHandler(trans)
 
 	// Request WITH tools — endpoint must be excluded, falls back to translation.
-	reqWithTools, _ := json.Marshal(map[string]interface{}{
+	reqWithTools, _ := json.Marshal(map[string]any{
 		"model":    "claude-3-5-sonnet-20241022",
-		"messages": []map[string]interface{}{{"role": "user", "content": "use a tool"}},
-		"tools": []map[string]interface{}{
-			{"name": "get_weather", "description": "Get weather", "input_schema": map[string]interface{}{"type": "object"}},
+		"messages": []map[string]any{{"role": "user", "content": "use a tool"}},
+		"tools": []map[string]any{
+			{"name": "get_weather", "description": "Get weather", "input_schema": map[string]any{"type": "object"}},
 		},
 	})
 
@@ -2231,9 +2231,9 @@ func TestPassthrough_LimitationFiltering_NoToolUse(t *testing.T) {
 		"endpoint with no_tool_use must be excluded when request uses tools — falls back to translation")
 
 	// Request WITHOUT tools — endpoint must be included, passthrough used.
-	reqWithoutTools, _ := json.Marshal(map[string]interface{}{
+	reqWithoutTools, _ := json.Marshal(map[string]any{
 		"model":    "claude-3-5-sonnet-20241022",
-		"messages": []map[string]interface{}{{"role": "user", "content": "hello"}},
+		"messages": []map[string]any{{"role": "user", "content": "hello"}},
 	})
 
 	req2 := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqWithoutTools))
@@ -2278,7 +2278,7 @@ func TestPassthrough_LimitationFiltering_TokenCounting(t *testing.T) {
 			proxyCalled = true
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message", "id": "msg_tc"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message", "id": "msg_tc"})
 		},
 	}
 
@@ -2296,9 +2296,9 @@ func TestPassthrough_LimitationFiltering_TokenCounting(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"model":    "claude-3-5-sonnet-20241022",
-		"messages": []map[string]interface{}{{"role": "user", "content": "hello"}},
+		"messages": []map[string]any{{"role": "user", "content": "hello"}},
 	})
 
 	req := httptest.NewRequest("POST", "/olla/anthropic/v1/messages", bytes.NewReader(reqBody))
@@ -2351,7 +2351,7 @@ func TestPassthrough_LimitationFiltering_MixedFleet(t *testing.T) {
 			capturedEndpoints = eps
 			w.Header().Set(constants.HeaderContentType, constants.ContentTypeJSON)
 			w.WriteHeader(http.StatusOK)
-			return json.NewEncoder(w).Encode(map[string]interface{}{"type": "message", "id": "msg_mixed"})
+			return json.NewEncoder(w).Encode(map[string]any{"type": "message", "id": "msg_mixed"})
 		},
 	}
 
@@ -2369,11 +2369,11 @@ func TestPassthrough_LimitationFiltering_MixedFleet(t *testing.T) {
 
 	handler := app.translationHandler(trans)
 
-	reqWithTools, _ := json.Marshal(map[string]interface{}{
+	reqWithTools, _ := json.Marshal(map[string]any{
 		"model":    "claude-3-5-sonnet-20241022",
-		"messages": []map[string]interface{}{{"role": "user", "content": "use a tool"}},
-		"tools": []map[string]interface{}{
-			{"name": "search", "description": "Search", "input_schema": map[string]interface{}{"type": "object"}},
+		"messages": []map[string]any{{"role": "user", "content": "use a tool"}},
+		"tools": []map[string]any{
+			{"name": "search", "description": "Search", "input_schema": map[string]any{"type": "object"}},
 		},
 	})
 

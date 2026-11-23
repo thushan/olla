@@ -38,7 +38,7 @@ func TestOllamaConverter_ConvertToFormat(t *testing.T) {
 			Capabilities: []string{"chat", "completion"},
 			DiskSize:     40000000000,
 			LastSeen:     now,
-			Metadata: map[string]interface{}{
+			Metadata: map[string]any{
 				"digest": "sha256:abc123def456",
 			},
 		},

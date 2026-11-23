@@ -176,7 +176,7 @@ func dropGenerativeForNonGenerative(capabilities map[string]bool, modelType stri
 }
 
 // inferCapabilitiesFromMetadata infers model capabilities from various metadata fields
-func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]interface{}) []string {
+func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength int64, metadata map[string]any) []string {
 	capabilities := make(map[string]bool)
 	config := getConfig()
 
@@ -228,7 +228,7 @@ func inferCapabilitiesFromMetadata(modelType, modelName string, contextLength in
 
 	// Preserve explicitly declared capabilities from source metadata
 	if metadata != nil {
-		if caps, ok := metadata["capabilities"].([]interface{}); ok {
+		if caps, ok := metadata["capabilities"].([]any); ok {
 			for _, capName := range caps {
 				if capStr, ok := capName.(string); ok {
 					capabilities[capStr] = true
@@ -461,7 +461,7 @@ func extractStandardFamily(pattern PatternConfig, matches []string) (family, var
 }
 
 // parseContextLength handles type-polymorphic context length values from diverse platforms.
-func parseContextLength(value interface{}) int64 {
+func parseContextLength(value any) int64 {
 	switch v := value.(type) {
 	case int64:
 		return v
@@ -479,7 +479,7 @@ func parseContextLength(value interface{}) int64 {
 
 // extractPublisher identifies model creators through metadata, naming conventions,
 // and family-to-publisher mappings.
-func extractPublisher(modelName string, metadata map[string]interface{}) string {
+func extractPublisher(modelName string, metadata map[string]any) string {
 	if metadata != nil {
 		if publisher, ok := metadata["publisher"].(string); ok && publisher != "" {
 			return publisher

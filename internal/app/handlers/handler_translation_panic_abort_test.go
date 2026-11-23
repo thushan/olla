@@ -36,7 +36,7 @@ func TestStreamingPanic_AfterWrite_AbortsConnection(t *testing.T) {
 		implementsErrorWriter: true,
 		transformRequestFunc: func(ctx context.Context, r *http.Request) (*translator.TransformedRequest, error) {
 			return &translator.TransformedRequest{
-				OpenAIRequest: map[string]interface{}{"model": "test-model", "stream": true},
+				OpenAIRequest: map[string]any{"model": "test-model", "stream": true},
 				ModelName:     "test-model",
 				IsStreaming:   true,
 			}, nil
@@ -92,7 +92,7 @@ func TestStreamingPanic_AfterWrite_AbortsConnection(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	body, _ := json.Marshal(map[string]interface{}{"model": "test-model", "stream": true})
+	body, _ := json.Marshal(map[string]any{"model": "test-model", "stream": true})
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/test", strings.NewReader(string(body)))
 	require.NoError(t, err)
 	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)

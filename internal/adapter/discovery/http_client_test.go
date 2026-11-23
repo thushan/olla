@@ -28,7 +28,7 @@ func TestDiscoverModels(t *testing.T) {
 		serverStatus   int
 		expectedModels int
 		expectedError  bool
-		errorType      interface{}
+		errorType      any
 		validateModels func(*testing.T, []*domain.ModelInfo)
 	}{
 		{

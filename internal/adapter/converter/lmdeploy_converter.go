@@ -32,7 +32,7 @@ func (c *LMDeployConverter) GetFormatName() string {
 	return constants.ProviderTypeLMDeploy
 }
 
-func (c *LMDeployConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *LMDeployConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
 	filtered := filterModels(models, filters)
 
 	data := make([]profile.LMDeployModel, 0, len(filtered))

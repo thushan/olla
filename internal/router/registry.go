@@ -136,7 +136,7 @@ func (r *RouteRegistry) GetRoutes() map[string]RouteInfo {
 	return r.routes
 }
 
-func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters interface{}) {
+func (r *RouteRegistry) WireUpWithSecurityChain(mux *http.ServeMux, securityAdapters any) {
 	type securityAdapterProvider interface {
 		CreateChainMiddleware(reject security.RejectFunc) func(http.Handler) http.Handler
 		CreateRateLimitMiddleware() func(http.Handler) http.Handler

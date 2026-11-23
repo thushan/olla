@@ -116,7 +116,7 @@ func (t *Translator) getSessionID(r *http.Request) string {
 // forEachSystemContentBlock iterates over system prompt content blocks regardless of input format.
 // This is a convenience wrapper around the standalone forEachSystemBlock function.
 // See forEachSystemBlock in token_count.go for the implementation details.
-func (t *Translator) forEachSystemContentBlock(system interface{}, fn func(block ContentBlock) error) error {
+func (t *Translator) forEachSystemContentBlock(system any, fn func(block ContentBlock) error) error {
 	return forEachSystemBlock(system, fn)
 }
 
@@ -157,9 +157,9 @@ func (t *Translator) WriteErrorQuiet(w http.ResponseWriter, err error, statusCod
 	}
 
 	// Anthropic error format
-	errorResp := map[string]interface{}{
+	errorResp := map[string]any{
 		"type": "error",
-		"error": map[string]interface{}{
+		"error": map[string]any{
 			"type":    errorType,
 			"message": err.Error(),
 		},

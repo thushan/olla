@@ -10,7 +10,7 @@ import (
 )
 
 // funcName extracts the full symbol name of a function value.
-func funcName(f interface{}) string {
+func funcName(f any) string {
 	return runtime.FuncForPC(reflect.ValueOf(f).Pointer()).Name()
 }
 

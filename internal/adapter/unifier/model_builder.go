@@ -12,7 +12,7 @@ import (
 // ModelBuilder simplifies the creation of unified models
 type ModelBuilder struct {
 	model    *domain.UnifiedModel
-	metadata map[string]interface{}
+	metadata map[string]any
 }
 
 // NewModelBuilder creates a new model builder
@@ -24,7 +24,7 @@ func NewModelBuilder() *ModelBuilder {
 			Capabilities:    []string{},
 			LastSeen:        time.Now(),
 		},
-		metadata: make(map[string]interface{}),
+		metadata: make(map[string]any),
 	}
 }
 
@@ -102,7 +102,7 @@ func (b *ModelBuilder) AddCapabilities(capabilities []string) *ModelBuilder {
 }
 
 // WithMetadata adds a metadata entry
-func (b *ModelBuilder) WithMetadata(key string, value interface{}) *ModelBuilder {
+func (b *ModelBuilder) WithMetadata(key string, value any) *ModelBuilder {
 	b.metadata[key] = value
 	return b
 }
@@ -150,7 +150,7 @@ func NewModelExtractor() *ModelExtractor {
 }
 
 // ExtractParameterInfo extracts parameter size and count from metadata
-func (e *ModelExtractor) ExtractParameterInfo(metadata map[string]interface{}, modelSize int64) (string, int64) {
+func (e *ModelExtractor) ExtractParameterInfo(metadata map[string]any, modelSize int64) (string, int64) {
 	paramSize := ""
 	paramCount := int64(0)
 
@@ -167,7 +167,7 @@ func (e *ModelExtractor) ExtractParameterInfo(metadata map[string]interface{}, m
 }
 
 // ExtractQuantization extracts and normalizes quantization from metadata
-func (e *ModelExtractor) ExtractQuantization(metadata map[string]interface{}) string {
+func (e *ModelExtractor) ExtractQuantization(metadata map[string]any) string {
 	if quantStr, ok := metadata["quantization_level"].(string); ok {
 		return normalizeQuantization(quantStr)
 	}
@@ -178,7 +178,7 @@ func (e *ModelExtractor) ExtractQuantization(metadata map[string]interface{}) st
 }
 
 // ExtractFamilyAndVariant extracts model family and variant
-func (e *ModelExtractor) ExtractFamilyAndVariant(modelName, modelFamily string, metadata map[string]interface{}) (string, string) {
+func (e *ModelExtractor) ExtractFamilyAndVariant(modelName, modelFamily string, metadata map[string]any) (string, string) {
 	arch := ""
 	if archStr, ok := metadata["arch"].(string); ok {
 		arch = archStr
@@ -198,12 +198,12 @@ func (e *ModelExtractor) ExtractFamilyAndVariant(modelName, modelFamily string, 
 // ExtractModelType extracts the model kind from metadata. The specific kind
 // (model_type) wins over the generic top-level type, which OpenAI-style and
 // LM Studio parsers set to "model" and which would otherwise hide it.
-func (e *ModelExtractor) ExtractModelType(metadata map[string]interface{}) string {
+func (e *ModelExtractor) ExtractModelType(metadata map[string]any) string {
 	return domain.ModelKindFromMetadata(metadata)
 }
 
 // ExtractPublisher extracts publisher from model name and metadata
-func (e *ModelExtractor) ExtractPublisher(modelName string, metadata map[string]interface{}) string {
+func (e *ModelExtractor) ExtractPublisher(modelName string, metadata map[string]any) string {
 	// Check metadata first
 	if publisher, ok := metadata["publisher"].(string); ok {
 		return publisher
@@ -214,7 +214,7 @@ func (e *ModelExtractor) ExtractPublisher(modelName string, metadata map[string]
 }
 
 // DetectPlatform detects the platform from model metadata and endpoint info
-func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]interface{}, endpointType string) string {
+func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]any, endpointType string) string {
 	// Check metadata for platform hints
 	if metadata != nil {
 		if platform, ok := metadata["platform"].(string); ok {
@@ -247,7 +247,7 @@ func (e *ModelExtractor) DetectPlatform(format string, metadata map[string]inter
 }
 
 // MapModelState maps model properties to a state string
-func (e *ModelExtractor) MapModelState(metadata map[string]interface{}, modelSize int64) string {
+func (e *ModelExtractor) MapModelState(metadata map[string]any, modelSize int64) string {
 	// Check various state indicators
 	if metadata != nil {
 		if state, ok := metadata["state"].(string); ok {

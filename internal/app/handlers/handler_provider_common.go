@@ -240,7 +240,7 @@ func (a *Application) getProviderModels(ctx context.Context, providerType string
 
 // convertModelsToProviderFormat handles the final transformation step for model listings,
 // converting our internal UnifiedModel format to whatever the client expects (Ollama, OpenAI, etc.)
-func (a *Application) convertModelsToProviderFormat(models []*domain.UnifiedModel, format string) (interface{}, error) {
+func (a *Application) convertModelsToProviderFormat(models []*domain.UnifiedModel, format string) (any, error) {
 	converter, err := a.converterFactory.GetConverter(format)
 	if err != nil {
 		return nil, fmt.Errorf("unsupported format: %w", err)

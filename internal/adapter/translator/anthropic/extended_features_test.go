@@ -19,12 +19,12 @@ func TestTransformRequest_WithThinkingField(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		thinking interface{}
+		thinking any
 		desc     string
 	}{
 		{
 			name:     "thinking_as_object",
-			thinking: map[string]interface{}{"type": "enabled", "budget_tokens": 1000},
+			thinking: map[string]any{"type": "enabled", "budget_tokens": 1000},
 			desc:     "Thinking field as object with configuration",
 		},
 		{
@@ -57,7 +57,7 @@ func TestTransformRequest_WithThinkingField(t *testing.T) {
 			require.NoError(t, err)
 
 			// Verify the JSON contains the thinking field
-			var parsedBody map[string]interface{}
+			var parsedBody map[string]any
 			err = json.Unmarshal(body, &parsedBody)
 			require.NoError(t, err)
 			assert.Contains(t, parsedBody, "thinking", tt.desc)
@@ -87,12 +87,12 @@ func TestTransformRequest_SystemPromptAsArray(t *testing.T) {
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type": "text",
 				"text": "You are a helpful assistant. ",
 			},
-			map[string]interface{}{
+			map[string]any{
 				"type": "text",
 				"text": "Always be concise.",
 			},
@@ -115,7 +115,7 @@ func TestTransformRequest_SystemPromptAsArray(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2) // system + user message
 
@@ -135,12 +135,12 @@ func TestTransformRequest_SystemPromptArrayWithEmptyBlocks(t *testing.T) {
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type": "text",
 				"text": "",
 			},
-			map[string]interface{}{
+			map[string]any{
 				"type": "text",
 				"text": "Only this matters",
 			},
@@ -163,7 +163,7 @@ func TestTransformRequest_SystemPromptArrayWithEmptyBlocks(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
 
@@ -179,7 +179,7 @@ func TestTransformRequest_SystemPromptArrayEmpty(t *testing.T) {
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		System:    []interface{}{},
+		System:    []any{},
 		Messages: []AnthropicMessage{
 			{
 				Role:    "user",
@@ -198,7 +198,7 @@ func TestTransformRequest_SystemPromptArrayEmpty(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	// Should only have user message, no system message for empty array
 	require.Len(t, messages, 1)
@@ -231,7 +231,7 @@ func TestTransformRequest_SystemPromptString(t *testing.T) {
 	result, err := translator.TransformRequest(context.Background(), req)
 	require.NoError(t, err)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
 
@@ -247,8 +247,8 @@ func TestTransformRequest_CombinedThinkingAndSystemArray(t *testing.T) {
 	anthropicReq := AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type": "text",
 				"text": "You are an expert problem solver.",
 			},
@@ -259,7 +259,7 @@ func TestTransformRequest_CombinedThinkingAndSystemArray(t *testing.T) {
 				Content: "Solve this puzzle",
 			},
 		},
-		Thinking: map[string]interface{}{
+		Thinking: map[string]any{
 			"type":          "enabled",
 			"budget_tokens": 2000,
 		},
@@ -276,7 +276,7 @@ func TestTransformRequest_CombinedThinkingAndSystemArray(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 
-	messages, ok := result.OpenAIRequest["messages"].([]map[string]interface{})
+	messages, ok := result.OpenAIRequest["messages"].([]map[string]any)
 	require.True(t, ok)
 	require.Len(t, messages, 2)
 
@@ -293,7 +293,7 @@ func TestTransformRequest_CombinedThinkingAndSystemArray(t *testing.T) {
 func TestCountSystemChars(t *testing.T) {
 	tests := []struct {
 		name          string
-		system        interface{}
+		system        any
 		expectedChars int
 		desc          string
 	}{
@@ -317,8 +317,8 @@ func TestCountSystemChars(t *testing.T) {
 		},
 		{
 			name: "array_single_block",
-			system: []interface{}{
-				map[string]interface{}{
+			system: []any{
+				map[string]any{
 					"type": "text",
 					"text": "Hello",
 				},
@@ -328,12 +328,12 @@ func TestCountSystemChars(t *testing.T) {
 		},
 		{
 			name: "array_multiple_blocks",
-			system: []interface{}{
-				map[string]interface{}{
+			system: []any{
+				map[string]any{
 					"type": "text",
 					"text": "Hello ",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "text",
 					"text": "World",
 				},
@@ -343,12 +343,12 @@ func TestCountSystemChars(t *testing.T) {
 		},
 		{
 			name: "array_with_empty_blocks",
-			system: []interface{}{
-				map[string]interface{}{
+			system: []any{
+				map[string]any{
 					"type": "text",
 					"text": "",
 				},
-				map[string]interface{}{
+				map[string]any{
 					"type": "text",
 					"text": "Test",
 				},
@@ -358,7 +358,7 @@ func TestCountSystemChars(t *testing.T) {
 		},
 		{
 			name:          "empty_array",
-			system:        []interface{}{},
+			system:        []any{},
 			expectedChars: 0,
 			desc:          "Empty array should return 0",
 		},
@@ -409,8 +409,8 @@ func TestEstimateTokens_WithSystemArray(t *testing.T) {
 	req := &AnthropicRequest{
 		Model:     "claude-3-5-sonnet-20241022",
 		MaxTokens: 1024,
-		System: []interface{}{
-			map[string]interface{}{
+		System: []any{
+			map[string]any{
 				"type": "text",
 				"text": "You are a helpful assistant",
 			},

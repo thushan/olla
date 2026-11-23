@@ -94,11 +94,11 @@ func TestProcessStreamLine_ReasoningBeatsContent(t *testing.T) {
 	deltas := findEventsByType(events, "content_block_delta")
 	require.Len(t, deltas, 2)
 
-	firstDelta, ok := deltas[0]["delta"].(map[string]interface{})
+	firstDelta, ok := deltas[0]["delta"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "thinking_delta", firstDelta["type"], "first delta must be thinking_delta")
 
-	secondDelta, ok := deltas[1]["delta"].(map[string]interface{})
+	secondDelta, ok := deltas[1]["delta"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "text_delta", secondDelta["type"], "second delta must be text_delta")
 
@@ -284,7 +284,7 @@ func TestProcessStreamLine_UsageFinalChunk(t *testing.T) {
 	// (JSON numbers always unmarshal to float64 via map[string]interface{}).
 	messageDelta := getEventByType(events, "message_delta")
 	require.NotNil(t, messageDelta)
-	usage, ok := messageDelta["usage"].(map[string]interface{})
+	usage, ok := messageDelta["usage"].(map[string]any)
 	require.True(t, ok, "message_delta must have usage")
 
 	inputTokens, hasInput := usage["input_tokens"].(float64)
