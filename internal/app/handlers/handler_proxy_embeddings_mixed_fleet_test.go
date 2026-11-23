@@ -270,7 +270,7 @@ func runMixedFleet(t *testing.T, profileFactory profile.ProfileFactory, chain *i
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set(constants.HeaderContentType, constants.ContentTypeJSON)
 	if strings.HasPrefix(path, "/olla/proxy/") {
-		req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+		req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 	}
 	w := httptest.NewRecorder()
 

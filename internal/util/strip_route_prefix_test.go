@@ -1,20 +1,17 @@
 package util
 
 import (
-	"context"
 	"testing"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 // Characterisation of StripRoutePrefix, the lookup the proxy handler drives
-// with its route-prefix context key. The key is passed in as a plain string
-// today; callers own the pairing of writer and lookup key. These rows pin the
-// stripping behaviour for the value present, absent, and non-matching cases.
+// with its route-prefix context key. The lookup key is the typed route-prefix
+// key inside the function; these rows pin the stripping behaviour for the
+// value present, absent, and non-matching cases.
 func TestStripRoutePrefix_PresentAbsentAndNoMatch(t *testing.T) {
 	t.Parallel()
-
-	// A variable key on purpose: the production caller passes its own constant,
-	// and the pairing is theirs, not this function's.
-	lookupKey := "route_prefix"
 
 	tests := []struct {
 		name     string
@@ -34,9 +31,9 @@ func TestStripRoutePrefix_PresentAbsentAndNoMatch(t *testing.T) {
 			t.Parallel()
 			ctx := t.Context()
 			if tt.ctxValue != "" {
-				ctx = context.WithValue(ctx, lookupKey, tt.ctxValue)
+				ctx = constants.WithRoutePrefix(ctx, tt.ctxValue)
 			}
-			if got := StripRoutePrefix(ctx, tt.path, lookupKey); got != tt.want {
+			if got := StripRoutePrefix(ctx, tt.path); got != tt.want {
 				t.Errorf("StripRoutePrefix() = %q, want %q", got, tt.want)
 			}
 		})

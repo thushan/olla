@@ -90,7 +90,7 @@ func (a *Application) providerProxyHandler(w http.ResponseWriter, r *http.Reques
 	// normalised name (lm-studio) would produce a non-matching prefix and forward
 	// the full /olla/lmstudio/... path to the backend, causing a 404.
 	providerPrefix := getRawProviderPrefix(r.URL.Path)
-	ctx = context.WithValue(ctx, constants.ContextRoutePrefixKey, providerPrefix)
+	ctx = constants.WithRoutePrefix(ctx, providerPrefix)
 	r = r.WithContext(ctx)
 
 	ctx, r = a.setupRequestContext(r, pr.stats)

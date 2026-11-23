@@ -53,7 +53,7 @@ func injectKey(parent context.Context, key, source string) (context.Context, *St
 	outcome := &StickyOutcome{}
 	ctx := context.WithValue(parent, constants.ContextStickyKeyKey, key)
 	ctx = context.WithValue(ctx, constants.ContextStickyKeySourceKey, source)
-	ctx = context.WithValue(ctx, constants.ContextStickyOutcomeKey, outcome)
+	ctx = constants.WithStickyOutcome(ctx, outcome)
 	return ctx, outcome
 }
 
@@ -147,7 +147,7 @@ func TestStickySessionWrapper_NoKey(t *testing.T) {
 	// Empty key — wrapper should pass through transparently.
 	ctx := t.Context()
 	outcome := &StickyOutcome{}
-	ctx = context.WithValue(ctx, constants.ContextStickyOutcomeKey, outcome)
+	ctx = constants.WithStickyOutcome(ctx, outcome)
 
 	chosen, err := w.Select(ctx, []*domain.Endpoint{ep1})
 	require.NoError(t, err)

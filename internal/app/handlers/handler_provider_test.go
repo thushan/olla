@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thushan/olla/internal/adapter/balancer"
 	"github.com/thushan/olla/internal/adapter/inspector"
 	"github.com/thushan/olla/internal/config"
 	"github.com/thushan/olla/internal/core/constants"
@@ -177,9 +176,9 @@ func (m *captureProxyService) ProxyRequestToEndpoints(ctx context.Context, w htt
 	m.capturedCtx = r.Context()
 	m.capturedPath = r.URL.Path
 	// Simulate the sticky wrapper writing outcome headers before the proxy flushes.
-	if outcome, ok := r.Context().Value(constants.ContextStickyOutcomeKey).(*balancer.StickyOutcome); ok && outcome != nil {
+	if outcome, ok := constants.GetStickyOutcome(r.Context()); ok && outcome != nil {
 		outcome.Result = "miss"
-		outcome.Source, _ = r.Context().Value(constants.ContextStickyKeySourceKey).(string)
+		outcome.Source = constants.GetStickyKeySource(r.Context())
 	}
 	w.WriteHeader(http.StatusOK)
 	return nil
@@ -236,17 +235,17 @@ func TestProviderProxyHandler_InjectsStickyKey(t *testing.T) {
 		t.Fatalf("proxy was never invoked; handler failed before reaching executeProxyRequest (status=%d body=%q)", w.Code, w.Body.String())
 	}
 
-	stickyKey, _ := capture.capturedCtx.Value(constants.ContextStickyKeyKey).(string)
+	stickyKey := constants.GetStickyKey(capture.capturedCtx)
 	if stickyKey == "" {
 		t.Fatal("expected sticky key to be injected into context, got empty string — providerProxyHandler is bypassing sticky sessions")
 	}
 
-	source, _ := capture.capturedCtx.Value(constants.ContextStickyKeySourceKey).(string)
+	source := constants.GetStickyKeySource(capture.capturedCtx)
 	if source != "session_header" {
 		t.Errorf("expected key source 'session_header' (X-Olla-Session-ID was supplied), got %q", source)
 	}
 
-	outcome, _ := capture.capturedCtx.Value(constants.ContextStickyOutcomeKey).(*balancer.StickyOutcome)
+	outcome, _ := constants.GetStickyOutcome(capture.capturedCtx)
 	if outcome == nil {
 		t.Fatal("expected StickyOutcome pointer in context for the balancer wrapper to populate")
 	}
@@ -284,7 +283,7 @@ func TestProviderProxyHandler_SkipsStickyWhenDisabled(t *testing.T) {
 	if capture.capturedCtx == nil {
 		t.Fatalf("proxy was never invoked (status=%d body=%q)", w.Code, w.Body.String())
 	}
-	if key, _ := capture.capturedCtx.Value(constants.ContextStickyKeyKey).(string); key != "" {
+	if key := constants.GetStickyKey(capture.capturedCtx); key != "" {
 		t.Errorf("expected no sticky key when disabled, got %q", key)
 	}
 }
@@ -440,7 +439,7 @@ func TestProviderProxyHandler_RawAliasPrefixOverridesRegistration(t *testing.T) 
 			// A stale registration-shaped value the handler must override: had it
 			// survived, no prefix would match and the backend would receive the
 			// full /olla/<spelling>/... path.
-			req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+			req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 			w := httptest.NewRecorder()
 
 			app.providerProxyHandler(w, req)

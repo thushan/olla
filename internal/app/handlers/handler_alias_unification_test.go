@@ -99,7 +99,7 @@ func TestConfiguredAliasNameUnification(t *testing.T) {
 				response := httptest.NewRecorder()
 				switch route {
 				case "proxy":
-					req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+					req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 					app.proxyHandler(response, req)
 				case "provider":
 					app.providerProxyHandler(response, req)

@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/thushan/olla/internal/core/constants"
 )
 
 func GenerateRequestID() string {
@@ -74,8 +76,11 @@ func getSourceIP(r *http.Request) net.IP {
 	return net.ParseIP(r.RemoteAddr)
 }
 
-func StripRoutePrefix(ctx context.Context, path, prefix string) string {
-	if routePrefix, ok := ctx.Value(prefix).(string); ok {
+// StripRoutePrefix strips the route prefix installed in the context under the
+// route-prefix context key (constants.WithRoutePrefix) from path, when one is
+// present; without one the path is returned unchanged.
+func StripRoutePrefix(ctx context.Context, path string) string {
+	if routePrefix, ok := ctx.Value(constants.ContextRoutePrefixKey).(string); ok {
 		return StripPrefix(path, routePrefix)
 	}
 	return path

@@ -92,8 +92,8 @@ func (a *Application) dispatchToEndpoints(ctx context.Context, w http.ResponseWr
 
 	// Strip the route prefix before forwarding to the backend.
 	// Without this, BuildTargetURL receives the full /olla/proxy/... path and
-	// GetProxyPrefix() returns "route_prefix" (a context key name, not a URL path),
-	// so its StripPrefix is a no-op.
+	// GetProxyPrefix() returns the "route_prefix" sentinel (a never-matching
+	// default, not a real URL path), so its StripPrefix is a no-op.
 	r.URL.Path = pr.targetPath
 
 	a.logRequestStart(pr, len(endpoints))
@@ -191,10 +191,7 @@ func (a *Application) setRoutingDecisionHeaders(w http.ResponseWriter, decision 
 
 func (a *Application) initializeProxyRequest(r *http.Request) *proxyRequest {
 	// get the requestID from the middleware context first
-	requestID := ""
-	if id, ok := r.Context().Value(middleware.RequestIDKey).(string); ok {
-		requestID = id
-	}
+	requestID := middleware.GetRequestID(r.Context())
 
 	// fallback to generating a new one otherwise
 	if requestID == "" {
@@ -275,10 +272,10 @@ func (a *Application) withCanonicalAliasTargets(ctx context.Context, requested s
 	if targets == nil {
 		return ctx
 	}
-	canonical, _ := ctx.Value(constants.ContextCanonicalModelKey).(core.CanonicalModel)
+	canonical, _ := core.GetCanonicalModel(ctx)
 	canonical.Requested = requested
 	canonical.Targets = targets
-	return context.WithValue(ctx, constants.ContextCanonicalModelKey, canonical)
+	return core.WithCanonicalModel(ctx, canonical)
 }
 
 func (a *Application) analyzeRequest(ctx context.Context, r *http.Request, pr *proxyRequest) {
@@ -323,7 +320,7 @@ func (pr *proxyRequest) markUpstreamServerError() {
 // The outcome pointer is allocated in injectStickyKeyWithBody and filled by the balancer
 // wrapper before Select() returns, so no lock is needed here.
 func (pr *proxyRequest) captureStickyOutcome(ctx context.Context, r *http.Request) {
-	if outcome, ok := ctx.Value(constants.ContextStickyOutcomeKey).(*balancer.StickyOutcome); ok && outcome != nil {
+	if outcome, ok := constants.GetStickyOutcome(ctx); ok && outcome != nil {
 		pr.stickyOutcome = outcome.Result
 		pr.stickySource = outcome.Source
 	}
@@ -371,7 +368,7 @@ func (a *Application) injectStickyKeyWithBody(ctx context.Context, r *http.Reque
 	outcome := &balancer.StickyOutcome{}
 	ctx = context.WithValue(ctx, constants.ContextStickyKeyKey, stickyKey)
 	ctx = context.WithValue(ctx, constants.ContextStickyKeySourceKey, stickySource)
-	ctx = context.WithValue(ctx, constants.ContextStickyOutcomeKey, outcome)
+	ctx = constants.WithStickyOutcome(ctx, outcome)
 	r = r.WithContext(ctx)
 
 	return ctx, r, outcome
@@ -381,7 +378,7 @@ func (a *Application) injectStickyKeyWithBody(ctx context.Context, r *http.Reque
 // and writes the sticky session headers. Used by sub-handlers that have *http.Request
 // but not the outcome pointer directly. Must be called before w.WriteHeader().
 func (a *Application) setStickyResponseHeadersFromRequest(w http.ResponseWriter, r *http.Request) {
-	outcome, _ := r.Context().Value(constants.ContextStickyOutcomeKey).(*balancer.StickyOutcome)
+	outcome, _ := constants.GetStickyOutcome(r.Context())
 	a.setStickyResponseHeaders(w, r, outcome)
 }
 
@@ -761,7 +758,7 @@ func logNoCompatibleFallback(log logger.StyledLogger, profile *domain.RequestPro
 }
 
 func (a *Application) stripRoutePrefix(ctx context.Context, path string) string {
-	return util.StripRoutePrefix(ctx, path, constants.ContextRoutePrefixKey)
+	return util.StripRoutePrefix(ctx, path)
 }
 
 // filterEndpointsByPlatform is stage 1 of filterEndpointsByProfile: platform
@@ -930,7 +927,7 @@ func (a *Application) resolveAliasEndpoints(ctx context.Context, profile *domain
 	}
 
 	// store the rewrite map in the profile for use during request proxying
-	profile.SetInspectionMeta(constants.ContextModelAliasMapKey, endpointToModel)
+	profile.SetInspectionMeta(constants.InspectionMetaModelAliasMapKey, endpointToModel)
 
 	// set routing decision so downstream headers/metrics stay consistent
 	profile.RoutingDecision = ports.NewRoutingDecision("alias", ports.RoutingActionRouted,

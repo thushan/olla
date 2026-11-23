@@ -287,7 +287,7 @@ func combinedLoggingMiddleware(styledLogger logger.StyledLogger, now func() time
 			requestSize := max(r.ContentLength, 0)
 
 			ctx := context.WithValue(r.Context(), RequestIDKey, requestID)
-			baseLogger := styledLogger.GetUnderlying().With(constants.ContextRequestIdKey, requestID)
+			baseLogger := styledLogger.GetUnderlying().With(constants.SlogRequestIdKey, requestID)
 			ctx = context.WithValue(ctx, LoggerKey, baseLogger)
 
 			w.Header().Set("X-Olla-Request-ID", requestID)
@@ -373,7 +373,7 @@ func logCompletion(ctx context.Context, c completedRequest, aborted bool) {
 	// already an explicit field below - attaching it via .With() as well
 	// would double it up in the emitted record.
 	accessLogger := styledLogger.GetUnderlying()
-	detailedCtx := context.WithValue(r.Context(), logger.DefaultDetailedCookie, true)
+	detailedCtx := logger.WithDetailed(r.Context())
 	accessLevel := accessLogLevel(r.Method, path, wrapped.status)
 	if aborted && accessLevel < slog.LevelWarn {
 		accessLevel = slog.LevelWarn

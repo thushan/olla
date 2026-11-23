@@ -84,7 +84,7 @@ func newFront(t *testing.T, h *statusHarness) *frontServer {
 		case "anthropic":
 			h.fleet.app.translationHandler(h.fleet.trans).ServeHTTP(w, r)
 		case "proxy":
-			h.fleet.app.proxyHandler(w, r.WithContext(context.WithValue(r.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/")))
+			h.fleet.app.proxyHandler(w, r.WithContext(constants.WithRoutePrefix(r.Context(), "/olla/proxy/")))
 		default:
 			h.fleet.app.providerProxyHandler(w, r)
 		}

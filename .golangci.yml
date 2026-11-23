@@ -90,10 +90,6 @@ linters:
         - -ST1021
         - -ST1022
         - -QF1008  # explicit embedded selectors are deliberate in the registry/proxy wrappers
-        # The context key constants are plain strings on purpose: the same constants
-        # are slog keys, InspectionMeta keys and util.StripRoutePrefix lookups, so
-        # typing them breaks those. Typing the context keys is its own change.
-        - -SA1029
     testifylint:
       enable-all: true
     usetesting:

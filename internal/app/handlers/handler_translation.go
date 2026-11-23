@@ -696,7 +696,7 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 	if pr.model != "" {
 		ctx = context.WithValue(ctx, constants.ContextModelKey, pr.model)
 		if native := a.canonicalModelName(pr.model); native != pr.model {
-			ctx = context.WithValue(ctx, constants.ContextCanonicalModelKey, core.CanonicalModel{Requested: pr.model, Native: native})
+			ctx = core.WithCanonicalModel(ctx, core.CanonicalModel{Requested: pr.model, Native: native})
 		}
 		r = r.WithContext(ctx)
 	}
@@ -714,9 +714,9 @@ func (a *Application) prepareProxyContext(ctx context.Context, r *http.Request, 
 	// if a model alias was resolved, pass the endpoint→model rewrite map through context
 	// so the proxy can rewrite the model name in the request body for the selected backend
 	if pr.profile != nil {
-		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.ContextModelAliasMapKey); ok {
+		if aliasMapRaw, ok := pr.profile.InspectionMeta.Load(constants.InspectionMetaModelAliasMapKey); ok {
 			if aliasMap, ok := aliasMapRaw.(map[string]string); ok {
-				ctx = context.WithValue(ctx, constants.ContextModelAliasMapKey, aliasMap)
+				ctx = constants.WithModelAliasMap(ctx, aliasMap)
 				ctx = a.withCanonicalAliasTargets(ctx, pr.model, aliasMap)
 				r = r.WithContext(ctx)
 			}

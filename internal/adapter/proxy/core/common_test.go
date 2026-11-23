@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"crypto/tls"
 	"net/http"
 	"net/http/httptest"
@@ -762,7 +761,7 @@ func TestSetStickySessionHeaders(t *testing.T) {
 			}
 
 			if tt.outcome != nil {
-				ctx := context.WithValue(req.Context(), constants.ContextStickyOutcomeKey, tt.outcome)
+				ctx := constants.WithStickyOutcome(req.Context(), tt.outcome)
 				req = req.WithContext(ctx)
 			}
 

@@ -15,6 +15,12 @@ import (
 	"github.com/thushan/olla/internal/core/ports"
 )
 
+// unrelatedPrefixKey is a defined type of its own, deliberately not the real
+// route-prefix context key: these tests write context values the proxy must
+// ignore (or never install at all), so the write stays typed without ever
+// matching the production lookup.
+type unrelatedPrefixKey string
+
 // TestProxyPathStripping tests the critical path stripping behavior for both proxy implementations
 // This is critical for edge deployments where millions of requests rely on correct routing
 //
@@ -161,7 +167,7 @@ func TestProxyPathStripping(t *testing.T) {
 
 					// Add context override if specified
 					if tc.contextPrefix != "" {
-						ctx := context.WithValue(req.Context(), tc.proxyPrefix, tc.contextPrefix)
+						ctx := context.WithValue(req.Context(), unrelatedPrefixKey(tc.proxyPrefix), tc.contextPrefix)
 						req = req.WithContext(ctx)
 					}
 
@@ -271,7 +277,7 @@ func TestProxyPathStrippingWithProviderContext(t *testing.T) {
 	}{
 		{
 			name:              "handler_and_proxy_same_prefix",
-			handlerPrefix:     constants.ContextRoutePrefixKey, // "/olla"
+			handlerPrefix:     string(constants.ContextRoutePrefixKey), // "route_prefix"
 			proxyConfigPrefix: "/olla",
 			requestPath:       "/olla/api/chat",
 			expectedPath:      "/api/chat",
@@ -318,7 +324,7 @@ func TestProxyPathStrippingWithProviderContext(t *testing.T) {
 
 			// Create request with handler context
 			req := httptest.NewRequest("GET", tc.requestPath, nil)
-			ctx := context.WithValue(req.Context(), tc.proxyConfigPrefix, tc.handlerPrefix)
+			ctx := context.WithValue(req.Context(), unrelatedPrefixKey(tc.proxyConfigPrefix), tc.handlerPrefix)
 			req = req.WithContext(ctx)
 
 			// Execute

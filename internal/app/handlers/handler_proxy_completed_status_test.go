@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -137,7 +136,7 @@ func (h *statusHarness) post(model string, stream bool) *httptest.ResponseRecord
 	case "anthropic":
 		h.fleet.app.translationHandler(h.fleet.trans).ServeHTTP(w, req)
 	case "proxy":
-		req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+		req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 		h.fleet.app.proxyHandler(w, req)
 	default:
 		h.fleet.app.providerProxyHandler(w, req)

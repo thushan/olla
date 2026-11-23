@@ -114,7 +114,7 @@ func (sl *PlainStyledLogger) GetUnderlying() *slog.Logger {
 }
 
 func (sl *PlainStyledLogger) WithRequestID(requestID string) StyledLogger {
-	return sl.With(constants.ContextRequestIdKey, requestID)
+	return sl.With(constants.SlogRequestIdKey, requestID)
 }
 
 func (sl *PlainStyledLogger) InfoConfigChange(oldName, newName string) {
@@ -172,7 +172,7 @@ func (sl *PlainStyledLogger) logWithContext(level string, msg string, endpoint s
 		allArgs = append(allArgs, ctx.UserArgs...)
 		allArgs = append(allArgs, ctx.DetailedArgs...)
 
-		detailedCtx := context.WithValue(context.Background(), DefaultDetailedCookie, true)
+		detailedCtx := WithDetailed(context.Background())
 
 		switch level {
 		case LogLevelInfo:

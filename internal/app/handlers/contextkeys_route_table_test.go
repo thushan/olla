@@ -524,7 +524,7 @@ func TestRouteTable_TranslatorRegistrationInjectsNoRoutePrefix(t *testing.T) {
 	probe := func(seen *string) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			mu.Lock()
-			*seen = util.StripRoutePrefix(r.Context(), r.URL.Path, constants.ContextRoutePrefixKey)
+			*seen = util.StripRoutePrefix(r.Context(), r.URL.Path)
 			mu.Unlock()
 			w.WriteHeader(http.StatusOK)
 		}

@@ -32,7 +32,7 @@ func TestRewriteModelForAlias_EndpointNotInMap(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://other:1234": "other-model",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	body := `{"model": "alias-name", "messages": []}`
 	r := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBufferString(body))
 
@@ -50,7 +50,7 @@ func TestRewriteModelForAlias_RewritesModel(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "gpt-oss:120b",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	body := `{"model": "gpt-oss-120b", "messages": [{"role": "user", "content": "hello"}]}`
 	r := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBufferString(body))
 	r.Header.Set("Content-Type", "application/json")
@@ -84,7 +84,7 @@ func TestRewriteModelForAlias_NilBody(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "gpt-oss:120b",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	r := httptest.NewRequest("GET", "/v1/models", nil)
 	r.Body = nil
 	r.ContentLength = 0
@@ -98,7 +98,7 @@ func TestRewriteModelForAlias_NonJSONBody(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "gpt-oss:120b",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	body := "this is not json"
 	r := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBufferString(body))
 
@@ -116,7 +116,7 @@ func TestRewriteModelForAlias_NoModelField(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "gpt-oss:120b",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	body := `{"messages": [{"role": "user", "content": "hello"}]}`
 	r := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBufferString(body))
 
@@ -134,7 +134,7 @@ func TestRewriteModelForAlias_UpdatesContentLength(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "a-much-longer-model-name-than-the-original",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	body := `{"model": "short"}`
 	r := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBufferString(body))
 	originalLength := r.ContentLength
@@ -344,7 +344,7 @@ func TestRewriteModelForAlias_WithEmptyBody(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "gpt-oss:120b",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	r := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBufferString(""))
 	r.ContentLength = 0
 
@@ -355,7 +355,7 @@ func TestRewriteModelForAlias_WithEmptyBody(t *testing.T) {
 
 func TestRewriteModelForAlias_WithEmptyAliasMap(t *testing.T) {
 	aliasMap := map[string]string{}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	body := `{"model": "test-model"}`
 	r := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewBufferString(body))
 
@@ -374,7 +374,7 @@ func TestRewriteModelForAlias_BodyReadableAfterRewrite(t *testing.T) {
 	aliasMap := map[string]string{
 		"http://ollama:11434": "rewritten-model",
 	}
-	ctx := context.WithValue(t.Context(), constants.ContextModelAliasMapKey, aliasMap)
+	ctx := constants.WithModelAliasMap(t.Context(), aliasMap)
 	body := `{"model": "original-model"}`
 	r, _ := http.NewRequestWithContext(ctx, "POST", "/v1/chat/completions", bytes.NewBufferString(body))
 	r.ContentLength = int64(len(body))
@@ -396,14 +396,14 @@ func TestResolvedModelName(t *testing.T) {
 	t.Parallel()
 
 	endpoint := &domain.Endpoint{URLString: "http://ollama-1:11434"}
-	withCanonical := context.WithValue(t.Context(), constants.ContextCanonicalModelKey,
+	withCanonical := WithCanonicalModel(t.Context(),
 		CanonicalModel{Requested: "all-minilm", Native: "all-minilm:latest"})
-	withAlias := context.WithValue(withCanonical, constants.ContextModelAliasMapKey,
+	withAlias := constants.WithModelAliasMap(withCanonical,
 		map[string]string{endpoint.URLString: "aliased:7b"})
 
-	withTargets := context.WithValue(t.Context(), constants.ContextModelAliasMapKey,
+	withTargets := constants.WithModelAliasMap(t.Context(),
 		map[string]string{endpoint.URLString: "all-minilm"})
-	withTargets = context.WithValue(withTargets, constants.ContextCanonicalModelKey,
+	withTargets = WithCanonicalModel(withTargets,
 		CanonicalModel{Requested: "embed", Targets: map[string]string{"all-minilm": "all-minilm:latest"}})
 
 	tests := []struct {

@@ -108,7 +108,7 @@ func TestProxyRouting_NamedModelIgnoresContentType(t *testing.T) {
 			if ct != "" {
 				req.Header.Set(constants.HeaderContentType, ct)
 			}
-			req = req.WithContext(context.WithValue(req.Context(), constants.ContextRoutePrefixKey, "/olla/proxy/"))
+			req = req.WithContext(constants.WithRoutePrefix(req.Context(), "/olla/proxy/"))
 			w := httptest.NewRecorder()
 			app.proxyHandler(w, req)
 

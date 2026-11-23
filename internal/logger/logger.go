@@ -39,6 +39,22 @@ const (
 	LogLevelPanic   = "panic"
 )
 
+// contextKey is this package's context-storage key type; never used as a slog
+// or cookie key.
+type contextKey string
+
+// detailedContextKey is the context-storage role of the "detailed" cookie name
+// (DefaultDetailedCookie): the flag that keeps a log record out of the terminal
+// handler while the file handler still receives it. The cookie name itself
+// stays the plain string constant.
+const detailedContextKey contextKey = DefaultDetailedCookie
+
+// WithDetailed marks the context so records logged with it bypass the terminal
+// filter and reach only handlers that want the detailed stream (the file log).
+func WithDetailed(ctx context.Context) context.Context {
+	return context.WithValue(ctx, detailedContextKey, true)
+}
+
 // regex for stripping ANSI escape codes from log messages
 // Matches all ANSI escape sequences: \x1b[...m, \x1b[...K, \x1b[...A, etc.
 var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
@@ -238,7 +254,7 @@ func (h *terminalFilterHandler) WithGroup(name string) slog.Handler {
 
 // isDetailedLog checks if a log should only go to files (not terminal)
 func isDetailedLog(ctx context.Context) bool {
-	if detailed := ctx.Value(DefaultDetailedCookie); detailed != nil {
+	if detailed := ctx.Value(detailedContextKey); detailed != nil {
 		if d, ok := detailed.(bool); ok && d {
 			return true
 		}
