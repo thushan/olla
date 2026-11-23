@@ -407,6 +407,95 @@ func TestCollector_FailedRequestsNoLatency(t *testing.T) {
 	}
 }
 
+// TestCollector_ConnectionOnlyLastUsed pins lastUsed semantics for
+// connection-only updates: a first RecordConnection creates the endpoint with
+// a non-zero lastUsed (a zero value would let TTL cleanup evict an endpoint
+// with live connections), a later connection change must not refresh it, and
+// only a recorded request advances it.
+func TestCollector_ConnectionOnlyLastUsed(t *testing.T) {
+	collector := NewCollector(createTestLogger())
+	endpoint := createTestEndpoint("http://localhost:8080", "local")
+	uri := endpoint.URL.String()
+
+	start := time.Now().UnixNano()
+	collector.RecordConnection(endpoint, 1)
+
+	stats := collector.GetEndpointStats()
+	first, ok := stats[uri]
+	if !ok {
+		t.Fatal("connection-only update must create endpoint stats")
+	}
+	if first.LastUsedNano < start {
+		t.Errorf("lastUsed after first connection-only update = %d, want >= test start %d", first.LastUsedNano, start)
+	}
+
+	// A live-connection endpoint must survive a TTL cleanup pass keyed on
+	// lastUsed; this is the eviction the non-zero creation timestamp prevents.
+	collector.cleanup(time.Now().UnixNano())
+	if _, ok := collector.GetEndpointStats()[uri]; !ok {
+		t.Error("endpoint with a live connection was evicted by TTL cleanup")
+	}
+
+	// A subsequent connection-only update must not refresh lastUsed.
+	time.Sleep(2 * time.Millisecond) // separate the nanosecond clocks, not a sync primitive
+	collector.RecordConnection(endpoint, -1)
+
+	stats = collector.GetEndpointStats()
+	second := stats[uri]
+	if second.LastUsedNano != first.LastUsedNano {
+		t.Errorf("lastUsed refreshed by connection-only update: first %d, second %d", first.LastUsedNano, second.LastUsedNano)
+	}
+
+	// A recorded request does advance it.
+	collector.RecordRequest(endpoint, StatusSuccess, time.Millisecond, 1024)
+	stats = collector.GetEndpointStats()
+	if stats[uri].LastUsedNano <= second.LastUsedNano {
+		t.Errorf("lastUsed not advanced by request: %d, want > %d", stats[uri].LastUsedNano, second.LastUsedNano)
+	}
+}
+
+// TestCollector_MinLatencySentinel pins the -1 "unset" sentinel at both
+// scopes, so an implementation that treats 0 as unset fails: the raw global
+// and per-endpoint values are -1 before any successful sample, and a 0ms
+// first sample followed by a positive one keeps the reported minimum at 0.
+func TestCollector_MinLatencySentinel(t *testing.T) {
+	collector := NewCollector(createTestLogger())
+	endpoint := createTestEndpoint("http://localhost:8080", "local")
+	uri := endpoint.URL.String()
+
+	if got := atomic.LoadInt64(&collector.minLatency); got != -1 {
+		t.Errorf("global minLatency sentinel before any sample = %d, want -1", got)
+	}
+
+	// A first request that never touches latency bounds (a failure) must
+	// leave the per-endpoint sentinel intact.
+	collector.RecordRequest(endpoint, StatusFailure, 50*time.Millisecond, 0)
+	data, ok := collector.endpoints.Load(uri)
+	if !ok {
+		t.Fatal("request must create endpoint stats")
+	}
+	if got := atomic.LoadInt64(&data.minLatency); got != -1 {
+		t.Errorf("endpoint minLatency sentinel after failure-only request = %d, want -1", got)
+	}
+	if got := atomic.LoadInt64(&collector.minLatency); got != -1 {
+		t.Errorf("global minLatency sentinel after failure-only request = %d, want -1", got)
+	}
+
+	// A 0ms sample is a real sample: it replaces the sentinel, and a later
+	// positive sample must not raise the minimum.
+	collector.RecordRequest(endpoint, StatusSuccess, 0, 1024)
+	collector.RecordRequest(endpoint, StatusSuccess, 50*time.Millisecond, 1024)
+
+	stats := collector.GetEndpointStats()[uri]
+	if stats.MinLatency != 0 {
+		t.Errorf("endpoint min latency after 0ms then 50ms = %d, want 0", stats.MinLatency)
+	}
+	proxyStats := collector.GetProxyStats()
+	if proxyStats.MinLatency != 0 {
+		t.Errorf("global min latency after 0ms then 50ms = %d, want 0", proxyStats.MinLatency)
+	}
+}
+
 func TestCollector_RecordDiscovery(t *testing.T) {
 	collector := NewCollector(createTestLogger())
 
