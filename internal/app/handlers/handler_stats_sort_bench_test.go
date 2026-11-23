@@ -11,9 +11,9 @@ import (
 // benchModelStats builds the collector maps behind /internal/stats/models for
 // n models. Every seventh model shares a request count so the sort key ties
 // often, as it does in production where most models see little traffic. The
-// maps are rebuilt per iteration because buildModelStats sorts the slice it
-// appends from a map, and Go randomises map iteration order, so the sort input
-// is shuffled the way it is on a live scrape.
+// maps are built once; buildModelStats rebuilds the slice it sorts from the
+// map on every iteration, and Go randomises map iteration order, so the sort
+// input is shuffled the way it is on a live scrape.
 func benchModelStats(n int) (map[string]ports.ModelStats, map[string]map[string]ports.EndpointModelStats) {
 	modelStats := make(map[string]ports.ModelStats, n)
 	modelEndpointStats := make(map[string]map[string]ports.EndpointModelStats, n)
