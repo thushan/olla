@@ -103,6 +103,8 @@ make dev
 | `make ready` | Run all pre-commit checks (test-short + test-race + fmt + vet + lint + align) |
 | `OLLA_SMOKE_OK=1 make smoke-build-local` | Check `make build-local` from a clean and a pre-populated `build/` (needs goreleaser and bun; deletes `./build`, so use a scratch worktree) |
 
+`make lint` enforces the `modernize` and `usetesting` linters and staticcheck SA1029. In practice that means `any` rather than `interface{}`, `t.Context()` and `t.Setenv` rather than `context.Background()` and `os.Setenv` in tests, and typed context keys with accessors (see `internal/core/constants/context.go`) rather than string literals.
+
 ### Docker Commands
 
 | Command | Description |

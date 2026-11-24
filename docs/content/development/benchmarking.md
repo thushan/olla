@@ -167,7 +167,7 @@ go build -gcflags="-m -m" ./...
 
 # Example output:
 # ./internal/adapter/stats/collector.go:42: moved to heap: data
-# ./internal/adapter/stats/collector.go:43: inlining call to atomic.AddInt64
+# ./internal/adapter/stats/collector.go:43: inlining call to atomic.(*Int64).Add
 ```
 
 ## CPU Profiling
@@ -215,7 +215,7 @@ func processRequest() []byte {
 
 // Good - uses pool
 var bufferPool = sync.Pool{
-    New: func() interface{} {
+    New: func() any {
         buf := make([]byte, 1024)
         return &buf
     },
@@ -232,7 +232,7 @@ func processRequest() []byte {
 
 ```go
 // Bad - interface conversion overhead
-func process(v interface{}) {
+func process(v any) {
     str := v.(string)
     // use str
 }
@@ -274,13 +274,13 @@ func (c *Counter) Inc() {
     c.mu.Unlock()
 }
 
-// Good - atomic operation
+// Good - typed atomic (what the stats collectors use)
 type Counter struct {
-    value int64
+    value atomic.Int64
 }
 
 func (c *Counter) Inc() {
-    atomic.AddInt64(&c.value, 1)
+    c.value.Add(1)
 }
 ```
 

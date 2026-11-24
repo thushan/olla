@@ -284,7 +284,7 @@ func NewMyBackendConverter() ports.ModelResponseConverter {
     }
 }
 
-func (c *MyBackendConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (interface{}, error) {
+func (c *MyBackendConverter) ConvertToFormat(models []*domain.UnifiedModel, filters ports.ModelFilters) (any, error) {
     // 1. Call filterModels() to apply filters
     // 2. Convert each UnifiedModel to backend format
     // 3. Use BaseConverter.FindProviderAlias() to get native model name

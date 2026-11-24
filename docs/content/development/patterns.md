@@ -127,14 +127,12 @@ func NewWorkerPool[T any](workers int, processor func(T)) *WorkerPool[T] {
 }
 
 func (wp *WorkerPool[T]) start() {
-    for i := 0; i < wp.workers; i++ {
-        wp.wg.Add(1)
-        go wp.worker()
+    for range wp.workers {
+        wp.wg.Go(wp.worker)
     }
 }
 
 func (wp *WorkerPool[T]) worker() {
-    defer wp.wg.Done()
     for {
         select {
         case task := <-wp.taskQueue:
@@ -312,8 +310,8 @@ Prevents circular dependencies:
 
 ```go
 // Phase 1: Create all services
-func createServices(cfg *Config) map[string]interface{} {
-    services := make(map[string]interface{})
+func createServices(cfg *Config) map[string]any {
+    services := make(map[string]any)
     
     // Create with nil dependencies
     services["stats"] = NewStatsService(nil)
@@ -324,7 +322,7 @@ func createServices(cfg *Config) map[string]interface{} {
 }
 
 // Phase 2: Wire dependencies
-func wireServices(services map[string]interface{}) {
+func wireServices(services map[string]any) {
     stats := services["stats"].(*StatsService)
     security := services["security"].(*SecurityService)
     proxy := services["proxy"].(*ProxyService)
@@ -445,7 +443,7 @@ func (eb *EventBus[T]) Publish(eventType string, data T) {
 
 ### Request Metadata Propagation
 
-Context-based request tracking:
+Context-based request tracking. Olla's own keys are typed constants in `internal/core/constants/context.go`, read and written through accessors such as `GetModel` and `WithRoutePrefix`. Add new keys there rather than using string literals; staticcheck SA1029 rejects them. The sample below is a standalone illustration of the same shape:
 
 ```go
 type contextKey string
@@ -527,7 +525,7 @@ Efficient string concatenation:
 ```go
 // String builder pool
 var stringBuilderPool = sync.Pool{
-    New: func() interface{} {
+    New: func() any {
         return &strings.Builder{}
     },
 }
@@ -639,7 +637,7 @@ const (
 type AppError struct {
     Code      ErrorCode
     Message   string
-    Details   map[string]interface{}
+    Details   map[string]any
     Cause     error
     Timestamp time.Time
 }
@@ -659,12 +657,12 @@ func NewAppError(code ErrorCode, message string) *AppError {
     return &AppError{
         Code:      code,
         Message:   message,
-        Details:   make(map[string]interface{}),
+        Details:   make(map[string]any),
         Timestamp: time.Now(),
     }
 }
 
-func (e *AppError) WithDetail(key string, value interface{}) *AppError {
+func (e *AppError) WithDetail(key string, value any) *AppError {
     e.Details[key] = value
     return e
 }
@@ -676,13 +674,13 @@ Graceful degradation with fallbacks:
 
 ```go
 type Resilient struct {
-    primary   func() (interface{}, error)
-    fallback  func() (interface{}, error)
+    primary   func() (any, error)
+    fallback  func() (any, error)
     retries   int
     backoff   time.Duration
 }
 
-func (r *Resilient) Execute() (interface{}, error) {
+func (r *Resilient) Execute() (any, error) {
     var lastErr error
     
     // Try primary with retries
