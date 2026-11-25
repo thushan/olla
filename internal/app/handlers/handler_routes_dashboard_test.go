@@ -3,10 +3,9 @@ package handlers
 // Route-mounting tests for the dashboard, scoped to the no-ripple design in
 // simple-dashboard.md §5: registerRoutes() keeps its existing return type,
 // the dashboard subtree mounts last, a collision logs Error and skips mounting
-// rather than halting startup, and the access middleware stays scoped to
-// /internal/ui/. The three GateInternalAPI subtests from
-// feature/dashboard-impl are deliberately dropped: that wrapping is not
-// implemented on this branch (§5.2).
+// rather than halting startup, and with gate_internal_api off (the default
+// asserted here) the access middleware stays scoped to /internal/ui/. The
+// gated route table has its own coverage in handler_internal_gate_test.go.
 
 import (
 	"net/http"

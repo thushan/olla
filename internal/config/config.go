@@ -157,8 +157,9 @@ func DefaultConfig() *Config {
 				// curl installer) serving on 0.0.0.0 must not 403 its own default.
 				AllowedHosts: []string{"localhost"},
 			},
-			// Inert for now: the GateInternalAPI wrapping is not implemented yet.
-			// The field ships now so a later change needs no config migration.
+			// Off by default: turning it on also gates Prometheus scrapes
+			// and health checks from hosts outside allowed_cidrs, so it stays
+			// an explicit operator choice.
 			GateInternalAPI: false,
 		},
 		Translators: TranslatorsConfig{
