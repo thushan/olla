@@ -6,7 +6,7 @@ toolchain go1.27.4
 
 require (
 	github.com/docker/go-units v0.5.0
-	github.com/expr-lang/expr v1.18.0
+	github.com/expr-lang/expr v1.18.1
 	github.com/jellydator/ttlcache/v3 v3.4.1
 	github.com/json-iterator/go v1.1.12
 	github.com/mattn/go-isatty v0.0.24
